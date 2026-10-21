@@ -131,3 +131,63 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
 ; unchanged: the `postinstall` flag still offers it as the last checkbox.
 Filename: "{app}\{#MyAppExe}"; Description: "Launch Lumit"; \
   Flags: nowait postinstall
+
+[Code]
+// An update runs this installer from inside Lumit, which then quits. Lumit
+// can take a while to let go of its files, and a plugin broker can outlive
+// it. A file still held halfway through the copy leaves half an installation
+// that will not start, so before anything is touched this waits for Lumit to
+// be gone and ends whatever brokers it left behind. Interactive installs keep
+// Inno's own page for closing programs.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Locator, Service, Processes, Process: Variant;
+  Prefix, Name, Path: String;
+  Poll, I: Integer;
+  LumitRunning: Boolean;
+begin
+  Result := '';
+  if not WizardSilent then exit;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Service := Locator.ConnectServer('.', 'root\CIMV2');
+  except
+    exit;
+  end;
+  Prefix := Uppercase(AddBackslash(ExpandConstant('{app}')));
+  // Half a second at a time, for up to 30 seconds.
+  for Poll := 1 to 60 do
+  begin
+    Processes := Service.ExecQuery(
+      'SELECT Name, ExecutablePath FROM Win32_Process WHERE Name LIKE ''lumit%''');
+    LumitRunning := False;
+    for I := 0 to Processes.Count - 1 do
+    begin
+      Process := Processes.ItemIndex(I);
+      if not VarIsNull(Process.ExecutablePath) then
+      begin
+        Name := Process.Name;
+        Path := Process.ExecutablePath;
+        if (Pos(Prefix, Uppercase(Path)) = 1) and (CompareText(Name, '{#MyAppExe}') = 0) then
+          LumitRunning := True;
+      end;
+    end;
+    if not LumitRunning then
+    begin
+      for I := 0 to Processes.Count - 1 do
+      begin
+        Process := Processes.ItemIndex(I);
+        if not VarIsNull(Process.ExecutablePath) then
+        begin
+          Path := Process.ExecutablePath;
+          if Pos(Prefix, Uppercase(Path)) = 1 then
+            Process.Terminate();
+        end;
+      end;
+      Sleep(500);
+      exit;
+    end;
+    Sleep(500);
+  end;
+  Result := 'Lumit is still running. Close it, then update again.';
+end;
