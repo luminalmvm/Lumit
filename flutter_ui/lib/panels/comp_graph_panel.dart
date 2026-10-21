@@ -2171,7 +2171,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                         ],
                         flight: _flight == null
                             ? null
-                            : (_flight!.from.at, _flight!.to),
+                            : _flight!.from.isInput
+                                ? (_flight!.to, _flight!.from.at)
+                                : (_flight!.from.at, _flight!.to),
                         dragged: t.textPrimary,
                         pan: _pan,
                         zoom: _zoom,

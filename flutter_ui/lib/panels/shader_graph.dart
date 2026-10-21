@@ -1082,7 +1082,8 @@ class _WirePainter extends CustomPainter {
           dashes: false);
     }
     if (flight case final f?) {
-      _wire(canvas, f.from.at, f.to, theme.textPrimary, dashes: true);
+      final (a, b) = f.from.isInput ? (f.to, f.from.at) : (f.from.at, f.to);
+      _wire(canvas, a, b, theme.textPrimary, dashes: true);
     }
   }
 
