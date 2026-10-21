@@ -4801,6 +4801,60 @@ mod tests {
         assert_eq!(alpha, 255, "the solid is opaque");
     }
 
+    /// An effect's picture wired into the Matte of one further down is the
+    /// picture that effect made, not whatever the walk drew since. Black, then
+    /// white twice over it, then red held back by the black: the red should
+    /// not show. Two whites, so a freed black would be drawn over by the second.
+    #[test]
+    fn an_effects_picture_can_matte_one_further_down() {
+        use lumit_core::anim::Property;
+        use lumit_core::graph::{Edge, InputRef, OutputRef};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let fill = |rgb: [f64; 3]| {
+            let mut inst = lumit_core::fx::instantiate("fill").expect("fill");
+            for p in &mut inst.params {
+                if p.id == "colour" {
+                    p.value = lumit_core::model::EffectValue::Colour(
+                        [rgb[0], rgb[1], rgb[2], 1.0].map(Property::fixed),
+                    );
+                }
+            }
+            inst
+        };
+        let (black, red) = (fill([0.0; 3]), fill([1.0, 0.0, 0.0]));
+        let edge = Edge {
+            from: OutputRef::EffectOutput { effect: black.id },
+            to: InputRef::Matte { effect: red.id },
+        };
+        let (mut doc, comp_id, _) = matrix_base(8, 8, LinearColour([0.5, 0.5, 0.5, 1.0]));
+        let layer = &mut doc.comp_mut(comp_id).expect("comp").layers[0];
+        layer.effects = vec![black, fill([1.0; 3]), fill([1.0; 3]), red];
+        let mut centre = |doc: &Document| {
+            let (rgba, w, h) = r
+                .render_rgba(&Arc::new(doc.clone()), comp_id, 0, 1.0)
+                .expect("render");
+            let i = (((h / 2) * w + w / 2) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let [_, unmatted, _] = centre(&doc);
+        assert!(
+            unmatted < 60,
+            "with no wire the red fill shows, got green {unmatted}"
+        );
+        doc.comp_mut(comp_id).expect("comp").layers[0].graph.edges = vec![edge];
+        let [_, green, blue] = centre(&doc);
+        assert!(
+            green > 200 && blue > 200,
+            "the black matte holds the red back to white, got {green} {blue}"
+        );
+    }
+
     /// **The preview scale is real.** Under auto resolution the COMPOSITE
     /// itself runs on the scaled raster — the display texture comes back at
     /// comp × scale, not comp size shrunk afterwards. This is what makes a

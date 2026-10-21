@@ -669,6 +669,10 @@ fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) {
             h.update(effect.as_bytes());
             name(h, port);
         }
+        OutputRef::EffectOutput { effect } => {
+            h.update(&[3]);
+            h.update(effect.as_bytes());
+        }
     }
     match &edge.to {
         InputRef::Matte { effect } => {

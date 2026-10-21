@@ -558,6 +558,9 @@ pub enum LayerInput {
     /// picture the chain is holding when the op comes round, which on an
     /// adjustment layer is the composite of everything below.
     ThisLayer,
+    /// What an effect above made, named by its instance. Only the matte list
+    /// carries one, and `run_ops` keeps that effect's output to hand over.
+    EffectOutput(uuid::Uuid),
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
     /// Distance in metres rather than a picture: a 3D precomp's Scene depth
@@ -581,7 +584,10 @@ impl LayerInput {
     #[must_use]
     pub fn texture<'a>(&'a self, current: &'a Tex) -> Option<&'a Tex> {
         match self {
-            LayerInput::Absent | LayerInput::Several(_) | LayerInput::Late => None,
+            LayerInput::Absent
+            | LayerInput::Several(_)
+            | LayerInput::Late
+            | LayerInput::EffectOutput(_) => None,
             LayerInput::ThisLayer => Some(current),
             LayerInput::Texture(t) | LayerInput::Depth(t, _) => Some(t),
         }
@@ -591,7 +597,8 @@ impl LayerInput {
     /// the op's own parameters names.
     fn binds_a_picture(&self) -> bool {
         match self {
-            LayerInput::Absent | LayerInput::ThisLayer => false,
+            // An effect's output above is in the chain's own name already.
+            LayerInput::Absent | LayerInput::ThisLayer | LayerInput::EffectOutput(_) => false,
             // A late list is pictures nothing names yet.
             LayerInput::Texture(_) | LayerInput::Depth(..) | LayerInput::Late => true,
             LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
@@ -994,6 +1001,20 @@ pub fn run_ops(
         }
         first
     };
+    // The effects whose picture a matte further down reads. A held picture
+    // from past the first of them would leave its picture unmade, so the
+    // cache may skip up to it and no further.
+    let kept_for: Vec<uuid::Uuid> = mattes
+        .iter()
+        .filter_map(|m| match m {
+            LayerInput::EffectOutput(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let held_limit = ops
+        .iter()
+        .position(|op| kept_for.contains(&op.instance))
+        .map_or(held_limit, |i| held_limit.min(i + 1));
     // Streams made so far this walk, by the slot of the op that made them.
     let mut late_streams: Vec<(u32, lumit_core::fx::points::PointsStream)> = Vec::new();
     if let Some((store, _)) = cache {
@@ -1031,6 +1052,15 @@ pub fn run_ops(
     // swap) stay off this path and out of export entirely.
     let filing =
         cache.is_some_and(|(store, _)| store.borrow().keep) && !ctx.vram_pressure().should_trim();
+    // Those pictures, as their effects make them, held to the end of the walk.
+    // ponytail: a frame-sized texture each while the walk runs, freed after
+    // the matte that reads it if a stack ever wires many.
+    let mut kept: Vec<(uuid::Uuid, Tex)> = Vec::new();
+    if let Some(op) = start.checked_sub(1).and_then(|i| ops.iter().nth(i)) {
+        if kept_for.contains(&op.instance) {
+            kept.push((op.instance, tex.clone()));
+        }
+    }
     // The picture the op before this one made, once nothing can read it again.
     let mut spent: Option<Tex> = None;
     // Outputs made this walk, filed at the end rather than as they are made:
@@ -1326,7 +1356,14 @@ pub fn run_ops(
         // Only a bound matte costs anything: the input texture is held (a
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
-        let matte = matte.and_then(|m| m.texture(&tex)).cloned();
+        let matte = matte
+            .and_then(|m| match m {
+                LayerInput::EffectOutput(from) => {
+                    kept.iter().find(|(id, _)| id == from).map(|(_, t)| t)
+                }
+                _ => m.texture(&tex),
+            })
+            .cloned();
         // The mattes and layer inputs were all rendered at the layer's own
         // raster, before the walk started. Once an op has grown it they
         // no longer line up with the picture, so they are grown into the same
@@ -1667,6 +1704,11 @@ pub fn run_ops(
             tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
         }
 
+        let keep = kept_for.contains(&resolved.instance);
+        if keep {
+            kept.push((resolved.instance, tex.clone()));
+        }
+
         let named = keys.get(i).copied().flatten();
         // Queued for the store, while the store has room for it. An output
         // bigger than the whole budget is never queued at all — the store
@@ -1699,7 +1741,7 @@ pub fn run_ops(
                     // only by the op after it, which has run. The one thing
                     // left to check is that it is not the picture the chain
                     // holds right now.
-                    if dropped != tex {
+                    if dropped != tex && !kept.iter().any(|(_, k)| *k == dropped) {
                         ctx.recycle(dropped);
                     }
                 }
@@ -1714,7 +1756,7 @@ pub fn run_ops(
         // is ever offered: never the layer's source, never one the cache gave us
         // or is about to take, and never one an op passed straight through.
         let done_with = spent.take();
-        if !queueing && tex != given {
+        if !queueing && tex != given && !keep {
             spent = Some(tex.clone());
         }
         if let Some(done_with) = done_with {
@@ -1876,8 +1918,15 @@ fn op_keys(
                 sched_i += 1;
             }
             if schema.matte.param().is_some() {
-                if let Some(LayerInput::Texture(_)) = mattes.get(matte_i) {
-                    broken = true;
+                match mattes.get(matte_i) {
+                    Some(LayerInput::Texture(_)) => broken = true,
+                    // Its picture is already in this op's name, which covers
+                    // every op above. Which one feeds the matte is not.
+                    Some(LayerInput::EffectOutput(from)) => {
+                        h.update(b"matte-from/");
+                        h.update(from.as_bytes());
+                    }
+                    _ => {}
                 }
                 matte_i += 1;
             }

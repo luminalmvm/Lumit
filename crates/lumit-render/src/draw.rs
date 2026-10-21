@@ -224,6 +224,9 @@ pub enum LayerInputDraw {
     /// so a Lens flare added to one finds the lights in the footage beneath
     /// it without being pointed anywhere.
     ThisLayer,
+    /// The picture an effect above this one in the same stack made, wired into
+    /// this one's Matte. `run_ops` keeps it from when that effect ran.
+    EffectOutput(uuid::Uuid),
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
     /// One op's whole list of layers, for an effect with more than one layer

@@ -121,6 +121,10 @@ pub enum OutputRef {
         /// The port's stable id, as the effect's signature declares it.
         port: String,
     },
+    /// A stack effect's picture, as it leaves that effect, into the Matte of an
+    /// effect further down. The chain is untouched: the picture still flows on
+    /// down the stack, and this hands a copy of it to the matte as well.
+    EffectOutput { effect: Uuid },
 }
 
 /// Where a wire goes.
@@ -133,7 +137,8 @@ pub enum InputRef {
         /// The parameter's stable snake_case id.
         port: String,
     },
-    /// An effect's matte input, fed by [`OutputRef::SourceMatte`].
+    /// An effect's matte input, fed by [`OutputRef::SourceMatte`] or by an
+    /// effect above it ([`OutputRef::EffectOutput`]).
     Matte { effect: Uuid },
 }
 
@@ -343,23 +348,27 @@ pub fn truncated_effects(
 /// output would be part of its input. Requiring the producer to be upstream is
 /// what keeps that question answerable, and is the recorded carve-out.
 ///
+/// An effect's picture into a later effect's Matte follows the same rule, as
+/// the picture below the consumer isn't made yet when the consumer runs.
+///
 /// `true` for everything else: a driver's wire, the source matte, and a data
 /// wire into a *driver*, which is not in the chain and so has no position in it.
 /// An edge naming an effect the stack does not carry is `true` here too —
 /// dangling is [`LayerGraph::prune_to`]'s business and `UnknownNode`'s, not this
 /// rule's.
 fn flows_down_the_stack(edge: &Edge, effects: &[EffectInstance]) -> bool {
-    let (
-        OutputRef::EffectData {
-            effect: producer, ..
-        },
-        InputRef::Param {
-            node: NodeRef::Effect(consumer),
-            ..
-        },
-    ) = (&edge.from, &edge.to)
-    else {
-        return true;
+    let (producer, consumer) = match (&edge.from, &edge.to) {
+        (
+            OutputRef::EffectData { effect, .. },
+            InputRef::Param {
+                node: NodeRef::Effect(consumer),
+                ..
+            },
+        )
+        | (OutputRef::EffectOutput { effect }, InputRef::Matte { effect: consumer }) => {
+            (effect, consumer)
+        }
+        _ => return true,
     };
     let at = |id: &Uuid| effects.iter().position(|e| e.id == *id);
     match (at(producer), at(consumer)) {
@@ -435,7 +444,9 @@ impl LayerGraph {
             // to remove, but an effect is.
             let source_stands = match &e.from {
                 OutputRef::Driver { .. } | OutputRef::SourceMatte => true,
-                OutputRef::EffectData { effect, .. } => alive(effect),
+                OutputRef::EffectData { effect, .. } | OutputRef::EffectOutput { effect } => {
+                    alive(effect)
+                }
             };
             let destination_stands = match &e.to {
                 InputRef::Param { node, .. } => !gone(node),
@@ -565,6 +576,20 @@ impl LayerGraph {
             .any(|e| e.from == OutputRef::SourceMatte && e.to == InputRef::Matte { effect })
     }
 
+    /// The effect above `effect` whose picture is wired into its matte, if one
+    /// is.
+    #[must_use]
+    pub fn matte_from(&self, effect: Uuid) -> Option<Uuid> {
+        self.edges.iter().find_map(|e| match (&e.from, &e.to) {
+            (OutputRef::EffectOutput { effect: from }, InputRef::Matte { effect: to })
+                if *to == effect =>
+            {
+                Some(*from)
+            }
+            _ => None,
+        })
+    }
+
     /// Check every rule `SetLayerGraph` enforces (§1.5), against the effect
     /// stack the graph sits beside.
     ///
@@ -588,7 +613,8 @@ impl LayerGraph {
             }
             let from = self.output_type(&edge.from, effects)?;
             let to = self.input_type(&edge.to, effects)?;
-            if from != to {
+            // A Matte takes a picture too, read through its Channel row.
+            if from != to && !(from == PortType::Image && to == PortType::Matte) {
                 return Err(GraphError::PortTypeMismatch);
             }
         }
@@ -603,6 +629,11 @@ impl LayerGraph {
     ) -> Result<PortType, GraphError> {
         match from {
             OutputRef::SourceMatte => Ok(PortType::Matte),
+            OutputRef::EffectOutput { effect } => effects
+                .iter()
+                .any(|e| e.id == *effect)
+                .then_some(PortType::Image)
+                .ok_or(GraphError::UnknownNode),
             OutputRef::Driver { node, port } => {
                 let inst = self.node(*node).ok_or(GraphError::UnknownNode)?;
                 Self::def_of(inst)?
@@ -723,7 +754,7 @@ impl LayerGraph {
                 let from = match &e.from {
                     OutputRef::Driver { node, .. } => *node,
                     OutputRef::EffectData { effect, .. } => *effect,
-                    OutputRef::SourceMatte => return None,
+                    OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => return None,
                 };
                 let to = match &e.to {
                     InputRef::Param {

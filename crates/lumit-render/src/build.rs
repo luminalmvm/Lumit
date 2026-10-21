@@ -2615,6 +2615,9 @@ fn comp_walk(
                 if graph.source_matte(e.id) {
                     return LayerInputDraw::ThisLayer;
                 }
+                if let Some(from) = graph.matte_from(e.id) {
+                    return LayerInputDraw::EffectOutput(from);
+                }
                 // A row the panel does not show, or shows greyed, is a row
                 // nobody meant: the Lens flare's Matte rows only exist while
                 // its Source type is Matte, and rendering the layer one names

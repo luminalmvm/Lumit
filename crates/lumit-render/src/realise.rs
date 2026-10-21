@@ -600,6 +600,7 @@ impl Realiser<'_> {
                 let d = match slot {
                     LayerInputDraw::Absent => return LayerInput::Absent,
                     LayerInputDraw::ThisLayer => return LayerInput::ThisLayer,
+                    LayerInputDraw::EffectOutput(id) => return LayerInput::EffectOutput(*id),
                     // Made when its op comes round (`late_clones`).
                     LayerInputDraw::Late(_) => return LayerInput::Late,
                     // An op's whole list: each layer rendered as it would be
