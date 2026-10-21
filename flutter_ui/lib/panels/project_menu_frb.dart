@@ -62,18 +62,32 @@ void eachInOneUndo(LumitState state, List<ItemReference> items,
   }
 }
 
-/// Duplicate every composition in [items] and hand back the copies. The
-/// panel's Duplicate, its `Mod+D` and its paste all come here. Only a comp has
-/// a copy to make, so anything else picked is passed over.
+/// Duplicate [items] and hand back the copies. The panel's Duplicate, its
+/// `Mod+D` and its paste all come here. A comp asks about the comps nested in
+/// it first, the way the Composition menu's Duplicate does.
 Future<List<ItemReference>> duplicateProjectItems(
     BuildContext context, List<ItemReference> items) async {
+  final state = Provider.of<LumitState>(context, listen: false);
   final copies = <ItemReference>[];
-  for (final item in items) {
-    if (item case ItemReference_Composition(:final field0)) {
+  final project = state.project;
+  final group = items.length > 1 && project != null;
+  if (group) project.beginUndoGroup();
+  try {
+    for (final item in items) {
       if (!context.mounted) break;
-      final copy = await duplicateCompositionFrb(context, field0);
-      if (copy != null) copies.add(ItemReference.composition(copy));
+      if (item case ItemReference_Composition(:final field0)) {
+        final copy = await duplicateCompositionFrb(context, field0);
+        if (copy != null) copies.add(ItemReference.composition(copy));
+        continue;
+      }
+      try {
+        copies.add(item.duplicate());
+      } catch (_) {
+        // Gone from under the selection.
+      }
     }
+  } finally {
+    if (group) project.endUndoGroup();
   }
   return copies;
 }
@@ -206,12 +220,11 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.compSettings),
               child: Text(l10n.compositionSettingsEllipsis),
             ),
-          if (isComp)
-            MenuRow(
-              key: const ValueKey('project-menu-duplicate'),
-              onPressed: () => close(_ProjectMenuAction.duplicate),
-              child: Text(l10n.menuDuplicate),
-            ),
+          MenuRow(
+            key: const ValueKey('project-menu-duplicate'),
+            onPressed: () => close(_ProjectMenuAction.duplicate),
+            child: Text(l10n.menuDuplicate),
+          ),
           // Every kind can be renamed from here. It matters most for a comp,
           // whose second click opens it rather than renaming it.
           MenuRow(
