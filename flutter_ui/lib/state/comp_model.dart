@@ -26,6 +26,12 @@ class CompModel extends ChangeNotifier {
   /// widget re-read the engine itself — for one call instead of dozens.
   BigInt? _revision;
 
+  /// The revision listeners were last told about. A getter re-reads without
+  /// telling anyone, so after an undo the new revision may already be read
+  /// by the time the change event lands. The graph canvases keep their own
+  /// copy and still need telling.
+  BigInt? _told;
+
   /// The frame [_freshen] last asked the engine for its revision in.
   ///
   /// Asking is itself a bridge call, and a rebuild reads several getters —
@@ -157,6 +163,7 @@ class CompModel extends ChangeNotifier {
     _revision = null;
     _checkedIn = null;
     _freshen();
+    _told = _revision;
     notifyListeners();
   }
 
@@ -173,10 +180,11 @@ class CompModel extends ChangeNotifier {
   /// undo, a recovery, the engine's own edit — still moves the number, so it
   /// still refreshes and still notifies.
   void refreshIfMoved() {
-    final was = _revision;
     _checkedIn = null;
     _freshen();
-    if (_revision != was) notifyListeners();
+    if (_revision == _told) return;
+    _told = _revision;
+    notifyListeners();
   }
 
   /// Re-read only if the document has moved since the last read.
