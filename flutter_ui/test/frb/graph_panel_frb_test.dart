@@ -99,25 +99,27 @@ void main() {
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
 
-    /// The header twirl grows the box to every parameter socket. Until it is
-    /// open, a number socket nobody has wired is not drawn at all.
+    /// A new effect's box starts open, showing every parameter socket. The
+    /// header twirl shuts it, and a number socket nobody has wired is then not
+    /// drawn at all.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
       final p = withBlur();
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      expect(socket(key, 'radius'), findsNothing);
+      expect(socket(key, 'radius'), findsOneWidget);
+      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
       await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
-      expect(socket(key, 'radius'), findsOneWidget);
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
+      expect(socket(key, 'radius'), findsNothing);
+      expect(p.layer.getGraph().wiring.exposed, isEmpty);
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(p.layer.getGraph().wiring.exposed, isEmpty,
+      expect(p.layer.getGraph().wiring.exposed, hasLength(1),
           reason: 'one gesture, one undo step');
     });
 
@@ -127,8 +129,6 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
 
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
       final to = tester.getCenter(socket(key, 'radius'));
@@ -160,8 +160,6 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
 
       var from = tester.getCenter(socket('driver:$wiggle', 'value'));
       final radius = tester.getCenter(socket(key, 'radius'));
@@ -192,8 +190,6 @@ void main() {
       final cycle = seedDriver(p.layer, 'colour_cycle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
 
       final from = tester.getCenter(socket('driver:$cycle', 'colour'));
       final to = tester.getCenter(socket(key, 'radius'));
@@ -242,8 +238,6 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
       final to = tester.getCenter(socket(key, 'radius'));
       await tester.dragFrom(from, to - from);
@@ -426,8 +420,6 @@ void main() {
       final spare = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
 
       final out = tester.getCenter(socket('driver:$first', 'value'));
       final radius = tester.getCenter(socket(key, 'radius'));
