@@ -167,6 +167,9 @@ Future<void> showProjectMenuFrb({
   /// folder.
   void Function(ItemReference folder)? onMoveToFolder,
 
+  /// Select the items a command has just made. Null leaves the selection.
+  void Function(List<ItemReference> items)? onPick,
+
   /// **What the commands act on**: the whole selection when [item] is
   /// part of it, and [item] alone when it is not — the panel's `_targets`,
   /// which **Move to folder** already took while Delete, Move to root and the
@@ -551,7 +554,7 @@ Future<void> showProjectMenuFrb({
       final copies = await duplicateProjectItems(context, acts);
       if (copies.isNotEmpty) {
         onLocalEdit();
-        ui.projectPickRequest.value = copies.last;
+        onPick?.call(copies);
       }
     case _ProjectMenuAction.interpret:
       final picked = [

@@ -292,6 +292,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// the folder picked from **Move to folder**.
   final void Function(ItemReference folder) onMoveToFolder;
 
+  /// Select items the row menu has just made, such as the copies Duplicate
+  /// leaves.
+  final void Function(List<ItemReference> items) onPick;
+
   /// The folders **Move to folder** may offer, read when the menu is raised.
   /// A function rather than a list because a menu is a gesture: reading the
   /// tree per rebuild is exactly the chatter the budget test guards against.
@@ -340,6 +344,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.onLocalEdit,
     required this.onSetLabel,
     required this.onMoveToFolder,
+    required this.onPick,
     required this.menuTargets,
     required this.folderChoices,
     this.onDropItems,
@@ -545,6 +550,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
               // Read here, not in build: raising the menu is a gesture.
               folders: widget.folderChoices(),
               onMoveToFolder: widget.onMoveToFolder,
+              onPick: widget.onPick,
               targets: widget.menuTargets(),
             );
           },

@@ -1150,6 +1150,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         onLocalEdit: _documentChanged,
         onSetLabel: (picked) => _setLabel(item, picked),
         onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
+        onPick: _pick,
         menuTargets: () => _targets(item),
         folderChoices: () => _folderChoices(item),
         onDropItems: item is ItemReference_Folder
