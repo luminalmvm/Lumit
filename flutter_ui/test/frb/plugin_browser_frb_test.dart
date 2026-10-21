@@ -37,6 +37,7 @@ BridgeEffectInfo entry({
       namespace: namespace,
       inputs: const [],
       outputs: const [],
+      otherNames: const [],
     );
 
 /// One built-in and two plugins: one that declared a grouping, one that did

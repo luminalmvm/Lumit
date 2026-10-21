@@ -7818,10 +7818,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Flutter frontend",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "stageBuild": "构建",
   "@stageBuild": {
     "description": "Name of the render's draw-list building stage, shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."

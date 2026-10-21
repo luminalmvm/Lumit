@@ -70,6 +70,7 @@ const _bannedWordIsAnotherSense = {
   'keyMoveClipsUpATrack',
   'keyMoveClipsDownATrack',
   'cutRefusedLocked',
+  'cutSoundOnItsOwnTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

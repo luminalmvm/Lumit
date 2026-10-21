@@ -8,7 +8,9 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
-# The extensions folder, and nothing else from it.
+# The LFX effect an extension carries, and the engine's own check of it.
+lumit-core = { path = "../lumit-core" }
+# The extensions folder and the extra folders the person added.
 lumit-project = { path = "../lumit-project" }
 # A folder being put together is named with a number nobody else has. Already
 # in the lock.
@@ -17,6 +19,12 @@ getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# A package is a zip of the extension's folder.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+# The check a render makes of a shader, for the Tape sample's.
+lumit-gpu = { path = "../lumit-gpu" }
 
 [lints]
 workspace = true

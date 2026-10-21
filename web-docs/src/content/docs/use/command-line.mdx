@@ -1,0 +1,148 @@
+---
+title: Command line
+description: Export, run scripts and let other programs edit a project from the command line.
+sidebar:
+  order: 19.8
+---
+
+**lumit-cli** is Lumit without its window. It exports a composition of a project, runs a
+JavaScript or After Effects (`.jsx`) script on a project, and lets another program edit a
+project over MCP.
+
+| System | Where it is |
+| --- | --- |
+| Windows | `lib\lumit-cli.exe` in Lumit's folder, `%LOCALAPPDATA%\Programs\Lumit` by default. |
+| macOS | `Lumit.app/Contents/MacOS/lumit-cli`. |
+| Linux | `lumit-cli` beside `lumit_flutter`. In the Flatpak, `flatpak run --command=lumit-cli io.github.luminalmvm.Lumit`. |
+
+## Export compositions
+
+```
+lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>] [--range <in>-<out>] [--out <file>]
+```
+
+- **--comp**: a composition, by name or id. Needed when the project has more than one.
+  Repeat it for more.
+- **--all-comps**: every composition in the project.
+- **--preset**: a saved export preset, by the name the **Export** window shows.
+- **--range**: the first and last frame to export, such as `0-119`.
+- **--out**: the file to write, or with several compositions the folder they go in.
+
+Without **--preset**, the file is an H.264 mp4 with sound, at the composition's own size and
+rate. Without **--range**, it covers the work area where one is set and the whole
+composition where it is not. Without **--out**, each file goes beside the project, named as
+the **Export** window names it, from the file name in **Settings ▸ Export** or else the
+composition's name, and numbered when that file is already there. Plugin effects the project
+uses are looked for first.
+
+Each composition is exported in turn, to its own file. One that fails is named on standard
+error, the rest still export, and the exit status is 1.
+
+## Run a script
+
+```
+lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>] [--arg <key>=<value>]
+```
+
+- **--project**: the project to open. Without it, a new empty one.
+- **--save**: save over the project when the script has finished.
+- **--save-as**: save it as this file instead.
+- **--arg**: text for the script, read as `lumit.args`. Repeat it for more. A file named this
+  way can be read by the script.
+
+A script that fails or is stopped saves nothing. A file asked for with
+`lumit.chooseFile` comes back empty, and `alert` prints to standard error.
+
+## Let another program edit a project
+
+```
+lumit-cli mcp --project <project.lum>
+```
+
+**mcp** answers the Model Context Protocol (MCP) on standard input and output, for a program
+that starts **lumit-cli** itself. Each of Lumit's commands is a tool: `comp_list`,
+`layer_add`, `layer_keys`, `markers_set`, `export_start` and the rest. `script_run` runs
+JavaScript as one undo step. Standard output carries only the protocol's messages. The
+[Scripting reference](/reference/scripting/) lists the commands and their arguments.
+
+- The project is saved only when `project_save` is called, over its own file or as a new
+  `.lum` file in its folder.
+- Footage is imported only from the project's folder and the folders inside it.
+- Exports and frames go only into the project's folder, never over a file already there.
+- `comp_frame` renders a frame of a composition to a PNG, and sends the picture back with
+  its path when it is 2 MB or smaller.
+- A relative path is read from the project's folder. A network path or a device is refused.
+- `script_run` reads no files, and stops after a minute.
+- A project open in Lumit is refused, and Lumit does not open the project while **mcp** has
+  it.
+
+A program takes **lumit-cli**'s path, from the table above, and its arguments:
+
+```json
+{
+  "command": "C:\\Users\\Name\\AppData\\Local\\Programs\\Lumit\\lib\\lumit-cli.exe",
+  "args": ["mcp", "--project", "C:\\Projects\\Shot\\shot.lum"]
+}
+```
+
+Most programs list them under `mcpServers`, under any name:
+
+```json
+{
+  "mcpServers": {
+    "lumit": {
+      "command": "C:\\Users\\Name\\AppData\\Local\\Programs\\Lumit\\lib\\lumit-cli.exe",
+      "args": ["mcp", "--project", "C:\\Projects\\Shot\\shot.lum"]
+    }
+  }
+}
+```
+
+## Let another program edit the project open in Lumit
+
+```
+lumit-cli mcp
+```
+
+Without `--project`, **mcp** edits the project open in Lumit, with the same tools. It needs
+**Settings ▸ General ▸ Let other programs drive Lumit**, which is off until turned on. With
+the setting off, or Lumit closed, **mcp** stops with exit status 1.
+
+- Every edit is a step in **History**. `script_run` is one step, and covers the window with
+  **Stop** until it ends.
+- While a program is connected, the status line names it. **Disconnect** lets it go, and
+  so does turning the setting off.
+- One program at a time. A second is refused.
+- Footage, saves and exports keep to the project's folder, as with `--project`. A project
+  that has not been saved yet is not saved, imported into or exported from.
+- An edit sent during a drag in the window waits for the drag to end, and is refused after
+  two seconds.
+
+Lumit listens on a named pipe on Windows and a socket file on macOS and Linux, never on a
+network port. The name is random, and it is kept with a secret in a file only the signed-in
+user can read. A program has to prove it holds the secret before Lumit reads anything it
+sends.
+
+A program starts it the same way, with `"args": ["mcp"]`.
+
+## What it prints
+
+Progress, the script's `print` lines and errors go to standard error. The exported files, one
+a line, or the script's last value as JSON, go to standard output.
+
+| Exit status | Meaning |
+| --- | --- |
+| 0 | Done. |
+| 1 | Failed or stopped. |
+| 2 | The arguments were wrong. |
+
+`Ctrl+C` stops a script or an export. A second `Ctrl+C` ends the program.
+
+A project open in Lumit is not saved over, and Lumit does not open a project
+**lumit-cli** is saving to.
+
+## Related
+
+- [Exporting](/use/export/)
+- [Projects](/use/projects/)
+- [Scripting reference](/reference/scripting/)

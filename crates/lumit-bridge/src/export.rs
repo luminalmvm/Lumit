@@ -274,7 +274,7 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
 /// container from the file name and the Windows save dialogue hands back a
 /// typed name as it is, so a name without the extension would fail to open.
 #[cfg(feature = "media")]
-fn with_format_extension(out_path: &str, codec: &str) -> String {
+pub(crate) fn with_format_extension(out_path: &str, codec: &str) -> String {
     let Ok(format) = export_format(codec) else {
         return out_path.to_owned();
     };
@@ -292,7 +292,7 @@ fn with_format_extension(out_path: &str, codec: &str) -> String {
 }
 
 #[cfg(not(feature = "media"))]
-fn with_format_extension(out_path: &str, _codec: &str) -> String {
+pub(crate) fn with_format_extension(out_path: &str, _codec: &str) -> String {
     out_path.to_owned()
 }
 

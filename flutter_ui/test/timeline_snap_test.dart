@@ -60,6 +60,7 @@ void main() {
           clips: [
             BridgeClip(
               id: id,
+              audible: true,
               placeStart: const BridgeRational(num: 1, den: 1),
               placeDuration: const BridgeRational(num: 1, den: 1),
               gainDb: 0,
@@ -156,8 +157,8 @@ void main() {
   });
 
   group('What a drag lands on', () {
-    // Ten pixels per frame: the default eight-pixel slop is therefore
-    // 0.8 frames, which makes every case below easy to reason about.
+    // Ten pixels per frame: the default twelve-pixel slop is therefore
+    // 1.2 frames, which makes every case below easy to reason about.
     const perFrame = 10.0;
 
     test('a target within the slop takes the drag exactly', () {
@@ -192,16 +193,16 @@ void main() {
     /// zoomed in.
     test('the reach is in pixels, so the magnification is the precision', () {
       const target = [SnapTarget(14, SnapKind.marker)];
-      // Zoomed out: two frames away is 8 px at 4 px/frame... just outside.
+      // Zoomed out: two frames away is 12 px at 6 px/frame... just outside.
       expect(
         snapFrame(
-                frame: 12, targets: target, perFrame: 4.0, magnet: true)
+                frame: 12, targets: target, perFrame: 6.0, magnet: true)
             .caught,
         isNull,
       );
-      // Zoomed further out: the same two frames is 6 px, and it catches.
+      // Zoomed further out: the same two frames is 10 px, and it catches.
       expect(
-        snapFrame(frame: 12, targets: target, perFrame: 3.0, magnet: true)
+        snapFrame(frame: 12, targets: target, perFrame: 5.0, magnet: true)
             .caught,
         const SnapTarget(14, SnapKind.marker),
       );

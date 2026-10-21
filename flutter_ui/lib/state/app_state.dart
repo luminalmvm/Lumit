@@ -5,7 +5,6 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, exit;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -22,6 +21,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
 import 'package:lumit_flutter/src/rust/api/share.dart'
     hide joinSharedProject, shareDefaultPort, shareLinkIn, shareRelayPort;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -53,7 +53,13 @@ String? projectNameFor(String? path) {
 ///
 /// A Linux desktop hands the document over as a `file:` address, since the
 /// same launcher line also takes an invite link.
-String? projectPathFromArgs(List<String> args) {
+String? projectPathFromArgs(List<String> args) => _fileFromArgs(args, '.lum');
+
+/// The `.lfx` extension package a double-click asked Lumit to install, read
+/// as [projectPathFromArgs] reads a project.
+String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
+
+String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
       try {
@@ -62,7 +68,7 @@ String? projectPathFromArgs(List<String> args) {
         continue;
       }
     }
-    if (a.toLowerCase().endsWith('.lum') && File(a).existsSync()) return a;
+    if (a.toLowerCase().endsWith(ending) && File(a).existsSync()) return a;
   }
   return null;
 }
@@ -84,15 +90,17 @@ String? inviteFromArgs(List<String> args) {
 }
 
 /// The macOS runner's end of this is `OpenRequests` in AppDelegate.swift.
+/// The Windows and Linux runners answer it too, for a Lumit kept running in
+/// the background that a second start hands its arguments to.
 const _openRequests = MethodChannel('lumit/open');
 
 /// What macOS has asked Lumit to open and nobody has taken yet: a project
 /// double-clicked in Finder as its path, an invite link clicked in a browser
 /// as it was written. macOS hands these over as events and never as
 /// arguments, so they are read as arguments once they are here, by
-/// [projectPathFromArgs] and [inviteFromArgs]. Empty on every other system.
+/// [projectPathFromArgs] and [inviteFromArgs]. Elsewhere it is what a second
+/// start passed on, and empty at start-up.
 Future<List<String>> takeOpenRequests() async {
-  if (defaultTargetPlatform != TargetPlatform.macOS) return const [];
   try {
     return await _openRequests.invokeListMethod<String>('take') ?? const [];
   } catch (_) {
@@ -101,11 +109,10 @@ Future<List<String>> takeOpenRequests() async {
   }
 }
 
-/// Hand [open] whatever macOS asks Lumit to open from here on. A click that
-/// finds Lumit running comes to it there, where another system would start a
-/// second one.
+/// Hand [open] whatever Lumit is asked to open from here on. A click that
+/// finds Lumit running comes to it on macOS, and on the other systems when
+/// it is kept running in the background.
 void listenForOpenRequests(void Function(List<String> asked) open) {
-  if (defaultTargetPlatform != TargetPlatform.macOS) return;
   Future<void> take() async {
     final asked = await takeOpenRequests();
     if (asked.isNotEmpty) open(asked);
@@ -123,6 +130,10 @@ class LumitState extends ChangeNotifier {
   /// The invite link Lumit was started with, until the Shared project window
   /// has opened on it.
   String? launchInvite;
+
+  /// The extension package Lumit was started with, until its install
+  /// window has opened.
+  String? launchPackage;
 
   StreamSubscription? currentDocumentStream;
 
@@ -161,9 +172,12 @@ class LumitState extends ChangeNotifier {
   final List<LumitNotice> recentNotices = [];
 
   void postNotice(String message,
-      {bool error = false, bool sticky = false, VoidCallback? onTap}) {
-    final posted =
-        LumitNotice(message, error: error, sticky: sticky, onTap: onTap);
+      {bool error = false,
+      bool sticky = false,
+      String? action,
+      VoidCallback? onTap}) {
+    final posted = LumitNotice(message,
+        error: error, sticky: sticky, action: action, onTap: onTap);
     // One that stays until it is dismissed keeps the line from anything
     // quiet, which waits behind it in the list a press on the line shows.
     final kept = notice.value;
@@ -181,6 +195,10 @@ class LumitState extends ChangeNotifier {
   /// How the shell offers back the edits a crash left behind, for the project
   /// at a path. Null until there is a window to ask in.
   Future<void> Function(String path)? offerRecovery;
+
+  /// How the shell runs the script chosen for [ScriptEvent], told the file
+  /// the event was about. Null until there is a window to run it in.
+  void Function(ScriptEvent event, String path)? runEventScript;
 
   bool _askingUnsaved = false;
 
@@ -1071,8 +1089,26 @@ class LumitState extends ChangeNotifier {
       } catch (_) {
         // Closed again already.
       }
-      if (crashed) unawaited(offerRecovery?.call(path));
+      if (crashed) {
+        unawaited(offerRecovery?.call(path));
+        return;
+      }
     }
+    _tellOpened(opened, path);
+  }
+
+  /// Run the project-opened script once [opened] is in and its card has
+  /// gone, if it is still the open project then.
+  void _tellOpened(ProjectReference opened, String path) {
+    void check() {
+      if (opening.value) return;
+      opening.removeListener(check);
+      if (identical(project, opened)) {
+        runEventScript?.call(ScriptEvent.open, path);
+      }
+    }
+
+    opening.addListener(check);
   }
 
   /// Import an After Effects project and make it the open one (docs/11) —
@@ -1443,6 +1479,9 @@ class LumitNotice {
 
   /// What a press on its words does, for a notice that leads somewhere.
   final VoidCallback? onTap;
+
+  /// A button beside the words that does the same, for where it leads.
+  final String? action;
   const LumitNotice(this.message,
-      {this.error = false, this.sticky = false, this.onTap});
+      {this.error = false, this.sticky = false, this.action, this.onTap});
 }

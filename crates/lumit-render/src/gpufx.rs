@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+pub mod lfx;
 pub mod ofx;
 
 type Tex = wgpu::Texture;
@@ -780,6 +781,7 @@ impl CustomShader {
     fn header(
         roi_offset: [u32; 2],
         roi_size: [u32; 2],
+        raster_size: [u32; 2],
         comp_scale: f32,
         lt: f64,
         seed: u32,
@@ -796,8 +798,7 @@ impl CustomShader {
             mix_amt: mix,
             matte_on: f32::from(u8::from(matte_on)),
             input2_on: f32::from(u8::from(input2_on)),
-            _pad0: 0,
-            _pad1: 0,
+            raster_size,
         };
         // Field by field rather than `bytes_of`: the header has padding, and a
         // byte of uninitialised memory in a uniform is the kind of difference
@@ -817,8 +818,8 @@ impl CustomShader {
         out.extend_from_slice(&head.mix_amt.to_le_bytes());
         out.extend_from_slice(&head.matte_on.to_le_bytes());
         out.extend_from_slice(&head.input2_on.to_le_bytes());
-        out.extend_from_slice(&head._pad0.to_le_bytes());
-        out.extend_from_slice(&head._pad1.to_le_bytes());
+        out.extend_from_slice(&head.raster_size[0].to_le_bytes());
+        out.extend_from_slice(&head.raster_size[1].to_le_bytes());
         out
     }
 }
@@ -873,6 +874,7 @@ impl GpuEffect for CustomShader {
         let header = Self::header(
             [fx0 as u32, fy0 as u32],
             [fw as u32, fh as u32],
+            [w, h],
             p.float(cs::COMP_SCALE, 1.0),
             lt,
             seed,
@@ -4719,6 +4721,71 @@ impl Particulate {
         );
         f(&op, sprite.filter(|_| mode == 1))
     }
+
+    /// The particles a collider walk got to, drawn through the shared points
+    /// draw. `stream` is in px@comp.
+    #[allow(clippy::too_many_arguments)]
+    fn stepped(
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+        stream: &lumit_core::fx::points::PointsStream,
+    ) -> Tex {
+        use lumit_core::fx::effects::particulate::Particulate as P;
+        let inst = P::read(p);
+        let style = inst.draw_style();
+        let px_scale = P::px_scale_of(p);
+        let s = stream.rescaled(px_scale);
+        // A streak runs back along the particle's speed, Streak length's
+        // worth. The walk keeps no earlier frames to run back through.
+        let back = style.streak_seconds;
+        let tails: Vec<[f32; 3]> = if back > 0.0 {
+            s.position
+                .iter()
+                .zip(&s.speed)
+                .map(|(at, v)| {
+                    [
+                        at[0] - v[0] * back,
+                        at[1] - v[1] * back,
+                        at[2] - v[2] * back,
+                    ]
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let points = draw_points_tailed(&s, &tails);
+        let sprite = <P as EffectMetadata>::SCHEMA
+            .layer_inputs()
+            .position(|row| row == "sprite_layer")
+            .and_then(|at| aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex))
+            .filter(|_| style.mode == lumit_core::fx::points::RenderMode::Sprite);
+        let projection = aux
+            .schedule()
+            .and_then(|sched| sched.projection)
+            .map(|proj| proj.rescaled(px_scale).m);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection,
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: inst.seed,
+                mode: u32::from(sprite.is_some()),
+                sprite,
+            },
+        )
+    }
 }
 
 impl GpuEffect for Particulate {
@@ -4735,6 +4802,9 @@ impl GpuEffect for Particulate {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
+        if let Some(stream) = aux.schedule().and_then(|s| s.stepped.as_ref()) {
+            return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
+        }
         Particulate::with_op(p, aux, |op, sprite| {
             fx.particulate(ctx, tex, w, h, sprite, op)
         })
@@ -4754,6 +4824,10 @@ impl GpuEffect for Particulate {
         aux: AuxSlot<'_>,
     ) -> Option<lumit_core::fx::points::PointsStream> {
         use lumit_core::fx::effects::particulate::Particulate as P;
+        // A walked stream was made before the render, by the driver walk.
+        if aux.schedule().is_some_and(|s| s.stepped.is_some()) {
+            return None;
+        }
         let px_scale = P::px_scale_of(p);
         let (count, words, projection) = Particulate::with_op(p, aux, |op, _| {
             op.density?;
@@ -5946,6 +6020,10 @@ mod tests {
             trigger: 0.0,
             edge: 0,
             edge_margin: 20.0,
+            collide_with: false,
+            on_contact: 0,
+            bounciness: 60.0,
+            friction: 10.0,
             direction: -90.0,
             spread: 200.0,
             initial_speed: 70.0,

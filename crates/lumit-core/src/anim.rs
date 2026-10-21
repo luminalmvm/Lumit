@@ -116,6 +116,18 @@ pub const EASY_EASE: SideInterp = SideInterp::Bezier {
     influence: 1.0 / 3.0,
 };
 
+/// One side of a key eased as After Effects describes it: a speed in the
+/// property's units a second, and an influence as a per cent of the span,
+/// 0.1 to 100. Lumit's influence is the same as a fraction. Either left out
+/// is the After Effects default, no speed and a third of the span.
+#[must_use]
+pub fn ae_ease(speed: Option<f64>, influence: Option<f64>) -> SideInterp {
+    SideInterp::Bezier {
+        speed: speed.unwrap_or(0.0),
+        influence: (influence.unwrap_or(100.0 / 3.0) / 100.0).clamp(1e-3, 1.0),
+    }
+}
+
 impl Keyframe {
     /// This keyframe made linear on both sides — straight lines to its
     /// neighbours, the default for a fresh key.

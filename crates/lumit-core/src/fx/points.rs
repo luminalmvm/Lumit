@@ -56,6 +56,8 @@ use crate::fx::cpu::{curve_at, CURVE_TABLE};
 use crate::fx::noise::{hash01, value3};
 use crate::mask::MaskPolyline;
 
+pub mod stepped;
+
 /// Max particles' default: the cap a fresh instance declares, and the
 /// budget the reference desktop must draw in a millisecond.
 pub const CAP_DEFAULT: i64 = 20_000;
@@ -257,6 +259,36 @@ impl Edge {
             1 => Edge::Kill,
             2 => Edge::Wrap,
             _ => Edge::None,
+        }
+    }
+}
+
+/// What a particle does when it hits a Collide with layer's shapes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Contact {
+    /// It comes off the other way, keeping Bounciness of its speed.
+    #[default]
+    Bounce,
+    /// It carries on along the surface.
+    Slide,
+    /// It stays where it hit, and moves with the layer it hit.
+    Stick,
+    /// It dies.
+    Kill,
+}
+
+impl Contact {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["Bounce", "Slide", "Stick", "Kill"];
+
+    /// The response for a stored Choice index; anything unknown is Bounce.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Contact::Slide,
+            2 => Contact::Stick,
+            3 => Contact::Kill,
+            _ => Contact::Bounce,
         }
     }
 }
@@ -1679,6 +1711,10 @@ pub struct PointsSchedule {
     /// distance in. Only the points effects a stack ends on are given any,
     /// and it is nought on every other layer.
     pub grow: [u32; 2],
+    /// The particles a Particulate with a Collide with layer walked to, in
+    /// px@comp ([`stepped`]). The card draws these instead of working its own
+    /// out from `schedule`. `None` everywhere else.
+    pub stepped: Option<PointsStream>,
 }
 
 /// One letter of a Text layer as it is laid out, in the layer's own px. A
@@ -1963,6 +1999,69 @@ fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
     }
 }
 
+/// Which way and how fast particle `b` leaves the emitter.
+fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
+    let e = &p.emitter;
+    let dir = e.direction_deg.to_radians()
+        + (draw(p.seed, b, attr::DIRECTION) - 0.5) * e.spread_deg.to_radians();
+    let dir_z = e.direction_z_deg.to_radians()
+        + (draw(p.seed, b, attr::DIRECTION_Z) - 0.5) * e.spread_z_deg.to_radians();
+    let speed = jitter(e.speed, e.speed_jitter, draw(p.seed, b, attr::SPEED));
+    let (sd, cd) = dir.sin_cos();
+    // The elevation tilts the launch out of the plane. At nought — every
+    // project saved before the axis existed — `cos` is exactly 1 and `sin`
+    // exactly 0, so the two in-plane components are the bits they always
+    // were.
+    let (sz, cz) = dir_z.sin_cos();
+    [speed * cd * cz, speed * sd * cz, speed * sz]
+}
+
+/// How particle `b` looks `age` seconds into a life of `life`, going at
+/// `speed`: its size, its premultiplied colour and its rotation.
+fn look_of(p: &PointsParams, b: u64, age: f32, life: f32, speed: [f32; 3]) -> (f32, [f32; 4], f32) {
+    let look = &p.particle;
+    let u = (age / life).clamp(0.0, 1.0);
+    let fast = speed[0].hypot(speed[1]).hypot(speed[2]);
+    let drive = |by: Drive, die: u32| match by {
+        Drive::Age => u,
+        Drive::Speed => drive_speed(fast, look.speed_range),
+        Drive::Random => draw(p.seed, b, die),
+    };
+    let size = jitter(look.size, look.size_jitter, draw(p.seed, b, attr::SIZE))
+        * curve_at(drive(look.size_by, attr::RANDOM_SIZE), &look.size_curve);
+    let alpha = look.colour[3]
+        * curve_at(
+            drive(look.opacity_by, attr::RANDOM_OPACITY),
+            &look.opacity_curve,
+        );
+    let toward = drive(look.colour_by, attr::RANDOM_COLOUR);
+    // Premultiplied, and the blend to End colour is in working space —
+    // which is what "in working space" costs: one lerp, no encode.
+    let mut colour = [alpha; 4];
+    for (c, (from, to)) in colour
+        .iter_mut()
+        .zip(look.colour.iter().zip(look.end_colour.iter()))
+        .take(3)
+    {
+        *c = (from + (to - from) * toward) * alpha;
+    }
+    // The per-particle rotation spread: a uniform draw of ±half the
+    // dial about Rotation, from the seed hash like every other die, so two
+    // sprites born together do not point the same way.
+    let spread_rot =
+        (draw(p.seed, b, attr::ROTATION) - 0.5) * look.rotation_jitter_deg.to_radians();
+    // Align to motion follows the motion **in the layer's plane**: a
+    // rotation is one angle in the picture the sprite is stamped into, and
+    // the depth component of the speed is not an angle that picture has.
+    let rotation = if look.align_to_motion {
+        speed[1].atan2(speed[0]) + look.rotation_deg.to_radians()
+    } else {
+        look.rotation_deg.to_radians()
+    } + spread_rot
+        + look.spin_deg.to_radians() * age;
+    (size, colour, rotation)
+}
+
 /// Where in the emitter this particle starts.
 ///
 /// `w` is the draw through the emitter's [`depth`](Emitter::depth),
@@ -2094,10 +2193,6 @@ pub fn evaluate_dense(
     // fixed, so one frame key names one picture whatever raster or refresh the
     // preview happens to be running at (particulate.md §3.2).
     let eps = (sched.dt() as f32 * 0.5).max(1e-6);
-    let spread = e.spread_deg.to_radians();
-    let base_dir = e.direction_deg.to_radians();
-    let spread_z = e.spread_z_deg.to_radians();
-    let base_dir_z = e.direction_z_deg.to_radians();
     let bounds = p.edge_box();
     let dt = sched.dt() as f32;
 
@@ -2149,16 +2244,7 @@ pub fn evaluate_dense(
                 }
             }
         };
-        let dir = base_dir + (draw(p.seed, b, attr::DIRECTION) - 0.5) * spread;
-        let dir_z = base_dir_z + (draw(p.seed, b, attr::DIRECTION_Z) - 0.5) * spread_z;
-        let speed = jitter(e.speed, e.speed_jitter, draw(p.seed, b, attr::SPEED));
-        let (sd, cd) = dir.sin_cos();
-        // The elevation tilts the launch out of the plane. At nought — every
-        // project saved before the axis existed — `cos` is exactly 1 and `sin`
-        // exactly 0, so the two in-plane components are the bits they always
-        // were.
-        let (sz, cz) = dir_z.sin_cos();
-        let v0 = [speed * cd * cz, speed * sd * cz, speed * sz];
+        let v0 = launch(p, b);
         let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;
         if let Some(bx) = bounds.filter(|_| p.edge == Edge::Kill) {
             if has_left(bx, &p.forces, p.seed, p0, v0, phase, life, age, dt) {
@@ -2169,50 +2255,12 @@ pub fn evaluate_dense(
         let d = turbulence(p0, phase, &p.forces, p.seed, age);
         let d_next = turbulence(p0, phase, &p.forces, p.seed, age + eps);
         let d_prev = turbulence(p0, phase, &p.forces, p.seed, age - eps);
-        let u = (age / life).clamp(0.0, 1.0);
         let speed_out = [
             vel[0] + (d_next[0] - d_prev[0]) / (2.0 * eps),
             vel[1] + (d_next[1] - d_prev[1]) / (2.0 * eps),
             vel[2] + (d_next[2] - d_prev[2]) / (2.0 * eps),
         ];
-        let fast = speed_out[0].hypot(speed_out[1]).hypot(speed_out[2]);
-        let drive = |by: Drive, die: u32| match by {
-            Drive::Age => u,
-            Drive::Speed => drive_speed(fast, look.speed_range),
-            Drive::Random => draw(p.seed, b, die),
-        };
-        let size = jitter(look.size, look.size_jitter, draw(p.seed, b, attr::SIZE))
-            * curve_at(drive(look.size_by, attr::RANDOM_SIZE), &look.size_curve);
-        let alpha = look.colour[3]
-            * curve_at(
-                drive(look.opacity_by, attr::RANDOM_OPACITY),
-                &look.opacity_curve,
-            );
-        let toward = drive(look.colour_by, attr::RANDOM_COLOUR);
-        // Premultiplied, and the blend to End colour is in working space —
-        // which is what "in working space" costs: one lerp, no encode.
-        let mut colour = [alpha; 4];
-        for (c, (from, to)) in colour
-            .iter_mut()
-            .zip(look.colour.iter().zip(look.end_colour.iter()))
-            .take(3)
-        {
-            *c = (from + (to - from) * toward) * alpha;
-        }
-        // The per-particle rotation spread: a uniform draw of ±half the
-        // dial about Rotation, from the seed hash like every other die, so two
-        // sprites born together do not point the same way.
-        let spread_rot =
-            (draw(p.seed, b, attr::ROTATION) - 0.5) * look.rotation_jitter_deg.to_radians();
-        // Align to motion follows the motion **in the layer's plane**: a
-        // rotation is one angle in the picture the sprite is stamped into, and
-        // the depth component of the speed is not an angle that picture has.
-        let rotation = if look.align_to_motion {
-            speed_out[1].atan2(speed_out[0]) + look.rotation_deg.to_radians()
-        } else {
-            look.rotation_deg.to_radians()
-        } + spread_rot
-            + look.spin_deg.to_radians() * age;
+        let (size, colour, rotation) = look_of(p, b, age, life, speed_out);
 
         let mut head = [pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]];
         // Wrapped back into the frame. The tail moves with the head, so a

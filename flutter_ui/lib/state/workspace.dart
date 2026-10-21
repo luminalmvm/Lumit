@@ -595,6 +595,11 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// Whether the start-up splash lights its card with the theme's accent
+  /// rather than Lumit's own green and blue. Off by default, so the splash
+  /// looks like Lumit whatever the chrome.
+  bool themedSplash = false;
+
   /// The effects and presets the owner has starred in Effects & presets
   /// (owner, desk test), by the panel's own key — an effect's match name, or
   /// `preset:` and the preset's name.
@@ -793,6 +798,10 @@ class Workspace extends ChangeNotifier {
   /// default, since a project's name can be somebody else's secret.
   DiscordStatus discordStatus = DiscordStatus.app;
 
+  /// Whether other programs on this computer may drive Lumit through its
+  /// live endpoint. Off until the person turns it on.
+  bool liveEndpoint = false;
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -803,6 +812,13 @@ class Workspace extends ChangeNotifier {
 
   /// The `.lum` a new project starts as a copy of, or empty for none.
   String projectTemplate = '';
+
+  /// The folder File > Scripts lists, or empty for Lumit's own.
+  String scriptsFolder = '';
+
+  /// The script run after each event, by its path in the Scripts folder.
+  /// None is set at first.
+  final Map<ScriptEvent, String> eventScripts = {};
 
   /// When the last update check finished, in milliseconds since the epoch.
   /// Zero means never. Kept so six launches in a morning ask GitHub once.
@@ -965,6 +981,26 @@ class Workspace extends ChangeNotifier {
 
   void setPhonesExport(bool on) {
     phonesExport = on;
+    save();
+  }
+
+  /// Whether closing the window leaves Lumit running in the tray, so the
+  /// phones still see this computer. This machine's own, so in no profile
+  /// group, as is [openAtSignIn].
+  bool keepRunning = false;
+
+  /// Whether Lumit starts in the tray when the person signs in. Only ever on
+  /// with [keepRunning].
+  bool openAtSignIn = false;
+
+  void setKeepRunning(bool on) {
+    keepRunning = on;
+    if (!on) openAtSignIn = false;
+    save();
+  }
+
+  void setOpenAtSignIn(bool on) {
+    openAtSignIn = on && keepRunning;
     save();
   }
 
@@ -1360,9 +1396,30 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setLiveEndpoint(bool on) {
+    liveEndpoint = on;
+    settingsChanged();
+  }
+
   /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
+    settingsChanged();
+  }
+
+  /// Choose the folder File > Scripts lists, or empty for Lumit's own.
+  void setScriptsFolder(String path) {
+    scriptsFolder = path;
+    settingsChanged();
+  }
+
+  /// Run [script] after [event], or nothing when it is null.
+  void setEventScript(ScriptEvent event, String? script) {
+    if (script == null) {
+      eventScripts.remove(event);
+    } else {
+      eventScripts[event] = script;
+    }
     settingsChanged();
   }
 
@@ -1381,6 +1438,11 @@ class Workspace extends ChangeNotifier {
 
   void setThemedScopes(bool on) {
     themedScopes = on;
+    settingsChanged();
+  }
+
+  void setThemedSplash(bool on) {
+    themedSplash = on;
     settingsChanged();
   }
 
@@ -1891,8 +1953,14 @@ class Workspace extends ChangeNotifier {
         'nightly_updates': nightlyUpdates,
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
+        'live_endpoint': liveEndpoint,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
+        'scripts_folder': scriptsFolder,
+        'event_scripts': {
+          for (final MapEntry(:key, :value) in eventScripts.entries)
+            key.name: value,
+        },
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
@@ -1902,6 +1970,8 @@ class Workspace extends ChangeNotifier {
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
         'phones_export': phonesExport,
+        'keep_running': keepRunning,
+        'open_at_sign_in': openAtSignIn,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -1919,6 +1989,7 @@ class Workspace extends ChangeNotifier {
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'themed_splash': themedSplash,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
         'saved_expression_languages': _encodedExpressionLanguages(),
@@ -1999,10 +2070,19 @@ class Workspace extends ChangeNotifier {
     // By name. Absent, or a name no build wrote, is the shipped default.
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
+    liveEndpoint = j['live_endpoint'] as bool? ?? false;
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
+    scriptsFolder = j['scripts_folder'] as String? ?? '';
+    eventScripts.clear();
+    if (j['event_scripts'] case final Map<String, dynamic> scripts) {
+      for (final MapEntry(:key, :value) in scripts.entries) {
+        final event = ScriptEvent.values.asNameMap()[key];
+        if (event != null && value is String) eventScripts[event] = value;
+      }
+    }
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
     // Absent, or empty from a hand-edited file, means follow the machine —
@@ -2021,6 +2101,8 @@ class Workspace extends ChangeNotifier {
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
+    keepRunning = j['keep_running'] == true;
+    openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
@@ -2093,6 +2175,7 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    themedSplash = j['themed_splash'] == true;
     favouriteEffects
       ..clear()
       ..addAll([

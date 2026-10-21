@@ -404,7 +404,10 @@ fn fx_ports(
     if !driver {
         for param in schema.params {
             let is_matte = schema.matte.param() == Some(param.id);
-            if matches!(param.kind, ParamKind::Layer { .. }) && !is_matte {
+            if matches!(param.kind, ParamKind::Layer { .. })
+                && !is_matte
+                && !def.shape_inputs().contains(&param.id)
+            {
                 let ty = if def.depth_inputs().contains(&param.id) {
                     PortType::Depth
                 } else {

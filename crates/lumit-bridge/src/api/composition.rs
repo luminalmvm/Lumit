@@ -84,75 +84,31 @@ pub(crate) fn bridge_marker(
 }
 
 /// A whole marker list coming back from the panel, merged onto the list the
-/// document holds.
-///
-/// **Why a merge and not a conversion.** The bridge marker carries what a panel
-/// can edit — id, time, label, colour and the span — and the engine's marker
-/// carries two more it cannot: the *kind* (a detected beat's provenance, plus
-/// its confidence) and the `extra` map that keeps fields a newer Lumit wrote
-/// (docs/10 §1.1's forward-compatibility promise). Rebuilding each marker from
-/// the bridge's fields alone flattened those to their defaults, so **dragging
-/// or renaming a beat marker on the ruler turned it into an ordinary cue** —
-/// and then *Clear beat markers* could no longer find it, because there was
-/// nothing left to say it had ever been one. The ruler markers made that a
-/// click away.
-///
-/// So each incoming marker is matched by id against what the document already
-/// holds: found, and it keeps that marker's kind and extra; new, and it is a
-/// plain user marker, which is exactly what a marker the panel just created is.
-///
-/// **The duration crosses now, and still rides the merge.** It crosses as
-/// *frames* — what the ruler draws with — so a straight conversion back would
-/// round a marker whose span is finer than a frame down to the frame boundary
-/// every time an unrelated drag wrote the list. So a duration that still reads
-/// as the same number of frames keeps the document's exact rational, and only a
-/// span the panel actually changed is rebuilt from frames.
+/// document holds ([`lumit_core::markers::merge_edits`] says why a merge).
 #[frb(ignore)]
 pub(crate) fn core_markers(
     incoming: Vec<BridgeMarker>,
     existing: &[lumit_core::markers::Marker],
     rate: lumit_core::time::FrameRate,
 ) -> Result<Vec<lumit_core::markers::Marker>, BridgeError> {
-    incoming
+    let edits = incoming
         .into_iter()
-        .map(|m| {
-            let was = existing.iter().find(|e| e.id == m.id);
-            core_marker(m, was, rate)
-        })
-        .collect()
+        .map(core_marker)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(lumit_core::markers::merge_edits(edits, existing, rate))
 }
 
 #[frb(ignore)]
-pub(crate) fn core_marker(
-    m: BridgeMarker,
-    existing: Option<&lumit_core::markers::Marker>,
-    rate: lumit_core::time::FrameRate,
-) -> Result<lumit_core::markers::Marker, BridgeError> {
+pub(crate) fn core_marker(m: BridgeMarker) -> Result<lumit_core::markers::MarkerEdit, BridgeError> {
     use lumit_core::time::{CompTime, Rational};
-    let was = existing.and_then(|e| e.duration);
-    let duration = match m.duration_frames {
-        // Unchanged in frames: keep the exact span the document holds, so a
-        // rename or a drag cannot quantise a marker nobody resized.
-        Some(frames) if was.map(|d| rate.frame_at(CompTime(d))) == Some(frames) => was,
-        // A span the panel set. Nought frames or fewer is a moment, which is
-        // what "no span" means everywhere else.
-        Some(frames) if frames > 0 => rate.time_of_frame(frames).ok().map(|t| t.0),
-        Some(_) => None,
-        None => None,
-    };
-    Ok(lumit_core::markers::Marker {
+    Ok(lumit_core::markers::MarkerEdit {
         id: m.id,
         time: CompTime(
             Rational::new(m.time.num, m.time.den).map_err(|_| BridgeError::InvalidTime)?,
         ),
-        duration,
         label: m.label,
         colour: m.colour,
-        // Everything the panel cannot edit is carried from the marker that was
-        // already there; a marker it has just made has nothing to carry, and
-        // takes the plain-user defaults.
-        kind: existing.map(|e| e.kind).unwrap_or_default(),
-        extra: existing.map(|e| e.extra.clone()).unwrap_or_default(),
+        duration_frames: m.duration_frames,
     })
 }
 
@@ -350,34 +306,40 @@ impl BridgeCompSettings {
     /// what a default comp is.
     #[frb(sync)]
     pub fn defaults() -> BridgeCompSettings {
+        let d = lumit_core::edits::CompSettings::default();
         BridgeCompSettings {
-            name: String::new(),
-            width: 1920,
-            height: 1080,
-            fps_num: 60,
-            fps_den: 1,
-            duration: BridgeRational { num: 30, den: 1 },
-            // Black, and the model's own shutter — one place decides what a
-            // comp is, and this is it.
-            background: [0.0, 0.0, 0.0, 1.0],
-            shutter_angle: lumit_core::model::MotionBlur::default().shutter_angle,
-            motion_blur_samples: lumit_core::model::MotionBlur::default().samples,
+            name: d.name,
+            width: d.width,
+            height: d.height,
+            fps_num: d.frame_rate.num(),
+            fps_den: d.frame_rate.den(),
+            duration: BridgeRational {
+                num: d.duration.0.num(),
+                den: d.duration.0.den(),
+            },
+            background: d.background,
+            shutter_angle: d.shutter_angle,
+            motion_blur_samples: d.motion_blur_samples,
         }
     }
 
-    /// The engine types this settings block names, or `None` when the rate or
+    /// The engine's settings this block names, or `None` when the rate or
     /// duration is not a time at all.
     #[frb(ignore)]
-    pub(crate) fn to_engine(
-        &self,
-    ) -> Option<(lumit_core::time::FrameRate, lumit_core::time::Duration)> {
-        use lumit_core::time::{Duration, FrameRate, Rational};
-        let rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
+    pub(crate) fn to_engine(&self) -> Option<lumit_core::edits::CompSettings> {
+        use lumit_core::time::{FrameRate, Rational};
+        let frame_rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
         let duration = Rational::new(self.duration.num, self.duration.den).ok()?;
-        // A comp shorter than one frame has nothing to show, so the floor is one
-        // frame at the rate being applied.
-        let floor = rate.frame_duration().ok()?;
-        Some((rate, Duration(duration.max(floor.0))))
+        Some(lumit_core::edits::CompSettings {
+            name: self.name.clone(),
+            width: self.width,
+            height: self.height,
+            frame_rate,
+            duration: lumit_core::edits::comp_duration(frame_rate, duration)?,
+            background: self.background,
+            shutter_angle: self.shutter_angle,
+            motion_blur_samples: self.motion_blur_samples,
+        })
     }
 }
 
@@ -647,68 +609,18 @@ impl CompositionReference {
     #[frb(sync)]
     pub fn set_settings(&self, settings: BridgeCompSettings) -> Result<(), BridgeError> {
         let comp = self.composition()?;
-        let (frame_rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let settings = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let ops = lumit_core::edits::comp_settings_ops(&comp, settings);
 
-        let motion_blur = lumit_core::model::MotionBlur {
-            // The dialog does not ask whether the master switch is on, or what
-            // the shutter's phase is; both are left exactly as they stand.
-            shutter_angle: settings.shutter_angle,
-            samples: settings.motion_blur_samples.max(1),
-            ..comp.motion_blur
-        };
-
-        let (width, height) = (
-            settings.width.clamp(16, 16384),
-            settings.height.clamp(16, 16384),
-        );
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.begin_undo_group();
-        // The other settings first, at the size the frame has, so the step
-        // is named for the settings in the undo list. Then a new frame size,
-        // which keeps the picture's middle in the middle: the frame is
-        // cropped (or grown) evenly about its centre, which moves the layers
-        // with it. Without this every layer stays where it was against the
-        // top-left corner and a narrower comp shows them pushed to one side.
-        let applied = proj
-            .store
-            .commit(lumit_core::Op::SetCompSettings {
-                comp: self.id,
-                name: settings.name,
-                width: comp.width,
-                height: comp.height,
-                frame_rate,
-                duration,
-                background: lumit_core::model::LinearColour(settings.background),
-            })
-            .map_err(BridgeError::OpError)
-            .and_then(|_| {
-                if (width, height) == (comp.width, comp.height) {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::CropCompToRegion {
-                        comp: self.id,
-                        x: (f64::from(comp.width) - f64::from(width)) / 2.0,
-                        y: (f64::from(comp.height) - f64::from(height)) / 2.0,
-                        width,
-                        height,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            })
-            .and_then(|_| {
-                if motion_blur == comp.motion_blur {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::SetCompMotionBlur {
-                        comp: self.id,
-                        motion_blur,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            });
+        let applied = ops.into_iter().try_for_each(|op| {
+            proj.store
+                .commit(op)
+                .map(|_| ())
+                .map_err(BridgeError::OpError)
+        });
         proj.store.end_undo_group();
         applied
     }
@@ -1172,19 +1084,7 @@ impl CompositionReference {
     pub fn add_solid_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let doc = self.document()?;
-        let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
-
-        let mut layer = crate::edits::base_layer(
-            name,
-            lumit_core::model::LayerKind::Solid { def },
-            comp.duration.0,
-            crate::edits::centred_transform(
-                f64::from(comp.width),
-                f64::from(comp.height),
-                comp.width,
-                comp.height,
-            ),
-        );
+        let (mut layer, mut ops) = crate::edits::white_solid_layer(&doc, &comp);
         crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
         ops.push(lumit_core::Op::AddLayer {
@@ -1215,36 +1115,8 @@ impl CompositionReference {
         }
         let inner = comp.composition()?;
         let outer = self.composition()?;
-
-        let mut layer = crate::edits::base_layer(
-            inner.name.clone(),
-            lumit_core::model::LayerKind::Precomp { comp: inner.id },
-            outer.duration.0,
-            crate::edits::centred_transform(
-                f64::from(inner.width),
-                f64::from(inner.height),
-                outer.width,
-                outer.height,
-            ),
-        );
-        // The comp's own markers come with it as the layer's: a
-        // composition dropped into another is a piece of material, and its
-        // beats are part of what you are placing. Copied, not referenced —
-        // from here they are this layer's, and editing them never reaches back
-        // into the composition they came from. New ids for the same reason.
-        layer.markers = inner
-            .markers
-            .iter()
-            .map(|m| lumit_core::markers::Marker {
-                id: Uuid::now_v7(),
-                ..m.clone()
-            })
-            .collect();
-        // Placing a node graph places its Inputs with it
-        // (docs/impl/node-graph-comp.md §5.3), so the layer's rows are there
-        // to be edited from the moment it lands.
         let doc = self.document()?;
-        layer.graph_inputs = crate::api::layer::graph_inputs_for(&doc, inner.id);
+        let layer = crate::edits::precomp_layer(&doc, &outer, &inner);
         self.add_at(layer, row)
     }
 
@@ -1296,350 +1168,29 @@ impl CompositionReference {
         adjust_duration: bool,
         group: Option<Uuid>,
     ) -> Result<LayerReference, BridgeError> {
-        use lumit_core::model::{Composition, MotionBlur, ProjectItem};
-        use lumit_core::ops::AutoFolderKind;
-        use lumit_core::time::CompTime;
-        use lumit_core::Op;
-
         let comp = self.composition()?;
         let doc = self.document()?;
-
-        // The group whose header stack rides across. Resolved up front so a
-        // dangling id refuses before anything is committed.
-        let carried = match group {
-            Some(id) => Some(
-                comp.groups
-                    .iter()
-                    .find(|g| g.id == id)
-                    .cloned()
-                    .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?,
-            ),
-            None => None,
+        let length = |src: &lumit_core::model::Layer| {
+            LayerReference::new(self.project, self.id, src.id).source_length(src)
         };
-
-        // Read in stack order, not selection order, so the packed comp holds
-        // the layers the way the timeline showed them. What is actually packed
-        // is what was actually found: an id belonging to some other comp would
-        // otherwise fail the batch on its way through `RemoveLayer` and lose
-        // the whole precompose with it.
-        let packed: Vec<lumit_core::model::Layer> = comp
-            .layers
-            .iter()
-            .filter(|l| layer_ids.contains(&l.id))
-            .cloned()
-            .collect();
-        if packed.is_empty() {
-            return Err(BridgeError::InvalidLayer);
-        }
-        // Leaving the attributes behind means there is one layer for them to
-        // act on. Asked for a stack, the dialogue offers Move instead, and the
-        // engine refuses rather than picking a layer for the user.
-        if leave_attributes && packed.len() > 1 {
-            return Err(BridgeError::InvalidLayer);
-        }
-
-        // Every packed layer sits at or below this index, so the slot is still
-        // a valid one once the batch's removals have run.
-        let index = comp
-            .layers
-            .iter()
-            .position(|l| packed.iter().any(|p| p.id == l.id))
-            .unwrap_or(0);
-
-        // The selection's own span, and the shift that brings it back to zero
-        // inside the new comp. Without `adjust_duration` the shift is nothing
-        // and the span is the whole comp, which is what leaves timing alone.
-        let min_in = packed
-            .iter()
-            .map(|l| l.in_point)
-            .min()
-            .unwrap_or(CompTime::ZERO);
-        let max_out = packed
-            .iter()
-            .map(|l| l.out_point)
-            .max()
-            .unwrap_or(CompTime(comp.duration.0));
-        let span = max_out
-            .delta(min_in)
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let (duration, shift, precomp_in, precomp_out) =
-            if adjust_duration && !span.0.is_zero() && !span.0.is_negative() {
-                (span, min_in, min_in, max_out)
-            } else {
-                (
-                    comp.duration,
-                    CompTime::ZERO,
-                    CompTime::ZERO,
-                    CompTime(comp.duration.0),
-                )
-            };
-        // Time moves as a whole: a layer's in point, out point and start
-        // offset all step back by the same amount, so a packed layer plays the
-        // same footage at the same moment of the Precomp layer as before.
-        let shift_back = |t: CompTime| -> Result<CompTime, BridgeError> {
-            t.sub_dur(lumit_core::time::Duration(shift.0))
-                .map_err(|_| BridgeError::InvalidTime)
-        };
-
-        let name = if name.trim().is_empty() {
-            let existing = doc
-                .items
-                .iter()
-                .filter(
-                    |i| matches!(i, ProjectItem::Composition(c) if c.name.starts_with("Pre-comp ")),
-                )
-                .count();
-            format!("Pre-comp {}", existing + 1)
-        } else {
-            name.trim().to_string()
-        };
-
-        // A retimed layer that leaves its attributes behind leaves its Retime
-        // too, and its place in time goes with that: the Retime reads the
-        // layer's own clock, so the Precomp layer has to keep that clock. The
-        // layer inside then starts at nought and runs the whole of the new
-        // comp, which is made long enough to hold all of its source.
-        let retimed = leave_attributes && packed.iter().any(|l| l.retime.is_some());
-        let duration = if retimed {
-            let source = packed.first().and_then(|src| {
-                LayerReference::new(self.project, self.id, src.id).source_length(src)
-            });
-            duration.max(source.unwrap_or(duration))
-        } else {
-            duration
-        };
-
-        let mut inner_layers = Vec::with_capacity(packed.len());
-        for src in &packed {
-            let mut layer = src.clone();
-            if leave_attributes {
-                // An id of its own. The Precomp layer takes this one's, and
-                // with it everything in the comp that points here: a child, a
-                // matte, an effect's layer row.
-                layer.id = Uuid::now_v7();
-                // Stripped back to its source: the attributes are staying
-                // behind on the Precomp layer, and a copy on both would apply
-                // each of them twice.
-                layer.transform = crate::edits::centred_transform(
-                    f64::from(comp.width),
-                    f64::from(comp.height),
-                    comp.width,
-                    comp.height,
-                );
-                layer.effects.clear();
-                layer.masks.clear();
-                layer.retime = None;
-                layer.blend = Default::default();
-                layer.switches = Default::default();
-                layer.parent = None;
-                layer.matte = None;
-            }
-            if retimed {
-                layer.in_point = CompTime::ZERO;
-                layer.out_point = CompTime(duration.0);
-                layer.start_offset = CompTime::ZERO;
-            } else {
-                layer.in_point = shift_back(src.in_point)?;
-                layer.out_point = shift_back(src.out_point)?;
-                layer.start_offset = shift_back(src.start_offset)?;
-            }
-            inner_layers.push(layer);
-        }
-
-        // A parent or matte link that would cross the new comp's edge is kept
-        // by a hidden copy of the layer at the far end, on the near side.
-        let ids: Vec<Uuid> = packed.iter().map(|l| l.id).collect();
-        let copies = if leave_attributes {
-            crate::edits::LinkCopies::default()
-        } else {
-            crate::edits::link_copies(&comp.layers, &ids)
-        };
-        for layer in &mut inner_layers {
-            if let Some(copy) = layer.parent.and_then(|p| copies.inside_ids.get(&p)) {
-                layer.parent = Some(*copy);
-            }
-            if let Some(matte) = &mut layer.matte {
-                if let Some(copy) = copies.inside_ids.get(&matte.layer) {
-                    matte.layer = *copy;
-                }
-            }
-        }
-        for copy in &copies.inside {
-            let mut copy = copy.clone();
-            copy.in_point = shift_back(copy.in_point)?;
-            copy.out_point = shift_back(copy.out_point)?;
-            copy.start_offset = shift_back(copy.start_offset)?;
-            inner_layers.push(copy);
-        }
-
-        let inner = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: name.clone(),
-            width: comp.width,
-            height: comp.height,
-            frame_rate: comp.frame_rate,
-            duration,
-            background: comp.background,
-            work_area: None,
-            layers: inner_layers,
-            // The comp's markers go in with the layers. They are part
-            // of how the work is laid out, and a packed section that loses its
-            // cues has lost the map to itself. Shifted with everything else
-            // when `adjust_duration` moves time back to zero, and any that fall
-            // outside the new comp's span are left behind rather than parked
-            // where nothing can reach them.
-            markers: comp
-                .markers
-                .iter()
-                .filter_map(|m| {
-                    let time = shift_back(m.time).ok()?;
-                    (!time.0.is_negative() && time.0 <= duration.0).then(|| {
-                        lumit_core::markers::Marker {
-                            id: Uuid::now_v7(),
-                            time,
-                            ..m.clone()
-                        }
-                    })
-                })
-                .collect(),
-            motion_blur: MotionBlur::default(),
-            extra: serde_json::Map::new(),
-        };
-        let inner_id = inner.id;
-
-        // Comps auto-file into the Compositions folder, however they are made —
-        // a precomp that landed at the project root would be the one comp the
-        // habit missed.
-        let (folder, mut ops) =
-            crate::edits::ensure_auto_folder_ops(&doc, AutoFolderKind::Compositions);
-        let queued = ops
-            .iter()
-            .filter(|o| matches!(o, Op::AddItem { .. }))
-            .count();
-        ops.push(Op::AddItem {
-            index: doc.items.len() + queued,
-            item: Box::new(ProjectItem::Composition(inner)),
-        });
-        ops.push(crate::edits::file_into_folder_op(&doc, folder, inner_id));
-
-        // The band goes before its members do: a batch inverts in
-        // reverse, so ungrouping first is what lets the undo put the layers
-        // back before `GroupLayers` checks that they are a contiguous run.
-        if let Some(g) = &carried {
-            ops.push(Op::UngroupLayers {
-                comp: self.id,
-                group: g.id,
-            });
-        }
-        for layer in &packed {
-            ops.push(Op::RemoveLayer {
-                comp: self.id,
-                layer: layer.id,
-            });
-        }
-
-        let mut layer = crate::edits::base_layer(
-            name,
-            lumit_core::model::LayerKind::Precomp { comp: inner_id },
-            precomp_out.0,
-            if leave_attributes {
-                packed[0].transform.clone()
-            } else {
-                crate::edits::centred_transform(
-                    f64::from(comp.width),
-                    f64::from(comp.height),
-                    comp.width,
-                    comp.height,
-                )
+        let (ops, layer_id) = crate::edits::precompose_ops(
+            &doc,
+            &comp,
+            crate::edits::Precompose {
+                layers: &layer_ids,
+                name,
+                leave_attributes,
+                adjust_duration,
+                group,
+                source_length: &length,
             },
-        );
-        layer.in_point = precomp_in;
-        layer.out_point = precomp_out;
-        // Inner time zero is the moment the new comp starts in this one, so a
-        // trimmed comp needs the offset to line the two up; an untrimmed one
-        // starts at zero and needs none.
-        layer.start_offset = shift;
-        if leave_attributes {
-            let src = &packed[0];
-            layer.effects = src.effects.clone();
-            layer.masks = src.masks.clone();
-            layer.retime = src.retime.clone();
-            layer.blend = src.blend;
-            layer.switches = src.switches.clone();
-            // It stands where the layer stood: under the same id, with the
-            // same parent and the same matte.
-            layer.id = src.id;
-            layer.parent = src.parent;
-            layer.matte = src.matte.clone();
-            if retimed {
-                layer.in_point = src.in_point;
-                layer.out_point = src.out_point;
-                layer.start_offset = src.start_offset;
-            }
-        }
-        if let Some(g) = &carried {
-            // The header's stack lands after any attributes the layer kept —
-            // the order the live group already ran them in: each member's own
-            // effects first, the header's on the composite. The picture does
-            // not change across the conversion, which is §2's whole argument
-            // and test 8's assertion. The band itself was ungrouped above,
-            // before the removals.
-            layer.effects.extend(g.effects.iter().cloned());
-        }
-        // Asked of the layers that are staying: the soloed ones being packed
-        // away are about to leave, and a Precomp layer soloed on their account
-        // would isolate itself against a comp that has no solo left.
-        crate::edits::solo_on_arrival(
-            &mut layer,
-            comp.layers
-                .iter()
-                .filter(|l| !packed.iter().any(|p| p.id == l.id)),
-        );
-        let layer_id = layer.id;
-        ops.push(Op::AddLayer {
-            comp: self.id,
-            index,
-            layer: Box::new(layer),
-        });
-
-        // The copies left behind go to the bottom of the stack, and what
-        // pointed at a packed layer points at its copy.
-        let bottom = comp.layers.len() - packed.len() + 1;
-        for (n, copy) in copies.outside.into_iter().enumerate() {
-            ops.push(Op::AddLayer {
-                comp: self.id,
-                index: bottom + n,
-                layer: Box::new(copy),
-            });
-        }
-        for layer in comp.layers.iter().filter(|l| !ids.contains(&l.id)) {
-            if let Some(copy) = layer.parent.and_then(|p| copies.outside_ids.get(&p)) {
-                ops.push(Op::SetLayerParent {
-                    comp: self.id,
-                    layer: layer.id,
-                    parent: Some(*copy),
-                });
-            }
-            if let Some(matte) = &layer.matte {
-                if let Some(copy) = copies.outside_ids.get(&matte.layer) {
-                    ops.push(Op::SetLayerMatte {
-                        comp: self.id,
-                        layer: layer.id,
-                        matte: Some(lumit_core::model::MatteRef {
-                            layer: *copy,
-                            ..matte.clone()
-                        }),
-                    });
-                }
-            }
-        }
-
-        self.commit(Op::Batch { ops })?;
+        )
+        .map_err(|e| match e {
+            lumit_core::OpError::UnknownLayer => BridgeError::InvalidLayer,
+            lumit_core::OpError::InvalidSpan => BridgeError::InvalidTime,
+            e => BridgeError::OpError(e),
+        })?;
+        self.commit(lumit_core::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, layer_id))
     }
 
@@ -1893,21 +1444,8 @@ impl CompositionReference {
     /// position is centred and the anchor stays at the origin.
     #[frb(sync)]
     pub fn add_null_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
-        use lumit_core::anim::Property;
-        use lumit_core::model::TransformGroup;
-
         let comp = self.composition()?;
-        let layer = crate::edits::base_layer(
-            "Null".into(),
-            lumit_core::model::LayerKind::Null,
-            comp.duration.0,
-            TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
-                ..TransformGroup::default()
-            },
-        );
-        self.add_at(layer, row)
+        self.add_at(crate::edits::null_layer(&comp), row)
     }
 
     /// Add an empty Sequence layer — a clip row spanning the comp.
@@ -2337,7 +1875,6 @@ impl CompositionReference {
         row: Option<u32>,
         arrival: Option<crate::api::streams::BridgeStreamsArrival>,
     ) -> Result<(), BridgeError> {
-        use lumit_core::sequence::{Clip, ClipSource};
         let arrival = arrival.unwrap_or(crate::api::streams::BridgeStreamsArrival::First);
         let proj = self.project()?;
         let comp = self.composition()?;
@@ -2345,108 +1882,15 @@ impl CompositionReference {
         let (layer, beside) = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             let doc = p.store.snapshot();
-
-            let item = footage.id();
-            let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
-                return Err(BridgeError::InvalidItem);
-            };
-
-            let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
-            // Media with no picture at all can only ever be an Audio layer, so
-            // it becomes one whichever route placed it — the caller does not
-            // have to know what the file turned out to hold. A deliberate
-            // "sound only" placement says so instead.
-            let audio_only = audio_only || !Self::has_picture(&p, f);
-            let runs = Self::runs_as_video(&p, f);
-            let sequenced = as_sequence && !audio_only && runs;
-
-            // The stretch marked on the source side, when a video has one: the
-            // layer starts on its In and lasts to its Out, in whole frames.
-            let zero = lumit_core::time::Rational::ZERO;
-            let marked = doc
-                .footage_trims
-                .get(&item)
-                .filter(|_| runs)
-                .and_then(|trim| trim.span(out))
-                .and_then(|(start, end)| {
-                    let length = lumit_core::time::CompTime(end.checked_sub(start).ok()?);
-                    let frames = comp.frame_rate.nearest_frame_at(length).max(1);
-                    let length = comp.frame_rate.time_of_frame(frames).ok()?.0;
-                    Some((start, start.checked_add(length).ok()?, length))
-                });
-            let (source_in, source_out, out) = marked.unwrap_or((zero, out, out));
-
-            // What the layer sounds, and what each row split off beside it
-            // does: nothing beside it unless the file has several streams and
-            // they were asked for apart.
-            let streams = crate::streams::of_item(&p, f);
-            let sounds = arrival.sounds(streams.len());
-            let (first, rest) = match sounds.split_first() {
-                Some((first, rest)) => (first.clone(), rest),
-                None => (Default::default(), &[][..]),
-            };
-            // A stream on a row of its own is the same stretch of the file
-            // as the picture, so the two are linked as a cut's are.
-            let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
-            let clip_of = |plays: &lumit_core::model::AudioStreams| {
-                let mut clip =
-                    Clip::new(ClipSource::Footage(item), source_in, source_out, zero, out);
-                clip.audio_streams = plays.clone();
-                clip.link = link;
-                clip
-            };
-
-            let kind = if sequenced {
-                lumit_core::model::LayerKind::Sequence {
-                    clips: vec![clip_of(&first)],
-                }
-            } else {
-                lumit_core::model::LayerKind::Footage { item }
-            };
-
-            let mut layer = crate::edits::base_layer(
-                f.name.clone(),
-                kind,
-                out,
-                crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
-            );
-            layer.audio_only = audio_only;
-            if !sequenced {
-                layer.audio_streams = first;
-                // Layer time is source time, so the In lands on comp 0.
-                if let Ok(back) = source_in.checked_neg() {
-                    layer.start_offset = lumit_core::time::CompTime(back);
-                }
-            }
-            crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
-
-            let beside: Vec<lumit_core::model::Layer> = rest
-                .iter()
-                .map(|plays| {
-                    let mut sound = layer.clone();
-                    sound.id = Uuid::now_v7();
-                    sound.audio_only = true;
-                    if let [place] = plays.places() {
-                        sound.name = crate::streams::split_name(&f.name, *place, &streams);
-                    }
-                    if sequenced {
-                        sound.kind = lumit_core::model::LayerKind::Sequence {
-                            clips: vec![clip_of(plays)],
-                        };
-                        // The label an Audio layer starts on, as a sound row
-                        // made by a cut wears.
-                        sound.label = 1;
-                    } else {
-                        sound.audio_streams = plays.clone();
-                    }
-                    // Asked again, as an Audio layer: it counts every solo in
-                    // the comp, where a layer with a picture counts the ones
-                    // that draw.
-                    crate::edits::solo_on_arrival(&mut sound, comp.layers.iter());
-                    sound
-                })
-                .collect();
-            (layer, beside)
+            Self::footage_layers(
+                &p,
+                &doc,
+                &comp,
+                footage.id(),
+                as_sequence,
+                audio_only,
+                arrival,
+            )?
         };
 
         // The layer, and directly below it each row split off beside it.
@@ -2470,6 +1914,121 @@ impl CompositionReference {
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
         Ok(())
+    }
+
+    /// The layers placing footage item `item` in `comp` makes, before anything
+    /// is added: the layer itself, and each sound row split off beside it.
+    /// What [`Self::add_footage_layer`] adds, and what a script adds too.
+    #[frb(ignore)]
+    pub(crate) fn footage_layers(
+        p: &LumitBridgeState,
+        doc: &lumit_core::Document,
+        comp: &lumit_core::model::Composition,
+        item: Uuid,
+        as_sequence: bool,
+        audio_only: bool,
+        arrival: crate::api::streams::BridgeStreamsArrival,
+    ) -> Result<(lumit_core::model::Layer, Vec<lumit_core::model::Layer>), BridgeError> {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
+            return Err(BridgeError::InvalidItem);
+        };
+
+        let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
+        // Media with no picture at all can only ever be an Audio layer, so
+        // it becomes one whichever route placed it — the caller does not
+        // have to know what the file turned out to hold. A deliberate
+        // "sound only" placement says so instead.
+        let audio_only = audio_only || !Self::has_picture(&p, f);
+        let runs = Self::runs_as_video(&p, f);
+        let sequenced = as_sequence && !audio_only && runs;
+
+        // The stretch marked on the source side, when a video has one: the
+        // layer starts on its In and lasts to its Out, in whole frames.
+        let zero = lumit_core::time::Rational::ZERO;
+        let marked = doc
+            .footage_trims
+            .get(&item)
+            .filter(|_| runs)
+            .and_then(|trim| trim.span(out))
+            .and_then(|(start, end)| {
+                let length = lumit_core::time::CompTime(end.checked_sub(start).ok()?);
+                let frames = comp.frame_rate.nearest_frame_at(length).max(1);
+                let length = comp.frame_rate.time_of_frame(frames).ok()?.0;
+                Some((start, start.checked_add(length).ok()?, length))
+            });
+        let (source_in, source_out, out) = marked.unwrap_or((zero, out, out));
+
+        // What the layer sounds, and what each row split off beside it
+        // does: nothing beside it unless the file has several streams and
+        // they were asked for apart.
+        let streams = crate::streams::of_item(&p, f);
+        let sounds = arrival.sounds(streams.len());
+        let (first, rest) = match sounds.split_first() {
+            Some((first, rest)) => (first.clone(), rest),
+            None => (Default::default(), &[][..]),
+        };
+        // A stream on a row of its own is the same stretch of the file
+        // as the picture, so the two are linked as a cut's are.
+        let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
+        let clip_of = |plays: &lumit_core::model::AudioStreams| {
+            let mut clip = Clip::new(ClipSource::Footage(item), source_in, source_out, zero, out);
+            clip.audio_streams = plays.clone();
+            clip.link = link;
+            clip
+        };
+
+        let kind = if sequenced {
+            lumit_core::model::LayerKind::Sequence {
+                clips: vec![clip_of(&first)],
+            }
+        } else {
+            lumit_core::model::LayerKind::Footage { item }
+        };
+
+        let mut layer = crate::edits::base_layer(
+            f.name.clone(),
+            kind,
+            out,
+            crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
+        );
+        layer.audio_only = audio_only;
+        if !sequenced {
+            layer.audio_streams = first;
+            // Layer time is source time, so the In lands on comp 0.
+            if let Ok(back) = source_in.checked_neg() {
+                layer.start_offset = lumit_core::time::CompTime(back);
+            }
+        }
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
+
+        let beside: Vec<lumit_core::model::Layer> = rest
+            .iter()
+            .map(|plays| {
+                let mut sound = layer.clone();
+                sound.id = Uuid::now_v7();
+                sound.audio_only = true;
+                if let [place] = plays.places() {
+                    sound.name = crate::streams::split_name(&f.name, *place, &streams);
+                }
+                if sequenced {
+                    sound.kind = lumit_core::model::LayerKind::Sequence {
+                        clips: vec![clip_of(plays)],
+                    };
+                    // The label an Audio layer starts on, as a sound row
+                    // made by a cut wears.
+                    sound.label = 1;
+                } else {
+                    sound.audio_streams = plays.clone();
+                }
+                // Asked again, as an Audio layer: it counts every solo in
+                // the comp, where a layer with a picture counts the ones
+                // that draw.
+                crate::edits::solo_on_arrival(&mut sound, comp.layers.iter());
+                sound
+            })
+            .collect();
+        Ok((layer, beside))
     }
 
     /// Whether this media is something to cut: a video stream that runs for

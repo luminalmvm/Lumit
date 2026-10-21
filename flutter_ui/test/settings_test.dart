@@ -50,6 +50,8 @@ void main() {
       retimeInSeconds: true,
       videoAsSequenceLayer: true,
       streamsArrival: StreamsArrival.split,
+      cutSoundWithPicture: true,
+      cutTracksAnyOrder: true,
       playheadStaysOnStop: true,
       pasteLayersAtOriginalTime: true,
       multiwaveWaveforms: false,
@@ -83,6 +85,8 @@ void main() {
     expect(back.retimeInSeconds, isTrue);
     expect(back.videoAsSequenceLayer, isTrue);
     expect(back.streamsArrival, StreamsArrival.split);
+    expect(back.cutSoundWithPicture, isTrue);
+    expect(back.cutTracksAnyOrder, isTrue);
     expect(back.playheadStaysOnStop, isTrue);
     expect(back.pasteLayersAtOriginalTime, isTrue);
     expect(back.multiwaveWaveforms, isFalse);
@@ -108,7 +112,7 @@ void main() {
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 34);
+    expect(all.toJson().keys.length, 36);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

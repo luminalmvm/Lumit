@@ -3950,10 +3950,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Flutter frontend",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "switchAudible": "Audible",
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."

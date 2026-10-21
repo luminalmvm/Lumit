@@ -338,7 +338,7 @@ Future<void> offerLumitUpdate(
         updates: updates,
         notice: app.postNotice,
         projectIsDirty: () => app.project?.isDirty() ?? false,
-        saveProject: () => saveProjectFrb(app, ui),
+        saveProject: () => saveProjectFrb(app, ui, leaving: true),
       );
   final found = updates.stage == UpdateStage.available ||
       updates.stage == UpdateStage.ready;

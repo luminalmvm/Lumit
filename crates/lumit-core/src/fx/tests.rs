@@ -5241,7 +5241,7 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
                         options.len()
                     );
                 }
-                EnabledCond::LayerSet => assert!(
+                EnabledCond::LayerSet | EnabledCond::LayerUnset => assert!(
                     matches!(on, ParamKind::Layer { .. }),
                     "{}: `{}` is read as a Layer reference but is not one",
                     s.match_name,
@@ -10736,4 +10736,50 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
     assert_eq!(of(5000.0), cpu::PIXEL_SORT_MAX_SPAN);
     assert_eq!(of(0.0), 1);
     assert_eq!(of(300.0), 300);
+}
+
+/// **A collider's walk lands in one place however it is reached**: a frame
+/// stepped to from a kept state is the frame walked from the in point, which
+/// is what lets an export match the Viewer. And the floor holds.
+#[test]
+fn a_stepped_frame_is_the_walk_from_the_start() {
+    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
+    let e = particulate(&[
+        ("gravity", fixed(900.0)),
+        ("emit_rate", fixed(400.0)),
+        ("turbulence_amount", fixed(30.0)),
+    ]);
+    let floor = 700.0f32;
+    let at = |lt: f64| {
+        let bag = resolve_bag(
+            std::slice::from_ref(&e),
+            lt,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        let collider = Collider::new(
+            vec![[[0.0, floor], [1920.0, floor]]],
+            crate::shape::Affine::IDENTITY,
+        );
+        Some(Inputs::new(
+            Particulate::read(Params::new(&bag)),
+            [1920.0, 1080.0],
+            MaskPolyline::default(),
+            collider,
+        ))
+    };
+    let dt = 1.0 / 30.0;
+    let key = |n: u8| [n; 32];
+    // Walked whole, under a name nothing else uses.
+    let whole = stream_at(key(201), 43.0 * dt, dt, &at).expect("a walk");
+    // Walked past it first, so the frame is three steps on from a kept one.
+    stream_at(key(202), 45.0 * dt, dt, &at).expect("a walk");
+    let resumed = stream_at(key(202), 43.0 * dt, dt, &at).expect("a walk");
+    assert!(!whole.is_empty(), "nothing was born");
+    assert_eq!(whole, resumed, "a kept walk landed somewhere else");
+    assert!(
+        whole.position.iter().all(|p| p[1] <= floor + 0.01),
+        "a particle went through the floor"
+    );
 }

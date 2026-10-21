@@ -98,11 +98,13 @@ cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colo
 # executables do belong. Built here rather than by the podspec, which knows how
 # to build one static library and nothing else. Before the signing loop below, so
 # they are signed like everything else in the app.
-(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker)
+(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker -p lumit-cli)
 cp "$root/target/release/lumit-ofx-broker" "$app/Contents/MacOS/"
 cp "$root/target/release/lumit-aplug-broker" "$app/Contents/MacOS/"
 # The process an Illustrator file is read in goes with them.
 cp "$root/target/release/lumit-media-broker" "$app/Contents/MacOS/"
+# And the command line, lumit-cli, which runs from the bridge in Frameworks.
+cp "$root/target/release/lumit-cli" "$app/Contents/MacOS/"
 
 # Every Mach-O in the app that still links a Homebrew path gets handed to
 # dylibbundler. The bridge dylib is the expected hit; the loop rather than a
@@ -254,6 +256,10 @@ for broker in "$app/Contents/MacOS/"lumit-*-broker; do
     codesign --force $signopts --sign "$identity" \
         --entitlements "$root/flutter_ui/macos/Runner/Broker.entitlements" "$broker"
 done
+# The command line loads no plugin either, so it is signed as the media
+# broker is: the hardened runtime and no entitlements.
+# shellcheck disable=SC2086 # as above
+codesign --force $signopts --sign "$identity" "$app/Contents/MacOS/lumit-cli"
 # Re-signing drops whatever entitlements the build applied, so they are named
 # again here rather than silently lost.
 # shellcheck disable=SC2086 # as above

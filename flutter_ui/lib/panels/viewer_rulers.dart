@@ -30,8 +30,7 @@ import '../state/workspace.dart' show ViewerGuide;
 const double viewerRulerBand = 18;
 
 /// How near, in screen pixels, the pointer has to come to a guide before the
-/// drag is the guide's rather than the picture's. The Timeline's own slop
-/// (`snapSlopPixels`), for the same reason: a hair under half a row.
+/// drag is the guide's rather than the picture's. A hair under half a row.
 const double viewerGuideGrab = 8;
 
 /// How far apart, in screen pixels, two labelled ticks are allowed to get

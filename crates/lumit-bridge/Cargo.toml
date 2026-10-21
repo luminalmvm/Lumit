@@ -70,6 +70,10 @@ lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
 # Shared projects: the host and guest ends behind `api::share`.
 lumit-share = { path = "../lumit-share" }
+# File > Run script: the commands and the script runner behind them.
+lumit-script = { path = "../lumit-script" }
+# The command line reads the script it is given with a size cap.
+lumit-ingress = { path = "../lumit-ingress" }
 # Installed extensions: reading a manifest, and the folder they live in.
 lumit-extensions = { path = "../lumit-extensions" }
 # The realtime preview-tier controller lives here as a pure,
@@ -97,6 +101,9 @@ lumit-render = { path = "../lumit-render" }
 # is a typed variant rather than a scraped English sentence. Already in
 # the build graph through lumit-render.
 lumit-track = { path = "../lumit-track" }
+# A comp frame saved for a script or an MCP client, with the version
+# lumit-render already brings in.
+png = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v5", "v7", "serde"] }

@@ -49,6 +49,58 @@ const PROLOGUE: &str = include_str!("prologue.wgsl");
 /// Where the generated struct is spliced into [`PROLOGUE`].
 const PARAMS_MARKER: &str = "//__LUMIT_PARAMS__";
 
+/// Where an LFX effect's pass pictures are declared in [`PROLOGUE`].
+const PASSES_MARKER: &str = "//__LUMIT_PASSES__";
+
+/// The one line of [`EPILOGUE`] that names the user's function, which an LFX
+/// pass swaps for its own.
+const SHADE_CALL: &str = "var c = shade(uv);";
+
+/// The lines an LFX module says differently, so a pass drawn smaller than the
+/// raster is written, and read back, in its own pixels. Each swap keeps its
+/// line count, so compiler line numbers still land on the user's text.
+///
+/// The Custom shader keeps the first of each pair. All its pictures are the
+/// raster's size, and the same text is what keeps them the same to the bit:
+/// even a sum that comes out equal compiles to a picture a step apart.
+const OWN_PIXELS: &[(&str, &str)] = &[
+    (
+        "    let f = uv * vec2<f32>(lumit.roi_size) + vec2<f32>(lumit.roi_offset) - vec2<f32>(0.5, 0.5);",
+        "    let f = (uv * vec2<f32>(lumit.roi_size) + vec2<f32>(lumit.roi_offset)) * (vec2<f32>(textureDimensions(t)) / lumit_raster()) - vec2<f32>(0.5, 0.5);",
+    ),
+    (
+        "    let size = vec2<i32>(textureDimensions(src));",
+        "    let size = vec2<i32>(textureDimensions(dst));",
+    ),
+    (
+        "    let uv = (vec2<f32>(xy - vec2<i32>(lumit.roi_offset)) + vec2<f32>(0.5, 0.5))\n        / vec2<f32>(lumit.roi_size);",
+        "    let uv = ((vec2<f32>(xy) + vec2<f32>(0.5, 0.5)) * (lumit_raster() / vec2<f32>(size))\n        - vec2<f32>(lumit.roi_offset)) / vec2<f32>(lumit.roi_size);",
+    ),
+];
+
+/// The prologue and epilogue an LFX pass is built from, with the
+/// [`OWN_PIXELS`] swaps made. Refused when a swap, or the call to `shade`,
+/// no longer matches exactly once, since the module would read the wrong
+/// pixels.
+fn in_own_pixels() -> Result<(String, String), ShaderRefusal> {
+    let once = |from: &str| PROLOGUE.matches(from).count() + EPILOGUE.matches(from).count() == 1;
+    if !OWN_PIXELS.iter().all(|(from, _)| once(from)) || !once(SHADE_CALL) {
+        return Err(ShaderRefusal::HostOutOfStep);
+    }
+    let swap = |text: &str| {
+        OWN_PIXELS
+            .iter()
+            .fold(text.to_owned(), |text, (from, to)| text.replace(from, to))
+    };
+    Ok((swap(PROLOGUE), swap(EPILOGUE)))
+}
+
+/// The binding the first pass picture takes; the rest follow it.
+pub const FIRST_PASS_BINDING: u32 = 7;
+
+/// What every pass picture's name begins with, so no user declaration may.
+pub const PASS_PREFIX: &str = "pass_";
+
 /// The epilogue: the entry point, the sanitise and the Mix (§1.3, §2.3).
 const EPILOGUE: &str = include_str!("epilogue.wgsl");
 
@@ -79,12 +131,12 @@ pub struct ShaderHeader {
     pub mix_amt: f32,
     pub matte_on: f32,
     pub input2_on: f32,
-    pub _pad0: u32,
-    pub _pad1: u32,
+    /// The whole raster's size, which a pass drawn smaller is read against.
+    /// Nought means the input's own size.
+    pub raster_size: [u32; 2],
 }
 
-/// The size of [`ShaderHeader`] in bytes — 48, WGSL's uniform rounding of 40 up
-/// to the struct alignment.
+/// The size of [`ShaderHeader`] in bytes: 48, ten words and the raster's two.
 pub const HEADER_SIZE: usize = std::mem::size_of::<ShaderHeader>();
 
 /// The names the host owns at module scope. A user declaration of any of them
@@ -195,6 +247,10 @@ pub struct ShaderProgram {
     pub prologue_lines: u32,
     /// Annotations that would not parse, one calm sentence each (§2.2).
     pub notes: Vec<String>,
+    /// An LFX effect's modules, one per pass in pass order, each with its
+    /// text's hash for the pipeline cache. Empty for the Custom shader, whose
+    /// one module is `assembled`.
+    pub passes: Vec<(u64, String)>,
 }
 
 /// Why a shader source was refused **at the edit**, before anything was
@@ -212,6 +268,13 @@ pub enum ShaderRefusal {
     ReservedName(String),
     /// No `fn shade(uv: vec2<f32>) -> vec4<f32>`.
     NoShadeFunction,
+    /// An LFX effect names a pass its shader has no function for.
+    NoPassFunction(String),
+    /// An LFX shader declares a name starting `pass_`, which the pass
+    /// pictures use.
+    PassPrefix(String),
+    /// This build's own wrapper no longer fits the pass swaps.
+    HostOutOfStep,
     /// A `vec3<f32>` parameter — sixteen bytes wearing twelve bytes' name.
     Vec3Field(String),
     /// A parameter field of a type the grammar does not carry.
@@ -245,6 +308,17 @@ impl std::fmt::Display for ShaderRefusal {
             ShaderRefusal::NoShadeFunction => write!(
                 f,
                 "a shader needs `fn {ENTRY_FN}(uv: vec2<f32>) -> vec4<f32>`"
+            ),
+            ShaderRefusal::NoPassFunction(name) => write!(
+                f,
+                "a shader needs `fn {name}(uv: vec2<f32>) -> vec4<f32>` for its {name} pass"
+            ),
+            ShaderRefusal::HostOutOfStep => {
+                write!(f, "this Lumit can't wrap shaders in passes")
+            }
+            ShaderRefusal::PassPrefix(n) => write!(
+                f,
+                "`{n}` starts with {PASS_PREFIX}, which is kept for the pass pictures"
             ),
             ShaderRefusal::Vec3Field(n) => write!(
                 f,
@@ -446,6 +520,21 @@ pub fn program_by_hash(source_hash: u64) -> Option<&'static ShaderProgram> {
 /// # Errors
 /// As [`program_for`].
 pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
+    build_with(source, &[])
+}
+
+/// Read and wrap an LFX effect's shader: one module per pass, each calling
+/// that pass's own function, and every pass picture declared in all of them.
+///
+/// # Errors
+/// As [`build`], less the need for `shade`, plus a pass with no function and
+/// a declaration starting `pass_`.
+pub fn build_passes(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefusal> {
+    build_with(source, passes)
+}
+
+/// The Custom shader when `passes` is empty, an LFX effect otherwise.
+fn build_with(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefusal> {
     // Comments blanked to spaces rather than removed, so every byte offset in
     // `code` is the same byte offset in `source` and the struct can be cut out
     // of the user's own text with its doc comments intact.
@@ -461,9 +550,16 @@ pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
         if d.name == "Params" && d.kind != "struct" {
             return Err(ShaderRefusal::ReservedName(d.name.clone()));
         }
+        if !passes.is_empty() && d.name.starts_with(PASS_PREFIX) {
+            return Err(ShaderRefusal::PassPrefix(d.name.clone()));
+        }
     }
-    if !decls.iter().any(|d| d.kind == "fn" && d.name == ENTRY_FN) {
+    let has_fn = |name: &str| decls.iter().any(|d| d.kind == "fn" && d.name == name);
+    if passes.is_empty() && !has_fn(ENTRY_FN) {
         return Err(ShaderRefusal::NoShadeFunction);
+    }
+    if let Some(missing) = passes.iter().find(|name| !has_fn(name)) {
+        return Err(ShaderRefusal::NoPassFunction((*missing).to_owned()));
     }
 
     let block = decls
@@ -505,7 +601,24 @@ pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
     // The user's first line is the line after the prologue's last, exactly —
     // `prologue_lines` is what a compiler's line numbers are shifted by, so an
     // off-by-one here is an off-by-one in every message a person reads.
-    let mut assembled = PROLOGUE.replace(PARAMS_MARKER, &struct_text);
+    let pass_bindings: Vec<String> = passes
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            format!(
+                "@group(0) @binding({}) var {PASS_PREFIX}{name}: texture_2d<f32>;",
+                FIRST_PASS_BINDING + i as u32
+            )
+        })
+        .collect();
+    let (prologue, epilogue) = if passes.is_empty() {
+        (PROLOGUE.to_owned(), EPILOGUE.to_owned())
+    } else {
+        in_own_pixels()?
+    };
+    let mut assembled = prologue
+        .replace(PARAMS_MARKER, &struct_text)
+        .replace(PASSES_MARKER, &pass_bindings.join("\n"));
     if !assembled.ends_with('\n') {
         assembled.push('\n');
     }
@@ -514,7 +627,19 @@ pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
     if !assembled.ends_with('\n') {
         assembled.push('\n');
     }
-    assembled.push_str(EPILOGUE);
+    // Each pass is the same module with the epilogue calling its own function.
+    let passes: Vec<(u64, String)> = passes
+        .iter()
+        .map(|name| {
+            let call = format!("var c = {name}(uv);");
+            let text = format!("{assembled}{}", epilogue.replace(SHADE_CALL, &call));
+            (hash64(text.as_bytes()), text)
+        })
+        .collect();
+    match passes.first() {
+        Some((_, first)) => assembled.clone_from(first),
+        None => assembled.push_str(&epilogue),
+    }
 
     Ok(ShaderProgram {
         source_hash: hash64(source.as_bytes()),
@@ -524,6 +649,7 @@ pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
         params_size,
         prologue_lines,
         notes,
+        passes,
     })
 }
 

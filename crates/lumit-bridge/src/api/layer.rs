@@ -55,25 +55,6 @@ pub(crate) fn placed_graph_of(doc: &lumit_core::Document, layer: &Layer) -> Opti
     doc.comp(comp)?.graph.as_ref().map(|_| comp)
 }
 
-/// A fresh `node_graph` instance bound to the node graph `comp`, the Inputs a
-/// Precomp layer of it carries (docs/impl/node-graph-comp.md §5.3).
-///
-/// Seeded at the **graph's own** frame size rather than the placing comp's: the
-/// picture the Inputs feed is made in the graph's frame, which is where a
-/// positional default belongs. `None` when `comp` is not a node graph.
-#[frb(ignore)]
-pub(crate) fn graph_inputs_for(doc: &lumit_core::Document, comp: Uuid) -> Option<EffectInstance> {
-    let placed = doc.comp(comp)?;
-    let graph = placed.graph.as_ref()?;
-    let mut instance = lumit_core::fx::instantiate_for_raster(
-        lumit_core::comp_graph::NODE_GRAPH,
-        f64::from(placed.width),
-        f64::from(placed.height),
-    )?;
-    lumit_core::fx::effects::node_graph::bind(&mut instance, comp, graph);
-    Some(instance)
-}
-
 /// Whether `instance` is `layer`'s node graph **Inputs**
 /// (docs/impl/node-graph-comp.md §5.3).
 ///
@@ -1621,6 +1602,9 @@ pub struct BridgeClip {
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
     pub link: Option<Uuid>,
+    /// Whether the clip is heard. Off on a picture clip whose sound has been
+    /// detached onto a clip of its own.
+    pub audible: bool,
     /// The trim into the source, in seconds of source time: the first moment
     /// the clip shows and the moment it stops before.
     pub source_in: BridgeRational,
@@ -1742,6 +1726,7 @@ fn bridge_clip(
                 .unwrap_or_default(),
         },
         link: clip.link,
+        audible: clip.audible,
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
@@ -4790,6 +4775,9 @@ impl LayerReference {
         let mut converted = layer.clone();
         converted.kind = LayerKind::Footage { item };
         converted.audio_streams = clip.audio_streams.clone();
+        // A clip whose sound was detached is heard from that other clip, so
+        // the layer it becomes stays as quiet as it was.
+        converted.switches.audible &= clip.audible;
         converted.interpolation = clip.interpolation.clone();
         // The clip's own map becomes the layer's, which is exact: the clip
         // spans the whole layer, so clip time and layer time are the same
@@ -5085,6 +5073,7 @@ impl LayerReference {
                 gain_db: 0.0,
                 link: None,
                 audio_streams: layer.audio_streams.clone(),
+                audible: true,
                 blend: None,
                 extra: serde_json::Map::new(),
             }],
@@ -5598,42 +5587,16 @@ impl LayerReference {
         let (comp, layer) = (self.comp_id, self.layer_id);
         let doc = self.document()?;
         let c = doc.comp(comp).ok_or(BridgeError::InvalidItem)?;
-        let l = c
-            .layers
-            .iter()
-            .find(|l| l.id == layer)
-            .ok_or(BridgeError::InvalidLayer)?;
+        if !c.layers.iter().any(|l| l.id == layer) {
+            return Err(BridgeError::InvalidLayer);
+        }
         let t = c
             .frame_rate
             .time_of_frame(frame)
             .map_err(|_| BridgeError::InvalidTime)?
             .0
             .to_f64();
-        let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
-            document: doc.clone(),
-            comp: Some(comp),
-            layer: Some(layer),
-            comp_time: t,
-            current_depth: 0,
-            inputs: None,
-        });
-        // The parent goes first: it names the undo step, and a refused one
-        // takes the transform edits down with it.
-        let mut ops = vec![lumit_core::Op::SetLayerParent {
-            comp,
-            layer,
-            parent,
-        }];
-        ops.extend(
-            lumit_render::build::reparented(c, l, parent, t, context)
-                .into_iter()
-                .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
-                    comp,
-                    layer,
-                    prop,
-                    animation,
-                }),
-        );
+        let ops = lumit_render::build::parent_ops(&doc, comp, layer, parent, t);
         self.commit(lumit_core::Op::Batch { ops })
     }
 
@@ -6258,6 +6221,29 @@ impl LayerReference {
             let _ = (item, start_seconds, end_seconds, columns);
             Ok(BridgeSpectrogram::empty())
         }
+    }
+
+    /// Whether a clip on this layer plays something with a picture: false
+    /// for a clip of a file with no video stream, which a picture row plays
+    /// as sound. Probing costs an FFmpeg open the first time, so the Cut
+    /// timeline asks once a clip, off the build, and remembers.
+    pub fn clip_has_picture(&self, clip: Uuid) -> Result<bool, BridgeError> {
+        let (clips, index) = self.clips_and_index(clip)?;
+        let Some(clip) = clips.get(index) else {
+            return Ok(true);
+        };
+        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+            return Ok(true);
+        };
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let snapshot = proj.store.snapshot();
+        Ok(match snapshot.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(footage)) => {
+                crate::api::composition::CompositionReference::has_picture(&proj, footage)
+            }
+            _ => true,
+        })
     }
 
     /// Whether this layer has a picture to sample — the mirror of
@@ -6949,12 +6935,8 @@ impl LayerReference {
         self.commit(op)
     }
 
-    /// The ops that put `value` on one transform property: its animation, and
-    /// beside it what an expression knows about the property (its language,
-    /// the value underneath, its seed) whenever that changes.
-    ///
-    /// The note is worked out here and carried whole in the op, so undo puts
-    /// back the one that was there and a replayed journal writes the same seed.
+    /// The ops that put `value` on one transform property
+    /// ([`lumit_core::edits::transform_ops`]).
     #[frb(ignore)]
     fn transform_ops(
         &self,
@@ -6962,29 +6944,18 @@ impl LayerReference {
         prop: BridgeTransformProp,
         value: &BridgeScalar,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        use lumit_core::expression::SLOT_KEY;
-
         let animation = value.animation_at(layer.start_offset.0)?;
-        let mut ops = vec![lumit_core::Op::SetTransformProperty {
-            comp: self.comp_id,
-            layer: self.layer_id,
-            prop: prop.core(),
-            animation: animation.clone(),
-        }];
-        if let Some(held) = layer.prop(prop.core()) {
-            let mut next = held.clone();
-            value.put(&mut next, animation);
-            let slot = next.extra.get(SLOT_KEY).cloned();
-            if slot.as_ref() != held.extra.get(SLOT_KEY) {
-                ops.push(lumit_core::Op::SetTransformExpressionSlot {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    prop: prop.core(),
-                    slot,
-                });
-            }
-        }
-        Ok(ops)
+        let language = match value {
+            BridgeScalar::Expression(_, language) => Some(language.read()),
+            _ => None,
+        };
+        Ok(lumit_core::edits::transform_ops(
+            self.comp_id,
+            layer,
+            prop.core(),
+            animation,
+            language,
+        ))
     }
 
     /// Set how one two-axis property is shown and edited: combined on
@@ -7687,7 +7658,7 @@ impl LayerReference {
         let Some(graph_comp) = placed_graph_of(&doc, &layer) else {
             return Ok(None);
         };
-        Ok(graph_inputs_for(&doc, graph_comp)
+        Ok(crate::edits::graph_inputs_for(&doc, graph_comp)
             .map(|instance| BridgeEffectInstance::new(instance, layer.start_offset.0)))
     }
 

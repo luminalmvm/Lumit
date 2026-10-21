@@ -48,7 +48,8 @@ class UpdateChip extends StatelessWidget {
                     updates: updates,
                     notice: app.postNotice,
                     projectIsDirty: () => app.project?.isDirty() ?? false,
-                    saveProject: () => saveProjectFrb(app, ui),
+                    saveProject: () =>
+                        saveProjectFrb(app, ui, leaving: true),
                   ),
           child: UpdateMark(updates),
         ),

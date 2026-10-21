@@ -13,6 +13,155 @@ class MainFlutterWindow: NSWindow {
   /// way the Windows runner does.
   private static let savedFrameName = "LumitMainWindow"
 
+  /// Settings says closing the window keeps Lumit running in the menu bar
+  /// (lib/state/background.dart).
+  private var keepRunning = false
+
+  /// Started at sign-in and not shown yet.
+  private var startedHidden = false
+
+  private var statusItem: NSStatusItem?
+  private var windowChannel: FlutterMethodChannel?
+
+  /// The start-up splash (lib/shell/splash_window.dart) while it is up: a
+  /// window of its own, the shape of its picture.
+  private var splash: NSWindow?
+
+  /// Whether Dart has said start-up is over (`splashClose`). Until then this
+  /// window is on screen but see-through, so Flutter keeps drawing into it
+  /// while the splash is what shows.
+  private var handedOver = false
+
+  /// Kept running in the background, closing the window only hides it, and
+  /// the Dock icon goes with it. Quit in the menu bar is an ordinary quit.
+  override func performClose(_ sender: Any?) {
+    guard keepRunning else { return super.performClose(sender) }
+    orderOut(nil)
+    NSApp.setActivationPolicy(.accessory)
+    windowChannel?.invokeMethod("hidden", arguments: nil)
+  }
+
+  /// Show the window and bring Lumit to the front, from the menu bar, the
+  /// Dock or a second start.
+  @objc func reveal() {
+    startedHidden = false
+    alphaValue = 1
+    ignoresMouseEvents = false
+    NSApp.setActivationPolicy(.regular)
+    makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  /// The primary screen, which the splash is centred on.
+  private var splashScreen: NSScreen? { NSScreen.screens.first ?? NSScreen.main }
+
+  /// Put the splash on screen, or give it new pixels: premultiplied RGBA,
+  /// "width" by "height", in "bytes". False if it could not.
+  private func showSplash(_ args: [String: Any]) -> Bool {
+    guard !startedHidden, !handedOver,
+      let width = args["width"] as? Int, let height = args["height"] as? Int,
+      width > 0, height > 0,
+      let data = (args["bytes"] as? FlutterStandardTypedData)?.data,
+      data.count >= width * height * 4,
+      let provider = CGDataProvider(data: data as CFData),
+      let space = CGColorSpace(name: CGColorSpace.sRGB),
+      let image = CGImage(
+        width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+        bytesPerRow: width * 4, space: space,
+        bitmapInfo: CGBitmapInfo(
+          rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
+            | CGBitmapInfo.byteOrder32Big.rawValue),
+        provider: provider, decode: nil, shouldInterpolate: true,
+        intent: .defaultIntent)
+    else { return false }
+    let scale = splashScreen?.backingScaleFactor ?? 1
+    let size = NSSize(width: CGFloat(width) / scale, height: CGFloat(height) / scale)
+    let window: NSWindow
+    if let up = splash {
+      window = up
+    } else {
+      window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless,
+        backing: .buffered, defer: false)
+      window.isOpaque = false
+      window.backgroundColor = .clear
+      window.hasShadow = false
+      window.isReleasedWhenClosed = false
+      window.isMovableByWindowBackground = true
+      let view = NSView(frame: NSRect(origin: .zero, size: size))
+      view.wantsLayer = true
+      window.contentView = view
+      if let frame = splashScreen?.visibleFrame {
+        window.setFrameOrigin(
+          NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2))
+      }
+      splash = window
+    }
+    window.contentView?.layer?.contentsScale = scale
+    window.contentView?.layer?.contents = image
+    if !window.isVisible {
+      window.orderFrontRegardless()
+    }
+    return true
+  }
+
+  /// Take the splash down and show this window in its place.
+  private func handOver() {
+    handedOver = true
+    splash?.orderOut(nil)
+    splash = nil
+    if !startedHidden {
+      reveal()
+    }
+  }
+
+  /// Start Lumit in the menu bar when the person signs in, with a LaunchAgent
+  /// that passes --background, or stop doing so.
+  private func setOpenAtSignIn(_ on: Bool) {
+    let agents = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/LaunchAgents")
+    let label = Bundle.main.bundleIdentifier ?? "io.github.luminalmvm.lumitFlutter"
+    let plist = agents.appendingPathComponent("\(label).plist")
+    guard on, let exe = Bundle.main.executablePath else {
+      try? FileManager.default.removeItem(at: plist)
+      return
+    }
+    try? FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+    let agent: NSDictionary = [
+      "Label": label, "ProgramArguments": [exe, "--background"], "RunAtLoad": true,
+    ]
+    try? agent.write(to: plist)
+  }
+
+  private func setBackground(_ args: [String: Any]) {
+    keepRunning = args["keep"] as? Bool ?? false
+    setOpenAtSignIn(keepRunning && args["signIn"] as? Bool == true)
+    guard keepRunning else {
+      if let item = statusItem {
+        NSStatusBar.system.removeStatusItem(item)
+        statusItem = nil
+      }
+      // Started at sign-in with nothing now to come back from: the window is
+      // the only way back, so it shows.
+      if startedHidden { reveal() }
+      return
+    }
+    let item = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    if let icon = NSApp.applicationIconImage.copy() as? NSImage {
+      icon.size = NSSize(width: 18, height: 18)
+      item.button?.image = icon
+    }
+    let menu = NSMenu()
+    menu.addItem(withTitle: args["open"] as? String ?? "", action: #selector(reveal), keyEquivalent: "")
+      .target = self
+    menu.addItem(
+      withTitle: args["quit"] as? String ?? "",
+      action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""
+    ).target = NSApp
+    item.menu = menu
+    statusItem = item
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -41,6 +190,56 @@ class MainFlutterWindow: NSWindow {
         NSImage(contentsOfFile: $0)
       }
       result(nil)
+    }
+
+    // macOS draws the window's buttons itself, so this channel only carries
+    // what Settings says about running in the background, and Dart asking
+    // for the window back.
+    let window = FlutterMethodChannel(
+      name: "lumit/window",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    window.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "splashScale":
+        let hidden = self?.startedHidden ?? true
+        result(hidden ? nil : Double(self?.splashScreen?.backingScaleFactor ?? 1))
+        return
+      case "splash":
+        result(self?.showSplash(call.arguments as? [String: Any] ?? [:]) ?? false)
+        return
+      case "splashClose":
+        self?.handOver()
+      case "background":
+        self?.setBackground(call.arguments as? [String: Any] ?? [:])
+      case "show":
+        self?.reveal()
+      default:
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(nil)
+    }
+    windowChannel = window
+
+    // Started at sign-in, it waits in the menu bar with no window and no Dock
+    // icon until it is opened.
+    if CommandLine.arguments.contains("--background") {
+      startedHidden = true
+      NSApp.setActivationPolicy(.accessory)
+      DispatchQueue.main.async { self.orderOut(nil) }
+    }
+
+    // See-through until Dart hands over, which it does once the first frame is
+    // drawn, splash or no splash. On screen rather than hidden, so Flutter has
+    // a window to draw that frame into. If start-up never gets that far, the
+    // window shows anyway after ten seconds, as the Windows runner's does, so
+    // there is something to close.
+    alphaValue = 0
+    ignoresMouseEvents = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+      guard let self = self, !self.handedOver, self.splash == nil, !self.startedHidden
+      else { return }
+      self.reveal()
     }
 
     // Open where the last run left the window, and zoomed — macOS's word for

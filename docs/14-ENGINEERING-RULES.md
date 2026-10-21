@@ -9,6 +9,8 @@ crashes" erode one careless commit at a time.
 |---|---|
 | Document edits, snapshot publication, painting | UI thread only |
 | Other people's edits in a shared project | That project's share threads only |
+| Script, command line and MCP edits | The caller's thread, committing through the project's store |
+| Another program driving the open project | The live endpoint's thread, one request at a time, committing through the project's store |
 | Pixel jobs | Worker pool only |
 | Media decode | Decode threads only |
 | Disk IO | IO threads only |

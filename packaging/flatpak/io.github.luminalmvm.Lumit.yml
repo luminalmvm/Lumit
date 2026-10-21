@@ -90,6 +90,8 @@ modules:
       - rm -rf bundle/share
       - mkdir -p /app/lumit && cp -r bundle/* /app/lumit/
       - mkdir -p /app/bin && ln -s /app/lumit/lumit_flutter /app/bin/lumit_flutter
+      # The command line: flatpak run --command=lumit-cli io.github.luminalmvm.Lumit
+      - ln -s /app/lumit/lumit-cli /app/bin/lumit-cli
     sources:
       - type: dir
         path: bundle

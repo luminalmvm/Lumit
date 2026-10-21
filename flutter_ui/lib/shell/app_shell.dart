@@ -14,6 +14,7 @@ import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
+import 'package:lumit_flutter/shell/extension_install_frb.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
@@ -26,6 +27,8 @@ import 'package:lumit_flutter/shell/menu_layer_frb.dart';
 import 'package:lumit_flutter/shell/project_history_window.dart'
     show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
+import 'package:lumit_flutter/shell/run_script_frb.dart'
+    show installEventScripts;
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/share_dialog_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
@@ -40,7 +43,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
-import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
@@ -166,42 +168,28 @@ class _ArrowOnwards extends DirectionalFocusAction {
   bool isEnabled(DirectionalFocusIntent intent) => _tabMovesFocus;
 }
 
-/// The boot splash, the welcome screen, and the shell behind them once both are
-/// done.
+/// The welcome screen, and the shell behind it once it is done. The start-up
+/// splash is a window of its own and is gone before this is built
+/// (shell/splash_window.dart).
 ///
-/// **Each of the three is the window in turn**, never a card floating over a
-/// half-built application: the shell is not put in the tree until boot has
-/// finished and the user has said how they want to start, so nothing of the
-/// application shows through, no dialogue — the first-run question above all —
-/// can appear underneath, and no panel starts asking the engine for pictures
-/// nobody can see yet.
-///
-/// The lines the splash streams are the engine's own boot log: the library
-/// version, the ABI, and what this build was compiled with. That is the only
-/// thing the engine can say about starting up — there is no notice stream to
-/// subscribe to, only `boot_log` (docs/TODO.md) — so it is what the splash
-/// shows, and a build with no bridge at all falls back to the canned list in
-/// splash.dart.
+/// **Each of the two is the window in turn**, never a card floating over a
+/// half-built application: the shell is not put in the tree until the user has
+/// said how they want to start, so nothing of the application shows through,
+/// no dialogue (the first-run question above all) can appear underneath, and
+/// no panel starts asking the engine for pictures nobody can see yet.
 class BootGate extends StatefulWidget {
-  /// Whether to show the splash at all. False in the tests that drive the
-  /// whole shell, which have no boot to wait for and would otherwise spend a
-  /// second and a third of simulated time watching one.
-  final bool splash;
-
-  /// Whether to show the welcome screen after it. False when a `.lum` came in
-  /// on the command line — somebody who double-clicked a project has already
-  /// said what they want to open — and in the tests that drive the shell.
+  /// Whether to show the welcome screen. False when a `.lum` came in on the
+  /// command line (somebody who double-clicked a project has already said what
+  /// they want to open) and in the tests that drive the shell.
   final bool welcome;
 
-  const BootGate({super.key, this.splash = true, this.welcome = true});
+  const BootGate({super.key, this.welcome = true});
 
   @override
   State<BootGate> createState() => _BootGateState();
 }
 
 class _BootGateState extends State<BootGate> {
-  late bool _booting = widget.splash;
-
   /// Whether the welcome screen is the window right now. Both answers have to
   /// agree: a `.lum` on the command line stands the screen down for this launch
   /// ([BootGate.welcome]), and Settings ▸ General stands it down for every
@@ -215,27 +203,14 @@ class _BootGateState extends State<BootGate> {
     _welcoming = widget.welcome &&
         context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
     // Up for the whole life of the window, so this is where unsaved changes
-    // are asked about.
+    // are asked about, and the scripts chosen in Settings run.
     installUnsavedQuestion(context);
+    installEventScripts(context);
   }
 
-  /// The engine's boot log, or empty where there is no engine to ask — a
-  /// placeholder build, or a widget test with no library loaded. Read once:
-  /// it is a bridge call, and it answers the same thing every time.
-  late final List<String> _lines = _readBootLog();
-
-  /// How many times the window has changed hands: splash to welcome, welcome
-  /// to shell. The first of the three is simply there, and each one after it
-  /// fades up in its place (docs/15 §8).
+  /// How many times the window has changed hands: welcome to shell. The first
+  /// is simply there, and the shell fades up in its place (docs/15 §8).
   int _handovers = 0;
-
-  static List<String> _readBootLog() {
-    try {
-      return bootLog();
-    } catch (_) {
-      return const [];
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,21 +227,6 @@ class _BootGateState extends State<BootGate> {
 
   Widget _window() {
     final theme = ThemeScope.of(context).theme;
-    if (_booting) {
-      return WindowDragStrip(
-        theme: theme,
-        child: SplashOverlay(
-          lines: _lines,
-          onDone: () {
-            if (!mounted) return;
-            setState(() {
-              _booting = false;
-              _handovers++;
-            });
-          },
-        ),
-      );
-    }
     if (_welcoming) {
       return WindowDragStrip(
         theme: theme,
@@ -356,6 +316,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           showShareFrb(context, app, invite: invite);
           return;
         }
+        final package = app.launchPackage;
+        if (package != null) {
+          app.launchPackage = null;
+          installExtensionPackage(context, app, ui.extensions, package);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
@@ -363,14 +329,21 @@ class _LumitAppViewState extends State<LumitAppView> {
     listenForOpenRequests(_openAsked);
   }
 
-  /// A project double-clicked in Finder, or an invite link clicked in a
-  /// browser, while Lumit is running. On macOS both come to this Lumit and
-  /// are opened as File ▸ Open and the Shared project window would.
+  /// A project or an extension package double-clicked, or an invite link
+  /// clicked in a browser, while Lumit is running. On macOS all three come to
+  /// this Lumit, and elsewhere when it is kept running in the background.
+  /// They are opened as File ▸ Open, the install window and the Shared
+  /// project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
     final project = projectPathFromArgs(asked);
     if (project != null) app.openProject(project);
+    final package = packagePathFromArgs(asked);
+    if (package != null) {
+      installExtensionPackage(
+          context, app, context.read<LumitUiState>().extensions, package);
+    }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }

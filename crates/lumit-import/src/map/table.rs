@@ -141,6 +141,43 @@ pub(crate) fn table() -> &'static Table {
     })
 }
 
+/// After Effects' names for the effects that import as `lumit`, so the effects
+/// search finds Glow under Deep Glow or S_Glow. Placeholder rows name nothing.
+pub fn other_names_of(lumit: &str) -> Vec<String> {
+    let mut names: Vec<String> = table()
+        .rows
+        .values()
+        .filter(|row| row.lumit == lumit)
+        .map(|row| row.name.clone())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// The match name of the After Effects effect called `name`, by its match
+/// name or its own name, when it becomes a Lumit effect. A script adding an
+/// effect by either goes through the import from there.
+pub fn ae_match_name(name: &str) -> Option<String> {
+    let rows = &table().rows;
+    rows.get(name)
+        .or_else(|| rows.values().find(|row| row.name == name))
+        .filter(|row| !row.lumit.is_empty())
+        .map(|row| row.ae.clone())
+}
+
+/// The After Effects effect `lumit` stands for, Adobe's own first when
+/// several import as it, so a script can name its controls the way After
+/// Effects does.
+pub fn ae_match_name_of(lumit: &str) -> Option<String> {
+    table()
+        .rows
+        .values()
+        .filter(|row| row.lumit == lumit)
+        .map(|row| row.ae.clone())
+        .min_by_key(|ae| (!ae.starts_with("ADBE "), ae.clone()))
+}
+
 /// The edited copy beside the executable, if there is one.
 fn override_text() -> Option<String> {
     let path = std::env::current_exe().ok()?.parent()?.join(OVERRIDE_FILE);

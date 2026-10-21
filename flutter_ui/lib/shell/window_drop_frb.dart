@@ -1,5 +1,6 @@
 // Files dropped anywhere on the window are imported, the way files dropped on
-// the Project panel are.
+// the Project panel are. An extension package dropped anywhere opens its
+// install window instead, and a script is run after a question.
 //
 // The drop plugin tells every drop target about every drop, and each one acts
 // if the drop was inside its own box. A target the size of the window would
@@ -7,14 +8,18 @@
 // So this one stands down whenever the drop landed inside another target, by
 // the same test the plugin makes, and that target is left to do its own work.
 
+import 'dart:async';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
+import 'extension_install_frb.dart';
 import '../state/app_state.dart';
 import '../state/dock.dart';
 import '../state/ui_state.dart';
+import 'run_script_frb.dart';
 
 class WindowDropFrb extends StatelessWidget {
   final Widget child;
@@ -23,12 +28,20 @@ class WindowDropFrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DropTarget(
         onDragDone: (details) async {
-          if (_inAnotherTarget(context, details.globalPosition)) return;
           final ui = context.read<LumitUiState>();
-          final imported = await importDroppedPaths(
-              context.read<LumitState>(), [for (final f in details.files) f.path]);
+          final paths = [for (final f in details.files) f.path];
+          // Wherever it lands, since no other target takes a package.
+          final package = packagePathFromArgs(paths);
+          if (package != null) {
+            unawaited(installExtensionPackage(
+                context, context.read<LumitState>(), ui.extensions, package));
+          }
+          if (_inAnotherTarget(context, details.globalPosition)) return;
+          final imported = await importDroppedPaths(context.read<LumitState>(),
+              paths.where((path) => !isScriptFile(path)).toList());
           // Nothing lit up under the drop, so show where the files went.
           if (imported) ui.frontPanel(Panel.project);
+          if (context.mounted) await runDroppedScripts(context, paths);
         },
         child: child,
       );

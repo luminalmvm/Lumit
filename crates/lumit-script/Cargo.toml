@@ -1,0 +1,33 @@
+[package]
+name = "lumit-script"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+lumit-core = { path = "../lumit-core" }
+# After Effects' effects and their controls, converted as importing a
+# project converts them.
+lumit-import = { path = "../lumit-import" }
+lumit-ingress = { path = "../lumit-ingress" }
+# The live endpoint: the local socket Lumit listens on while the person lets
+# other programs drive it, and the challenge both ends answer on it.
+lumit-peer = { path = "../lumit-peer" }
+interprocess = "2"
+# The JavaScript engine scripts run in. Its std and os modules are never
+# loaded, so a script reaches only what the runner hands it.
+rquickjs = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[target.'cfg(windows)'.dependencies]
+# The text form of the named pipe's permissions, which interprocess reads.
+widestring = "1"
+
+[lints]
+workspace = true

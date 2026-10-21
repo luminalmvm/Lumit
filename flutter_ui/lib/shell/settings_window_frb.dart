@@ -47,6 +47,7 @@ import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:provider/provider.dart';
@@ -57,6 +58,7 @@ import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';
+import '../state/background.dart';
 import '../state/expression_language.dart';
 import '../state/extensions.dart';
 import '../state/external_links.dart';
@@ -85,6 +87,7 @@ import 'export_dialog_frb.dart'
         exportTokenDate;
 import 'keymap_keyboard.dart';
 import 'menu_bar_frb.dart';
+import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
@@ -874,6 +877,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         workspace.setAutoUpdate(true);
         workspace.setDiscordStatus(DiscordStatus.app);
         ui.pushDiscordStatus();
+        workspace.setKeepRunning(false);
+        unawaited(applyBackground(workspace));
+        if (workspace.liveEndpoint) {
+          workspace.setLiveEndpoint(false);
+          ui.applyLiveEndpoint();
+        }
         ui.setLanguage(null);
       case SettingsPage.account:
         // Nothing here has a shipped value to go back to.
@@ -884,6 +893,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.setShape(ThemeShape.studio);
         workspace.setAnimationLevel(AnimationLevel.all);
         workspace.setThemedScopes(false);
+        workspace.setThemedSplash(false);
         workspace.setThemedEffectGraphs(false);
         workspace.setThemedViewerSurround(false);
         settings.uiScale = shipped.uiScale;
@@ -908,6 +918,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.retimeInSeconds = shipped.retimeInSeconds;
         settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
         settings.streamsArrival = shipped.streamsArrival;
+        settings.cutSoundWithPicture = shipped.cutSoundWithPicture;
+        settings.cutTracksAnyOrder = shipped.cutTracksAnyOrder;
         settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
@@ -1039,6 +1051,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,
                 set: ui.workspace.setShowWelcomeOnLaunch),
+            // Closing the window leaves Lumit in the tray, for the phones.
+            _flag(t, 'settings-keep-running', l10n.settingsKeepRunning,
+                value: ui.workspace.keepRunning, set: (on) {
+              ui.workspace.setKeepRunning(on);
+              unawaited(applyBackground(ui.workspace));
+            }),
+            if (ui.workspace.keepRunning)
+              _flag(t, 'settings-open-at-sign-in', l10n.settingsOpenAtSignIn,
+                  value: ui.workspace.openAtSignIn, set: (on) {
+                ui.workspace.setOpenAtSignIn(on);
+                unawaited(applyBackground(ui.workspace));
+              }),
             // The project a new one starts as a copy of. The path is the
             // row's own second line, and Clear goes back to an empty project.
             _row(
@@ -1102,6 +1126,79 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 }),
               ),
             ),
+            // Off until turned on: it is the one way another program can
+            // reach the open project.
+            _flag(t, 'settings-live-endpoint', l10n.settingsLiveEndpoint,
+                value: ui.workspace.liveEndpoint, set: (on) {
+              ui.workspace.setLiveEndpoint(on);
+              ui.applyLiveEndpoint();
+            }),
+          ],
+        ),
+        (
+          l10n.settingsGroupScripts,
+          [
+            // The folder File ▸ Scripts lists. Clear goes back to Lumit's own.
+            _row(
+              t,
+              l10n.settingsScriptsFolder,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-scripts-folder'),
+                    small: true,
+                    onPressed: () async {
+                      final folder = await pickFolder();
+                      if (folder == null || !mounted) return;
+                      setState(() => ui.workspace.setScriptsFolder(folder));
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.scriptsFolder.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-scripts-folder-clear'),
+                      small: true,
+                      onPressed: () =>
+                          setState(() => ui.workspace.setScriptsFolder('')),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: ui.workspace.scriptsFolder.isEmpty
+                  ? _ownScriptsFolder
+                  : ui.workspace.scriptsFolder,
+            ),
+            // The script each event runs, from the Scripts folder. None is
+            // what a fresh install has.
+            for (final (event, title) in [
+              (ScriptEvent.export, l10n.settingsScriptAfterExport),
+              (ScriptEvent.open, l10n.settingsScriptAfterOpen),
+              (ScriptEvent.save, l10n.settingsScriptAfterSave),
+            ])
+              _row(
+                t,
+                title,
+                _dropdown<String?>(
+                  key: 'settings-event-script-${event.name}',
+                  value: ui.workspace.eventScripts[event],
+                  options: [
+                    null,
+                    ..._scriptsIn(ui.workspace.scriptsFolder),
+                    // One set before the folder changed stays until replaced.
+                    if (ui.workspace.eventScripts[event] case final set?
+                        when !_scriptsIn(ui.workspace.scriptsFolder)
+                            .contains(set))
+                      set,
+                  ],
+                  width: _ddWide,
+                  label: (script) => script ?? l10n.none,
+                  onChanged: (script) => setState(
+                      () => ui.workspace.setEventScript(event, script)),
+                ),
+              ),
           ],
         ),
         // The same updater the Help menu drives, seen from the other side: one
@@ -1150,7 +1247,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                                       ?.isDirty() ??
                                   false,
                               saveProject: () => saveProjectFrb(
-                                  context.read<LumitState>(), ui),
+                                  context.read<LumitState>(), ui,
+                                  leaving: true),
                             ),
                     child: Text(ui.updates.menuLabel, style: t.small),
                   ),
@@ -1172,6 +1270,25 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// every update-service notification, and the installed version cannot
   /// change under a running process.
   late final String _installed = lumitProductVersion();
+
+  /// Lumit's own Scripts folder, read once like the version above.
+  late final String _ownScriptsFolder = scriptsFolderIn('') ?? '';
+
+  /// The scripts in the Scripts folder, read from disk once for each folder
+  /// the window shows.
+  (String, List<String>)? _scripts;
+  List<String> _scriptsIn(String chosen) {
+    if (_scripts case (final folder, final scripts) when folder == chosen) {
+      return scripts;
+    }
+    var scripts = const <String>[];
+    try {
+      final folder = scriptsFolderIn(chosen);
+      if (folder != null) scripts = listScripts(folder: folder);
+    } catch (_) {}
+    _scripts = (chosen, scripts);
+    return scripts;
+  }
 
   /// The line under "This version": what is installed, and what the last check
   /// made of it. Rebuilt with the row, so it follows the service too.
@@ -1245,6 +1362,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
               description: _themeMessage ?? ''),
           _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
+              value: ui.workspace.themedSplash,
+              set: ui.workspace.setThemedSplash),
           _row(t, l10n.settingsShape, _shapeChips(t, ui)),
           // How labels are cased. Null is the style's own, and a file that
           // never chose stores nothing.
@@ -1952,6 +2072,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
+          _row(
+            t,
+            l10n.settingsVideoSoundInCut,
+            _dropdown<bool>(
+              key: 'settings-cut-sound-with-picture',
+              width: _ddWide,
+              value: settings.cutSoundWithPicture,
+              options: const [false, true],
+              label: (on) =>
+                  on ? l10n.cutSoundWithPicture : l10n.cutSoundOnItsOwnTrack,
+              onChanged: (on) => setState(() {
+                settings.cutSoundWithPicture = on;
+                changed();
+              }),
+            ),
+          ),
+          _flag(t, 'settings-cut-tracks-any-order',
+              l10n.settingsCutTracksInAnyOrder,
+              value: settings.cutTracksAnyOrder, set: (on) {
+            settings.cutTracksAnyOrder = on;
+            changed();
+          }),
           _flag(t, 'settings-paste-at-original-time',
               l10n.settingsPasteLayersAtTheirOriginal,
               value: settings.pasteLayersAtOriginalTime, set: (on) {
@@ -2421,14 +2563,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // The page's one engine read: the scan, the runtime and the folder. Every
     // other reading it draws came with this one.
     service.refresh();
-    // The extensions are listed on the same page, from their own service.
+    // The extensions are listed on the same page, from their own service,
+    // registered again in case another Lumit installed one.
     final extensions = context.read<LumitUiState>().extensions;
     if (!identical(_extensions, extensions)) {
       _extensions?.removeListener(_addonsChanged);
       extensions.addListener(_addonsChanged);
       _extensions = extensions;
     }
-    extensions.refresh();
+    unawaited(extensions.rescan());
   }
 
   ExtensionService? _extensions;
@@ -2454,39 +2597,51 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   style: t.small.copyWith(color: t.warning)),
               const SizedBox(width: 8),
             ],
-            HouseButton(
-              key: ValueKey<String>('settings-extension-show-${extension.id}'),
-              small: true,
-              onPressed: () => setState(() => ui.toggleExtension(extension.id)),
-              child: Text(
-                  ui.extensionShown(extension.id)
-                      ? l10n.settingsExtensionHide
-                      : l10n.settingsExtensionShow,
-                  style: t.small),
-            ),
+            if (extension.panel)
+              HouseButton(
+                key:
+                    ValueKey<String>('settings-extension-show-${extension.id}'),
+                small: true,
+                onPressed: () =>
+                    setState(() => ui.toggleExtension(extension.id)),
+                child: Text(
+                    ui.extensionShown(extension.id)
+                        ? l10n.settingsExtensionHide
+                        : l10n.settingsExtensionShow,
+                    style: t.small),
+              ),
             HouseButton(
               key:
                   ValueKey<String>('settings-extension-remove-${extension.id}'),
               small: true,
               frameless: true,
-              onPressed: () {
+              onPressed: () async {
+                final app = context.read<LumitState>();
                 if (ui.extensionShown(extension.id)) {
                   ui.toggleExtension(extension.id);
                 }
-                ui.extensions.remove(extension.id);
+                final removed = await ui.extensions.remove(extension.id);
+                if (removed == BridgeExtensionRemoval.notOurs) {
+                  app.postNotice(l10n.extensionNotOurs(extension.name));
+                } else if (removed == BridgeExtensionRemoval.failed) {
+                  app.postNotice(l10n.extensionRemoveFailed(extension.name),
+                      error: true);
+                }
               },
               child: Text(l10n.settingsAddonsRemove, style: t.small),
             ),
           ],
         ),
-        description: extension.summary,
+        description: [
+          if (extension.summary.isNotEmpty) extension.summary,
+          if (extension.effects.isNotEmpty)
+            l10n.settingsExtensionEffects(
+                extension.effects.map((e) => e.name).join(', ')),
+        ].join('\n'),
       );
 
   List<Widget?> _extensionRows(LumitTheme t, LumitUiState ui) {
     final service = ui.extensions;
-    // Every extension sits in the one folder, so the first one's shows it.
-    final first = service.installed.firstOrNull?.folder;
-    final folder = first == null ? null : File(first).parent.path;
     return [
       for (final extension in service.installed)
         _extensionRow(t, ui, extension),
@@ -2500,6 +2655,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             style: t.small.copyWith(color: t.textMuted),
           ),
         ),
+      _row(
+        t,
+        l10n.settingsExtensionsInstallPackage,
+        HouseButton(
+          key: const ValueKey('settings-extension-install-package'),
+          small: true,
+          onPressed: service.busy
+              ? null
+              : () => unawaited(installExtensionFromPackage(
+                  context, context.read<LumitState>(), service)),
+          child: Text(l10n.chooseEllipsis, style: t.small),
+        ),
+      ),
       _row(
         t,
         l10n.settingsExtensionsInstall,
@@ -2516,13 +2684,69 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
       _row(
         t,
+        l10n.settingsExtensionsMakePackage,
+        HouseButton(
+          key: const ValueKey('settings-extension-make-package'),
+          small: true,
+          onPressed: service.busy
+              ? null
+              : () => unawaited(makeExtensionPackage(
+                  context.read<LumitState>(), service)),
+          child: Text(l10n.chooseEllipsis, style: t.small),
+        ),
+      ),
+    ];
+  }
+
+  /// Where extensions are found: Lumit's own folder, the machine-wide ones
+  /// and the ones the person added, in the order they are scanned.
+  List<Widget?> _extensionFolderRows(LumitTheme t, ExtensionService service) {
+    final folders = service.scanFolders;
+    final own = folders.own;
+    return [
+      _row(
+        t,
         l10n.settingsExtensionsFolder,
         HouseButton(
           key: const ValueKey('settings-extension-show-folder'),
           small: true,
-          onPressed:
-              folder == null ? null : () => revealInFolder(path: folder),
+          onPressed: own == null ? null : () => revealInFolder(path: own),
           child: Text(l10n.settingsAddonsShow, style: t.small),
+        ),
+        description: own ?? '',
+      ),
+      if (folders.machine.isNotEmpty)
+        _row(
+          t,
+          l10n.settingsExtensionsMachineFolder,
+          const SizedBox.shrink(),
+          description: folders.machine.join('\n'),
+        ),
+      for (final folder in folders.extra)
+        _row(
+          t,
+          folder,
+          HouseButton(
+            key: ValueKey<String>('settings-extension-folder-remove-$folder'),
+            small: true,
+            frameless: true,
+            onPressed: () async {
+              await service.removeFolder(folder);
+            },
+            child: Text(l10n.settingsAddonsRemove, style: t.small),
+          ),
+        ),
+      _row(
+        t,
+        l10n.settingsExtensionsAddFolder,
+        HouseButton(
+          key: const ValueKey('settings-extension-folder-add'),
+          small: true,
+          onPressed: () async {
+            final folder = await pickFolder();
+            if (folder != null) await service.addFolder(folder);
+          },
+          child: Text(l10n.chooseEllipsis, style: t.small),
         ),
       ),
     ];
@@ -2596,6 +2820,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ]
       ),
       (l10n.settingsGroupExtensions, _extensionRows(t, ui)),
+      (
+        l10n.settingsGroupExtensionFolders,
+        _extensionFolderRows(t, ui.extensions)
+      ),
     ]);
   }
 

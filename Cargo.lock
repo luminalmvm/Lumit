@@ -1561,6 +1561,8 @@ version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
+ "allocator-api2",
+ "equivalent",
  "foldhash 0.2.0",
 ]
 
@@ -1999,7 +2001,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lumit-aplug"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "clap-sys",
@@ -2018,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-aplug-broker"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-aplug",
  "lumit-aplug-testplug",
@@ -2029,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-aplug-testplug"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "clap-sys",
  "vst3",
@@ -2037,7 +2039,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-audio"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cpal",
  "lumit-media",
@@ -2048,7 +2050,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-bench"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-audio",
  "lumit-core",
@@ -2062,7 +2064,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-budget"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-ingress",
  "thiserror 2.0.18",
@@ -2070,7 +2072,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-cache"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-budget",
  "lz4_flex",
@@ -2078,8 +2080,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-cli"
+version = "0.9.0"
+dependencies = [
+ "libloading 0.8.9",
+]
+
+[[package]]
 name = "lumit-colour"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-core",
  "lumit-ingress",
@@ -2090,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-core"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "arc-swap",
  "blake3",
@@ -2112,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-eval"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "blake3",
  "lumit-core",
@@ -2123,18 +2132,21 @@ dependencies = [
 
 [[package]]
 name = "lumit-extensions"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "getrandom 0.4.3",
+ "lumit-core",
+ "lumit-gpu",
  "lumit-project",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "zip",
 ]
 
 [[package]]
 name = "lumit-flow"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bytemuck",
  "lumit-gpu",
@@ -2145,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-fx-macros"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2154,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-gpu"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "ash",
  "bytemuck",
@@ -2179,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-import"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-core",
  "lumit-project",
@@ -2195,14 +2207,14 @@ dependencies = [
 
 [[package]]
 name = "lumit-ingress"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "lumit-keymap"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2210,7 +2222,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-media"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "blake3",
@@ -2226,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-media-broker"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-media",
  "tempfile",
@@ -2234,7 +2246,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ml"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-project",
  "ort",
@@ -2247,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "cc",
@@ -2270,7 +2282,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx-broker"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-eval",
  "lumit-ofx",
@@ -2281,14 +2293,14 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx-testplug"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-ofx",
 ]
 
 [[package]]
 name = "lumit-peer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "blake3",
  "getrandom 0.4.3",
@@ -2298,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-project"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "blake3",
  "criterion",
@@ -2314,11 +2326,11 @@ dependencies = [
 
 [[package]]
 name = "lumit-relay"
-version = "0.8.1"
+version = "0.9.0"
 
 [[package]]
 name = "lumit-render"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bincode",
  "blake3",
@@ -2352,7 +2364,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-roto"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -2360,8 +2372,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-script"
+version = "0.9.0"
+dependencies = [
+ "interprocess",
+ "lumit-core",
+ "lumit-import",
+ "lumit-ingress",
+ "lumit-peer",
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+ "widestring",
+]
+
+[[package]]
 name = "lumit-share"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "argon2",
  "blake3",
@@ -2383,7 +2412,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-text"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "fontdue",
  "fontique",
@@ -2397,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-track"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "lumit-core",
  "serde",
@@ -2406,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "lumit_bridge"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "flutter_rust_bridge",
  "lumit-aplug",
@@ -2416,6 +2445,7 @@ dependencies = [
  "lumit-eval",
  "lumit-extensions",
  "lumit-import",
+ "lumit-ingress",
  "lumit-keymap",
  "lumit-media",
  "lumit-ml",
@@ -2423,9 +2453,11 @@ dependencies = [
  "lumit-ofx-testplug",
  "lumit-project",
  "lumit-render",
+ "lumit-script",
  "lumit-share",
  "lumit-text",
  "lumit-track",
+ "png",
  "serde",
  "serde_json",
  "tempfile",
@@ -3370,6 +3402,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "relative-path"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2a073568cd8b9c4825429d3e9fc5f52851b4f97cc1348800689408921e6b8f8"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3419,6 +3460,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "rquickjs"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0a22bf72f515cc4189dd7c63d016f6de92a11eee98ddf7dd64794198f6eb34e"
+dependencies = [
+ "rquickjs-core",
+]
+
+[[package]]
+name = "rquickjs-core"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6657979a24d543e5fc66f32cef2f47ca82ce8eb55cec5f7d59a12b7b570bbf24"
+dependencies = [
+ "hashbrown 0.17.1",
+ "relative-path",
+ "rquickjs-sys",
+]
+
+[[package]]
+name = "rquickjs-sys"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee271d0eeba64f0915b846cb7ae02e16faf3dfdffdca91731101d9d30fe3423"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

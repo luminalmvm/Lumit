@@ -47,7 +47,7 @@ the top, so its samples do not depend on what was played.
 
 ## 3. The document
 
-- Every edit is a command (`AddLayer`, `SetKeyframe`, ...) with an inverse. Applying one
+- Every edit is an op (`AddLayer`, `SetKeyframe`, ...) with an inverse. Applying one
   makes a new immutable snapshot. Today that clones the whole `Document`.
 - Undo and redo walk the journal. Autosave appends the same journal to disk. Recovery is
   the last snapshot plus a journal replay.
@@ -115,6 +115,8 @@ file's own.
 - First-party effects run in-process. Third-party OFX plugins run in a broker process per
   bundle. Frames cross in shared memory. A crashed or hung broker is restarted and the
   node draws as an error placeholder.
+- LFX effects run in-process on the GPU, checked by naga before they run, with no broker.
+  One running when the device is lost twice is switched off until Lumit restarts.
 - A plugin node declares its region, its temporal needs and whether it's thread-safe. A
   plugin that isn't serialises on its own broker only.
 - Expressions run in-process with no IO, no clock and seeded randomness. Results match per

@@ -1180,7 +1180,7 @@ pub enum EffectNamespace {
     /// once here is cheaper than every walk asking the catalogue what kind of
     /// thing it just found.
     Clap,
-    /// A native LFX plugin (docs/12-PLUGINS.md).
+    /// An LFX effect: a WGSL shader an extension carries.
     Lfx,
     /// Unknown to this build (AE import or missing plugin): renders as
     /// identity with a badge, round-trips untouched.

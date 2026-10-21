@@ -29,7 +29,12 @@ place as they are.
   empty project. **Reset workspace** puts the current arrangement back to how it
   shipped. **Discord status** sets what Discord shows while Lumit is open: **Off**,
   **Lumit only**, or **Project and composition**, which adds the names of the open project
-  and composition.
+  and composition. **Keep running in the background**: closing the window leaves Lumit in
+  the system tray, or the menu bar on macOS, where paired phones still see it. **Open
+  Lumit** on the tray icon's menu brings the window back and **Quit Lumit** ends Lumit.
+  Opening Lumit again also brings the window back, which is the only way on a desktop with
+  no tray, such as GNOME as it ships. **Open Lumit when you sign in** appears once that is
+  on, and starts Lumit in the tray when you sign in to the computer.
 - **Updates**: **Automatic updates** checks for a new version at launch, at most once a
   day; downloading waits for a click. **Nightly builds** follows nightly builds instead of
   releases, and asks first. **Nightly icon**, on a nightly build on Windows or macOS,
@@ -81,12 +86,13 @@ of it is synced. See [Profiles and accounts](/use/profiles/).
 
 - **Editing**: whether [Retime](/use/retime/) opens to the Speed lens rather than Value
   (**Retime opens to Speed**) and whether it reads in seconds, whether video is placed in a
-  [Sequence layer](/use/sequence-layers/) automatically, whether pasted layers keep their
-  original time rather than pasting at the playhead, and whether the playhead stays where
-  playback stopped. **Several audio streams arrive as** sets what a file with more than one
-  audio stream becomes when placed: **The first stream**, **One layer, mixed** or **A layer
-  each**. **New expressions are written in** **JavaScript** or **Rhai**; each expression
-  keeps its own language afterwards.
+  [Sequence layer](/use/sequence-layers/) automatically, where a video's sound goes in the
+  [Cut timeline](/use/cutting/), whether its tracks stand in any order, whether pasted
+  layers keep their original time rather than pasting at the playhead, and whether the
+  playhead stays where playback stopped. **Several audio streams arrive as** sets what a
+  file with more than one audio stream becomes when placed: **The first stream**, **One
+  layer, mixed** or **A layer each**. **New expressions are written in** **JavaScript** or
+  **Rhai**; each expression keeps its own language afterwards.
 - **Panels**: whether Transform appears in Effect controls, whether Effect controls shows its
   keyframes beside the parameters (**Keyframes in Effect controls**), whether an ease opens
   in a popup or the [Easing panel](/use/workspaces/), and whether sound dragged in the Cut

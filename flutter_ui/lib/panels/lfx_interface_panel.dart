@@ -1,0 +1,484 @@
+// An LFX effect's own interface: the extension's page in a panel that floats
+// over the work, one per effect type. It follows the picked card's instance
+// of that effect, or the selected layer's first one, and its
+// page drives that instance's real rows through the `effect` calls.
+
+import 'dart:convert';
+
+import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/extensions.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
+
+import '../l10n/strings.dart';
+import '../shell/dialog_frame.dart';
+import '../state/comp_time.dart';
+import '../state/extension_host.dart';
+import '../state/extensions.dart';
+import '../widgets/controls.dart';
+import 'effect_param_row_frb.dart';
+import 'extension_panel.dart';
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
+
+/// The interfaces open now, by match name, so a second press does not open
+/// a second one.
+final Set<String> _open = {};
+
+/// Open the interface of the LFX effect [matchName], titled [title], unless
+/// it is open already. The page and its size come from the extension list
+/// already held.
+Future<void> showLfxInterface(BuildContext context,
+    {required String matchName, required String title}) async {
+  if (_open.contains(matchName)) return;
+  final ui = context.read<LumitUiState>();
+  final carried = ui.extensions.carrying(matchName);
+  if (carried == null || carried.$2.entry.isEmpty) return;
+  final (owner, page) = carried;
+  final extension = _showing(owner, page);
+  _open.add(matchName);
+  try {
+    await showLumitModal<void>(
+      context: context,
+      id: 'lfx-interface-$matchName',
+      modeless: true,
+      dimBackground: false,
+      initialSize: Size(page.width.toDouble(),
+          page.height.toDouble() + dialogTitleStrip + 1),
+      minSize: const Size(200, 120),
+      builder: (close) => LfxInterfaceWindow(
+        extension: extension,
+        matchName: matchName,
+        title: title,
+        onClose: () => close(null),
+      ),
+    );
+  } finally {
+    _open.remove(matchName);
+  }
+}
+
+/// The extension as the page host knows it, showing [page].
+BridgeExtension _showing(BridgeExtension owner, BridgeExtensionEffect page) =>
+    BridgeExtension(
+      id: owner.id,
+      name: owner.name,
+      version: owner.version,
+      summary: owner.summary,
+      author: owner.author,
+      homepage: owner.homepage,
+      folder: owner.folder,
+      panel: true,
+      entry: page.entry,
+      permissions: owner.permissions,
+      hosts: owner.hosts,
+      broken: false,
+      effects: owner.effects,
+    );
+
+/// The floating panel itself: its title strip, and the page once there has
+/// been an instance to follow. It closes when its extension is removed and
+/// loads the page again when it is updated.
+class LfxInterfaceWindow extends StatefulWidget {
+  final BridgeExtension extension;
+  final String matchName;
+  final String title;
+  final VoidCallback onClose;
+
+  const LfxInterfaceWindow({
+    super.key,
+    required this.extension,
+    required this.matchName,
+    required this.title,
+    required this.onClose,
+  });
+
+  @override
+  State<LfxInterfaceWindow> createState() => _LfxInterfaceWindowState();
+}
+
+class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
+  late final LfxFollow _follow = LfxFollow(
+      ui: context.read<LumitUiState>(), matchName: widget.matchName);
+
+  late final ExtensionService _extensions =
+      context.read<LumitUiState>().extensions;
+  late BridgeExtension _extension = widget.extension;
+
+  /// The page has been put up.
+  bool _paged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _extensions.addListener(_extensionsChanged);
+  }
+
+  void _extensionsChanged() {
+    final carried = _extensions.carrying(widget.matchName);
+    if (carried == null || carried.$2.entry.isEmpty) return widget.onClose();
+    setState(() => _extension = _showing(carried.$1, carried.$2));
+  }
+
+  @override
+  void dispose() {
+    _extensions.removeListener(_extensionsChanged);
+    _follow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return DialogFrame(
+      children: [
+        dialogTitleBar(t,
+            title: widget.title,
+            onClose: widget.onClose,
+            keyPrefix: 'lfx-interface'),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: _follow,
+            builder: (context, _) {
+              // Once the page is up it stays, and shows its own empty state
+              // when nothing is followed. Before that the panel says so.
+              _paged |= _follow.target != null;
+              return !_paged
+                  ? Center(
+                      child: Text(
+                        l10n.lfxInterfaceEmpty(widget.title),
+                        key: const ValueKey('lfx-interface-empty'),
+                        style: t.small.copyWith(color: t.textMuted),
+                      ),
+                    )
+                  // A drag in the page is the page's own, so turning a knob
+                  // in it never moves the window.
+                  : GestureDetector(
+                      onPanStart: (_) {},
+                      child: ExtensionView(
+                        // A new page for a new version, or one installed
+                        // over itself.
+                        key: ValueKey<String>('lfx-page-${widget.matchName}:'
+                            '${_extension.version}:${_extensions.generation}'),
+                        extension: _extension,
+                        effect: _follow,
+                      ),
+                    );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The instance an interface follows, and the `effect` calls its page makes.
+///
+/// Rows, the preview while dragging and the commit go through the same
+/// [EffectStackEditor] calls the Effect controls rows use, so a drag is one
+/// undo step. A row with a hard range is held to it.
+class LfxFollow extends ChangeNotifier implements EffectChannel {
+  final LumitUiState ui;
+  final String matchName;
+
+  LfxFollow({required this.ui, required this.matchName}) {
+    ui.selectedLayer.addListener(_look);
+    ui.selectedEffects.addListener(_look);
+    ui.playheadFrame.addListener(_look);
+    ui.model.addListener(_look);
+    _look();
+  }
+
+  @override
+  void Function(String event, Map<String, Object?> data)? onEvent;
+
+  /// The layer and the instance on it being followed, or null.
+  ({LayerReference layer, BridgeEffectInstanceInfo info})? target;
+
+  final EffectStackEditor _editor = EffectStackEditor();
+
+  /// A drag is running, and what it has set so far.
+  bool _dragging = false;
+  final Map<String, BridgeEffectValue> _staged = {};
+
+  /// A drag was dropped when the instance changed under it. What the page
+  /// still sets for it is refused until it ends or a new one begins.
+  bool _dropped = false;
+
+  /// The values last told to the page, so only a change is told.
+  String? _told;
+
+  @override
+  void dispose() {
+    ui.selectedLayer.removeListener(_look);
+    ui.selectedEffects.removeListener(_look);
+    ui.playheadFrame.removeListener(_look);
+    ui.model.removeListener(_look);
+    _editor.clear();
+    super.dispose();
+  }
+
+  ({LayerReference layer, BridgeEffectInstanceInfo info})? _find() {
+    // The layer the picked card is on, as Effect controls reads it, so the
+    // card whose Interface was pressed is the one driven.
+    final layer = ui.selectedEffectsLayer ?? ui.selectedLayer.value;
+    if (layer == null) return null;
+    final effects = ui.model.byId(layer.internallayerId)?.info.effects ?? [];
+    final mine = [
+      for (final e in effects)
+        if (e.name == matchName) e,
+    ];
+    if (mine.isEmpty) return null;
+    final picked = ui.selectedEffects.value;
+    final info = mine.firstWhere((e) => picked.contains(e.id),
+        orElse: () => mine.first);
+    return (layer: layer, info: info);
+  }
+
+  void _look() {
+    final next = _find();
+    final was = target;
+    target = next;
+    if (next?.info.id != was?.info.id ||
+        next?.layer.internallayerId != was?.layer.internallayerId) {
+      _dropped |= _dragging;
+      _drop();
+      _told = null;
+      notifyListeners();
+      onEvent?.call('effect.target', {'id': next?.info.id.toString()});
+    }
+    if (next == null) return;
+    final values = _values(next.info);
+    final key = jsonEncode(values);
+    if (key == _told) return;
+    final first = _told == null;
+    _told = key;
+    if (!first) onEvent?.call('effect.changed', {'values': values});
+  }
+
+  /// The rows a page can drive: numbers, checkboxes, choices, seeds and
+  /// colours. A layer, a file or a text row is left out.
+  List<BridgeParamInfo> _rows(BridgeEffectInstanceInfo info) => [
+        for (final row in relistedRows(
+            [...cachedListParameters(matchName), ...info.derivedParams],
+            info.rowOptions))
+          if (!info.hiddenRows.contains(row.id) && _kind(row.kind) != null) row,
+      ];
+
+  static String? _kind(BridgeParamKind kind) => switch (kind) {
+        BridgeParamKind_Float() => 'float',
+        BridgeParamKind_Int() => 'int',
+        BridgeParamKind_Angle() => 'angle',
+        BridgeParamKind_Slider() => 'slider',
+        BridgeParamKind_Bool() => 'bool',
+        BridgeParamKind_Choice() => 'choice',
+        BridgeParamKind_Seed() => 'seed',
+        BridgeParamKind_Colour() => 'colour',
+        _ => null,
+      };
+
+  /// A scalar at the playhead. Null for one an expression drives.
+  double? _at(BridgeScalar scalar) {
+    final comp = ui.selectedComp;
+    if (comp == null) return null;
+    return switch (scalar) {
+      BridgeScalar_Static(:final field0) => field0,
+      BridgeScalar_Keyframed() =>
+        sampledScalar(scalar, timeOfFrame(comp, ui.playheadFrame.value)),
+      _ => null,
+    };
+  }
+
+  Object? _out(BridgeEffectValue? value) => switch (value) {
+        BridgeEffectValue_Float(:final field0) => _at(field0),
+        BridgeEffectValue_Bool(:final field0) => field0,
+        BridgeEffectValue_Choice(:final field0) => field0,
+        BridgeEffectValue_Seed(:final field0) => field0,
+        BridgeEffectValue_Colour(:final field0) => [
+            _at(field0.r),
+            _at(field0.g),
+            _at(field0.b),
+            _at(field0.a),
+          ],
+        _ => null,
+      };
+
+  BridgeEffectValue? _stored(BridgeEffectInstanceInfo info, String id) {
+    for (final v in info.values) {
+      if (v.id == id) return v.value;
+    }
+    return null;
+  }
+
+  Map<String, Object?> _values(BridgeEffectInstanceInfo info) => {
+        for (final row in _rows(info)) row.id: _out(_stored(info, row.id)),
+      };
+
+  ({LayerReference layer, BridgeEffectInstanceInfo info}) _target() =>
+      target ??
+      (throw const ExtensionRefusal('failed', 'no instance is selected'));
+
+  BridgeParamInfo _row(BridgeEffectInstanceInfo info, String id) {
+    for (final row in _rows(info)) {
+      if (row.id == id) return row;
+    }
+    throw ExtensionRefusal('bad-params', 'there is no row $id');
+  }
+
+  @override
+  List<Map<String, Object?>> rows() {
+    final info = _target().info;
+    return [
+      for (final row in _rows(info))
+        {
+          'id': row.id,
+          'label': row.label,
+          'kind': _kind(row.kind),
+          ...switch (row.kind) {
+            BridgeParamKind_Float(:final sliderMin, :final sliderMax) => {
+                'min': sliderMin,
+                'max': sliderMax,
+              },
+            BridgeParamKind_Int(:final sliderMin, :final sliderMax) => {
+                'min': sliderMin.toInt(),
+                'max': sliderMax.toInt(),
+              },
+            BridgeParamKind_Slider(:final min, :final max) ||
+            BridgeParamKind_Colour(:final min, :final max) =>
+              {'min': min, 'max': max},
+            _ => {'min': null, 'max': null},
+          },
+          'choices': switch (row.kind) {
+            BridgeParamKind_Choice(:final options) => options,
+            _ => null,
+          },
+          'value': _out(_stored(info, row.id)),
+        },
+    ];
+  }
+
+  /// Drop a drag and its preview without keeping anything.
+  void _drop() {
+    _editor.clear();
+    _dragging = false;
+    // The Viewer still shows the preview until it is asked for the frame.
+    if (_staged.isNotEmpty) ui.requestFrame();
+    _staged.clear();
+  }
+
+  /// The page went or came, so a drag it left open is dropped.
+  @override
+  void cancel() {
+    _drop();
+    _dropped = false;
+  }
+
+  @override
+  void begin(String id) {
+    _row(_target().info, id);
+    _dropped = false;
+    _dragging = true;
+  }
+
+  @override
+  void set(String id, Object? value) {
+    if (_dropped) {
+      throw const ExtensionRefusal(
+          'failed', 'the drag ended when the instance changed');
+    }
+    final (:layer, :info) = _target();
+    final row = _row(info, id);
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    final written = _value(row, _stored(info, id), value);
+    if (_dragging) {
+      _staged[id] = written;
+      _editor.live(comp, layer, info.id, id, written,
+          frame: ui.playheadFrame.value, scale: ui.viewerScale);
+    } else {
+      _editor.write(layer, info.id, id, written);
+      ui.model.refresh();
+    }
+  }
+
+  @override
+  void end() {
+    _dropped = false;
+    _dragging = false;
+    final held = target;
+    if (held == null || _staged.isEmpty) return;
+    _editor.writeAll(held.layer, held.info.id, Map.of(_staged));
+    _staged.clear();
+    ui.model.refresh();
+  }
+
+  /// [value] from the page as the row's own value, keyed at the playhead
+  /// where the row is keyed, and held to the row's hard range.
+  BridgeEffectValue _value(
+      BridgeParamInfo row, BridgeEffectValue? stored, Object? value) {
+    final comp = ui.selectedComp!;
+    final frame = ui.playheadFrame.value;
+    final (low, high) = switch (row.kind) {
+      BridgeParamKind_Float(:final hardMin, :final hardMax) => (
+          hardMin,
+          hardMax
+        ),
+      BridgeParamKind_Int(:final hardMin, :final hardMax) => (
+          hardMin?.toDouble(),
+          hardMax?.toDouble()
+        ),
+      BridgeParamKind_Slider(:final min, :final max) ||
+      BridgeParamKind_Colour(:final min, :final max) =>
+        (min, max),
+      _ => (null, null),
+    };
+    BridgeScalar scalar(BridgeScalar? was, Object? v) {
+      if (v is! num) {
+        throw ExtensionRefusal('bad-params', '${row.id} takes a number');
+      }
+      if (was is BridgeScalar_Expression) {
+        throw ExtensionRefusal(
+            'failed', '${row.id} is driven by an expression');
+      }
+      final n = row.kind is BridgeParamKind_Int ? v.roundToDouble() : v;
+      return scalarWithValueAt(
+          was ?? BridgeScalar.static_(0),
+          n.toDouble().clamp(low ?? double.negativeInfinity,
+              high ?? double.infinity),
+          comp,
+          frame);
+    }
+
+    switch (row.kind) {
+      case BridgeParamKind_Bool():
+        if (value is bool) return BridgeEffectValue.bool(value);
+        throw ExtensionRefusal('bad-params', '${row.id} takes true or false');
+      case BridgeParamKind_Choice(:final options):
+        if (value is int && value >= 0 && value < options.length) {
+          return BridgeEffectValue.choice(value);
+        }
+        throw ExtensionRefusal('bad-params', '${row.id} takes an option index');
+      case BridgeParamKind_Seed():
+        if (value is int && value >= 0 && value <= 0xFFFFFFFF) {
+          return BridgeEffectValue.seed(value);
+        }
+        throw ExtensionRefusal('bad-params',
+            '${row.id} takes a whole number from 0 to 4294967295');
+      case BridgeParamKind_Colour():
+        final was = stored is BridgeEffectValue_Colour ? stored.field0 : null;
+        if (value is! List || value.length < 3 || value.length > 4) {
+          throw ExtensionRefusal('bad-params', '${row.id} takes [r, g, b, a]');
+        }
+        return BridgeEffectValue.colour(BridgeColour(
+          r: scalar(was?.r, value[0]),
+          g: scalar(was?.g, value[1]),
+          b: scalar(was?.b, value[2]),
+          a: scalar(was?.a, value.length > 3 ? value[3] : 1),
+        ));
+      default:
+        final was = stored is BridgeEffectValue_Float ? stored.field0 : null;
+        return BridgeEffectValue.float(scalar(was, value));
+    }
+  }
+}
