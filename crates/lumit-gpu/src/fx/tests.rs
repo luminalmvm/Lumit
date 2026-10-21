@@ -9546,6 +9546,114 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
     );
 }
 
+/// The §1.6 oracle for Vector blur, over both vector sources, straight and
+/// curved streaks, every direction, falloff, constant length, the angle offset,
+/// map softness, all three edge policies, Invert, and no map at all, where the
+/// layer's own picture is the map. Mix 0 is the exact identity.
+#[test]
+fn wgsl_vector_blur_matches_the_cpu_oracle() {
+    use lumit_core::fx::effects::vector_blur::VectorBlur;
+    use lumit_core::fx::{EffectMetadata, Params};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    // Swirling channels, so curved streaks really bend.
+    let mut map = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let (u, v) = (x as f32 * 0.3, y as f32 * 0.25);
+            map[i] = 0.5 + 0.4 * u.sin() * v.cos();
+            map[i + 1] = 0.5 + 0.4 * (u + v).cos();
+            map[i + 2] = 0.5 + 0.3 * (u - v).sin();
+            map[i + 3] = 1.0;
+        }
+    }
+    let qmap: Vec<f32> = map.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    let map_tex = upload_linear_f32(&ctx, &map, w, h);
+
+    let base = {
+        let mut v = VectorBlur::read(Params::EMPTY);
+        v.length = 8.0;
+        v
+    };
+    let with = |f: &dyn Fn(&mut VectorBlur)| {
+        let mut v = base;
+        f(&mut v);
+        v
+    };
+    let cases = [
+        ("slope-curved", base),
+        ("slope-straight", with(&|v| v.follow_vectors = false)),
+        ("channels-curved", with(&|v| v.vectors_from = 1)),
+        (
+            "channels-straight",
+            with(&|v| {
+                v.vectors_from = 1;
+                v.follow_vectors = false;
+            }),
+        ),
+        ("forwards", with(&|v| v.direction = 1)),
+        ("backwards", with(&|v| v.direction = 2)),
+        ("falloff", with(&|v| v.falloff = 100.0)),
+        ("constant", with(&|v| v.constant_length = true)),
+        ("across", with(&|v| v.angle_offset = 90.0)),
+        ("soft", with(&|v| v.map_softness = 4.0)),
+        ("blue", with(&|v| v.slope_channel = 4)),
+        ("transparent-edges", with(&|v| v.edge = 0)),
+        ("mirrored-edges", with(&|v| v.edge = 2)),
+        ("mixed", with(&|v| v.mix = 50.0)),
+        ("mix-zero", with(&|v| v.mix = 0.0)),
+    ];
+    for (name, v) in cases {
+        let p = v.packed();
+        for (bound, invert) in [(true, false), (true, true), (false, false)] {
+            let mut cpu = img.clone();
+            let cpu_map: &[f32] = if bound { &qmap } else { &[] };
+            lumit_core::fx::cpu::vector_blur(&mut cpu, w, h, &p, cpu_map, invert);
+            let op = VectorBlurOp {
+                from_channels: p.from_channels,
+                channels: p.channels,
+                length_px: p.length,
+                turn: p.turn,
+                constant_length: p.constant_length,
+                follow: p.follow,
+                direction: p.direction,
+                falloff: p.falloff,
+                softness_px: p.softness,
+                edge: p.edge,
+                mix: p.mix,
+                taps: p.taps,
+                matte_invert: invert,
+            };
+            let gpu_map = bound.then_some(&map_tex);
+            let out = fx.vector_blur(&ctx, &tex, w, h, gpu_map, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let worst = worst_diff(&cpu, &gpu);
+            eprintln!("vector_blur {name} bound {bound} invert {invert}: worst {worst}");
+            assert!(
+                worst < 2e-3,
+                "{name} bound {bound} invert {invert}: worst {worst}"
+            );
+            if name == "mix-zero" {
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            } else {
+                assert!(
+                    gpu != img,
+                    "{name}: the streaks must actually move something"
+                );
+            }
+        }
+    }
+}
+
 /// The §1.6 oracle for Polar coordinates (docs/08 §3.50), on the smooth corpus
 /// and by absolute difference — §3.42's fourth note and the distort batch's
 /// rule: three transcendentals a pixel, none of them liftable host-side.

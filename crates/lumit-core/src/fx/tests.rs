@@ -3181,6 +3181,64 @@ fn cpu_scanlines_darken_a_periodic_band() {
     assert_eq!(red_at(&inter, 10), 0.5, "period 2 (even) unflipped again");
 }
 
+/// Vector blur follows its map. A map pushing straight right smears a lit
+/// pixel along its row and never off it, Forwards trails it to the right only,
+/// and the slope of a vertical edge smears along the edge, up and down.
+#[test]
+fn cpu_vector_blur_streaks_along_the_map() {
+    use super::effects::vector_blur::VectorBlur;
+    let (w, h) = (16u32, 16u32);
+    let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+    let mut dot = vec![0.0f32; (w * h * 4) as usize];
+    dot[at(8, 8)..at(8, 8) + 4].copy_from_slice(&[1.0; 4]);
+    let lit = |img: &[f32]| -> Vec<(u32, u32)> {
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .filter(|&(x, y)| img[at(x, y)] > 1e-4)
+            .collect()
+    };
+
+    // Red full and green mid-grey: every vector points right.
+    let right: Vec<f32> = (0..w * h).flat_map(|_| [1.0, 0.5, 0.5, 1.0]).collect();
+    let mut v = VectorBlur::read(Params::EMPTY);
+    v.vectors_from = 1;
+    v.length = 6.0;
+    for (follow, direction) in [(false, 0), (true, 0), (true, 1)] {
+        v.follow_vectors = follow;
+        v.direction = direction;
+        let mut out = dot.clone();
+        cpu::vector_blur(&mut out, w, h, &v.packed(), &right, false);
+        let px = lit(&out);
+        assert!(
+            px.len() > 1,
+            "follow {follow} direction {direction}: {px:?}"
+        );
+        assert!(px.iter().all(|&(_, y)| y == 8), "stays on its row: {px:?}");
+        if direction == 1 {
+            assert!(px.iter().all(|&(x, _)| x >= 8), "trails forwards: {px:?}");
+        }
+    }
+
+    // Dark left of x = 8 and light right of it: the contour runs up and down.
+    let edge: Vec<f32> = (0..h)
+        .flat_map(|_| {
+            (0..w).flat_map(|x| {
+                let k = if x < 8 { 0.0 } else { 1.0 };
+                [k, k, k, 1.0]
+            })
+        })
+        .collect();
+    let mut s = VectorBlur::read(Params::EMPTY);
+    s.length = 6.0;
+    s.map_softness = 2.0;
+    s.falloff = 50.0;
+    let mut out = dot.clone();
+    cpu::vector_blur(&mut out, w, h, &s.packed(), &edge, false);
+    let px = lit(&out);
+    assert!(px.len() > 1, "{px:?}");
+    assert!(px.iter().all(|&(x, _)| x == 8), "stays on the edge: {px:?}");
+}
+
 // ---------------------------------------------------------------------------
 // Lens flare (docs/08 §3.27, docs/impl/lens-flare.md §8)
 // ---------------------------------------------------------------------------
@@ -6454,6 +6512,8 @@ fn every_parameter_declares_a_unit() {
             ("channel_blur", "green"),
             ("channel_blur", "blue"),
             ("channel_blur", "alpha"),
+            ("vector_blur", "length"),
+            ("vector_blur", "map_softness"),
             ("transform", "anchor_x"),
             ("transform", "anchor_y"),
             ("transform", "position_x"),
@@ -7459,6 +7519,7 @@ fn every_effect_carries_a_matte_row() {
                 | "glow"
                 | "turbulent_displace"
                 | "displacement_map"
+                | "vector_blur"
                 | "directional_blur"
                 | "radial_blur"
                 | "sharpen"
@@ -7574,15 +7635,15 @@ fn every_effect_carries_a_matte_row() {
             s.match_name
         );
         // The Channel choice rides beside the injected pair on every
-        // effect that does not pick its matte's channels itself. The four that
+        // effect that does not pick its matte's channels itself. The five that
         // do — Depth of field (`depth_channel`), Displacement map (its two
-        // channel choices), the Lens flare (source detection) and Scatter,
-        // which reads **alpha and only alpha** — carry none, and the
-        // seam leaves their matte raw. Set matte used to be a fifth, and
-        // carries no Matte row at all now.
+        // channel choices), Vector blur (its three), the Lens flare (source
+        // detection) and Scatter, which reads **alpha and only alpha** — carry
+        // none, and the seam leaves their matte raw. Set matte used to be one
+        // more, and carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

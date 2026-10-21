@@ -138,6 +138,7 @@ pub mod tritone;
 pub mod turbulent_displace;
 pub mod twirl;
 pub mod vary_points;
+pub mod vector_blur;
 pub mod vegas;
 pub mod venetian_blinds;
 pub mod vibrancy;

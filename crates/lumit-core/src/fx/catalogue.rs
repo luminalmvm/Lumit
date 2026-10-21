@@ -187,6 +187,7 @@ use super::effects::{
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
     twirl::{Twirl, TwirlDef},
     vary_points::{VaryPoints, VaryPointsDef},
+    vector_blur::{VectorBlur, VectorBlurDef},
     vegas::{Vegas, VegasDef},
     venetian_blinds::{VenetianBlinds, VenetianBlindsDef},
     vibrancy::{Vibrancy, VibrancyDef},
@@ -224,6 +225,7 @@ crate::catalogue![
     DofProDef => DofPro,
     // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,
+    VectorBlurDef => VectorBlur,
     TransformDef => Transform,
     GlowDef => Glow,
     ShakeDef => Shake,

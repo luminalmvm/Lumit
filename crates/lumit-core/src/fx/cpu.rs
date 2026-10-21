@@ -2951,6 +2951,183 @@ pub fn displacement_map(
     }
 }
 
+/// One resolved Vector blur, reduced to what both paths read. The Matte row's
+/// Invert is not here: it rides beside the layer binding.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VectorBlurParams {
+    /// True reads a push from two channels, false the slope of one.
+    pub from_channels: bool,
+    /// `CHANNEL_OPTIONS` indices: the slope's channel, then x's and y's.
+    pub channels: [u32; 3],
+    /// The longest streak, raster pixels.
+    pub length: f32,
+    /// The Angle offset's cos and sin.
+    pub turn: (f32, f32),
+    /// Every streak the full length, whatever the map's strength.
+    pub constant_length: bool,
+    /// Streaks bend along the map rather than run straight.
+    pub follow: bool,
+    /// 0 both ways, 1 forwards, 2 backwards.
+    pub direction: u32,
+    /// 0..1: how much a streak fades towards its end.
+    pub falloff: f32,
+    /// The map's blur radius, raster pixels.
+    pub softness: f32,
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+    /// == [`vector_blur_taps`] of the length.
+    pub taps: i32,
+}
+
+/// Vector blur's tap count. A straight streak takes one a pixel, as
+/// Directional blur's does. A curved one reads the map again at every tap, so
+/// it takes one every two pixels.
+// ponytail: 256 caps a curved streak's cost, so a very long one steps further apart.
+pub fn vector_blur_taps(length_px: f32, follow: bool) -> i32 {
+    if follow {
+        ((length_px * 0.5).ceil() as i32).clamp(1, 256)
+    } else {
+        dir_blur_taps(length_px)
+    }
+}
+
+/// The map's unit vector at a point, turned by the Angle offset, and its
+/// strength there, 0..1. A flat map has no direction and gives all zeros.
+///
+/// The slope is the change in the channel across `reach` either side, so a
+/// hard step from black to white is full strength. The streak runs along the
+/// contour, at right angles to the slope.
+#[allow(clippy::too_many_arguments)]
+fn vector_at(
+    map: &[f32],
+    w: u32,
+    h: u32,
+    p: &VectorBlurParams,
+    reach: f32,
+    invert: bool,
+    x: f32,
+    y: f32,
+) -> (f32, f32, f32) {
+    let read = |c: u32, sx: f32, sy: f32| {
+        let v = channel_of(&bilinear_edge(map, w, h, sx, sy, 1), c);
+        if invert {
+            1.0 - v
+        } else {
+            v
+        }
+    };
+    let (vx, vy) = if p.from_channels {
+        (
+            (read(p.channels[1], x, y) - 0.5) * 2.0,
+            (read(p.channels[2], x, y) - 0.5) * 2.0,
+        )
+    } else {
+        let c = p.channels[0];
+        let gx = read(c, x + reach, y) - read(c, x - reach, y);
+        let gy = read(c, x, y + reach) - read(c, x, y - reach);
+        (-gy, gx)
+    };
+    let mag = (vx * vx + vy * vy).sqrt();
+    if mag < 1e-5 {
+        return (0.0, 0.0, 0.0);
+    }
+    let (ux, uy) = (vx / mag, vy / mag);
+    let (c, s) = p.turn;
+    let strength = if p.constant_length { 1.0 } else { mag.min(1.0) };
+    (ux * c - uy * s, ux * s + uy * c, strength)
+}
+
+/// Vector blur: each pixel averages taps along a streak whose direction and
+/// length come from a map. The CPU reference and oracle for `fx_vecblur.wgsl`.
+///
+/// `map` is the Matte layer's picture at this raster. Empty means none is
+/// picked, and the layer's own picture is used instead. The taps sit where
+/// Directional blur's do, along a line or, following the vectors, along the
+/// curve the map traces from the pixel outwards, one walk each way.
+pub fn vector_blur(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &VectorBlurParams,
+    map: &[f32],
+    invert: bool,
+) {
+    let original = rgba.to_vec();
+    let map = if map.is_empty() { &original[..] } else { map };
+    // A map shorter than the picture leaves it alone. Degrade, never fault.
+    if map.len() < original.len() {
+        return;
+    }
+    let soft;
+    let map = if p.softness > 0.0 {
+        let mut m = map.to_vec();
+        blur_gaussian(&mut m, w, h, p.softness, 1, 1.0);
+        soft = m;
+        &soft[..]
+    } else {
+        map
+    };
+    let reach = (p.softness * 0.5).max(1.0);
+    let n = p.taps.max(1);
+    let nf = n as f32;
+    let half = n / 2;
+    // Each walk is (first tap, taps, stride, side). Both ways walks out from
+    // the middle tap in each direction, so a curve is traced from its pixel.
+    let (walks, reach_u) = match p.direction {
+        0 => ([(half, n - half, 1, 1.0), (half - 1, half, -1, -1.0)], 0.5),
+        1 => ([(0, n, 1, -1.0), (0, 0, 1, 1.0)], 1.0),
+        _ => ([(0, n, 1, 1.0), (0, 0, 1, 1.0)], 1.0),
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let (cx, cy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let (dx0, dy0, k) = vector_at(map, w, h, p, reach, invert, cx, cy);
+            let len = p.length * k;
+            let mut acc = [0.0f32; 4];
+            let mut wsum = 0.0f32;
+            for (first, count, stride, side) in walks {
+                let (mut px, mut py) = (cx, cy);
+                let (mut dx, mut dy) = (dx0 * side, dy0 * side);
+                let mut done = 0.0f32;
+                for j in 0..count {
+                    let t = first + j * stride;
+                    let u = if p.direction == 0 {
+                        ((t as f32 + 0.5) / nf - 0.5).abs()
+                    } else {
+                        (t as f32 + 0.5) / nf
+                    };
+                    let a = u * len;
+                    px += dx * (a - done);
+                    py += dy * (a - done);
+                    done = a;
+                    let wt = 1.0 - p.falloff * u / reach_u;
+                    let s = bilinear_edge(&original, w, h, px, py, p.edge);
+                    for c in 0..4 {
+                        acc[c] += s[c] * wt;
+                    }
+                    wsum += wt;
+                    if p.follow {
+                        let (nx, ny, _) = vector_at(map, w, h, p, reach, invert, px, py);
+                        if nx != 0.0 || ny != 0.0 {
+                            // Keep heading the same way where the vectors
+                            // flip across a ridge.
+                            let f = if nx * dx + ny * dy < 0.0 { -1.0 } else { 1.0 };
+                            dx = nx * f;
+                            dy = ny * f;
+                        }
+                    }
+                }
+            }
+            for c in 0..4 {
+                rgba[i + c] = original[i + c] * (1.0 - p.mix) + acc[c] / wsum * p.mix;
+            }
+        }
+    }
+}
+
 /// One resolved Polar coordinates (docs/08 §3.50). The centre and the radius
 /// scale are deliberately absent: both are functions of the raster, which the
 /// kernel knows and the host does not (§3.39's precedent).

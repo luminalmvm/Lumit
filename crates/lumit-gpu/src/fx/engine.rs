@@ -306,6 +306,7 @@ impl FxEngine {
         };
         let blur_mod = module(include_str!("../fx_blur.wgsl"), "fx-blur");
         let dir_blur_mod = module(include_str!("../fx_dirblur.wgsl"), "fx-dir-blur");
+        let vector_blur_mod = module(include_str!("../fx_vecblur.wgsl"), "fx-vector-blur");
         let radial_blur_mod = module(include_str!("../fx_radialblur.wgsl"), "fx-radial-blur");
         let sharpen_mod = module(include_str!("../fx_sharpen.wgsl"), "fx-sharpen");
         let sharpen_simple_mod = module(
@@ -472,6 +473,7 @@ impl FxEngine {
         );
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
+        let vector_blur = pipeline(&vector_blur_mod, "fx-vector-blur", "vector_blur");
         let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
@@ -640,6 +642,7 @@ impl FxEngine {
             lens_flare,
             blur: blur.wait(),
             dir_blur: dir_blur.wait(),
+            vector_blur: vector_blur.wait(),
             radial_blur: radial_blur.wait(),
             sharpen_unpremultiply: sharpen_unpremultiply.wait(),
             sharpen_combine: sharpen_combine.wait(),
