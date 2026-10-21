@@ -75,7 +75,7 @@ void main() {
         {List<BridgeEffectInfo> Function()? drivers,
         List<BridgePresetInfo> Function()? groups,
         String? Function()? groupLibrary}) async {
-      const size = Size(900, 600);
+      const size = Size(1400, 700);
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -548,9 +548,11 @@ void main() {
     Future<void> clickBox(WidgetTester tester, Finder box,
         {LogicalKeyboardKey? held}) async {
       if (held != null) await tester.sendKeyDownEvent(held);
-      await tester.tapAt(tester.getCenter(box));
+      // The header: an open box's rows are its controls.
+      await tester.tapAt(tester.getTopLeft(box) + const Offset(80, 10));
       if (held != null) await tester.sendKeyUpEvent(held);
-      await tester.pump();
+      // Past the name's double-click window, which renames.
+      await tester.pump(const Duration(milliseconds: 500));
     }
 
     testWidgets('a click replaces the pick and Ctrl-click toggles it',
