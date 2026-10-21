@@ -103,12 +103,94 @@ impl ItemReference {
         })
     }
 
-    /// Delete the item. One undo step, no confirmation — matching the egui
-    /// project menu, where Delete is undoable and therefore not worth a dialog.
+    /// Delete the item as one undo step. A folder takes everything inside it,
+    /// and the layers, effects and boxes using any of it go too
+    /// ([`lumit_core::ops::delete_item_ops`]).
     #[frb(sync)]
     pub fn delete(&self) -> Result<(), BridgeError> {
-        self.item()?;
-        self.commit(lumit_core::Op::RemoveItem { id: self.item_id() })
+        let ops = self.delete_ops()?;
+        self.commit(lumit_core::Op::Batch { ops })
+    }
+
+    /// **Duplicate**: a copy of this item under a free name ("Shot copy"),
+    /// filed just after it, with its colour tag and proxy. A folder's copy
+    /// holds copies of everything inside it, keeping their names, and a comp
+    /// copied that way shares the comps it nests. One undo step.
+    #[frb(sync)]
+    pub fn duplicate(&self) -> Result<ItemReference, BridgeError> {
+        let id = self.item_id();
+        let proj = self.project()?;
+        let (ops, copy) = {
+            let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = p.store.snapshot();
+            let mut copier = Copier {
+                doc: &doc,
+                names: doc.items.iter().map(|i| i.name().to_owned()).collect(),
+                seen: Vec::new(),
+                made: Vec::new(),
+                after: Vec::new(),
+            };
+            let copy = copier.copy(id, true).ok_or(BridgeError::InvalidItem)?;
+            let mut ops: Vec<lumit_core::Op> = copier
+                .made
+                .into_iter()
+                .enumerate()
+                .map(|(n, item)| lumit_core::Op::AddItem {
+                    index: doc.items.len() + n,
+                    item: Box::new(item),
+                })
+                .collect();
+            ops.append(&mut copier.after);
+            let home = doc.items.iter().find_map(|i| match i {
+                ProjectItem::Folder(f) if f.children.contains(&id) => Some(f),
+                _ => None,
+            });
+            if let Some(folder) = home {
+                let mut children = folder.children.clone();
+                let at = children
+                    .iter()
+                    .position(|c| *c == id)
+                    .map_or(children.len(), |i| i + 1);
+                children.insert(at, copy);
+                ops.push(lumit_core::Op::SetFolderChildren {
+                    folder: folder.id,
+                    children,
+                });
+            }
+            (ops, copy)
+        };
+        self.commit(lumit_core::Op::Batch { ops })?;
+        let project = self.project_id();
+        Ok(match self {
+            ItemReference::Footage(_) => {
+                ItemReference::Footage(FootageReference::new(project, copy))
+            }
+            ItemReference::Solid(_) => ItemReference::Solid(SolidReference::new(project, copy)),
+            ItemReference::Composition(_) => {
+                ItemReference::Composition(CompositionReference::new(project, copy))
+            }
+            ItemReference::Folder(_) => ItemReference::Folder(FolderReference::new(project, copy)),
+        })
+    }
+
+    /// How many uses in compositions a delete of this item would take with
+    /// it, so the panel can ask first.
+    #[frb(sync)]
+    pub fn uses(&self) -> Result<u32, BridgeError> {
+        let ops = self.delete_ops()?;
+        let uses = ops
+            .iter()
+            .filter(|op| !matches!(op, lumit_core::Op::RemoveItem { .. }))
+            .count();
+        Ok(u32::try_from(uses).unwrap_or(u32::MAX))
+    }
+
+    #[frb(ignore)]
+    fn delete_ops(&self) -> Result<Vec<lumit_core::Op>, BridgeError> {
+        let proj = self.project()?;
+        let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        lumit_core::ops::delete_item_ops(&p.store.snapshot(), self.item_id())
+            .ok_or(BridgeError::InvalidItem)
     }
 
     /// Move the item back to the panel root: remove it from every folder that
@@ -254,5 +336,73 @@ impl ItemReference {
             id: self.item_id(),
             label,
         })
+    }
+}
+
+/// Builds the copies [`ItemReference::duplicate`] adds, children before the
+/// folder that holds them.
+struct Copier<'a> {
+    doc: &'a lumit_core::model::Document,
+    names: Vec<String>,
+    /// Every item copied so far, so a folder that holds itself stops.
+    seen: Vec<Uuid>,
+    made: Vec<ProjectItem>,
+    /// The tags and proxies, set once the copies exist.
+    after: Vec<lumit_core::Op>,
+}
+
+impl Copier<'_> {
+    fn copy(&mut self, id: Uuid, rename: bool) -> Option<Uuid> {
+        if self.seen.contains(&id) {
+            return None;
+        }
+        self.seen.push(id);
+        let mut item = self.doc.item(id)?.clone();
+        let copy = Uuid::now_v7();
+        match &mut item {
+            ProjectItem::Footage(f) => f.id = copy,
+            ProjectItem::Solid(s) => s.id = copy,
+            ProjectItem::Composition(c) => {
+                c.id = copy;
+                crate::edits::fresh_ids(std::slice::from_mut(c))?;
+            }
+            ProjectItem::Folder(f) => {
+                f.id = copy;
+                f.children = std::mem::take(&mut f.children)
+                    .into_iter()
+                    .filter_map(|child| self.copy(child, false))
+                    .collect();
+            }
+        }
+        // Comps are found by name, so a comp copy always gets a name of its own.
+        if rename || matches!(item, ProjectItem::Composition(_)) {
+            let base = format!("{} copy", item.name());
+            let name = (1..)
+                .map(|n| {
+                    if n == 1 {
+                        base.clone()
+                    } else {
+                        format!("{base} {n}")
+                    }
+                })
+                .find(|name| !self.names.contains(name))
+                .unwrap_or(base);
+            self.names.push(name.clone());
+            item.set_name(name);
+        }
+        if let Some(label) = self.doc.item_labels.get(&id) {
+            self.after.push(lumit_core::Op::SetItemLabel {
+                id: copy,
+                label: *label,
+            });
+        }
+        if let Some(proxy) = self.doc.proxies.get(&id) {
+            self.after.push(lumit_core::Op::SetItemProxy {
+                id: copy,
+                proxy: Some(Box::new(proxy.clone())),
+            });
+        }
+        self.made.push(item);
+        Some(copy)
     }
 }

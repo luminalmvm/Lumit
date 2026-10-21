@@ -3046,7 +3046,7 @@ fn collect_comp_footage(
 /// Whether `inst` is a Node graph effect bound to the comp `id`. Bypassed or
 /// not: a switched-off effect still places the graph, as a hidden layer still
 /// places its footage.
-fn applies_graph(inst: &EffectInstance, id: Uuid) -> bool {
+pub(crate) fn applies_graph(inst: &EffectInstance, id: Uuid) -> bool {
     inst.effect.match_name == crate::comp_graph::NODE_GRAPH
         && crate::fx::effects::node_graph::comp_of(inst) == Some(id)
 }
@@ -3132,7 +3132,7 @@ fn comp_places(comp: &Composition, id: Uuid) -> bool {
 /// Written as an exhaustive match so a new [`LayerKind`] cannot quietly place
 /// an item the `in use` badge then fails to notice: the compiler asks.
 #[must_use]
-fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
+pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     match &layer.kind {
         LayerKind::Footage { item } => *item == id,
         LayerKind::Solid { def } => *def == id,

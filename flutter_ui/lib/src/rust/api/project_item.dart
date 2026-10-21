@@ -14,8 +14,8 @@ import 'package:uuid/uuid.dart';
 import 'solid.dart';
 part 'project_item.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `commit`, `item_id`, `item_reference`, `item`, `project_id`, `project`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `LumitProjectItemInfo`
+// These functions are ignored because they are not marked as `pub`: `commit`, `copy`, `delete_ops`, `item_id`, `item_reference`, `item`, `project_id`, `project`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Copier`, `LumitProjectItemInfo`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
 @freezed
@@ -35,10 +35,20 @@ sealed class ItemReference with _$ItemReference {
     FolderReference field0,
   ) = ItemReference_Folder;
 
-  /// Delete the item. One undo step, no confirmation — matching the egui
-  /// project menu, where Delete is undoable and therefore not worth a dialog.
+  /// Delete the item as one undo step. A folder takes everything inside it,
+  /// and the layers, effects and boxes using any of it go too
+  /// ([`lumit_core::ops::delete_item_ops`]).
   void delete() =>
       BridgeLib.instance.api.crateApiProjectItemItemReferenceDelete(
+        that: this,
+      );
+
+  /// **Duplicate**: a copy of this item under a free name ("Shot copy"),
+  /// filed just after it, with its colour tag and proxy. A folder's copy
+  /// holds copies of everything inside it, keeping their names, and a comp
+  /// copied that way shares the comps it nests. One undo step.
+  ItemReference duplicate() =>
+      BridgeLib.instance.api.crateApiProjectItemItemReferenceDuplicate(
         that: this,
       );
 
@@ -104,4 +114,10 @@ sealed class ItemReference with _$ItemReference {
   /// file.
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceSetLabel(that: this, label: label);
+
+  /// How many uses in compositions a delete of this item would take with
+  /// it, so the panel can ask first.
+  int uses() => BridgeLib.instance.api.crateApiProjectItemItemReferenceUses(
+        that: this,
+      );
 }

@@ -148,6 +148,29 @@ fn delete_removes_the_item_and_a_second_delete_is_a_calm_error() {
     assert!(matches!(loose.delete(), Err(BridgeError::InvalidItem)));
 }
 
+/// Deleting a folder takes what is inside it and the layers showing it, and
+/// one undo puts them all back.
+#[test]
+fn deleting_a_folder_takes_its_footage_and_layers_and_one_undo_restores_them() {
+    let (project, folder, filed, loose) = project_with_folder();
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("seeded as footage")
+    };
+    comp.add_footage_layer(footage, false, None, None)
+        .expect("placed");
+    assert_eq!(folder.uses().expect("counted"), 1);
+
+    folder.delete().expect("deleted");
+    assert!(comp.get_layers().expect("layers").is_empty());
+    assert!(matches!(filed.name(), Err(BridgeError::InvalidItem)));
+    assert!(loose.name().is_ok(), "the loose clip stayed");
+
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), 1);
+    assert!(filed.name().is_ok());
+}
+
 /// The other direction: filing a loose item into a folder, which is what the
 /// panel's drag onto a folder row and its **Move to folder** menu do. One undo
 /// step, and an unknown folder is a calm error rather than a panic.
