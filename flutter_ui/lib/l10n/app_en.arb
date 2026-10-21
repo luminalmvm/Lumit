@@ -5631,6 +5631,22 @@
   "@keySelectTheItemBelow": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyExtendTheSelectionUp": "Add the item above to the selection",
+  "@keyExtendTheSelectionUp": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyExtendTheSelectionDown": "Add the item below to the selection",
+  "@keyExtendTheSelectionDown": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCloseTheSelectedFolder": "Close the selected folder",
+  "@keyCloseTheSelectedFolder": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOpenTheSelectedFolder": "Open the selected folder",
+  "@keyOpenTheSelectedFolder": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyRevealAnchorPoint": "Reveal Anchor point",
   "@keyRevealAnchorPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."

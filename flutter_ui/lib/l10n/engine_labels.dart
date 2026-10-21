@@ -1389,6 +1389,10 @@ Map<String, String> get _built => {
       "Duplicate the selected item": l10n.keyDuplicateTheSelectedItem,
       "Select the item above": l10n.keySelectTheItemAbove,
       "Select the item below": l10n.keySelectTheItemBelow,
+      "Add the item above to the selection": l10n.keyExtendTheSelectionUp,
+      "Add the item below to the selection": l10n.keyExtendTheSelectionDown,
+      "Close the selected folder": l10n.keyCloseTheSelectedFolder,
+      "Open the selected folder": l10n.keyOpenTheSelectedFolder,
       "Interpret the selected footage": l10n.keyInterpretTheSelectedFootage,
       "Remember the footage's interpretation":
           l10n.keyRememberTheFootagesInterpretation,

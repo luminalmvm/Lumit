@@ -341,7 +341,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _selectedIds
       ..clear()
       ..addAll(ids);
-    _anchorId = ids.last;
+    _anchorId = _cursorId = ids.last;
     _publishPicks();
     _publishSelection();
     _documentChanged();
@@ -364,7 +364,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _selectedIds
       ..clear()
       ..addAll(_visibleIds);
-    _anchorId = _visibleIds.last;
+    _anchorId = _cursorId = _visibleIds.last;
     _publishPicks();
     _publishSelection();
   }
@@ -425,6 +425,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         return _step(-1);
       case 'item.select.next':
         return _step(1);
+      case 'item.select.prev.extend':
+        return _step(-1, extend: true);
+      case 'item.select.next.extend':
+        return _step(1, extend: true);
+      case 'item.folder.close' || 'item.folder.open':
+        final id = _cursorId;
+        if (id == null || _itemById[id] is! ItemReference_Folder) return false;
+        setState(() {
+          if (action == 'item.folder.open') {
+            _closedFolders.remove(id);
+          } else {
+            _closedFolders.add(id);
+          }
+        });
+        return true;
     }
     final footage = [
       for (final id in _visibleIds)
@@ -458,14 +473,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   }
 
   /// Move the pick one row up or down the list, and scroll that row into
-  /// view.
-  bool _step(int by) {
+  /// view. With [extend] the run from the anchor grows or shrinks instead.
+  bool _step(int by, {bool extend = false}) {
     if (_visibleIds.isEmpty) return false;
-    final at = _visibleIds.indexOf(_anchorId ?? '');
+    final at = _visibleIds.indexOf(_cursorId ?? '');
     final next = at < 0
         ? (by > 0 ? 0 : _visibleIds.length - 1)
         : (at + by).clamp(0, _visibleIds.length - 1);
-    _select(_visibleIds[next], SelectMode.replace);
+    _select(_visibleIds[next], extend ? SelectMode.range : SelectMode.replace);
     if (_vScroll.hasClients) {
       final top = next * projectRowHeight;
       final view = _vScroll.position;
@@ -503,6 +518,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// The row a `Shift`-click measures its run from — the last one clicked
   /// without `Shift`.
   String? _anchorId;
+
+  /// The row the arrow keys move from: the last one clicked or stepped to.
+  String? _cursorId;
 
   /// Every row id currently drawn, top to bottom, so a `Shift`-click knows what
   /// "between these two" means. Rebuilt with the rows.
@@ -630,6 +648,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Apply a click to the selection.
   void _select(String id, SelectMode mode) {
+    _cursorId = id;
     // The card is about to describe something else, so its sound stops with it.
     if (_soundId != null && _soundId != id) _stopSound();
     switch (mode) {
