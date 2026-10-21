@@ -546,6 +546,287 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect,
 bool showsPath(LayerBox box, UuidValue path, (UuidValue, UuidValue)? only) =>
     only == null || only.$1 != box.id || only.$2 == path;
 
+/// One path of a layer as a list of vertices, whichever kind it is, with what
+/// it takes to name its points and put them on screen.
+typedef PathOnBox = ({
+  UuidValue id,
+  List<BridgeVertex> vertices,
+  bool closed,
+  bool shape,
+  String Function(int index) keyOf,
+  Offset Function(double x, double y) screen,
+});
+
+/// Every path of [box], masks first then the art, as [pathPointsOf] walks them.
+List<PathOnBox> pathsOf(LayerBox box, {(UuidValue, UuidValue)? only}) => [
+      for (final mask in box.masks)
+        if (showsPath(box, mask.id, only))
+          (
+            id: mask.id,
+            vertices: mask.vertices,
+            closed: mask.closed,
+            shape: false,
+            keyOf: (int i) => maskPointKey(box.id, mask.id, i),
+            screen: box.map.toScreen,
+          ),
+      for (final item in box.shapeContents)
+        if (showsPath(box, item.id, only))
+          (
+            id: item.id,
+            vertices: item.vertices,
+            closed: item.closed,
+            shape: true,
+            keyOf: (int i) => shapePointKey(box.id, item.id, i),
+            screen: box.shapePoint,
+          ),
+    ];
+
+/// Which of a point's two handles: the one the path arrives along, or the one
+/// it leaves along.
+enum HandleSide { arriving, leaving }
+
+/// A handle of a selected point, under the pointer.
+typedef PathHandle = ({
+  LayerBox box,
+  String key,
+  int index,
+  HandleSide side,
+});
+
+/// A vertex's handle on [side], in its own path's coordinates.
+Offset handleOf(BridgeVertex v, HandleSide side) => side == HandleSide.arriving
+    ? Offset(v.tanInX, v.tanInY)
+    : Offset(v.tanOutX, v.tanOutY);
+
+/// The handle of a **selected** point under [point], or null. Only selected
+/// points show their handles, so only theirs can be grabbed. A handle folded
+/// into its point has no end of its own and is left to the point.
+PathHandle? pathHandleAt(
+  List<LayerBox> boxes,
+  Offset point,
+  Set<String> selected, {
+  double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
+}) {
+  PathHandle? best;
+  var bestDistance = slop;
+  for (final box in boxes) {
+    for (final path in pathsOf(box, only: only)) {
+      for (var i = 0; i < path.vertices.length; i++) {
+        final key = path.keyOf(i);
+        if (!selected.contains(key)) continue;
+        final v = path.vertices[i];
+        for (final side in HandleSide.values) {
+          final h = handleOf(v, side);
+          if (h.distance < 1e-9) continue;
+          final d = (path.screen(v.x + h.dx, v.y + h.dy) - point).distance;
+          if (d <= bestDistance) {
+            bestDistance = d;
+            best = (box: box, key: key, index: i, side: side);
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/// Whether [v] is a smooth point: two handles in one line, pointing apart.
+/// Dragging one of a smooth point's handles turns the other with it.
+bool isSmoothVertex(BridgeVertex v) {
+  final a = handleOf(v, HandleSide.arriving);
+  final b = handleOf(v, HandleSide.leaving);
+  if (a.distance < 1e-9 || b.distance < 1e-9) return false;
+  final cos = (a.dx * b.dx + a.dy * b.dy) / (a.distance * b.distance);
+  return cos < -0.995;
+}
+
+BridgeVertex _vertexWith(BridgeVertex v, {Offset? arriving, Offset? leaving}) =>
+    BridgeVertex(
+      x: v.x,
+      y: v.y,
+      tanInX: arriving?.dx ?? v.tanInX,
+      tanInY: arriving?.dy ?? v.tanInY,
+      tanOutX: leaving?.dx ?? v.tanOutX,
+      tanOutY: leaving?.dy ?? v.tanOutY,
+    );
+
+/// How a handle drag treats the point's other handle.
+enum HandleLink {
+  /// Left where it is: the point becomes, or stays, a corner.
+  broken,
+
+  /// Turned to stay in line, at its own length: a smooth point stays smooth.
+  turned,
+
+  /// The mirror of the dragged one, length and all: handles pulled out of a
+  /// point.
+  mirrored,
+}
+
+/// [vertices] with point [index]'s handle on [side] set to [handle].
+List<BridgeVertex> verticesWithHandle(
+  List<BridgeVertex> vertices,
+  int index,
+  HandleSide side,
+  Offset handle,
+  HandleLink link,
+) {
+  final v = vertices[index];
+  final otherSide =
+      side == HandleSide.arriving ? HandleSide.leaving : HandleSide.arriving;
+  final other = handleOf(v, otherSide);
+  final Offset? turned = switch (link) {
+    HandleLink.broken => null,
+    HandleLink.mirrored => -handle,
+    HandleLink.turned => handle.distance < 1e-9
+        ? null
+        : -handle / handle.distance * other.distance,
+  };
+  final (arriving, leaving) =
+      side == HandleSide.arriving ? (handle, turned) : (turned, handle);
+  return [
+    for (var i = 0; i < vertices.length; i++)
+      if (i == index)
+        _vertexWith(v, arriving: arriving, leaving: leaving)
+      else
+        vertices[i],
+  ];
+}
+
+/// [vertices] with point [index] turned from smooth to a corner, or from a
+/// corner to smooth: a point with any handle loses both, and a point with
+/// none grows a pair along the line between its neighbours, each a third of
+/// the way to its own neighbour, as After Effects' Convert Vertex does.
+List<BridgeVertex> verticesConverted(
+  List<BridgeVertex> vertices,
+  int index,
+  bool closed,
+) {
+  final v = vertices[index];
+  final n = vertices.length;
+  final hasHandles = handleOf(v, HandleSide.arriving).distance > 1e-9 ||
+      handleOf(v, HandleSide.leaving).distance > 1e-9;
+  BridgeVertex converted;
+  if (hasHandles) {
+    converted = _vertexWith(v, arriving: Offset.zero, leaving: Offset.zero);
+  } else {
+    final here = Offset(v.x, v.y);
+    final prev = index > 0 || closed ? vertices[(index - 1 + n) % n] : null;
+    final next = index < n - 1 || closed ? vertices[(index + 1) % n] : null;
+    final p = prev == null ? here : Offset(prev.x, prev.y);
+    final q = next == null ? here : Offset(next.x, next.y);
+    final run = q - p;
+    if (run.distance < 1e-9) return vertices;
+    final dir = run / run.distance;
+    converted = _vertexWith(
+      v,
+      arriving: -dir * ((here - p).distance / 3),
+      leaving: dir * ((q - here).distance / 3),
+    );
+  }
+  return [
+    for (var i = 0; i < n; i++) i == index ? converted : vertices[i],
+  ];
+}
+
+/// [vertices] without point [index], or null when the path would be left with
+/// too few points to be a path.
+List<BridgeVertex>? verticesWithoutPoint(
+  List<BridgeVertex> vertices,
+  int index,
+  bool closed,
+) {
+  if (vertices.length <= (closed ? 3 : 2)) return null;
+  return [
+    for (var i = 0; i < vertices.length; i++)
+      if (i != index) vertices[i],
+  ];
+}
+
+/// [vertices] with a point added at [t] along the edge leaving point
+/// [segment]. The edge is split where it lies, handles and all, so the path's
+/// shape does not change.
+List<BridgeVertex> verticesWithPointAdded(
+  List<BridgeVertex> vertices,
+  int segment,
+  double t,
+) {
+  final n = vertices.length;
+  final a = vertices[segment];
+  final b = vertices[(segment + 1) % n];
+  final p0 = Offset(a.x, a.y);
+  final p1 = p0 + handleOf(a, HandleSide.leaving);
+  final p3 = Offset(b.x, b.y);
+  final p2 = p3 + handleOf(b, HandleSide.arriving);
+  // De Casteljau: the two halves of the cubic, and the point between them.
+  Offset lerp(Offset u, Offset w) => u + (w - u) * t;
+  final q0 = lerp(p0, p1), q1 = lerp(p1, p2), q2 = lerp(p2, p3);
+  final r0 = lerp(q0, q1), r1 = lerp(q1, q2);
+  final s = lerp(r0, r1);
+  final added = BridgeVertex(
+    x: s.dx,
+    y: s.dy,
+    tanInX: r0.dx - s.dx,
+    tanInY: r0.dy - s.dy,
+    tanOutX: r1.dx - s.dx,
+    tanOutY: r1.dy - s.dy,
+  );
+  final out = <BridgeVertex>[];
+  for (var i = 0; i < n; i++) {
+    if (i == segment) {
+      out.add(_vertexWith(a, leaving: q0 - p0));
+      out.add(added);
+    } else if (i == (segment + 1) % n) {
+      out.add(_vertexWith(b, arriving: q2 - p3));
+    } else {
+      out.add(vertices[i]);
+    }
+  }
+  return out;
+}
+
+/// The edge of a path under [point], and how far along it, or null when no
+/// edge is near enough. Each edge is walked on the layer and put on screen a
+/// step at a time, so a layer seen through a camera is aimed at as drawn.
+({LayerBox box, PathOnBox path, int segment, double t})? pathEdgeAt(
+  List<LayerBox> boxes,
+  Offset point, {
+  double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
+}) {
+  ({LayerBox box, PathOnBox path, int segment, double t})? best;
+  var bestDistance = slop;
+  for (final box in boxes) {
+    for (final path in pathsOf(box, only: only)) {
+      final v = path.vertices;
+      final edges = path.closed ? v.length : v.length - 1;
+      for (var s = 0; s < edges; s++) {
+        final a = v[s], b = v[(s + 1) % v.length];
+        final p0 = Offset(a.x, a.y);
+        final p1 = p0 + handleOf(a, HandleSide.leaving);
+        final p3 = Offset(b.x, b.y);
+        final p2 = p3 + handleOf(b, HandleSide.arriving);
+        const steps = 48;
+        for (var k = 1; k < steps; k++) {
+          final t = k / steps;
+          final u = 1 - t;
+          final p = p0 * (u * u * u) +
+              p1 * (3 * u * u * t) +
+              p2 * (3 * u * t * t) +
+              p3 * (t * t * t);
+          final d = (path.screen(p.dx, p.dy) - point).distance;
+          if (d <= bestDistance) {
+            bestDistance = d;
+            best = (box: box, path: path, segment: s, t: t);
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
+
 /// A drag's screen delta in [box]'s own coordinates.
 ///
 /// Two points on the picture, subtracted, so the layer's scale and rotation are
@@ -752,22 +1033,77 @@ BridgeMask? maskWithPointsMoved(
   BridgeMask mask,
   Set<String> points,
   Offset d,
-) {
-  bool moved(int i) => points.contains(maskPointKey(box.id, mask.id, i));
-  if (!Iterable<int>.generate(mask.vertices.length).any(moved)) return null;
-  return BridgeMask(
-    id: mask.id,
-    name: mask.name,
-    vertices: _verticesMoved(mask.vertices, moved, d),
-    closed: mask.closed,
-    inverted: mask.inverted,
-    opacity: mask.opacity,
-    mode: mask.mode,
-    feather: mask.feather,
-    vertexFeather: mask.vertexFeather,
-    expansion: mask.expansion,
-    pathKeys: mask.pathKeys,
-  );
+) =>
+    maskEdited(box, mask, _pointsMoved(points, d));
+
+/// What an edit does to one path: its vertices afterwards, or null when the
+/// edit does not touch that path. [keyOf] names the path's points, so an edit
+/// can tell which of them are selected or in hand.
+typedef VertexEdit = List<BridgeVertex>? Function(
+  String Function(int index) keyOf,
+  List<BridgeVertex> vertices,
+  bool closed,
+);
+
+VertexEdit _pointsMoved(Set<String> points, Offset d) =>
+    (keyOf, vertices, closed) {
+      bool moved(int i) => points.contains(keyOf(i));
+      if (!Iterable<int>.generate(vertices.length).any(moved)) return null;
+      return _verticesMoved(vertices, moved, d);
+    };
+
+/// [mask] with [edit] made to its path, or null when the edit leaves it be.
+BridgeMask? maskEdited(LayerBox box, BridgeMask mask, VertexEdit edit) {
+  final vertices = edit(
+      (i) => maskPointKey(box.id, mask.id, i), mask.vertices, mask.closed);
+  if (vertices == null) return null;
+  return maskWith(mask,
+      vertices: vertices, vertexFeather: _featherFollowing(mask, vertices));
+}
+
+/// A copy of [mask] with its path or its per-point widths replaced.
+BridgeMask maskWith(
+  BridgeMask mask, {
+  List<BridgeVertex>? vertices,
+  List<BridgeScalar>? vertexFeather,
+}) =>
+    BridgeMask(
+      id: mask.id,
+      name: mask.name,
+      vertices: vertices ?? mask.vertices,
+      closed: mask.closed,
+      inverted: mask.inverted,
+      opacity: mask.opacity,
+      mode: mask.mode,
+      feather: mask.feather,
+      vertexFeather: vertexFeather ?? mask.vertexFeather,
+      expansion: mask.expansion,
+      pathKeys: mask.pathKeys,
+    );
+
+/// [mask]'s per-point widths for the path [to]. A width belongs to its point
+/// by position, so when points are added or removed each width follows its
+/// point, found where it sits, and a new point takes the width before it.
+List<BridgeScalar> _featherFollowing(BridgeMask mask, List<BridgeVertex> to) {
+  final from = mask.vertices;
+  final widths = mask.vertexFeather;
+  if (widths.isEmpty || to.length == from.length) return widths;
+  BridgeScalar widthAt(int i) => i < widths.length ? widths[i] : mask.feather;
+  final out = <BridgeScalar>[];
+  var j = 0;
+  for (final v in to) {
+    var k = j;
+    while (k < from.length && (from[k].x != v.x || from[k].y != v.y)) {
+      k++;
+    }
+    if (k < from.length) {
+      out.add(widthAt(k));
+      j = k + 1;
+    } else {
+      out.add(out.isEmpty ? widthAt(0) : out.last);
+    }
+  }
+  return out;
 }
 
 /// [box]'s whole art with every point of it in [points] moved by [d], or null
@@ -779,20 +1115,25 @@ List<BridgeShapeItem>? shapeContentsWithPointsMoved(
   LayerBox box,
   Set<String> points,
   Offset d,
-) {
+) =>
+    shapeContentsEdited(box, _pointsMoved(points, d));
+
+/// [box]'s whole art with [edit] made to each path, or null when the edit
+/// touches none of them.
+List<BridgeShapeItem>? shapeContentsEdited(LayerBox box, VertexEdit edit) {
   var touched = false;
   final contents = <BridgeShapeItem>[];
   for (final item in box.shapeContents) {
-    bool moved(int i) => points.contains(shapePointKey(box.id, item.id, i));
-    if (!Iterable<int>.generate(item.vertices.length).any(moved)) {
+    final vertices = edit((i) => shapePointKey(box.id, item.id, i),
+        item.vertices, item.closed);
+    if (vertices == null) {
       contents.add(item);
       continue;
     }
     touched = true;
-    // A point drag moves geometry; every modifier on the item is carried
+    // An edit changes geometry; every modifier on the item is carried
     // over untouched.
-    contents.add(shapeItemWith(item,
-        vertices: _verticesMoved(item.vertices, moved, d)));
+    contents.add(shapeItemWith(item, vertices: vertices));
   }
   return touched ? contents : null;
 }
@@ -1048,6 +1389,9 @@ enum _GizmoDrag {
   rotate,
   anchor,
   points,
+
+  /// A handle of a selected path point, or a pair pulled out of a point.
+  handle,
   marquee,
 
   /// A key of a motion path (docs/07 §2.4), dragged on the picture.
@@ -1182,6 +1526,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// point edits the path, a press anywhere else is the layer's.
   final Set<String> _points = {};
 
+  /// The handle in hand, while [_GizmoDrag.handle] is the drag, what it does
+  /// to the point's other handle, and whether it is a fresh pair being pulled
+  /// out of the point rather than a handle already there.
+  PathHandle? _handleInHand;
+  HandleLink _link = HandleLink.broken;
+  bool _pullingOut = false;
+
   final PreviewThrottle _throttle = PreviewThrottle();
 
   /// Counts a second click in one place, for opening what a layer holds.
@@ -1234,7 +1585,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           BridgeTransformProp.anchorX,
           BridgeTransformProp.positionX
         ],
-      _GizmoDrag.points => const <BridgeTransformProp>[],
+      _GizmoDrag.points ||
+      _GizmoDrag.handle =>
+        const <BridgeTransformProp>[],
       _GizmoDrag.axis3d => [
           _set?.props.first ?? BridgeTransformProp.positionX,
         ],
@@ -1275,6 +1628,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   bool get _selectionTool => widget.tool.group == ToolGroup.select;
+
+  /// The Pen's siblings, which edit a finished path: adding, removing and
+  /// converting its points.
+  bool get _vertexTool =>
+      widget.tool == ToolMode.penAddVertex ||
+      widget.tool == ToolMode.penDeleteVertex ||
+      widget.tool == ToolMode.penConvertVertex;
+
 
   /// Whether this is the view the keys and the double-click belong to. Every
   /// view on screen hears a key, and only one of them may answer it.
@@ -1447,6 +1808,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         selectedPoints: _points,
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
         pointFrom: _origin,
+        pathEdit: _drag == _GizmoDrag.handle ? _handleEdit() : null,
         onlyPath: _pathBeingEdited,
         anchors: widget.showControls && widget.showAnchors
             ? [
@@ -1493,7 +1855,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
     // The Hand tool never edits: its boxes are a read-out, and the drag under
     // them belongs to the panel, which pans the picture with it.
-    if (!_selectionTool) {
+    if (!_selectionTool && !_vertexTool) {
       return Positioned.fill(child: IgnorePointer(child: painter));
     }
 
@@ -1679,6 +2041,18 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // A click on a 3D handle is a drag that went nowhere, not a pick.
     if (_pick3d(details.localPosition) != null) return;
     final shift = HardwareKeyboard.instance.isShiftPressed;
+    if (widget.showControls &&
+        _vertexTool &&
+        _vertexToolTap(details.localPosition)) {
+      return;
+    }
+    // A click on a handle that went nowhere leaves everything as it was.
+    if (widget.showControls &&
+        pathHandleAt(_editablePointBoxes, details.localPosition, _points,
+                only: _pathBeingEdited) !=
+            null) {
+      return;
+    }
     // A mask point first: it sits on top of the layer it belongs to, and a
     // click on it means the point rather than the layer.
     final point = widget.showControls
@@ -1964,6 +2338,55 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         ? pathPointAt(_editablePointBoxes, at, only: only)
         : null;
 
+    // Convert vertex drags a handle on its own, or pulls a pair out of a
+    // point. The other two tools only click, and none of the three moves a
+    // layer or sweeps a marquee.
+    if (_vertexTool) {
+      if (!widget.showControls || widget.tool != ToolMode.penConvertVertex) {
+        return;
+      }
+      final handle =
+          pathHandleAt(_editablePointBoxes, at, _points, only: only);
+      if (handle != null) {
+        _takeHandle(handle, HandleLink.broken);
+      } else if (aimedAt != null) {
+        _points
+          ..clear()
+          ..add(aimedAt.key);
+        _takeHandle(
+          (
+            box: aimedAt.box,
+            key: aimedAt.key,
+            index: aimedAt.index,
+            side: HandleSide.leaving,
+          ),
+          HandleLink.mirrored,
+          pullingOut: true,
+        );
+      }
+      return;
+    }
+
+    // A handle of a selected point, unless the press is squarely on a point:
+    // a short handle ends close to its own point, and the point must stay
+    // reachable. A smooth point's other handle turns with the one in hand.
+    if (widget.showControls &&
+        (aimedAt == null ||
+            pathPointAt(_editablePointBoxes, at, slop: 4, only: only) ==
+                null)) {
+      final handle =
+          pathHandleAt(_editablePointBoxes, at, _points, only: only);
+      if (handle != null) {
+        final v = _vertexOf(handle);
+        _takeHandle(
+            handle,
+            v != null && isSmoothVertex(v)
+                ? HandleLink.turned
+                : HandleLink.broken);
+        return;
+      }
+    }
+
     // A key on a selected layer's motion path: a press within its own tight
     // reach drags that key, whatever layer's body sits under it.
     if (aimedAt == null && widget.showControls) {
@@ -2106,6 +2529,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _previewAnchor();
       case _GizmoDrag.points:
         _previewPoints();
+      case _GizmoDrag.handle:
+        final edit = _handleEdit();
+        if (edit != null) _previewEdit((_) => edit);
       case _GizmoDrag.motionKey:
         _previewMotionKey();
       case _GizmoDrag.axis3d:
@@ -2127,6 +2553,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _commitAnchor();
       case _GizmoDrag.points:
         _commitPoints();
+      case _GizmoDrag.handle:
+        final edit = _handleEdit();
+        if (edit != null && _delta != Offset.zero) _commitEdit((_) => edit);
       case _GizmoDrag.motionKey:
         _commitMotionKey();
       case _GizmoDrag.marquee:
@@ -2149,6 +2578,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       _delta = Offset.zero;
       _acting = null;
       _handle = null;
+      _handleInHand = null;
+      _pullingOut = false;
       _motionKey = null;
       _set = null;
       _part = null;
@@ -2544,13 +2975,21 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// per mask — the same rule the razor follows for a multi-layer cut.
   void _commitPoints() {
     if (_delta == Offset.zero || _points.isEmpty) return;
+    _commitEdit((box) =>
+        _pointsMoved(_points, pointDeltaIn(box, _delta, from: _origin)));
+  }
+
+  /// Write an edit to every path it touches: a point drag, a handle, or a
+  /// point added, removed or converted. [editFor] gives the edit in each
+  /// layer's own terms.
+  void _commitEdit(VertexEdit Function(LayerBox box) editFor) {
     var landed = false;
     // The same boxes a point can be grabbed from, so a picked Path row's
     // layer gets the write even when the layer isn't selected.
     for (final box in _editablePointBoxes) {
-      final d = pointDeltaIn(box, _delta, from: _origin);
+      final edit = editFor(box);
       for (final mask in box.masks) {
-        final moved = maskWithPointsMoved(box, mask, _points, d);
+        final moved = maskEdited(box, mask, edit);
         if (moved == null) continue;
         try {
           // The playhead goes with it: on a mask whose shape is keyed, the
@@ -2581,7 +3020,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // layer's items are rebuilt together and committed once. That is still
       // one undo step per layer. The engine moves the layer with the art's box
       // in that same op, so the points nobody dragged stay where they are.
-      final contents = shapeContentsWithPointsMoved(box, _points, d);
+      final contents = shapeContentsEdited(box, edit);
       if (contents != null) {
         try {
           // The playhead goes with it, for the mask's reason above: on an item
@@ -2617,19 +3056,24 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// once had, and the reason a path edit was a guess until you let go. The
   /// engine patches **one** layer's paths into a clone of the document per
   /// request, so this previews a single layer, exactly as a move does.
-  void _previewPoints() {
+  void _previewPoints() => _previewEdit((box) =>
+      _pointsMoved(_points, pointDeltaIn(box, _delta, from: _origin)));
+
+  /// The picture under any path edit in flight, as [_previewPoints] has it.
+  void _previewEdit(VertexEdit Function(LayerBox box) editFor) {
     final touched = [
       for (final box in _editablePointBoxes)
-        if (pathPointsOf(box).any((p) => _points.contains(p.key))) box,
+        if (shapeContentsEdited(box, editFor(box)) != null ||
+            box.masks.any((m) => maskEdited(box, m, editFor(box)) != null))
+          box,
     ];
     if (touched.length != 1) return;
     final box = touched.single;
-    _throttle.request(() => _sendPointsPreview(box));
+    _throttle.request(() => _sendEditPreview(box, editFor(box)));
   }
 
-  void _sendPointsPreview(LayerBox box) {
-    final d = pointDeltaIn(box, _delta, from: _origin);
-    final contents = shapeContentsWithPointsMoved(box, _points, d);
+  void _sendEditPreview(LayerBox box, VertexEdit edit) {
+    final contents = shapeContentsEdited(box, edit);
     try {
       if (contents != null) {
         // Art, and the layer moved with it: the layer's picture *is* the art's
@@ -2662,7 +3106,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // both patches rather than a choice between them.
       final masks = [
         for (final mask in box.masks)
-          maskWithPointsMoved(box, mask, _points, d) ?? mask,
+          maskEdited(box, mask, edit) ?? mask,
       ];
       widget.comp.renderFrameWithMaskPreview(
         frame: BigInt.from(widget.uiState.playheadFrame.value),
@@ -2674,6 +3118,86 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // A preview is a courtesy: the wireframe still follows the pointer and
       // the commit still lands.
     }
+  }
+
+  // --- Path handles and the Pen's siblings ---------------------------------
+
+  void _takeHandle(PathHandle handle, HandleLink link,
+      {bool pullingOut = false}) {
+    setState(() {
+      _handleInHand = handle;
+      _link = link;
+      _pullingOut = pullingOut;
+      _drag = _GizmoDrag.handle;
+    });
+  }
+
+  /// The point a handle belongs to, as the document has it.
+  BridgeVertex? _vertexOf(PathHandle h) {
+    for (final path in pathsOf(h.box)) {
+      if (h.index < path.vertices.length && path.keyOf(h.index) == h.key) {
+        return path.vertices[h.index];
+      }
+    }
+    return null;
+  }
+
+  /// What the handle drag in flight does to the path it is on. Alt breaks a
+  /// smooth point's handles apart, as in After Effects.
+  VertexEdit? _handleEdit() {
+    final h = _handleInHand;
+    if (h == null) return null;
+    final d = pointDeltaIn(h.box, _delta, from: _origin);
+    final link = _pullingOut
+        ? HandleLink.mirrored
+        : HardwareKeyboard.instance.isAltPressed
+            ? HandleLink.broken
+            : _link;
+    return (keyOf, vertices, closed) {
+      if (h.index >= vertices.length || keyOf(h.index) != h.key) return null;
+      final from =
+          _pullingOut ? Offset.zero : handleOf(vertices[h.index], h.side);
+      return verticesWithHandle(vertices, h.index, h.side, from + d, link);
+    };
+  }
+
+  /// A click with Add, Delete or Convert vertex. True when it changed a path.
+  bool _vertexToolTap(Offset at) {
+    final boxes = _editablePointBoxes;
+    final only = _pathBeingEdited;
+    final point = pathPointAt(boxes, at, only: only);
+    if (widget.tool == ToolMode.penAddVertex) {
+      // A click on a point is left to select it.
+      if (point != null) return false;
+      final edge = pathEdgeAt(boxes, at, only: only);
+      if (edge == null) return false;
+      final first = edge.path.keyOf(edge.segment);
+      _commitEdit((_) => (keyOf, vertices, closed) =>
+          keyOf(edge.segment) == first
+              ? verticesWithPointAdded(vertices, edge.segment, edge.t)
+              : null);
+      setState(() => _points
+        ..clear()
+        ..add(edge.path.keyOf(edge.segment + 1)));
+      return true;
+    }
+    if (point == null) return false;
+    bool mine(String Function(int) keyOf) => keyOf(point.index) == point.key;
+    if (widget.tool == ToolMode.penDeleteVertex) {
+      _commitEdit((_) => (keyOf, vertices, closed) => mine(keyOf)
+          ? verticesWithoutPoint(vertices, point.index, closed)
+          : null);
+      // The points after it have moved up one, so their names have changed.
+      setState(_points.clear);
+    } else {
+      _commitEdit((_) => (keyOf, vertices, closed) => mine(keyOf)
+          ? verticesConverted(vertices, point.index, closed)
+          : null);
+      setState(() => _points
+        ..clear()
+        ..add(point.key));
+    }
+    return true;
   }
 
   // --- Motion-path keys (docs/07 §2.4) ---------------------------------------
@@ -2856,6 +3380,9 @@ class _GizmoPainter extends CustomPainter {
   /// measures the drag from.
   final Offset pointFrom;
 
+  /// A handle drag in flight, drawn on the path it is changing.
+  final VertexEdit? pathEdit;
+
   /// The layer and path whose Path row is picked, which is then the only path
   /// of its layer drawn.
   final (UuidValue, UuidValue)? onlyPath;
@@ -2901,6 +3428,7 @@ class _GizmoPainter extends CustomPainter {
     required this.selectedPoints,
     required this.pointNudge,
     required this.pointFrom,
+    this.pathEdit,
     this.onlyPath,
     required this.hover,
     required this.handlesFor,
@@ -2977,15 +3505,19 @@ class _GizmoPainter extends CustomPainter {
           canvas, handles.handleAt(GizmoHandle.anchor) + moved, accent);
     }
 
+    List<BridgeVertex> live(String Function(int) keyOf,
+            List<BridgeVertex> vertices, bool closed) =>
+        pathEdit?.call(keyOf, vertices, closed) ?? vertices;
     for (final box in maskedBoxes) {
       for (final mask in box.masks) {
         if (!showsPath(box, mask.id, onlyPath)) continue;
+        String keyOf(int i) => maskPointKey(box.id, mask.id, i);
         _pathOutline(
           canvas,
           box,
-          mask.vertices,
+          live(keyOf, mask.vertices, mask.closed),
           mask.closed,
-          (i) => maskPointKey(box.id, mask.id, i),
+          keyOf,
           feather: stillHalfFeather(mask),
         );
       }
@@ -2993,12 +3525,13 @@ class _GizmoPainter extends CustomPainter {
       // drawn art can be seen point by point and corrected rather than redrawn.
       for (final item in box.shapeContents) {
         if (!showsPath(box, item.id, onlyPath)) continue;
+        String keyOf(int i) => shapePointKey(box.id, item.id, i);
         _pathOutline(
           canvas,
           box,
-          item.vertices,
+          live(keyOf, item.vertices, item.closed),
           item.closed,
-          (i) => shapePointKey(box.id, item.id, i),
+          keyOf,
           // Art coordinates, a bounding box away from the layer's own.
           art: true,
         );
@@ -3225,6 +3758,31 @@ class _GizmoPainter extends CustomPainter {
       for (final band in [inside, outside]) {
         if (band.length < 2) continue;
         canvas.drawPath(Path()..addPolygon(band, closed), guide);
+      }
+    }
+
+    // A selected point's handles: a line out to each, ending in a dot that
+    // can be dragged. A handle folded into its point has nothing to show.
+    final stem = Paint()
+      ..color = accent
+      ..strokeWidth = 1;
+    for (var i = 0; i < vertices.length; i++) {
+      if (!seen(i) || !picked(i)) continue;
+      final v = vertices[i];
+      for (final (tan, end) in [
+        (Offset(v.tanInX, v.tanInY), into(i)),
+        (Offset(v.tanOutX, v.tanOutY), out(i)),
+      ]) {
+        if (tan.distance < 1e-9) continue;
+        canvas.drawLine(at(i), end, stem);
+        canvas.drawCircle(end, 3, Paint()..color = surface);
+        canvas.drawCircle(
+            end,
+            3,
+            Paint()
+              ..color = accent
+              ..strokeWidth = 1
+              ..style = PaintingStyle.stroke);
       }
     }
 

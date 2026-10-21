@@ -71,12 +71,12 @@ enum ToolMode {
   shapePolygon(ToolGroup.shape, LumitIcon.polygon, ready: true),
   shapeStar(ToolGroup.shape, LumitIcon.star, ready: true),
 
-  // The Pen builds a mask path point by point. Its four siblings edit a
-  // *finished* path, which is not built.
+  // The Pen builds a mask path point by point. Three of its siblings edit a
+  // finished path, the gizmo's work; Mask feather is not built.
   pen(ToolGroup.pen, LumitIcon.pen, ready: true),
-  penAddVertex(ToolGroup.pen, LumitIcon.vertexAdd),
-  penDeleteVertex(ToolGroup.pen, LumitIcon.vertexDelete),
-  penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert),
+  penAddVertex(ToolGroup.pen, LumitIcon.vertexAdd, ready: true),
+  penDeleteVertex(ToolGroup.pen, LumitIcon.vertexDelete, ready: true),
+  penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert, ready: true),
   penMaskFeather(ToolGroup.pen, LumitIcon.maskFeather),
 
   // Making and editing text layers on the picture. Vertical type would
@@ -183,6 +183,7 @@ enum ToolMode {
         ToolMode.shapeStar =>
           l10n.statusHintShape,
         ToolMode.pen => l10n.statusHintPen,
+        ToolMode.penConvertVertex => l10n.statusHintConvertVertex,
         ToolMode.typeHorizontal => l10n.statusHintType,
         ToolMode.brush || ToolMode.eraser => l10n.statusHintPaint,
         ToolMode.cloneStamp => l10n.statusHintCloneStamp,

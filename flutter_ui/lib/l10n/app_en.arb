@@ -15351,6 +15351,10 @@
   "@statusHintPen": {
     "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
   },
+  "statusHintConvertVertex": "Click makes a point sharp or smooth · Drag from a point pulls out its handles · Drag a handle moves it alone",
+  "@statusHintConvertVertex": {
+    "description": "Right-hand end of the status bar while the Convert vertex tool is armed: what a click on a path point, a drag from a point and a drag of a handle do in the Viewer. The parts are separated by a middle dot."
+  },
   "statusHintType": "Shift+Enter starts a new line · Enter or Esc finishes the edit",
   "@statusHintType": {
     "description": "Right-hand end of the status bar while the Type tool is armed: one quiet line saying which keys break a line and end the edit while typing in the Viewer. The parts are separated by a middle dot."
