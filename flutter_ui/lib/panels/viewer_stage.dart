@@ -350,6 +350,7 @@ class ViewerStage extends StatelessWidget {
             }
         ],
         shapeContents: art,
+        pickedItem: pickedShapeItem(uiState.selectedProperties.value, id),
         // Where the art's box starts, which is where the layer's pixels do.
         // Without it every drawn point sat a box away from its art.
         artOrigin:

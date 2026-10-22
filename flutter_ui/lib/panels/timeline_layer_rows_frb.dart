@@ -610,12 +610,14 @@ class FoldRow extends StatelessWidget {
             onChanged();
           },
         ),
-      FoldShapeRow(:final item) => ShapeItemRow(
+      FoldShapeRow(:final item, :final open) => ShapeItemRow(
           comp: comp,
           layer: layer,
           item: item,
           valueColumn: valueColumn,
           onChanged: onChanged,
+          open: open,
+          onToggle: () => onToggle(path),
         ),
       FoldShapePaintRow(:final item, :final which) => ShapePaintRow(
           layer: layer,

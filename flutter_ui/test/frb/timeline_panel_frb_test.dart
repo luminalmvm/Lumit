@@ -702,7 +702,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.opacity, 30);
 
-      // The trim's three rows sit under the item, and each writes through.
+      // The trim's three rows sit under the item, shut until its own twirl
+      // opens it, and each writes through.
+      expect(find.text('Trim start'), findsNothing);
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-shape-twirl-${item.id}')));
+      await tester.pumpAndSettle();
       expect(find.text('Trim start'), findsOneWidget);
       expect(find.text('Trim end'), findsOneWidget);
       expect(find.text('Trim offset'), findsOneWidget);
