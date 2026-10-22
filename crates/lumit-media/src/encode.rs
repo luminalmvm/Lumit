@@ -780,6 +780,13 @@ pub struct GifEncoder {
     finished: bool,
 }
 
+/// A `va_list` as a C function receives it. On x86-64 outside Windows it
+/// is an array, and an array argument arrives as a pointer to its first item.
+#[cfg(all(target_arch = "x86_64", not(windows)))]
+type VaList = *mut ffi::__va_list_tag;
+#[cfg(not(all(target_arch = "x86_64", not(windows))))]
+type VaList = ffi::va_list;
+
 /// palettegen says how many colours it made at info level, which with a
 /// palette for each frame is a line a frame. Everything else goes through.
 ///
@@ -792,7 +799,7 @@ unsafe extern "C" fn quiet_palettegen(
     avcl: *mut std::ffi::c_void,
     level: std::ffi::c_int,
     fmt: *const std::ffi::c_char,
-    vl: ffi::va_list,
+    vl: VaList,
 ) {
     let from_palettegen = || {
         if avcl.is_null() {
