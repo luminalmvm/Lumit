@@ -637,6 +637,10 @@ class ItemOpacityRow extends StatefulWidget {
   final bool open;
   final VoidCallback? onToggle;
 
+  /// Asks for a rename by id, the way `Enter` does a layer's. Null for a kind
+  /// that is only renamed by hand.
+  final ValueNotifier<String?>? renameRequest;
+
   const ItemOpacityRow({super.key,
     required this.icon,
     required this.name,
@@ -653,6 +657,7 @@ class ItemOpacityRow extends StatefulWidget {
     this.menuRows,
     this.open = false,
     this.onToggle,
+    this.renameRequest,
   });
 
   @override
@@ -675,7 +680,29 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
   void renameCommit(String name) => widget.onRename?.call(name);
 
   @override
+  void initState() {
+    super.initState();
+    widget.renameRequest?.addListener(_maybeRename);
+  }
+
+  @override
+  void didUpdateWidget(ItemOpacityRow old) {
+    super.didUpdateWidget(old);
+    if (old.renameRequest == widget.renameRequest) return;
+    old.renameRequest?.removeListener(_maybeRename);
+    widget.renameRequest?.addListener(_maybeRename);
+  }
+
+  void _maybeRename() {
+    final request = widget.renameRequest;
+    if (request == null || request.value != widget.id) return;
+    request.value = null;
+    startRename();
+  }
+
+  @override
   void dispose() {
+    widget.renameRequest?.removeListener(_maybeRename);
     _throttle.cancel();
     super.dispose();
   }

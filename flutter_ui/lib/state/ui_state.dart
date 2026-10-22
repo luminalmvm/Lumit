@@ -862,6 +862,10 @@ class LumitUiState extends ChangeNotifier {
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
 
+  /// The id of the shape item `Enter` has asked to rename, for its row to
+  /// open its own editor and clear.
+  final ValueNotifier<String?> renameItemRequest = ValueNotifier(null);
+
   /// The Project panel's picked item — its selection anchor, published by the
   /// panel on every click. The full selection stays the panel's own;
   /// this is the one item the FX console acts on, so a Ctrl+Space over the

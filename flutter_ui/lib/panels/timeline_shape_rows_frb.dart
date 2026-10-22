@@ -173,6 +173,7 @@ class ShapeItemRow extends StatelessWidget {
       id: item.id.toString(),
       open: open,
       onToggle: onToggle,
+      renameRequest: ui.renameItemRequest,
       opacity: item.opacity,
       valueColumn: valueColumn,
       // Show the opacity the drag is passing through without writing it,

@@ -2888,6 +2888,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // panel focused yet falls to the Timeline, as it always did.
       final active = ui.activePanel;
       if (active != null && active != Panel.timeline) return false;
+      // A shape item's own row picked: Enter renames the item, as it would
+      // the layer.
+      if (_selectedProperties.length == 1) {
+        final parts = _selectedProperties.single.split('/');
+        if (parts.length == 3 && parts[1] == 'contents') {
+          ui.renameItemRequest.value = parts[2];
+          return true;
+        }
+      }
       // A group header chose the current selection: Enter renames the band
       // itself, through the same request road (the owner's "the same as any
       // other"). Checked against the model so a group that has since been
