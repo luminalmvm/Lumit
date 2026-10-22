@@ -275,9 +275,21 @@ pub struct MediaSource {
     /// index and the decoder all answer in interpreted frames, so a source
     /// with fields separated has twice the frames at twice the rate.
     pub interpret: crate::Interpretation,
+    /// The file's length and modification time when this was made, or `None`
+    /// when nobody asked ([`Self::stamped`]). A file saved over in place is
+    /// then a different source, so nothing opened on or read from the old one
+    /// is taken for the new one.
+    pub stamp: Option<(u64, std::time::SystemTime)>,
 }
 
 impl MediaSource {
+    /// This source with the file's length and modification time.
+    #[must_use]
+    pub fn stamped(mut self) -> Self {
+        self.stamp = file_stamp(&self.path);
+        self
+    }
+
     /// A plain single file.
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
@@ -312,6 +324,40 @@ impl MediaSource {
     pub fn on_disk(&self) -> &Path {
         &self.path
     }
+}
+
+/// A file's length and modification time, read off the disk at most twice a
+/// second.
+///
+/// A `stat` can cost a tenth of a millisecond here, and every footage layer
+/// asks a few times a frame. Half a second late is soon enough to notice a
+/// file saved over from another program.
+fn file_stamp(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+    type Held = HashMap<PathBuf, (Instant, Option<(u64, std::time::SystemTime)>)>;
+    static HELD: OnceLock<Mutex<Held>> = OnceLock::new();
+    let held = HELD.get_or_init(|| Mutex::new(HashMap::new()));
+    let now = Instant::now();
+    if let Ok(held) = held.lock() {
+        if let Some((at, stamp)) = held.get(path) {
+            if now.duration_since(*at) < Duration::from_millis(500) {
+                return *stamp;
+            }
+        }
+    }
+    // Nothing held across the `stat`.
+    let stamp = std::fs::metadata(path)
+        .ok()
+        .map(|meta| (meta.len(), meta.modified().unwrap_or(std::time::UNIX_EPOCH)));
+    if let Ok(mut held) = held.lock() {
+        if held.len() >= 4096 {
+            held.clear();
+        }
+        held.insert(path.to_path_buf(), (now, stamp));
+    }
+    stamp
 }
 
 impl From<&Path> for MediaSource {

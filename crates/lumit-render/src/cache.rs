@@ -214,9 +214,14 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         } else {
             settled.target_width(width)
         };
+        // The file as it is now, so one saved over in place names new frames
+        // and the old ones, on disk too, are never served for it.
+        let on_disk = lumit_media::MediaSource::file(&media.absolute_path)
+            .stamped()
+            .stamp;
         Some((
             format!(
-                "{}#w{}#c{space}{source_layer}{read_as}",
+                "{}#w{}#c{space}{source_layer}{read_as}#s{on_disk:?}",
                 media.absolute_path,
                 target.unwrap_or(0)
             ),
@@ -544,6 +549,27 @@ mod tests {
         )
         .unwrap();
         assert_ne!(full, half);
+    }
+
+    /// A file saved over in place names new frames, so the old ones, on disk
+    /// beside the project too, are never shown for it.
+    #[test]
+    fn a_file_saved_over_names_new_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("clip.mp4");
+        std::fs::write(&path, b"first").unwrap();
+        let (doc, comp, item) = footage_comp();
+        let mut doc = (*doc).clone();
+        if let Some(ProjectItem::Footage(f)) = doc.items.first_mut() {
+            f.media.absolute_path = path.to_string_lossy().into_owned();
+        }
+        let doc = std::sync::Arc::new(doc);
+        let (q, probes) = (Quality::default(), probed(item));
+        let before = frame_key(&doc, &comp, 0, q, &probes).unwrap();
+        // Past the half second a stamp is believed for.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        std::fs::write(&path, b"second take").unwrap();
+        assert_ne!(frame_key(&doc, &comp, 0, q, &probes).unwrap(), before);
     }
 
     /// An edit that cannot change the picture must not invalidate the cache —

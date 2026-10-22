@@ -186,6 +186,7 @@ impl FootageReference {
             source_layer: f.source_layer,
             render_pass: f.interpretation.render_pass.clone(),
             interpret: lumit_render::source::interpretation(f),
+            stamp: None,
         })
     }
 
@@ -358,6 +359,7 @@ impl FootageReference {
                     source_layer: other.source_layer,
                     render_pass: other.interpretation.render_pass.clone(),
                     interpret: lumit_render::source::interpretation(other),
+                    stamp: None,
                 });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
@@ -439,6 +441,7 @@ impl FootageReference {
                         source_layer: None,
                         render_pass: f.interpretation.render_pass.clone(),
                         interpret: lumit_render::source::interpretation(f),
+                        stamp: None,
                     }),
                 _ => None,
             }
