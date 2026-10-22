@@ -26,6 +26,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -251,6 +252,8 @@ class _FxConsoleState extends State<_FxConsole> {
   /// The category the strip has narrowed to, or null for All.
   String? _category;
 
+  final ScrollController _strip = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -288,6 +291,7 @@ class _FxConsoleState extends State<_FxConsole> {
       ..removeListener(_keepFocus)
       ..dispose();
     _query.dispose();
+    _strip.dispose();
     super.dispose();
   }
 
@@ -579,16 +583,38 @@ class _FxConsoleState extends State<_FxConsole> {
   Widget _categoryStrip(LumitTheme t) => Container(
         height: _stripHeight,
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _categoryKicker(t, label: l10n.fxConsoleAll, category: null),
-              for (final group in _groups) ...[
-                const SizedBox(width: 10),
-                _categoryKicker(t, label: group, category: group),
-              ],
-            ],
+        // A strip past the cap shows its thumb, and a plain wheel moves it
+        // sideways. Flutter only moves a sideways view with Shift held, which
+        // nobody would guess here.
+        child: Listener(
+          onPointerSignal: (event) {
+            if (event is! PointerScrollEvent) return;
+            GestureBinding.instance.pointerSignalResolver.register(event, (e) {
+              if (e is! PointerScrollEvent || !_strip.hasClients) return;
+              final p = _strip.position;
+              _strip.jumpTo((p.pixels + e.scrollDelta.dy)
+                  .clamp(p.minScrollExtent, p.maxScrollExtent));
+            });
+          },
+          child: HouseScrollbar(
+            controller: _strip,
+            thumbVisibility: true,
+            thickness: 2,
+            crossAxisMargin: 0,
+            child: SingleChildScrollView(
+              controller: _strip,
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _categoryKicker(t,
+                      label: l10n.fxConsoleAll, category: null),
+                  for (final group in _groups) ...[
+                    const SizedBox(width: 10),
+                    _categoryKicker(t, label: group, category: group),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       );
