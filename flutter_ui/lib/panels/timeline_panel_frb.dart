@@ -91,6 +91,7 @@ import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
 import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
+import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -1808,15 +1809,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   SelectionMove _selectionMove(LumitUiState ui) {
     final picked = ui.selectedLayerIds;
     final ids = <UuidValue>[];
+    final ins = <int>[];
     int? minIn;
     for (final entry in ui.model.layers) {
       if (!picked.contains(entry.layer.internallayerId)) continue;
       if (entry.info.switches.locked) continue;
       ids.add(entry.layer.internallayerId);
       final inFrame = entry.info.inFrame.toInt();
+      ins.add(inFrame);
       if (minIn == null || inFrame < minIn) minIn = inFrame;
     }
-    return SelectionMove(ids, minIn ?? 0);
+    return SelectionMove(ids, ins, minIn ?? 0,
+        staggerOrder: inStaggerOrder(ids, ui.workspace.staggerOrder,
+            clicked: ui.selectionInClickOrder, layerOf: (id) => id));
   }
 
   /// The block stretch in flight, on the same terms and for the same

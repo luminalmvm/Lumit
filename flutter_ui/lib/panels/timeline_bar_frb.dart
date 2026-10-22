@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
+    show Int64List;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -24,6 +26,7 @@ import 'timeline_snap.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_layer_drag.dart' show LayerLift;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
+import 'stagger.dart';
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer.
@@ -68,8 +71,16 @@ class BarDragPreview {
   final int deltaIn;
   final int deltaOut;
   final int offsetShift;
+
+  /// Each layer's own travel on a Ctrl+Alt move, which fans the bars out
+  /// rather than moving them together. Null on every other drag.
+  final Map<String, int>? fan;
   const BarDragPreview(
-      this.layerId, this.layers, this.deltaIn, this.deltaOut, this.offsetShift);
+      this.layerId, this.layers, this.deltaIn, this.deltaOut, this.offsetShift,
+      {this.fan});
+
+  /// How far a move carries [id]: its share of a fan, or the one shift.
+  int shiftOf(String id) => fan?[id] ?? offsetShift;
 }
 
 /// What a grab of [grab] moved by [delta] frames does to a layer's span.
@@ -96,7 +107,7 @@ BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta,
 /// with its bar; zero for a layer outside the drag, and zero between gestures.
 int keyShiftOf(BarDragPreview? preview, String layerId) =>
     preview != null && preview.layers.contains(layerId)
-        ? preview.offsetShift
+        ? preview.shiftOf(layerId)
         : 0;
 
 /// The selection's share of a move drag: every **unlocked** selected
@@ -106,11 +117,38 @@ class SelectionMove {
   /// In stack order; the grabbed layer is among them.
   final List<UuidValue> layerIds;
 
+  /// Each layer's in frame, beside [layerIds], for a fan's wall.
+  final List<int> inFrames;
+
   /// The earliest in frame among them: the whole set's travel stops where
   /// this one meets comp zero, so the set hits the wall with its shape
   /// intact — the same clamp the group bar's slide has.
   final int minIn;
-  const SelectionMove(this.layerIds, this.minIn);
+  /// The same layers in the order a stagger drag takes them, which the
+  /// Stagger panel sets.
+  final List<UuidValue> staggerOrder;
+
+  const SelectionMove(this.layerIds, this.inFrames, this.minIn,
+      {this.staggerOrder = const []});
+}
+
+/// Each layer's travel when a stagger drag ([staggerKeysHeld]) moves
+/// [grabbed] by [delta] frames, in the order the Stagger panel sets
+/// ([staggerShare]). Each stops at comp zero on its own.
+Map<String, int> fanShares(SelectionMove move, UuidValue grabbed, int delta) {
+  final order = move.staggerOrder;
+  final held = order.indexOf(grabbed);
+  final ins = {
+    for (final (i, id) in move.layerIds.indexed) id: move.inFrames[i],
+  };
+  return {
+    for (final (rank, id) in order.indexed)
+      '$id': max(
+          staggerShare(
+                  rank: rank, held: held, count: order.length, delta: delta)
+              .round(),
+          -(ins[id] ?? 0)),
+  };
 }
 
 /// How far a layer's ends may be dragged, in comp frames.
@@ -415,6 +453,19 @@ class _BarState extends State<Bar> {
   /// rather than sixty times a second in [_publishPreview].
   Set<String>? _movingIds;
 
+  /// The selection move was started with Ctrl+Alt held, so it fans the bars
+  /// out ([fanShares]) rather than carrying them together.
+  bool _fanned = false;
+
+  /// Each bar's travel while [_fanned], as last published.
+  Map<String, int>? _fan;
+
+  /// How far a move drag carries this bar: its share of a stagger, or the
+  /// drag itself.
+  int get _moveShift => _fanned
+      ? (_fan?['${widget.entry.layer.internallayerId}'] ?? 0)
+      : _delta;
+
   /// How far a selection-mate's move drag says **this** bar travels:
   /// non-zero only while another selected bar is being dragged and this layer
   /// rides along. Fed by the shared preview notifier, so a drag repaints the
@@ -425,7 +476,7 @@ class _BarState extends State<Bar> {
     final p = widget.dragPreview.value;
     final id = widget.entry.layer.internallayerId.toString();
     final shift =
-        p != null && p.layerId != id && p.layers.contains(id) ? p.offsetShift : 0;
+        p != null && p.layerId != id && p.layers.contains(id) ? p.shiftOf(id) : 0;
     if (shift != _followShift && mounted) {
       setState(() => _followShift = shift);
     }
@@ -463,6 +514,8 @@ class _BarState extends State<Bar> {
       _stretch = false;
       _moving = null;
       _movingIds = null;
+      _fanned = false;
+      _fan = null;
       _caught = null;
       widget.dragPreview.value = null;
     });
@@ -536,7 +589,7 @@ class _BarState extends State<Bar> {
     final held = info.switches.locked;
 
     final (drawIn, drawOut) = switch (_grab) {
-      BarGrab.move => (inFrame + _delta, outFrame + _delta),
+      BarGrab.move => (inFrame + _moveShift, outFrame + _moveShift),
       BarGrab.trimIn => (inFrame + _delta, outFrame),
       BarGrab.trimOut => (inFrame, outFrame + _delta),
       // Not necessarily at rest: while a selection-mate's bar is being moved,
@@ -558,7 +611,7 @@ class _BarState extends State<Bar> {
     // it. Without this the marks and the ghost stayed behind while the bar
     // went, and a bar at its limit looked as though it had left the limit.
     // A bar riding a selection-mate's drag is being moved too.
-    final shift = _grab == BarGrab.move ? _delta : _followShift;
+    final shift = _grab == BarGrab.move ? _moveShift : _followShift;
     final minIn =
         widget.bounds.minIn == null ? null : widget.bounds.minIn! + shift;
     final maxOut =
@@ -725,11 +778,14 @@ class _BarState extends State<Bar> {
                   // modified press keeps its old manners (Ctrl toggles on the
                   // down), and so does the razor, whose click is a cut.
                   final keys = HardwareKeyboard.instance;
+                  // The stagger keys keep it too: that press is the start of
+                  // a stagger, not a toggle.
                   _keptSelection = !widget.razor &&
                       widget.selected &&
-                      !keys.isControlPressed &&
-                      !keys.isMetaPressed &&
-                      !keys.isShiftPressed;
+                      (staggerKeysHeld() ||
+                          (!keys.isControlPressed &&
+                              !keys.isMetaPressed &&
+                              !keys.isShiftPressed));
                   if (!_keptSelection) widget.onSelect();
                   _downAt = event.position;
                 },
@@ -835,6 +891,7 @@ class _BarState extends State<Bar> {
                                 _movingIds = {
                                   for (final id in move.layerIds) id.toString(),
                                 };
+                                _fanned = staggerKeysHeld();
                               }
                             }
                           });
@@ -865,8 +922,12 @@ class _BarState extends State<Bar> {
                             // in the set meeting comp zero stops all of them,
                             // the same clamp the engine's slide applies — so
                             // the preview and the commit agree to the frame.
+                            // A fan stops each bar at the wall on its own.
                             final moving = _moving;
-                            if (moving != null) {
+                            if (moving != null && _fanned) {
+                              _fan = fanShares(moving,
+                                  widget.entry.layer.internallayerId, _delta);
+                            } else if (moving != null) {
                               _delta = max(_delta, -moving.minIn);
                             }
                             _publishPreview();
@@ -1142,7 +1203,14 @@ class _BarState extends State<Bar> {
   /// The `f<in>–f<out> · <frames> f` pill beside the pointer while the bar is
   /// moved or trimmed.
   Widget _dragHint(int restIn, int drawIn, int drawOut) {
-    final text = l10n.timelineBarDragHint(drawIn, drawOut, drawOut - drawIn);
+    final moving = _moving;
+    final text = _fanned && moving != null
+        ? l10n.timelineBarFanHint(staggerGap(
+            held: moving.staggerOrder
+                .indexOf(widget.entry.layer.internallayerId),
+            count: moving.staggerOrder.length,
+            delta: _delta))
+        : l10n.timelineBarDragHint(drawIn, drawOut, drawOut - drawIn);
     // Where the pointer is: where it took hold, and how far it has gone.
     final x = widget.axis.xOf(restIn) + _downDx + _deltaPx;
     // Beside the pointer, or on its other side where the axis has run out.
@@ -1202,9 +1270,13 @@ class _BarState extends State<Bar> {
     if (grab == null) return;
     final id = widget.entry.layer.internallayerId.toString();
     // A stretch from the in end slides the layer, so its keys travel too.
+    final fan = _fan;
     widget.dragPreview.value = _stretch && grab == BarGrab.trimIn
         ? BarDragPreview(id, {id}, _delta, 0, _delta)
-        : barDragPreview(id, grab, _delta, moving: _movingIds);
+        : _fanned && fan != null
+            ? BarDragPreview(id, fan.keys.toSet(), _delta, _delta, _delta,
+                fan: fan)
+            : barDragPreview(id, grab, _delta, moving: _movingIds);
   }
 
   /// One write for the whole gesture, so a move that shifted the in point
@@ -1230,8 +1302,9 @@ class _BarState extends State<Bar> {
             outFrame: outFrame,
             bounds: _stretch ? BarBounds.free : widget.bounds,
           );
-    if (moving != null) delta = max(delta, -moving.minIn);
+    if (moving != null && !_fanned) delta = max(delta, -moving.minIn);
     final stretch = _stretch;
+    final fan = _fanned ? _fan : null;
     setState(() {
       _stretch = false;
       _delta = 0;
@@ -1239,10 +1312,22 @@ class _BarState extends State<Bar> {
       _grab = null;
       _moving = null;
       _movingIds = null;
+      _fanned = false;
+      _fan = null;
       _caught = null;
     });
     widget.dragPreview.value = null;
     if (grab == null) return;
+
+    if (fan != null && moving != null) {
+      widget.comp.fanLayers(
+        layerIds: moving.layerIds,
+        deltas: Int64List.fromList(
+            [for (final id in moving.layerIds) fan['$id'] ?? 0]),
+      );
+      widget.onChanged();
+      return;
+    }
 
     // Sound may sit between two frames. With the setting off an Audio layer
     // goes where the pointer let go, and with it on a layer that was left

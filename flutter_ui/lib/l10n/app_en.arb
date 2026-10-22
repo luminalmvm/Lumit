@@ -13460,6 +13460,15 @@
       }
     }
   },
+  "timelineBarFanHint": "{frames} f apart",
+  "@timelineBarFanHint": {
+    "description": "Timeline lanes: the small readout pill beside the pointer while a stagger drag (Ctrl+Alt, or Ctrl+Shift on Linux) spreads a selection of layer bars apart, saying how many frames apart neighbouring layers now start. Very small mono type; the number may have one decimal place.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
+      }
+    }
+  },
   "graphKeyKicker": "Key",
   "@graphKeyKicker": {
     "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."

@@ -1214,16 +1214,19 @@ class LayerArea extends StatelessWidget {
           // Whether the drag in flight carries **this** layer — its own bar,
           // or a selection-mate's move it rides along with. The three
           // deltas are the mover's, which for the only plural grab (a move)
-          // are one number for the whole set.
+          // are one number for the whole set, or this layer's share of a fan.
           final p = preview != null && preview.layers.contains(id) ? preview : null;
+          final fanned = p?.fan?[id];
           final span = entry.info.span;
           // The span as drawn — the document's frames plus any drag in flight —
           // and where its source starts, so a bar being dragged or trimmed
           // carries its transients with it in realtime.
-          final inFrame = entry.info.inFrame.toInt() + (p?.deltaIn ?? 0);
-          final outFrame = entry.info.outFrame.toInt() + (p?.deltaOut ?? 0);
-          final startOffset =
-              rationalSeconds(span.startOffset) + (p?.offsetShift ?? 0) / fps;
+          final inFrame =
+              entry.info.inFrame.toInt() + (fanned ?? p?.deltaIn ?? 0);
+          final outFrame =
+              entry.info.outFrame.toInt() + (fanned ?? p?.deltaOut ?? 0);
+          final startOffset = rationalSeconds(span.startOffset) +
+              (fanned ?? p?.offsetShift ?? 0) / fps;
           final secondsPerPixel =
               axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
           final mode = laneModes.of(id);

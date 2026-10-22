@@ -1,5 +1,6 @@
 // The Stagger panel: start the selected layers one after another, a set
-// number of frames apart, or line them up on one frame again.
+// number of frames apart, or line them up on one frame again. Its order is
+// also the one a stagger drag on bars or keys follows.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
