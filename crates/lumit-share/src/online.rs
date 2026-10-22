@@ -4041,17 +4041,42 @@ mod tests {
     /// one the server holds. Answers the edits in the server's entries.
     fn settled(machines: &[&Machine]) -> Vec<Op> {
         let id = machines[0].0.access().0;
-        until(
-            "every machine has everything and has had every edit answered",
-            || {
-                let head = stand().projects.lock().get(&id).map(|stored| stored.head);
-                machines.iter().all(|(member, store)| {
-                    let in_step = !member.away() && store.saving_apart().is_none();
-                    let here = member.inner.line.lock().head;
-                    in_step && store.unanswered() == 0 && Some(here) == head
+        let head = || stand().projects.lock().get(&id).map(|stored| stored.head);
+        let settles = || {
+            let head = head();
+            machines.iter().all(|(member, store)| {
+                let in_step = !member.away() && store.saving_apart().is_none();
+                let here = member.inner.line.lock().head;
+                in_step && store.unanswered() == 0 && Some(here) == head
+            })
+        };
+        // Each machine as it stands, so a run that never settles says which
+        // part of it is stuck.
+        let state = || {
+            let each: Vec<String> = machines
+                .iter()
+                .map(|(member, store)| {
+                    format!(
+                        "{} away {} apart {} unanswered {} at {}",
+                        member.inner.seat.name,
+                        member.away(),
+                        store.saving_apart().is_some(),
+                        store.unanswered(),
+                        member.inner.line.lock().head,
+                    )
                 })
-            },
-        );
+                .collect();
+            format!("server at {:?}, {}", head(), each.join(", "))
+        };
+        let start = Instant::now();
+        while !settles() {
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "every machine has everything and has had every edit answered: {}",
+                state()
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
         let (theirs, edits) = held(&machines[0].0);
         for (member, store) in machines {
             let differs = footprint(&store.snapshot(), &theirs);
