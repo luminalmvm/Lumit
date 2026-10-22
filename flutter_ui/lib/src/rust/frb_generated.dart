@@ -22870,8 +22870,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeExportSpec dco_decode_bridge_export_spec(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 37)
-      throw Exception('unexpected arr length: expect 37 but see ${arr.length}');
+    if (arr.length != 40)
+      throw Exception('unexpected arr length: expect 40 but see ${arr.length}');
     return BridgeExportSpec(
       preset: dco_decode_String(arr[0]),
       codec: dco_decode_String(arr[1]),
@@ -22910,6 +22910,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       useProxies: dco_decode_bool(arr[34]),
       makeANoise: dco_decode_bool(arr[35]),
       openFolder: dco_decode_bool(arr[36]),
+      gifDither: dco_decode_u_32(arr[37]),
+      gifPalettePerFrame: dco_decode_bool(arr[38]),
+      gifPlays: dco_decode_u_32(arr[39]),
     );
   }
 
@@ -23236,18 +23239,20 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeFormatCaps dco_decode_bridge_format_caps(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return BridgeFormatCaps(
       video: dco_decode_bool(arr[0]),
       audio: dco_decode_bool(arr[1]),
       alpha: dco_decode_bool(arr[2]),
-      depths: dco_decode_list_prim_u_32_strict(arr[3]),
-      bitRate: dco_decode_bool(arr[4]),
-      audioBitRate: dco_decode_bool(arr[5]),
-      audio24Bit: dco_decode_bool(arr[6]),
-      metadata: dco_decode_bool(arr[7]),
-      colourSpaces: dco_decode_list_String(arr[8]),
+      alphaMode: dco_decode_bool(arr[3]),
+      gif: dco_decode_bool(arr[4]),
+      depths: dco_decode_list_prim_u_32_strict(arr[5]),
+      bitRate: dco_decode_bool(arr[6]),
+      audioBitRate: dco_decode_bool(arr[7]),
+      audio24Bit: dco_decode_bool(arr[8]),
+      metadata: dco_decode_bool(arr[9]),
+      colourSpaces: dco_decode_list_String(arr[10]),
     );
   }
 
@@ -29624,6 +29629,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_useProxies = sse_decode_bool(deserializer);
     var var_makeANoise = sse_decode_bool(deserializer);
     var var_openFolder = sse_decode_bool(deserializer);
+    var var_gifDither = sse_decode_u_32(deserializer);
+    var var_gifPalettePerFrame = sse_decode_bool(deserializer);
+    var var_gifPlays = sse_decode_u_32(deserializer);
     return BridgeExportSpec(
         preset: var_preset,
         codec: var_codec,
@@ -29661,7 +29669,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         retimeBlend: var_retimeBlend,
         useProxies: var_useProxies,
         makeANoise: var_makeANoise,
-        openFolder: var_openFolder);
+        openFolder: var_openFolder,
+        gifDither: var_gifDither,
+        gifPalettePerFrame: var_gifPalettePerFrame,
+        gifPlays: var_gifPlays);
   }
 
   @protected
@@ -30023,6 +30034,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_video = sse_decode_bool(deserializer);
     var var_audio = sse_decode_bool(deserializer);
     var var_alpha = sse_decode_bool(deserializer);
+    var var_alphaMode = sse_decode_bool(deserializer);
+    var var_gif = sse_decode_bool(deserializer);
     var var_depths = sse_decode_list_prim_u_32_strict(deserializer);
     var var_bitRate = sse_decode_bool(deserializer);
     var var_audioBitRate = sse_decode_bool(deserializer);
@@ -30033,6 +30046,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         video: var_video,
         audio: var_audio,
         alpha: var_alpha,
+        alphaMode: var_alphaMode,
+        gif: var_gif,
         depths: var_depths,
         bitRate: var_bitRate,
         audioBitRate: var_audioBitRate,
@@ -37427,6 +37442,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.useProxies, serializer);
     sse_encode_bool(self.makeANoise, serializer);
     sse_encode_bool(self.openFolder, serializer);
+    sse_encode_u_32(self.gifDither, serializer);
+    sse_encode_bool(self.gifPalettePerFrame, serializer);
+    sse_encode_u_32(self.gifPlays, serializer);
   }
 
   @protected
@@ -37705,6 +37723,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.video, serializer);
     sse_encode_bool(self.audio, serializer);
     sse_encode_bool(self.alpha, serializer);
+    sse_encode_bool(self.alphaMode, serializer);
+    sse_encode_bool(self.gif, serializer);
     sse_encode_list_prim_u_32_strict(self.depths, serializer);
     sse_encode_bool(self.bitRate, serializer);
     sse_encode_bool(self.audioBitRate, serializer);

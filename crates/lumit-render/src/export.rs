@@ -1129,8 +1129,8 @@ impl AudioFormat {
     }
 }
 
-/// What the export writes: a video file, one still image per frame, or
-/// sound with no picture at all.
+/// What the export writes: a video file, an animated GIF, one still image per
+/// frame, or sound with no picture at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExportFormat {
     /// An `.mp4`, in the given codec.
@@ -1139,6 +1139,8 @@ pub enum ExportFormat {
     Images(lumit_media::encode::ImageFormat),
     /// An `.m4a` or `.wav` of the comp's mix, with no video stream.
     Audio(AudioFormat),
+    /// An animated `.gif`.
+    Gif,
 }
 
 /// What one output format can and cannot carry (docs/06 §7.4).
@@ -1157,6 +1159,11 @@ pub struct FormatCaps {
     pub audio: bool,
     /// Can carry an alpha channel (so the Channels choice means something).
     pub alpha: bool,
+    /// The choice between premultiplied and straight alpha means something.
+    /// A GIF's alpha is on or off, so its kept pixels are always straight.
+    pub alpha_mode: bool,
+    /// Dither, palette and plays apply, which only a GIF has.
+    pub gif: bool,
     /// The colour depths this format can write, best last.
     pub depths: &'static [lumit_media::encode::BitDepth],
     /// The sample rates this format's audio stream can be written at, empty
@@ -1215,6 +1222,8 @@ impl ExportFormat {
                 video: true,
                 audio: true,
                 alpha: c.has_alpha(),
+                alpha_mode: c.has_alpha(),
+                gif: false,
                 depths: EIGHT_OR_SIXTEEN,
                 audio_rates: EXPORT_AUDIO_RATES,
                 audio_depths: PCM_DEPTHS,
@@ -1228,6 +1237,8 @@ impl ExportFormat {
                 video: true,
                 audio: true,
                 alpha: false,
+                alpha_mode: false,
+                gif: false,
                 depths: EIGHT_ONLY,
                 audio_rates: EXPORT_AUDIO_RATES,
                 audio_depths: AAC_DEPTH,
@@ -1242,6 +1253,8 @@ impl ExportFormat {
                 video: true,
                 audio: false,
                 alpha: true,
+                alpha_mode: true,
+                gif: false,
                 depths: if f == lumit_media::encode::ImageFormat::Exr {
                     EXR_DEPTHS
                 } else {
@@ -1253,10 +1266,27 @@ impl ExportFormat {
                 metadata: false,
                 colour_spaces: STILL_COLOUR_SPACES,
             },
+            // A GIF is eight-bit sRGB with no sound, no bitrate and no tags.
+            // Its alpha is one bit, but it is still alpha.
+            ExportFormat::Gif => FormatCaps {
+                video: true,
+                audio: false,
+                alpha: true,
+                alpha_mode: false,
+                gif: true,
+                depths: EIGHT_ONLY,
+                audio_rates: &[],
+                audio_depths: &[],
+                bit_rate: false,
+                metadata: false,
+                colour_spaces: UNTAGGED_COLOUR_SPACE,
+            },
             ExportFormat::Audio(f) => FormatCaps {
                 video: false,
                 audio: true,
                 alpha: false,
+                alpha_mode: false,
+                gif: false,
                 depths: &[],
                 audio_rates: EXPORT_AUDIO_RATES,
                 audio_depths: match f {
@@ -1277,6 +1307,7 @@ impl ExportFormat {
             ExportFormat::Video(c) => c.extension(),
             ExportFormat::Images(f) => f.extension(),
             ExportFormat::Audio(f) => f.extension(),
+            ExportFormat::Gif => "gif",
         }
     }
 
@@ -2407,6 +2438,8 @@ pub struct ExportSpec {
     /// How the composition is rendered for this export.
     pub render: RenderOptions,
     pub when_done: WhenDone,
+    /// Dither, palette and plays. Unread by every format but GIF.
+    pub gif: lumit_media::encode::GifOptions,
 }
 
 impl Default for ExportSpec {
@@ -2433,6 +2466,7 @@ impl Default for ExportSpec {
             metadata: lumit_media::encode::Metadata::new(),
             render: RenderOptions::default(),
             when_done: WhenDone::default(),
+            gif: lumit_media::encode::GifOptions::default(),
         }
     }
 }
@@ -3327,6 +3361,18 @@ fn run(
                 written: 0,
             }
         }
+        ExportFormat::Gif => {
+            let (tw, th) = (delivered.0.max(1), delivered.1.max(1));
+            opened.store(true, Ordering::Relaxed);
+            let encoder =
+                lumit_media::encode::GifEncoder::open(out_path, tw, th, out_num, out_den, spec.gif)
+                    .map_err(|e| e.to_string())?;
+            let _ = tx.send(ExportEvent::Encoder("GIF"));
+            Sink::Gif {
+                encoder,
+                size: (tw, th),
+            }
+        }
         // Handled above: sound with no picture never reaches the frame loop.
         ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
@@ -3335,6 +3381,13 @@ fn run(
     // same for every frame, and deriving them per pixel would be the same
     // answer two million times over.
     let colour = spec.colour_space.transform();
+    // A GIF pixel is either clear or solid, so the edge pixels it keeps are
+    // written at their own colour, not darkened by their coverage.
+    let alpha = if !spec.format.caps().alpha_mode {
+        AlphaMode::Straight
+    } else {
+        spec.alpha
+    };
 
     let (tw, th) = sink.size();
     let audio_mix = audio_mix.as_deref();
@@ -3403,7 +3456,7 @@ fn run(
                     } else {
                         px
                     };
-                    pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
+                    pack_frame(&px, spec.channels, alpha, colour.as_ref())
                 }),
                 // The float depths read the composite back as it stands: no
                 // display transform, no curve, no clamp (docs/06 §7.4a). The
@@ -3442,7 +3495,7 @@ fn run(
             } else {
                 px
             };
-            Ok(pack_frame(&px, spec.channels, spec.alpha, colour.as_ref()))
+            Ok(pack_frame(&px, spec.channels, alpha, colour.as_ref()))
         };
         // The comp frame under an output frame: exact when the rates match
         // (the rounding is then of an integer), nearest otherwise.
@@ -3679,7 +3732,7 @@ fn run_audio_only(
     Ok(())
 }
 
-/// Where the rendered frames go: the mp4 muxer, or the numbered stills. One
+/// Where the rendered frames go: the mp4 muxer, a GIF, or the numbered stills. One
 /// type so the frame loop stays single.
 /// A frame on its way to the file: its bytes, or at eight bits its
 /// read-back still coming off the graphics card.
@@ -3699,18 +3752,23 @@ enum Sink {
         /// Frames written so far — exactly the files a cancel removes.
         written: usize,
     },
+    Gif {
+        encoder: lumit_media::encode::GifEncoder,
+        size: (u32, u32),
+    },
 }
 
 impl Sink {
     fn size(&self) -> (u32, u32) {
         match self {
-            Sink::Video { size, .. } | Sink::Images { size, .. } => *size,
+            Sink::Video { size, .. } | Sink::Images { size, .. } | Sink::Gif { size, .. } => *size,
         }
     }
 
     fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), String> {
         match self {
             Sink::Video { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
+            Sink::Gif { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
             Sink::Images {
                 encoder, written, ..
             } => {
@@ -3725,6 +3783,7 @@ impl Sink {
         match self {
             Sink::Video { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
             Sink::Images { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
+            Sink::Gif { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
         }
     }
 

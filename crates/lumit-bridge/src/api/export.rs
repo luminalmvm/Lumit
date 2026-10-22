@@ -145,6 +145,15 @@ pub struct BridgeExportSpec {
     pub make_a_noise: bool,
     /// Show the finished file in the desktop's own file manager.
     pub open_folder: bool,
+    /// How a GIF is dithered: `0` diffusion, `1` pattern, `2` none.
+    #[frb(default = 0)]
+    pub gif_dither: u32,
+    /// Give each frame of a GIF its own palette, rather than one for all.
+    #[frb(default = false)]
+    pub gif_palette_per_frame: bool,
+    /// How many times a GIF plays, `0` for forever.
+    #[frb(default = 0)]
+    pub gif_plays: u32,
 }
 
 /// One key/value pair written into the container.
@@ -199,6 +208,9 @@ impl Default for BridgeExportSpec {
             use_proxies: false,
             make_a_noise: false,
             open_folder: false,
+            gif_dither: 0,
+            gif_palette_per_frame: false,
+            gif_plays: 0,
         }
     }
 }
@@ -218,6 +230,13 @@ pub struct BridgeFormatCaps {
     pub audio: bool,
     /// Can carry an alpha channel.
     pub alpha: bool,
+    /// The choice of premultiplied or straight alpha means something. False
+    /// for a GIF, whose kept pixels are always straight.
+    #[frb(default = false)]
+    pub alpha_mode: bool,
+    /// Dither, palette and plays apply, which only a GIF has.
+    #[frb(default = false)]
+    pub gif: bool,
     /// The colour depths this format writes, best last: `[8]`, `[8, 16]`, or
     /// empty for a format with no picture.
     pub depths: Vec<u32>,

@@ -920,6 +920,8 @@ void main() {
       /// over the page, so the last match is the one in the menu rather than
       /// the closed face of some other row.
       Future<void> pick(String id, String option) async {
+        await tester.ensureVisible(find.byKey(ValueKey<String>(id)));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(ValueKey<String>(id)));
         await tester.pumpAndSettle();
         await tester.tap(find.text(option).last);
