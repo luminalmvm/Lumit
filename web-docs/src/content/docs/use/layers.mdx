@@ -52,6 +52,18 @@ Double-click a layer's name in the Timeline to rename it. On a Precomp layer the
 double-click opens its composition, and on a [Sequence layer](/use/sequence-layers/) its
 clips. `Enter` renames either.
 
+## Stagger
+
+The **Stagger** panel starts the selected layers one after another. **Layer ▸ Stagger
+layers…** opens it. Locked layers stay put.
+
+- **Offset per layer**: how many frames each layer starts after the one before it.
+- **Order**: **Top down**, **Bottom up**, **Order clicked** or **Random**. Order clicked
+  follows the order the layers were added to the selection. Random shuffles again each time.
+- **Stagger**: the first layer starts on the earliest in point among them, and each one
+  after it starts later by the offset.
+- **Line up**: every layer starts on that earliest in point.
+
 ## Copy and paste
 
 **Edit ▸ Cut / Copy / Paste** can copy whole layers if selected and can be pasted into
@@ -83,6 +95,7 @@ act on every selected layer and skip locked ones.
 | **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, each stream onto a layer of its own, and back onto one. |
 | **Enable Retime** or **Disable Retime**, **Stretch…**, **Freeze frame at playhead** | See [Retime](/use/retime/). Not on Sequence layers. |
 | **Pre-compose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
+| **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
 | **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
 | **Delete** | Deletes the layers. |
 | **Delete all markers** | Removes the layers' markers. Only on a layer with markers. |

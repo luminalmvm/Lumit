@@ -65,6 +65,7 @@ import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
+import '../panels/stagger_panel_frb.dart' show showStaggerPanel;
 import 'ae_report_frb.dart';
 import 'backups_window.dart';
 import 'bring_composition_frb.dart';
@@ -1395,6 +1396,9 @@ List<MenuSection> lumitMenus(
             lockRow(app, ui),
             unlockAllRow(app, ui),
             MenuEntry.submenu(l10n.menuArrange, arrangeRows(app, ui)),
+            MenuEntry(
+                l10n.menuStaggerLayers,
+                comp == null ? null : () => showStaggerPanel(ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
