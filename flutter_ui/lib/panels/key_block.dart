@@ -81,12 +81,17 @@ class KeyStretch {
   /// key drag follows (`_snappedKeyTravel`).
   final double shift;
 
+  /// A stagger drag's travel for each row, by row id, in frames. Null on
+  /// every other gesture.
+  final Map<String, double>? fan;
+
   const KeyStretch({
     required this.keys,
     required this.anchor,
     required this.from,
     required this.to,
-  }) : shift = 0;
+  })  : shift = 0,
+        fan = null;
 
   /// A **move** of the whole selection [by] frames (6.24): no anchor, no
   /// scale, every held key the same distance along.
@@ -94,7 +99,16 @@ class KeyStretch {
       : anchor = 0,
         from = 0,
         to = 0,
-        shift = by;
+        shift = by,
+        fan = null;
+
+  /// A stagger drag: every held key on a row moves by that row's share.
+  const KeyStretch.fan({required this.keys, required Map<String, double> byRow})
+      : anchor = 0,
+        from = 0,
+        to = 0,
+        shift = 0,
+        fan = byRow;
 
   KeyStretch movedTo(double to) =>
       KeyStretch(keys: keys, anchor: anchor, from: from, to: to);
@@ -118,7 +132,9 @@ class KeyStretch {
   /// with the magnet on — the block is a gesture on keys, not a new kind of
   /// thing, and a stretch that left every key on a fraction of a frame while a
   /// drag of one landed on a whole one would be two rules for one act.
-  double frameOf(double frame, {required bool whole}) {
+  double frameOf(double frame, {required bool whole, String? row}) {
+    final fan = this.fan;
+    if (fan != null) return frame + (fan[row] ?? 0);
     // A move needs no rounding of its own: [shift] is the travel of the key in
     // hand, which the magnet has already taken to a whole frame, so a key that
     // started on one lands on one. Rounding again would be the only thing that

@@ -5157,6 +5157,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       rows: rows,
                       barNames: _barNames,
                       quantiseSound: _quantiseSound,
+                      staggerOrdered: <T>(stack, layerOf) => inStaggerOrder(
+                          stack, ui.workspace.staggerOrder,
+                          clicked: ui.selectionInClickOrder,
+                          layerOf: layerOf),
                       selection: _rowSelection,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,

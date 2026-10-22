@@ -64,6 +64,22 @@ double staggerShare({
   return reach <= 0 ? 0 : delta * rank / reach;
 }
 
+/// Each row's travel when a stagger drag on keys moves [by] frames: [units]
+/// are the rows that move together, in order, and [heldRow] is the row in
+/// hand, which follows the pointer. Whole frames, as the stagger keys hold
+/// Ctrl and Ctrl lets a drag land between frames.
+Map<String, double> staggerRows(
+    List<List<String>> units, String? heldRow, double by) {
+  final held = units.indexWhere((unit) => unit.contains(heldRow));
+  return {
+    for (final (rank, unit) in units.indexed)
+      for (final row in unit)
+        row: staggerShare(
+                rank: rank, held: held, count: units.length, delta: by)
+            .roundToDouble(),
+  };
+}
+
 /// The frames between two neighbours in a stagger drag, to one place where
 /// the spacing does not come out whole.
 String staggerGap({required int held, required int count, required num delta}) {
