@@ -266,6 +266,7 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
         "exr" => ExportFormat::Images(ImageFormat::Exr),
         "m4a" => ExportFormat::Audio(AudioFormat::M4a),
         "wav" => ExportFormat::Audio(AudioFormat::Wav),
+        "gif" => ExportFormat::Gif,
         other => return Err(format!("export: unknown format '{other}'")),
     })
 }
@@ -314,6 +315,7 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
         ExportFormat::Images(ImageFormat::Exr) => "exr",
         ExportFormat::Audio(AudioFormat::M4a) => "m4a",
         ExportFormat::Audio(AudioFormat::Wav) => "wav",
+        ExportFormat::Gif => "gif",
     }
 }
 
@@ -331,6 +333,8 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
         video: caps.video,
         audio: caps.audio,
         alpha: caps.alpha,
+        alpha_mode: caps.alpha_mode,
+        gif: caps.gif,
         depths: caps
             .depths
             .iter()
@@ -526,6 +530,15 @@ pub(crate) fn to_export_spec(
         } else {
             WhenDone::Nothing
         },
+        gif: lumit_media::encode::GifOptions {
+            dither: match spec.gif_dither {
+                1 => lumit_media::encode::GifDither::Pattern,
+                2 => lumit_media::encode::GifDither::None,
+                _ => lumit_media::encode::GifDither::Diffusion,
+            },
+            palette_per_frame: spec.gif_palette_per_frame,
+            plays: (spec.gif_plays > 0).then_some(spec.gif_plays),
+        },
     })
 }
 
@@ -617,6 +630,13 @@ pub(crate) fn from_export_spec(
         // *When done* is what this export does, not what the preset is for.
         make_a_noise: false,
         open_folder: false,
+        gif_dither: match spec.gif.dither {
+            lumit_media::encode::GifDither::Diffusion => 0,
+            lumit_media::encode::GifDither::Pattern => 1,
+            lumit_media::encode::GifDither::None => 2,
+        },
+        gif_palette_per_frame: spec.gif.palette_per_frame,
+        gif_plays: spec.gif.plays.unwrap_or(0),
     })
 }
 

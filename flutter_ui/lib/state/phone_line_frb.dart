@@ -341,6 +341,9 @@ class PhoneLine extends ChangeNotifier {
           useProxies: stored.useProxies,
           makeANoise: false,
           openFolder: false,
+          gifDither: stored.gifDither,
+          gifPalettePerFrame: stored.gifPalettePerFrame,
+          gifPlays: stored.gifPlays,
         );
     var (width, height) = (stored.width, stored.height);
     if (width <= 0 || height <= 0) {

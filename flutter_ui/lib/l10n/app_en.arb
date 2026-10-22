@@ -2123,6 +2123,50 @@
   "@formatProRes4444Xq": {
     "description": "Export format that can carry transparency, at a higher data rate than ProRes 4444. ProRes 4444 XQ and .mov are technical names and stay as they are."
   },
+  "formatGif": "GIF (.gif)",
+  "@formatGif": {
+    "description": "Export format: an animated GIF that loops. It can carry transparency. GIF and .gif are technical names and stay as they are."
+  },
+  "formatGifPicker": "GIF image",
+  "@formatGifPicker": {
+    "description": "The file type shown in the system Save dialogue for a .gif file. GIF stays as it is."
+  },
+  "exportGifDither": "Dither",
+  "@exportGifDither": {
+    "description": "Export dialog, Picture section: how a GIF spreads the picture over its 256 colours."
+  },
+  "exportGifDitherDiffusion": "Diffusion",
+  "@exportGifDitherDiffusion": {
+    "description": "GIF dither choice: error diffusion, the smoothest gradients. The word Photoshop uses for it."
+  },
+  "exportGifDitherPattern": "Pattern",
+  "@exportGifDitherPattern": {
+    "description": "GIF dither choice: an ordered pattern that stays still between frames and makes a smaller file. The word Photoshop uses for it."
+  },
+  "exportGifDitherNone": "None",
+  "@exportGifDitherNone": {
+    "description": "GIF dither choice: no dithering, each pixel takes the nearest colour."
+  },
+  "exportGifPalette": "Palette",
+  "@exportGifPalette": {
+    "description": "Export dialog, Picture section: whether a GIF has one set of 256 colours for the whole file or one for each frame."
+  },
+  "exportGifPaletteShared": "Shared",
+  "@exportGifPaletteShared": {
+    "description": "GIF palette choice: one set of colours for every frame."
+  },
+  "exportGifPalettePerFrame": "Per frame",
+  "@exportGifPalettePerFrame": {
+    "description": "GIF palette choice: each frame gets its own set of colours."
+  },
+  "exportGifPlays": "Plays",
+  "@exportGifPlays": {
+    "description": "Export dialog, Picture section: how many times a GIF plays before it stops."
+  },
+  "exportGifForever": "Forever",
+  "@exportGifForever": {
+    "description": "Tick beside Plays: the GIF loops for ever."
+  },
   "formatMovPicker": "QuickTime movie",
   "@formatMovPicker": {
     "description": "The file type shown in the system Save dialogue for a .mov file. QuickTime stays as it is."

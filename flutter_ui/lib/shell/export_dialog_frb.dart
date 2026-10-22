@@ -254,6 +254,8 @@ List<_Format> get _formats => [
           l10n.formatMovPicker, ExportOutputType.video),
       _Format('prores_4444xq', l10n.formatProRes4444Xq, 'mov',
           l10n.formatMovPicker, ExportOutputType.video),
+      _Format('gif', l10n.formatGif, 'gif', l10n.formatGifPicker,
+          ExportOutputType.video),
       _Format('png', l10n.formatPngSequence, 'png', l10n.formatPngPicker,
           ExportOutputType.imageSequence),
       _Format('tiff', l10n.formatTiffSequence, 'tiff', l10n.formatTiffPicker,
@@ -483,6 +485,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _depth = 8;
   bool _alphaChannel = false;
   bool _straightAlpha = false;
+
+  /// A GIF's own choices: the dither (0 diffusion, 1 pattern, 2 none), a
+  /// palette for each frame, and how many times it plays, 0 for forever.
+  int _gifDither = 0;
+  bool _gifPalettePerFrame = false;
+  int _gifPlays = 0;
 
   /// Deliver from the proxies rather than the originals, and deliver the guide
   /// layers too. Both are off by default whatever the project is set to: a
@@ -803,6 +811,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       honourSolo: _honourSolo,
       makeANoise: _makeANoise,
       openFolder: _openFolder,
+      gifDither: _gifDither,
+      gifPalettePerFrame: _gifPalettePerFrame,
+      gifPlays: _gifPlays,
     );
   }
 
@@ -1589,7 +1600,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             t,
             l10n.exportAlpha,
             _why(
-              !_caps.alpha
+              !_caps.alpha || !_caps.alphaMode
                   ? l10n.tipExportFormatLimit
                   : _alphaChannel
                       ? null
@@ -1597,12 +1608,13 @@ class _ExportDialogState extends State<_ExportDialog> {
               dialogDropdown<bool>(
                 t,
                 id: 'export-alpha',
-                value: _straightAlpha,
+                // A GIF always writes straight, so it says so.
+                value: _caps.alpha && !_caps.alphaMode || _straightAlpha,
                 options: const [false, true],
                 label: (straight) => straight
                     ? l10n.exportAlphaStraight
                     : l10n.exportAlphaPremultiplied,
-                onChanged: _caps.alpha && _alphaChannel
+                onChanged: _caps.alpha && _caps.alphaMode && _alphaChannel
                     ? (s) => _edit(() => _straightAlpha = s)
                     : null,
               ),
@@ -1661,6 +1673,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             dimmed: dim,
           ),
         ),
+        ..._gifRows(t, dim),
         _row(
           t,
           l10n.exportResize,
@@ -2201,6 +2214,91 @@ class _ExportDialogState extends State<_ExportDialog> {
       ? control
       : LumitTooltip(message: reason, child: control);
 
+  /// Dither, palette and plays, live only for a GIF.
+  List<Widget> _gifRows(LumitTheme t, bool dim) {
+    final why = _caps.gif ? null : l10n.tipExportFormatLimit;
+    final forever = _gifPlays == 0;
+    return [
+      _columns(
+        _row(
+          t,
+          l10n.exportGifDither,
+          _why(
+            why,
+            dialogDropdown<int>(
+              t,
+              id: 'export-gif-dither',
+              value: _gifDither,
+              options: const [0, 1, 2],
+              label: (d) => switch (d) {
+                1 => l10n.exportGifDitherPattern,
+                2 => l10n.exportGifDitherNone,
+                _ => l10n.exportGifDitherDiffusion,
+              },
+              onChanged: _caps.gif ? (d) => _edit(() => _gifDither = d) : null,
+            ),
+          ),
+          dimmed: dim,
+        ),
+        _row(
+          t,
+          l10n.exportGifPalette,
+          _why(
+            why,
+            dialogDropdown<bool>(
+              t,
+              id: 'export-gif-palette',
+              value: _gifPalettePerFrame,
+              options: const [false, true],
+              label: (perFrame) => perFrame
+                  ? l10n.exportGifPalettePerFrame
+                  : l10n.exportGifPaletteShared,
+              onChanged: _caps.gif
+                  ? (p) => _edit(() => _gifPalettePerFrame = p)
+                  : null,
+            ),
+          ),
+          labelColumn: exportLabelColumnPaired,
+          dimmed: dim,
+        ),
+      ),
+      _row(
+        t,
+        l10n.exportGifPlays,
+        Row(children: [
+          _why(
+            why,
+            _tick(
+              t,
+              'export-gif-forever',
+              l10n.exportGifForever,
+              forever,
+              _caps.gif ? (on) => _edit(() => _gifPlays = on ? 0 : 1) : null,
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: exportSizeWell,
+            height: dialogControlHeight,
+            child: forever || !_caps.gif
+                ? _well(t, forever ? '—' : '$_gifPlays',
+                    key: const ValueKey('export-gif-plays'),
+                    tone: t.textDisabled)
+                : DragValueField(
+                    key: const ValueKey('export-gif-plays'),
+                    value: _gifPlays,
+                    min: 1,
+                    max: 1000,
+                    fill: t.surface0,
+                    onChanged: (v) => _edit(() => _gifPlays = v.toInt()),
+                  ),
+          ),
+        ]),
+        dimmed: dim,
+      ),
+    ];
+  }
+
   /// The colour depth, offered only where the format carries more than one.
   Widget _depthDropdown(LumitTheme t, String id) => _why(
         _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
@@ -2528,6 +2626,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       _depth = stored.depth;
       _alphaChannel = stored.alphaChannel;
       _straightAlpha = stored.straightAlpha;
+      _gifDither = stored.gifDither;
+      _gifPalettePerFrame = stored.gifPalettePerFrame;
+      _gifPlays = stored.gifPlays;
       _cropTop = stored.cropTop;
       _cropLeft = stored.cropLeft;
       _cropBottom = stored.cropBottom;

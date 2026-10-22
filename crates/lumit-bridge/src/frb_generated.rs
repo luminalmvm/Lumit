@@ -24596,6 +24596,9 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
         let mut var_useProxies = <bool>::sse_decode(deserializer);
         let mut var_makeANoise = <bool>::sse_decode(deserializer);
         let mut var_openFolder = <bool>::sse_decode(deserializer);
+        let mut var_gifDither = <u32>::sse_decode(deserializer);
+        let mut var_gifPalettePerFrame = <bool>::sse_decode(deserializer);
+        let mut var_gifPlays = <u32>::sse_decode(deserializer);
         return crate::api::export::BridgeExportSpec {
             preset: var_preset,
             codec: var_codec,
@@ -24634,6 +24637,9 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
             use_proxies: var_useProxies,
             make_a_noise: var_makeANoise,
             open_folder: var_openFolder,
+            gif_dither: var_gifDither,
+            gif_palette_per_frame: var_gifPalettePerFrame,
+            gif_plays: var_gifPlays,
         };
     }
 }
@@ -25093,6 +25099,8 @@ impl SseDecode for crate::api::export::BridgeFormatCaps {
         let mut var_video = <bool>::sse_decode(deserializer);
         let mut var_audio = <bool>::sse_decode(deserializer);
         let mut var_alpha = <bool>::sse_decode(deserializer);
+        let mut var_alphaMode = <bool>::sse_decode(deserializer);
+        let mut var_gif = <bool>::sse_decode(deserializer);
         let mut var_depths = <Vec<u32>>::sse_decode(deserializer);
         let mut var_bitRate = <bool>::sse_decode(deserializer);
         let mut var_audioBitRate = <bool>::sse_decode(deserializer);
@@ -25103,6 +25111,8 @@ impl SseDecode for crate::api::export::BridgeFormatCaps {
             video: var_video,
             audio: var_audio,
             alpha: var_alpha,
+            alpha_mode: var_alphaMode,
+            gif: var_gif,
             depths: var_depths,
             bit_rate: var_bitRate,
             audio_bit_rate: var_audioBitRate,
@@ -34731,6 +34741,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportSpec {
             self.use_proxies.into_into_dart().into_dart(),
             self.make_a_noise.into_into_dart().into_dart(),
             self.open_folder.into_into_dart().into_dart(),
+            self.gif_dither.into_into_dart().into_dart(),
+            self.gif_palette_per_frame.into_into_dart().into_dart(),
+            self.gif_plays.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -35338,6 +35351,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeFormatCaps {
             self.video.into_into_dart().into_dart(),
             self.audio.into_into_dart().into_dart(),
             self.alpha.into_into_dart().into_dart(),
+            self.alpha_mode.into_into_dart().into_dart(),
+            self.gif.into_into_dart().into_dart(),
             self.depths.into_into_dart().into_dart(),
             self.bit_rate.into_into_dart().into_dart(),
             self.audio_bit_rate.into_into_dart().into_dart(),
@@ -41939,6 +41954,9 @@ impl SseEncode for crate::api::export::BridgeExportSpec {
         <bool>::sse_encode(self.use_proxies, serializer);
         <bool>::sse_encode(self.make_a_noise, serializer);
         <bool>::sse_encode(self.open_folder, serializer);
+        <u32>::sse_encode(self.gif_dither, serializer);
+        <bool>::sse_encode(self.gif_palette_per_frame, serializer);
+        <u32>::sse_encode(self.gif_plays, serializer);
     }
 }
 
@@ -42314,6 +42332,8 @@ impl SseEncode for crate::api::export::BridgeFormatCaps {
         <bool>::sse_encode(self.video, serializer);
         <bool>::sse_encode(self.audio, serializer);
         <bool>::sse_encode(self.alpha, serializer);
+        <bool>::sse_encode(self.alpha_mode, serializer);
+        <bool>::sse_encode(self.gif, serializer);
         <Vec<u32>>::sse_encode(self.depths, serializer);
         <bool>::sse_encode(self.bit_rate, serializer);
         <bool>::sse_encode(self.audio_bit_rate, serializer);
