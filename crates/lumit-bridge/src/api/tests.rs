@@ -3361,6 +3361,34 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
         1,
         "no key planted for a path nobody moved"
     );
+
+    // Nor the shape showing between two keys, which is what the Viewer sends
+    // for an item a point drag didn't touch.
+    let mut moved = shape.get_shape_contents().expect("contents");
+    moved[0].vertices[0].x = -4.0;
+    shape
+        .set_shape_contents(moved, Some(BridgeRational { num: 2, den: 1 }))
+        .expect("a second key");
+    let frame = 12;
+    let showing = comp
+        .animated_mask_paths_at(frame)
+        .expect("paths")
+        .into_iter()
+        .find(|p| p.mask == id)
+        .expect("the shape showing");
+    let mut contents = shape.get_shape_contents().expect("contents");
+    assert_ne!(contents[0].vertices, showing.vertices, "between the keys");
+    contents[0].vertices = showing.vertices;
+    shape
+        .set_shape_contents(contents, Some(comp.time_of_frame(frame).expect("time")))
+        .expect("set at the playhead");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0]
+            .path_keys
+            .len(),
+        2,
+        "no key planted for the shape already showing"
+    );
 }
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
