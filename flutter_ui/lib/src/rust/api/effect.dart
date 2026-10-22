@@ -14,8 +14,8 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `import_ffx_into`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write_ffx_as_lumfx`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -196,6 +196,14 @@ void editSavedGroup(
 /// Not sync: it reads a file, and converts one that is After Effects' own.
 Future<String> readEffectPreset({required String path}) =>
     BridgeLib.instance.api.crateApiEffectReadEffectPreset(path: path);
+
+/// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
+/// into a `.lumfx` in the preset library, where the Effects & presets panel
+/// lists it. A preset already in the library is never written over.
+///
+/// Not sync: a folder of presets can be a few hundred files.
+Future<BridgeFfxImport> importFfxPresets({required String folder}) =>
+    BridgeLib.instance.api.crateApiEffectImportFfxPresets(folder: folder);
 
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
@@ -1077,6 +1085,32 @@ enum BridgeExpressionLanguage {
   /// JavaScript, as After Effects expressions are written.
   javaScript,
   ;
+}
+
+/// What an import of After Effects presets did.
+class BridgeFfxImport {
+  /// Presets written into the library.
+  final int imported;
+
+  /// Presets left out: unreadable, holding no effect, or named like one
+  /// already in the library.
+  final int skipped;
+
+  const BridgeFfxImport({
+    required this.imported,
+    required this.skipped,
+  });
+
+  @override
+  int get hashCode => imported.hashCode ^ skipped.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFfxImport &&
+          runtimeType == other.runtimeType &&
+          imported == other.imported &&
+          skipped == other.skipped;
 }
 
 /// A file parameter: the paths it references, and the index that selects which

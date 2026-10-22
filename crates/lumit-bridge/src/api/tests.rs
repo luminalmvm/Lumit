@@ -5636,6 +5636,29 @@ fn a_preset_file_reads_as_text_whichever_kind_it_is() {
     assert!(read_effect_preset(at("gone.lumfx")).is_err());
 }
 
+/// Importing a folder of After Effects presets finds them in the folders
+/// inside it, and a preset with no effect in it is left out rather than
+/// written as an empty one.
+#[test]
+fn an_ffx_import_leaves_out_presets_with_no_effects() {
+    let from = tempfile::tempdir().expect("tempdir");
+    let library = tempfile::tempdir().expect("tempdir");
+    let inside = from.path().join("Behaviours");
+    std::fs::create_dir(&inside).expect("mkdir");
+    // The smallest After Effects preset there is: the container, and a
+    // description with nothing saved in it.
+    std::fs::write(
+        inside.join("Shake.ffx"),
+        b"RIFX\0\0\0\x10FaFXLIST\0\0\0\x04besc",
+    )
+    .expect("write");
+    std::fs::write(from.path().join("notes.txt"), "not a preset").expect("write");
+
+    let done = crate::api::effect::import_ffx_into(from.path(), library.path());
+    assert_eq!((done.imported, done.skipped), (0, 1));
+    assert_eq!(std::fs::read_dir(library.path()).expect("read").count(), 0);
+}
+
 // ---------------------------------------------------------------------------
 // The keymap (docs/07 §15)
 // ---------------------------------------------------------------------------
