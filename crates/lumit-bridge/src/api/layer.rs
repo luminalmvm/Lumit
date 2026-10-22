@@ -604,6 +604,10 @@ impl BridgeShapeItem {
     /// would appear frozen under the pointer. `at` is where the playhead is;
     /// without it — an edit that is not a shape edit, such as an opacity drag —
     /// the keys are carried through untouched.
+    ///
+    /// An item whose path came back as it was is not a shape edit either, even
+    /// with `at` given. The list is sent whole, so the items nobody touched
+    /// arrive holding their still path, and keying that would snap them to it.
     #[frb(ignore)]
     pub(crate) fn write_item_over(
         &self,
@@ -616,7 +620,8 @@ impl BridgeShapeItem {
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };
-        if let (false, Some(at)) = (written.path_keys.is_empty(), at) {
+        let untouched = written.path == previous.path;
+        if let (false, Some(at)) = (written.path_keys.is_empty() || untouched, at) {
             let at = at
                 .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?;

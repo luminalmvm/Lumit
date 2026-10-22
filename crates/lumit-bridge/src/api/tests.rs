@@ -3328,7 +3328,8 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
 }
 
 /// An edit that is not a shape edit carries the keys through untouched — an
-/// opacity drag must not throw a morph away.
+/// opacity drag must not throw a morph away. Nor key the still path when the
+/// playhead comes with it, which is what the drag's preview sends.
 #[test]
 fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     let (project, layer) = project_with_layer();
@@ -3343,11 +3344,23 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].opacity = 40.0;
-    shape.set_shape_contents(contents, None).expect("set");
+    shape
+        .set_shape_contents(contents.clone(), None)
+        .expect("set");
 
     let after = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(after.opacity, 40.0);
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
+
+    shape
+        .set_shape_contents(contents, Some(BridgeRational { num: 1, den: 1 }))
+        .expect("set at the playhead");
+    let after = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        after.path_keys.len(),
+        1,
+        "no key planted for a path nobody moved"
+    );
 }
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
