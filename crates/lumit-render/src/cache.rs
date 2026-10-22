@@ -71,6 +71,27 @@ impl<'a> Stamper<'a> {
     }
 }
 
+impl Stamper<'_> {
+    /// The file's stamp when it has been saved over since it was brought in,
+    /// so the frames made from the old one, on disk too, are never shown for
+    /// it. Nothing for a file still as it was, so every name from before this
+    /// still stands.
+    fn saved_over(&self, media: &lumit_core::model::MediaRef) -> String {
+        let secs = |t: std::time::SystemTime| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+        };
+        let fingerprint = media.fingerprint.as_ref();
+        let stamp = lumit_media::MediaSource::file(&media.absolute_path)
+            .stamped()
+            .stamp
+            .filter(|(size, at)| {
+                fingerprint.is_none_or(|fp| *size != fp.size || secs(*at) != fp.mtime_secs)
+            });
+        stamp.map(|s| format!("#s{s:?}")).unwrap_or_default()
+    }
+}
+
 impl lumit_eval::SourceStamper for Stamper<'_> {
     fn source_fps(&self, item: Uuid) -> Option<f64> {
         self.probes.probe(item).video().map(|(fps, ..)| fps)
@@ -214,14 +235,10 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         } else {
             settled.target_width(width)
         };
-        // The file as it is now, so one saved over in place names new frames
-        // and the old ones, on disk too, are never served for it.
-        let on_disk = lumit_media::MediaSource::file(&media.absolute_path)
-            .stamped()
-            .stamp;
+        let on_disk = self.saved_over(media);
         Some((
             format!(
-                "{}#w{}#c{space}{source_layer}{read_as}#s{on_disk:?}",
+                "{}#w{}#c{space}{source_layer}{read_as}{on_disk}",
                 media.absolute_path,
                 target.unwrap_or(0)
             ),
