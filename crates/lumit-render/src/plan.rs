@@ -220,7 +220,9 @@ fn media_source(
         interpret: footage
             .map(crate::source::interpretation)
             .unwrap_or_default(),
+        stamp: None,
     }
+    .stamped()
 }
 
 /// The neighbour frames a Precomp or adjustment layer's stack reads at layer

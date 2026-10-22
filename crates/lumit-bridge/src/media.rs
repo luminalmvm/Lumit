@@ -39,9 +39,17 @@ pub(crate) struct MediaCache {
 }
 
 /// What a cached thumbnail is of: the item, the size asked for, which frame
-/// of it, and how the file was being read, render pass included.
+/// of it, how the file was being read, render pass included, and the file's
+/// stamp, so one saved over in place is decoded again.
 #[cfg(feature = "media")]
-type ThumbKey = (Uuid, u32, i64, lumit_media::Interpretation, Option<String>);
+type ThumbKey = (
+    Uuid,
+    u32,
+    i64,
+    lumit_media::Interpretation,
+    Option<String>,
+    Option<(u64, std::time::SystemTime)>,
+);
 
 /// A decoded thumbnail: width, height, and tightly packed RGBA8.
 #[cfg(feature = "media")]
@@ -84,7 +92,7 @@ impl MediaCache {
         self.thumbs.insert(key, (w, h, rgba));
         let bytes: usize = self.thumbs.values().map(|(_, _, rgba)| rgba.len()).sum();
         if bytes > THUMB_BUDGET_BYTES {
-            self.thumbs.retain(|(_, _, frame, _, _), _| *frame == 0);
+            self.thumbs.retain(|(_, _, frame, _, _, _), _| *frame == 0);
         }
     }
 }
@@ -195,6 +203,7 @@ fn thumb_key(id: Uuid, src: &lumit_media::MediaSource, max_edge: u32, frame: i64
         frame.max(0),
         src.interpret,
         pass,
+        src.clone().stamped().stamp,
     )
 }
 

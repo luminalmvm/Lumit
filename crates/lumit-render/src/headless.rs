@@ -3926,7 +3926,9 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
         source_layer: f.source_layer,
         render_pass: f.interpretation.render_pass.clone(),
         interpret: crate::source::interpretation(f),
+        stamp: None,
     }
+    .stamped()
 }
 
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
@@ -4192,7 +4194,8 @@ impl SourceProbes for ProbeView<'_> {
                 _ => lumit_media::Interpretation::default(),
             },
             ..Default::default()
-        };
+        }
+        .stamped();
         match probes.proxies.get(&item) {
             Some((cached, probe)) if *cached == src => seen(Some(probe)),
             _ => {

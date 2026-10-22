@@ -252,6 +252,7 @@ pub fn analysed(
         source_layer: f.source_layer,
         render_pass: f.interpretation.render_pass.clone(),
         interpret,
+        stamp: None,
     };
     (source, fingerprint)
 }

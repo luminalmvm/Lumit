@@ -21,8 +21,10 @@
 //! shot, and silently bridging the hole would show the wrong picture at the
 //! wrong time without saying so.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::MediaError;
 
@@ -275,9 +277,21 @@ pub struct MediaSource {
     /// index and the decoder all answer in interpreted frames, so a source
     /// with fields separated has twice the frames at twice the rate.
     pub interpret: crate::Interpretation,
+    /// The file's length and modification time when this was made, or `None`
+    /// when nobody asked ([`Self::stamped`]). A file saved over in place is
+    /// then a different source, so nothing opened on or read from the old one
+    /// is taken for the new one.
+    pub stamp: Option<(u64, SystemTime)>,
 }
 
 impl MediaSource {
+    /// This source with the file's length and modification time.
+    #[must_use]
+    pub fn stamped(mut self) -> Self {
+        self.stamp = file_stamp(&self.path);
+        self
+    }
+
     /// A plain single file.
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
@@ -307,11 +321,70 @@ impl MediaSource {
         Some((detect(&self.path)?, fps))
     }
 
+    /// The length and modification time of the numbered file `frame` of a run
+    /// is read from, so saving over one frame of it is noticed. `None` for a
+    /// single file, whose stamp is [`Self::stamp`].
+    #[must_use]
+    pub fn frame_stamp(&self, frame: usize) -> Option<(u64, SystemTime)> {
+        self.sequence_fps?;
+        file_stamp(&run_of(&self.path)?.file_at(frame))
+    }
+
     /// The path to stat and fingerprint: always a real file, never a pattern.
     #[must_use]
     pub fn on_disk(&self) -> &Path {
         &self.path
     }
+}
+
+/// What `read` says about `path`, worked out again at most twice a second.
+///
+/// A `stat` can cost a tenth of a millisecond here, and every footage layer
+/// asks a few times a frame. Half a second late is soon enough to notice a
+/// file saved over from another program.
+fn briefly_held<T: Clone>(
+    held: &Mutex<HashMap<PathBuf, (Instant, T)>>,
+    path: &Path,
+    read: impl FnOnce() -> T,
+) -> T {
+    let now = Instant::now();
+    if let Ok(held) = held.lock() {
+        if let Some((at, answer)) = held.get(path) {
+            if now.duration_since(*at) < Duration::from_millis(500) {
+                return answer.clone();
+            }
+        }
+    }
+    // Nothing held while the disk is asked.
+    let answer = read();
+    if let Ok(mut held) = held.lock() {
+        if held.len() >= 4096 {
+            held.clear();
+        }
+        held.insert(path.to_path_buf(), (now, answer.clone()));
+    }
+    answer
+}
+
+/// A file's length and modification time.
+pub(crate) fn file_stamp(path: &Path) -> Option<(u64, SystemTime)> {
+    type Held = Mutex<HashMap<PathBuf, (Instant, Option<(u64, SystemTime)>)>>;
+    static HELD: LazyLock<Held> = LazyLock::new(Held::default);
+    briefly_held(&HELD, path, || {
+        std::fs::metadata(path).ok().map(|meta| {
+            (
+                meta.len(),
+                meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            )
+        })
+    })
+}
+
+/// The run `path` belongs to. Finding it reads the whole folder.
+fn run_of(path: &Path) -> Option<Run> {
+    type Held = Mutex<HashMap<PathBuf, (Instant, Option<Run>)>>;
+    static HELD: LazyLock<Held> = LazyLock::new(Held::default);
+    briefly_held(&HELD, path, || detect(path))
 }
 
 impl From<&Path> for MediaSource {
