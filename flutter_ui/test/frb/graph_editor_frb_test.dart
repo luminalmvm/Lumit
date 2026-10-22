@@ -186,6 +186,10 @@ void main() {
       await gesture.up();
       await tester.pump();
       expect(rowValueDrag.value, isNull);
+      expect(opacityKeys(p.layer).length, 3);
+      p.state.project!.undo();
+      expect(opacityKeys(p.layer).length, 2,
+          reason: 'the planted key and the drag are one undo step');
     });
 
     testWidgets('dragging a key moves it in time and value as one undo step',
