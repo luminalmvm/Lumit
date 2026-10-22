@@ -850,22 +850,22 @@ class LumitMenuBarFrb extends StatelessWidget {
         footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
-          // Effects first — the overwhelmingly common reason to open this.
-          for (final effect in listEffects())
-            FxConsoleEntry(
-              label: engineLabel(effect.label),
-              kind: FxConsoleKind.effect,
-              group: engineLabel(effect.categoryLabel),
-              run: () => applyEffect(effect.name),
-            ),
-          // The saved presets beside them, under the Presets kicker the
-          // board's category strip draws.
+          // The saved presets lead, so their kicker sits first in the strip
+          // however many plugin categories follow.
           for (final preset in listPresets())
             FxConsoleEntry(
               label: preset.name,
               kind: FxConsoleKind.effect,
               group: l10n.fxConsolePresets,
               run: () => applyPreset(preset),
+            ),
+          // Then the effects, the overwhelmingly common reason to open this.
+          for (final effect in listEffects())
+            FxConsoleEntry(
+              label: engineLabel(effect.label),
+              kind: FxConsoleKind.effect,
+              group: engineLabel(effect.categoryLabel),
+              run: () => applyEffect(effect.name),
             ),
           // The node graphs, which apply as effects rather than front.
           for (final (each, name) in graphs)
