@@ -489,11 +489,6 @@ impl Pool {
     /// one file share its blocks. Two that play different streams of it do
     /// not: each is a sound of its own. Opens nothing: a file that is missing
     /// or silent is found out when a block of it is first wanted.
-    ///
-    /// ponytail: keyed by path, so a file replaced on disk under a running
-    /// Lumit keeps the blocks already decoded from the old one until they are
-    /// dropped. Key by the file's fingerprint if overwriting a clip in place
-    /// has to be heard at once.
     #[must_use]
     pub fn source(self: &Arc<Self>, sound: &SoundSource, rate: u32) -> Arc<Source> {
         let mut state = self.state.lock();

@@ -332,7 +332,7 @@ impl MediaSource {
 /// A `stat` can cost a tenth of a millisecond here, and every footage layer
 /// asks a few times a frame. Half a second late is soon enough to notice a
 /// file saved over from another program.
-fn file_stamp(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+pub(crate) fn file_stamp(path: &Path) -> Option<(u64, std::time::SystemTime)> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     use std::time::{Duration, Instant};

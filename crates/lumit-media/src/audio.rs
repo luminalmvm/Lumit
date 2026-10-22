@@ -95,14 +95,20 @@ pub struct SoundSource {
     pub path: PathBuf,
     /// Ascending, no stream twice, never empty.
     streams: Vec<u32>,
+    /// The file's length and modification time when this was made, so a file
+    /// saved over in place is a different sound and nothing decoded from the
+    /// old one is played for it.
+    stamp: Option<(u64, std::time::SystemTime)>,
 }
 
 impl SoundSource {
     /// The file's first audio stream, which is all a file with one has.
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
         Self {
-            path: path.into(),
+            stamp: crate::sequence::file_stamp(&path),
+            path,
             streams: vec![0],
         }
     }
@@ -117,8 +123,10 @@ impl SoundSource {
         if streams.is_empty() {
             streams.push(0);
         }
+        let path = path.into();
         Self {
-            path: path.into(),
+            stamp: crate::sequence::file_stamp(&path),
+            path,
             streams,
         }
     }
