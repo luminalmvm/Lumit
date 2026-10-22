@@ -28,6 +28,7 @@ import 'node_panel.dart';
 import 'project_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
+import 'stagger_panel_frb.dart';
 import 'extension_panel.dart';
 import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
@@ -46,6 +47,7 @@ const Set<Panel> _changing = {
   Panel.text,
   Panel.paragraph,
   Panel.expressions,
+  Panel.stagger,
 };
 
 Widget buildPanelBodyFrb(BuildContext context, PaneId pane) =>
@@ -97,6 +99,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.text => const TextPanelFrb(),
       Panel.paragraph => const ParagraphPanelFrb(),
       Panel.expressions => const ExpressionsPanelFrb(),
+      Panel.stagger => const StaggerPanelFrb(),
       Panel.debug => const DebugPanel(),
       Panel.extension => ExtensionPanel(slot: pane.instance),
     };

@@ -14,6 +14,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import 'key_block.dart';
+import 'stagger.dart';
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
@@ -79,6 +80,10 @@ class KeyLane extends StatefulWidget {
   /// has carried it (6.24). The area does the writing, because the keys are on
   /// rows this lane does not have.
   final ValueChanged<KeyStretch> onMoveKeys;
+
+  /// The selected keys' rows in the groups and order a stagger drag moves
+  /// them in, asked for when one starts.
+  final List<List<String>> Function()? staggerUnits;
   final VoidCallback onChanged;
 
   const KeyLane({
@@ -100,6 +105,7 @@ class KeyLane extends StatefulWidget {
     required this.onSelectKey,
     required this.onKeyMenu,
     required this.onMoveKeys,
+    this.staggerUnits,
     required this.onChanged,
   });
 
@@ -133,6 +139,10 @@ class _KeyLaneState extends State<KeyLane> {
   /// The keys this drag is carrying, captured at its start (6.24) — the whole
   /// lane selection, which is spread across rows this lane cannot see.
   Set<String> _held = const {};
+
+  /// The rows a stagger drag moves, grouped and in order, or null on a
+  /// plain move.
+  List<List<String>>? _units;
 
   /// Whether a modifier was down when the gesture began, so a release that
   /// turns out to have been a click toggles rather than replaces.
@@ -260,6 +270,8 @@ class _KeyLaneState extends State<KeyLane> {
       // Captured now so the set cannot change underneath the drag, exactly as
       // the block stretch captures its own.
       _held = {...widget.selectedKeys};
+      final units = staggerKeysHeld() ? widget.staggerUnits?.call() : null;
+      _units = units != null && units.length > 1 ? units : null;
     });
     final scrollable = Scrollable.maybeOf(context, axis: Axis.horizontal);
     if (scrollable != null) {
@@ -293,6 +305,7 @@ class _KeyLaneState extends State<KeyLane> {
     if (held != null && held.keys.contains('${widget.rowId}#$i')) {
       return held.frameOf(
         base,
+        row: widget.rowId,
         whole: widget.magnet &&
             !snapSuspended(
                 controlPressed: HardwareKeyboard.instance.isControlPressed),
@@ -353,8 +366,15 @@ class _KeyLaneState extends State<KeyLane> {
     final base =
         laneKeyFrame(widget.keys[i], widget.fps) + widget.barShift.toDouble();
     final by = _snappedFrame(i) - base;
-    widget.stretch.value =
-        by == 0 ? null : KeyStretch.shift(keys: _held, by: by);
+    final units = _units;
+    if (by == 0) {
+      widget.stretch.value = null;
+    } else if (units != null) {
+      widget.stretch.value = KeyStretch.fan(
+          keys: _held, byRow: staggerRows(units, widget.rowId, by));
+    } else {
+      widget.stretch.value = KeyStretch.shift(keys: _held, by: by);
+    }
   }
 
   /// Put the key back where the drag found it, leaving nothing behind — what

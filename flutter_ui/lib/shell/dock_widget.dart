@@ -77,6 +77,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.text => 220,
       Panel.paragraph => 220,
       Panel.expressions => 180,
+      // The two rows' labels and controls, and the two buttons.
+      Panel.stagger => 220,
       Panel.debug => 180,
       // A page lays itself out, and a timer or a sign-in form needs this much.
       Panel.extension => 240,

@@ -6736,6 +6736,10 @@
   "@menuStretch": {
     "description": "Layer context-menu item: opens a small dialogue asking for a new speed or a new duration for the layer."
   },
+  "menuStaggerLayers": "Stagger layers…",
+  "@menuStaggerLayers": {
+    "description": "Layer menu and layer context-menu item: opens the Stagger panel, which starts the selected layers one after another, a set number of frames apart."
+  },
   "menuText": "Text",
   "@menuText": {
     "description": "Menu item."
@@ -9488,6 +9492,34 @@
   "stretchAnchor": "The in point holds; the end of the layer moves.",
   "@stretchAnchor": {
     "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
+  },
+  "panelStagger": "Stagger",
+  "@panelStagger": {
+    "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
+  },
+  "staggerOffset": "Offset per layer",
+  "@staggerOffset": {
+    "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."
+  },
+  "staggerOrder": "Order",
+  "@staggerOrder": {
+    "description": "Stagger panel: label for which layer starts first. The choices are Top down, Bottom up, Order clicked and Random."
+  },
+  "staggerClicked": "Order clicked",
+  "@staggerClicked": {
+    "description": "Stagger panel: the order choice that starts the layers in the order they were clicked into the selection."
+  },
+  "staggerRandom": "Random",
+  "@staggerRandom": {
+    "description": "Stagger panel: the order choice that starts the selected layers in a shuffled order, a new one each time."
+  },
+  "staggerApply": "Stagger",
+  "@staggerApply": {
+    "description": "Stagger panel: the button that starts each selected layer the set number of frames after the one before it."
+  },
+  "staggerLineUp": "Line up",
+  "@staggerLineUp": {
+    "description": "Stagger panel: the button that moves every selected layer to start on the same frame, the earliest one among them."
   },
   "strokeStart": "Start",
   "@strokeStart": {
@@ -13425,6 +13457,15 @@
       },
       "frames": {
         "type": "int"
+      }
+    }
+  },
+  "timelineBarFanHint": "{frames} f apart",
+  "@timelineBarFanHint": {
+    "description": "Timeline lanes: the small readout pill beside the pointer while a stagger drag (Ctrl+Alt, or Ctrl+Shift on Linux) spreads a selection of layer bars apart, saying how many frames apart neighbouring layers now start. Very small mono type; the number may have one decimal place.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
       }
     }
   },

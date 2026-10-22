@@ -3,11 +3,14 @@
 //
 // Split out of timeline_panel_frb.dart.
 
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../l10n/strings.dart';
+import 'stagger.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
@@ -221,8 +224,16 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
           if (p.top < top) top = p.top;
           if (p.top + p.height > bottom) bottom = p.top + p.height;
         }
-        final first = frameOf(block.first);
-        final last = frameOf(block.last);
+        // A stagger moves each row its own way, so the box measures the
+        // keys where they are going.
+        final fanned = live?.fan == null
+            ? null
+            : [
+                for (final p in widget.places)
+                  live!.frameOf(p.frame, whole: _whole, row: p.rowId)
+              ];
+        final first = fanned?.reduce(min) ?? frameOf(block.first);
+        final last = fanned?.reduce(max) ?? frameOf(block.last);
         final left = widget.axis.xOf(first);
         final right = widget.axis.xOf(last);
         final boxTop = top + _blockBoxInset;
@@ -502,6 +513,10 @@ class KeyBlockMoveGrab extends StatefulWidget {
   /// The release: write every key where the move has carried it.
   final ValueChanged<KeyStretch> onMove;
 
+  /// The rows a stagger drag moves, grouped and in order, as the key lanes
+  /// ask for them.
+  final List<List<String>> Function()? staggerUnits;
+
   const KeyBlockMoveGrab({
     super.key,
     required this.places,
@@ -509,6 +524,7 @@ class KeyBlockMoveGrab extends StatefulWidget {
     required this.stretch,
     required this.magnet,
     required this.onMove,
+    this.staggerUnits,
   });
 
   @override
@@ -520,6 +536,11 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
   double _deltaPx = 0;
 
   final DragEscape _escape = DragEscape();
+
+  /// A stagger drag's rows, grouped and in order, and the row under the
+  /// hand. Null on a plain move.
+  List<List<String>>? _units;
+  String? _heldRow;
 
   @override
   void dispose() {
@@ -543,12 +564,14 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
     final back = block.first < 0 ? 0.0 : -block.first;
     final room = widget.axis.frames - block.last;
     by = by.clamp(back, room < 0 ? 0.0 : room).toDouble();
+    final keys = {for (final p in widget.places) '${p.rowId}#${p.index}'};
+    final units = _units;
     widget.stretch.value = by == 0
         ? null
-        : KeyStretch.shift(
-            keys: {for (final p in widget.places) '${p.rowId}#${p.index}'},
-            by: by,
-          );
+        : units != null
+            ? KeyStretch.fan(
+                keys: keys, byRow: staggerRows(units, _heldRow, by))
+            : KeyStretch.shift(keys: keys, by: by);
   }
 
   @override
@@ -582,8 +605,17 @@ class _KeyBlockMoveGrabState extends State<KeyBlockMoveGrab> {
               // From the down, as the handles are, so the block stays under
               // the hand.
               dragStartBehavior: DragStartBehavior.down,
-              onHorizontalDragStart: (_) {
+              onHorizontalDragStart: (d) {
                 _deltaPx = 0;
+                final units =
+                    staggerKeysHeld() ? widget.staggerUnits?.call() : null;
+                _units = units != null && units.length > 1 ? units : null;
+                // The row under the hand is the one that follows it.
+                final y = top + _blockBoxInset + d.localPosition.dy;
+                _heldRow = widget.places
+                    .where((p) => y >= p.top && y < p.top + p.height)
+                    .firstOrNull
+                    ?.rowId;
                 _escape.begin(() => widget.stretch.value = null);
               },
               onHorizontalDragUpdate: (d) => _moveBy(d.delta.dx, block),
