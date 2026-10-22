@@ -40,12 +40,18 @@ class ShapeItemRow extends StatelessWidget {
   /// The composition, for the live preview a drag shows.
   final CompositionReference comp;
 
+  /// The item's own twirl: whether its rows show, and what turns it.
+  final bool open;
+  final VoidCallback? onToggle;
+
   const ShapeItemRow({super.key, 
     required this.layer,
     required this.item,
     required this.valueColumn,
     required this.onChanged,
     required this.comp,
+    this.open = false,
+    this.onToggle,
   });
 
   static BridgeShapeItem _with(BridgeShapeItem i,
@@ -165,6 +171,8 @@ class ShapeItemRow extends StatelessWidget {
       name: item.name,
       keyPrefix: 'tl-shape',
       id: item.id.toString(),
+      open: open,
+      onToggle: onToggle,
       opacity: item.opacity,
       valueColumn: valueColumn,
       // Show the opacity the drag is passing through without writing it,

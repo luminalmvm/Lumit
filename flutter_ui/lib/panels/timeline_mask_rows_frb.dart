@@ -11,6 +11,8 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
@@ -630,6 +632,11 @@ class ItemOpacityRow extends StatefulWidget {
   /// Delete — a shape item's Add and Remove. Handed the menu's close.
   final List<Widget> Function(VoidCallback close)? menuRows;
 
+  /// A twirl before the icon, for an item with rows of its own under it — a
+  /// shape item. Null draws none.
+  final bool open;
+  final VoidCallback? onToggle;
+
   const ItemOpacityRow({super.key,
     required this.icon,
     required this.name,
@@ -644,6 +651,8 @@ class ItemOpacityRow extends StatefulWidget {
     required this.deleteLabel,
     this.extra,
     this.menuRows,
+    this.open = false,
+    this.onToggle,
   });
 
   @override
@@ -687,6 +696,26 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
       onSecondaryTapUp: (details) => _menu(context, details.globalPosition),
       child: Row(
         children: [
+          if (widget.onToggle case final toggle?) ...[
+            // The same twirl a heading carries, and as wide to aim at.
+            GestureDetector(
+              key: ValueKey<String>('${widget.keyPrefix}-twirl-${widget.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: toggle,
+              child: SizedBox(
+                width: iconSize + 6,
+                child: TwirlTurn(
+                  open: widget.open,
+                  child: glyph.LumitIcon(
+                    widget.open ? LumitIcons.collapse : LumitIcons.expand,
+                    size: iconSize,
+                    colour: widget.open ? t.textPrimary : t.textMuted,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
           lumitIcon(widget.icon, size: iconSize, color: t.textSecondary),
           const SizedBox(width: 4),
           // Named after the tool that drew it — and, where the kind supports
