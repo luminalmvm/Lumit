@@ -1908,49 +1908,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     ];
   }
 
-  /// [keys] with the row drag's value written into the key at its frame —
-  /// matched to the **nearest half frame**, never by float equality.
-  ///
-  /// `withKeyAt` merged by exact double frame, and a key's frame comes back
-  /// through rational-to-float maths: frame 50 at 60 fps reads 49.999…, which
-  /// is not 50.0, so the drag's key was *inserted beside* the document's
-  /// instead of replacing it. One extra key shifts every later index, and the
-  /// glyphs read position by index — the dragged key drew at the next key's
-  /// place and everything after it sat one key off, until the release rebuilt
-  /// from the document and it all snapped back. Same length in, same length
-  /// out (or +1 when the playhead truly has no key), so the glyph indexes hold.
-  List<BridgeKeyframe> _keysWithRowDrag(
-      List<BridgeKeyframe> keys, RowValueDrag row) {
-    final out = <BridgeKeyframe>[];
-    var replaced = false;
-    for (final k in keys) {
-      if (!replaced && (keyFrame(k, widget.fps) - row.frame).abs() < 0.5) {
-        out.add(BridgeKeyframe(
-          time: k.time,
-          value: row.value,
-          interpIn: k.interpIn,
-          interpOut: k.interpOut,
-        ));
-        replaced = true;
-      } else {
-        out.add(k);
-      }
-    }
-    if (replaced) return out;
-    // The playhead genuinely sits between keys and the plant has not landed
-    // yet: show the key the release will write, in order.
-    final planted = keyframeAmong(
-        out,
-        timeOfSubframe(row.frame.toDouble(), widget.fpsNum, widget.fpsDen),
-        row.value);
-    final at = out.indexWhere((k) => keyFrame(k, widget.fps) > row.frame);
-    if (at < 0) {
-      out.add(planted);
-    } else {
-      out.insert(at, planted);
-    }
-    return out;
-  }
 
   /// The keys as every reader should see them — the drag in flight folded in,
   /// so the curve, the glyphs, the tangent endpoints and the lines between
@@ -2039,9 +1996,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final row = rowValueDrag.value;
     if (row != null && row.matches(channel)) {
       final keys = channel.keys;
-      if (keys.isNotEmpty) {
-        return _keysWithRowDrag(keys, row);
-      }
+      if (keys.isNotEmpty) return row.keys ?? keys;
       // Not keyed: one point carries the whole flat line to its new height, and
       // only for the drawing.
       if (painting) {

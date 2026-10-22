@@ -29,6 +29,8 @@
 // v0's granular add/remove/shift ops, where a key drag that moved time *and*
 // value cost two.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -47,11 +49,27 @@ import '../widgets/controls.dart';
 import 'fx_section.dart';
 import 'graph_maths.dart' show keyframeAmong;
 
+/// The zone value [editPickedKeys] sets: the picked keys' indices, and
+/// whether the number was typed.
+const _picked = #pickedKeys;
+
+/// Run [edit] as an edit of the [picked] keys on its row, when the playhead
+/// sits on one of them. A drag moves each of them by as much as the value
+/// moved, and a typed number sets each of them to it. Fewer than two picked,
+/// or the playhead anywhere else, is the ordinary edit.
+void editPickedKeys(Set<int> picked, bool typed, VoidCallback edit) =>
+    picked.length < 2
+        ? edit()
+        : runZoned(edit, zoneValues: {_picked: (keys: picked, typed: typed)});
+
 /// The scalar with `value` written at `frame`: the key already there is
 /// updated, or a new linear key is inserted in order. This is what typing or
 /// dragging an *animated* value in the outline means (docs/07 §4.3) — on a
 /// keyframe it edits that keyframe; between keyframes it plants one, exactly
 /// as After Effects does. A static scalar just becomes the new value.
+///
+/// Inside [editPickedKeys], with the playhead on a picked key, it edits the
+/// picked keys instead. Their times and their easing stay as they are.
 BridgeScalar scalarWithValueAt(
   BridgeScalar scalar,
   double value,
@@ -59,6 +77,26 @@ BridgeScalar scalarWithValueAt(
   int frame,
 ) {
   if (scalar is! BridgeScalar_Keyframed) return BridgeScalar.static_(value);
+  if (Zone.current[_picked] case (keys: Set<int> picked, typed: bool typed)) {
+    final keys = scalar.field0;
+    final here =
+        keys.indexWhere((k) => comp.frameAtTime(time: k.time) == frame);
+    if (picked.contains(here)) {
+      final by = value - keys[here].value;
+      return BridgeScalar.keyframed([
+        for (var i = 0; i < keys.length; i++)
+          if (picked.contains(i))
+            BridgeKeyframe(
+              time: keys[i].time,
+              value: typed ? value : keys[i].value + by,
+              interpIn: keys[i].interpIn,
+              interpOut: keys[i].interpOut,
+            )
+          else
+            keys[i],
+      ]);
+    }
+  }
   final next = <BridgeKeyframe>[];
   var replaced = false;
   for (final key in scalar.field0) {
@@ -178,8 +216,8 @@ class KeyedValueField extends StatefulWidget {
   /// drag-start uses it: the property is animated, the playhead is
   /// between keys, and the drag is about to edit *something* — so a key holding
   /// the value already there is planted, and nothing moves until the pointer
-  /// does.
-  final VoidCallback? onStart;
+  /// does. Returns whether it planted one.
+  final bool Function()? onStart;
 
   const KeyedValueField({
     super.key,
@@ -208,6 +246,13 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   /// it starts and the value written on release are one undo step.
   ProjectReference? _group;
 
+  /// Whether this drag planted the key it is editing. That makes it the
+  /// ordinary edit throughout, as the plant has shifted the picked keys along.
+  bool _planted = false;
+
+  void _ordinary(VoidCallback edit) =>
+      _planted ? runZoned(edit, zoneValues: {_picked: null}) : edit();
+
   void _closeGroup() {
     _group?.endUndoGroup();
     _group = null;
@@ -216,8 +261,9 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   void _commit(num value) {
     setState(() => _staged = null);
     try {
-      widget.onCommit(value.toDouble());
+      _ordinary(() => widget.onCommit(value.toDouble()));
     } finally {
+      _planted = false;
       _closeGroup();
     }
   }
@@ -247,16 +293,17 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
           setState(() => _staged = widget.value);
           _group = Provider.of<LumitState>(context, listen: false).project
             ?..beginUndoGroup();
-          widget.onStart?.call();
+          _planted = widget.onStart?.call() ?? false;
         },
         // A tick moves the number on screen, and shows it if the caller can.
         onChangeLive: (v) {
           setState(() => _staged = v.toDouble());
-          widget.onLive?.call(v.toDouble());
+          _ordinary(() => widget.onLive?.call(v.toDouble()));
         },
         onChangeEnd: _commit,
         onDragCancel: () {
           setState(() => _staged = null);
+          _planted = false;
           _closeGroup();
         },
       );

@@ -48,6 +48,9 @@ class RowValueDrag {
   final int frame;
   final double value;
 
+  /// The keys as the release will write them, when the property is keyed.
+  final List<BridgeKeyframe>? keys;
+
   const RowValueDrag({
     required this.layer,
     this.prop,
@@ -56,6 +59,7 @@ class RowValueDrag {
     this.retime = false,
     required this.frame,
     required this.value,
+    this.keys,
   });
 
   /// Whether [channel] is the curve this drag is editing.
