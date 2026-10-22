@@ -75,19 +75,35 @@ impl Stamper<'_> {
     /// The file's stamp when it has been saved over since it was brought in,
     /// so the frames made from the old one, on disk too, are never shown for
     /// it. Nothing for a file still as it was, so every name from before this
-    /// still stands.
-    fn saved_over(&self, media: &lumit_core::model::MediaRef) -> String {
+    /// still stands. In a run of stills it is the frame's own file, and only a
+    /// file written after the run was brought in counts.
+    fn saved_over(&self, item: Uuid, media: &lumit_core::model::MediaRef, frame: usize) -> String {
         let secs = |t: std::time::SystemTime| {
             t.duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
         };
         let fingerprint = media.fingerprint.as_ref();
-        let stamp = lumit_media::MediaSource::file(&media.absolute_path)
-            .stamped()
-            .stamp
-            .filter(|(size, at)| {
-                fingerprint.is_none_or(|fp| *size != fp.size || secs(*at) != fp.mtime_secs)
-            });
+        let run = match self.doc.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(f)) if std::ptr::eq(&f.media, media) => {
+                f.sequence_fps()
+            }
+            _ => None,
+        };
+        let stamp = match run {
+            Some(fps) => lumit_media::MediaSource {
+                path: (&media.absolute_path).into(),
+                sequence_fps: Some(fps),
+                ..Default::default()
+            }
+            .frame_stamp(frame)
+            .filter(|(_, at)| fingerprint.is_none_or(|fp| secs(*at) > fp.mtime_secs)),
+            None => lumit_media::MediaSource::file(&media.absolute_path)
+                .stamped()
+                .stamp
+                .filter(|(size, at)| {
+                    fingerprint.is_none_or(|fp| *size != fp.size || secs(*at) != fp.mtime_secs)
+                }),
+        };
         stamp.map(|s| format!("#s{s:?}")).unwrap_or_default()
     }
 }
@@ -235,7 +251,7 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         } else {
             settled.target_width(width)
         };
-        let on_disk = self.saved_over(media);
+        let on_disk = self.saved_over(item, media, source_frame);
         Some((
             format!(
                 "{}#w{}#c{space}{source_layer}{read_as}{on_disk}",
