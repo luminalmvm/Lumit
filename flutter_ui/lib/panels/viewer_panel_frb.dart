@@ -179,7 +179,29 @@ class ViewerPanelFrb extends StatefulWidget {
   State<ViewerPanelFrb> createState() => _ViewerPanelLayoutState();
 }
 
-class _ViewerPanelLayoutState extends State<ViewerPanelFrb> {
+class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back in front, the frame is asked for again, since a file may have been
+  /// saved over from another program meanwhile.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<LumitUiState>().requestFrame();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = context.watch<LumitUiState>();
