@@ -126,6 +126,10 @@ class FoldRow extends StatelessWidget {
   /// Editing a value (or keying) selects the property too, without the
   /// click-gesture modifiers.
   final ValueChanged<String> onEditProperty;
+
+  /// The keys picked on a row, by index. A value edit on a row with several
+  /// moves them all. Null where a panel has no key picking.
+  final Set<int> Function(String path)? keysPickedOn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final ValueChanged<String> onToggle;
@@ -171,6 +175,7 @@ class FoldRow extends StatelessWidget {
     this.others = const [],
     this.onSetEnabled,
     this.onAddEffect,
+    this.keysPickedOn,
   });
 
   @override
@@ -275,7 +280,16 @@ class FoldRow extends StatelessWidget {
               // A property row is held for whoever else in a shared project
               // is changing its value.
               : picks
-                  ? HeldFor(names: [path], child: _control(context))
+                  ? HeldFor(
+                      names: [path],
+                      child: keysPickedOn == null
+                          ? _control(context)
+                          : ValueEditScope(
+                              run: (typed, edit) => editPickedKeys(
+                                  keysPickedOn!(path), typed, edit),
+                              child: _control(context),
+                            ),
+                    )
                   : _control(context),
         ),
       ),

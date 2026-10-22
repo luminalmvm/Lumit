@@ -126,6 +126,13 @@ class FxKeyStripScope extends InheritedWidget {
     required super.child,
   }) : _host = host;
 
+  /// The keys picked on [rowKey]'s lane, by index.
+  Set<int> pickedOn(String rowKey) => {
+        for (final id in selected.value)
+          if (id.startsWith('$rowKey#'))
+            if (int.tryParse(id.substring(rowKey.length + 1)) case final i?) i,
+      };
+
   static FxKeyStripScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<FxKeyStripScope>();
 

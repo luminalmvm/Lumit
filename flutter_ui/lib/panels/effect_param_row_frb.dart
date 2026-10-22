@@ -1073,23 +1073,25 @@ class EffectParamRowFrb extends StatelessWidget {
           onStart: () {
             if (scalar.field0
                 .any((k) => comp.frameAtTime(time: k.time) == frame)) {
-              return;
+              return false;
             }
             write(scalarWithValueAt(scalar, sampled, comp, frame));
+            return true;
           },
           // Each tick: the picture through the staged effect stack, and the
           // curve through the published drag — the same pair a
           // transform row's drag feeds.
           onLive: (v) {
+            final written = scalarWithValueAt(scalar, snap(v), comp, frame);
             rowValueDrag.value = RowValueDrag(
               layer: ownerLayerId.toString(),
               effectId: effectId.toString(),
               paramId: param.id,
               frame: frame,
               value: snap(v),
+              keys: (written as BridgeScalar_Keyframed).field0,
             );
-            _setLive(BridgeEffectValue.float(
-                scalarWithValueAt(scalar, snap(v), comp, frame)));
+            _setLive(BridgeEffectValue.float(written));
           },
         ),
       );

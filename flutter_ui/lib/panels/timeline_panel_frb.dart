@@ -1531,7 +1531,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// gesture first — the press picks the row before the tap does — so
   /// leaving it a panel-wide redraw would have left the click costing one
   /// anyway.
+  ///
+  /// In the layer view a press on a row with picked keys narrows everything to
+  /// that row, so a value edit there moves those keys and no others.
   void _selectOnEdit(String path) {
+    if (!_graph && _keysPickedOn(path).isNotEmpty) {
+      _laneKeySelection.removeWhere((id) => !id.startsWith('$path#'));
+      _publishLaneKeys();
+      if (_selectedProperties.any((p) => p != path)) {
+        _selectedProperties.clear();
+      }
+    }
     if (_selectedProperties.contains(path)) return;
     _selectedProperties
       ..clear()
@@ -1541,6 +1551,27 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishPropertySelection();
     _publishRowSelection();
     if (_graph) setState(() {});
+  }
+
+  /// The keys picked on [path]'s row, by index, in whichever view is up. A
+  /// graph key on either axis of a row counts for the row, as a lane key does.
+  Set<int> _keysPickedOn(String path) {
+    final rows = _graph
+        ? {
+            for (final c in graphChannels(
+                layers: Provider.of<LumitUiState>(context, listen: false)
+                    .model
+                    .layers,
+                selected: [path]))
+              c.id
+          }
+        : {path};
+    return {
+      for (final id in _graph ? _graphKeySelection : _laneKeySelection)
+        if (id.lastIndexOf('#') case final hash
+            when hash > 0 && rows.contains(id.substring(0, hash)))
+          if (int.tryParse(id.substring(hash + 1)) case final i?) i,
+    };
   }
 
   /// Which of the two views is up (§12A.1).
@@ -4601,6 +4632,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             selection: _rowSelection,
                                             onSelectProperty: _selectProperty,
                                             onEditProperty: _selectOnEdit,
+                                            keysPickedOn: _keysPickedOn,
                                             onToggle: _toggle,
                                             playheadFrame:
                                                 ui.playheadFrame.value,
