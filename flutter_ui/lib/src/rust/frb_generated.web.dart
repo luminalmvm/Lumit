@@ -711,6 +711,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
 
   @protected
+  BridgeFfxImport dco_decode_bridge_ffx_import(dynamic raw);
+
+  @protected
   BridgeFieldOrder dco_decode_bridge_field_order(dynamic raw);
 
   @protected
@@ -2771,6 +2774,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFadeShape sse_decode_bridge_fade_shape(SseDeserializer deserializer);
+
+  @protected
+  BridgeFfxImport sse_decode_bridge_ffx_import(SseDeserializer deserializer);
 
   @protected
   BridgeFieldOrder sse_decode_bridge_field_order(SseDeserializer deserializer);
@@ -5096,6 +5102,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_fade_shape(
       BridgeFadeShape self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_ffx_import(
+      BridgeFfxImport self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_field_order(

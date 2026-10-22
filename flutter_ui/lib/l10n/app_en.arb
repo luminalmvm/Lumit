@@ -5127,6 +5127,22 @@
   "@settingsProjectTemplate": {
     "description": "Settings window, Workspace group: the name of the row that picks a project file every new project starts as a copy of."
   },
+  "settingsAfterEffectsPresets": "After Effects presets",
+  "@settingsAfterEffectsPresets": {
+    "description": "Settings window, Workspace group: the name of the row whose button picks a folder of Adobe After Effects animation presets (.ffx) and turns them into Lumit presets. After Effects is a product name."
+  },
+  "settingsAfterEffectsPresetsImported": "{imported} imported, {skipped} skipped",
+  "@settingsAfterEffectsPresetsImported": {
+    "description": "Shown under the After Effects presets row in Settings once a folder has been read. {imported} is how many presets were added to the Effects & presets panel, {skipped} how many were left out because they could not be read, held no effects, or had the name of a preset already there.",
+    "placeholders": {
+      "imported": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
   "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
   "@settingsHelpProjectTemplate": {
     "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
