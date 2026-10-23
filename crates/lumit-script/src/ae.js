@@ -497,8 +497,9 @@
     LayerCollection.prototype.addCamera = function (name, centerPoint) {
         var layer = this._add('camera', String(name));
         // After Effects' new camera aims at its point of interest, here the
-        // point it was given, from a zoom's distance in front.
-        command('layer.set', { comp: this._comp._id, layer: layer._id, two_node: true });
+        // point it was given, from a zoom's distance in front. It turns in
+        // After Effects' order, so its rotations keep After Effects' numbers.
+        command('layer.set', { comp: this._comp._id, layer: layer._id, two_node: true, after_effects_order: true });
         if (centerPoint) {
             var at = [Number(centerPoint[0]), Number(centerPoint[1])];
             var z = layer._info().properties.position[2];
@@ -611,7 +612,13 @@
         effectsActive: switchProp('fx'),
         threeDLayer: {
             get: function () { return this._info().three_d; },
-            set: function (v) { this._set({ three_d: !!v }); },
+            // A layer a script makes 3D turns in After Effects' order, so its
+            // rotations keep After Effects' numbers.
+            set: function (v) {
+                var args = { three_d: !!v };
+                if (v && !this._info().three_d) args.after_effects_order = true;
+                this._set(args);
+            },
         },
         startTime: {
             get: function () { return seconds(this._info().start_offset); },
@@ -874,7 +881,9 @@
             return;
         }
         if (held === undefined) throw new Error(LABELS[name] + ' is not on this layer.');
-        if (TURNS.indexOf(name) >= 0 && (info.kind === 'camera' || info.three_d)) {
+        // A layer turning in After Effects' order holds its angles as they
+        // are, each on its own.
+        if (TURNS.indexOf(name) >= 0 && (info.kind === 'camera' || info.three_d) && !info.after_effects_order) {
             loadTurns(this._layer, info, this);
             return;
         }
@@ -1258,18 +1267,15 @@
 
     // A 3D layer's X, Y and Z Rotation as After Effects reads them, which
     // takes all three at once. `caller` is the one being read; the others
-    // are filled too unless already read. A layer turning in After Effects'
-    // order holds its angles as they are.
+    // are filled too unless already read.
     var TURNS = ['rotation_x', 'rotation_y', 'rotation'];
     function loadTurns(layer, info, caller) {
-        var ae = !!info.after_effects_order;
         var channels = TURNS.map(function (n) { return info.properties[n]; });
         var still = channels.map(function (c) { return typeof c === 'number' ? c : 0; });
-        if (!ae) still = aeAngles(still, still);
+        still = aeAngles(still, still);
         var lists = [[], [], []], near = null;
         channelTimes(channels).forEach(function (t) {
-            var angles = channels.map(function (c) { return channelAt(c, t); });
-            var turned = ae ? angles : aeAngles(angles, near);
+            var turned = aeAngles(channels.map(function (c) { return channelAt(c, t); }), near);
             near = turned;
             var hold = channels.every(function (c) { return heldAt(c, t); });
             turned.forEach(function (v, n) {
