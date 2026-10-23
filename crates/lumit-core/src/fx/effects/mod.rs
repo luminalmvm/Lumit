@@ -103,6 +103,7 @@ pub mod radial_wipe;
 pub mod radio_waves;
 pub mod relax_points;
 pub mod remove_background;
+pub mod repeat;
 pub mod rgb_split;
 pub mod ripple;
 pub mod roto_brush;

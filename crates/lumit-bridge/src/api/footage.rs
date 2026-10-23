@@ -889,16 +889,17 @@ impl FootageReference {
                 // answered from memory.
                 #[cfg(not(feature = "media"))]
                 let probed = true;
-                // A picture with no size is one FFmpeg found but could not read.
                 #[cfg(feature = "media")]
-                let probed = Self::resolve_source(&proj, footage_item)
-                    .and_then(|src| crate::probe::ensure_probed(&src))
-                    .is_some_and(|info| {
-                        info.video
-                            .as_ref()
-                            .is_none_or(|v| v.width > 0 && v.height > 0)
-                    });
+                let probed =
+                    Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
 
+                // A run with a file that would not read wears the badge too,
+                // though a neighbour is drawn in that file's place.
+                #[cfg(feature = "media")]
+                let probed = probed
+                    && !lumit_media::sequence::unreadable_frames()
+                        .iter()
+                        .any(|(source, _)| source.canonicalize().ok() == path.canonicalize().ok());
                 if probed {
                     Ok(LumitMediaStatus::Ready)
                 } else {

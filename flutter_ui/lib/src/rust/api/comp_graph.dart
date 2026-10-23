@@ -16,7 +16,7 @@ import 'project_item.dart';
 import 'solid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `box_source`, `core`, `core`, `graph_fx`, `of`, `of`, `port_of`, `read_comp_graph`, `read_node`, `wiring_into`, `wiring_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The file a Roto brush box reads, as the Viewer needs it to carry a scribble
 /// onto the picture: which frame of it is on screen, and how big its picture
@@ -87,13 +87,17 @@ class BridgeCompGraph {
   final List<BridgeCompNode> nodes;
   final BridgeCompWiring wiring;
 
+  /// Each Repeat start and end that pair, for the frame drawn round them.
+  final List<BridgeCompRepeat> repeats;
+
   const BridgeCompGraph({
     required this.nodes,
     required this.wiring,
+    required this.repeats,
   });
 
   @override
-  int get hashCode => nodes.hashCode ^ wiring.hashCode;
+  int get hashCode => nodes.hashCode ^ wiring.hashCode ^ repeats.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -101,7 +105,8 @@ class BridgeCompGraph {
       other is BridgeCompGraph &&
           runtimeType == other.runtimeType &&
           nodes == other.nodes &&
-          wiring == other.wiring;
+          wiring == other.wiring &&
+          repeats == other.repeats;
 }
 
 /// One box on the canvas, as it is drawn.
@@ -253,6 +258,31 @@ class BridgeCompNodePosition {
           node == other.node &&
           x == other.x &&
           y == other.y;
+}
+
+/// A Repeat start, the end it pairs with, and the boxes between them.
+class BridgeCompRepeat {
+  final UuidValue start;
+  final UuidValue end;
+  final List<UuidValue> members;
+
+  const BridgeCompRepeat({
+    required this.start,
+    required this.end,
+    required this.members,
+  });
+
+  @override
+  int get hashCode => start.hashCode ^ end.hashCode ^ members.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCompRepeat &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          end == other.end &&
+          members == other.members;
 }
 
 /// The half of the graph the user edits, read out of [`BridgeCompGraph`],

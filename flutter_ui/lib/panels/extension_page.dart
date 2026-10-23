@@ -8,8 +8,9 @@
 // is.
 //
 // All three serve the extension's folder under a name of its own, give the
-// page `window.lumit` before its own script runs, and carry messages both
-// ways. Nothing here knows what the messages mean: they go to and from an
+// page `window.lumit` before its own script runs, hold it to its own files
+// and the sites its manifest named, and carry messages both ways. Nothing
+// here knows what the messages mean: they go to and from an
 // [ExtensionPageLink], which the panel holds the other end of.
 
 import 'dart:async';
@@ -154,11 +155,12 @@ class _WebView2PageState extends State<_WebView2Page> {
       _started = true;
       await _view.initialize();
       if (!mounted) return;
-      // No window of its own, and its files are its own: a page from
+      // No window of its own, and nothing beyond its own files and the
+      // sites its manifest named. Its files are its own: a page from
       // anywhere else cannot load them.
       await _view.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
-      await _view.addVirtualHostNameMapping(origin.substring(8),
-          extension.folder, WebviewHostResourceAccessKind.deny);
+      await _view.limitRequests(origin.substring(8), extension.folder,
+          extension.hosts, extensionPolicy(extension.hosts));
       await _view.addScriptToExecuteOnDocumentCreated(
           extensionBootstrap(origin: origin, key: ''));
       _listening.add(_view.url.listen(link.onUrl));
@@ -264,6 +266,8 @@ class _AppKitPageState extends State<_AppKitPage> {
           'id': widget.extension.id,
           'folder': widget.extension.folder,
           'bootstrap': extensionBootstrap(origin: _origin, key: _key),
+          'rules': extensionRules(_origin, widget.extension.hosts),
+          'policy': extensionPolicy(widget.extension.hosts),
           'inspect': _inspectable,
         },
         creationParamsCodec: const StandardMessageCodec(),
@@ -380,6 +384,8 @@ class _GtkPageState extends State<_GtkPage> {
         'folder': extension.folder,
         'data': extensionDataDir(id: 'webview'),
         'bootstrap': extensionBootstrap(origin: _origin, key: _key),
+        'rules': extensionRules(_origin, extension.hosts),
+        'policy': extensionPolicy(extension.hosts),
         'inspect': _inspectable,
       });
     } catch (_) {

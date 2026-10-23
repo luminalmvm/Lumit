@@ -26108,6 +26108,122 @@
       "matte_role": "none"
     },
     {
+      "slug": "repeat-start",
+      "match_name": "repeat_start",
+      "label": "Repeat start",
+      "version": 1,
+      "category": "Compositing",
+      "category_slug": "compositing",
+      "params": [
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "repeat-end",
+      "match_name": "repeat_end",
+      "label": "Repeat end",
+      "version": 1,
+      "category": "Compositing",
+      "category_slug": "compositing",
+      "params": [
+        {
+          "id": "for_each",
+          "label": "For",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Times",
+            "Each point",
+            "Each path"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "times",
+          "label": "Times",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 0.0,
+          "slider_max": 64.0,
+          "hard_min": 0.0,
+          "hard_max": 4096.0
+        },
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Feedback",
+            "Copies"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "copies_blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "times",
+          "on": "for_each",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "copies_blend",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 1
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
       "slug": "slider-control",
       "match_name": "slider_control",
       "label": "Slider control",

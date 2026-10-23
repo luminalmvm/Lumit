@@ -36,7 +36,10 @@ dependencies:
   freezed_annotation: ^3.1.0
   uuid: ^4.6.0
   syntax_highlight: ^0.5.0
-  webview_windows: ^0.4.0
+  # 0.4.0 from pub.dev, kept here for the request filter an extension's page
+  # is held to (third_party/webview_windows/README.md).
+  webview_windows:
+    path: third_party/webview_windows
   # The modules of the code a phone scans to pair (shell/add_phone_window.dart).
   # Pure Dart and nothing else: Lumit paints the squares itself.
   qr: ^3.0.2

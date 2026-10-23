@@ -1736,8 +1736,49 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// moves the playhead.
   final DoubleTap _rulerTaps = DoubleTap();
 
+  /// Taking a scrub past either end of the lanes scrolls them, the way a key
+  /// drag does, and the playhead stays under the pointer as they go. Null when
+  /// no scrub is running, or the ruler sits in no scroll view.
+  EdgeDraggingAutoScroller? _edgeScroll;
+
+  /// The scrub's pointer, in global coordinates.
+  Offset _pointer = Offset.zero;
+
+  /// Asked again after every step, as the pointer may be held still. The rect
+  /// is 40 wide so the lanes start scrolling 20 pixels short of their end: a
+  /// maximised window's end is the screen's, and the pointer stops there.
+  void _scrollToPointer() => _edgeScroll?.startAutoScrollIfNecessary(
+      Rect.fromCenter(center: _pointer, width: 40, height: 0));
+
+  void _scrubBy(DragUpdateDetails d) {
+    _seek(d.localPosition.dx);
+    _pointer = d.globalPosition;
+    if (_edgeScroll == null) {
+      final scrollable = Scrollable.maybeOf(context, axis: Axis.horizontal);
+      if (scrollable == null) return;
+      _edgeScroll = EdgeDraggingAutoScroller(scrollable,
+          velocityScalar: 50, onScrollViewScrolled: _scrolledUnder);
+    }
+    _scrollToPointer();
+  }
+
+  /// The lanes moved under a pointer held still, so the playhead follows it.
+  void _scrolledUnder() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    _seek(box.globalToLocal(_pointer).dx);
+    _scrollToPointer();
+  }
+
+  void _scrubStopped() {
+    _edgeScroll?.stopAutoScroll();
+    _edgeScroll = null;
+    _scrubEnded();
+  }
+
   @override
   void dispose() {
+    _edgeScroll?.stopAutoScroll();
     _escape.dispose();
     // A ruler closed with a marker in hand must not leave its line stranded.
     if (_dragMarker != null || _dragSpan != null) markerDragPreview.value = null;
@@ -2214,9 +2255,9 @@ class _TimelineRulerState extends State<TimelineRuler> {
       },
       onTapUp: (_) => _scrubEnded(),
       onTapCancel: _scrubEnded,
-      onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
-      onHorizontalDragEnd: (_) => _scrubEnded(),
-      onHorizontalDragCancel: _scrubEnded,
+      onHorizontalDragUpdate: _scrubBy,
+      onHorizontalDragEnd: (_) => _scrubStopped(),
+      onHorizontalDragCancel: _scrubStopped,
       onSecondaryTapUp: (d) =>
           _groundMenu(d.globalPosition, axis.frameAt(d.localPosition.dx)),
       child: Container(

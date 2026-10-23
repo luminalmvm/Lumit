@@ -1,5 +1,5 @@
-//! Which installed plugins the user has switched off (docs/12 §2.6), and
-//! the folders of extensions they added.
+//! Which installed plugins the user has switched off (docs/12 §2.6), the
+//! folders of extensions they added, and what the audio plugin scan last found.
 //!
 //! # In plain terms
 //!
@@ -42,6 +42,10 @@ pub struct PluginPrefs {
     /// Folders of extensions the person added, scanned after Lumit's own
     /// and the machine's.
     pub extension_folders: Vec<PathBuf>,
+    /// What the audio plugin scan learned about each module, so start-up need
+    /// not open it again. The plugin host's own shape, kept opaque here so this
+    /// crate need not depend on the host.
+    pub audio_cache: serde_json::Value,
 }
 
 impl PluginPrefs {

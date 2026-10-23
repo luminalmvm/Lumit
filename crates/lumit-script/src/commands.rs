@@ -269,7 +269,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches, 3D switch or place in the stack",
+        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -281,7 +281,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -1522,6 +1522,7 @@ struct SetArgs {
     three_d: Option<bool>,
     index: Option<usize>,
     two_node: Option<bool>,
+    after_effects_order: Option<bool>,
     #[serde(default)]
     switches: SwitchArgs,
 }
@@ -1579,6 +1580,30 @@ fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
             out_point: at(a.out, found.out_point)?,
             start_offset: at(a.start_offset, found.start_offset)?,
         });
+    }
+    if let Some(on) = a
+        .after_effects_order
+        .filter(|on| *on != found.transform.after_effects_order)
+    {
+        // Rewritten so the layer keeps its pose, as the Timeline's switch does.
+        let rows = found
+            .transform
+            .rotations_in_order(on)
+            .ok_or_else(|| bad("An expression drives a rotation, so the order stays as it is."))?;
+        ops.push(Op::SetRotationOrder {
+            comp: c,
+            layer,
+            after_effects: on,
+        });
+        ops.extend(
+            rows.into_iter()
+                .map(|(prop, animation)| Op::SetTransformProperty {
+                    comp: c,
+                    layer,
+                    prop,
+                    animation,
+                }),
+        );
     }
     if let Some(three_d) = a.three_d {
         ops.push(Op::SetLayerThreeD {

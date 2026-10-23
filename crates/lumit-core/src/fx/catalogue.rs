@@ -152,6 +152,7 @@ use super::effects::{
     radio_waves::{RadioWaves, RadioWavesDef},
     relax_points::{RelaxPoints, RelaxPointsDef},
     remove_background::{RemoveBackground, RemoveBackgroundDef},
+    repeat::{RepeatEnd, RepeatEndDef, RepeatStart, RepeatStartDef},
     rgb_split::{RgbSplit, RgbSplitDef},
     ripple::{Ripple, RippleDef},
     roto_brush::{RotoBrush, RotoBrushDef},
@@ -432,6 +433,9 @@ crate::catalogue![
     // alone.
     SplitChannelsDef => SplitChannels,
     CombineChannelsDef => CombineChannels,
+    // The boxes between these two run several times.
+    RepeatStartDef => RepeatStart,
+    RepeatEndDef => RepeatEnd,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

@@ -235,6 +235,7 @@ Conversion
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
+Copies
 Core colour
 Core radius
 Corner pin
@@ -316,6 +317,8 @@ Droplets
 Dry
 Duration
 Dust
+Each path
+Each point
 Echo
 Echoes
 Edge
@@ -417,6 +420,7 @@ Focus point y
 Focus range
 Follow
 Follow the vectors
+For
 Force on all layers
 Forces
 Forking
@@ -866,6 +870,8 @@ Render
 Rendered
 Repeat
 Repeat edge pixels
+Repeat end
+Repeat start
 Replace colour
 Replace method
 Reset interval
@@ -949,6 +955,7 @@ Shadow tonal width
 Shadows
 Shake
 Shape
+Shapes
 Share of frame
 Sharp colours
 Sharpen
@@ -1088,6 +1095,7 @@ Time offset
 Time samples
 Time since last
 Time step
+Times
 Tint
 Tint colour
 To
@@ -1202,8 +1210,10 @@ Wipe centre y
 Word
 Work area
 Wrap
+X
 X amount
 X frequency
+Y
 Y amount
 Y frequency
 Yellow

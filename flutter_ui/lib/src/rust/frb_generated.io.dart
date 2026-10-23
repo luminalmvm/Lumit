@@ -636,6 +636,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompNodePosition dco_decode_bridge_comp_node_position(dynamic raw);
 
   @protected
+  BridgeCompRepeat dco_decode_bridge_comp_repeat(dynamic raw);
+
+  @protected
   BridgeCompSettings dco_decode_bridge_comp_settings(dynamic raw);
 
   @protected
@@ -1489,6 +1492,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<BridgeCompNodePosition> dco_decode_list_bridge_comp_node_position(
       dynamic raw);
+
+  @protected
+  List<BridgeCompRepeat> dco_decode_list_bridge_comp_repeat(dynamic raw);
 
   @protected
   List<BridgeEffectInfo> dco_decode_list_bridge_effect_info(dynamic raw);
@@ -2761,6 +2767,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeCompRepeat sse_decode_bridge_comp_repeat(SseDeserializer deserializer);
+
+  @protected
   BridgeCompSettings sse_decode_bridge_comp_settings(
       SseDeserializer deserializer);
 
@@ -3749,6 +3758,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeCompNodePosition> sse_decode_list_bridge_comp_node_position(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeCompRepeat> sse_decode_list_bridge_comp_repeat(
       SseDeserializer deserializer);
 
   @protected
@@ -5170,6 +5183,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeCompNodePosition self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_comp_repeat(
+      BridgeCompRepeat self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_comp_settings(
       BridgeCompSettings self, SseSerializer serializer);
 
@@ -6267,6 +6284,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_comp_node_position(
       List<BridgeCompNodePosition> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_comp_repeat(
+      List<BridgeCompRepeat> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_effect_info(

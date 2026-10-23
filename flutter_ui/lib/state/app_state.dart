@@ -203,6 +203,11 @@ class LumitState extends ChangeNotifier {
   /// until there is a window to ask in.
   Future<bool> Function()? askUnsaved;
 
+  /// How the shell asks before Lumit quits in the middle of an export, which
+  /// would stop it. True when Lumit may go: nothing is exporting, or the user
+  /// chose to stop it. Null until there is a window to ask in.
+  Future<bool> Function()? askQuitExporting;
+
   /// How the shell offers back the edits a crash left behind, for the project
   /// at a path. Null until there is a window to ask in.
   Future<void> Function(String path)? offerRecovery;
