@@ -829,6 +829,15 @@ fn quieten_palettegen() {
     ONCE.call_once(|| unsafe { ffi::av_log_set_callback(Some(quiet_palettegen)) });
 }
 
+/// Keep FFmpeg's own log lines out of the command line's output. Lumit says
+/// what went wrong in its own words.
+///
+/// SAFETY: setting the level is a plain store FFmpeg reads before each line.
+#[allow(unsafe_code)]
+pub fn quiet_ffmpeg_log() {
+    unsafe { ffi::av_log_set_level(ffi::AV_LOG_QUIET as std::ffi::c_int) };
+}
+
 /// Add one filter to `graph`, named `name`.
 fn add_filter<'g>(
     graph: &'g rsmpeg::avfilter::AVFilterGraph,
