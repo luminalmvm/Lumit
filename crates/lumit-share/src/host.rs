@@ -460,8 +460,11 @@ impl Host {
     }
 
     /// Which footage this machine has the original of, told to everyone.
-    pub fn set_holds(&self, items: Vec<Held>) {
+    /// False before footage is carried, when it goes nowhere.
+    pub fn set_holds(&self, items: Vec<Held>) -> bool {
+        let carried = self.hub.bulk.lock().is_some();
         self.hub.hold(0, items);
+        carried
     }
 
     /// Who has the original of `item`.
@@ -767,9 +770,13 @@ impl Hub {
     /// for a guest that is seated, which `token` is how it is known by.
     fn carry(&self, token: u64, socket: TcpStream, sender: Sender, receiver: Receiver) {
         let peer = {
-            let seats = self.seats.lock();
+            let mut seats = self.seats.lock();
             let seated = seats.links.iter().find(|link| link.token == token);
-            seated.filter(|_| token != 0).map(|link| link.id)
+            let peer = seated.filter(|_| token != 0).map(|link| link.id);
+            // Who has which footage goes to everyone again at the next beat.
+            // Said before this guest carried footage, it went nowhere.
+            seats.changed |= peer.is_some();
+            peer
         };
         let bulk = self.bulk.lock().clone();
         if let (Some(peer), Some(bulk)) = (peer, bulk) {
