@@ -4959,6 +4959,9 @@ fn plane_of(
     })
 }
 
+/// The most steps a node graph's plan grows to through its Repeat pairs.
+const MAX_REPEAT_STEPS: usize = 4096;
+
 /// Where one output socket of a box landed in a graph's plan: the box, the
 /// socket, and the step, `None` where it reads transparent.
 type Landed = (Uuid, std::borrow::Cow<'static, str>, Option<usize>);
@@ -5017,7 +5020,8 @@ impl GraphLower<'_> {
         plan: &mut GraphDraw,
     ) -> Option<usize> {
         use lumit_core::comp_graph::{
-            GraphNode, InputKind, COMBINE_CHANNELS, NODE_GRAPH, SPLIT_CHANNELS, SPLIT_OUTPUTS,
+            GraphNode, InputKind, COMBINE_CHANNELS, NODE_GRAPH, REPEAT_END, REPEAT_START,
+            SPLIT_CHANNELS, SPLIT_OUTPUTS,
         };
         use lumit_core::graph::{INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 
@@ -5091,6 +5095,13 @@ impl GraphLower<'_> {
         // the box. A box nothing consumes never enters the plan, and one
         // inside a loop - refused at the edit - is simply left out.
         let order = graph.cone_picked(output, &picks);
+        // The Repeat pairs. The boxes between each pair, and its start, are
+        // lowered by its end, once a time, so the walk below steps over them.
+        let repeats = graph.repeats().unwrap_or_default();
+        let hidden: Vec<Uuid> = repeats
+            .iter()
+            .flat_map(|r| r.body.iter().copied().chain([r.start]))
+            .collect();
 
         // Which step each box's output landed on, in the order they were
         // lowered. Keyed by socket too, since a Split channels box has four
@@ -5147,6 +5158,9 @@ impl GraphLower<'_> {
         const FULL_OFF: u32 = 11;
 
         for id in order.iter().copied() {
+            if hidden.contains(&id) {
+                continue;
+            }
             let Some(node) = graph.node(id) else { continue };
             let step = match node {
                 // The Output shows what is wired into it; it is no step of its
@@ -5220,9 +5234,14 @@ impl GraphLower<'_> {
                     // where a bypassed ordinary box lands anyway. A Switch's
                     // own picture is its first socket, and a Split hands its
                     // input on at every output, as a box with views does.
+                    // A bypassed Repeat end hands on what its start was
+                    // given, which is what Times at nought does.
+                    let repeat = repeats.iter().find(|r| r.end == id);
                     if !inst.enabled {
                         let main = if inst.effect.match_name == lumit_core::comp_graph::SWITCH {
                             wired(&steps, id, "in0")
+                        } else if let Some(r) = repeat {
+                            wired(&steps, r.start, INPUT_PORT.id)
                         } else {
                             input
                         };
@@ -5369,6 +5388,15 @@ impl GraphLower<'_> {
                         }
                         NODE_GRAPH => self
                             .nested_step(inst, graph, id, input, &steps, &drivers, visited, plan),
+                        // A start or an end with no pair hands its picture on.
+                        REPEAT_START => input,
+                        REPEAT_END => match repeat {
+                            Some(r) => self.repeat_step(
+                                graph_comp, graph, view, r, inst, &steps, &drivers, diag, &context,
+                                visited, plan,
+                            ),
+                            None => input,
+                        },
                         _ => {
                             // What an analysis filed for the file this box
                             // reads, looked up once: every view of the box
@@ -5658,6 +5686,103 @@ impl GraphLower<'_> {
             },
         )));
         Some(plan.steps.len() - 1)
+    }
+
+    /// A Repeat end: the boxes between it and its start, lowered once a time
+    /// into this plan. In Feedback each time is handed the picture the time
+    /// before made, and in Copies each is handed the start's own and laid
+    /// over the ones before it.
+    #[allow(clippy::too_many_arguments)]
+    fn repeat_step(
+        &self,
+        graph_comp: &lumit_core::model::Composition,
+        graph: &lumit_core::comp_graph::CompGraph,
+        view: lumit_core::comp_graph::GraphView<'_>,
+        r: &lumit_core::comp_graph::Repeat,
+        end: &lumit_core::model::EffectInstance,
+        steps: &[Landed],
+        drivers: &lumit_core::fx::ResolvedDrivers,
+        diag: f32,
+        context: &Arc<ExpressionContext>,
+        visited: &mut Vec<Uuid>,
+        plan: &mut GraphDraw,
+    ) -> Option<usize> {
+        use lumit_core::comp_graph::GraphNode;
+        use lumit_core::fx::effects::repeat::MODE_COPIES;
+        use lumit_core::fx::ParamId;
+        let landed = |node: Uuid, port: &str| {
+            steps
+                .iter()
+                .find(|(id, out, _)| *id == node && out == port)
+                .and_then(|(_, _, step)| *step)
+        };
+        let into = graph
+            .wire_into(r.start, lumit_core::graph::INPUT_PORT.id)
+            .and_then(|(from, port)| landed(*from, port));
+        let markers = lumit_core::fx::MarkerContext::for_comp(graph_comp);
+        let rows = lumit_core::fx::resolve_instance(
+            end,
+            drivers,
+            self.t,
+            diag,
+            1.0,
+            &markers,
+            context.clone(),
+        );
+        let p = rows.iter().next().map(|op| op.params);
+        let times = p.map_or(0, |p| p.int(ParamId::new("times"), 4)).max(0) as u32;
+        let copies = p.map_or(0, |p| p.choice(ParamId::new("mode"), 0)) == MODE_COPIES;
+        let blend = p.map_or(0, |p| p.choice(ParamId::new("copies_blend"), 0));
+        let Some(GraphNode::Fx(start)) = graph.node(r.start) else {
+            return into;
+        };
+        let (inner, fed) = graph.repeat_graph(r);
+        let outside: Vec<Option<usize>> = fed.iter().map(|(n, port)| landed(*n, port)).collect();
+        let (mut last, mut laid) = (into, None);
+        for k in 0..times {
+            // A document must not be able to ask for more steps than this,
+            // however many times it repeats.
+            if plan.steps.len() >= MAX_REPEAT_STEPS {
+                break;
+            }
+            let mut values = view.values.to_vec();
+            values.extend(lumit_core::comp_graph::repeat_values(start, k, times));
+            let mut feeds = vec![GraphFeed::Step(if copies { into } else { last })];
+            feeds.extend(outside.iter().map(|s| GraphFeed::Step(*s)));
+            let out = self.lower(
+                graph_comp,
+                &inner,
+                lumit_core::comp_graph::GraphView {
+                    values: &values,
+                    pictures_fed: true,
+                },
+                &mut feeds,
+                visited,
+                plan,
+            );
+            last = out;
+            laid = match laid {
+                // The first time at the bottom, each after it laid over.
+                Some(below) if copies => {
+                    plan.steps.push(GraphStep::Merge {
+                        a: out,
+                        b: Some(below),
+                        mode: blend,
+                        opacity: 100.0,
+                    });
+                    Some(plan.steps.len() - 1)
+                }
+                _ => out,
+            };
+        }
+        if times == 0 {
+            return into;
+        }
+        if copies {
+            laid
+        } else {
+            last
+        }
     }
 
     /// A Node graph box inside a graph: the named graph lowered into **this**

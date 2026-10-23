@@ -50,6 +50,10 @@ pub const NODE_GRAPH: &str = "node_graph";
 pub const SPLIT_CHANNELS: &str = "split_channels";
 /// The match name of the Combine channels node (§1.3).
 pub const COMBINE_CHANNELS: &str = "combine_channels";
+/// The match name of the Repeat start box.
+pub const REPEAT_START: &str = "repeat_start";
+/// The match name of the Repeat end box.
+pub const REPEAT_END: &str = "repeat_end";
 
 /// Split channels' outputs and Combine channels' inputs, red to alpha. Red
 /// keeps the `output` and `input` ids, as Merge's A does, so Auto-wire and Heal
@@ -738,7 +742,8 @@ impl CompGraph {
                 return Err(GraphError::PortTypeMismatch);
             }
         }
-        self.check_acyclic()
+        self.check_acyclic()?;
+        self.repeats().map(|_| ())
     }
 
     /// Refuse a loop anywhere in the graph, image wires and value wires alike.
@@ -1147,6 +1152,302 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         switches: crate::model::Switches::default(),
         extra: serde_json::Map::new(),
     })
+}
+
+/// One Repeat start, the Repeat end it pairs with, and the boxes between them:
+/// every box downstream of the start that the end is downstream of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Repeat {
+    pub start: Uuid,
+    pub end: Uuid,
+    /// In document order, nested pairs included.
+    pub body: Vec<Uuid>,
+}
+
+/// The box standing in for output `k` of a Repeat start's numbers inside one
+/// time, or for picture `k` wired in from outside: ids made from the start's,
+/// so a time's graph is the same every frame.
+fn repeat_node(start: Uuid, kind: u128, k: usize) -> Uuid {
+    Uuid::from_u128(start.as_u128() ^ (0x5245_5045_4154 << 64 | kind << 32 | (k as u128 + 1)))
+}
+
+/// What a time's Input box stands for: a picture, or a number named `id`.
+fn repeat_input(id: String, kind: InputKind) -> GraphInput {
+    GraphInput {
+        label: id.clone(),
+        id,
+        kind,
+        default: [0.0; 4],
+        min: f64::MIN,
+        max: f64::MAX,
+        unit: Unit::Raw,
+        preview: None,
+    }
+}
+
+/// The Input id the start's number `port` reaches a time by. The start's own
+/// id is in it, so a pair inside another reads its own numbers.
+fn repeat_value_id(start: Uuid, port: &str) -> String {
+    format!("repeat_{}_{port}", start.simple())
+}
+
+impl CompGraph {
+    fn is_box(&self, id: Uuid, match_name: &str) -> bool {
+        matches!(self.node(id), Some(GraphNode::Fx(inst)) if inst.effect.match_name == match_name)
+    }
+
+    /// Every box `from` reaches along the wires, downstream or up, `from`
+    /// among them.
+    fn reach(&self, from: Uuid, down: bool) -> Vec<Uuid> {
+        let mut seen = vec![from];
+        let mut stack = vec![from];
+        while let Some(at) = stack.pop() {
+            for e in &self.edges {
+                let (a, b) = if down { (e.from, e.to) } else { (e.to, e.from) };
+                if a == at && !seen.contains(&b) {
+                    seen.push(b);
+                    stack.push(b);
+                }
+            }
+        }
+        seen
+    }
+
+    /// The Repeat start `end` pairs with: of the starts upstream of it, once
+    /// every pair in between is stepped over, the one all the others lead to.
+    /// `Ok(None)` when there is none upstream at all, and refused when no one
+    /// of them is nearest.
+    fn start_of(&self, end: Uuid, depth: u32) -> Result<Option<Uuid>, GraphError> {
+        if depth > 64 {
+            return Err(GraphError::RepeatUnpaired);
+        }
+        let into = |node: Uuid| {
+            self.edges
+                .iter()
+                .filter(move |e| e.to == node)
+                .map(|e| e.from)
+        };
+        let mut found = Vec::new();
+        let mut seen = vec![end];
+        let mut stack: Vec<Uuid> = into(end).collect();
+        while let Some(at) = stack.pop() {
+            if seen.contains(&at) {
+                continue;
+            }
+            seen.push(at);
+            let next = if self.is_box(at, REPEAT_START) {
+                found.push(at);
+                continue;
+            } else if self.is_box(at, REPEAT_END) {
+                match self.start_of(at, depth + 1)? {
+                    Some(start) => start,
+                    None => at,
+                }
+            } else {
+                at
+            };
+            stack.extend(into(next));
+        }
+        let near: Vec<Uuid> = found
+            .iter()
+            .copied()
+            .filter(|s| {
+                found
+                    .iter()
+                    .all(|o| o == s || self.reach(*o, true).contains(s))
+            })
+            .collect();
+        match near[..] {
+            [start] => Ok(Some(start)),
+            [] if found.is_empty() => Ok(None),
+            _ => Err(GraphError::RepeatUnpaired),
+        }
+    }
+
+    /// Every Repeat start and end that pair, with the boxes between them.
+    ///
+    /// Refused when no one start is nearest an end, two ends share a start, a
+    /// wire leaves the boxes between other than into the end's picture
+    /// socket, or a pair sits half inside another. A start or an end on its
+    /// own is none of these: it hands its picture on.
+    pub fn repeats(&self) -> Result<Vec<Repeat>, GraphError> {
+        let mut out: Vec<Repeat> = Vec::new();
+        for node in &self.nodes {
+            let GraphNode::Fx(inst) = node else { continue };
+            if inst.effect.match_name != REPEAT_END {
+                continue;
+            }
+            let end = inst.id;
+            // An end with no start before it hands its picture on.
+            let Some(start) = self.start_of(end, 0)? else {
+                continue;
+            };
+            if out.iter().any(|r| r.start == start) {
+                return Err(GraphError::RepeatUnpaired);
+            }
+            let (down, up) = (self.reach(start, true), self.reach(end, false));
+            let body = self
+                .nodes
+                .iter()
+                .map(GraphNode::id)
+                .filter(|id| *id != start && *id != end && down.contains(id) && up.contains(id))
+                .collect();
+            out.push(Repeat { start, end, body });
+        }
+        for r in &out {
+            for e in &self.edges {
+                let from_inside = e.from == r.start || r.body.contains(&e.from);
+                let to_inside =
+                    r.body.contains(&e.to) || (e.to == r.end && e.to_port == INPUT_PORT.id);
+                if from_inside && !to_inside {
+                    return Err(GraphError::RepeatLeak);
+                }
+            }
+            if out
+                .iter()
+                .any(|o| r.body.contains(&o.start) != r.body.contains(&o.end))
+            {
+                return Err(GraphError::RepeatLeak);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The graph one time of `r` runs, and the pictures wired in from outside
+    /// it, as box and socket.
+    ///
+    /// The boxes between the pair go in as they are. The start becomes a
+    /// picture Input under its own id, so the wires out of it stand, and an
+    /// Input of a number for each of its four numbers. The end becomes the
+    /// Output. Each picture wired in from outside becomes a picture Input of
+    /// its own after the start's, in the order the list gives. The drivers and
+    /// number Inputs outside that feed the boxes between are copied in, with
+    /// every one upstream of them.
+    #[must_use]
+    pub fn repeat_graph(&self, r: &Repeat) -> (CompGraph, Vec<(Uuid, String)>) {
+        use crate::fx::effects::repeat::PASS_PORTS;
+        let inside = |id: Uuid| r.body.contains(&id);
+        let value_box = |id: Uuid| match self.node(id) {
+            Some(GraphNode::Input { input, .. }) => input.kind != InputKind::Picture,
+            Some(GraphNode::Fx(inst)) => is_driver(inst),
+            _ => false,
+        };
+        let picture = |id: Uuid, port: &str| {
+            self.node(id).is_some_and(|n| {
+                ports_of(self, n, None).1.iter().any(|p| {
+                    p.id == port
+                        && matches!(p.ty, PortType::Image | PortType::Matte | PortType::Depth)
+                })
+            })
+        };
+        let mut nodes = vec![GraphNode::Input {
+            id: r.start,
+            input: repeat_input(repeat_value_id(r.start, "picture"), InputKind::Picture),
+        }];
+        for (k, port) in PASS_PORTS.iter().enumerate() {
+            nodes.push(GraphNode::Input {
+                id: repeat_node(r.start, 1, k),
+                input: repeat_input(repeat_value_id(r.start, port.id), InputKind::Number),
+            });
+        }
+        nodes.extend(self.nodes.iter().filter(|n| inside(n.id())).cloned());
+        let mut edges = Vec::new();
+        let mut fed: Vec<(Uuid, String)> = Vec::new();
+        let mut copied: Vec<Uuid> = Vec::new();
+        for e in &self.edges {
+            if !(inside(e.to) || (e.to == r.end && e.to_port == INPUT_PORT.id)) {
+                continue;
+            }
+            let from = if e.from == r.start {
+                match PASS_PORTS.iter().position(|p| p.id == e.from_port) {
+                    Some(k) => (repeat_node(r.start, 1, k), VALUE_PORT.id.to_owned()),
+                    None => (e.from, e.from_port.clone()),
+                }
+            } else if inside(e.from) {
+                (e.from, e.from_port.clone())
+            } else if picture(e.from, &e.from_port) {
+                let source = (e.from, e.from_port.clone());
+                let k = fed.iter().position(|f| *f == source).unwrap_or_else(|| {
+                    fed.push(source);
+                    fed.len() - 1
+                });
+                (repeat_node(r.start, 2, k), OUTPUT_PORT.id.to_owned())
+            } else if value_box(e.from) {
+                // Only through boxes that make numbers: a picture upstream of
+                // a driver stays outside, as a wire nobody reads.
+                let mut stack = vec![e.from];
+                while let Some(at) = stack.pop() {
+                    if copied.contains(&at) || !value_box(at) || at == r.start {
+                        continue;
+                    }
+                    copied.push(at);
+                    stack.extend(self.edges.iter().filter(|w| w.to == at).map(|w| w.from));
+                }
+                (e.from, e.from_port.clone())
+            } else {
+                continue;
+            };
+            edges.push(GraphEdge {
+                from: from.0,
+                from_port: from.1,
+                to: e.to,
+                to_port: e.to_port.clone(),
+            });
+        }
+        nodes.extend(
+            self.nodes
+                .iter()
+                .filter(|n| copied.contains(&n.id()))
+                .cloned(),
+        );
+        edges.extend(
+            self.edges
+                .iter()
+                .filter(|e| copied.contains(&e.from) && copied.contains(&e.to))
+                .cloned(),
+        );
+        for k in 0..fed.len() {
+            nodes.push(GraphNode::Input {
+                id: repeat_node(r.start, 2, k),
+                input: repeat_input(
+                    repeat_value_id(r.start, &format!("picture_{k}")),
+                    InputKind::Picture,
+                ),
+            });
+        }
+        nodes.push(GraphNode::Output { id: r.end });
+        let graph = CompGraph {
+            nodes,
+            edges,
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+            notes: Vec::new(),
+        };
+        (graph, fed)
+    }
+}
+
+/// The numbers time `index` of `count` of the pair starting at `start` reads,
+/// by the Input ids [`CompGraph::repeat_graph`] gave them.
+#[must_use]
+pub fn repeat_values(start: &EffectInstance, index: u32, count: u32) -> Vec<(String, EffectValue)> {
+    use crate::fx::effects::repeat::{RepeatStart, PASS_PORTS};
+    let seed = match start.param("seed") {
+        Some(EffectValue::Seed(s)) => *s,
+        _ => 0,
+    };
+    let values = RepeatStart { seed }.pass(index, count);
+    PASS_PORTS
+        .iter()
+        .zip(values)
+        .map(|(port, v)| {
+            (
+                repeat_value_id(start.id, port.id),
+                EffectValue::Float(crate::anim::Property::fixed(f64::from(v))),
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1844,5 +2145,105 @@ mod tests {
         let json = serde_json::to_string(&graph).expect("it serialises");
         let back: CompGraph = serde_json::from_str(&json).expect("and reads back");
         assert_eq!(back, graph);
+    }
+
+    /// **A Repeat pair holds the boxes between it, and nothing leaves them
+    /// but through the end.** A nested pair is inside, a wire from inside to
+    /// the Output is refused, and an end with no start of its own is refused.
+    #[test]
+    fn a_repeat_pair_holds_the_boxes_between_it() {
+        let src = read(Uuid::now_v7());
+        let (start, end) = (fx(REPEAT_START), fx(REPEAT_END));
+        let (inner_start, inner_end) = (fx(REPEAT_START), fx(REPEAT_END));
+        let blur = fx("blur");
+        let out = GraphNode::Output { id: Uuid::now_v7() };
+        let nodes = vec![
+            src.clone(),
+            start.clone(),
+            inner_start.clone(),
+            blur.clone(),
+            inner_end.clone(),
+            end.clone(),
+            out.clone(),
+        ];
+        let mut edges = vec![
+            wire(&src, "output", &start, "input"),
+            wire(&start, "output", &inner_start, "input"),
+            wire(&inner_start, "output", &blur, "input"),
+            wire(&blur, "output", &inner_end, "input"),
+            wire(&inner_end, "output", &end, "input"),
+            wire(&end, "output", &out, "input"),
+        ];
+        let graph = built(nodes.clone(), edges.clone());
+        assert_eq!(graph.validate(None), Ok(()));
+        let pairs = graph.repeats().expect("two pairs");
+        let outer = pairs.iter().find(|r| r.start == start.id()).expect("outer");
+        assert_eq!(outer.end, end.id());
+        assert_eq!(
+            outer.body,
+            vec![inner_start.id(), blur.id(), inner_end.id()]
+        );
+        let inner = pairs
+            .iter()
+            .find(|r| r.start == inner_start.id())
+            .expect("inner");
+        assert_eq!(inner.body, vec![blur.id()]);
+
+        // One time of the outer pair is a graph of its own: the start an
+        // Input under its own id, the end its Output, and nothing wired in
+        // from outside. Its numbers are named for the start.
+        let (time, fed) = graph.repeat_graph(outer);
+        assert!(fed.is_empty());
+        assert_eq!(time.output_id(), Some(end.id()));
+        assert_eq!(time.validate(None), Ok(()));
+        assert_eq!(time.repeats().map(|r| r.len()), Ok(1));
+        let GraphNode::Fx(start_box) = &start else {
+            panic!("the start is a box");
+        };
+        let values = repeat_values(start_box, 2, 5);
+        assert_eq!(values.len(), crate::fx::effects::repeat::PASS_PORTS.len());
+        assert!(values
+            .iter()
+            .all(|(id, _)| time.inputs().any(|i| i.id == *id)));
+
+        // Out of the middle straight to the Output, past both ends.
+        edges[5] = wire(&blur, "output", &out, "input");
+        assert_eq!(
+            built(nodes.clone(), edges).validate(None),
+            Err(GraphError::RepeatLeak)
+        );
+
+        // An end on its own hands its picture on, and two ends on one start
+        // are refused.
+        let lone = fx(REPEAT_END);
+        let graph = built(
+            vec![src.clone(), lone.clone(), out.clone()],
+            vec![
+                wire(&src, "output", &lone, "input"),
+                wire(&lone, "output", &out, "input"),
+            ],
+        );
+        assert_eq!(graph.validate(None), Ok(()));
+        assert_eq!(graph.repeats(), Ok(Vec::new()));
+        let merge = fx("merge");
+        let graph = built(
+            vec![
+                src.clone(),
+                start.clone(),
+                lone.clone(),
+                end.clone(),
+                merge.clone(),
+                out.clone(),
+            ],
+            vec![
+                wire(&src, "output", &start, "input"),
+                wire(&start, "output", &lone, "input"),
+                wire(&start, "output", &end, "input"),
+                wire(&lone, "output", &merge, "input"),
+                wire(&end, "output", &merge, "background"),
+                wire(&merge, "output", &out, "input"),
+            ],
+        );
+        assert_eq!(graph.validate(None), Err(GraphError::RepeatUnpaired));
     }
 }

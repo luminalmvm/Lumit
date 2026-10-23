@@ -233,6 +233,7 @@ Conversion
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
+Copies
 Core colour
 Core radius
 Corner pin
@@ -862,6 +863,8 @@ Render
 Rendered
 Repeat
 Repeat edge pixels
+Repeat end
+Repeat start
 Replace colour
 Replace method
 Reset interval
@@ -1079,6 +1082,7 @@ Time offset
 Time samples
 Time since last
 Time step
+Times
 Tint
 Tint colour
 To
