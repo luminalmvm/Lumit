@@ -1,5 +1,5 @@
-//! Which installed plugins the user has switched off (docs/12 §2.6), and
-//! the folders of extensions they added.
+//! Which installed plugins the user has switched off (docs/12 §2.6), the
+//! folders of extensions they added, and what the audio plugin scan last found.
 //!
 //! # In plain terms
 //!

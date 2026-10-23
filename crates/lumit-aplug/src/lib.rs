@@ -90,7 +90,7 @@ pub use describe::{
 };
 pub use discover::{
     clap_search_paths, scan, scan_brokered, scan_brokered_reporting, scan_dir, search_paths,
-    vst3_search_paths, DiscoveredPlugin, ScanCache, ScanOptions, ScanOutcome,
+    vst3_search_paths, CachedModule, DiscoveredPlugin, ScanCache, ScanOptions, ScanOutcome,
 };
 pub use instance::{HostError, HostFlags, Instance};
 pub use ipc::broker::{

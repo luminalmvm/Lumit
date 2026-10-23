@@ -40,7 +40,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
+
+use serde::{Deserialize, Serialize};
 
 use crate::abi::AnyModule;
 use crate::def::AudioEffectDef;
@@ -247,9 +249,35 @@ pub struct ScanOutcome {
     pub skipped: Vec<String>,
 }
 
-/// The plugins each module offered the last time it described, by module path,
-/// so a later scan can offer them without opening it again.
-pub type ScanCache = BTreeMap<PathBuf, Vec<PluginDescriptor>>;
+/// What each module offered the last time it described, by module path, so a
+/// later scan can offer it without opening it again.
+pub type ScanCache = BTreeMap<PathBuf, CachedModule>;
+
+/// One module's describe, and what the file and the switched-off list were
+/// when it ran.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CachedModule {
+    /// The file's size and when it was last written, so an update in place is
+    /// described again.
+    pub stamp: (u64, u64),
+    /// What was switched off then. Those plugins were never described, so one
+    /// switched back on since sends the module to the broker again.
+    pub disabled: BTreeSet<String>,
+    /// What it offered.
+    pub described: Vec<PluginDescriptor>,
+}
+
+/// A file's size and when it was last written, in nanoseconds. `None` when
+/// either cannot be read, which is never cached.
+fn stamp_of(binary: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::metadata(binary).ok()?;
+    let written = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    Some((meta.len(), u64::try_from(written.as_nanos()).ok()?))
+}
 
 /// Scan the named directories and describe everything hostable in them.
 ///
@@ -321,12 +349,28 @@ pub fn scan_brokered_reporting(
     let binaries: Vec<PathBuf> = paths.iter().flat_map(|dir| scan_dir(dir)).collect();
     let total = binaries.len();
     cache.retain(|path, _| binaries.contains(path));
+    let switched_off = disabled
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
     for (index, binary) in binaries.into_iter().enumerate() {
         file(&binary, index, total);
-        if let Some(cached) = cache.get(&binary) {
-            offer(&binary, cached, &[], &mut outcome);
+        let stamp = stamp_of(&binary);
+        // ponytail: switching any plugin back on describes every module once
+        // more, since a module's list does not say which ids were its own.
+        if let Some(cached) = cache.get(&binary).filter(|cached| {
+            Some(cached.stamp) == stamp && cached.disabled.is_subset(&switched_off)
+        }) {
+            let described: Vec<PluginDescriptor> = cached
+                .described
+                .iter()
+                .filter(|plugin| !switched_off.contains(&plugin.id))
+                .cloned()
+                .collect();
+            offer(&binary, &described, &[], &mut outcome);
             continue;
         }
+        cache.remove(&binary);
         let mut config = BrokerConfig::new(&binary);
         config.disabled = Arc::clone(disabled);
         config.exe = exe.map(Path::to_path_buf);
@@ -348,7 +392,16 @@ pub fn scan_brokered_reporting(
         let rejected = broker.rejected().to_vec();
         drop(broker);
         offer(&binary, &described, &rejected, &mut outcome);
-        cache.insert(binary, described);
+        if let Some(stamp) = stamp {
+            cache.insert(
+                binary,
+                CachedModule {
+                    stamp,
+                    disabled: switched_off.clone(),
+                    described,
+                },
+            );
+        }
     }
     outcome
 }

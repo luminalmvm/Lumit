@@ -242,9 +242,9 @@ fn a_verified_module_is_offered_from_the_cache_without_a_broker() {
     let Ok(root) = tempfile::tempdir() else {
         return;
     };
-    if a_module_in(root.path()).is_none() {
+    let Some(module) = a_module_in(root.path()) else {
         return skipped("a_verified_module_is_offered_from_the_cache_without_a_broker");
-    }
+    };
     let paths = [root.path().to_path_buf()];
     let exe = PathBuf::from(env!("CARGO_BIN_EXE_lumit-aplug-broker"));
     let mut cache = ScanCache::default();
@@ -273,6 +273,22 @@ fn a_verified_module_is_offered_from_the_cache_without_a_broker() {
         "the cache should answer: {:?}",
         outcome.skipped
     );
+
+    // An update in place is a different file, so the cache no longer answers.
+    let later = std::time::SystemTime::now() + Duration::from_secs(60);
+    let touched = std::fs::File::options()
+        .write(true)
+        .open(&module)
+        .and_then(|file| file.set_modified(later));
+    assert!(touched.is_ok(), "{touched:?}");
+    let outcome = scan_brokered_reporting(
+        &paths,
+        &nothing_disabled(),
+        Some(&nowhere),
+        &mut cache,
+        &mut |_, _, _| {},
+    );
+    assert!(outcome.found.is_empty(), "a changed file was offered stale");
 }
 
 #[test]
