@@ -463,12 +463,13 @@ impl Sharing {
     }
 
     /// Say which footage items this machine has the original of. The whole
-    /// list each time it changes.
-    pub fn set_holds(&self, items: Vec<Held>) {
+    /// list each time it changes. False when nobody heard it, because no
+    /// footage is carried yet, and it is to be said again.
+    pub fn set_holds(&self, items: Vec<Held>) -> bool {
         match self {
             Sharing::Host(host) => host.set_holds(items),
             Sharing::Guest(guest) => guest.set_holds(items),
-            Sharing::Online(_) => {}
+            Sharing::Online(_) => true,
         }
     }
 
