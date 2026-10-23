@@ -301,6 +301,58 @@ pub(crate) fn unreadable(path: &Path) -> ScriptError {
     ScriptError::Failed(format!("{} could not be read.", path.display()))
 }
 
+/// The file footage item `item` reads, found in `state` so it can be probed
+/// once the project is let go.
+#[cfg(feature = "media")]
+pub(crate) fn footage_source(
+    state: &crate::api::state::LumitBridgeState,
+    item: Uuid,
+) -> Option<lumit_media::MediaSource> {
+    match state.store.snapshot().item(item) {
+        Some(lumit_core::model::ProjectItem::Footage(f)) => {
+            crate::api::footage::FootageReference::resolve_source(state, f)
+        }
+        _ => None,
+    }
+}
+
+/// What a script's `item.list` says of the footage `source` reads, as the
+/// project panel reads it.
+#[cfg(feature = "media")]
+pub(crate) fn footage_info(source: lumit_media::MediaSource) -> Option<lumit_script::FootageInfo> {
+    use lumit_core::time::{Duration, FrameRate, Rational};
+    let info = crate::probe::held_or_probed(source)?;
+    let video = info.video.as_ref();
+    let runs = info.runs_as_video();
+    let rate = video.filter(|_| runs).and_then(|v| {
+        FrameRate::new(
+            u32::try_from(v.fps_num).ok()?,
+            u32::try_from(v.fps_den).ok()?,
+        )
+        .ok()
+    });
+    // A whole number of frames on the file's own rate, so 127 frames at 30
+    // are 127/30 seconds exactly. Sound alone is read to the millisecond.
+    let duration = match rate {
+        Some(rate) => {
+            let frames = (info.duration_seconds * rate.fps()).round() as i64;
+            rate.time_of_frame(frames.max(1))
+                .ok()
+                .map(|t| Duration(t.0))
+        }
+        None if video.is_none() => Rational::from_f64_on_grid(info.duration_seconds, 1000)
+            .ok()
+            .map(Duration),
+        None => None,
+    };
+    Some(lumit_script::FootageInfo {
+        width: video.map_or(0, |v| v.width),
+        height: video.map_or(0, |v| v.height),
+        frame_rate: rate,
+        duration,
+    })
+}
+
 impl Host for AppHost<'_> {
     fn store(&self) -> &DocumentStore {
         &self.store
@@ -524,6 +576,14 @@ impl Host for AppHost<'_> {
 
     fn source_length(&self, comp: Uuid, layer: &Layer) -> Option<lumit_core::time::Duration> {
         crate::api::layer::LayerReference::new(self.project.id, comp, layer.id).source_length(layer)
+    }
+
+    // Probed outside the project's lock, as placing footage is.
+    #[cfg(feature = "media")]
+    fn footage_info(&self, item: Uuid) -> Option<lumit_script::FootageInfo> {
+        let state = self.project.state().ok()?;
+        let source = footage_source(&*state.read().ok()?, item)?;
+        footage_info(source)
     }
 
     fn parent_ops(

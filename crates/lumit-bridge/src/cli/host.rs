@@ -509,6 +509,11 @@ impl Host for Headless {
         lumit_render::build::parent_ops(&doc, comp, layer, parent, at.0.to_f64())
     }
 
+    #[cfg(feature = "media")]
+    fn footage_info(&self, item: Uuid) -> Option<lumit_script::FootageInfo> {
+        crate::script::footage_info(crate::script::footage_source(&self.bridge_state(), item)?)
+    }
+
     fn stop_flag(&self) -> Arc<AtomicBool> {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();

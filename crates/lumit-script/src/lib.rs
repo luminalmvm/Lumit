@@ -29,7 +29,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
-use lumit_core::time::{CompTime, Duration};
+use lumit_core::time::{CompTime, Duration, FrameRate};
 use lumit_core::{DocumentStore, Op};
 use serde::Serialize;
 use serde_json::Value;
@@ -124,6 +124,26 @@ pub trait Host {
         let _ = (comp, layer);
         None
     }
+
+    /// Footage item `item`'s file as it is read, when the host can read it.
+    /// By default it is not known.
+    fn footage_info(&self, item: Uuid) -> Option<FootageInfo> {
+        let _ = item;
+        None
+    }
+}
+
+/// A footage item's file as it is read, interpretation and all: what After
+/// Effects' `FootageItem` answers for its size, rate and length.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FootageInfo {
+    /// The picture's size, nought for sound alone.
+    pub width: u32,
+    pub height: u32,
+    /// The rate it plays at. `None` for a still or for sound alone.
+    pub frame_rate: Option<FrameRate>,
+    /// How long it runs. `None` for a still.
+    pub duration: Option<Duration>,
 }
 
 /// Where an export has got to.

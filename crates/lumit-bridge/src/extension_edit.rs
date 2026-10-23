@@ -203,6 +203,10 @@ impl Host for EditHost<'_> {
         self.app.footage_layers(comp, item)
     }
 
+    fn footage_info(&self, item: Uuid) -> Option<lumit_script::FootageInfo> {
+        self.app.footage_info(item)
+    }
+
     fn export_start(&self, _: Uuid, _: Option<&Path>) -> Result<u64, ScriptError> {
         Err(not_for_extensions())
     }

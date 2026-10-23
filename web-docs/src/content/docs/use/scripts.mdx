@@ -79,7 +79,7 @@ the save made before a project closes, run none.
 | Expressions | `expression`, `expressionEnabled` |
 | Effects | `addProperty()` by match name or name, `property()` by number, match name or Lumit's name, `numProperties`, `name`, `enabled` |
 | Markers | `setValueAtTime()` with a `MarkerValue`, `setValuesAtTimes()`, `numKeys`, `keyTime()`, `keyValue()`, `removeKey()` |
-| `FootageItem` | `mainSource.conformFrameRate`, `file`, `duration` |
+| `FootageItem` | `mainSource.conformFrameRate`, `file`, `duration`, `width`, `height`, `frameRate`, `frameDuration` |
 | `ImportOptions` | `file`, `sequence`, footage as `importAs` |
 | `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `write()`, `writeln()`, `close()`, `encoding`, `lineFeed`, `remove()`, `Folder.create()`, `File.openDialog()` |
 | `Window` | `"dialog"` and `"palette"`, `add()` of `group`, `panel`, `statictext`, `edittext`, `checkbox`, `radiobutton`, `dropdownlist`, `slider` and `button`, `text`, `value`, `selection`, `items`, `enabled`, `onClick`, `onChange`, `orientation`, `alignChildren`, `alignment`, `margins`, `spacing`, `show()`, `close()` |
@@ -107,7 +107,6 @@ Anything else stops the script with a message naming it.
 - A marker keeps its comment, duration, label colour and whether it is a chapter. Chapter
   text, URLs and cue points are not kept.
 - A numbered still always imports as the whole sequence.
-- A footage item's `duration` is known once it has a layer.
 - An item's `comment` and a comp's or solid's pixel aspect are not kept.
 - `#target` lines are skipped. `#include`, `//@include` and `#includepath` read in files from
   the script's own folder and the folders inside it, each once.
