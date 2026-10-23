@@ -134,6 +134,10 @@ picture and a map can be wired at once. **Output** follows the dropdown.
 The points family has a socket of its own, and a wire from it feeds another box's points
 input.
 
+A **Shapes** socket carries paths. A Read box of a composition hands out the paths of its
+shape layers on **Shapes**, for a [Repeat start](/effects/compositing/repeat-start/) to run
+once a path.
+
 ## The console
 
 `Ctrl+Space` over the canvas opens the [effects console](/use/fx-console/). So do a

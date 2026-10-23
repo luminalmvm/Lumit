@@ -11453,6 +11453,30 @@
   "@fxCopies": {
     "description": "Effect controls - a Mode setting on Repeat end: every run starts from the same picture and all of them are laid over each other."
   },
+  "fxFor": "For",
+  "@fxFor": {
+    "description": "Effect controls - a control on Repeat end: what the boxes between Repeat start and Repeat end run once for, a number of times, each point or each path."
+  },
+  "fxEachPoint": "Each point",
+  "@fxEachPoint": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each point wired into Repeat start."
+  },
+  "fxEachPath": "Each path",
+  "@fxEachPath": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each path wired into Repeat start."
+  },
+  "fxShapes": "Shapes",
+  "@fxShapes": {
+    "description": "Node graph socket - on a Read box of a composition, the paths of its shape layers; on Repeat start, the paths it runs once for."
+  },
+  "fxX": "X",
+  "@fxX": {
+    "description": "Node graph socket - on Repeat start: across, in pixels, where this run's point or path is."
+  },
+  "fxY": "Y",
+  "@fxY": {
+    "description": "Node graph socket - on Repeat start: down, in pixels, where this run's point or path is."
+  },
   "fxSplitChannels": "Split channels",
   "@fxSplitChannels": {
     "description": "Node graph box name - hands out its picture's red, green, blue and alpha as four greyscale pictures."
