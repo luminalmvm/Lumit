@@ -2567,10 +2567,9 @@ impl ExportSpec {
     /// group for the same reason).
     ///
     /// It matters because two of them did reach the mix. `honour_solo: false`
-    /// clears every layer's solo switch, and the mixer counts solos with
-    /// [`lumit_core::model::any_solo`] — every soloed layer, audio-only ones
-    /// included — so a picture setting was deciding what a `.wav`
-    /// contained. The defaults are the two rules that are *not* picture
+    /// clears every layer's solo switch, and the mixer counts the solos of
+    /// layers that make a sound, so a picture setting was deciding what a
+    /// `.wav` contained. The defaults are the two rules that are *not* picture
     /// settings: solos are honoured, exactly as playback honours them,
     /// and a guide layer stays reference-only at every depth, its sound no more
     /// delivered than its picture.

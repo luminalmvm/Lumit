@@ -120,8 +120,10 @@ pub fn base_layer(
 /// nothing happens. Adding it soloed puts it where it was just asked for.
 ///
 /// Counted the way the two halves of solo are counted: a layer with a
-/// picture asks whether any layer that *draws* is soloed, an Audio layer asks
-/// the mixer's question — every soloed layer. A Camera, a Light and a Null are
+/// picture asks whether any layer that *draws* is soloed, an Audio layer
+/// whether another Audio layer is. The mixer also counts a soloed footage
+/// layer with sound, but that takes a probe of the file, which this cannot
+/// make. A Camera, a Light and a Null are
 /// left out of it in both directions ([`Layer::can_adjust`] is the same "shows
 /// something in the Viewer" question): none of them draws, so soloing one would
 /// blank the comp, and they are chosen by their visible switch and never by
@@ -136,7 +138,7 @@ pub fn solo_on_arrival<'a>(layer: &mut Layer, mut existing: impl Iterator<Item =
     if !audio_only && !layer.can_adjust() {
         return;
     }
-    layer.switches.solo |= existing.any(|l| l.switches.solo && (audio_only || !l.audio_only));
+    layer.switches.solo |= existing.any(|l| l.switches.solo && l.audio_only == audio_only);
 }
 
 /// The ops that guarantee `kind`'s auto-filing folder exists, plus its id —
@@ -1382,7 +1384,7 @@ mod tests {
             (LayerKind::Null, false, &picture, false),
             (LayerKind::Solid { def: item }, false, &sound, false),
             (LayerKind::Footage { item }, true, &sound, true),
-            (LayerKind::Footage { item }, true, &picture, true),
+            (LayerKind::Footage { item }, true, &picture, false),
         ];
         for (kind, audio_only, existing, soloed) in cases {
             let mut new = layer(kind, audio_only, false);

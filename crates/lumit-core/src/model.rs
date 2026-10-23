@@ -1759,22 +1759,17 @@ impl Layer {
     }
 }
 
-/// Whether any layer in `comp` is soloed. When true, the compositor
-/// renders only the soloed layers. Shared by the preview and export paths so
-/// they agree on what is visible.
-pub fn any_solo(comp: &Composition) -> bool {
-    comp.layers.iter().any(|l| l.switches.solo)
-}
-
 /// Whether any layer that **draws** is soloed — the question the
-/// picture asks, where [`any_solo`] is the one the mixer asks.
+/// picture asks. Shared by the preview and export paths so they agree on what
+/// is visible.
 ///
-/// **In plain terms.** Solo means "just this one". Soloing a music track means
-/// just that sound; it cannot sensibly mean an empty picture, because the track
-/// has no picture to show. So the two halves count solos separately: the mixer
-/// counts every soloed layer, and the compositor counts only the layers that
-/// could have been on screen. Solo an Audio layer and the picture does not
-/// notice — which is also what keeps its switches out of the frame key.
+/// **In plain terms.** Solo means "just this one", among layers of its own
+/// kind, as in After Effects. Soloing a music track means just that sound; it
+/// cannot sensibly mean an empty picture, because the track has no picture to
+/// show. So the two halves count solos separately: the compositor counts only
+/// the layers that could have been on screen, and the mixer only the layers
+/// that make a sound. Solo an Audio layer and the picture does not notice —
+/// which is also what keeps its switches out of the frame key.
 pub fn any_picture_solo(comp: &Composition) -> bool {
     comp.layers.iter().any(|l| l.switches.solo && !l.audio_only)
 }
