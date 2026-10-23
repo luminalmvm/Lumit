@@ -294,6 +294,13 @@ fn failed(message: &str) -> ScriptError {
     ScriptError::Failed(message.into())
 }
 
+/// A file Lumit can't read is refused rather than imported, as After Effects'
+/// importFile throws for one, so a script can catch it and say which.
+#[cfg(feature = "media")]
+pub(crate) fn unreadable(path: &Path) -> ScriptError {
+    ScriptError::Failed(format!("{} could not be read.", path.display()))
+}
+
 impl Host for AppHost<'_> {
     fn store(&self) -> &DocumentStore {
         &self.store
@@ -315,9 +322,11 @@ impl Host for AppHost<'_> {
     }
 
     fn import_footage(&self, paths: &[PathBuf]) -> Result<Vec<Uuid>, ScriptError> {
-        // Each file is its own commit, and the call is one undo step.
-        self.store.begin_undo_group();
-        let ids = paths
+        let could_not =
+            |path: &Path| ScriptError::Failed(format!("{} could not be imported.", path.display()));
+        // Every file is read before any is added, so a refused one leaves
+        // nothing half imported.
+        let items = paths
             .iter()
             .map(|path| {
                 if !path.exists() {
@@ -326,12 +335,33 @@ impl Host for AppHost<'_> {
                         path.display()
                     )));
                 }
+                let item = ProjectReference::footage_from_disk(&path.to_string_lossy())
+                    .map_err(|_| could_not(path))?;
+                #[cfg(feature = "media")]
+                {
+                    let state = self.project.state().map_err(|_| could_not(path))?;
+                    // Probed outside the project's lock.
+                    let source = {
+                        let state = state.read().map_err(|_| could_not(path))?;
+                        crate::api::footage::FootageReference::resolve_source(&state, &item)
+                    };
+                    if !source.is_some_and(crate::probe::reads) {
+                        return Err(unreadable(path));
+                    }
+                }
+                Ok(item)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Each file is its own commit, and the call is one undo step.
+        self.store.begin_undo_group();
+        let ids = items
+            .into_iter()
+            .zip(paths)
+            .map(|(item, path)| {
                 self.project
-                    .import_footage(path.to_string_lossy().into_owned())
+                    .file_footage(item)
                     .map(|footage| footage.id())
-                    .map_err(|_| {
-                        ScriptError::Failed(format!("{} could not be imported.", path.display()))
-                    })
+                    .map_err(|_| could_not(path))
             })
             .collect();
         self.store.end_undo_group();

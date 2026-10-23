@@ -134,6 +134,8 @@ pub extern "C" fn lumit_cli_main() -> i32 {
 
 fn main() -> i32 {
     find_brokers();
+    #[cfg(feature = "media")]
+    lumit_media::encode::quiet_ffmpeg_log();
     let command = match parse(std::env::args_os().skip(1).collect()) {
         Ok(command) => command,
         Err(why) => {
