@@ -11,8 +11,7 @@ are [LFX effects](/use/lfx-effects/).
 
 :::note
 Extensions are installed from a folder or a package: the addon catalogue does not list
-them. An extension is not signed, and Lumit does not limit what its page loads from the
-internet.
+them. An extension is not signed.
 :::
 
 ## Installing one
@@ -70,7 +69,7 @@ my-extension/
 | `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
 | `effects` | Optional. The [LFX effects](/use/lfx-effects/#the-manifest) it carries. |
 | `permissions` | What the page may ask. See below. |
-| `hosts` | The sites `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
+| `hosts` | The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
 
 A manifest with a permission Lumit does not know, an `entry` outside the folder, or a host
 that is not a bare name is refused. A folder holds at most 4,096 files and 512 MB.
@@ -80,6 +79,10 @@ that is not a bare name is refused. A folder holds at most 4,096 files and 512 M
 The page is served from `https://<id>.lumit.example/` on Windows and from
 `lumit-extension://<id>/` on macOS and Linux, so relative paths to its own scripts, styles
 and pictures work. Lumit gives it `window.lumit` before its own scripts run.
+
+The page loads its own files and `https` and `wss` addresses on `hosts`, and nothing else.
+Any other request is refused, whether it comes from `fetch`, a tag, a form or a worker. A
+WebRTC connection is not limited.
 
 ```js
 const info = await lumit.call("app.info");

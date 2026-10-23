@@ -53,8 +53,27 @@ static void AddLibFolderToSearchPath() {
   }
 }
 
+// The installer holds this mutex while it replaces Lumit's files
+// (packaging/windows/lumit.iss). Starting then would hold some of them open
+// and leave half an update, so this start gives way. The installer opens
+// Lumit itself when it's done, with --after-update to get past this.
+static bool UpdateInProgress(const wchar_t *command_line) {
+  if (::wcsstr(command_line, L"--after-update") != nullptr) {
+    return false;
+  }
+  HANDLE setup = ::OpenMutexW(SYNCHRONIZE, FALSE, L"LumitSetup");
+  if (setup == nullptr) {
+    return false;
+  }
+  ::CloseHandle(setup);
+  return true;
+}
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  if (UpdateInProgress(command_line)) {
+    return EXIT_SUCCESS;
+  }
   AddLibFolderToSearchPath();
 
   // Kept running in the background, Lumit is one Lumit: opening it again

@@ -466,9 +466,11 @@ impl Guest {
     }
 
     /// Which footage this machine has the original of, told to the host.
-    pub fn set_holds(&self, items: Vec<Held>) {
+    /// Kept, and said again whenever the host is found again.
+    pub fn set_holds(&self, items: Vec<Held>) -> bool {
         *self.inner.holds.lock() = Some(items);
         self.inner.say_holds();
+        true
     }
 
     /// Who has the original of `item`, as the host last said.

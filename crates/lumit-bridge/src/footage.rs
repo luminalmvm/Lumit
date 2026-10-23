@@ -648,11 +648,11 @@ impl Carrier {
     }
 
     fn run(&self, queue: &Receiver<Job>, tell: &Tell) {
-        self.settle(tell);
         // An edit says the document changed, and a drag is a great many
         // edits. What this machine has and wants is looked at again once
-        // they have stopped coming for a moment, not once for each.
-        let (mut changed, mut settled) = (false, Instant::now());
+        // they have stopped coming for a moment, not once for each. And
+        // again until what it has is heard.
+        let (mut changed, mut settled) = (!self.settle(tell), Instant::now());
         while !self.stop.load(Ordering::Relaxed) {
             match queue.recv_timeout(Duration::from_millis(250)) {
                 Ok(Job::News(news)) => self.news(news, tell),
@@ -662,16 +662,17 @@ impl Carrier {
                 Err(RecvTimeoutError::Disconnected) => break,
             }
             if changed && settled.elapsed() >= Duration::from_millis(500) {
-                (changed, settled) = (false, Instant::now());
-                self.settle(tell);
+                settled = Instant::now();
+                changed = !self.settle(tell);
             }
             self.watch_exports();
         }
     }
 
     /// Say which originals this machine has, if that has changed, and ask
-    /// for a stand-in of whatever it lacks that a composition uses.
-    fn settle(&self, tell: &Tell) {
+    /// for a stand-in of whatever it lacks that a composition uses. False
+    /// when nobody heard what it has, so it is to be said again.
+    fn settle(&self, tell: &Tell) -> bool {
         let doc = self.store.snapshot();
         let mut held = Vec::new();
         let mut wants = Vec::new();
@@ -688,17 +689,19 @@ impl Carrier {
                 _ => {}
             }
         }
-        let changed = self.held.lock().is_ok_and(|mut was| {
-            let changed = *was != held;
-            was.clone_from(&held);
-            changed
-        });
-        if changed {
-            self.sharing(|sharing| sharing.set_holds(held));
+        // Kept as said only once it is heard. A carrier starts before its
+        // sharing is filed or carries footage, and what it says then is lost.
+        if self.held.lock().is_ok_and(|was| *was != held) {
+            if self.sharing(|sharing| sharing.set_holds(held.clone())) != Some(true) {
+                return false;
+            }
+            if let Ok(mut was) = self.held.lock() {
+                *was = held;
+            }
             tell(Told::Changed);
         }
         if !TAKE.load(Ordering::Relaxed) {
-            return;
+            return true;
         }
         for item in wants {
             let wanted = Wanted::StandIn { item };
@@ -708,6 +711,7 @@ impl Carrier {
                 self.want(wanted);
             }
         }
+        true
     }
 
     fn news(&self, news: News, tell: &Tell) {

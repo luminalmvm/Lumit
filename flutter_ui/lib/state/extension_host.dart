@@ -44,6 +44,53 @@ const String extensionScheme = 'lumit-extension';
 String extensionOrigin(String id) =>
     Platform.isWindows ? 'https://$id.lumit.example' : '$extensionScheme://$id';
 
+/// The Content-Security-Policy on a page's own documents. It may load its
+/// own files, and https and wss on the sites its manifest named and the
+/// ones under them. The web view's own filter holds it to the same.
+String extensionPolicy(List<String> hosts) {
+  final reach = [
+    "'self'",
+    for (final host in hosts)
+      for (final scheme in ['https', 'wss']) ...[
+        '$scheme://$host',
+        '$scheme://*.$host',
+      ],
+  ].join(' ');
+  return "default-src $reach 'unsafe-inline' 'unsafe-eval' data: blob:; "
+      'form-action $reach';
+}
+
+/// WebKit's content filter for a page on macOS and Linux: everything is
+/// blocked but the page's own files, what never leaves the computer, and
+/// https and wss on the sites its manifest named. WebKit's patterns have no
+/// `|`, so each is a rule of its own. Ids and hosts are letters, digits,
+/// hyphens and dots, so a dot is all that needs escaping.
+String extensionRules(String origin, List<String> hosts) {
+  String literal(String text) => text.replaceAll('.', r'\.');
+  final allowed = [
+    '^${literal(origin)}/',
+    '^data:',
+    '^blob:',
+    '^about:',
+    for (final host in hosts)
+      for (final scheme in ['https', 'wss']) ...[
+        '^$scheme://([a-z0-9-]+\\.)*${literal(host)}/',
+        '^$scheme://([a-z0-9-]+\\.)*${literal(host)}:[0-9]+/',
+      ],
+  ];
+  return jsonEncode([
+    {
+      'trigger': {'url-filter': '.*'},
+      'action': {'type': 'block'},
+    },
+    for (final pattern in allowed)
+      {
+        'trigger': {'url-filter': pattern},
+        'action': {'type': 'ignore-previous-rules'},
+      },
+  ]);
+}
+
 /// The most of an answer [ExtensionHost] fetches for a page.
 const int _fetchLimit = 8 << 20;
 
