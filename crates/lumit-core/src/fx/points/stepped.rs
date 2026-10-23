@@ -610,32 +610,37 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 /// wired row counts as above nought, as it may be at some time.
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
+    inst.effect.match_name == "particulate"
+        && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
+}
+
+/// Whether Particulate `inst` keeps a picture between frames: Persistence is
+/// above nought, at some time. It does not make the particles walk.
+#[must_use]
+pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
+    inst.effect.match_name == "particulate" && above(comp, inst, "persistence")
+}
+
+/// Whether row `id` is above nought, or keyed, an expression or wired, as it
+/// may be at some time.
+fn above(comp: &Composition, inst: &EffectInstance, id: &str) -> bool {
     use crate::anim::Animation;
     use crate::graph::{InputRef, NodeRef};
-    if inst.effect.match_name != "particulate" {
-        return false;
-    }
-    let wired = |id: &str| {
-        let owner = comp
-            .layers
-            .iter()
-            .find(|l| l.effects.iter().any(|e| e.id == inst.id));
-        owner.is_some_and(|l| {
+    let on = match inst.param(id) {
+        Some(EffectValue::Float(track)) => {
+            !matches!(track.animation, Animation::Static(v) if v <= 0.0)
+        }
+        _ => false,
+    };
+    on || comp
+        .layers
+        .iter()
+        .find(|l| l.effects.iter().any(|e| e.id == inst.id))
+        .is_some_and(|l| {
             l.graph.edges.iter().any(|e| {
                 matches!(&e.to, InputRef::Param { node: NodeRef::Effect(n), port }
                     if *n == inst.id && port == id)
             })
-        })
-    };
-    target(comp, inst).is_some()
-        || WALK_ROWS.iter().any(|id| {
-            let on = match inst.param(id) {
-                Some(EffectValue::Float(track)) => {
-                    !matches!(track.animation, Animation::Static(v) if v <= 0.0)
-                }
-                _ => false,
-            };
-            on || wired(id)
         })
 }
 

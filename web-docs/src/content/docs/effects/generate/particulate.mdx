@@ -85,6 +85,9 @@ A particle system.
 | **Spark speed** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
 | **Spark life** | Slider | 0.1 to 5; down to 0 and higher | 0.5 | Seconds |
 | **Spark size** | Slider | 0 to 100; higher | 50 | Per cent |
+| **Persistence** | Slider | 0 to 100 | 0 | Per cent |
+| **Zoom** | Slider | -100 to 100; higher | 0 | Per cent |
+| **Turn** | Slider | -360 to 360; any value by typing | 0 | Degrees |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
@@ -109,6 +112,7 @@ In the Effect Controls panel:
 - **Collide** groups **Collide with**, **On contact**, **Bounciness**, **Friction**.
 - **Flock** groups **Separation**, **Alignment**, **Cohesion**, **Flock radius**.
 - **Sparks** groups **Sparks**, **Spark speed**, **Spark life**, **Spark size**.
+- **Trails** groups **Persistence**, **Zoom**, **Turn**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
@@ -130,6 +134,9 @@ In the Effect Controls panel:
 - **Map placement** is editable while **Alignment** is 0.
 - **Map placement** is editable while **Cohesion** is 0.
 - **Map placement** is editable while **Sparks** is 0.
+- **Particle blend** is editable while **Persistence** is 0.
+- **Density layer** is editable while **Persistence** is 0.
+- **Map placement** is editable while **Persistence** is 0.
 - **Particle blend** is editable while **Collide with** names no layer.
 - **Density layer** is editable while **Collide with** names no layer.
 - **Map placement** is editable while **Collide with** names no layer.
@@ -262,6 +269,18 @@ With Separation, Alignment, Cohesion or Sparks above nought, each frame's partic
 worked out from the frame before, as with Collide with, and Density layer and Particle
 blend are not read. A row that is keyframed, has an expression or is wired counts as above
 nought.
+
+The **Trails** group, a picture kept from frame to frame:
+
+- **Persistence**: how much of the kept picture is left after one second.
+- **Zoom**: how much the kept picture grows each second, about the emitter's position.
+- **Turn**: how far the kept picture turns each second, about the emitter's position.
+
+With Persistence above nought, each frame's particles are drawn over the picture kept from
+the frame before, after it is faded, zoomed and turned, and that picture goes over the layer.
+Every frame from the layer's in point goes into it. Density layer and Particle blend are
+not read, Streak draws its tail back along each particle's speed, and the Sprite layer's
+picture at the current frame is stamped on every earlier frame.
 
 The **Render** group, how they are drawn:
 

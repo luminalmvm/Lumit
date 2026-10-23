@@ -1039,13 +1039,31 @@ fn feed_effect_stack(
         }
         // **A Particulate walk** reads every row, every wire and the collider
         // at every frame from the in point, so all of what it reads is fed,
-        // under the name its kept walks go by.
-        if let Some(layer) =
-            marker_layer.filter(|_| lumit_core::fx::points::stepped::wanted(comp, e))
-        {
+        // under the name its kept walks go by. Trails draw every frame from
+        // the in point too.
+        if let Some(layer) = marker_layer.filter(|_| {
+            use lumit_core::fx::points::stepped::{trails, wanted};
+            wanted(comp, e) || trails(comp, e)
+        }) {
             use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");
             h.update(&definition(doc, comp, layer, e, target(comp, e)));
+            // A 3D layer's trail is seen through the camera at every frame
+            // before this one.
+            if layer.switches.three_d && lumit_core::fx::points::stepped::trails(comp, e) {
+                for cam in comp
+                    .layers
+                    .iter()
+                    .filter(|l| matches!(l.kind, lumit_core::model::LayerKind::Camera { .. }))
+                {
+                    let _ = serde_json::to_writer(&mut *h, cam);
+                    for id in lumit_core::model::layer_parent_chain(comp, cam.id) {
+                        if let Some(parent) = comp.layers.iter().find(|l| l.id == id) {
+                            let _ = serde_json::to_writer(&mut *h, parent);
+                        }
+                    }
+                }
+            }
         }
         // **Beat trigger counts from the start.** Its events up to this frame
         // come from every moment before it: the keys of its rows there, and
@@ -4125,6 +4143,38 @@ mod tests {
             key(&doc, &tapped, 2.5),
             key(&doc, &edited, 2.5),
             "a tap keys the far layer's whole Emit rate track"
+        );
+
+        // A 3D layer's trail is seen through the camera at every frame before
+        // this one, so an earlier camera key renames it too.
+        let mut trail = text_layer("trail", 0.0, 10.0, 0.0);
+        trail.switches.three_d = true;
+        let mut p = particulate();
+        set(
+            &mut p,
+            "persistence",
+            EffectValue::Float(Property::fixed(80.0)),
+        );
+        trail.effects = vec![p];
+        let mut camera = text_layer("camera", 0.0, 10.0, 0.0);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1000.0),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(lumit_core::model::CameraOptions::fresh(
+                1000.0,
+                (0.0, 0.0, 0.0),
+            )),
+        };
+        camera.transform.position_x = linear_retime(&[(0.0, 0.0), (1.0, 100.0), (2.0, 0.0)]);
+        let trailed = comp_with(vec![trail, camera]);
+        let mut edited = trailed.clone();
+        edited.layers[1].transform.position_x =
+            linear_retime(&[(0.0, 0.0), (1.0, 300.0), (2.0, 0.0)]);
+        assert_ne!(
+            key(&doc, &trailed, 2.5),
+            key(&doc, &edited, 2.5),
+            "an earlier camera key changes a 3D trail"
         );
     }
 

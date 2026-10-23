@@ -1714,6 +1714,24 @@ pub struct PointsSchedule {
     /// ([`stepped`]). The card draws these instead of working its own
     /// out from `schedule`. `None` everywhere else.
     pub stepped: Option<PointsStream>,
+    /// What a Particulate with Trails on draws its kept picture from. `None`
+    /// everywhere else.
+    pub trails: Option<Trails>,
+}
+
+/// A Particulate with Persistence above nought: the card draws every frame
+/// from the in point again, each from the document at its own time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trails {
+    /// The walk's [`stepped::definition`], which names the kept pictures.
+    pub key: [u8; 32],
+    pub doc: std::sync::Arc<crate::model::Document>,
+    pub comp: uuid::Uuid,
+    pub layer: uuid::Uuid,
+    /// Which clone this is, as the driver walk reads it.
+    pub clone: (u32, u32),
+    /// How far the room round the art moves the points in, px@comp.
+    pub inset: [f32; 2],
 }
 
 /// One letter of a Text layer as it is laid out, in the layer's own px. A

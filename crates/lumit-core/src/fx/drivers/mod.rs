@@ -1243,11 +1243,14 @@ impl Eval<'_> {
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     // Births that follow a Density layer depend on a
-                    // picture, so they fall out with Scatter's below.
-                    if matches!(
-                        inst.param("density_layer"),
-                        Some(crate::model::EffectValue::Layer(Some(_)))
-                    ) {
+                    // picture, so they fall out with Scatter's below. Trails
+                    // draw from this stream, so they leave the layer unread.
+                    if !points::stepped::trails(comp, inst)
+                        && matches!(
+                            inst.param("density_layer"),
+                            Some(crate::model::EffectValue::Layer(Some(_)))
+                        )
+                    {
                         return None;
                     }
                     Some(Producer::Particulate {

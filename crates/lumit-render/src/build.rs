@@ -3321,6 +3321,36 @@ fn comp_walk(
                         label,
                         grow,
                         stepped: None,
+                        trails: None,
+                    };
+                }
+                // **A Particulate with Trails on** draws every frame from the
+                // in point on the card, each from the driver walk at its own
+                // time, so there is nothing to scan here.
+                if let Some(layer) =
+                    owner.filter(|_| lumit_core::fx::points::stepped::trails(comp, e))
+                {
+                    use lumit_core::fx::points::stepped::{definition, target};
+                    return lumit_core::fx::points::PointsSchedule {
+                        schedule: lumit_core::fx::points::Schedule::default(),
+                        t,
+                        projection,
+                        late,
+                        ports_from,
+                        input,
+                        input_from,
+                        text,
+                        label,
+                        grow,
+                        stepped: None,
+                        trails: Some(lumit_core::fx::points::Trails {
+                            key: definition(expr_doc, comp, layer, e, target(comp, e)),
+                            doc: expr_doc.clone(),
+                            comp: comp.id,
+                            layer: layer.id,
+                            clone: clone_number,
+                            inset,
+                        }),
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -3354,6 +3384,7 @@ fn comp_walk(
                         label,
                         grow,
                         stepped: walked,
+                        trails: None,
                     };
                 }
                 let upto = (t / dt).floor() as i64;
@@ -3410,6 +3441,7 @@ fn comp_walk(
                     label,
                     grow,
                     stepped: None,
+                    trails: None,
                 }
             })
             .collect()

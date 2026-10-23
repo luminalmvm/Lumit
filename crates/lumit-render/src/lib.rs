@@ -80,6 +80,7 @@ mod sidecar;
 pub mod source;
 pub mod standin;
 pub mod track;
+mod trails;
 
 pub use build::{
     below_draws_at, build_comp_draws, build_comp_draws_at, patch_layer_effect_param,

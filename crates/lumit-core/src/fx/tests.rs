@@ -10990,6 +10990,8 @@ fn a_collider_turned_in_3d_is_a_surface() {
         ("position_y", fixed(500.0)),
         ("turbulence_amount", fixed(0.0)),
     ]);
+    // Trails off, and the walk is the collider's alone.
+    assert!(!crate::fx::points::stepped::trails(&comp, &e));
     let at = |lt: f64| {
         let bag = resolve_bag(
             std::slice::from_ref(&e),

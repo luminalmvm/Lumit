@@ -1533,6 +1533,11 @@ impl HeadlessRenderer {
                 roi,
                 self.ground,
             );
+            // Asked to stop while compositing: a trail may have stopped short,
+            // so the picture is never shown.
+            if crate::cancel::requested() {
+                break 'frame Err(crate::cancel::CANCELLED.to_string());
+            }
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
                     crop_texture(&self.gpu, &linear, r, realiser.render_scale, (cw, ch))

@@ -5,6 +5,8 @@
 //! waits a layer rather than a whole frame. The composite itself is never cut
 //! short: it records into one command buffer and caches precomps as it goes,
 //! and stopping half way would leave a cached picture that was never drawn.
+//! Particulate's Trails do stop inside it, so once a stop is asked nothing
+//! more is filed and the frame is not shown.
 
 use lumit_eval::epoch::EpochToken;
 use std::cell::RefCell;

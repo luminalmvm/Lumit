@@ -812,7 +812,10 @@ impl Realiser<'_> {
             }
         }
         let made = self.realise(camera, width, height, background, layers);
-        self.fx_cache.borrow_mut().put_nested(key, made.clone());
+        // A frame asked to stop may have drawn this short.
+        if !crate::cancel::requested() {
+            self.fx_cache.borrow_mut().put_nested(key, made.clone());
+        }
         made
     }
 
