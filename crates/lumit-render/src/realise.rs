@@ -1040,6 +1040,7 @@ impl Realiser<'_> {
                     roto,
                     plane,
                     baked_from,
+                    points,
                     ..
                 } => {
                     let (tex, from) =
@@ -1107,11 +1108,11 @@ impl Realiser<'_> {
                         }],
                         &flare_lens,
                         &[bind(matte)],
-                        // A graph has no masks, no birth schedules and no graph
-                        // of its own to run here: a nested graph was lowered
-                        // into these very steps rather than left as an op.
+                        // A graph has no masks and no graph of its own to run
+                        // here: a nested graph was lowered into these very
+                        // steps rather than left as an op.
                         &[],
-                        &[],
+                        points,
                         &crate::fxops::Side {
                             roto: &roto,
                             planes: &planes,

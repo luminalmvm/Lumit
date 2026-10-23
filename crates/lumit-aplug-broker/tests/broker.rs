@@ -25,8 +25,8 @@ use std::time::Duration;
 use lumit_aplug::def::{BlockJob, BrokerHost};
 use lumit_aplug::ipc::proto::Bring;
 use lumit_aplug::{
-    nothing_disabled, scan_brokered, AudioHost, Broker, BrokerConfig, BrokerError, DisableList,
-    InstanceSetup, INTERLEAVED_LEN,
+    nothing_disabled, scan_brokered, scan_brokered_reporting, AudioHost, Broker, BrokerConfig,
+    BrokerError, DisableList, InstanceSetup, ScanCache, INTERLEAVED_LEN,
 };
 use lumit_aplug_testplug::{Kind, CRASH_ON_BLOCK_ENV, HANG_ENV, PARAM_GAIN};
 
@@ -235,6 +235,60 @@ fn a_brokered_scan_offers_the_effects_without_opening_a_module_here() {
         "and its refusal is one calm line: {:?}",
         outcome.skipped
     );
+}
+
+#[test]
+fn a_verified_module_is_offered_from_the_cache_without_a_broker() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some(module) = a_module_in(root.path()) else {
+        return skipped("a_verified_module_is_offered_from_the_cache_without_a_broker");
+    };
+    let paths = [root.path().to_path_buf()];
+    let exe = PathBuf::from(env!("CARGO_BIN_EXE_lumit-aplug-broker"));
+    let mut cache = ScanCache::default();
+    let _ = scan_brokered_reporting(
+        &paths,
+        &nothing_disabled(),
+        Some(&exe),
+        &mut cache,
+        &mut |_, _, _| {},
+    );
+
+    // A broker that cannot start: only the cache can answer now.
+    let nowhere = root.path().join("no-broker-here");
+    let outcome = scan_brokered_reporting(
+        &paths,
+        &nothing_disabled(),
+        Some(&nowhere),
+        &mut cache,
+        &mut |_, _, _| {},
+    );
+    assert!(
+        outcome
+            .found
+            .iter()
+            .any(|plugin| plugin.match_name == "clap:com.lumit.aplug.testplug.gain"),
+        "the cache should answer: {:?}",
+        outcome.skipped
+    );
+
+    // An update in place is a different file, so the cache no longer answers.
+    let later = std::time::SystemTime::now() + Duration::from_secs(60);
+    let touched = std::fs::File::options()
+        .write(true)
+        .open(&module)
+        .and_then(|file| file.set_modified(later));
+    assert!(touched.is_ok(), "{touched:?}");
+    let outcome = scan_brokered_reporting(
+        &paths,
+        &nothing_disabled(),
+        Some(&nowhere),
+        &mut cache,
+        &mut |_, _, _| {},
+    );
+    assert!(outcome.found.is_empty(), "a changed file was offered stale");
 }
 
 #[test]

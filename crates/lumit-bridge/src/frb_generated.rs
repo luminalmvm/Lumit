@@ -24359,9 +24359,12 @@ impl SseDecode for crate::api::comp_graph::BridgeCompGraph {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_nodes = <Vec<crate::api::comp_graph::BridgeCompNode>>::sse_decode(deserializer);
         let mut var_wiring = <crate::api::comp_graph::BridgeCompWiring>::sse_decode(deserializer);
+        let mut var_repeats =
+            <Vec<crate::api::comp_graph::BridgeCompRepeat>>::sse_decode(deserializer);
         return crate::api::comp_graph::BridgeCompGraph {
             nodes: var_nodes,
             wiring: var_wiring,
+            repeats: var_repeats,
         };
     }
 }
@@ -24464,6 +24467,20 @@ impl SseDecode for crate::api::comp_graph::BridgeCompNodePosition {
             node: var_node,
             x: var_x,
             y: var_y,
+        };
+    }
+}
+
+impl SseDecode for crate::api::comp_graph::BridgeCompRepeat {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_start = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_end = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_members = <Vec<uuid::Uuid>>::sse_decode(deserializer);
+        return crate::api::comp_graph::BridgeCompRepeat {
+            start: var_start,
+            end: var_end,
+            members: var_members,
         };
     }
 }
@@ -30109,6 +30126,20 @@ impl SseDecode for Vec<crate::api::comp_graph::BridgeCompNodePosition> {
     }
 }
 
+impl SseDecode for Vec<crate::api::comp_graph::BridgeCompRepeat> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::comp_graph::BridgeCompRepeat>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::effect::BridgeEffectInfo> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -34718,6 +34749,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::comp_graph::BridgeCompGraph {
         [
             self.nodes.into_into_dart().into_dart(),
             self.wiring.into_into_dart().into_dart(),
+            self.repeats.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -34855,6 +34887,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::comp_graph::BridgeCompNodePos
     for crate::api::comp_graph::BridgeCompNodePosition
 {
     fn into_into_dart(self) -> crate::api::comp_graph::BridgeCompNodePosition {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::comp_graph::BridgeCompRepeat {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.start.into_into_dart().into_dart(),
+            self.end.into_into_dart().into_dart(),
+            self.members.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::comp_graph::BridgeCompRepeat
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::comp_graph::BridgeCompRepeat>
+    for crate::api::comp_graph::BridgeCompRepeat
+{
+    fn into_into_dart(self) -> crate::api::comp_graph::BridgeCompRepeat {
         self
     }
 }
@@ -42512,6 +42566,7 @@ impl SseEncode for crate::api::comp_graph::BridgeCompGraph {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<crate::api::comp_graph::BridgeCompNode>>::sse_encode(self.nodes, serializer);
         <crate::api::comp_graph::BridgeCompWiring>::sse_encode(self.wiring, serializer);
+        <Vec<crate::api::comp_graph::BridgeCompRepeat>>::sse_encode(self.repeats, serializer);
     }
 }
 
@@ -42583,6 +42638,15 @@ impl SseEncode for crate::api::comp_graph::BridgeCompNodePosition {
         <uuid::Uuid>::sse_encode(self.node, serializer);
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
+    }
+}
+
+impl SseEncode for crate::api::comp_graph::BridgeCompRepeat {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <uuid::Uuid>::sse_encode(self.start, serializer);
+        <uuid::Uuid>::sse_encode(self.end, serializer);
+        <Vec<uuid::Uuid>>::sse_encode(self.members, serializer);
     }
 }
 
@@ -46869,6 +46933,16 @@ impl SseEncode for Vec<crate::api::comp_graph::BridgeCompNodePosition> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::comp_graph::BridgeCompNodePosition>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::comp_graph::BridgeCompRepeat> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::comp_graph::BridgeCompRepeat>::sse_encode(item, serializer);
         }
     }
 }

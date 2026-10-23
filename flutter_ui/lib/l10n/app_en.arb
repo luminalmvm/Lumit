@@ -1646,6 +1646,14 @@
   "@exportPreset": {
     "description": "Export dialogue: a saved set of encoder options."
   },
+  "exportQuitAsk": "Stop the export and quit?",
+  "@exportQuitAsk": {
+    "description": "Asked when Lumit is closed while an export is still running. Quitting stops the export."
+  },
+  "exportQuit": "Quit",
+  "@exportQuit": {
+    "description": "Button that quits Lumit and stops the running export."
+  },
   "exportWriteTo": "Write to",
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."
@@ -11476,6 +11484,46 @@
   "fxSwitch": "Switch",
   "@fxSwitch": {
     "description": "Node graph box name - shows one of its pictures, chosen by an index."
+  },
+  "fxRepeatStart": "Repeat start",
+  "@fxRepeatStart": {
+    "description": "Node graph box name - marks where the boxes that run several times begin. Paired with Repeat end."
+  },
+  "fxRepeatEnd": "Repeat end",
+  "@fxRepeatEnd": {
+    "description": "Node graph box name - marks where the boxes that run several times end, and says how many times."
+  },
+  "fxTimes": "Times",
+  "@fxTimes": {
+    "description": "Effect controls - a control on Repeat end: how many times the boxes between Repeat start and Repeat end run."
+  },
+  "fxCopies": "Copies",
+  "@fxCopies": {
+    "description": "Effect controls - a Mode setting on Repeat end: every run starts from the same picture and all of them are laid over each other."
+  },
+  "fxFor": "For",
+  "@fxFor": {
+    "description": "Effect controls - a control on Repeat end: what the boxes between Repeat start and Repeat end run once for, a number of times, each point or each path."
+  },
+  "fxEachPoint": "Each point",
+  "@fxEachPoint": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each point wired into Repeat start."
+  },
+  "fxEachPath": "Each path",
+  "@fxEachPath": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each path wired into Repeat start."
+  },
+  "fxShapes": "Shapes",
+  "@fxShapes": {
+    "description": "Node graph socket - on a Read box of a composition, the paths of its shape layers; on Repeat start, the paths it runs once for."
+  },
+  "fxX": "X",
+  "@fxX": {
+    "description": "Node graph socket - on Repeat start: across, in pixels, where this run's point or path is."
+  },
+  "fxY": "Y",
+  "@fxY": {
+    "description": "Node graph socket - on Repeat start: down, in pixels, where this run's point or path is."
   },
   "fxSplitChannels": "Split channels",
   "@fxSplitChannels": {

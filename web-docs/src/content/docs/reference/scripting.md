@@ -232,7 +232,7 @@ Script: `lumit.layer.get({ ... })`. MCP tool: `layer_get`.
 
 ## layer.set
 
-Change a layer's name, parent, span, switches, 3D switch or place in the stack.
+Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack.
 
 Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 
@@ -249,6 +249,7 @@ Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 | `three_d` | boolean |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `two_node` | boolean |  | For a camera, whether it aims at its point of interest |
+| `after_effects_order` | boolean |  | Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose |
 | `switches` | object |  |  |
 | `switches.visible` | boolean |  |  |
 | `switches.audible` | boolean |  |  |

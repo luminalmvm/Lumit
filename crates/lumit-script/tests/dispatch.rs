@@ -29,8 +29,23 @@ impl Host for Bare {
     fn path(&self) -> Option<PathBuf> {
         None
     }
-    fn save(&self, _: Option<&Path>) -> Result<PathBuf, ScriptError> {
-        Err(ScriptError::Failed("no saving here".into()))
+    // Saved as JSON, and a frame is the comp as JSON, each as it stands when
+    // asked for.
+    fn save(&self, path: Option<&Path>) -> Result<PathBuf, ScriptError> {
+        let path = path.ok_or_else(|| ScriptError::Failed("no saving here".into()))?;
+        std::fs::write(path, serde_json::to_vec(&*self.0.snapshot()).unwrap()).unwrap();
+        Ok(path.to_path_buf())
+    }
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        _: u64,
+        _: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let doc = self.0.snapshot();
+        std::fs::write(out, serde_json::to_vec(doc.comp(comp).unwrap()).unwrap()).unwrap();
+        Ok((1, 1))
     }
     fn import_footage(&self, _: &[PathBuf]) -> Result<Vec<Uuid>, ScriptError> {
         Err(ScriptError::Failed("no footage here".into()))
@@ -198,9 +213,8 @@ while (true) {}
     assert!(!host.store().can_redo());
 }
 
-/// An After Effects script keys a camera, and the camera in Lumit faces the
-/// way it does in After Effects, which turns by Rx · Ry · Rz where Lumit turns
-/// by Ry · Rx · Rz.
+/// An After Effects script keys a camera, and the camera turns in After
+/// Effects' order, Rx · Ry · Rz, so it keeps After Effects' own numbers.
 #[test]
 fn an_after_effects_script_keys_a_camera() {
     let host = Bare(DocumentStore::new(Document::new()));
@@ -245,23 +259,20 @@ app.endUndoGroup();
     assert_eq!(at(&p["position"][1], 2), 40.0);
     assert_eq!(p["zoom"][1]["hold"], json!(true));
     assert_eq!(at(&p["zoom"], 2), 1200.0);
-    let faces = |p: &Value, ae: [(f64, f64, f64); 3]| {
-        for (n, ae) in ae.iter().enumerate() {
-            let turned = (
-                at(&p["rotation_x"], n),
-                at(&p["rotation_y"], n),
-                at(&p["rotation"], n),
-            );
-            let want = Mat::rx(ae.0).mul(Mat::ry(ae.1)).mul(Mat::rz(ae.2));
-            let got = lumit_core::camera::rotation(turned);
-            for (r, row) in got.iter().enumerate() {
-                for (c, v) in row.iter().enumerate() {
-                    assert!((v - want.0[r][c]).abs() < 1e-9, "key {n}: {turned:?}");
-                }
-            }
+    // A value, or the value of each key.
+    let angles = |p: &Value| -> Vec<f64> {
+        match p {
+            Value::Array(keys) => keys.iter().map(|k| k["value"].as_f64().unwrap()).collect(),
+            v => vec![v.as_f64().unwrap()],
         }
     };
-    faces(p, [(10.0, 40.0, 5.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)]);
+    let faces = |p: &Value, z: f64| {
+        assert_eq!(angles(&p["rotation_x"]), [10.0, 20.0, 30.0]);
+        assert_eq!(angles(&p["rotation_y"]), [40.0, 50.0, 60.0]);
+        assert_eq!(angles(&p["rotation"]), [z]);
+    };
+    assert_eq!(cam["after_effects_order"], json!(true));
+    faces(p, 5.0);
     // The whole run is one step, named after its undo group.
     let history = host.store().history();
     assert_eq!(history.len(), 1);
@@ -303,16 +314,14 @@ read"#;
         "layer.get",
         json!({ "comp": "Shot", "layer": "Cam" }),
     );
-    faces(
-        &cam["properties"],
-        [(10.0, 40.0, 15.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)],
-    );
+    faces(&cam["properties"], 15.0);
 }
 
 /// Orientation and X, Y and Z Rotation from an After Effects script turn a
-/// layer exactly as After Effects does, on a layer turning in After Effects'
-/// order as imported ones do (its angles kept as they are) and on one in
-/// Lumit's (its rotations rewritten). Placed as the compositor places them.
+/// layer exactly as After Effects does, on a layer the script made 3D, which
+/// turns in After Effects' order (its angles kept as they are), and on one put
+/// back in Lumit's (its rotations rewritten). Placed as the compositor places
+/// them.
 #[test]
 fn an_after_effects_script_turns_layers_in_either_rotation_order() {
     use lumit_core::anim::Property;
@@ -328,16 +337,17 @@ b.threeDLayer = true;
     let shot: Uuid =
         serde_json::from_value(call(&host, "comp.get", json!({ "comp": "Shot" }))["id"].clone())
             .unwrap();
-    let doc = host.store().snapshot();
-    let comp = doc.comp(shot).unwrap();
-    let id = |name: &str| comp.layers.iter().find(|l| l.name == name).unwrap().id;
-    host.store()
-        .commit(lumit_core::Op::SetRotationOrder {
-            comp: comp.id,
-            layer: id("Imported"),
-            after_effects: true,
-        })
-        .unwrap();
+    let order = |name: &str| {
+        call(&host, "layer.get", json!({ "comp": "Shot", "layer": name }))["after_effects_order"]
+            .clone()
+    };
+    assert_eq!(order("Imported"), json!(true));
+    call(
+        &host,
+        "layer.set",
+        json!({ "comp": "Shot", "layer": "Plain", "after_effects_order": false }),
+    );
+    assert_eq!(order("Plain"), json!(false));
 
     let turn = r#"var comp;
 for (var i = 1; i <= app.project.numItems; i++) {
@@ -401,7 +411,7 @@ var t = comp.layer("Imported").transform;
 /// The After Effects pieces past keys and cameras: includes, eased keys, a
 /// solid, a precomp, a precompose, an effect with a keyed control, markers,
 /// an expression and a file written in the script's folder, with one outside
-/// it refused.
+/// it refused. A frame and a save straight after a key both have it.
 #[test]
 fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
     use lumit_core::anim::{Animation, SideInterp};
@@ -463,6 +473,8 @@ var moved = pack.layers.addNull();
 pack.layers.addNull();
 var packed = pack.layers.precompose([1, 2], "Packed", true);
 moved.transform.opacity.setValueAtTime(1, 25);
+packed.saveFrameToPng(0, new File(here.fsName + "/out/packed.png"));
+app.project.save(new File(here.fsName + "/out/saved.lum"));
 [app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name]
 "#;
     std::fs::write(&path, script).unwrap();
@@ -500,11 +512,25 @@ moved.transform.opacity.setValueAtTime(1, 25);
             .unwrap()
     };
     let (edit, inner) = (comp("Edit"), comp("Inner"));
-    // A key made after the precompose lands on the layer in its new comp.
-    assert!(comp("Packed").layers.iter().any(|l| matches!(
-        l.prop(TransformProp::Opacity).unwrap().animation,
-        Animation::Keyframed(_)
-    )));
+    // A key made after the precompose lands on the layer in its new comp, and
+    // is in the frame and the file saved straight after it.
+    let keyed = |c: &Composition| {
+        c.layers.iter().any(|l| {
+            matches!(
+                l.prop(TransformProp::Opacity).unwrap().animation,
+                Animation::Keyframed(_)
+            )
+        })
+    };
+    assert!(keyed(comp("Packed")));
+    let out = |name: &str| std::fs::read(folder.join("out").join(name)).unwrap();
+    let frame: Composition = serde_json::from_slice(&out("packed.png")).unwrap();
+    assert!(keyed(&frame));
+    let saved: Document = serde_json::from_slice(&out("saved.lum")).unwrap();
+    assert!(saved
+        .items
+        .iter()
+        .any(|i| matches!(i, ProjectItem::Composition(c) if c.name == "Packed" && keyed(c))));
     let layer = |name: &str| edit.layers.iter().find(|l| l.name == name).unwrap();
     let keys = |l: &Layer, p: TransformProp| match &l.prop(p).unwrap().animation {
         Animation::Keyframed(keys) => keys.clone(),

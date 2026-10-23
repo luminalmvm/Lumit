@@ -41,6 +41,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ChangesAssociations=yes
+; Held for as long as this runs. Lumit won't start while it's there, so it
+; can't hold files halfway through an update (runner/main.cpp).
+SetupMutex=LumitSetup
 Compression=lzma2
 ; Each file compressed on its own, so a file that didn't change between two
 ; releases is the same bytes in both installers and an update only fetches
@@ -74,6 +77,16 @@ Type: files; Name: "{app}\lumit_flutter.exe"
 Type: files; Name: "{app}\*.dll"
 ; An OFX plugin's own log, which the plugin brokers used to let land here.
 Type: files; Name: "{app}\ofxTestLog.txt"
+; Files the last update had to move aside (MoveAside below), once nothing
+; holds them.
+Type: files; Name: "{app}\*.old"
+Type: files; Name: "{app}\lib\*.old"
+Type: files; Name: "{app}\data\*.old"
+
+[UninstallDelete]
+Type: files; Name: "{app}\*.old"
+Type: files; Name: "{app}\lib\*.old"
+Type: files; Name: "{app}\data\*.old"
 
 [Icons]
 Name: "{group}\Lumit"; Filename: "{app}\{#MyAppExe}"
@@ -129,8 +142,9 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
 ; without this line nothing starts again — a "Restart now" button that does
 ; not restart, which is exactly the complaint. Interactive installs are
 ; unchanged: the `postinstall` flag still offers it as the last checkbox.
-Filename: "{app}\{#MyAppExe}"; Description: "Launch Lumit"; \
-  Flags: nowait postinstall
+; `--after-update` lets it start while SetupMutex is still held.
+Filename: "{app}\{#MyAppExe}"; Parameters: "--after-update"; \
+  Description: "Launch Lumit"; Flags: nowait postinstall
 
 [Code]
 // An update runs this installer from inside Lumit, which then quits. Lumit
@@ -180,8 +194,13 @@ begin
         if not VarIsNull(Process.ExecutablePath) then
         begin
           Path := Process.ExecutablePath;
+          // A broker can exit on its own between the query and here, and
+          // WMI then says it can't find it. That's fine, it's gone.
           if Pos(Prefix, Uppercase(Path)) = 1 then
+          try
             Process.Terminate();
+          except
+          end;
         end;
       end;
       Sleep(500);
@@ -190,4 +209,39 @@ begin
     Sleep(500);
   end;
   Result := 'Lumit is still running. Close it, then update again.';
+end;
+
+// Something can still hold a library after all that, such as Lumit started
+// again before the update finished, or lumit-cli kept open by another program.
+// A held file can't be replaced, and stopping there leaves the new app with
+// the old bridge, which won't start. Windows does let a held file be renamed,
+// so whatever can't be deleted is moved aside and the new one goes in beside it.
+procedure MoveAside(Dir: String);
+var
+  Find: TFindRec;
+  Path, Ext: String;
+begin
+  if not FindFirst(Dir + '\*', Find) then exit;
+  try
+    repeat
+      Ext := Lowercase(ExtractFileExt(Find.Name));
+      Path := Dir + '\' + Find.Name;
+      if ((Ext = '.dll') or (Ext = '.exe') or (Ext = '.so')) and
+         (Pos('unins', Lowercase(Find.Name)) <> 1) and not DeleteFile(Path) then
+      begin
+        DeleteFile(Path + '.old');
+        RenameFile(Path, Path + '.old');
+      end;
+    until not FindNext(Find);
+  finally
+    FindClose(Find);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep <> ssInstall then exit;
+  MoveAside(ExpandConstant('{app}'));
+  MoveAside(ExpandConstant('{app}\lib'));
+  MoveAside(ExpandConstant('{app}\data'));
 end;
