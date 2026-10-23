@@ -3004,8 +3004,8 @@ impl HeadlessRenderer {
 /// It is the headless twin of `AppState::comp_audio_jobs` (docs/09 §6): every
 /// audible footage layer with an audio stream, its span mapped to the comp
 /// timeline, plus nested Precomp layers' contents scaled by their carrier
-/// Volumes. Solo silences non-soloed audio per comp, exactly as the video gate
-/// does. The has-audio probe result is cached per item, so each file is probed
+/// Volumes. A soloed sound silences non-soloed audio per comp, as a soloed
+/// picture hides the other pictures. The has-audio probe result is cached per item, so each file is probed
 /// at most once per session.
 #[derive(Default)]
 pub struct AudioJobsBuilder {
@@ -3189,8 +3189,8 @@ impl AudioJobsBuilder {
     ///
     /// This is the Beats panel's *Source* picker (docs/09 §5): choosing a layer
     /// by name is asking to hear that layer, and a source picked by name that
-    /// answered "no audio" because a picture row elsewhere was soloed is the
-    /// bug this exists for. The comp's own mix ([`Self::audio_jobs`]) still
+    /// answered "no audio" because another row was soloed is the bug this
+    /// exists for. The comp's own mix ([`Self::audio_jobs`]) still
     /// respects every switch — it is what the comp sounds like.
     ///
     /// The bypass is for the named row alone: inside a Precomp the ordinary
@@ -3269,7 +3269,11 @@ impl AudioJobsBuilder {
             }
             return;
         }
-        let any_solo = lumit_core::model::any_solo(comp);
+        // Only a soloed layer that makes a sound silences the rest, as in
+        // After Effects: soloing a title to look at it leaves the music playing.
+        let any_solo = comp.layers.iter().any(|l| {
+            l.switches.solo && (l.audio_only || self.layer_has_audio(doc, l))
+        });
         for layer in &comp.layers {
             self.walk_layer(
                 doc, comp, layer, any_solo, base_s, window, carriers, strip, visited, jobs,
