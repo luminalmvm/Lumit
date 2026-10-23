@@ -702,7 +702,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.opacity, 30);
 
-      // The trim's three rows sit under the item, and each writes through.
+      // The trim's three rows sit under the item, shut until its own twirl
+      // opens it, and each writes through.
+      expect(find.text('Trim start'), findsNothing);
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-shape-twirl-${item.id}')));
+      await tester.pumpAndSettle();
       expect(find.text('Trim start'), findsOneWidget);
       expect(find.text('Trim end'), findsOneWidget);
       expect(find.text('Trim offset'), findsOneWidget);
@@ -1538,10 +1543,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
       await tester.pumpAndSettle();
       final trimmed = layer.getSpan();
-      final at30 = p.comp.timeOfFrame(frame: 30);
+      final at31 = p.comp.timeOfFrame(frame: 31);
       expect(trimmed.outPoint.num / trimmed.outPoint.den,
-          closeTo(at30.num / at30.den, 1e-9),
-          reason: 'the out point is on the playhead');
+          closeTo(at31.num / at31.den, 1e-9),
+          reason: 'the playhead frame is the last one shown');
       expect(trimmed.inPoint, moved.inPoint,
           reason: 'a trim moves one end, not both');
     });

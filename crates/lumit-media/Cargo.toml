@@ -27,10 +27,9 @@ hayro = "0.8"
 miniz_oxide = "0.8"
 rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "link_system_ffmpeg"] }
 serde = { version = "1", features = ["derive"] }
-thiserror = "2"
-
-[dev-dependencies]
+# A self-deleting file for the frames a one-palette GIF holds until the end.
 tempfile = "3"
+thiserror = "2"
 
 [lints]
 workspace = true

@@ -95,41 +95,42 @@ class _RetimeRowState extends State<RetimeRow> {
     setState(() => _sourceFps = (info.fpsNum, info.fpsDen));
   }
 
-  /// Whether this gesture already planted its key — one plant per drag.
-  bool _planted = false;
+  /// A drag starting on a frame with **no key plants one** holding the value
+  /// already showing: nothing moves, and the preview then *replaces* a real
+  /// key instead of inserting beside the document's — the aligned path the
+  /// transform rows take. Returns whether it planted one.
+  bool _plant(BridgeScalar scalar, int frame) {
+    if (scalar is! BridgeScalar_Keyframed ||
+        scalar.field0
+            .any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
+      return false;
+    }
+    final held = sampledScalar(scalar, timeOfFrame(widget.comp, frame));
+    widget.layer.setRetimeProperty(
+      value: scalarWithValueAt(scalar, held, widget.comp, frame),
+    );
+    widget.onChanged();
+    return true;
+  }
 
   /// A drag tick: render the map the release will write, without writing it —
   /// and publish it, so the graph's Retime curve follows the drag.
-  ///
-  /// The first tick on a frame with **no key plants one** holding the value
-  /// already showing: nothing moves, and the preview then *replaces* a real
-  /// key instead of inserting beside the document's — the aligned path the
-  /// transform rows take.
   void _live(BridgeScalar scalar, double value, int frame) {
-    if (!_planted &&
-        scalar is BridgeScalar_Keyframed &&
-        !scalar.field0
-            .any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
-      _planted = true;
-      final held = sampledScalar(scalar, timeOfFrame(widget.comp, frame));
-      widget.layer.setRetimeProperty(
-        value: scalarWithValueAt(scalar, held, widget.comp, frame),
-      );
-      widget.onChanged();
-    }
     setState(() => _staged = value);
+    final written = scalarWithValueAt(scalar, value, widget.comp, frame);
     rowValueDrag.value = RowValueDrag(
       layer: widget.layer.internallayerId.toString(),
       retime: true,
       frame: frame,
       value: value,
+      keys: written is BridgeScalar_Keyframed ? written.field0 : null,
     );
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _preview.request(() => widget.comp.renderFrameWithRetime(
           frame: BigInt.from(ui.playheadFrame.value),
           scale: ui.viewerScale,
           layer: widget.layer,
-          retime: scalarWithValueAt(scalar, value, widget.comp, frame),
+          retime: written,
         ));
   }
 
@@ -188,6 +189,7 @@ class _RetimeRowState extends State<RetimeRow> {
                       ? KeyedValueField(
                           fieldKey: const ValueKey('tl-retime-seconds'),
                           onLive: (v) => _live(scalar, v, frame),
+                          onStart: () => _plant(scalar, frame),
                           value: value,
                           // The same open range a transform axis gets: a
                           // source time before zero or past the end simply
@@ -273,7 +275,6 @@ class _RetimeRowState extends State<RetimeRow> {
     // would put the provisional picture back.
     _preview.cancel();
     rowValueDrag.value = null;
-    _planted = false;
     widget.layer.setRetimeProperty(
       value: scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame),
     );

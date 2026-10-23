@@ -160,6 +160,13 @@ impl ActionId {
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",
             "item.rename" => "Rename the selected item",
+            "item.duplicate" => "Duplicate the selected item",
+            "item.select.prev" => "Select the item above",
+            "item.select.next" => "Select the item below",
+            "item.select.prev.extend" => "Add the item above to the selection",
+            "item.select.next.extend" => "Add the item below to the selection",
+            "item.folder.close" => "Close the selected folder",
+            "item.folder.open" => "Open the selected folder",
             "footage.interpret" => "Interpret the selected footage",
             "footage.interpretation.remember" => "Remember the footage's interpretation",
             "footage.interpretation.apply" => "Apply the remembered interpretation",
@@ -1077,6 +1084,13 @@ pub fn default_keymap() -> Keymap {
         // the item in the Project panel, the effect in Effect controls — the
         // same key the Timeline has always used for its layers.
         row(Project, "Enter", "item.rename"),
+        row(Project, "Mod+D", "item.duplicate"),
+        row(Project, "ArrowUp", "item.select.prev"),
+        row(Project, "ArrowDown", "item.select.next"),
+        row(Project, "Shift+ArrowUp", "item.select.prev.extend"),
+        row(Project, "Shift+ArrowDown", "item.select.next.extend"),
+        row(Project, "ArrowLeft", "item.folder.close"),
+        row(Project, "ArrowRight", "item.folder.open"),
         // After Effects' own three for Interpret Footage.
         row(Project, "Mod+Alt+G", "footage.interpret"),
         row(Project, "Mod+Alt+C", "footage.interpretation.remember"),

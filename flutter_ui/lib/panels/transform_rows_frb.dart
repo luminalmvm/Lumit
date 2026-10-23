@@ -1064,18 +1064,20 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// planted there holding the value already showing. Nothing moves —
   /// it is the same value — and the drag then has a key to carry, which is what
   /// makes it visible in the graph as it goes rather than only on release.
-  void _keyOnDragStart(
+  /// Returns whether it planted one.
+  bool _keyOnDragStart(
       BridgeTransformProp prop, BridgeScalar scalar, double value, int frame) {
-    if (scalar is! BridgeScalar_Keyframed) return;
+    if (scalar is! BridgeScalar_Keyframed) return false;
     if (scalar.field0
         .any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
-      return;
+      return false;
     }
     widget.layer.setTransform(
       prop: prop,
       value: scalarWithValueAt(scalar, value, widget.comp, frame),
     );
     widget.onChanged();
+    return true;
   }
 
   /// A tick of a drag on an *animated* property: render the curve the release
@@ -1084,17 +1086,15 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// uses, carrying a whole animation instead of one number.
   void _liveKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
       int frame, List<BridgeTransformProp> partners) {
+    final written = scalarWithValueAt(scalar, value, widget.comp, frame);
     rowValueDrag.value = RowValueDrag(
       layer: widget.layer.internallayerId.toString(),
       prop: prop.name,
       frame: frame,
       value: value,
+      keys: (written as BridgeScalar_Keyframed).field0,
     );
-    var staged = writeScalar(
-      widget.transform,
-      prop,
-      scalarWithValueAt(scalar, value, widget.comp, frame),
-    );
+    var staged = writeScalar(widget.transform, prop, written);
     // A linked row previews every axis, or the release would move the
     // picture one last time on a drag that looked finished.
     for (final partner in partners) {

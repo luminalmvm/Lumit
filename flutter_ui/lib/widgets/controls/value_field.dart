@@ -141,6 +141,18 @@ bool tookSetExpression() {
       DateTime.now().difference(at) < const Duration(seconds: 1);
 }
 
+/// Sees every edit the value wells under it make, and whether each was typed
+/// (or reset, or pasted) or dragged. The Timeline puts one round each property
+/// row, so an edit on a row with several picked keys can move them all.
+class ValueEditScope extends InheritedWidget {
+  final void Function(bool typed, VoidCallback edit) run;
+
+  const ValueEditScope({super.key, required this.run, required super.child});
+
+  @override
+  bool updateShouldNotify(ValueEditScope old) => false;
+}
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -451,12 +463,18 @@ class _DragValueFieldState extends State<DragValueField>
     return widget.suffix == null ? s : '$s${widget.suffix}';
   }
 
+  /// Hand one edit to the [ValueEditScope] above, if there is one.
+  void _edit(bool typed, VoidCallback edit) {
+    final scope = context.getInheritedWidgetOfExactType<ValueEditScope>();
+    scope == null ? edit() : scope.run(typed, edit);
+  }
+
   /// [submitted] is Enter, as against clicking or tabbing away.
   void _commitText({bool submitted = false}) {
     final raw = _controller.text.replaceAll(widget.suffix ?? '', '').trim();
     final parsed = parseNumberField(raw);
     if (parsed != null) {
-      widget.onChanged(parsed.clamp(widget.min, widget.max));
+      _edit(true, () => widget.onChanged(parsed.clamp(widget.min, widget.max)));
       if (submitted) widget.onSubmitted?.call();
     } else if (raw.isNotEmpty) {
       // Neither a number nor a sum. The edge says so, and on Enter the
@@ -507,8 +525,10 @@ class _DragValueFieldState extends State<DragValueField>
                 MenuRow(
                   onPressed: () {
                     close(null);
-                    widget.onChanged(
-                        widget.resetTo!.clamp(widget.min, widget.max));
+                    _edit(
+                        true,
+                        () => widget.onChanged(
+                            widget.resetTo!.clamp(widget.min, widget.max)));
                   },
                   child: Text(l10n.reset),
                 ),
@@ -526,8 +546,11 @@ class _DragValueFieldState extends State<DragValueField>
                   final raw =
                       data?.text?.replaceAll(widget.suffix ?? '', '').trim();
                   final parsed = raw == null ? null : parseNumberField(raw);
-                  if (parsed != null) {
-                    widget.onChanged(parsed.clamp(widget.min, widget.max));
+                  if (parsed != null && mounted) {
+                    _edit(
+                        true,
+                        () => widget
+                            .onChanged(parsed.clamp(widget.min, widget.max)));
                   }
                 },
                 child: Text(l10n.menuPaste),
@@ -661,7 +684,7 @@ class _DragValueFieldState extends State<DragValueField>
           _lastDragValue = null;
           setState(() => _dragging = true);
           _showLadder();
-          widget.onChangeStart?.call();
+          _edit(false, () => widget.onChangeStart?.call());
         },
         onHorizontalDragUpdate: (d) {
           final factor = scrubFactor();
@@ -676,7 +699,8 @@ class _DragValueFieldState extends State<DragValueField>
                 .clamp(widget.min, widget.max);
             _dragAccum = 0;
             _lastDragValue = next;
-            (widget.onChangeLive ?? widget.onChanged)(next);
+            _edit(
+                false, () => (widget.onChangeLive ?? widget.onChanged)(next));
           }
         },
         onHorizontalDragEnd: (_) {
@@ -685,7 +709,7 @@ class _DragValueFieldState extends State<DragValueField>
           _hideLadder();
           setState(() => _dragging = false);
           if (v != null) {
-            (widget.onChangeEnd ?? widget.onChanged)(v);
+            _edit(false, () => (widget.onChangeEnd ?? widget.onChanged)(v));
           } else {
             // Never crossed one speed-increment: nothing was ticked, so the
             // press was a click that wobbled a few pixels, not a scrub. It

@@ -36,12 +36,22 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct WaveWarp {
-    /// The wave's shape. All five run between −1 and 1 over one wave; Square
-    /// and Sawtooth carry a step, which the resampler renders as the hard slice
-    /// they are meant to be.
+    /// The wave's shape, in AE's order. All nine run between −1 and 1 over one
+    /// wave; Square and Sawtooth carry a step, which the resampler renders as
+    /// the hard slice they are meant to be.
     #[choice(
         label = "Wave type",
-        options = ["Sine", "Square", "Triangle", "Sawtooth", "Circle"],
+        options = [
+            "Sine",
+            "Square",
+            "Triangle",
+            "Sawtooth",
+            "Circle",
+            "Semicircle",
+            "Uncircle",
+            "Noise",
+            "Smooth noise"
+        ],
         default = 0
     )]
     pub wave_type: u32,
@@ -139,7 +149,7 @@ impl WaveWarp {
             height: self.wave_height,
             inv_width: 1.0 / self.wave_width.max(1e-3),
             turns: self.phase / 360.0,
-            shape: self.wave_type.min(4),
+            shape: self.wave_type.min(8),
             pin,
             // The pin ramp is |Wave height| wide, so a pinned edge cannot be
             // reached from outside the frame. Floored so a zero height does not

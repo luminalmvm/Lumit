@@ -920,6 +920,7 @@ class Outline extends StatelessWidget {
   final ValueListenable<TimelineSelection> selection;
   final ValueChanged<String> onSelectProperty;
   final ValueChanged<String> onEditProperty;
+  final Set<int> Function(String path) keysPickedOn;
 
   /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
@@ -963,6 +964,7 @@ class Outline extends StatelessWidget {
     required this.selection,
     required this.onSelectProperty,
     required this.onEditProperty,
+    required this.keysPickedOn,
     this.onOpenSequence,
     required this.onToggle,
     required this.playheadFrame,
@@ -1061,6 +1063,7 @@ class Outline extends StatelessWidget {
                     graphColours: mine.colours,
                     onSelectProperty: onSelectProperty,
                     onEditProperty: onEditProperty,
+                    keysPickedOn: keysPickedOn,
                     playheadFrame: playheadFrame,
                     onSeek: onSeek,
                     onToggle: onToggle,
@@ -1136,6 +1139,7 @@ class Outline extends StatelessWidget {
                       graphColours: mine.colours,
                       onSelectProperty: onSelectProperty,
                       onEditProperty: onEditProperty,
+                      keysPickedOn: keysPickedOn,
                       playheadFrame: playheadFrame,
                       onSeek: onSeek,
                       onToggle: onToggle,

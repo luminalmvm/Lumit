@@ -37,8 +37,8 @@ report will appear telling you what was carried across with or without adjustmen
 Common third-party effects become the maker's own OFX plugin when it is installed. See
 [Importing](/use/importing/).
 
-Expressions written for After Effects run as written, and an animation preset (`.ffx`)
-is applied from **Animation ▸ Apply animation preset**. See
+Expressions written for After Effects run as written, and animation presets (`.ffx`) are
+imported from **Settings ▸ General ▸ After Effects presets**. See
 [Expressions](/use/expressions/#what-javascript-can-read).
 
 ## Vegas to Lumit

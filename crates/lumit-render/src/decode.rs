@@ -295,6 +295,9 @@ struct CachedFrame {
     /// Decoded ahead for one render, which takes it out rather than copying
     /// it ([`DecodePool::hand_over_prefetched`]).
     once: bool,
+    /// The stamp of the frame's own file in a run of stills, so a frame saved
+    /// over is decoded again. A single file's rides on its source instead.
+    stamp: Option<(u64, std::time::SystemTime)>,
 }
 
 impl lumit_cache::ByteSized for CachedFrame {
@@ -773,6 +776,7 @@ impl DecodePool {
                 rgba: decoded.rgba,
                 format: decoded.format,
                 once: self.hand_over,
+                stamp: source.frame_stamp(frame),
             },
         );
     }
@@ -842,7 +846,17 @@ fn decode(
     // does — the same file read as `Z` is not the picture it opens as — so they
     // are part of the key rather than something the cache could get wrong.
     let cache_key = (req.item, req.frame, req.target_width, req.channels.clone());
-    if take && cache.peek(&cache_key).is_some_and(|hit| hit.once) {
+    let stamp = req.source.frame_stamp(req.frame);
+    // A frame of a run saved over since it was read: the decoder may still
+    // hold the old picture as the last one it handed out.
+    if cache.peek(&cache_key).is_some_and(|hit| hit.stamp != stamp) {
+        decoders.close(req.item);
+    }
+    if take
+        && cache
+            .peek(&cache_key)
+            .is_some_and(|hit| hit.once && hit.stamp == stamp)
+    {
         if let Some(hit) = cache.remove(&cache_key) {
             return Ok(FramePixels {
                 width: hit.width,
@@ -854,7 +868,7 @@ fn decode(
             });
         }
     }
-    if let Some(hit) = cache.get(&cache_key) {
+    if let Some(hit) = cache.get(&cache_key).filter(|hit| hit.stamp == stamp) {
         return Ok(FramePixels {
             width: hit.width,
             height: hit.height,
@@ -882,6 +896,7 @@ fn decode(
                     rgba: out.rgba.clone(),
                     format: out.format,
                     once: false,
+                    stamp,
                 },
             );
             return Ok(FramePixels {
@@ -907,6 +922,7 @@ fn decode(
                 rgba: out.rgba.clone(),
                 format: out.format,
                 once: false,
+                stamp,
             },
         );
         return Ok(FramePixels {
@@ -933,6 +949,7 @@ fn decode(
             rgba: out.rgba.clone(),
             format: out.format,
             once: false,
+            stamp,
         },
     );
     Ok(FramePixels {

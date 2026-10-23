@@ -311,14 +311,15 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     ];
   }
 
-  /// Frame the picked boxes as a new group and start typing its name.
+  /// Frame the picked boxes as a new group. Its name isn't opened for typing,
+  /// since the field would keep Ctrl+Z from undoing the group.
   void groupPicked() {
     final picked = pickedKeys;
     // Boxes that are a group already are not framed twice.
     if (picked.isEmpty || _groupOfPick != null) return;
     final next = _grouped(picked, l10n.graphGroupDefaultName);
     commitGroups(next);
-    setState(() => groupPick = groupRenaming = next.length - 1);
+    setState(() => groupPick = next.length - 1);
   }
 
   /// With a group's bar pressed, take that frame away and leave its boxes.

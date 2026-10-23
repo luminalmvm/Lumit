@@ -91,6 +91,7 @@ import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
 import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
+import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -1530,7 +1531,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// gesture first — the press picks the row before the tap does — so
   /// leaving it a panel-wide redraw would have left the click costing one
   /// anyway.
+  ///
+  /// In the layer view a press on a row with picked keys narrows everything to
+  /// that row, so a value edit there moves those keys and no others.
   void _selectOnEdit(String path) {
+    if (!_graph && _keysPickedOn(path).isNotEmpty) {
+      _laneKeySelection.removeWhere((id) => !id.startsWith('$path#'));
+      _publishLaneKeys();
+      if (_selectedProperties.any((p) => p != path)) {
+        _selectedProperties.clear();
+      }
+    }
     if (_selectedProperties.contains(path)) return;
     _selectedProperties
       ..clear()
@@ -1540,6 +1551,27 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishPropertySelection();
     _publishRowSelection();
     if (_graph) setState(() {});
+  }
+
+  /// The keys picked on [path]'s row, by index, in whichever view is up. A
+  /// graph key on either axis of a row counts for the row, as a lane key does.
+  Set<int> _keysPickedOn(String path) {
+    final rows = _graph
+        ? {
+            for (final c in graphChannels(
+                layers: Provider.of<LumitUiState>(context, listen: false)
+                    .model
+                    .layers,
+                selected: [path]))
+              c.id
+          }
+        : {path};
+    return {
+      for (final id in _graph ? _graphKeySelection : _laneKeySelection)
+        if (id.lastIndexOf('#') case final hash
+            when hash > 0 && rows.contains(id.substring(0, hash)))
+          if (int.tryParse(id.substring(hash + 1)) case final i?) i,
+    };
   }
 
   /// Which of the two views is up (§12A.1).
@@ -1680,7 +1712,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final outFrame = frameOfTime(span.outPoint, fpsNum, fpsDen);
       final delta = clampBarDelta(
         grab: grab,
-        delta: frame - (atIn ? inFrame : outFrame),
+        // The out point is the frame after the last one shown, so the end
+        // lands a frame past the playhead and keeps the playhead's frame, as
+        // After Effects does.
+        delta: atIn ? frame - inFrame : frame + 1 - outFrame,
         inFrame: inFrame,
         outFrame: outFrame,
         bounds: _barBounds[entry.layer.internallayerId.toString()] ??
@@ -1807,15 +1842,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   SelectionMove _selectionMove(LumitUiState ui) {
     final picked = ui.selectedLayerIds;
     final ids = <UuidValue>[];
+    final ins = <int>[];
     int? minIn;
     for (final entry in ui.model.layers) {
       if (!picked.contains(entry.layer.internallayerId)) continue;
       if (entry.info.switches.locked) continue;
       ids.add(entry.layer.internallayerId);
       final inFrame = entry.info.inFrame.toInt();
+      ins.add(inFrame);
       if (minIn == null || inFrame < minIn) minIn = inFrame;
     }
-    return SelectionMove(ids, minIn ?? 0);
+    return SelectionMove(ids, ins, minIn ?? 0,
+        staggerOrder: inStaggerOrder(ids, ui.workspace.staggerOrder,
+            clicked: ui.selectionInClickOrder, layerOf: (id) => id));
   }
 
   /// The block stretch in flight, on the same terms and for the same
@@ -2882,6 +2921,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // panel focused yet falls to the Timeline, as it always did.
       final active = ui.activePanel;
       if (active != null && active != Panel.timeline) return false;
+      // A shape item's own row picked: Enter renames the item, as it would
+      // the layer.
+      if (_selectedProperties.length == 1) {
+        final parts = _selectedProperties.single.split('/');
+        if (parts.length == 3 && parts[1] == 'contents') {
+          ui.renameItemRequest.value = parts[2];
+          return true;
+        }
+      }
       // A group header chose the current selection: Enter renames the band
       // itself, through the same request road (the owner's "the same as any
       // other"). Checked against the model so a group that has since been
@@ -4595,6 +4643,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             selection: _rowSelection,
                                             onSelectProperty: _selectProperty,
                                             onEditProperty: _selectOnEdit,
+                                            keysPickedOn: _keysPickedOn,
                                             onToggle: _toggle,
                                             playheadFrame:
                                                 ui.playheadFrame.value,
@@ -5151,6 +5200,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       rows: rows,
                       barNames: _barNames,
                       quantiseSound: _quantiseSound,
+                      staggerOrdered: <T>(stack, layerOf) => inStaggerOrder(
+                          stack, ui.workspace.staggerOrder,
+                          clicked: ui.selectionInClickOrder,
+                          layerOf: layerOf),
                       selection: _rowSelection,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,

@@ -3951,7 +3951,9 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
         source_layer: f.source_layer,
         render_pass: f.interpretation.render_pass.clone(),
         interpret: crate::source::interpretation(f),
+        stamp: None,
     }
+    .stamped()
 }
 
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
@@ -4217,7 +4219,8 @@ impl SourceProbes for ProbeView<'_> {
                 _ => lumit_media::Interpretation::default(),
             },
             ..Default::default()
-        };
+        }
+        .stamped();
         match probes.proxies.get(&item) {
             Some((cached, probe)) if *cached == src => seen(Some(probe)),
             _ => {
@@ -4827,6 +4830,145 @@ mod tests {
         assert!(green < 60, "green should be low, got {green}");
         assert!(blue < 60, "blue should be low, got {blue}");
         assert_eq!(alpha, 255, "the solid is opaque");
+    }
+
+    /// An effect's picture wired into the Matte of one further down is the
+    /// picture that effect made, not whatever the walk drew since. Black, then
+    /// white twice over it, then red held back by the black: the red should
+    /// not show. Two whites, so a freed black would be drawn over by the second.
+    #[test]
+    fn an_effects_picture_can_matte_one_further_down() {
+        use lumit_core::anim::Property;
+        use lumit_core::graph::{Edge, InputRef, OutputRef};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let fill = |rgb: [f64; 3]| {
+            let mut inst = lumit_core::fx::instantiate("fill").expect("fill");
+            for p in &mut inst.params {
+                if p.id == "colour" {
+                    p.value = lumit_core::model::EffectValue::Colour(
+                        [rgb[0], rgb[1], rgb[2], 1.0].map(Property::fixed),
+                    );
+                }
+            }
+            inst
+        };
+        let (black, red) = (fill([0.0; 3]), fill([1.0, 0.0, 0.0]));
+        let edge = Edge {
+            from: OutputRef::EffectOutput { effect: black.id },
+            to: InputRef::Matte { effect: red.id },
+        };
+        let (mut doc, comp_id, _) = matrix_base(8, 8, LinearColour([0.5, 0.5, 0.5, 1.0]));
+        let layer = &mut doc.comp_mut(comp_id).expect("comp").layers[0];
+        layer.effects = vec![black, fill([1.0; 3]), fill([1.0; 3]), red];
+        let mut centre = |doc: &Document| {
+            let (rgba, w, h) = r
+                .render_rgba(&Arc::new(doc.clone()), comp_id, 0, 1.0)
+                .expect("render");
+            let i = (((h / 2) * w + w / 2) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let [_, unmatted, _] = centre(&doc);
+        assert!(
+            unmatted < 60,
+            "with no wire the red fill shows, got green {unmatted}"
+        );
+        doc.comp_mut(comp_id).expect("comp").layers[0].graph.edges = vec![edge];
+        let [_, green, blue] = centre(&doc);
+        assert!(
+            green > 200 && blue > 200,
+            "the black matte holds the red back to white, got {green} {blue}"
+        );
+    }
+
+    /// A Node graph box in a node graph takes a Matte as any effect does: a
+    /// black picture in it holds the box's brightening back to the plate.
+    #[test]
+    fn a_node_graph_box_takes_a_matte() {
+        use lumit_core::comp_graph::{CompGraph, GraphNode};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let mut solid = |name: &str, grey: f32| {
+            let id = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id,
+                name: name.into(),
+                colour: LinearColour([grey, grey, grey, 1.0]),
+                width: 8,
+                height: 8,
+                extra: serde_json::Map::new(),
+            }));
+            id
+        };
+        let (plate, black) = (solid("Plate", 0.2), solid("Black", 0.0));
+        let inst = push_preset_graph(&mut doc, 8, 8);
+        let (box_id, a, b, out) = (inst.id, Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let read = |id, item| GraphNode::Read {
+            id,
+            item,
+            custom_name: None,
+        };
+        let outer = graph_composition(
+            8,
+            8,
+            CompGraph {
+                notes: Vec::new(),
+                nodes: vec![
+                    read(a, plate),
+                    read(b, black),
+                    GraphNode::Fx(inst),
+                    GraphNode::Output { id: out },
+                ],
+                edges: vec![
+                    graph_wire(a, "output", box_id, "input"),
+                    graph_wire(box_id, "output", out, "input"),
+                ],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+                groups: Vec::new(),
+            },
+        );
+        let comp_id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        let mut centre = |doc: &Document| {
+            let (rgba, w, h) = r
+                .render_rgba(&Arc::new(doc.clone()), comp_id, 0, 1.0)
+                .expect("render");
+            rgba[(((h / 2) * w + w / 2) * 4) as usize]
+        };
+        let brightened = centre(&doc);
+        if let Some(ProjectItem::Composition(c)) = doc.items.last_mut() {
+            if let Some(g) = c.graph.as_mut() {
+                g.edges.push(graph_wire(b, "output", box_id, "matte"));
+            }
+        }
+        let held = centre(&doc);
+        let mut bare = doc.clone();
+        if let Some(ProjectItem::Composition(c)) = bare.items.last_mut() {
+            if let Some(g) = c.graph.as_mut() {
+                g.edges = vec![graph_wire(a, "output", out, "input")];
+            }
+        }
+        let plate = centre(&bare);
+        assert!(
+            brightened > plate + 20,
+            "the box brightens, {brightened} over {plate}"
+        );
+        assert!(
+            held.abs_diff(plate) <= 1,
+            "the black matte holds it back, {held} for {plate}"
+        );
     }
 
     /// **The preview scale is real.** Under auto resolution the COMPOSITE

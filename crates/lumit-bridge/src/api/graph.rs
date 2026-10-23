@@ -169,6 +169,8 @@ pub enum BridgeOutputRef {
     /// The effect goes on making its picture for the chain; this taps
     /// the data it declares beside it, and carries no picture itself.
     EffectData { effect: Uuid, port: String },
+    /// A stack effect's picture into the Matte of an effect below it.
+    EffectOutput { effect: Uuid },
 }
 
 /// Where a wire goes.
@@ -204,6 +206,9 @@ impl BridgeGraphEdge {
                     effect: *effect,
                     port: port.clone(),
                 },
+                OutputRef::EffectOutput { effect } => {
+                    BridgeOutputRef::EffectOutput { effect: *effect }
+                }
             },
             to: match &edge.to {
                 InputRef::Param { node, port } => BridgeInputRef::Param {
@@ -224,6 +229,7 @@ impl BridgeGraphEdge {
                 BridgeOutputRef::EffectData { effect, port } => {
                     OutputRef::EffectData { effect, port }
                 }
+                BridgeOutputRef::EffectOutput { effect } => OutputRef::EffectOutput { effect },
             },
             to: match self.to {
                 BridgeInputRef::Param { node, port } => InputRef::Param {

@@ -42,7 +42,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgeExpressionLanguage;
+    show BridgeExpressionLanguage, BridgeFfxImport, importFfxPresets;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
@@ -1096,6 +1096,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               description: ui.workspace.projectTemplate.isEmpty
                   ? l10n.settingsHelpProjectTemplate
                   : ui.workspace.projectTemplate,
+            ),
+            // Converted once into the preset library, so the Effects &
+            // presets panel lists them beside Lumit's own.
+            _row(
+              t,
+              l10n.settingsAfterEffectsPresets,
+              HouseButton(
+                key: const ValueKey('settings-import-ffx'),
+                small: true,
+                onPressed: () => _importFfxPresets(ui),
+                child: Text(l10n.menuImport, style: t.small),
+              ),
+              description: _ffxMessage ?? '',
             ),
             _row(
               t,
@@ -3286,6 +3299,27 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// What the last After Effects import said, shown under its row.
   String? _afterEffectsMessage;
+
+  /// What the last import of After Effects presets said, under its row.
+  String? _ffxMessage;
+
+  /// Pick a folder of After Effects presets and have the engine write each
+  /// into the preset library as a Lumit preset.
+  Future<void> _importFfxPresets(LumitUiState ui) async {
+    final folder = await pickFolder();
+    if (folder == null) return;
+    final BridgeFfxImport done;
+    try {
+      done = await importFfxPresets(folder: folder);
+    } catch (_) {
+      // No preset library on this machine to write into.
+      return;
+    }
+    ui.presetsChanged.value++;
+    if (!mounted) return;
+    setState(() => _ffxMessage = l10n.settingsAfterEffectsPresetsImported(
+        done.imported, done.skipped));
+  }
 
   /// Read an After Effects shortcut file and hand it to the engine, which
   /// keeps the commands it has an action for and refuses a file with none.

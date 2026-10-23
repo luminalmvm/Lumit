@@ -66,6 +66,7 @@ import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
+import '../panels/stagger_panel_frb.dart' show showStaggerPanel;
 import 'ae_report_frb.dart';
 import 'backups_window.dart';
 import 'bring_composition_frb.dart';
@@ -850,22 +851,22 @@ class LumitMenuBarFrb extends StatelessWidget {
         footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
-          // Effects first — the overwhelmingly common reason to open this.
-          for (final effect in listEffects())
-            FxConsoleEntry(
-              label: engineLabel(effect.label),
-              kind: FxConsoleKind.effect,
-              group: engineLabel(effect.categoryLabel),
-              run: () => applyEffect(effect.name),
-            ),
-          // The saved presets beside them, under the Presets kicker the
-          // board's category strip draws.
+          // The saved presets lead, so their kicker sits first in the strip
+          // however many plugin categories follow.
           for (final preset in listPresets())
             FxConsoleEntry(
               label: preset.name,
               kind: FxConsoleKind.effect,
               group: l10n.fxConsolePresets,
               run: () => applyPreset(preset),
+            ),
+          // Then the effects, the overwhelmingly common reason to open this.
+          for (final effect in listEffects())
+            FxConsoleEntry(
+              label: engineLabel(effect.label),
+              kind: FxConsoleKind.effect,
+              group: engineLabel(effect.categoryLabel),
+              run: () => applyEffect(effect.name),
             ),
           // The node graphs, which apply as effects rather than front.
           for (final (each, name) in graphs)
@@ -1396,6 +1397,9 @@ List<MenuSection> lumitMenus(
             lockRow(app, ui),
             unlockAllRow(app, ui),
             MenuEntry.submenu(l10n.menuArrange, arrangeRows(app, ui)),
+            MenuEntry(
+                l10n.menuStaggerLayers,
+                comp == null ? null : () => showStaggerPanel(ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
@@ -2226,6 +2230,12 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
   // A panel holding a finer selection takes the whole of Cut, so its copy is
   // not followed by the layer under it going too.
   if (ui.cutClaim?.call() ?? false) return true;
+  // Keyframes, boxes and the like: the panel that took the copy removes the
+  // same things with its own Delete, and the layer under them stays.
+  if (ui.copyClaim?.call() ?? false) {
+    ui.deleteClaim?.call();
+    return true;
+  }
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
   final layer = ui.selectedLayer.value;

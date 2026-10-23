@@ -3826,9 +3826,79 @@ impl CompositionReference {
         }) {
             return Ok(());
         }
-        let travel = lumit_core::time::Duration(travel);
-        let mut ops = Vec::with_capacity(moving.len());
-        for l in moving {
+        self.commit_travels(moving.iter().map(|l| (*l, travel)).collect())
+    }
+
+    /// Stagger the given layers in the order given: the first starts on the
+    /// earliest in point among them and each after it `step` frames later
+    /// than the one before. A step of 0 lines them all up on that in point.
+    /// Each layer's contents travel with it, as a slide's do, and the whole
+    /// stagger is one undo step.
+    #[frb(sync)]
+    pub fn stagger_layers(&self, layer_ids: Vec<Uuid>, step: i64) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let by_id: std::collections::HashMap<Uuid, &lumit_core::model::Layer> =
+            comp.layers.iter().map(|l| (l.id, l)).collect();
+        let moving: Vec<&lumit_core::model::Layer> = layer_ids
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        let Some(first) = moving.iter().map(|l| l.in_point.0).min() else {
+            return Ok(());
+        };
+        let mut moves = Vec::with_capacity(moving.len());
+        for (rank, l) in moving.into_iter().enumerate() {
+            let gap = comp
+                .frame_rate
+                .time_of_frame(rank as i64 * step.max(0))
+                .map_err(|_| BridgeError::InvalidFrameRate)?;
+            let travel = first
+                .checked_add(gap.0)
+                .and_then(|to| to.checked_sub(l.in_point.0))
+                .map_err(|_| BridgeError::InvalidFrameRate)?;
+            moves.push((l, travel));
+        }
+        self.commit_travels(moves)
+    }
+
+    /// Slide each of the given layers by its own number of frames, as one
+    /// batch: what releasing a Ctrl+Alt drag on a selection's bar commits,
+    /// which fans the bars out rather than moving them together. Each layer
+    /// is held at comp zero on its own, so a fan dragged into the wall
+    /// piles up against it.
+    #[frb(sync)]
+    pub fn fan_layers(&self, layer_ids: Vec<Uuid>, deltas: Vec<i64>) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let by_id: std::collections::HashMap<Uuid, &lumit_core::model::Layer> =
+            comp.layers.iter().map(|l| (l.id, l)).collect();
+        let mut moves = Vec::with_capacity(layer_ids.len());
+        for (id, delta) in layer_ids.iter().zip(deltas) {
+            let Some(l) = by_id.get(id).copied() else {
+                continue;
+            };
+            let delta = delta.max(-comp.frame_rate.frame_at(l.in_point));
+            let travel = comp
+                .frame_rate
+                .time_of_frame(delta)
+                .map_err(|_| BridgeError::InvalidFrameRate)?;
+            moves.push((l, travel.0));
+        }
+        self.commit_travels(moves)
+    }
+
+    /// Move each layer's in point, out point and start offset by its own
+    /// travel, as one batch. A layer with no travel is left out of it.
+    #[frb(ignore)]
+    fn commit_travels(
+        &self,
+        moves: Vec<(&lumit_core::model::Layer, lumit_core::time::Rational)>,
+    ) -> Result<(), BridgeError> {
+        let mut ops = Vec::with_capacity(moves.len());
+        for (l, travel) in moves {
+            if travel.is_zero() {
+                continue;
+            }
+            let travel = lumit_core::time::Duration(travel);
             let at = |t: lumit_core::time::CompTime| {
                 t.add_dur(travel).map_err(|_| BridgeError::InvalidFrameRate)
             };
@@ -3839,6 +3909,9 @@ impl CompositionReference {
                 out_point: at(l.out_point)?,
                 start_offset: at(l.start_offset)?,
             });
+        }
+        if ops.is_empty() {
+            return Ok(());
         }
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -4414,5 +4487,45 @@ mod group_tests {
             7,
             "and the set kept its shape rather than folding against it"
         );
+    }
+
+    /// Staggering places each layer a step after the one before it, from the
+    /// earliest in point, in one undo step; a step of 0 lines them up; and a
+    /// fan holds each layer at comp zero on its own.
+    #[test]
+    fn a_stagger_places_layers_in_order_and_a_fan_stops_each_at_the_wall() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        comp.slide_layers(vec![all[1]], 10, 0)
+            .expect("move one off zero");
+        let before = comp.get_model().expect("model");
+
+        comp.stagger_layers(vec![all[2], all[1], all[0]], 3)
+            .expect("staggered");
+        let after = comp.get_model().expect("model");
+        assert_eq!(span(&after, 2).0, 0, "the first given starts earliest");
+        assert_eq!(span(&after, 1).0, 3);
+        assert_eq!(span(&after, 0).0, 6);
+        assert_eq!(
+            span(&after, 1).1 - span(&after, 1).0,
+            span(&before, 1).1 - span(&before, 1).0,
+            "a layer keeps its length"
+        );
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        for i in 0..4 {
+            assert_eq!(span(&back, i), span(&before, i), "one undo took it all");
+        }
+
+        comp.stagger_layers(vec![all[1], all[3]], 0)
+            .expect("aligned");
+        let lined = comp.get_model().expect("model");
+        assert_eq!(span(&lined, 1).0, span(&lined, 3).0, "both start together");
+
+        comp.fan_layers(vec![all[0], all[1]], vec![-5, 4])
+            .expect("clamped, not refused");
+        let fanned = comp.get_model().expect("model");
+        assert_eq!(span(&fanned, 0).0, 0, "already on the wall, it stays");
+        assert_eq!(span(&fanned, 1).0, span(&lined, 1).0 + 4);
     }
 }

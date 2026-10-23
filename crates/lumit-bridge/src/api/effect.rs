@@ -710,6 +710,89 @@ pub fn read_effect_preset(path: String) -> Result<String, BridgeError> {
     lumit_core::preset::to_json(&name, &effects).map_err(|_| BridgeError::InvalidPreset)
 }
 
+/// What an import of After Effects presets did.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeFfxImport {
+    /// Presets written into the library.
+    pub imported: u32,
+    /// Presets left out: unreadable, holding no effect, or named like one
+    /// already in the library.
+    pub skipped: u32,
+}
+
+/// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
+/// into a `.lumfx` in the preset library, where the Effects & presets panel
+/// lists it. A preset already in the library is never written over.
+///
+/// Not sync: a folder of presets can be a few hundred files.
+pub fn import_ffx_presets(folder: String) -> Result<BridgeFfxImport, BridgeError> {
+    let library = lumit_project::presets_dir().ok_or(BridgeError::InvalidPreset)?;
+    std::fs::create_dir_all(&library).map_err(|_| BridgeError::InvalidPreset)?;
+    Ok(import_ffx_into(std::path::Path::new(&folder), &library))
+}
+
+/// [`import_ffx_presets`] on any library folder, so it is testable without
+/// the user's own.
+#[frb(ignore)]
+pub(crate) fn import_ffx_into(
+    folder: &std::path::Path,
+    library: &std::path::Path,
+) -> BridgeFfxImport {
+    let mut done = BridgeFfxImport {
+        imported: 0,
+        skipped: 0,
+    };
+    let mut folders = vec![folder.to_path_buf()];
+    while let Some(dir) = folders.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for path in entries.flatten().map(|entry| entry.path()) {
+            if path.is_dir() {
+                folders.push(path);
+                continue;
+            }
+            let is_ffx = path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ffx"));
+            if !is_ffx {
+                continue;
+            }
+            if write_ffx_as_lumfx(&path, library) {
+                done.imported += 1;
+            } else {
+                done.skipped += 1;
+            }
+        }
+    }
+    done
+}
+
+/// One `.ffx` into the library under its own name. False when it is left out.
+fn write_ffx_as_lumfx(ffx: &std::path::Path, library: &std::path::Path) -> bool {
+    let Some(name) = ffx
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+    else {
+        return false;
+    };
+    let to = library.join(format!("{name}.{}", lumit_core::preset::PRESET_EXTENSION));
+    if to.exists() {
+        return false;
+    }
+    let Ok((effects, _report)) = lumit_import::open_ffx(ffx) else {
+        return false;
+    };
+    // A preset of text animators or a transform alone has nothing Lumit reads.
+    if effects.is_empty() {
+        return false;
+    }
+    lumit_core::preset::to_json(&name, &effects)
+        .ok()
+        .is_some_and(|text| std::fs::write(&to, text).is_ok())
+}
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.

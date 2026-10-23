@@ -7119,7 +7119,11 @@
             "Square",
             "Triangle",
             "Sawtooth",
-            "Circle"
+            "Circle",
+            "Semicircle",
+            "Uncircle",
+            "Noise",
+            "Smooth noise"
           ],
           "dividers_after": []
         },

@@ -46,6 +46,7 @@ import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -57,17 +58,28 @@ import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
+import '../state/preview_throttle.dart';
 import '../state/settings.dart' show InterfaceSettings;
+import '../state/timeline_columns.dart' show ValueColumn;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
-import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'comp_graph_panel.dart' show CompBoxRows, CompGraphPanel, compBoxRows;
+import 'effect_param_row_frb.dart'
+    show
+        EffectParamRowFrb,
+        EffectStackEditor,
+        cachedListParameters,
+        relistedRows,
+        withChained;
 import 'graph_groups.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
+import 'lens_window.dart' show pressLensButton;
 import '../state/share.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart' show InstanceHome;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'viewer_tool_cursor.dart' show handPanLayer;
@@ -273,6 +285,10 @@ const double _autoDriverStepY = 140;
 /// How near a socket the pointer has to be to take hold of it.
 const double _socketGrab = 7;
 
+/// How near a socket a wire in hand has to come to snap to it. Over a box, the
+/// nearest socket on that box that takes the wire is reached from anywhere.
+const double _socketSnap = 24;
+
 /// The pointer travel that turns a press into a drag rather than a click.
 const double graphDragSlop = 3;
 
@@ -411,6 +427,10 @@ Map<String, DrivenParam> drivenParamsIn(BridgeLayerGraph graph) {
         BridgeOutputRef_EffectData(:final effect, :final port) => (
             graphNodeKey(BridgeNodeRef.effect(effect)),
             port
+          ),
+        BridgeOutputRef_EffectOutput(:final effect) => (
+            graphNodeKey(BridgeNodeRef.effect(effect)),
+            'output'
           ),
       };
       final source = byRef[fromKey];
@@ -702,6 +722,33 @@ class GraphLayout {
     return null;
   }
 
+  /// The socket a wire let go of at [at] would join: the nearest one that
+  /// [fits], within [_socketSnap] of the pointer or anywhere on the box under
+  /// it. Null where none would.
+  GraphSocket? snapAt(Offset at, bool Function(GraphSocket) fits) {
+    final over = boxAt(at);
+    GraphSocket? best;
+    var nearest = double.infinity;
+    for (final box in boxes) {
+      for (final (isInput, ports) in [
+        (true, box.inputs),
+        (false, box.outputs)
+      ]) {
+        for (final port in ports) {
+          final centre = box.socket(port.id, isInput);
+          if (centre == null) continue;
+          final d = (centre - at).distance;
+          if (d >= nearest || (d > _socketSnap && box != over)) continue;
+          final socket = GraphSocket(box.key, port, isInput, centre);
+          if (!fits(socket)) continue;
+          best = socket;
+          nearest = d;
+        }
+      }
+    }
+    return best;
+  }
+
   GraphBox? boxAt(Offset at) {
     for (final box in boxes.reversed) {
       if (box.rect.contains(at)) return box;
@@ -715,12 +762,14 @@ class GraphLayout {
 /// A **driver** draws every socket it has: the box is small, and its ports are
 /// the whole of what it is for. An **effect** draws the picture's own sockets
 /// always, and a parameter socket when a wire is on it or when the box is
-/// twirled open.
+/// twirled open. An open box draws a control on each of its [params] rows, as
+/// a node graph composition's does.
 GraphLayout _layoutOf(
   BridgeLayerGraph graph,
   Map<String, Offset> positions,
   Set<String> exposed,
   String layerName,
+  Map<String, CompBoxRows> params,
 ) {
   final boxes = <GraphBox>[];
   var chain = 0;
@@ -729,9 +778,13 @@ GraphLayout _layoutOf(
     final key = graphNodeKey(node.node);
     final isDriver = node.node is BridgeNodeRef_Driver;
     final derived = _derivedNode(node.node);
-    final placed =
-        positions[key] ?? graphAutoPlace(isDriver ? drivers : chain, lower: isDriver);
+    final placed = positions[key] ??
+        graphAutoPlace(isDriver ? drivers : chain,
+            lower: isDriver, width: graphNodeOpenWidth);
     isDriver ? drivers++ : chain++;
+    final open = exposed.contains(key) || isDriver;
+    final rows =
+        open ? params[key]?.rows ?? const <BridgeParamInfo>[] : const [];
     boxes.add(graphLayoutBox(
       (
         key: key,
@@ -750,9 +803,13 @@ GraphLayout _layoutOf(
         noStream: graphNoStream(node),
       ),
       placed,
-      open: exposed.contains(key) || isDriver,
-      width:
-          node.node is BridgeNodeRef_Out ? graphOutNodeWidth : graphNodeWidth,
+      open: open,
+      params: [for (final p in rows) p.id],
+      width: node.node is BridgeNodeRef_Out
+          ? graphOutNodeWidth
+          : rows.isEmpty
+              ? graphNodeWidth
+              : graphNodeOpenWidth,
       foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
     ));
   }
@@ -822,6 +879,10 @@ bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
         graphNodeKey(BridgeNodeRef.effect(effect)),
         port
       ),
+    BridgeOutputRef_EffectOutput(:final effect) => (
+        graphNodeKey(BridgeNodeRef.effect(effect)),
+        'output'
+      ),
   };
   final (toKey, toPort) = switch (e.to) {
     BridgeInputRef_Param(:final node, :final port) => (
@@ -869,7 +930,13 @@ double graphWireDistance(Offset a, Offset b, Offset at,
 class GraphFlight {
   final GraphSocket from;
   Offset to;
+
+  /// The socket the wire would join if let go of now. The loose end is drawn
+  /// on it, so the wire shows where it is going before the drop.
+  GraphSocket? snap;
   GraphFlight(this.from, this.to);
+
+  Offset get end => snap?.at ?? to;
 }
 
 /// The layer canvas's wire in hand, which knows about the image chain besides.
@@ -963,6 +1030,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// commits want. Rebuilt with every read, so a box that has gone is simply
   /// not in it.
   Map<String, BridgeGraphNode> _byKey = const {};
+
+  /// Each effect and driver box's instance, and the rows it draws when open,
+  /// read beside the graph and never in a build.
+  Map<String, BridgeEffectInstanceInfo> _infos = const {};
+  Map<String, CompBoxRows> _params = const {};
+
+  /// A drag on an effect box's control: staged, previewed, committed on
+  /// release as one op, as the Node panel's is.
+  final EffectStackEditor _stack = EffectStackEditor();
+
+  /// The same for a driver box, whose commit is `setGraph`.
+  ({String key, Map<String, BridgeEffectValue> values})? _driverDrag;
+  final PreviewThrottle _driverPreview = PreviewThrottle();
 
   /// The layer's name, taken at the same moment, so the Source box can be
   /// headed without asking the model during a paint.
@@ -1130,6 +1210,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _positions,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
+      _params,
     ).boxes;
   }
 
@@ -1257,6 +1338,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   @override
   void dispose() {
     _unbind();
+    // A held tick would fire into a panel that is gone.
+    _driverPreview.cancel();
+    _stack.clear();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -1268,11 +1352,36 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     BridgeLayerGraph? graph;
     var notes = const <BridgeGraphNote>[];
     var name = '';
+    final infos = <String, BridgeEffectInstanceInfo>{};
+    final params = <String, CompBoxRows>{};
     if (layer != null) {
       try {
         graph = layer.getGraph();
         notes = layer.getGraphNotes();
         name = layer.getInfo().name;
+        // The rows an open box draws, by the Effect controls panel's rules.
+        void read(BridgeNodeRef node, BridgeEffectInstance instance) {
+          final key = graphNodeKey(node);
+          final info = instance.getInfo();
+          infos[key] = info;
+          params[key] = compBoxRows(
+            info.name,
+            relistedRows(
+              [...cachedListParameters(info.name), ...info.derivedParams],
+              info.rowOptions,
+            ),
+            {for (final v in info.values) v.id: v.value},
+            info.hiddenRows.toSet(),
+            info.disabledRows,
+          );
+        }
+
+        for (final instance in layer.getEffects()) {
+          read(BridgeNodeRef.effect(instance.id()), instance);
+        }
+        for (final instance in layer.getGraphDrivers()) {
+          read(BridgeNodeRef.driver(instance.id()), instance);
+        }
       } catch (_) {
         // The layer has gone since the selection was made; the placeholder is
         // the honest answer until the selection catches up.
@@ -1282,6 +1391,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() {
       _layer = layer;
       _graph = graph;
+      _infos = infos;
+      _params = params;
+      _driverDrag = null;
       _notes = graph == null ? const [] : notes;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
@@ -1300,6 +1412,189 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         _publishPick();
       }
     });
+  }
+
+  // --- A box's own controls -----------------------------------------------
+
+  /// One parameter row on an open box: the Node panel's row, committed and
+  /// previewed the way that panel's edit is.
+  Widget _paramRow(String key, String param) {
+    final layer = _layer;
+    final ui = _ui;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    final held = _params[key];
+    final p = held?.rows.where((p) => p.id == param).firstOrNull;
+    if (layer == null ||
+        ui == null ||
+        comp == null ||
+        info == null ||
+        held == null ||
+        p == null) {
+      return const SizedBox.shrink();
+    }
+    final driver = key.startsWith('driver:');
+    final values = {for (final v in info.values) v.id: v.value};
+    final drag = _driverDrag;
+    BridgeEffectValue? valueOf(String id) =>
+        (driver
+            ? (drag?.key == key ? drag!.values[id] : null)
+            : _stack.stagedValue(info.id, id)) ??
+        values[id];
+    Map<String, BridgeEffectValue> chained(
+            String param, BridgeEffectValue value) =>
+        withChained(info, param, value, comp, ui.playheadFrame.value);
+    return EffectParamRowFrb(
+      key: ValueKey<String>('graph-row-$key-$param'),
+      effectId: info.id,
+      param: p,
+      value: valueOf(param),
+      comp: comp,
+      ownerLayerId: layer.internallayerId,
+      ownerLayers: ui.model.layers,
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      onWrite: (_, param, value) =>
+          _writeParams(key, info, chained(param, value)),
+      onLive: (_, param, value) =>
+          _liveParams(key, info, chained(param, value)),
+      rowPadding: EdgeInsets.zero,
+      valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
+      siblings: values,
+      // Greyed where another control has taken the row over.
+      enabled: !held.disabled.contains(param),
+      riders: [
+        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
+          (r, valueOf(r.id)),
+      ],
+      onAction: (effect, param) => _pressParam(info, driver, effect, param),
+    );
+  }
+
+  /// The layer's drivers, freshly read, with [values] written into one of
+  /// them: what a driver box's preview and commit both send.
+  List<BridgeEffectInstance> _driversWith(LayerReference layer, UuidValue node,
+      Map<String, BridgeEffectValue> values) {
+    final drivers = layer.getGraphDrivers();
+    for (final instance in drivers) {
+      if (instance.id() != node) continue;
+      for (final entry in values.entries) {
+        instance.setValue(id: entry.key, value: entry.value);
+      }
+    }
+    return drivers;
+  }
+
+  /// A typed value, or the release of a drag: one op, one undo step.
+  void _writeParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final layer = _layer;
+    if (layer == null) return;
+    if (key.startsWith('driver:')) {
+      _driverPreview.cancel();
+      final List<BridgeEffectInstance> drivers;
+      try {
+        drivers = _driversWith(layer, info.id, values);
+      } catch (_) {
+        return;
+      }
+      _commit(_wiringNow(), drivers: drivers);
+      return;
+    }
+    _stack.writeAll(layer, info.id, values);
+    _ui?.model.refresh();
+  }
+
+  /// A drag tick: the row shows it and the Viewer previews it, and nothing is
+  /// committed.
+  void _liveParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final ui = _ui;
+    final layer = _layer;
+    final comp = ui?.selectedComp;
+    if (ui == null || layer == null || comp == null) return;
+    if (key.startsWith('driver:')) {
+      setState(() => _driverDrag = (key: key, values: values));
+      _driverPreview.request(() {
+        try {
+          comp.renderFrameWithDriverPreview(
+            frame: BigInt.from(ui.playheadFrame.value),
+            scale: ui.viewerScale,
+            layer: layer,
+            drivers: _driversWith(layer, info.id, values),
+          );
+        } catch (_) {
+          // The graph moved under the drag; the release re-reads.
+        }
+      });
+      return;
+    }
+    setState(() {
+      for (final entry in values.entries) {
+        _stack.live(comp, layer, info.id, entry.key, entry.value,
+            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+      }
+    });
+  }
+
+  /// A press on one of a box's buttons, the same press Effect controls and the
+  /// Node panel make.
+  void _pressParam(BridgeEffectInstanceInfo info, bool driver,
+      UuidValue effect, String param) {
+    final ui = _ui;
+    final layer = _layer;
+    if (ui == null || layer == null) return;
+    final comp = ui.selectedComp;
+    final frame = BigInt.from(ui.playheadFrame.value);
+    final home = driver
+        ? InstanceHome.drivers(layer)
+        : InstanceHome.layer(layer,
+            draw: comp == null
+                ? null
+                : (staged) => comp.renderFrameWithPreview(
+                    frame: frame,
+                    scale: ui.viewerScale,
+                    layer: layer,
+                    effects: staged));
+    void applied() => ui.model.refresh();
+    if (info.name == 'expression' &&
+        editExpressionOn(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (info.name == 'custom_shader' &&
+        pressShaderButton(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (pressLensButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied)) {
+      return;
+    }
+    if (info.name == 'node_graph' && param == 'open') {
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      final inner = graphCompById(project, info.nodeGraphComp);
+      if (inner != null) ui.setSelectedComp(inner);
+      return;
+    }
+    if (driver) return;
+    try {
+      fireEffectAction(layer: layer, effect: effect, param: param, frame: frame);
+    } catch (_) {
+      // Refused; the effect's own status line says why.
+    }
   }
 
   // --- Committing ---------------------------------------------------------
@@ -1551,6 +1846,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       BridgeOutputRef_Driver(:final port) => port,
       BridgeOutputRef_SourceMatte() => 'matte',
       BridgeOutputRef_EffectData(:final port) => port,
+      BridgeOutputRef_EffectOutput() => 'output',
     };
     final i = box.outputs.indexWhere((p) => p.id == portId);
     final at = box.socket(portId, false);
@@ -1584,11 +1880,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (_driverIdOf(node) case final driver?) {
       return BridgeOutputRef.driver(node: driver, port: port.id);
     }
-    // A **stack effect's** declared data output — the first wire whose source
-    // is the effect list itself. The picture's own `output` port never
-    // reaches here: a chain socket takes no drag at all.
+    // A **stack effect's** declared data output, or its picture, which only
+    // ever goes into the Matte of an effect below it.
     if (_effectIdOf(node) case final effect?) {
-      return BridgeOutputRef.effectData(effect: effect, port: port.id);
+      return port.portType == BridgePortType.image
+          ? BridgeOutputRef.effectOutput(effect: effect)
+          : BridgeOutputRef.effectData(effect: effect, port: port.id);
     }
     return null;
   }
@@ -1606,11 +1903,29 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// port types both sides carry in the read model. A mismatched drop is
   /// declined without a bridge call: the engine's refusal is the backstop, not
   /// the message channel (docs/17, "The layer graph").
+  /// What a wire in hand may snap to: a chain wire only a chain input, which
+  /// is all [_chainDrop] takes, and any other wire what [_accepts] takes.
+  /// A chain wire drawn out of an effect's output may also go into a Matte.
+  bool Function(GraphSocket) _fits(_InFlight flight) => flight.chain == null
+      ? (s) => _accepts(flight.from, s)
+      : (s) =>
+          (s.isInput && _isChainType(s.port.portType)) ||
+          (flight.fromOutput && _accepts(flight.from, s));
+
   bool _accepts(GraphSocket from, GraphSocket to) {
     if (from.isInput == to.isInput) return false;
     final out = from.isInput ? to : from;
     final into = from.isInput ? from : to;
     if (out.node == into.node) return false;
+    // An effect's picture into the Matte of an effect below it.
+    if (out.port.portType == BridgePortType.image &&
+        into.port.portType == BridgePortType.matte) {
+      final order = [for (final n in _graph!.nodes) graphNodeKey(n.node)];
+      final above = order.indexOf(out.node);
+      return _effectIdOf(_refOf(out.node)) != null &&
+          above >= 0 &&
+          above < order.indexOf(into.node);
+    }
     if (_isChainType(out.port.portType) || _isChainType(into.port.portType)) {
       return false;
     }
@@ -1655,7 +1970,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         BridgeOutputRef_Driver(:final node) =>
           graphNodeKey(BridgeNodeRef.driver(node)),
         BridgeOutputRef_SourceMatte() => 'source',
-        BridgeOutputRef_EffectData(:final effect) =>
+        BridgeOutputRef_EffectData(:final effect) ||
+        BridgeOutputRef_EffectOutput(:final effect) =>
           graphNodeKey(BridgeNodeRef.effect(effect)),
       };
 
@@ -2513,7 +2829,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   void _move(PointerMoveEvent event, GraphLayout layout) {
     final at = _toCanvas(event.localPosition);
     if (_flight case final flight?) {
-      setState(() => flight.to = at);
+      setState(() {
+        flight.to = at;
+        flight.snap = layout.snapAt(at, _fits(flight));
+      });
       return;
     }
     if (_nodeDrag case final drag?) {
@@ -2555,8 +2874,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
-      final landed = layout.socketAt(at);
+      final landed = layout.snapAt(at, _fits(flight)) ?? layout.socketAt(at);
       if (flight.chain case final held?) {
+        // Out of an effect's output into a Matte below: a wire, not a move.
+        if (moved &&
+            flight.fromOutput &&
+            landed != null &&
+            landed.port.portType == BridgePortType.matte &&
+            _accepts(flight.from, landed)) {
+          _connect(flight.from, landed);
+          return;
+        }
         // A press that never travelled is no gesture at all here: a stored
         // wire unplugs on a stationary click, but a chain wire's discard
         // costs an effect, and that must never be the price of a slip.
@@ -2735,6 +3063,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _positions,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
+      _params,
     );
     _boxRects = {for (final box in layout.boxes) box.key: box.rect};
 
@@ -2976,6 +3305,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
                                   foot: _shaderThumb(box.key),
+                                  paramRow: (param) =>
+                                      _paramRow(box.key, param),
+                                  snap: _flight?.snap?.node == box.key
+                                      ? _flight!.snap
+                                      : null,
                                 ),
                               ),
                           ],
@@ -3085,6 +3419,9 @@ class GraphNodeCard extends StatelessWidget {
   /// shader's picture of its inner graph. A press on it is its own.
   final Widget? foot;
 
+  /// The socket on this card a wire in hand has snapped to, drawn lit.
+  final GraphSocket? snap;
+
   const GraphNodeCard({
     super.key,
     required this.box,
@@ -3099,6 +3436,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenameCancelled,
     this.paramRow,
     this.foot,
+    this.snap,
   });
 
   GraphCard get _card => box.card;
@@ -3375,29 +3713,32 @@ class GraphNodeCard extends StatelessWidget {
           Positioned(
             left: -graphSocketSize / 2 - 1,
             top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, input),
+            child: _socket(t, input, isInput: true),
           ),
         if (output != null)
           Positioned(
             right: -graphSocketSize / 2 - 1,
             top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, output),
+            child: _socket(t, output, isInput: false),
           ),
       ],
     );
   }
 
-  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7).
-  Widget _socket(LumitTheme t, BridgePort port) {
+  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7). The
+  /// one a wire in hand has snapped to is filled and ringed.
+  Widget _socket(LumitTheme t, BridgePort port, {required bool isInput}) {
     final colour = portColour(t, port.portType);
+    final lit = snap?.isInput == isInput && snap?.port.id == port.id;
     return Container(
       key: ValueKey<String>('graph-socket-$_key-${port.id}'),
       width: graphSocketSize,
       height: graphSocketSize,
       decoration: BoxDecoration(
-        color: port.wired ? colour : t.surface1,
+        color: port.wired || lit ? colour : t.surface1,
         shape: BoxShape.circle,
-        border: Border.all(color: colour),
+        border: Border.all(
+            color: lit ? t.animated : colour, width: lit ? 2 : 1),
       ),
     );
   }
@@ -3678,7 +4019,10 @@ class _GraphPainter extends CustomPainter {
     }
 
     if (flight case final f?) {
-      _wire(canvas, f.from.at, f.to, dragged, dashes: true);
+      // A wire drawn out of an input runs the other way, pointer to socket,
+      // so it leaves the input heading left as a stored wire would.
+      final (a, b) = f.from.isInput ? (f.end, f.from.at) : (f.from.at, f.end);
+      _wire(canvas, a, b, dragged, dashes: true);
     }
   }
 

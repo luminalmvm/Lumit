@@ -573,6 +573,15 @@ class BridgeExportSpec {
   /// Show the finished file in the desktop's own file manager.
   final bool openFolder;
 
+  /// How a GIF is dithered: `0` diffusion, `1` pattern, `2` none.
+  final int gifDither;
+
+  /// Give each frame of a GIF its own palette, rather than one for all.
+  final bool gifPalettePerFrame;
+
+  /// How many times a GIF plays, `0` for forever.
+  final int gifPlays;
+
   const BridgeExportSpec({
     required this.preset,
     required this.codec,
@@ -611,6 +620,9 @@ class BridgeExportSpec {
     this.useProxies = false,
     required this.makeANoise,
     required this.openFolder,
+    this.gifDither = 0,
+    this.gifPalettePerFrame = false,
+    this.gifPlays = 0,
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
@@ -656,7 +668,10 @@ class BridgeExportSpec {
       retimeBlend.hashCode ^
       useProxies.hashCode ^
       makeANoise.hashCode ^
-      openFolder.hashCode;
+      openFolder.hashCode ^
+      gifDither.hashCode ^
+      gifPalettePerFrame.hashCode ^
+      gifPlays.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -699,7 +714,10 @@ class BridgeExportSpec {
           retimeBlend == other.retimeBlend &&
           useProxies == other.useProxies &&
           makeANoise == other.makeANoise &&
-          openFolder == other.openFolder;
+          openFolder == other.openFolder &&
+          gifDither == other.gifDither &&
+          gifPalettePerFrame == other.gifPalettePerFrame &&
+          gifPlays == other.gifPlays;
 }
 
 @freezed
@@ -743,6 +761,13 @@ class BridgeFormatCaps {
   /// Can carry an alpha channel.
   final bool alpha;
 
+  /// The choice of premultiplied or straight alpha means something. False
+  /// for a GIF, whose kept pixels are always straight.
+  final bool alphaMode;
+
+  /// Dither, palette and plays apply, which only a GIF has.
+  final bool gif;
+
   /// The colour depths this format writes, best last: `[8]`, `[8, 16]`, or
   /// empty for a format with no picture.
   final Uint32List depths;
@@ -783,6 +808,8 @@ class BridgeFormatCaps {
     required this.video,
     required this.audio,
     required this.alpha,
+    this.alphaMode = false,
+    this.gif = false,
     required this.depths,
     required this.bitRate,
     required this.audioBitRate,
@@ -799,6 +826,8 @@ class BridgeFormatCaps {
       video.hashCode ^
       audio.hashCode ^
       alpha.hashCode ^
+      alphaMode.hashCode ^
+      gif.hashCode ^
       depths.hashCode ^
       bitRate.hashCode ^
       audioBitRate.hashCode ^
@@ -814,6 +843,8 @@ class BridgeFormatCaps {
           video == other.video &&
           audio == other.audio &&
           alpha == other.alpha &&
+          alphaMode == other.alphaMode &&
+          gif == other.gif &&
           depths == other.depths &&
           bitRate == other.bitRate &&
           audioBitRate == other.audioBitRate &&

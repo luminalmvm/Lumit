@@ -33,6 +33,7 @@ import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
 import 'fx_key_strip.dart';
+import 'keyframe_controls_frb.dart' show editPickedKeys;
 
 /// **The fixed column edges** (docs/15 §12A.3). Every row in the panel
 /// lays out on the same four x positions: the stopwatch, then a keyframe-
@@ -793,6 +794,15 @@ Widget fxTwoColumnRow({
   final strip = FxKeyStripScope.widthOf(context);
   // In a narrow panel the lane has a line of its own under an animated row.
   final under = FxKeyStripScope.stackedLane(context, lane);
+  // A value edit on a row with keys picked in the strip moves them all.
+  final picks = FxKeyStripScope.maybeOf(context);
+  if (lane is FxKeyLane && picks != null && picks.width > 0) {
+    control = ValueEditScope(
+      run: (typed, edit) =>
+          editPickedKeys(picks.pickedOn(lane.rowKey), typed, edit),
+      child: control,
+    );
+  }
   final row = ConstrainedBox(
     constraints: grows
         ? BoxConstraints(minHeight: height)

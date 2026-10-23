@@ -30,6 +30,7 @@ import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
+import 'stagger_panel_frb.dart' show showStaggerPanel;
 import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
@@ -1343,6 +1344,11 @@ class _OutlineRowState extends State<OutlineRow> {
               key: const ValueKey('tl-row-precompose'),
               onPressed: () => close('precompose'),
               child: Text(l10n.menuPreCompose)),
+          if (_menuTargets().length > 1)
+            MenuRow(
+                key: const ValueKey('tl-row-stagger'),
+                onPressed: () => close('stagger'),
+                child: Text(l10n.menuStaggerLayers)),
         ],
         // The shape — the cuts, the gaps and the ramps, with no media in
         // it — from the layer itself, so carrying a cut onto a depth pass
@@ -1553,6 +1559,11 @@ class _OutlineRowState extends State<OutlineRow> {
         );
         // The dialogue refreshes the document itself, and by now this row may
         // be inside the new comp.
+        return;
+      case 'stagger':
+        if (!mounted) return;
+        showStaggerPanel(
+            Provider.of<LumitUiState>(this.context, listen: false));
         return;
       case 'copy-shape':
         // Singular by nature: a clipboard holds one shape, and copying four

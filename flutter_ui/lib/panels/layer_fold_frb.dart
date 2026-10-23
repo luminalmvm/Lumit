@@ -195,7 +195,11 @@ final class FoldMaskValueRow extends LayerFoldRow {
 /// outline — the row that makes a drawn shape editable after the fact.
 final class FoldShapeRow extends LayerFoldRow {
   final BridgeShapeItem item;
-  const FoldShapeRow(this.item, {required int depth}) : super(depth);
+
+  /// Whether its own twirl is down, showing the rows under it.
+  final bool open;
+  const FoldShapeRow(this.item, {required this.open, required int depth})
+      : super(depth);
 }
 
 /// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries.
@@ -822,6 +826,10 @@ List<LayerFoldRow> withHeadingsShut(
         enabled: row.enabled,
         named: row.named,
       ));
+    } else if (row is FoldShapeRow &&
+        shut.any((p) => p.endsWith('/contents/${row.item.id}'))) {
+      under = row.depth;
+      out.add(FoldShapeRow(row.item, open: false, depth: row.depth));
     } else {
       out.add(row);
     }
@@ -2157,7 +2165,11 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (contentsOpen) {
       for (final (index, item) in info.shapeContents.indexed) {
-        rows.add(FoldShapeRow(item, depth: 2));
+        // Each item has its own twirl, shut until opened, like an animator: an
+        // item carries a page of rows, and several open at once is a scroll.
+        final itemOpen = open.contains('${contentsPath(id)}/${item.id}');
+        rows.add(FoldShapeRow(item, open: itemOpen, depth: 2));
+        if (!itemOpen) continue;
         // How this item joins the one before it. The first item of the
         // list has nothing in front of it to join, so it has no such row.
         if (index > 0) {

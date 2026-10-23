@@ -2252,6 +2252,50 @@
   "@formatProRes4444Xq": {
     "description": "Export format that can carry transparency, at a higher data rate than ProRes 4444. ProRes 4444 XQ and .mov are technical names and stay as they are."
   },
+  "formatGif": "GIF (.gif)",
+  "@formatGif": {
+    "description": "Export format: an animated GIF that loops. It can carry transparency. GIF and .gif are technical names and stay as they are."
+  },
+  "formatGifPicker": "GIF image",
+  "@formatGifPicker": {
+    "description": "The file type shown in the system Save dialogue for a .gif file. GIF stays as it is."
+  },
+  "exportGifDither": "Dither",
+  "@exportGifDither": {
+    "description": "Export dialog, Picture section: how a GIF spreads the picture over its 256 colours."
+  },
+  "exportGifDitherDiffusion": "Diffusion",
+  "@exportGifDitherDiffusion": {
+    "description": "GIF dither choice: error diffusion, the smoothest gradients. The word Photoshop uses for it."
+  },
+  "exportGifDitherPattern": "Pattern",
+  "@exportGifDitherPattern": {
+    "description": "GIF dither choice: an ordered pattern that stays still between frames and makes a smaller file. The word Photoshop uses for it."
+  },
+  "exportGifDitherNone": "None",
+  "@exportGifDitherNone": {
+    "description": "GIF dither choice: no dithering, each pixel takes the nearest colour."
+  },
+  "exportGifPalette": "Palette",
+  "@exportGifPalette": {
+    "description": "Export dialog, Picture section: whether a GIF has one set of 256 colours for the whole file or one for each frame."
+  },
+  "exportGifPaletteShared": "Shared",
+  "@exportGifPaletteShared": {
+    "description": "GIF palette choice: one set of colours for every frame."
+  },
+  "exportGifPalettePerFrame": "Per frame",
+  "@exportGifPalettePerFrame": {
+    "description": "GIF palette choice: each frame gets its own set of colours."
+  },
+  "exportGifPlays": "Plays",
+  "@exportGifPlays": {
+    "description": "Export dialog, Picture section: how many times a GIF plays before it stops."
+  },
+  "exportGifForever": "Forever",
+  "@exportGifForever": {
+    "description": "Tick beside Plays: the GIF loops for ever."
+  },
   "formatMovPicker": "QuickTime movie",
   "@formatMovPicker": {
     "description": "The file type shown in the system Save dialogue for a .mov file. QuickTime stays as it is."
@@ -4226,7 +4270,7 @@
   },
   "fxNoise": "Noise",
   "@fxNoise": {
-    "description": "Effect controls — the name of an effect."
+    "description": "Effect controls — the name of an effect., and a Wave type option on Wave warp."
   },
   "fxNoiseType": "Noise type",
   "@fxNoiseType": {
@@ -5256,6 +5300,22 @@
   "@settingsProjectTemplate": {
     "description": "Settings window, Workspace group: the name of the row that picks a project file every new project starts as a copy of."
   },
+  "settingsAfterEffectsPresets": "After Effects presets",
+  "@settingsAfterEffectsPresets": {
+    "description": "Settings window, Workspace group: the name of the row whose button picks a folder of Adobe After Effects animation presets (.ffx) and turns them into Lumit presets. After Effects is a product name."
+  },
+  "settingsAfterEffectsPresetsImported": "{imported} imported, {skipped} skipped",
+  "@settingsAfterEffectsPresetsImported": {
+    "description": "Shown under the After Effects presets row in Settings once a folder has been read. {imported} is how many presets were added to the Effects & presets panel, {skipped} how many were left out because they could not be read, held no effects, or had the name of a preset already there.",
+    "placeholders": {
+      "imported": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
   "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
   "@settingsHelpProjectTemplate": {
     "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
@@ -5746,6 +5806,34 @@
   },
   "keyRenameTheSelectedItem": "Rename the selected item",
   "@keyRenameTheSelectedItem": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyDuplicateTheSelectedItem": "Duplicate the selected item",
+  "@keyDuplicateTheSelectedItem": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySelectTheItemAbove": "Select the item above",
+  "@keySelectTheItemAbove": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySelectTheItemBelow": "Select the item below",
+  "@keySelectTheItemBelow": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyExtendTheSelectionUp": "Add the item above to the selection",
+  "@keyExtendTheSelectionUp": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyExtendTheSelectionDown": "Add the item below to the selection",
+  "@keyExtendTheSelectionDown": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCloseTheSelectedFolder": "Close the selected folder",
+  "@keyCloseTheSelectedFolder": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOpenTheSelectedFolder": "Open the selected folder",
+  "@keyOpenTheSelectedFolder": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyRevealAnchorPoint": "Reveal Anchor point",
@@ -6481,6 +6569,19 @@
   "@duplicateNestedTitle": {
     "description": "Title of the question asked when a composition being duplicated has other compositions inside it."
   },
+  "deleteInUseTitle": "Delete items in use",
+  "@deleteInUseTitle": {
+    "description": "Title of the question asked before deleting Project panel items that compositions still use."
+  },
+  "deleteInUseQuestion": "{count, plural, =1{This is used once in your compositions, and that use will be deleted too.} other{This is used {count} times in your compositions, and those uses will be deleted too.}}",
+  "@deleteInUseQuestion": {
+    "description": "The question asked before deleting Project panel items that compositions still use. A use is a layer, an effect or a node graph box, and each is deleted too.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "duplicateNestedQuestion": "The copy can share the compositions inside this one, so an edit shows in both, or get copies of its own.",
   "@duplicateNestedQuestion": {
     "description": "The question asked when duplicating a composition that has other compositions nested in it. Sharing means one nested composition used by both; separate copies means each gets its own."
@@ -6936,6 +7037,10 @@
   "menuStretch": "Stretch…",
   "@menuStretch": {
     "description": "Layer context-menu item: opens a small dialogue asking for a new speed or a new duration for the layer."
+  },
+  "menuStaggerLayers": "Stagger layers…",
+  "@menuStaggerLayers": {
+    "description": "Layer menu and layer context-menu item: opens the Stagger panel, which starts the selected layers one after another, a set number of frames apart."
   },
   "menuText": "Text",
   "@menuText": {
@@ -9779,6 +9884,34 @@
   "@stretchAnchor": {
     "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
   },
+  "panelStagger": "Stagger",
+  "@panelStagger": {
+    "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
+  },
+  "staggerOffset": "Offset per layer",
+  "@staggerOffset": {
+    "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."
+  },
+  "staggerOrder": "Order",
+  "@staggerOrder": {
+    "description": "Stagger panel: label for which layer starts first. The choices are Top down, Bottom up, Order clicked and Random."
+  },
+  "staggerClicked": "Order clicked",
+  "@staggerClicked": {
+    "description": "Stagger panel: the order choice that starts the layers in the order they were clicked into the selection."
+  },
+  "staggerRandom": "Random",
+  "@staggerRandom": {
+    "description": "Stagger panel: the order choice that starts the selected layers in a shuffled order, a new one each time."
+  },
+  "staggerApply": "Stagger",
+  "@staggerApply": {
+    "description": "Stagger panel: the button that starts each selected layer the set number of frames after the one before it."
+  },
+  "staggerLineUp": "Line up",
+  "@staggerLineUp": {
+    "description": "Stagger panel: the button that moves every selected layer to start on the same frame, the earliest one among them."
+  },
   "strokeStart": "Start",
   "@strokeStart": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark begins, as a percentage."
@@ -10786,6 +10919,18 @@
   },
   "fxCircle": "Circle",
   "@fxCircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSemicircle": "Semicircle",
+  "@fxSemicircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxUncircle": "Uncircle",
+  "@fxUncircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSmoothNoise": "Smooth noise",
+  "@fxSmoothNoise": {
     "description": "Effect controls — a Wave type option on Wave warp."
   },
   "fxColourEdge": "Colour edge",
@@ -13739,6 +13884,15 @@
       },
       "frames": {
         "type": "int"
+      }
+    }
+  },
+  "timelineBarFanHint": "{frames} f apart",
+  "@timelineBarFanHint": {
+    "description": "Timeline lanes: the small readout pill beside the pointer while a stagger drag (Ctrl+Alt, or Ctrl+Shift on Linux) spreads a selection of layer bars apart, saying how many frames apart neighbouring layers now start. Very small mono type; the number may have one decimal place.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
       }
     }
   },
@@ -18974,6 +19128,14 @@
   "settingsAccountPlan": "Plan",
   "@settingsAccountPlan": {
     "description": "Row label on the Account page of Settings: Free, or Lumit Pro."
+  },
+  "settingsAccountName": "Name",
+  "@settingsAccountName": {
+    "description": "Row label on the Account page of Settings: the name other people see on previews and replies, which need not be the person's real name."
+  },
+  "accountRenameTitle": "Change your name",
+  "@accountRenameTitle": {
+    "description": "Title of the small window that asks for the name other people see on previews and replies."
   },
   "settingsAccountDelete": "Delete account…",
   "@settingsAccountDelete": {

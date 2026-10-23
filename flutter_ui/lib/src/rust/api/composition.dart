@@ -27,7 +27,7 @@ import 'state.dart';
 import 'streams.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -1304,6 +1304,16 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceExportSpecCheck(
           that: this, spec: spec);
 
+  /// Slide each of the given layers by its own number of frames, as one
+  /// batch: what releasing a Ctrl+Alt drag on a selection's bar commits,
+  /// which fans the bars out rather than moving them together. Each layer
+  /// is held at comp zero on its own, so a fan dragged into the wall
+  /// piles up against it.
+  void fanLayers(
+          {required List<UuidValue> layerIds, required Int64List deltas}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceFanLayers(
+          that: this, layerIds: layerIds, deltas: deltas);
+
   /// Press one of a box's Action parameters: `fire_effect_action` for a box.
   ///
   /// The boxes with an engine-side button are the planes tier's two and the
@@ -2452,6 +2462,17 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSoundMix(
         that: this,
       );
+
+  /// Stagger the given layers in the order given: the first starts on the
+  /// earliest in point among them and each after it `step` frames later
+  /// than the one before. A step of 0 lines them all up on that in point.
+  /// Each layer's contents travel with it, as a slide's do, and the whole
+  /// stagger is one undo step.
+  void staggerLayers(
+          {required List<UuidValue> layerIds, required PlatformInt64 step}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceStaggerLayers(
+              that: this, layerIds: layerIds, step: step);
 
   /// Start writing this composition to `path`.
   ///

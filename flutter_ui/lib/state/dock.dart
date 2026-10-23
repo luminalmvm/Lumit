@@ -68,6 +68,10 @@ enum Panel {
   /// selected properties.
   expressions,
 
+  /// Starts the selected layers a set number of frames apart, and sets the
+  /// order a stagger drag follows.
+  stagger,
+
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
@@ -91,6 +95,7 @@ enum Panel {
         Panel.text => l10n.panelText,
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
+        Panel.stagger => l10n.panelStagger,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };

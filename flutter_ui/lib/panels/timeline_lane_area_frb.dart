@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -86,7 +87,7 @@ bool commitKeyGesture({
   final byRow = <String, (SelectedKey, Map<int, BridgeRational>)>{};
   for (final place in places) {
     if (!moved.keys.contains('${place.rowId}#${place.index}')) continue;
-    final frame = moved.frameOf(place.frame, whole: whole);
+    final frame = moved.frameOf(place.frame, whole: whole, row: place.rowId);
     (byRow[place.rowId] ??= (place, {})).$2[place.index] =
         timeOfSubframe(frame, fpsNum, fpsDen);
   }
@@ -329,6 +330,11 @@ class LayerArea extends StatelessWidget {
   /// Whether a moved Audio layer lands on a whole frame, handed to its bar.
   final bool quantiseSound;
 
+  /// Puts items in the order the Stagger panel sets, [layerOf] saying which
+  /// layer each is on: what a stagger drag on keys follows.
+  final List<T> Function<T>(List<T> stack, UuidValue? Function(T) layerOf)
+      staggerOrdered;
+
   /// What a move drag on a selected bar carries — the panel's answer,
   /// asked at drag start. See [Bar.selectionMove].
   final SelectionMove Function() selectionMove;
@@ -339,6 +345,7 @@ class LayerArea extends StatelessWidget {
     required this.rows,
     this.barNames = false,
     this.quantiseSound = true,
+    required this.staggerOrdered,
     required this.selection,
     this.onOpenSequence,
     this.onGraphHeight,
@@ -520,6 +527,29 @@ class LayerArea extends StatelessWidget {
   /// Ordered top to bottom, which is the order Stagger's *top down* means.
   List<SelectedKey> _selectedKeyPlaces() =>
       _keyPlaces(selectedKeys.value.contains);
+
+  /// The selected keys' rows grouped into what a stagger drag moves
+  /// together, in the Stagger panel's order: a layer each when the keys are
+  /// on more than one layer, otherwise a row each.
+  List<List<String>> _staggerUnits() {
+    final layers = <UuidValue, List<String>>{};
+    final rowIds = <String>[];
+    for (final place in _selectedKeyPlaces()) {
+      final rows =
+          layers.putIfAbsent(place.entry.layer.internallayerId, () => []);
+      if (!rows.contains(place.rowId)) rows.add(place.rowId);
+      if (!rowIds.contains(place.rowId)) rowIds.add(place.rowId);
+    }
+    if (layers.length > 1) {
+      return [
+        for (final id in staggerOrdered(layers.keys.toList(), (id) => id))
+          layers[id]!
+      ];
+    }
+    return [
+      for (final row in staggerOrdered(rowIds, (_) => null)) [row]
+    ];
+  }
 
   /// Every key [held] answers for, with where it sits. The selection's walk,
   /// and the one the keyframes someone else has selected are found by.
@@ -776,6 +806,7 @@ class LayerArea extends StatelessWidget {
                                   stretch: stretch,
                                   magnet: magnet,
                                   onMove: _moveHeldKeys,
+                                  staggerUnits: _staggerUnits,
                                 ),
                               ),
                             ),
@@ -1214,16 +1245,19 @@ class LayerArea extends StatelessWidget {
           // Whether the drag in flight carries **this** layer — its own bar,
           // or a selection-mate's move it rides along with. The three
           // deltas are the mover's, which for the only plural grab (a move)
-          // are one number for the whole set.
+          // are one number for the whole set, or this layer's share of a fan.
           final p = preview != null && preview.layers.contains(id) ? preview : null;
+          final fanned = p?.fan?[id];
           final span = entry.info.span;
           // The span as drawn — the document's frames plus any drag in flight —
           // and where its source starts, so a bar being dragged or trimmed
           // carries its transients with it in realtime.
-          final inFrame = entry.info.inFrame.toInt() + (p?.deltaIn ?? 0);
-          final outFrame = entry.info.outFrame.toInt() + (p?.deltaOut ?? 0);
-          final startOffset =
-              rationalSeconds(span.startOffset) + (p?.offsetShift ?? 0) / fps;
+          final inFrame =
+              entry.info.inFrame.toInt() + (fanned ?? p?.deltaIn ?? 0);
+          final outFrame =
+              entry.info.outFrame.toInt() + (fanned ?? p?.deltaOut ?? 0);
+          final startOffset = rationalSeconds(span.startOffset) +
+              (fanned ?? p?.offsetShift ?? 0) / fps;
           final secondsPerPixel =
               axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
           final mode = laneModes.of(id);
@@ -1361,6 +1395,7 @@ class LayerArea extends StatelessWidget {
         onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
         onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
         onMoveKeys: _moveHeldKeys,
+        staggerUnits: _staggerUnits,
         onChanged: onChanged,
       ),
     );

@@ -873,6 +873,10 @@ class LumitUiState extends ChangeNotifier {
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
 
+  /// The id of the shape item `Enter` has asked to rename, for its row to
+  /// open its own editor and clear.
+  final ValueNotifier<String?> renameItemRequest = ValueNotifier(null);
+
   /// The Project panel's picked item — its selection anchor, published by the
   /// panel on every click. The full selection stays the panel's own;
   /// this is the one item the FX console acts on, so a Ctrl+Space over the
@@ -1937,6 +1941,28 @@ class LumitUiState extends ChangeNotifier {
           if (path.indexOf('/') > 0) path.substring(0, path.indexOf('/')),
       };
 
+  /// The selected layers in the order they joined the selection, which is
+  /// what a stagger set to *Order clicked* follows.
+  List<UuidValue> get selectionInClickOrder => _clickOrder;
+  List<UuidValue> _clickOrder = const [];
+
+  /// Keeps the layers still selected where they were and adds the new ones
+  /// at the end, whichever way the selection was changed.
+  void _noteClickOrder() {
+    final now = [for (final l in selectedLayers.value) l.internallayerId];
+    final held = now.toSet();
+    final kept = [
+      for (final id in _clickOrder)
+        if (held.contains(id)) id
+    ];
+    final seen = kept.toSet();
+    _clickOrder = List.unmodifiable([
+      ...kept,
+      for (final id in now)
+        if (seen.add(id)) id
+    ]);
+  }
+
   /// Replace the selection. The first entry becomes [selectedLayer].
   void setSelection(List<LayerReference> layers) {
     selectedLayers.value = List.unmodifiable(layers);
@@ -2523,6 +2549,7 @@ class LumitUiState extends ChangeNotifier {
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
     selectedLayer.addListener(_syncSelection);
+    selectedLayers.addListener(_noteClickOrder);
     this.workspace.presetApplied.addListener(_onPresetApplied);
     _app.addListener(_sourceNames.clear);
     _app.addListener(_followTrims);
@@ -3012,6 +3039,7 @@ class LumitUiState extends ChangeNotifier {
     previewTier.dispose();
     viewerFrameid.dispose();
     selectedLayer.removeListener(_syncSelection);
+    selectedLayers.removeListener(_noteClickOrder);
     selectedLayer.dispose();
     selectedLayers.dispose();
     graphNode.dispose();

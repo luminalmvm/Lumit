@@ -359,11 +359,15 @@ void main() {
       expect(edges.single.from, read);
       expect(edges.single.to, out);
 
+      // Undone as the shell does it: another panel's rebuild reads the model
+      // before the change event lands, and the canvas still has to redraw.
       p.state.project!.undo();
-      p.uiState.model.refresh();
+      p.uiState.model.layers;
+      p.uiState.model.refreshIfMoved();
       await tester.pump();
       expect(p.graph.getNodeGraph().wiring.edges, hasLength(2),
           reason: 'one gesture, one undo step');
+      expect(card(blur), findsOneWidget, reason: 'and the box is drawn again');
     });
 
     testWidgets('the twirl and the tick each commit', (tester) async {

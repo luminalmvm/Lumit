@@ -148,6 +148,29 @@ fn delete_removes_the_item_and_a_second_delete_is_a_calm_error() {
     assert!(matches!(loose.delete(), Err(BridgeError::InvalidItem)));
 }
 
+/// Deleting a folder takes what is inside it and the layers showing it, and
+/// one undo puts them all back.
+#[test]
+fn deleting_a_folder_takes_its_footage_and_layers_and_one_undo_restores_them() {
+    let (project, folder, filed, loose) = project_with_folder();
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("seeded as footage")
+    };
+    comp.add_footage_layer(footage, false, None, None)
+        .expect("placed");
+    assert_eq!(folder.uses().expect("counted"), 1);
+
+    folder.delete().expect("deleted");
+    assert!(comp.get_layers().expect("layers").is_empty());
+    assert!(matches!(filed.name(), Err(BridgeError::InvalidItem)));
+    assert!(loose.name().is_ok(), "the loose clip stayed");
+
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), 1);
+    assert!(filed.name().is_ok());
+}
+
 /// The other direction: filing a loose item into a folder, which is what the
 /// panel's drag onto a folder row and its **Move to folder** menu do. One undo
 /// step, and an unknown folder is a calm error rather than a panic.
@@ -3355,7 +3378,8 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
 }
 
 /// An edit that is not a shape edit carries the keys through untouched — an
-/// opacity drag must not throw a morph away.
+/// opacity drag must not throw a morph away. Nor key the still path when the
+/// playhead comes with it, which is what the drag's preview sends.
 #[test]
 fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     let (project, layer) = project_with_layer();
@@ -3370,11 +3394,51 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].opacity = 40.0;
-    shape.set_shape_contents(contents, None).expect("set");
+    shape
+        .set_shape_contents(contents.clone(), None)
+        .expect("set");
 
     let after = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(after.opacity, 40.0);
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
+
+    shape
+        .set_shape_contents(contents, Some(BridgeRational { num: 1, den: 1 }))
+        .expect("set at the playhead");
+    let after = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        after.path_keys.len(),
+        1,
+        "no key planted for a path nobody moved"
+    );
+
+    // Nor the shape showing between two keys, which is what the Viewer sends
+    // for an item a point drag didn't touch.
+    let mut moved = shape.get_shape_contents().expect("contents");
+    moved[0].vertices[0].x = -4.0;
+    shape
+        .set_shape_contents(moved, Some(BridgeRational { num: 2, den: 1 }))
+        .expect("a second key");
+    let frame = 12;
+    let showing = comp
+        .animated_mask_paths_at(frame)
+        .expect("paths")
+        .into_iter()
+        .find(|p| p.mask == id)
+        .expect("the shape showing");
+    let mut contents = shape.get_shape_contents().expect("contents");
+    assert_ne!(contents[0].vertices, showing.vertices, "between the keys");
+    contents[0].vertices = showing.vertices;
+    shape
+        .set_shape_contents(contents, Some(comp.time_of_frame(frame).expect("time")))
+        .expect("set at the playhead");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0]
+            .path_keys
+            .len(),
+        2,
+        "no key planted for the shape already showing"
+    );
 }
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
@@ -5753,6 +5817,29 @@ fn a_preset_file_reads_as_text_whichever_kind_it_is() {
     assert!(preset.effects.is_empty());
 
     assert!(read_effect_preset(at("gone.lumfx")).is_err());
+}
+
+/// Importing a folder of After Effects presets finds them in the folders
+/// inside it, and a preset with no effect in it is left out rather than
+/// written as an empty one.
+#[test]
+fn an_ffx_import_leaves_out_presets_with_no_effects() {
+    let from = tempfile::tempdir().expect("tempdir");
+    let library = tempfile::tempdir().expect("tempdir");
+    let inside = from.path().join("Behaviours");
+    std::fs::create_dir(&inside).expect("mkdir");
+    // The smallest After Effects preset there is: the container, and a
+    // description with nothing saved in it.
+    std::fs::write(
+        inside.join("Shake.ffx"),
+        b"RIFX\0\0\0\x10FaFXLIST\0\0\0\x04besc",
+    )
+    .expect("write");
+    std::fs::write(from.path().join("notes.txt"), "not a preset").expect("write");
+
+    let done = crate::api::effect::import_ffx_into(from.path(), library.path());
+    assert_eq!((done.imported, done.skipped), (0, 1));
+    assert_eq!(std::fs::read_dir(library.path()).expect("read").count(), 0);
 }
 
 // ---------------------------------------------------------------------------

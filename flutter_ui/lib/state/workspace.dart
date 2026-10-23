@@ -32,6 +32,10 @@ typedef ViewerLook = ({double stops, bool toneMap});
 /// Neither control engaged: the picture is the export.
 const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 
+/// Which layer a stagger starts first: the top of the stack, the bottom, the
+/// one clicked first, or a new shuffle each time.
+enum LayerStaggerOrder { topDown, bottomUp, clicked, random }
+
 /// Where the user was in one composition when they last left it: the playhead
 /// frame, the Timeline's magnification, and how far through its scrollable
 /// range the lanes were scrolled (0 at the left, 1 at the right — a fraction
@@ -768,6 +772,11 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  /// The Stagger panel's frames between layers, and the order its button and
+  /// a stagger drag take the layers in.
+  int staggerStep = 1;
+  LayerStaggerOrder staggerOrder = LayerStaggerOrder.topDown;
+
   /// The Timeline outline's columns: the group order, each group's width and
   /// the groups switched off, as the Timeline wrote them. Null until a column
   /// is first moved, and the Timeline opens on its defaults.
@@ -1487,6 +1496,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setStagger({int? step, LayerStaggerOrder? order}) {
+    staggerStep = step ?? staggerStep;
+    staggerOrder = order ?? staggerOrder;
+    settingsChanged();
+  }
+
   /// Saved straight away and without notifying: the Timeline already shows
   /// what it is writing.
   void setTimelineColumns(Map<String, dynamic> columns) {
@@ -2005,6 +2020,8 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'stagger_step': staggerStep,
+        'stagger_order': staggerOrder.name,
         'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
@@ -2219,6 +2236,9 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    staggerStep = (j['stagger_step'] as num?)?.toInt() ?? 1;
+    staggerOrder = LayerStaggerOrder.values.asNameMap()[j['stagger_order']] ??
+        LayerStaggerOrder.topDown;
     // Absent means a file written before the columns were kept: the defaults.
     final columns = j['timeline_columns'];
     timelineColumns = columns is Map<String, dynamic> ? columns : null;

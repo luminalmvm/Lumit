@@ -71,6 +71,43 @@ impl<'a> Stamper<'a> {
     }
 }
 
+impl Stamper<'_> {
+    /// The file's stamp when it has been saved over since it was brought in,
+    /// so the frames made from the old one, on disk too, are never shown for
+    /// it. Nothing for a file still as it was, so every name from before this
+    /// still stands. In a run of stills it is the frame's own file, and only a
+    /// file written after the run was brought in counts.
+    fn saved_over(&self, item: Uuid, media: &lumit_core::model::MediaRef, frame: usize) -> String {
+        let secs = |t: std::time::SystemTime| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+        };
+        let fingerprint = media.fingerprint.as_ref();
+        let run = match self.doc.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(f)) if std::ptr::eq(&f.media, media) => {
+                f.sequence_fps()
+            }
+            _ => None,
+        };
+        let stamp = match run {
+            Some(fps) => lumit_media::MediaSource {
+                path: (&media.absolute_path).into(),
+                sequence_fps: Some(fps),
+                ..Default::default()
+            }
+            .frame_stamp(frame)
+            .filter(|(_, at)| fingerprint.is_none_or(|fp| secs(*at) > fp.mtime_secs)),
+            None => lumit_media::MediaSource::file(&media.absolute_path)
+                .stamped()
+                .stamp
+                .filter(|(size, at)| {
+                    fingerprint.is_none_or(|fp| *size != fp.size || secs(*at) != fp.mtime_secs)
+                }),
+        };
+        stamp.map(|s| format!("#s{s:?}")).unwrap_or_default()
+    }
+}
+
 impl lumit_eval::SourceStamper for Stamper<'_> {
     fn source_fps(&self, item: Uuid) -> Option<f64> {
         self.probes.probe(item).video().map(|(fps, ..)| fps)
@@ -220,9 +257,10 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         } else {
             settled.target_width(width)
         };
+        let on_disk = self.saved_over(item, media, source_frame);
         Some((
             format!(
-                "{}#w{}#c{space}{source_layer}{read_as}",
+                "{}#w{}#c{space}{source_layer}{read_as}{on_disk}",
                 media.absolute_path,
                 target.unwrap_or(0)
             ),
@@ -551,6 +589,27 @@ mod tests {
         )
         .unwrap();
         assert_ne!(full, half);
+    }
+
+    /// A file saved over in place names new frames, so the old ones, on disk
+    /// beside the project too, are never shown for it.
+    #[test]
+    fn a_file_saved_over_names_new_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("clip.mp4");
+        std::fs::write(&path, b"first").unwrap();
+        let (doc, comp, item) = footage_comp();
+        let mut doc = (*doc).clone();
+        if let Some(ProjectItem::Footage(f)) = doc.items.first_mut() {
+            f.media.absolute_path = path.to_string_lossy().into_owned();
+        }
+        let doc = std::sync::Arc::new(doc);
+        let (q, probes) = (Quality::default(), probed(item));
+        let before = frame_key(&doc, &comp, 0, q, &probes).unwrap();
+        // Past the half second a stamp is believed for.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        std::fs::write(&path, b"second take").unwrap();
+        assert_ne!(frame_key(&doc, &comp, 0, q, &probes).unwrap(), before);
     }
 
     /// An edit that cannot change the picture must not invalidate the cache —

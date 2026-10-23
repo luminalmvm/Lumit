@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/dialog_frame.dart' show askLumitChoice;
 import '../shell/interpret_footage_frb.dart';
 import '../shell/status_line_frb.dart';
 import '../state/file_dialogs.dart';
@@ -42,6 +43,80 @@ enum _ProjectMenuAction {
   clearProxy,
   moveToRoot,
   delete
+}
+
+/// Do [act] to each of [items] as one undo step, passing over any that has
+/// gone, such as a clip deleted with its folder a moment ago.
+void eachInOneUndo(LumitState state, List<ItemReference> items,
+    void Function(ItemReference item) act) {
+  final project = state.project;
+  final group = items.length > 1 && project != null;
+  if (group) project.beginUndoGroup();
+  try {
+    for (final item in items) {
+      try {
+        act(item);
+      } catch (_) {}
+    }
+  } finally {
+    if (group) project.endUndoGroup();
+  }
+}
+
+/// Duplicate [items] and hand back the copies. The panel's Duplicate, its
+/// `Mod+D` and its paste all come here. A comp asks about the comps nested in
+/// it first, the way the Composition menu's Duplicate does.
+Future<List<ItemReference>> duplicateProjectItems(
+    BuildContext context, List<ItemReference> items) async {
+  final state = Provider.of<LumitState>(context, listen: false);
+  final copies = <ItemReference>[];
+  final project = state.project;
+  final group = items.length > 1 && project != null;
+  if (group) project.beginUndoGroup();
+  try {
+    for (final item in items) {
+      if (!context.mounted) break;
+      if (item case ItemReference_Composition(:final field0)) {
+        final copy = await duplicateCompositionFrb(context, field0);
+        if (copy != null) copies.add(ItemReference.composition(copy));
+        continue;
+      }
+      try {
+        copies.add(item.duplicate());
+      } catch (_) {
+        // Gone from under the selection.
+      }
+    }
+  } finally {
+    if (group) project.endUndoGroup();
+  }
+  return copies;
+}
+
+/// Delete [items] as one undo step: the row menu's Delete and the panel's
+/// `Delete` key. A folder takes what is inside it, and when compositions use
+/// any of it the question comes first, since those uses go too. Returns
+/// whether anything was deleted.
+Future<bool> deleteProjectItems(
+    BuildContext context, List<ItemReference> items) async {
+  var uses = 0;
+  for (final item in items) {
+    try {
+      uses += item.uses();
+    } catch (_) {}
+  }
+  if (uses > 0) {
+    final go = await askLumitChoice<bool>(
+      context: context,
+      title: l10n.deleteInUseTitle,
+      question: l10n.deleteInUseQuestion(uses),
+      answers: [(l10n.delete, true)],
+    );
+    if (go != true || !context.mounted) return false;
+  }
+  eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
+      (item) => item.delete());
+  return true;
 }
 
 /// A colour chip with a word for it, or the bare chip where the colour is its
@@ -91,6 +166,9 @@ Future<void> showProjectMenuFrb({
   /// File the picked row, and the rest of the selection with it, into that
   /// folder.
   void Function(ItemReference folder)? onMoveToFolder,
+
+  /// Select the items a command has just made. Null leaves the selection.
+  void Function(List<ItemReference> items)? onPick,
 
   /// **What the commands act on**: the whole selection when [item] is
   /// part of it, and [item] alone when it is not — the panel's `_targets`,
@@ -167,12 +245,11 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.compSettings),
               child: Text(l10n.compositionSettingsEllipsis),
             ),
-          if (isComp)
-            MenuRow(
-              key: const ValueKey('project-menu-duplicate'),
-              onPressed: () => close(_ProjectMenuAction.duplicate),
-              child: Text(l10n.menuDuplicate),
-            ),
+          MenuRow(
+            key: const ValueKey('project-menu-duplicate'),
+            onPressed: () => close(_ProjectMenuAction.duplicate),
+            child: Text(l10n.menuDuplicate),
+          ),
           // Every kind can be renamed from here. It matters most for a comp,
           // whose second click opens it rather than renaming it.
           MenuRow(
@@ -474,10 +551,10 @@ Future<void> showProjectMenuFrb({
         }
       }
     case _ProjectMenuAction.duplicate:
-      if (item case ItemReference_Composition(:final field0)) {
-        if (await duplicateCompositionFrb(context, field0) != null) {
-          onLocalEdit();
-        }
+      final copies = await duplicateProjectItems(context, acts);
+      if (copies.isNotEmpty) {
+        onLocalEdit();
+        onPick?.call(copies);
       }
     case _ProjectMenuAction.interpret:
       final picked = [
@@ -584,42 +661,27 @@ Future<void> showProjectMenuFrb({
       // proxy to read from; one that has none is passed over rather than
       // switched on to nothing.
       final on = !(proxy?.enabled ?? false);
-      for (final target in acts) {
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
         if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.setUseProxy(on_: on);
-          } catch (_) {}
+          if (field0.getProxy() != null) field0.setUseProxy(on_: on);
         }
-      }
+      });
       onLocalEdit();
     case _ProjectMenuAction.clearProxy:
-      for (final target in acts) {
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
         if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.clearProxy();
-          } catch (_) {}
+          if (field0.getProxy() != null) field0.clearProxy();
         }
-      }
+      });
       onLocalEdit();
     case _ProjectMenuAction.moveToRoot:
-      for (final target in acts) {
-        try {
-          target.moveToRoot();
-        } catch (_) {}
-      }
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) => target.moveToRoot());
       onLocalEdit();
     case _ProjectMenuAction.delete:
-      // No confirmation: it is one undo step, matching egui.
-      for (final target in acts) {
-        try {
-          target.delete();
-        } catch (_) {
-          // Already gone - a folder deleted with its parent a moment ago.
-        }
-      }
-      onLocalEdit();
+      if (await deleteProjectItems(context, acts)) onLocalEdit();
   }
 }
 

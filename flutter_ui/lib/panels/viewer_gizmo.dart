@@ -173,6 +173,16 @@ class LayerBox {
   /// edit is written back to: masks one at a time, art via `setShapeContents`.
   final List<BridgeShapeItem> shapeContents;
 
+  /// The shape item picked in the Timeline, or null. While one is picked its
+  /// points are the only ones offered, so one piece of the art can be worked
+  /// on without the rest getting in the way.
+  final UuidValue? pickedItem;
+
+  /// The items whose points are drawn and can be aimed at.
+  Iterable<BridgeShapeItem> get offeredItems => pickedItem == null
+      ? shapeContents
+      : shapeContents.where((i) => i.id == pickedItem);
+
   /// Where the art's bounding box starts, in the art's own coordinates.
   ///
   /// A shape layer's picture **is** that box, so the layer's pixel (0, 0) is
@@ -221,6 +231,7 @@ class LayerBox {
     required this.rotationDegrees,
     this.masks = const [],
     this.shapeContents = const [],
+    this.pickedItem,
     this.artOrigin = Offset.zero,
     this.puppet,
     this.motionPath,
@@ -253,6 +264,7 @@ class LayerBox {
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
         masks: masks,
         shapeContents: shapeContents,
+        pickedItem: pickedItem,
         artOrigin: artOrigin,
         puppet: puppet,
         motionPath: motionPath,
@@ -483,7 +495,7 @@ List<PathPoint> pathPointsOf(LayerBox box, {(UuidValue, UuidValue)? only}) {
       ));
     }
   }
-  for (final item in box.shapeContents) {
+  for (final item in box.offeredItems) {
     if (!shown(item.id)) continue;
     for (var i = 0; i < item.vertices.length; i++) {
       final v = item.vertices[i];
@@ -1177,6 +1189,24 @@ List<BridgeShapeItem>? shapeContentsEdited(LayerBox box, VertexEdit edit) {
   return touched ? contents : null;
 }
 
+/// The shape item of [layerId] that [selected] property paths pick, if any:
+/// its own row or one of the rows under it (`<layer>/contents/<item>/...`).
+UuidValue? pickedShapeItem(List<String> selected, UuidValue layerId) {
+  for (final path in selected) {
+    final parts = path.split('/');
+    if (parts.length >= 3 &&
+        parts[0] == layerId.toString() &&
+        parts[1] == 'contents') {
+      try {
+        return UuidValue.fromString(parts[2]);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 /// Which layer a click at [point] lands on: the topmost whose box contains it.
 ///
 /// [boxes] is in stacking order, top first — the order the read model reports
@@ -1810,16 +1840,17 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return out;
   }
 
-  /// The mask or shape whose **Path** row is picked, if one is — the shape the
-  /// author is editing, so it is the one whose points are offered even when
-  /// the layer itself was never clicked.
+  /// The mask whose **Path** row is picked, or the shape item with any of its
+  /// rows picked, if one is — the shape the author is editing, so it is the
+  /// one whose points are offered even when the layer itself was never clicked.
   (UuidValue, UuidValue)? get _pathBeingEdited {
     for (final path in widget.uiState.selectedProperties.value) {
       final parts = path.split('/');
-      // <layer>/masks/<mask>/path or <layer>/contents/<item>/path
-      if (parts.length == 4 &&
-          ((parts[1] == 'masks' && parts[3] == MaskValue.path.name) ||
-              (parts[1] == 'contents' && parts[3] == ShapeValue.path.name))) {
+      // <layer>/masks/<mask>/path or <layer>/contents/<item>[/<row>]
+      if ((parts.length == 4 &&
+              parts[1] == 'masks' &&
+              parts[3] == MaskValue.path.name) ||
+          (parts.length >= 3 && parts[1] == 'contents')) {
         try {
           return (
             UuidValue.fromString(parts[0]),
@@ -3751,7 +3782,7 @@ class _GizmoPainter extends CustomPainter {
       }
       // A shape layer's own art gets the same outline and the same vertices, so
       // drawn art can be seen point by point and corrected rather than redrawn.
-      for (final item in box.shapeContents) {
+      for (final item in box.offeredItems) {
         if (!showsPath(box, item.id, onlyPath)) continue;
         String keyOf(int i) => shapePointKey(box.id, item.id, i);
         _pathOutline(
