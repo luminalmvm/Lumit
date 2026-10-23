@@ -10744,6 +10744,36 @@
           "hard_min": 0.0
         },
         {
+          "id": "persistence",
+          "label": "Persistence",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "zoom",
+          "label": "Zoom",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0
+        },
+        {
+          "id": "turn",
+          "label": "Turn",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -360.0,
+          "slider_max": 360.0
+        },
+        {
           "id": "mode",
           "label": "Mode",
           "kind": "choice",
@@ -11032,6 +11062,15 @@
           "collapsed": false
         },
         {
+          "label": "Trails",
+          "params": [
+            "persistence",
+            "zoom",
+            "turn"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Render",
           "params": [
             "mode",
@@ -11151,6 +11190,21 @@
         {
           "param": "density_layer_placement",
           "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "persistence",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "persistence",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "persistence",
           "cond": "nought"
         },
         {

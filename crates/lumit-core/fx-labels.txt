@@ -765,6 +765,7 @@ Per
 Per clone
 Per-axis wobble
 Perlin
+Persistence
 Phase
 Phase offset
 Phaser
@@ -1113,6 +1114,7 @@ Top right tangent y
 Top to bottom
 Track points
 Trail
+Trails
 Transform
 Transform points
 Transition
@@ -1129,6 +1131,7 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turn
 Turn points
 Twirl
 Twist

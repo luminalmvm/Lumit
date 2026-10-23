@@ -3732,6 +3732,18 @@
   "@fxSparkSize": {
     "description": "Effect controls — a control on Particulate: how big a spark is, as a percentage of the particle it came from."
   },
+  "fxTrails": "Trails",
+  "@fxTrails": {
+    "description": "Effect controls — a group heading on Particulate: the controls for keeping each frame's picture, so particles leave smears behind them."
+  },
+  "fxPersistence": "Persistence",
+  "@fxPersistence": {
+    "description": "Effect controls — a control on Particulate: how much of the picture it keeps is left after one second, as a percentage."
+  },
+  "fxTurn": "Turn",
+  "@fxTurn": {
+    "description": "Effect controls — a control on Particulate: how far the picture it keeps turns each second, in degrees."
+  },
   "fxVariation": "Variation",
   "@fxVariation": {
     "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."
@@ -5162,7 +5174,7 @@
   },
   "fxZoom": "Zoom",
   "@fxZoom": {
-    "description": "Effect controls — a control on Radial blur."
+    "description": "Effect controls — a control on Radial blur, and on Particulate: how much the picture it keeps grows each second, as a percentage."
   },
   "graphAutoFit": "Auto fit",
   "@graphAutoFit": {

@@ -136,6 +136,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         "Sparks",
         &["sparks", "spark_speed", "spark_life", "spark_size"],
     ),
+    group("Trails", &["persistence", "zoom", "turn"]),
     group(
         "Render",
         &[
@@ -260,6 +261,23 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "density_layer_placement",
         on: "sparks",
+        cond: EnabledCond::Nought,
+    },
+    // A kept picture is drawn from the driver walk's stream, which reads no
+    // pictures either.
+    EnabledWhen {
+        param: "particle_blend",
+        on: "persistence",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "persistence",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "persistence",
         cond: EnabledCond::Nought,
     },
     EnabledWhen {
@@ -809,6 +827,29 @@ pub struct Particulate {
         unit = Percent
     )]
     pub spark_size: f32,
+
+    /// How much of the picture Particulate keeps is left after one second,
+    /// per cent. Above nought each frame's particles are drawn over what the
+    /// frames before left ([`points::Trails`]). Nought keeps nothing.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub persistence: f32,
+
+    /// How much the kept picture grows each second, per cent, about the
+    /// emitter's position. Below nought it shrinks.
+    #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0, unit = Percent)]
+    pub zoom: f32,
+
+    /// How far the kept picture turns each second, degrees, about the
+    /// emitter's position.
+    #[slider(min = -360.0, max = 360.0, default = 0.0, unit = Degrees)]
+    pub turn: f32,
 
     /// What a particle is drawn as. All three are the same instanced quad with
     /// a different coverage inside it ([`points::RenderMode`]).
