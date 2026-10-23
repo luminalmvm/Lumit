@@ -282,8 +282,8 @@
             },
         },
         comment: {
-            get: function () { return ''; },
-            set: function () { note('Item comments are not kept, as Lumit items have no comment.'); },
+            get: function () { return itemInfo(this._id).comment; },
+            set: function (v) { command('item.set', { item: this._id, comment: String(v) }); },
         },
     });
     Item.prototype.remove = function () { unsupported(this._label + '.remove()'); };

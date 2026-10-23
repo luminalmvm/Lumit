@@ -152,7 +152,7 @@ No arguments.
 
 ## item.set
 
-Rename an item, file it in a folder, or set the rate a footage item plays at.
+Rename an item, file it in a folder, set the rate a footage item plays at, or set its comment.
 
 Script: `lumit.item.set({ ... })`. MCP tool: `item_set`.
 
@@ -162,6 +162,7 @@ Script: `lumit.item.set({ ... })`. MCP tool: `item_set`.
 | `name` | string |  |  |
 | `folder` | string or null |  | The folder's id or name, or null for none |
 | `frame_rate` | integer (1 to 999) or `{num, den}` or null |  | 1 to 999 frames a second, or a video's own rate |
+| `comment` | string |  | Empty for none |
 
 ## folder.new
 

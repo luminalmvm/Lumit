@@ -19,6 +19,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
 | **Shared preview** | An address where an export of a comp is watched in a browser and commented on, frame by frame. The window that lists them is **Previews**. The people watching are **reviewers**, never *viewers*, and each upload to the link is a **version**. Comes with Lumit Pro |
 | **Folder** | A group in the Project panel. Not *bin* |
+| **Comment** | A line of text kept on an asset. Scripts set and read it, as After Effects' item comment |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
 
