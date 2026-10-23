@@ -94,12 +94,22 @@ class MarqueeSelect extends StatefulWidget {
   /// here was drawn behind them too, and behind the row lines.
   final ValueNotifier<Rect?>? box;
 
+  /// When set and it answers true for where a drag went down, the drag is the
+  /// owner's: it hears the travel through [onClaimedMove] and the release
+  /// through [onClaimedEnd], and no box is drawn.
+  final bool Function(Offset local)? claim;
+  final ValueChanged<Offset>? onClaimedMove;
+  final VoidCallback? onClaimedEnd;
+
   const MarqueeSelect({
     super.key,
     required this.onSelect,
     required this.onClear,
     this.onTapAt,
     this.box,
+    this.claim,
+    this.onClaimedMove,
+    this.onClaimedEnd,
   });
 
   @override
@@ -113,6 +123,9 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
   /// Whether the modifier that adds to the standing selection was down when
   /// this drag began.
   bool _additive = false;
+
+  /// Whether [MarqueeSelect.claim] took the drag in flight.
+  bool _claimed = false;
 
   /// The box's moving corner, or null to put the box away.
   void _show(Offset? to) {
@@ -132,6 +145,11 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
     _show(null);
     if (from == null || to == null) return;
     widget.onSelect(Rect.fromPoints(from, to), additive);
+  }
+
+  void _endClaim() {
+    _claimed = false;
+    widget.onClaimedEnd?.call();
   }
 
   @override
@@ -159,10 +177,22 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
                   keys.isControlPressed ||
                   keys.isMetaPressed;
             },
-            onPanStart: (d) => _show(d.localPosition),
-            onPanUpdate: (d) => _show(d.localPosition),
-            onPanEnd: (_) => _finish(),
-            onPanCancel: () => _show(null),
+            // Claimed at the start rather than the down, so a click that
+            // never moves is still a click.
+            onPanStart: (d) {
+              final from = _from;
+              _claimed = from != null && (widget.claim?.call(from) ?? false);
+              if (_claimed) {
+                _from = null;
+                return;
+              }
+              _show(d.localPosition);
+            },
+            onPanUpdate: (d) => _claimed
+                ? widget.onClaimedMove?.call(d.delta)
+                : _show(d.localPosition),
+            onPanEnd: (_) => _claimed ? _endClaim() : _finish(),
+            onPanCancel: () => _claimed ? _endClaim() : _show(null),
           ),
         ),
         if (widget.box == null && _from != null && _to != null)

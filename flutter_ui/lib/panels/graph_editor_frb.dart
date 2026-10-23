@@ -385,8 +385,63 @@ class _HandleDrag {
   });
 }
 
+/// A `Shift` drag on the curve between two keys, as in After Effects: moving
+/// sideways slides the steep middle of the ease along with the pointer. The
+/// first key's out influence grows as the second key's in influence shrinks,
+/// and both keep their speed.
+class _CentreDrag {
+  final GraphChannel channel;
+
+  /// The first of the two keys.
+  final int index;
+  final double outSpeed, inSpeed, outFrom, inFrom;
+
+  /// How wide the span between the two keys is on screen.
+  final double spanPx;
+  double rawDx = 0;
+
+  _CentreDrag({
+    required this.channel,
+    required this.index,
+    required this.outSpeed,
+    required this.inSpeed,
+    required this.outFrom,
+    required this.inFrom,
+    required this.spanPx,
+  });
+
+  double get outInfluence =>
+      (outFrom + rawDx / spanPx).clamp(1e-3, 1.0).toDouble();
+  double get inInfluence =>
+      (inFrom - rawDx / spanPx).clamp(1e-3, 1.0).toDouble();
+
+  /// [keys] with the two sides this drag shapes written in.
+  List<BridgeKeyframe> applied(List<BridgeKeyframe> keys) {
+    BridgeSideInterp side(double speed, double influence) =>
+        BridgeSideInterp.bezier(
+            BridgeBezierSide(speed: speed, influence: influence));
+    return [
+      for (var i = 0; i < keys.length; i++)
+        if (i == index || i == index + 1)
+          BridgeKeyframe(
+            time: keys[i].time,
+            value: keys[i].value,
+            interpIn:
+                i == index ? keys[i].interpIn : side(inSpeed, inInfluence),
+            interpOut:
+                i == index ? side(outSpeed, outInfluence) : keys[i].interpOut,
+          )
+        else
+          keys[i],
+    ];
+  }
+}
+
 class GraphEditorFrbState extends State<GraphEditorFrb> {
   _KeyDrag? _keyDrag;
+
+  /// A `Shift` drag on the curve, or null between them.
+  _CentreDrag? _centreDrag;
 
   /// A drag on the selection transform box, or null between them (§6.2).
   _BoxDrag? _boxDrag;
@@ -1106,8 +1161,77 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       _keyDrag = null;
       _boxDrag = null;
       _handleDrag = null;
+      _centreDrag = null;
       _frozen = null;
     });
+  }
+
+  /// Take a drag that went down on the curve between two keys with `Shift`
+  /// held, selecting the pair so their handles show (see [_CentreDrag]).
+  bool _claimCentre(Offset local, (double, double) range, double height) {
+    if (!HardwareKeyboard.instance.isShiftPressed) return false;
+    final channel = _curveAt(local, range, height, within: 6);
+    if (channel == null ||
+        channel.isStatic ||
+        isEnvelope(channel) ||
+        _dashed(channel)) {
+      return false;
+    }
+    final keys = channel.keys;
+    final at = _secondsOfX(local.dx);
+    final i = keys.lastIndexWhere((k) => rationalSeconds(k.time) <= at);
+    if (i < 0 || i + 1 >= keys.length) return false;
+    if (keys[i].interpOut is BridgeSideInterp_Hold) return false;
+    final spanPx = _xOfSeconds(rationalSeconds(keys[i + 1].time)) -
+        _xOfSeconds(rationalSeconds(keys[i].time));
+    if (spanPx < 1) return false;
+    widget.selectedKeys
+      ..clear()
+      ..add('${channel.id}#$i')
+      ..add('${channel.id}#${i + 1}');
+    widget.onSelectionChanged();
+    setState(() {
+      _centreDrag = _CentreDrag(
+        channel: channel,
+        index: i,
+        outSpeed: sideSpeedAtKey(keys, i, isOut: true),
+        inSpeed: sideSpeedAtKey(keys, i + 1, isOut: false),
+        outFrom: sideInfluence(keys[i].interpOut),
+        inFrom: sideInfluence(keys[i + 1].interpIn),
+        spanPx: spanPx,
+      );
+      _frozen = _range();
+    });
+    _escape.begin(_abandonDrag);
+    return true;
+  }
+
+  void _moveCentre(Offset delta) {
+    final drag = _centreDrag;
+    if (drag == null || !_escape.running) return;
+    setState(() => drag.rawDx += delta.dx);
+    _previewDrag({
+      drag.channel: BridgeScalar.keyframed(drag.applied(drag.channel.keys))
+    });
+  }
+
+  void _commitCentreDrag() {
+    final drag = _centreDrag;
+    final commit = _escape.end();
+    setState(() {
+      _centreDrag = null;
+      _frozen = null;
+    });
+    if (!commit || drag == null || drag.rawDx == 0) return;
+    _preview.cancel();
+    // The handles are as long as the new influences draw them.
+    final keys = drag.channel.keys;
+    _handleLenPx
+      ..remove(_handleLenKey(drag.channel, keys[drag.index], true))
+      ..remove(_handleLenKey(drag.channel, keys[drag.index + 1], false));
+    commitChannelEdits(
+        {drag.channel: BridgeScalar.keyframed(drag.applied(keys))});
+    widget.onChanged();
   }
 
   void _commitKeyDrag((double, double) range, double height) {
@@ -2004,6 +2128,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             widget.fpsNum, widget.fpsDen);
       }
     }
+    final centre = _centreDrag;
+    if (centre != null && centre.channel.id == channel.id) {
+      return centre.applied(channel.keys);
+    }
     final drag = _handleDrag;
     if (drag == null) return channel.keys;
     final shaped = _keysWithHandleDrags(drag, channel);
@@ -2446,6 +2574,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                       _applyMarquee(rect, range, height, additive),
                   onTapAt: (local) => _tapPane(local, range, height),
                   onClear: () {},
+                  claim: (local) => _claimCentre(local, range, height),
+                  onClaimedMove: _moveCentre,
+                  onClaimedEnd: _commitCentreDrag,
                 ),
               ),
               // The selection transform box (§6.2). Above the marquee, so its
