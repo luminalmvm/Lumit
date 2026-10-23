@@ -10813,10 +10813,12 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
 
 /// **A collider's walk lands in one place however it is reached**: a frame
 /// stepped to from a kept state is the frame walked from the in point, which
-/// is what lets an export match the Viewer. And the floor holds.
+/// is what lets an export match the Viewer, and so is one told to stop part
+/// way and asked again. And the floor holds.
 #[test]
 fn a_stepped_frame_is_the_walk_from_the_start() {
-    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
+    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME};
+    use std::sync::atomic::{AtomicU32, Ordering};
     let e = particulate(&[
         ("gravity", fixed(900.0)),
         ("emit_rate", fixed(400.0)),
@@ -10831,10 +10833,7 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
             1.0,
             &MarkerContext::NONE,
         );
-        let collider = Collider::new(
-            vec![[[0.0, floor], [1920.0, floor]]],
-            crate::shape::Affine::IDENTITY,
-        );
+        let collider = Collider::new(vec![[[0.0, floor], [1920.0, floor]]], SAME, false);
         Some(Inputs::new(
             Particulate::read(Params::new(&bag)),
             [1920.0, 1080.0],
@@ -10851,6 +10850,17 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
     let resumed = stream_at(key(202), 43.0 * dt, dt, &at).expect("a walk");
     assert!(!whole.is_empty(), "nothing was born");
     assert_eq!(whole, resumed, "a kept walk landed somewhere else");
+    // Stopped after ten steps, then asked again.
+    static ASKED: AtomicU32 = AtomicU32::new(0);
+    fn tenth() -> bool {
+        ASKED.fetch_add(1, Ordering::Relaxed) >= 10
+    }
+    let before = stop_when(Some(tenth));
+    let stopped = stream_at(key(203), 43.0 * dt, dt, &at);
+    stop_when(before);
+    assert!(stopped.is_none(), "a walk told to stop carried on");
+    let again = stream_at(key(203), 43.0 * dt, dt, &at).expect("a walk");
+    assert_eq!(whole, again, "a stopped walk went on somewhere else");
     assert!(
         whole.position.iter().all(|p| p[1] <= floor + 0.01),
         "a particle went through the floor"

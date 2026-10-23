@@ -17,9 +17,11 @@
 //! the start, which is what lets an export match the Viewer.
 //!
 //! The walk runs on the CPU in px@comp, so it is the same whatever the preview
-//! size. Collisions are across and down: a collider's outline is a wall
-//! through every depth.
+//! size. A collider facing the way the layer does is a wall along its outline
+//! through every depth, hit across and down. One turned against it in 3D is a
+//! surface, hit where a particle passes through its shapes.
 
+use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
@@ -28,11 +30,11 @@ use super::{
     attr, birth_point, burst_base, draw, integrate, jitter, launch, look_of, outline_polyline,
     turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream, BURST_MAX,
 };
+use crate::camera::Place;
 use crate::expression::ExpressionContext;
 use crate::fx::effects::particulate::Particulate;
 use crate::mask::MaskPolyline;
 use crate::model::{Composition, Document, EffectInstance, Layer, LayerKind};
-use crate::shape::Affine;
 
 /// The most particles a walk carries, whatever Max particles says. Each is
 /// carried from frame to frame and kept with the frame, so this is lower than
@@ -60,6 +62,27 @@ const PARALLEL_FROM: usize = 4096;
 /// next move does not start on the surface.
 const NUDGE: f32 = 1e-3;
 
+/// A placement that moves nothing: a collider already in this layer's pixels.
+pub const SAME: Place = Place {
+    m: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    t: (0.0, 0.0, 0.0),
+};
+
+thread_local! {
+    /// What says the frame this thread is drawing is no longer wanted. The
+    /// renderer holds the token, so it puts its own check here.
+    static STOP: Cell<Option<fn() -> bool>> = const { Cell::new(None) };
+}
+
+/// Makes `check` this thread's stop check, and hands back the one before.
+pub fn stop_when(check: Option<fn() -> bool>) -> Option<fn() -> bool> {
+    STOP.with(|stop| stop.replace(check))
+}
+
+fn stopping() -> bool {
+    STOP.with(|stop| stop.get().is_some_and(|check| check()))
+}
+
 /// One particle as the walk carries it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Particle {
@@ -76,7 +99,7 @@ struct Particle {
     age: f32,
     life: f32,
     /// Where it stuck, in the collider layer's own pixels.
-    held: Option<[f32; 2]>,
+    held: Option<[f32; 3]>,
 }
 
 /// Where a walk has got to at the start of a frame.
@@ -127,15 +150,18 @@ impl Inputs {
     }
 }
 
-/// A collider's outline at one time, in the Particulate layer's pixels.
+/// A collider's outline at one time, seen from the Particulate layer.
 #[derive(Debug, Clone)]
 pub struct Collider {
-    /// Each edge's two ends.
+    /// Each edge's two ends: in this layer's pixels for walls, in the
+    /// collider's own for a surface.
     edges: Vec<[[f32; 2]; 2]>,
-    /// The collider layer's own pixels to this layer's, for a stuck particle.
-    to_layer: Affine,
+    /// The collider layer's own pixels to this layer's, in 3D.
+    to_layer: Place,
     /// And back.
-    from_layer: Affine,
+    from_layer: Place,
+    /// Whether it is a surface turned against this layer, rather than walls.
+    surface: bool,
     grid: Grid,
 }
 
@@ -176,39 +202,75 @@ impl Collider {
                 });
             }
         }
-        let to_layer = measure::world(comp, target, t, context)
-            .then(&measure::world(comp, owner, t, context).inverse());
+        // Where both layers sit in the comp's 3D space, as toWorld reads it.
+        let read = crate::expression::space::reader(context, comp.id, t);
+        let world =
+            |l: &Layer| crate::expression::space::space(&context.document, comp, l, t, &read).world;
+        let owner = world(owner);
+        let Some(back) = owner.invert() else {
+            return Collider::new(Vec::new(), owner, false);
+        };
+        let to_layer = world(target).within(&back);
+        // The card's normal here. Along this layer's z, it is walls.
+        let m = &to_layer.m;
+        let n = [
+            m[1][0] * m[2][1] - m[2][0] * m[1][1],
+            m[2][0] * m[0][1] - m[0][0] * m[2][1],
+            m[0][0] * m[1][1] - m[1][0] * m[0][1],
+        ];
+        let surface = n[0].hypot(n[1]) > 1e-6 * n[2].abs();
         let place = |p: [f32; 2]| {
-            let (x, y) = to_layer.apply((f64::from(p[0]), f64::from(p[1])));
+            if surface {
+                return p;
+            }
+            let (x, y, _) = to_layer.point((f64::from(p[0]), f64::from(p[1]), 0.0));
             [x as f32, y as f32]
         };
         let mut edges = Vec::new();
+        let mut push = |a: [f32; 2], b: [f32; 2]| {
+            let edge = [place(a), place(b)];
+            if edge.iter().flatten().all(|v| v.is_finite()) {
+                edges.push(edge);
+            }
+        };
         for line in &lines {
+            let mut start = 0;
             for i in 0..line.points.len().saturating_sub(1) {
                 // Two paths of one run are joined by a step with no length,
-                // which is a jump between them and not an edge.
+                // which is a jump between them and not an edge. A surface is
+                // filled, so there each path closes.
                 if line.arc[i + 1] <= line.arc[i] {
+                    if surface {
+                        push(line.points[i], line.points[start]);
+                    }
+                    start = i + 1;
                     continue;
                 }
-                let edge = [place(line.points[i]), place(line.points[i + 1])];
-                if edge.iter().flatten().all(|v| v.is_finite()) {
-                    edges.push(edge);
-                }
+                push(line.points[i], line.points[i + 1]);
+            }
+            if let Some(&last) = line.points.last().filter(|_| surface) {
+                push(last, line.points[start]);
             }
         }
-        Collider::new(edges, to_layer)
+        Collider::new(edges, to_layer, surface)
     }
 
-    /// A collider of `edges`, in the Particulate layer's pixels, from a layer
-    /// whose own pixels `to_layer` carries into them.
+    /// A collider of `edges` from a layer whose own pixels `to_layer` carries
+    /// into this layer's. The edges are walls in this layer's pixels, or a
+    /// `surface` in the collider's own.
     #[must_use]
-    pub fn new(edges: Vec<[[f32; 2]; 2]>, to_layer: Affine) -> Self {
-        let grid = Grid::of(&edges);
+    pub fn new(edges: Vec<[[f32; 2]; 2]>, to_layer: Place, surface: bool) -> Self {
+        // A layer scaled to nothing has nothing to hit.
+        let (edges, from_layer) = match to_layer.invert() {
+            Some(back) => (edges, back),
+            None => (Vec::new(), to_layer),
+        };
         Collider {
+            grid: Grid::of(&edges),
             edges,
             to_layer,
-            from_layer: to_layer.inverse(),
-            grid,
+            from_layer,
+            surface,
         }
     }
 
@@ -218,20 +280,19 @@ impl Collider {
         contact: Contact,
         keep: f32,
         slip: f32,
-        from: [f32; 2],
-        to: [f32; 2],
-        vel: [f32; 2],
+        from: [f32; 3],
+        to: [f32; 3],
+        vel: [f32; 3],
     ) -> Hit {
         let (mut from, mut to, mut vel) = (from, to, vel);
+        // Walls are across and down only, so depth carries on as it was.
+        let slip = [slip, slip, if self.surface { slip } else { 1.0 }];
         for _ in 0..MAX_HITS {
             let Some((s, n)) = self.first(from, to) else {
                 return Hit::Clear(to, vel);
             };
-            let at = [
-                from[0] + (to[0] - from[0]) * s,
-                from[1] + (to[1] - from[1]) * s,
-            ];
-            let off = [at[0] + n[0] * NUDGE, at[1] + n[1] * NUDGE];
+            let at: [f32; 3] = std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s);
+            let off: [f32; 3] = std::array::from_fn(|k| at[k] + n[k] * NUDGE);
             let keep = match contact {
                 Contact::Kill => return Hit::Gone,
                 Contact::Stick => return Hit::Held(off),
@@ -240,26 +301,26 @@ impl Collider {
             };
             // Along the surface it keeps all but the friction, and off it the
             // bounciness, turned round.
-            let turn = |d: [f32; 2]| {
-                let dn = d[0] * n[0] + d[1] * n[1];
-                let along = [d[0] - dn * n[0], d[1] - dn * n[1]];
-                [
-                    along[0] * slip - dn * keep * n[0],
-                    along[1] * slip - dn * keep * n[1],
-                ]
+            let turn = |d: [f32; 3]| -> [f32; 3] {
+                let dn = d[0] * n[0] + d[1] * n[1] + d[2] * n[2];
+                std::array::from_fn(|k| (d[k] - dn * n[k]) * slip[k] - dn * keep * n[k])
             };
             vel = turn(vel);
-            let rest = turn([to[0] - at[0], to[1] - at[1]]);
+            let rest = turn(std::array::from_fn(|k| to[k] - at[k]));
             from = off;
-            to = [off[0] + rest[0], off[1] + rest[1]];
+            to = std::array::from_fn(|k| off[k] + rest[k]);
         }
         // Still hitting things: it stops where it last came off.
         Hit::Clear(from, vel)
     }
 
-    /// The first edge the move from `a` to `b` crosses: how far along the
-    /// move, and the edge's normal on `a`'s side.
-    fn first(&self, a: [f32; 2], b: [f32; 2]) -> Option<(f32, [f32; 2])> {
+    /// The first thing the move from `a` to `b` hits: how far along the move,
+    /// and the normal on `a`'s side.
+    fn first(&self, a: [f32; 3], b: [f32; 3]) -> Option<(f32, [f32; 3])> {
+        if self.surface {
+            return self.through(a, b);
+        }
+        let (a, b) = ([a[0], a[1]], [b[0], b[1]]);
         let cross = |p: [f32; 2], q: [f32; 2]| p[0] * q[1] - p[1] * q[0];
         let r = [b[0] - a[0], b[1] - a[1]];
         let mut best: Option<(f32, usize)> = None;
@@ -287,16 +348,63 @@ impl Collider {
         if (a[0] - c[0]) * n[0] + (a[1] - c[1]) * n[1] < 0.0 {
             n = [-n[0], -n[1]];
         }
-        Some((s, n))
+        Some((s, [n[0], n[1], 0.0]))
     }
+
+    /// Where the move from `a` to `b` passes through the surface's shapes:
+    /// how far along the move, and the surface's normal on `a`'s side.
+    fn through(&self, a: [f32; 3], b: [f32; 3]) -> Option<(f32, [f32; 3])> {
+        // In the collider's own pixels its card is where z is nought.
+        let (p, q) = (
+            self.from_layer.point(wide(a)),
+            self.from_layer.point(wide(b)),
+        );
+        if !((p.2 > 0.0 && q.2 <= 0.0) || (p.2 < 0.0 && q.2 >= 0.0)) {
+            return None;
+        }
+        let s = p.2 / (p.2 - q.2);
+        let at = [p.0 + (q.0 - p.0) * s, p.1 + (q.1 - p.1) * s];
+        if !self.inside([at[0] as f32, at[1] as f32]) {
+            return None;
+        }
+        // The way its own z grows, seen from this layer.
+        let z = self.from_layer.m[2];
+        let len = (z[0] * z[0] + z[1] * z[1] + z[2] * z[2]).sqrt() * p.2.signum();
+        Some((s as f32, z.map(|v| (v / len) as f32)))
+    }
+
+    /// Whether `p`, in the collider's own pixels, is inside its shapes,
+    /// even-odd.
+    fn inside(&self, p: [f32; 2]) -> bool {
+        if self.grid.span(p, p).is_none() {
+            return false;
+        }
+        let mut odd = false;
+        for [c, d] in &self.edges {
+            if (c[1] > p[1]) != (d[1] > p[1])
+                && p[0] < c[0] + (p[1] - c[1]) / (d[1] - c[1]) * (d[0] - c[0])
+            {
+                odd = !odd;
+            }
+        }
+        odd
+    }
+}
+
+fn wide(p: [f32; 3]) -> (f64, f64, f64) {
+    (f64::from(p[0]), f64::from(p[1]), f64::from(p[2]))
+}
+
+fn narrow(p: (f64, f64, f64)) -> [f32; 3] {
+    [p.0 as f32, p.1 as f32, p.2 as f32]
 }
 
 /// What a move came to.
 enum Hit {
     /// It got here, going this fast.
-    Clear([f32; 2], [f32; 2]),
+    Clear([f32; 3], [f32; 3]),
     /// It stuck here.
-    Held([f32; 2]),
+    Held([f32; 3]),
     /// It died.
     Gone,
 }
@@ -436,10 +544,20 @@ pub fn definition(
                 h.update(&solid.height.to_le_bytes());
             }
         }
+        h.update(&[u8::from(one.switches.three_d)]);
         let _ = serde_json::to_writer(&mut h, &one.transform);
         let _ = serde_json::to_writer(&mut h, &one.start_offset);
         for id in crate::model::layer_parent_chain(comp, one.id) {
             if let Some(parent) = comp.layers.iter().find(|l| l.id == id) {
+                // A parent is placed in 3D by its switch, and a camera or a
+                // light by its aim too.
+                h.update(&[u8::from(parent.switches.three_d)]);
+                if matches!(
+                    parent.kind,
+                    LayerKind::Camera { .. } | LayerKind::Light { .. }
+                ) {
+                    let _ = serde_json::to_writer(&mut h, &parent.kind);
+                }
                 let _ = serde_json::to_writer(&mut h, &parent.transform);
                 let _ = serde_json::to_writer(&mut h, &parent.start_offset);
             }
@@ -459,7 +577,8 @@ pub fn target<'a>(comp: &'a Composition, inst: &EffectInstance) -> Option<&'a La
 
 /// The particles at layer time `t`, walked from the layer's in point a frame
 /// of `dt` seconds at a time. `at` answers the inputs at any layer time, and
-/// `key` is the walk's [`definition`]. `None` when an input cannot be read.
+/// `key` is the walk's [`definition`]. `None` when an input cannot be read,
+/// or the frame is no longer wanted.
 ///
 /// A time between frames is the frame before, moved on by the part of a
 /// frame it is past it, so motion blur sees the particles move.
@@ -489,8 +608,13 @@ pub fn stream_at(
             state
         }
     };
-    let walked = state.frame < target;
+    let start = state.frame;
     while state.frame < target {
+        // A frame nobody wants any more stops here, and keeps where it got
+        // to for the next.
+        if stopping() {
+            break;
+        }
         let then = at((state.frame + 1) as f64 * dt)?;
         step(&mut state, &now, &then, dt, dt);
         if keeps && state.frame % KEEP_EVERY == 0 {
@@ -498,8 +622,11 @@ pub fn stream_at(
         }
         now = then;
     }
-    if keeps && walked && state.frame % KEEP_EVERY != 0 {
+    if keeps && state.frame > start && state.frame % KEEP_EVERY != 0 {
         keep(key, &state, false);
+    }
+    if state.frame < target {
+        return None;
     }
     let h = t - target as f64 * dt;
     if h > 1e-9 {
@@ -524,11 +651,7 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
         }
         q.age = age;
         if let Some(local) = q.held {
-            let (x, y) = then
-                .collider
-                .to_layer
-                .apply((f64::from(local[0]), f64::from(local[1])));
-            q.pos = [x as f32, y as f32, q.pos[2]];
+            q.pos = narrow(then.collider.to_layer.point(wide(local)));
             return Some(q);
         }
         let base = [
@@ -684,24 +807,16 @@ fn settle(
     let keep = (rows.bounciness / 100.0).clamp(0.0, 1.0);
     let slip = 1.0 - (rows.friction / 100.0).clamp(0.0, 1.0);
     let c = &then.collider;
-    match c.hit(
-        contact,
-        keep,
-        slip,
-        [from[0], from[1]],
-        [to[0], to[1]],
-        [vel[0], vel[1]],
-    ) {
+    match c.hit(contact, keep, slip, from, to, vel) {
         Hit::Gone => return None,
         Hit::Held(at) => {
-            q.pos = [at[0], at[1], to[2]];
+            q.pos = at;
             q.vel = [0.0; 3];
-            let (x, y) = c.from_layer.apply((f64::from(at[0]), f64::from(at[1])));
-            q.held = Some([x as f32, y as f32]);
+            q.held = Some(narrow(c.from_layer.point(wide(at))));
         }
         Hit::Clear(at, v) => {
-            q.pos = [at[0], at[1], to[2]];
-            q.vel = [v[0], v[1], vel[2]];
+            q.pos = at;
+            q.vel = v;
         }
     }
     let p = &then.params;

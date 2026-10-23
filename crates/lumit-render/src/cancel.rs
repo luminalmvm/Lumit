@@ -17,13 +17,15 @@ thread_local! {
 }
 
 /// Keeps `token` as this thread's render token until dropped, then puts back
-/// whatever was there before.
-pub struct Scope(Option<EpochToken>);
+/// whatever was there before. Particulate's walk cannot see the token, so it
+/// is handed [`requested`] to ask with.
+pub struct Scope(Option<EpochToken>, Option<fn() -> bool>);
 
 impl Scope {
     #[must_use]
     pub fn new(token: EpochToken) -> Self {
-        Self(TOKEN.with(|slot| slot.replace(Some(token))))
+        let walk = lumit_core::fx::points::stepped::stop_when(Some(requested));
+        Self(TOKEN.with(|slot| slot.replace(Some(token))), walk)
     }
 }
 
@@ -31,6 +33,7 @@ impl Drop for Scope {
     fn drop(&mut self) {
         let previous = self.0.take();
         TOKEN.with(|slot| *slot.borrow_mut() = previous);
+        lumit_core::fx::points::stepped::stop_when(self.1);
     }
 }
 

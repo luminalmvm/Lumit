@@ -34,7 +34,7 @@ mod comp;
 mod layer;
 mod math;
 mod script;
-mod space;
+pub(crate) mod space;
 
 pub use script::{Language, Slot, SLOT_KEY};
 

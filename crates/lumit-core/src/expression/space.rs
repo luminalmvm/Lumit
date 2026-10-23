@@ -38,7 +38,7 @@ impl Drop for Walking {
 
 /// One layer's spaces at one time.
 pub(crate) struct Space {
-    world: Place,
+    pub(crate) world: Place,
     /// The camera a 3D layer is seen through, the default one with no camera
     /// layer, and the comp's size. `None` for a 2D layer.
     camera: Option<(CameraPose, f64, f64)>,
