@@ -144,7 +144,7 @@ Script: `lumit.comp.frame({ ... })`. MCP tool: `comp_frame`.
 
 ## item.list
 
-Every item in the project panel: comps, footage, folders and solids, with the folder each is in.
+Every item in the project panel: comps, footage, folders and solids, with the folder each is in, and the size, rate and length of footage and solids.
 
 Script: `lumit.item.list()`. MCP tool: `item_list`.
 
