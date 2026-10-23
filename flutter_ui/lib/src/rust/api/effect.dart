@@ -1060,6 +1060,9 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 
   /// Editable while the named layer reference names no layer.
   const factory BridgeEnabledCond.layerUnset() = BridgeEnabledCond_LayerUnset;
+
+  /// Editable while the named number is a still nought.
+  const factory BridgeEnabledCond.nought() = BridgeEnabledCond_Nought;
 }
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies

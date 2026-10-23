@@ -22,6 +22,7 @@ Add to picked
 Age
 Align to motion
 Align to path
+Alignment
 All
 All edges
 All frames
@@ -186,6 +187,7 @@ Clone layer 4
 Clone to points
 Closed
 Coating
+Cohesion
 Collide
 Collide with
 Colour
@@ -405,6 +407,8 @@ Flash
 Flip axis
 Flip direction
 Flip order
+Flock
+Flock radius
 Flow points
 Flow resolution
 Flow smoothness
@@ -936,6 +940,7 @@ Segments
 Semicircle
 Sensitivity
 Sensor
+Separation
 Sepia
 Set channels
 Set matte
@@ -999,6 +1004,10 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Spark life
+Spark size
+Spark speed
+Sparks
 Speed
 Speed jitter
 Speed max

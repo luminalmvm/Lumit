@@ -5316,6 +5316,12 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
                     s.match_name,
                     rule.on
                 ),
+                EnabledCond::Nought => assert!(
+                    on.port_type() == Some(PortType::Number),
+                    "{}: `{}` is read as a number but is not one",
+                    s.match_name,
+                    rule.on
+                ),
             }
             assert_ne!(
                 rule.param, rule.on,
@@ -6655,6 +6661,8 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
             ("particulate", "edge_margin"),
+            ("particulate", "flock_radius"),
+            ("particulate", "spark_speed"),
             // Grid: every length in a lattice — the gaps between
             // cells, where its centre sits, how far a cell may wander, and the
             // disc a point is drawn as. The three counts and the per cents are
@@ -10814,10 +10822,11 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
 /// **A collider's walk lands in one place however it is reached**: a frame
 /// stepped to from a kept state is the frame walked from the in point, which
 /// is what lets an export match the Viewer, and so is one told to stop part
-/// way and asked again. And the floor holds.
+/// way and asked again. And the floor holds. A flock and sparks land in one
+/// place too.
 #[test]
 fn a_stepped_frame_is_the_walk_from_the_start() {
-    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME};
+    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME, SPARK_ID};
     use std::sync::atomic::{AtomicU32, Ordering};
     let e = particulate(&[
         ("gravity", fixed(900.0)),
@@ -10825,15 +10834,15 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
         ("turbulence_amount", fixed(30.0)),
     ]);
     let floor = 700.0f32;
-    let at = |lt: f64| {
+    let inputs = |e: &EffectInstance, lt: f64, floor: Option<f32>| {
         let bag = resolve_bag(
-            std::slice::from_ref(&e),
+            std::slice::from_ref(e),
             lt,
             1000.0,
             1.0,
             &MarkerContext::NONE,
         );
-        let collider = Collider::new(vec![[[0.0, floor], [1920.0, floor]]], SAME, false);
+        let collider = floor.map(|y| Collider::new(vec![[[0.0, y], [1920.0, y]]], SAME, false));
         Some(Inputs::new(
             Particulate::read(Params::new(&bag)),
             [1920.0, 1080.0],
@@ -10841,6 +10850,7 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
             collider,
         ))
     };
+    let at = |lt: f64| inputs(&e, lt, Some(floor));
     let dt = 1.0 / 30.0;
     let key = |n: u8| [n; 32];
     // Walked whole, under a name nothing else uses.
@@ -10864,6 +10874,46 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
     assert!(
         whole.position.iter().all(|p| p[1] <= floor + 0.01),
         "a particle went through the floor"
+    );
+
+    // A flock with nothing to hit, and sparks off a floor that kills.
+    let rows = [("emit_rate", fixed(400.0)), ("initial_speed", fixed(150.0))];
+    let flock = particulate(
+        &[
+            &rows[..],
+            &[
+                ("separation", fixed(60.0)),
+                ("alignment", fixed(50.0)),
+                ("cohesion", fixed(40.0)),
+            ],
+        ]
+        .concat(),
+    );
+    let sparks = particulate(&[
+        ("gravity", fixed(900.0)),
+        ("emit_rate", fixed(400.0)),
+        ("on_contact", EffectValue::Choice(3)),
+        ("sparks", fixed(8.0)),
+    ]);
+    let plain = particulate(&rows);
+    let walk = |e: &EffectInstance, floor: Option<f32>, n: u8| {
+        let at = |lt: f64| inputs(e, lt, floor);
+        let whole = stream_at(key(n), 43.0 * dt, dt, &at).expect("a walk");
+        stream_at(key(n + 1), 45.0 * dt, dt, &at).expect("a walk");
+        let resumed = stream_at(key(n + 1), 43.0 * dt, dt, &at).expect("a walk");
+        assert_eq!(whole, resumed, "a kept walk landed somewhere else");
+        whole
+    };
+    let flocked = walk(&flock, None, 204);
+    assert_ne!(
+        flocked,
+        walk(&plain, None, 206),
+        "the flock steered nothing"
+    );
+    let sparked = walk(&sparks, Some(floor), 208);
+    assert!(
+        sparked.id.iter().any(|&id| id & SPARK_ID != 0),
+        "nothing threw sparks"
     );
 }
 
@@ -10952,11 +11002,11 @@ fn a_collider_turned_in_3d_is_a_surface() {
             Particulate::read(Params::new(&bag)),
             [1920.0, 1080.0],
             MaskPolyline::default(),
-            surface.clone(),
+            Some(surface.clone()),
         ))
     };
     let dt = 1.0 / 30.0;
-    let held = stream_at([204; 32], 40.0 * dt, dt, &at).expect("a walk");
+    let held = stream_at([231; 32], 40.0 * dt, dt, &at).expect("a walk");
     assert!(!held.is_empty(), "nothing was born");
     assert!(
         held.position.iter().all(|p| p[1] <= 800.01),

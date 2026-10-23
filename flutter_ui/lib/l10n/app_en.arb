@@ -3696,6 +3696,42 @@
   "@fxFriction": {
     "description": "Effect controls — a control on Particulate: how much a particle slows along the surface of a shape it hits, as a percentage."
   },
+  "fxFlock": "Flock",
+  "@fxFlock": {
+    "description": "Effect controls — a group heading on Particulate: the controls for particles steering by their neighbours, like a flock of birds."
+  },
+  "fxSeparation": "Separation",
+  "@fxSeparation": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers away from neighbours that are close, as a percentage."
+  },
+  "fxAlignment": "Alignment",
+  "@fxAlignment": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers to go the way its neighbours go, as a percentage."
+  },
+  "fxCohesion": "Cohesion",
+  "@fxCohesion": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers towards the middle of its neighbours, as a percentage."
+  },
+  "fxFlockRadius": "Flock radius",
+  "@fxFlockRadius": {
+    "description": "Effect controls — a control on Particulate: how far away another particle can be and still count as a neighbour, in pixels."
+  },
+  "fxSparks": "Sparks",
+  "@fxSparks": {
+    "description": "Effect controls — a group heading and a control on Particulate: how many small particles fly out of each particle as it dies."
+  },
+  "fxSparkSpeed": "Spark speed",
+  "@fxSparkSpeed": {
+    "description": "Effect controls — a control on Particulate: how fast sparks fly out from a particle that dies, in pixels per second."
+  },
+  "fxSparkLife": "Spark life",
+  "@fxSparkLife": {
+    "description": "Effect controls — a control on Particulate: how long a spark lasts, in seconds."
+  },
+  "fxSparkSize": "Spark size",
+  "@fxSparkSize": {
+    "description": "Effect controls — a control on Particulate: how big a spark is, as a percentage of the particle it came from."
+  },
   "fxVariation": "Variation",
   "@fxVariation": {
     "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."

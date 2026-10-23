@@ -121,6 +121,8 @@ Not interchangeable.
 | **Points stream** | Per-frame particle data an effect produces. Never stored |
 | **Shapes** | Paths on a wire: a Read box hands out the paths of the shape layers in the comp it reads |
 | **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
+| **Flock** | Particulate's particles steering by their neighbours: apart, the same way, together. Worked out from the frame before, as Collide with is |
+| **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 

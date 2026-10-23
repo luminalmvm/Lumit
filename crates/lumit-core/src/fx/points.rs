@@ -1710,8 +1710,8 @@ pub struct PointsSchedule {
     /// distance in. Only the points effects a stack ends on are given any,
     /// and it is nought on every other layer.
     pub grow: [u32; 2],
-    /// The particles a Particulate with a Collide with layer walked to, in
-    /// px@comp ([`stepped`]). The card draws these instead of working its own
+    /// The particles a Particulate that walks got to, in px@comp
+    /// ([`stepped`]). The card draws these instead of working its own
     /// out from `schedule`. `None` everywhere else.
     pub stepped: Option<PointsStream>,
 }

@@ -3403,11 +3403,11 @@ fn comp_walk(
                         stepped: None,
                     };
                 }
-                // **A Particulate with a collider walks on the host**, through
+                // **A Particulate that walks does it on the host**, through
                 // the driver walk a wire reads, and the card only draws where
                 // it got to.
                 let walked = owner
-                    .filter(|_| lumit_core::fx::points::stepped::target(comp, e).is_some())
+                    .filter(|_| lumit_core::fx::points::stepped::wanted(comp, e))
                     .map(|layer| {
                         lumit_core::fx::drivers::effect_stream_in(
                             &layer.graph,

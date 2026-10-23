@@ -1037,16 +1037,15 @@ fn feed_effect_stack(
                 }
             }
         }
-        // **A collider walk** reads every row, every wire and the collider
+        // **A Particulate walk** reads every row, every wire and the collider
         // at every frame from the in point, so all of what it reads is fed,
         // under the name its kept walks go by.
-        if let Some((layer, target)) =
-            marker_layer.and_then(|l| Some((l, lumit_core::fx::points::stepped::target(comp, e)?)))
+        if let Some(layer) =
+            marker_layer.filter(|_| lumit_core::fx::points::stepped::wanted(comp, e))
         {
+            use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");
-            h.update(&lumit_core::fx::points::stepped::definition(
-                doc, comp, layer, e, target,
-            ));
+            h.update(&definition(doc, comp, layer, e, target(comp, e)));
         }
         // **Beat trigger counts from the start.** Its events up to this frame
         // come from every moment before it: the keys of its rows there, and
