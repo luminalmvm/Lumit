@@ -492,12 +492,21 @@ fn scan_audio_plugins(
     file: &mut dyn FnMut(&std::path::Path, usize, usize),
 ) {
     lumit_aplug::set_disabled(&prefs.disabled);
+    // Cached modules are offered without being opened; a cache that does not
+    // read is an empty one, and everything is described again.
+    let mut cache: lumit_aplug::ScanCache =
+        serde_json::from_value(prefs.audio_cache.clone()).unwrap_or_default();
     let outcome = lumit_aplug::scan_brokered_reporting(
         &lumit_aplug::search_paths(),
         &lumit_aplug::session_disabled(),
         None,
+        &mut cache,
         file,
     );
+    // Read again so a switch flicked during the scan is not overwritten.
+    let mut latest = lumit_project::PluginPrefs::load_default();
+    latest.audio_cache = serde_json::to_value(&cache).unwrap_or_default();
+    let _ = latest.save_default();
     for found in outcome.found {
         // A rescan is not a second effect. `register` would refuse the name
         // anyway; asking first is what stops a rescan leaking the definition it

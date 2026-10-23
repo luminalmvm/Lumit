@@ -3723,8 +3723,14 @@ mod tests {
                     _ => break,
                 }
             }
+            // Found by its seat, as a move renames the project. A seat left
+            // behind holds the connection open after the machine has hung
+            // up, which Lumit's door never does.
             let mut projects = self.projects.lock();
-            if let Some(stored) = projects.get_mut(id) {
+            let mine = |seated: &Seated| seated.seat == seat && seated.token == token;
+            let held = |(_, stored): &(&String, &Stored)| stored.seats.iter().any(mine);
+            let found = projects.iter().find(held).map(|(id, _)| id.clone());
+            if let Some(stored) = projects.get_mut(found.as_deref().unwrap_or(id)) {
                 let before = stored.seats.len();
                 stored.seats.retain(|seated| seated.seat != seat);
                 stored.took(seat);
