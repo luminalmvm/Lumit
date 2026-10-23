@@ -38,7 +38,7 @@
 //! The two answer with the same [`ScanOutcome`], so nothing downstream can tell
 //! which one ran.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -247,6 +247,10 @@ pub struct ScanOutcome {
     pub skipped: Vec<String>,
 }
 
+/// The plugins each module offered the last time it described, by module path,
+/// so a later scan can offer them without opening it again.
+pub type ScanCache = BTreeMap<PathBuf, Vec<PluginDescriptor>>;
+
 /// Scan the named directories and describe everything hostable in them.
 ///
 /// Blocking, and not to be called from the interface's thread.
@@ -291,23 +295,38 @@ fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) 
 /// Blocking, and not to be called from the interface's thread.
 #[must_use]
 pub fn scan_brokered(paths: &[PathBuf], disabled: &DisableList, exe: Option<&Path>) -> ScanOutcome {
-    scan_brokered_reporting(paths, disabled, exe, &mut |_, _, _| {})
+    scan_brokered_reporting(
+        paths,
+        disabled,
+        exe,
+        &mut ScanCache::default(),
+        &mut |_, _, _| {},
+    )
 }
 
 /// [`scan_brokered`], saying which file it is about to open, how many came
 /// before it and how many there are, so the splash can name what it is
 /// waiting on.
+///
+/// A module in `cache` is offered from it without a broker, one that describes
+/// is added to it, and one no longer in the folders leaves it.
 pub fn scan_brokered_reporting(
     paths: &[PathBuf],
     disabled: &DisableList,
     exe: Option<&Path>,
+    cache: &mut ScanCache,
     file: &mut dyn FnMut(&Path, usize, usize),
 ) -> ScanOutcome {
     let mut outcome = ScanOutcome::default();
     let binaries: Vec<PathBuf> = paths.iter().flat_map(|dir| scan_dir(dir)).collect();
     let total = binaries.len();
+    cache.retain(|path, _| binaries.contains(path));
     for (index, binary) in binaries.into_iter().enumerate() {
         file(&binary, index, total);
+        if let Some(cached) = cache.get(&binary) {
+            offer(&binary, cached, &[], &mut outcome);
+            continue;
+        }
         let mut config = BrokerConfig::new(&binary);
         config.disabled = Arc::clone(disabled);
         config.exe = exe.map(Path::to_path_buf);
@@ -329,6 +348,7 @@ pub fn scan_brokered_reporting(
         let rejected = broker.rejected().to_vec();
         drop(broker);
         offer(&binary, &described, &rejected, &mut outcome);
+        cache.insert(binary, described);
     }
     outcome
 }

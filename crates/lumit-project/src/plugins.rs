@@ -42,6 +42,10 @@ pub struct PluginPrefs {
     /// Folders of extensions the person added, scanned after Lumit's own
     /// and the machine's.
     pub extension_folders: Vec<PathBuf>,
+    /// What the audio plugin scan learned about each module, so start-up need
+    /// not open it again. The plugin host's own shape, kept opaque here so this
+    /// crate need not depend on the host.
+    pub audio_cache: serde_json::Value,
 }
 
 impl PluginPrefs {
