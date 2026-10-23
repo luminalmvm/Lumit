@@ -1,7 +1,10 @@
 #include "webview.h"
 
+#include <shlwapi.h>
+#include <wil/resource.h>
 #include <wrl.h>
 
+#include <algorithm>
 #include <format>
 #include <iostream>
 
@@ -794,4 +797,339 @@ bool Webview::ClearVirtualHostNameMapping(const std::string& hostName) {
 
   return webview->ClearVirtualHostNameToFolderMapping(
       util::Utf16FromUtf8(hostName).c_str());
+}
+
+// Lumit: the request filter an extension's page is held to.
+
+namespace {
+
+// The parts of a URL the filter looks at. WebView2 hands over URLs already
+// made canonical, with the scheme and host in lower case.
+struct UrlParts {
+  std::wstring scheme;
+  std::wstring host;
+  // Still percent-encoded, without the query or fragment.
+  std::wstring path;
+};
+
+std::wstring Lower(std::wstring text) {
+  for (auto& c : text) {
+    if (c >= L'A' && c <= L'Z') {
+      c += L'a' - L'A';
+    }
+  }
+  return text;
+}
+
+UrlParts SplitUrl(const std::wstring& url) {
+  UrlParts parts;
+  const auto colon = url.find(L':');
+  if (colon == std::wstring::npos) {
+    return parts;
+  }
+  parts.scheme = Lower(url.substr(0, colon));
+  if (url.compare(colon, 3, L"://") != 0) {
+    return parts;
+  }
+  const auto start = colon + 3;
+  const auto end = (std::min)(url.find_first_of(L"/?#", start), url.size());
+  auto authority = url.substr(start, end - start);
+  const auto at = authority.rfind(L'@');
+  if (at != std::wstring::npos) {
+    authority.erase(0, at + 1);
+  }
+  // An IPv6 address keeps its brackets, and a missing bracket leaves no host.
+  parts.host = Lower(!authority.empty() && authority[0] == L'['
+                         ? authority.substr(0, authority.find(L']') + 1)
+                         : authority.substr(0, authority.find(L':')));
+  if (end < url.size() && url[end] == L'/') {
+    const auto stop = url.find_first_of(L"?#", end);
+    parts.path = url.substr(
+        end, stop == std::wstring::npos ? std::wstring::npos : stop - end);
+  }
+  return parts;
+}
+
+// The full path of an open file or folder, with every link followed.
+std::wstring FinalPath(HANDLE handle) {
+  std::wstring path(MAX_PATH, L'\0');
+  auto size = GetFinalPathNameByHandleW(handle, path.data(),
+                                        static_cast<DWORD>(path.size()),
+                                        FILE_NAME_NORMALIZED);
+  if (size >= path.size()) {
+    path.resize(size);
+    size = GetFinalPathNameByHandleW(handle, path.data(), size,
+                                     FILE_NAME_NORMALIZED);
+  }
+  if (size == 0 || size >= path.size()) {
+    return {};
+  }
+  path.resize(size);
+  return path;
+}
+
+}  // namespace
+
+bool Webview::LimitRequests(const std::string& own_host,
+                            const std::string& folder,
+                            const std::vector<std::string>& hosts,
+                            const std::string& policy) {
+  if (!IsValid() || environment_) {
+    return false;
+  }
+  // An older runtime can't filter what a service or shared worker asks for,
+  // so it gets no page at all.
+  auto webview2 = webview_.try_query<ICoreWebView2_2>();
+  auto webview22 = webview_.try_query<ICoreWebView2_22>();
+  if (!webview2 || !webview22 ||
+      FAILED(webview2->get_Environment(environment_.put()))) {
+    return false;
+  }
+  wil::unique_hfile directory(CreateFileW(
+      util::Utf16FromUtf8(folder).c_str(), 0,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+  folder_ = directory ? FinalPath(directory.get()) : std::wstring();
+  if (folder_.empty()) {
+    return false;
+  }
+  own_host_ = Lower(util::Utf16FromUtf8(own_host));
+  for (const auto& host : hosts) {
+    hosts_.push_back(Lower(util::Utf16FromUtf8(host)));
+  }
+  policy_ = util::Utf16FromUtf8(policy);
+
+  return SUCCEEDED(webview_->add_WebResourceRequested(
+             Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                 [this](ICoreWebView2* sender,
+                        ICoreWebView2WebResourceRequestedEventArgs* args)
+                     -> HRESULT {
+                   OnRequest(args);
+                   return S_OK;
+                 })
+                 .Get(),
+             &event_registrations_.web_resource_requested_token_)) &&
+         SUCCEEDED(
+             webview22->AddWebResourceRequestedFilterWithRequestSourceKinds(
+                 L"*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+                 COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL));
+}
+
+void Webview::OnRequest(ICoreWebView2WebResourceRequestedEventArgs* args) {
+  wil::com_ptr<ICoreWebView2WebResourceRequest> request;
+  wil::unique_cotaskmem_string uri;
+  if (FAILED(args->get_Request(request.put())) ||
+      FAILED(request->get_Uri(&uri))) {
+    return Answer(args, 403, nullptr, L"");
+  }
+  const auto url = SplitUrl(uri.get());
+  if (url.host == own_host_) {
+    return url.scheme == L"https" ? ServeFile(url.path, request.get(), args)
+                                  : Answer(args, 403, nullptr, L"");
+  }
+  if (url.scheme == L"https" || url.scheme == L"wss") {
+    for (const auto& host : hosts_) {
+      if (url.host == host || url.host.ends_with(L"." + host)) {
+        return;
+      }
+    }
+  }
+  // Nothing that goes out on the network.
+  if (url.scheme == L"data" || url.scheme == L"blob" ||
+      url.scheme == L"about") {
+    return;
+  }
+  Answer(args, 403, nullptr, L"");
+}
+
+namespace {
+
+// What a file is, by the end of its name, for the ones a page is made of.
+const wchar_t* TypeOf(const std::wstring& path) {
+  static const std::pair<const wchar_t*, const wchar_t*> kTypes[] = {
+      {L".html", L"text/html"},        {L".htm", L"text/html"},
+      {L".xhtml", L"application/xhtml+xml"},
+      {L".css", L"text/css"},          {L".js", L"text/javascript"},
+      {L".mjs", L"text/javascript"},   {L".json", L"application/json"},
+      {L".map", L"application/json"},  {L".wasm", L"application/wasm"},
+      {L".svg", L"image/svg+xml"},     {L".png", L"image/png"},
+      {L".jpg", L"image/jpeg"},        {L".jpeg", L"image/jpeg"},
+      {L".gif", L"image/gif"},         {L".webp", L"image/webp"},
+      {L".avif", L"image/avif"},       {L".ico", L"image/x-icon"},
+      {L".woff", L"font/woff"},        {L".woff2", L"font/woff2"},
+      {L".ttf", L"font/ttf"},          {L".otf", L"font/otf"},
+      {L".mp4", L"video/mp4"},         {L".webm", L"video/webm"},
+      {L".mp3", L"audio/mpeg"},        {L".wav", L"audio/wav"},
+      {L".ogg", L"audio/ogg"},         {L".txt", L"text/plain"},
+      {L".xml", L"application/xml"},
+  };
+  const auto lower = Lower(path);
+  for (const auto& [end, type] : kTypes) {
+    if (lower.ends_with(end)) {
+      return type;
+    }
+  }
+  return L"application/octet-stream";
+}
+
+// A whole number of at most 18 digits, which can't overflow.
+bool Number(const std::wstring& text, ULONGLONG* out) {
+  if (text.empty() || text.size() > 18 ||
+      text.find_first_not_of(L"0123456789") != std::wstring::npos) {
+    return false;
+  }
+  *out = std::stoull(text);
+  return true;
+}
+
+// The bytes a Range header asks for out of `size`, as `bytes=first-last`
+// with either end left off, which is how sound and video are read.
+bool Span(const std::wstring& header, ULONGLONG size, ULONGLONG* first,
+          ULONGLONG* last) {
+  const auto dash = header.find(L'-');
+  if (size == 0 || header.rfind(L"bytes=", 0) != 0 ||
+      dash == std::wstring::npos) {
+    return false;
+  }
+  const auto from = header.substr(6, dash - 6);
+  const auto to = header.substr(dash + 1);
+  ULONGLONG a = 0;
+  ULONGLONG b = 0;
+  if (from.empty()) {
+    // The last so many bytes.
+    if (!Number(to, &b) || b == 0) {
+      return false;
+    }
+    *first = b >= size ? 0 : size - b;
+    *last = size - 1;
+    return true;
+  }
+  if (!Number(from, &a) || a >= size || (!to.empty() && !Number(to, &b))) {
+    return false;
+  }
+  *first = a;
+  *last = to.empty() ? size - 1 : (std::min)(b, size - 1);
+  return *last >= *first;
+}
+
+// The most of a file sent for a range that stops short of its end. A
+// shorter answer than was asked for is allowed, and says so.
+constexpr ULONGLONG kSpanLimit = 16 << 20;
+
+}  // namespace
+
+// A file of the extension's own, with the policy on it, and only for a page
+// of its own or one being opened. A page from anywhere else can't load them.
+void Webview::ServeFile(const std::wstring& path,
+                        ICoreWebView2WebResourceRequest* request,
+                        ICoreWebView2WebResourceRequestedEventArgs* args) {
+  COREWEBVIEW2_WEB_RESOURCE_CONTEXT context;
+  wil::unique_cotaskmem_string source;
+  if (FAILED(args->get_ResourceContext(&context)) ||
+      (context != COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT &&
+       (FAILED(webview_->get_Source(&source)) ||
+        SplitUrl(source.get()).host != own_host_))) {
+    return Answer(args, 403, nullptr, L"");
+  }
+  std::wstring name = path;
+  if (name.size() < 2 ||
+      FAILED(UrlUnescapeW(name.data(), nullptr, nullptr,
+                          URL_UNESCAPE_INPLACE | URL_UNESCAPE_AS_UTF8))) {
+    return Answer(args, 404, nullptr, L"");
+  }
+  name.resize(wcslen(name.c_str()));
+  // Plain names only, so it stays inside the folder before links are
+  // followed too.
+  std::wstring file = folder_;
+  size_t start = 1;
+  while (start <= name.size()) {
+    const auto end = (std::min)(name.find(L'/', start), name.size());
+    const auto part = name.substr(start, end - start);
+    if (part.empty() || part == L"." || part == L".." ||
+        part.find_first_of(L"\\:*?\"<>|") != std::wstring::npos ||
+        std::any_of(part.begin(), part.end(),
+                    [](wchar_t c) { return c < 0x20; })) {
+      return Answer(args, 404, nullptr, L"");
+    }
+    file += L"\\" + part;
+    start = end + 1;
+  }
+  wil::unique_hfile handle(CreateFileW(file.c_str(), GENERIC_READ,
+                                       FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                       FILE_ATTRIBUTE_NORMAL, nullptr));
+  const auto real = handle ? FinalPath(handle.get()) : std::wstring();
+  const auto inside = folder_ + L"\\";
+  BY_HANDLE_FILE_INFORMATION info;
+  LARGE_INTEGER length;
+  wil::com_ptr<IStream> body;
+  if (real.size() <= inside.size() ||
+      CompareStringOrdinal(real.c_str(), static_cast<int>(inside.size()),
+                           inside.c_str(), static_cast<int>(inside.size()),
+                           TRUE) != CSTR_EQUAL ||
+      !GetFileInformationByHandle(handle.get(), &info) ||
+      (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+      !GetFileSizeEx(handle.get(), &length) ||
+      FAILED(SHCreateStreamOnFileEx(real.c_str(),
+                                    STGM_READ | STGM_SHARE_DENY_NONE, 0, FALSE,
+                                    nullptr, body.put()))) {
+    return Answer(args, 404, nullptr, L"");
+  }
+  const auto size = static_cast<ULONGLONG>(length.QuadPart);
+  std::wstring headers = std::wstring(L"Content-Type: ") + TypeOf(real) +
+                         L"\r\nContent-Security-Policy: " + policy_ +
+                         L"\r\nCache-Control: no-cache"
+                         L"\r\nAccept-Ranges: bytes";
+
+  // Sound and video are read a piece at a time.
+  wil::com_ptr<ICoreWebView2HttpRequestHeaders> asked;
+  wil::unique_cotaskmem_string range;
+  BOOL ranged = FALSE;
+  ULONGLONG first = 0;
+  ULONGLONG last = 0;
+  if (SUCCEEDED(request->get_Headers(asked.put())) &&
+      SUCCEEDED(asked->Contains(L"Range", &ranged)) && ranged &&
+      SUCCEEDED(asked->GetHeader(L"Range", &range)) &&
+      Span(range.get(), size, &first, &last)) {
+    LARGE_INTEGER at;
+    at.QuadPart = static_cast<LONGLONG>(first);
+    if (FAILED(body->Seek(at, STREAM_SEEK_SET, nullptr))) {
+      return Answer(args, 404, nullptr, L"");
+    }
+    // A range to the end reads the file to its end. Any other is read
+    // here, since the stream would go on past it.
+    if (last != size - 1) {
+      last = (std::min)(last, first + kSpanLimit - 1);
+      std::vector<BYTE> piece(static_cast<size_t>(last - first + 1));
+      ULONG read = 0;
+      if (FAILED(body->Read(piece.data(), static_cast<ULONG>(piece.size()),
+                            &read)) ||
+          read != piece.size()) {
+        return Answer(args, 404, nullptr, L"");
+      }
+      body.attach(
+          SHCreateMemStream(piece.data(), static_cast<UINT>(piece.size())));
+      if (!body) {
+        return Answer(args, 404, nullptr, L"");
+      }
+    }
+    headers += std::format(
+        L"\r\nContent-Range: bytes {}-{}/{}\r\nContent-Length: {}", first,
+        last, size, last - first + 1);
+    return Answer(args, 206, body.get(), headers);
+  }
+  headers += std::format(L"\r\nContent-Length: {}", size);
+  Answer(args, 200, body.get(), headers);
+}
+
+void Webview::Answer(ICoreWebView2WebResourceRequestedEventArgs* args,
+                     int status, IStream* body, const std::wstring& headers) {
+  const wchar_t* reason = status == 200   ? L"OK"
+                          : status == 206 ? L"Partial Content"
+                          : status == 404 ? L"Not Found"
+                                          : L"Forbidden";
+  wil::com_ptr<ICoreWebView2WebResourceResponse> response;
+  if (SUCCEEDED(environment_->CreateWebResourceResponse(
+          body, status, reason, headers.c_str(), response.put()))) {
+    args->put_Response(response.get());
+  }
 }

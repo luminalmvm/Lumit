@@ -45,6 +45,7 @@ constexpr auto kMethodClearCache = "clearCache";
 constexpr auto kMethodSetCacheDisabled = "setCacheDisabled";
 constexpr auto kMethodSetPopupWindowPolicy = "setPopupWindowPolicy";
 constexpr auto kMethodSetFpsLimit = "setFpsLimit";
+constexpr auto kMethodLimitRequests = "limitRequests";
 
 constexpr auto kEventType = "type";
 constexpr auto kEventValue = "value";
@@ -513,6 +514,35 @@ void WebviewBridge::HandleMethodCall(
       return result->Success();
     }
     return result->Error(kErrorInvalidArgs);
+  }
+
+  // limitRequests [string ownHost, string folder, list<string> hosts,
+  // string policy]
+  if (method_name.compare(kMethodLimitRequests) == 0) {
+    const flutter::EncodableList* list =
+        std::get_if<flutter::EncodableList>(method_call.arguments());
+    if (!list || list->size() != 4) {
+      return result->Error(kErrorInvalidArgs);
+    }
+    const auto own_host = std::get_if<std::string>(&(*list)[0]);
+    const auto folder = std::get_if<std::string>(&(*list)[1]);
+    const auto host_list = std::get_if<flutter::EncodableList>(&(*list)[2]);
+    const auto policy = std::get_if<std::string>(&(*list)[3]);
+    if (!own_host || !folder || !host_list || !policy) {
+      return result->Error(kErrorInvalidArgs);
+    }
+    std::vector<std::string> hosts;
+    for (const auto& host : *host_list) {
+      const auto name = std::get_if<std::string>(&host);
+      if (!name) {
+        return result->Error(kErrorInvalidArgs);
+      }
+      hosts.push_back(*name);
+    }
+    if (webview_->LimitRequests(*own_host, *folder, hosts, *policy)) {
+      return result->Success();
+    }
+    return result->Error(kMethodFailed);
   }
 
   // clearVirtualHostNameMapping: string

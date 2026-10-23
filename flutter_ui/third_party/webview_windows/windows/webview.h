@@ -7,6 +7,8 @@
 #include <winrt/base.h>
 
 #include <functional>
+#include <string>
+#include <vector>
 
 class WebviewHost;
 
@@ -87,6 +89,7 @@ struct EventRegistrations {
   EventRegistrationToken devtools_protocol_event_token_{};
   EventRegistrationToken new_windows_requested_token_{};
   EventRegistrationToken contains_fullscreen_element_changed_token_{};
+  EventRegistrationToken web_resource_requested_token_{};
 };
 
 class Webview {
@@ -160,6 +163,14 @@ class Webview {
                                  WebviewHostResourceAccessKind accessKind);
   bool ClearVirtualHostNameMapping(const std::string& hostName);
 
+  // Lumit: the page reaches its own files on `own_host`, served from
+  // `folder` with `policy` as their Content-Security-Policy, and https and
+  // wss on `hosts` and the sites under them, and nothing else. Called once,
+  // before anything is loaded, in place of a virtual host name mapping.
+  bool LimitRequests(const std::string& own_host, const std::string& folder,
+                     const std::vector<std::string>& hosts,
+                     const std::string& policy);
+
   void OnUrlChanged(UrlChangedCallback callback) {
     url_changed_callback_ = std::move(callback);
   }
@@ -225,6 +236,13 @@ class Webview {
   WebviewPopupWindowPolicy popup_window_policy_ =
       WebviewPopupWindowPolicy::Allow;
 
+  // What LimitRequests was given. The folder is its full path on disk.
+  wil::com_ptr<ICoreWebView2Environment> environment_;
+  std::wstring own_host_;
+  std::wstring folder_;
+  std::vector<std::wstring> hosts_;
+  std::wstring policy_;
+
   winrt::com_ptr<ABI::Windows::UI::Composition::IVisual> surface_;
   winrt::com_ptr<ABI::Windows::UI::Composition::Desktop::IDesktopWindowTarget>
       window_target_;
@@ -256,4 +274,10 @@ class Webview {
   void RegisterEventHandlers();
   void EnableSecurityUpdates();
   void SendScroll(double offset, bool horizontal);
+  void OnRequest(ICoreWebView2WebResourceRequestedEventArgs* args);
+  void ServeFile(const std::wstring& path,
+                 ICoreWebView2WebResourceRequest* request,
+                 ICoreWebView2WebResourceRequestedEventArgs* args);
+  void Answer(ICoreWebView2WebResourceRequestedEventArgs* args, int status,
+              IStream* body, const std::wstring& headers);
 };

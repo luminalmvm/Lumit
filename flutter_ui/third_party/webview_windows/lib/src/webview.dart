@@ -491,6 +491,21 @@ class WebviewController extends ValueNotifier<WebviewValue> {
         'setVirtualHostNameMapping', [hostName, folderPath, accessKind.index]);
   }
 
+  /// Lumit: hold the page to its own files, served under https://[ownHost]
+  /// from [folderPath] with [policy] as their Content-Security-Policy, and
+  /// https and wss on [hosts] and the sites under them. Called once, before
+  /// anything is loaded, in place of [addVirtualHostNameMapping]. Throws on a
+  /// runtime too old to filter what workers ask for.
+  Future<void> limitRequests(String ownHost, String folderPath,
+      List<String> hosts, String policy) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _methodChannel.invokeMethod(
+        'limitRequests', [ownHost, folderPath, hosts, policy]);
+  }
+
   /// Removes a Virtual Host Name Mapping.
   ///
   /// Please refer to
