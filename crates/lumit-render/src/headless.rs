@@ -3271,9 +3271,10 @@ impl AudioJobsBuilder {
         }
         // Only a soloed layer that makes a sound silences the rest, as in
         // After Effects: soloing a title to look at it leaves the music playing.
-        let any_solo = comp.layers.iter().any(|l| {
-            l.switches.solo && (l.audio_only || self.layer_has_audio(doc, l))
-        });
+        let any_solo = comp
+            .layers
+            .iter()
+            .any(|l| l.switches.solo && (l.audio_only || self.layer_has_audio(doc, l)));
         for layer in &comp.layers {
             self.walk_layer(
                 doc, comp, layer, any_solo, base_s, window, carriers, strip, visited, jobs,
