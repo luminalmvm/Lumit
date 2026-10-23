@@ -2189,6 +2189,23 @@ mod tests {
             .expect("inner");
         assert_eq!(inner.body, vec![blur.id()]);
 
+        // One time of the outer pair is a graph of its own: the start an
+        // Input under its own id, the end its Output, and nothing wired in
+        // from outside. Its numbers are named for the start.
+        let (time, fed) = graph.repeat_graph(outer);
+        assert!(fed.is_empty());
+        assert_eq!(time.output_id(), Some(end.id()));
+        assert_eq!(time.validate(None), Ok(()));
+        assert_eq!(time.repeats().map(|r| r.len()), Ok(1));
+        let GraphNode::Fx(start_box) = &start else {
+            panic!("the start is a box");
+        };
+        let values = repeat_values(start_box, 2, 5);
+        assert_eq!(values.len(), crate::fx::effects::repeat::PASS_PORTS.len());
+        assert!(values
+            .iter()
+            .all(|(id, _)| time.inputs().any(|i| i.id == *id)));
+
         // Out of the middle straight to the Output, past both ends.
         edges[5] = wire(&blur, "output", &out, "input");
         assert_eq!(
