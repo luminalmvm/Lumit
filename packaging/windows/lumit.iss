@@ -74,6 +74,16 @@ Type: files; Name: "{app}\lumit_flutter.exe"
 Type: files; Name: "{app}\*.dll"
 ; An OFX plugin's own log, which the plugin brokers used to let land here.
 Type: files; Name: "{app}\ofxTestLog.txt"
+; Files the last update had to move aside (MoveAside below), once nothing
+; holds them.
+Type: files; Name: "{app}\*.old"
+Type: files; Name: "{app}\lib\*.old"
+Type: files; Name: "{app}\data\*.old"
+
+[UninstallDelete]
+Type: files; Name: "{app}\*.old"
+Type: files; Name: "{app}\lib\*.old"
+Type: files; Name: "{app}\data\*.old"
 
 [Icons]
 Name: "{group}\Lumit"; Filename: "{app}\{#MyAppExe}"
@@ -190,4 +200,39 @@ begin
     Sleep(500);
   end;
   Result := 'Lumit is still running. Close it, then update again.';
+end;
+
+// Something can still hold a library after all that, such as Lumit started
+// again before the update finished, or lumit-cli kept open by another program.
+// A held file can't be replaced, and stopping there leaves the new app with
+// the old bridge, which won't start. Windows does let a held file be renamed,
+// so whatever can't be deleted is moved aside and the new one goes in beside it.
+procedure MoveAside(Dir: String);
+var
+  Find: TFindRec;
+  Path, Ext: String;
+begin
+  if not FindFirst(Dir + '\*', Find) then exit;
+  try
+    repeat
+      Ext := Lowercase(ExtractFileExt(Find.Name));
+      Path := Dir + '\' + Find.Name;
+      if ((Ext = '.dll') or (Ext = '.exe') or (Ext = '.so')) and
+         (Pos('unins', Lowercase(Find.Name)) <> 1) and not DeleteFile(Path) then
+      begin
+        DeleteFile(Path + '.old');
+        RenameFile(Path, Path + '.old');
+      end;
+    until not FindNext(Find);
+  finally
+    FindClose(Find);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep <> ssInstall then exit;
+  MoveAside(ExpandConstant('{app}'));
+  MoveAside(ExpandConstant('{app}\lib'));
+  MoveAside(ExpandConstant('{app}\data'));
 end;
