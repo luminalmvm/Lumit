@@ -29,8 +29,23 @@ impl Host for Bare {
     fn path(&self) -> Option<PathBuf> {
         None
     }
-    fn save(&self, _: Option<&Path>) -> Result<PathBuf, ScriptError> {
-        Err(ScriptError::Failed("no saving here".into()))
+    // Saved as JSON, and a frame is the comp as JSON, each as it stands when
+    // asked for.
+    fn save(&self, path: Option<&Path>) -> Result<PathBuf, ScriptError> {
+        let path = path.ok_or_else(|| ScriptError::Failed("no saving here".into()))?;
+        std::fs::write(path, serde_json::to_vec(&*self.0.snapshot()).unwrap()).unwrap();
+        Ok(path.to_path_buf())
+    }
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        _: u64,
+        _: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let doc = self.0.snapshot();
+        std::fs::write(out, serde_json::to_vec(doc.comp(comp).unwrap()).unwrap()).unwrap();
+        Ok((1, 1))
     }
     fn import_footage(&self, _: &[PathBuf]) -> Result<Vec<Uuid>, ScriptError> {
         Err(ScriptError::Failed("no footage here".into()))
@@ -312,7 +327,7 @@ read"#;
 /// The After Effects pieces past keys and cameras: includes, eased keys, a
 /// solid, a precomp, a precompose, an effect with a keyed control, markers,
 /// an expression and a file written in the script's folder, with one outside
-/// it refused.
+/// it refused. A frame and a save straight after a key both have it.
 #[test]
 fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
     use lumit_core::anim::{Animation, SideInterp};
@@ -374,6 +389,8 @@ var moved = pack.layers.addNull();
 pack.layers.addNull();
 var packed = pack.layers.precompose([1, 2], "Packed", true);
 moved.transform.opacity.setValueAtTime(1, 25);
+packed.saveFrameToPng(0, new File(here.fsName + "/out/packed.png"));
+app.project.save(new File(here.fsName + "/out/saved.lum"));
 [app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name]
 "#;
     std::fs::write(&path, script).unwrap();
@@ -411,11 +428,25 @@ moved.transform.opacity.setValueAtTime(1, 25);
             .unwrap()
     };
     let (edit, inner) = (comp("Edit"), comp("Inner"));
-    // A key made after the precompose lands on the layer in its new comp.
-    assert!(comp("Packed").layers.iter().any(|l| matches!(
-        l.prop(TransformProp::Opacity).unwrap().animation,
-        Animation::Keyframed(_)
-    )));
+    // A key made after the precompose lands on the layer in its new comp, and
+    // is in the frame and the file saved straight after it.
+    let keyed = |c: &Composition| {
+        c.layers.iter().any(|l| {
+            matches!(
+                l.prop(TransformProp::Opacity).unwrap().animation,
+                Animation::Keyframed(_)
+            )
+        })
+    };
+    assert!(keyed(comp("Packed")));
+    let out = |name: &str| std::fs::read(folder.join("out").join(name)).unwrap();
+    let frame: Composition = serde_json::from_slice(&out("packed.png")).unwrap();
+    assert!(keyed(&frame));
+    let saved: Document = serde_json::from_slice(&out("saved.lum")).unwrap();
+    assert!(saved
+        .items
+        .iter()
+        .any(|i| matches!(i, ProjectItem::Composition(c) if c.name == "Packed" && keyed(c))));
     let layer = |name: &str| edit.layers.iter().find(|l| l.name == name).unwrap();
     let keys = |l: &Layer, p: TransformProp| match &l.prop(p).unwrap().animation {
         Animation::Keyframed(keys) => keys.clone(),
