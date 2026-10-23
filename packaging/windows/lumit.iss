@@ -41,6 +41,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ChangesAssociations=yes
+; Held for as long as this runs. Lumit won't start while it's there, so it
+; can't hold files halfway through an update (runner/main.cpp).
+SetupMutex=LumitSetup
 Compression=lzma2
 ; Each file compressed on its own, so a file that didn't change between two
 ; releases is the same bytes in both installers and an update only fetches
@@ -139,8 +142,9 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
 ; without this line nothing starts again — a "Restart now" button that does
 ; not restart, which is exactly the complaint. Interactive installs are
 ; unchanged: the `postinstall` flag still offers it as the last checkbox.
-Filename: "{app}\{#MyAppExe}"; Description: "Launch Lumit"; \
-  Flags: nowait postinstall
+; `--after-update` lets it start while SetupMutex is still held.
+Filename: "{app}\{#MyAppExe}"; Parameters: "--after-update"; \
+  Description: "Launch Lumit"; Flags: nowait postinstall
 
 [Code]
 // An update runs this installer from inside Lumit, which then quits. Lumit
