@@ -110,7 +110,13 @@ pub struct VideoDecoder {
     /// stands in for. Its frames are handed back at that size, as the probe
     /// says they are.
     own: Option<(u32, u32)>,
+    /// The numbered run this reads, with the source's own path its unreadable
+    /// files are noted under. `None` for a plain file.
+    run: Option<(crate::sequence::Run, std::path::PathBuf)>,
 }
+
+/// How far either way a file of a run that won't read looks for one that does.
+const FILL_REACH: usize = 30;
 
 /// Build and open a codec context for `codec`/`par`, with the D3D11VA
 /// hardware device attached when `try_hw` asks for it and the codec supports
@@ -239,6 +245,7 @@ impl VideoDecoder {
             u32::try_from(par.height).unwrap_or(0),
         );
         let own = crate::probe::stand_in_size(input.metadata(), coded);
+        let run = src.run().map(|(run, _)| (run, src.path.clone()));
         Ok(Self {
             input,
             decoder,
@@ -249,6 +256,7 @@ impl VideoDecoder {
             seeks: 0,
             hardware,
             own,
+            run,
         })
     }
 
@@ -384,10 +392,47 @@ impl VideoDecoder {
         convert_sized(frame, dst_w, dst_h)
     }
 
+    /// [`Self::decode_exact`], except that a file of a numbered run that won't
+    /// read, as a dropped frame of a game capture often is, draws the nearest
+    /// earlier frame that does, or at the start of the run the next one.
+    fn frame_exact(&mut self, n: usize) -> Result<AVFrame, MediaError> {
+        let failed = match self.decode_exact(n) {
+            Ok(frame) => {
+                self.note_frame(n, false);
+                return Ok(frame);
+            }
+            Err(e) => e,
+        };
+        let count = self.index.frame_count();
+        if self.run.is_none() || n >= count {
+            return Err(failed);
+        }
+        let earlier = (n.saturating_sub(FILL_REACH)..n).rev();
+        let later = n + 1..count.min(n + 1 + FILL_REACH);
+        for k in earlier.chain(later) {
+            // Each try seeks first, so the frame drawn is the same however
+            // the playhead got here.
+            self.next_sequential = None;
+            if let Ok(frame) = self.decode_exact(k) {
+                self.note_frame(n, true);
+                return Ok(frame);
+            }
+        }
+        Err(failed)
+    }
+
+    /// Note whether frame `n` of a run read, for whoever lists the files that
+    /// didn't.
+    fn note_frame(&self, n: usize, unreadable: bool) {
+        if let Some((run, source)) = &self.run {
+            crate::sequence::note_frame(source, || run.file_at(n), unreadable);
+        }
+    }
+
     /// Decode exactly frame `n` and hand back the picture in the shared planar
     /// form both taps convert from — hardware frames transferred to system
     /// memory and repacked, exactly as they were before either tap existed.
-    fn frame_exact(&mut self, n: usize) -> Result<AVFrame, MediaError> {
+    fn decode_exact(&mut self, n: usize) -> Result<AVFrame, MediaError> {
         let want_pts = self
             .index
             .pts_of_frame(n)

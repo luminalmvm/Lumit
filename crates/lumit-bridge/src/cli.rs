@@ -338,6 +338,32 @@ fn open(path: &Path) -> Result<Headless, String> {
     Ok(host)
 }
 
+/// Files of image sequences that would not read, each drawn as a neighbour.
+fn note_unreadable_frames() {
+    #[cfg(feature = "media")]
+    {
+        let files: Vec<String> = lumit_media::sequence::unreadable_frames()
+            .into_iter()
+            .map(|(_, file)| {
+                // Footage found from the project's folder has its path run
+                // through it, so each .. is walked back for a plain line.
+                let plain = file.components().fold(PathBuf::new(), |mut plain, part| {
+                    if part == std::path::Component::ParentDir {
+                        plain.pop();
+                    } else {
+                        plain.push(part);
+                    }
+                    plain
+                });
+                plain.display().to_string()
+            })
+            .collect();
+        if !files.is_empty() {
+            note!("Frames that could not be read: {}", files.join(", "));
+        }
+    }
+}
+
 fn export(project: &Path, how: Export) -> Result<(), String> {
     let stop = interrupt::stop_flag();
     // The preset first, so a misspelt name is heard before the project opens.
@@ -411,6 +437,7 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
             }
         }
     }
+    note_unreadable_frames();
     match failed {
         0 => Ok(()),
         n => Err(format!("{n} of {} exports failed.", comps.len())),
@@ -564,6 +591,7 @@ fn run(
         note!("{line}");
     }
     let finished = finish_exports(&host, &stop, report.result.is_ok());
+    note_unreadable_frames();
     let value = report.result.map_err(|e| format!("{name}: {e}"))?;
     finished?;
     if let Some(target) = target {

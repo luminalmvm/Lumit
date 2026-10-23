@@ -31,6 +31,12 @@ What is recognised as a run:
 Given `0001` to `0100` with `0050` missing, picking `0007` imports `0001`–`0049`, and
 picking `0060` imports `0051`–`0100`.
 
+## A file that won't read
+
+An empty or damaged file inside a run draws the frame before it, or at the start of the run
+the frame after it. Once that frame has been drawn, the item's row in the Project panel has
+an `unreadable` badge.
+
 ## The rate
 
 Every sequence starts at **25 fps**.

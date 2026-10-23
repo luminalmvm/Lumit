@@ -380,6 +380,42 @@ pub(crate) fn file_stamp(path: &Path) -> Option<(u64, SystemTime)> {
     })
 }
 
+/// Files of numbered runs that would not read, filed under the path of the
+/// source they belong to.
+static UNREADABLE: LazyLock<Mutex<HashMap<PathBuf, HashSet<PathBuf>>>> =
+    LazyLock::new(Default::default);
+
+/// Note whether `file` of the run read as `source` read. A file that reads
+/// again, saved over since, is forgotten.
+pub(crate) fn note_frame(source: &Path, file: impl FnOnce() -> PathBuf, unreadable: bool) {
+    let Ok(mut held) = UNREADABLE.lock() else {
+        return;
+    };
+    if unreadable {
+        held.entry(source.to_path_buf()).or_default().insert(file());
+    } else if let Some(files) = held.get_mut(source) {
+        files.remove(&file());
+        if files.is_empty() {
+            held.remove(source);
+        }
+    }
+}
+
+/// Every file of a numbered run that would not read and had a neighbour drawn
+/// in its place, with the path of the source it belongs to.
+#[must_use]
+pub fn unreadable_frames() -> Vec<(PathBuf, PathBuf)> {
+    let Ok(held) = UNREADABLE.lock() else {
+        return Vec::new();
+    };
+    let mut all: Vec<_> = held
+        .iter()
+        .flat_map(|(source, files)| files.iter().map(|f| (source.clone(), f.clone())))
+        .collect();
+    all.sort();
+    all
+}
+
 /// The run `path` belongs to. Finding it reads the whole folder.
 fn run_of(path: &Path) -> Option<Run> {
     type Held = Mutex<HashMap<PathBuf, (Instant, Option<Run>)>>;
@@ -548,6 +584,39 @@ mod tests {
             decoder.frame_rgba(3, None).is_err(),
             "frame 7 is past the hole and must not answer as frame 3"
         );
+    }
+
+    /// A file of a run that won't read, empty or cut short, draws the nearest
+    /// earlier frame that does, or the next one at the start, and the frames
+    /// after it carry on as themselves.
+    #[test]
+    fn a_frame_that_will_not_read_draws_its_neighbour() {
+        let dir = tempfile::tempdir().unwrap();
+        write_run(dir.path(), "cap", 4, ".ppm", &[2, 3, 6]);
+        std::fs::write(dir.path().join("cap0001.ppm"), b"").unwrap();
+        std::fs::write(dir.path().join("cap0004.ppm"), b"").unwrap();
+        std::fs::write(dir.path().join("cap0005.ppm"), b"P6\n2 2\n255\n\x05").unwrap();
+
+        let src = MediaSource {
+            path: dir.path().join("cap0001.ppm"),
+            sequence_fps: Some((30, 1)),
+            ..Default::default()
+        };
+        let index = crate::index::build_frame_index(&src).unwrap();
+        let mut decoder = crate::VideoDecoder::open(&src, index).unwrap();
+        let mut read = |frame: usize| decoder.frame_rgba(frame, None).unwrap().rgba[0];
+        // In order, as an export reads them, then scrubbed back.
+        let played: Vec<u8> = (0..6).map(&mut read).collect();
+        assert_eq!(played, [2, 2, 3, 3, 3, 6]);
+        assert_eq!([read(4), read(0), read(3)], [3, 2, 3]);
+
+        let noted: Vec<PathBuf> = unreadable_frames()
+            .into_iter()
+            .filter(|(source, _)| *source == src.path)
+            .map(|(_, file)| file)
+            .collect();
+        let name = |n: u32| dir.path().join(format!("cap{n:04}.ppm"));
+        assert_eq!(noted, [name(1), name(4), name(5)]);
     }
 
     /// What Lumit exports, Lumit re-imports. The image-sequence export writes
