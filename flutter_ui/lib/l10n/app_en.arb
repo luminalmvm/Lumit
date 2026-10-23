@@ -11429,6 +11429,22 @@
   "@fxSwitch": {
     "description": "Node graph box name - shows one of its pictures, chosen by an index."
   },
+  "fxRepeatStart": "Repeat start",
+  "@fxRepeatStart": {
+    "description": "Node graph box name - marks where the boxes that run several times begin. Paired with Repeat end."
+  },
+  "fxRepeatEnd": "Repeat end",
+  "@fxRepeatEnd": {
+    "description": "Node graph box name - marks where the boxes that run several times end, and says how many times."
+  },
+  "fxTimes": "Times",
+  "@fxTimes": {
+    "description": "Effect controls - a control on Repeat end: how many times the boxes between Repeat start and Repeat end run."
+  },
+  "fxCopies": "Copies",
+  "@fxCopies": {
+    "description": "Effect controls - a Mode setting on Repeat end: every run starts from the same picture and all of them are laid over each other."
+  },
   "fxSplitChannels": "Split channels",
   "@fxSplitChannels": {
     "description": "Node graph box name - hands out its picture's red, green, blue and alpha as four greyscale pictures."

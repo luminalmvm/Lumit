@@ -1445,6 +1445,33 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     return true;
   }
 
+  // --- Repeats ------------------------------------------------------------
+
+  /// A frame round each Repeat start, its end and the boxes between them,
+  /// under everything else. Worked out from the boxes each build, as a
+  /// group's is, and it takes no pointer.
+  List<Widget> _repeatFrames(LumitTheme t) => [
+        for (final r in _graph?.repeats ?? const <BridgeCompRepeat>[])
+          if (graphGroupRect([
+            for (final id in [r.start, ...r.members, r.end])
+              if (_boxRects[compNodeKey(id)] case final rect?) rect,
+          ], head: 0)
+              case final rect?)
+            Positioned.fromRect(
+              rect: rect.inflate(graphGroupPad),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: t.accent.withValues(alpha: 0.04),
+                    border: Border.all(color: t.accent.withValues(alpha: 0.45)),
+                    borderRadius:
+                        BorderRadius.all(Radius.circular(t.tokens.cardRadius)),
+                  ),
+                ),
+              ),
+            ),
+      ];
+
   // --- Groups -------------------------------------------------------------
 
   @override
@@ -2194,6 +2221,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                         ..setEntry(1, 1, _zoom),
                       child: GraphBoxStack(
                         children: [
+                          ..._repeatFrames(t),
                           ...groupWashes(t, () => _claimed = true),
                           ...graphNotes(t, () => _claimed = true),
                           for (final box in layout.boxes)

@@ -22843,11 +22843,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCompGraph dco_decode_bridge_comp_graph(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeCompGraph(
       nodes: dco_decode_list_bridge_comp_node(arr[0]),
       wiring: dco_decode_bridge_comp_wiring(arr[1]),
+      repeats: dco_decode_list_bridge_comp_repeat(arr[2]),
     );
   }
 
@@ -22920,6 +22921,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       node: dco_decode_Uuid(arr[0]),
       x: dco_decode_f_64(arr[1]),
       y: dco_decode_f_64(arr[2]),
+    );
+  }
+
+  @protected
+  BridgeCompRepeat dco_decode_bridge_comp_repeat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return BridgeCompRepeat(
+      start: dco_decode_Uuid(arr[0]),
+      end: dco_decode_Uuid(arr[1]),
+      members: dco_decode_list_Uuid(arr[2]),
     );
   }
 
@@ -26986,6 +27000,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeCompRepeat> dco_decode_list_bridge_comp_repeat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_bridge_comp_repeat).toList();
+  }
+
+  @protected
   List<BridgeEffectInfo> dco_decode_list_bridge_effect_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_bridge_effect_info).toList();
@@ -29797,7 +29817,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_nodes = sse_decode_list_bridge_comp_node(deserializer);
     var var_wiring = sse_decode_bridge_comp_wiring(deserializer);
-    return BridgeCompGraph(nodes: var_nodes, wiring: var_wiring);
+    var var_repeats = sse_decode_list_bridge_comp_repeat(deserializer);
+    return BridgeCompGraph(
+        nodes: var_nodes, wiring: var_wiring, repeats: var_repeats);
   }
 
   @protected
@@ -29880,6 +29902,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
     return BridgeCompNodePosition(node: var_node, x: var_x, y: var_y);
+  }
+
+  @protected
+  BridgeCompRepeat sse_decode_bridge_comp_repeat(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_start = sse_decode_Uuid(deserializer);
+    var var_end = sse_decode_Uuid(deserializer);
+    var var_members = sse_decode_list_Uuid(deserializer);
+    return BridgeCompRepeat(
+        start: var_start, end: var_end, members: var_members);
   }
 
   @protected
@@ -34347,6 +34379,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeCompRepeat> sse_decode_list_bridge_comp_repeat(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeCompRepeat>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_comp_repeat(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<BridgeEffectInfo> sse_decode_list_bridge_effect_info(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -38019,6 +38064,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_bridge_comp_node(self.nodes, serializer);
     sse_encode_bridge_comp_wiring(self.wiring, serializer);
+    sse_encode_list_bridge_comp_repeat(self.repeats, serializer);
   }
 
   @protected
@@ -38076,6 +38122,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_Uuid(self.node, serializer);
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_comp_repeat(
+      BridgeCompRepeat self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_Uuid(self.start, serializer);
+    sse_encode_Uuid(self.end, serializer);
+    sse_encode_list_Uuid(self.members, serializer);
   }
 
   @protected
@@ -41444,6 +41499,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_bridge_comp_node_position(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_comp_repeat(
+      List<BridgeCompRepeat> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_comp_repeat(item, serializer);
     }
   }
 
