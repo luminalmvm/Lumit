@@ -893,6 +893,13 @@ impl FootageReference {
                 let probed =
                     Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
 
+                // A run with a file that would not read wears the badge too,
+                // though a neighbour is drawn in that file's place.
+                #[cfg(feature = "media")]
+                let probed = probed
+                    && !lumit_media::sequence::unreadable_frames()
+                        .iter()
+                        .any(|(source, _)| source.canonicalize().ok() == path.canonicalize().ok());
                 if probed {
                     Ok(LumitMediaStatus::Ready)
                 } else {
