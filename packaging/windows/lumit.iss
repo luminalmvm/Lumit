@@ -194,8 +194,13 @@ begin
         if not VarIsNull(Process.ExecutablePath) then
         begin
           Path := Process.ExecutablePath;
+          // A broker can exit on its own between the query and here, and
+          // WMI then says it can't find it. That's fine, it's gone.
           if Pos(Prefix, Uppercase(Path)) = 1 then
+          try
             Process.Terminate();
+          except
+          end;
         end;
       end;
       Sleep(500);
