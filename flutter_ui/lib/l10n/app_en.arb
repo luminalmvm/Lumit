@@ -1646,6 +1646,14 @@
   "@exportPreset": {
     "description": "Export dialogue: a saved set of encoder options."
   },
+  "exportQuitAsk": "Stop the export and quit?",
+  "@exportQuitAsk": {
+    "description": "Asked when Lumit is closed while an export is still running. Quitting stops the export."
+  },
+  "exportQuit": "Quit",
+  "@exportQuit": {
+    "description": "Button that quits Lumit and stops the running export."
+  },
   "exportWriteTo": "Write to",
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."

@@ -6,13 +6,16 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../state/background.dart' show showWindow;
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'recovery_dialog_frb.dart';
+import 'settings_account.dart' show askBefore;
 import 'tour_frb.dart' show onlyTourDemo;
 
 /// Narrow, like the recovery dialogue: one sentence and three short answers.
@@ -25,6 +28,14 @@ void installUnsavedQuestion(BuildContext context) {
   final ui = context.read<LumitUiState>();
   app.askUnsaved = () async =>
       onlyTourDemo(app) || await askUnsavedChangesFrb(context, app, ui);
+  // Quitting stops an export, so closing in the middle of one asks first.
+  // Quit in the tray can come with no window up, so it is shown first.
+  app.askQuitExporting = () async {
+    if (exportPoll() is! BridgeExportState_Running) return true;
+    if (ui.workspace.keepRunning) await showWindow();
+    if (!context.mounted) return true;
+    return askBefore(context, l10n.exportQuitAsk, l10n.exportQuit);
+  };
   // The same window is where a crash's edits are offered back.
   app.offerRecovery = (path) => showRecoveryDialogFrb(
       context: context, state: app, projectPath: path, crashed: true);

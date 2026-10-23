@@ -1788,9 +1788,19 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     // **Somebody else's solo does not reach the sibling**. Detaching
     // clones the row, solo and all; a row that was not being heard before the
     // detach must not start being heard because of it, or the command changes
-    // the mix it promises to leave alone.
-    let mask = outer.add_solid_layer(None).expect("another row");
-    mask.set_switch(crate::api::layer::BridgeLayerSwitch::Solo, true)
+    // the mix it promises to leave alone. The solo is on another sound, since
+    // a soloed picture leaves every sound playing.
+    outer
+        .add_footage_layer(&footage, false, None, None)
+        .expect("another sound");
+    let other = outer
+        .get_layers()
+        .expect("layers")
+        .into_iter()
+        .find(|l| l.layer_id != precomp.layer_id)
+        .expect("the other sound");
+    other
+        .set_switch(crate::api::layer::BridgeLayerSwitch::Solo, true)
         .expect("soloed");
     let under_a_solo = audible_jobs(&project, &outer);
     let sound = precomp.detach_audio().expect("detached");
@@ -5443,8 +5453,8 @@ fn the_audio_transport_answers_without_a_device() {
 /// on another row and through its own mute. The owner soloed a precomp, ran
 /// detection on the music, and was told the composition was silent.
 ///
-/// A soloed picture row over a click train is the smallest scene that tells the
-/// two apart: the mix has nothing left in it and says so, while the track asked
+/// A soloed silent track over a click train is the smallest scene that tells
+/// the two apart: the mix finds no beat in what is left, while the track asked
 /// for by name finds its clicks.
 #[test]
 fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
@@ -5469,12 +5479,6 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
         return;
     }
 
-    // The everyday way to reach the bug: a picture row is soloed, which takes
-    // the music out of the mix.
-    let solid = comp.add_solid_layer(None).expect("layer");
-    solid
-        .set_switch(BridgeLayerSwitch::Solo, true)
-        .expect("soloed");
     let listening_to = |layer: Option<&crate::api::layer::LayerReference>| BridgeBeatOptions {
         source_layer: layer.map(|l| l.layer_id.to_string()).unwrap_or_default(),
         sensitivity_percent: 80,
@@ -5486,12 +5490,42 @@ fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
         phase_ms: 0.0,
     };
 
+    // A soloed picture leaves the music playing, as in After Effects.
+    let solid = comp.add_solid_layer(None).expect("layer");
+    solid
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
     assert!(
-        matches!(
-            comp.detect_beats(listening_to(None), None),
-            Err(BridgeError::NoAudio)
-        ),
-        "the comp mix hears only what is audible, and the solo silenced it"
+        comp.detect_beats(listening_to(None), None)
+            .expect("the music is heard")
+            .placed
+            > 0,
+        "a solo on a picture does not silence a sound"
+    );
+
+    // A soloed sound takes the music out of the mix.
+    let hush = dir.path().join("hush.wav");
+    std::fs::write(&hush, wav(8_000, &[0i16; 24_000])).expect("wrote the fixture");
+    let hush = project
+        .import_footage(hush.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_footage_layer(&hush, false, None, None)
+        .expect("placed");
+    let silent_row = comp
+        .get_layers()
+        .expect("layers")
+        .into_iter()
+        .find(|l| l.layer_id != music_row.layer_id && l.layer_id != solid.layer_id)
+        .expect("the silent track");
+    silent_row
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    assert_eq!(
+        comp.detect_beats(listening_to(None), None)
+            .expect("the silent track is heard")
+            .placed,
+        0,
+        "the comp mix hears only what is audible, and the solo silenced the music"
     );
     assert!(
         comp.detect_beats(listening_to(Some(&music_row)), None)

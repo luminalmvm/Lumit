@@ -2619,6 +2619,9 @@ class LumitUiState extends ChangeNotifier {
       },
       onExitRequested: () async {
         rememberSession();
+        if (!(await _app.askQuitExporting?.call() ?? true)) {
+          return AppExitResponse.cancel;
+        }
         // The window stays open while the question is up. The platform waits
         // for this answer, and closes only when it is told to exit. Quit in
         // the tray can come with no window up, so it is shown first.
