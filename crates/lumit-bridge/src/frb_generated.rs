@@ -24801,6 +24801,9 @@ impl SseDecode for crate::api::effect::BridgeEnabledCond {
             4 => {
                 return crate::api::effect::BridgeEnabledCond::LayerUnset;
             }
+            5 => {
+                return crate::api::effect::BridgeEnabledCond::Nought;
+            }
             _ => {
                 unimplemented!("");
             }
@@ -35247,6 +35250,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEnabledCond {
             }
             crate::api::effect::BridgeEnabledCond::LayerSet => [3.into_dart()].into_dart(),
             crate::api::effect::BridgeEnabledCond::LayerUnset => [4.into_dart()].into_dart(),
+            crate::api::effect::BridgeEnabledCond::Nought => [5.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -42821,6 +42825,9 @@ impl SseEncode for crate::api::effect::BridgeEnabledCond {
             }
             crate::api::effect::BridgeEnabledCond::LayerUnset => {
                 <i32>::sse_encode(4, serializer);
+            }
+            crate::api::effect::BridgeEnabledCond::Nought => {
+                <i32>::sse_encode(5, serializer);
             }
             _ => {
                 unimplemented!("");

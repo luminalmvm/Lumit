@@ -1,10 +1,12 @@
-//! Particulate with a Collide with layer: particles worked out frame by frame.
+//! Particulate with a Collide with layer, a flock or sparks: particles worked
+//! out frame by frame.
 //!
 //! # In plain terms
 //!
 //! The closed forms in [`super`] put a particle where it is by arithmetic, and
-//! that cannot know about a wall. Once Collide with names a layer, Particulate
-//! walks instead: each frame starts from the particles of the frame before,
+//! that cannot know about a wall, a neighbour or a death. Once Collide with
+//! names a layer, or the particles flock or throw sparks, Particulate walks
+//! instead: each frame starts from the particles of the frame before,
 //! moves them on by one frame of the same forces, and then looks at what they
 //! hit on the way. A particle remembers where it was born and how it has been
 //! knocked about, so it can bounce, slide, stick or die.
@@ -28,13 +30,13 @@ use rayon::prelude::*;
 
 use super::{
     attr, birth_point, burst_base, draw, integrate, jitter, launch, look_of, outline_polyline,
-    turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream, BURST_MAX,
+    turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream, BURST_ID, BURST_MAX,
 };
 use crate::camera::Place;
 use crate::expression::ExpressionContext;
 use crate::fx::effects::particulate::Particulate;
 use crate::mask::MaskPolyline;
-use crate::model::{Composition, Document, EffectInstance, Layer, LayerKind};
+use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, LayerKind};
 
 /// The most particles a walk carries, whatever Max particles says. Each is
 /// carried from frame to frame and kept with the frame, so this is lower than
@@ -61,6 +63,26 @@ const PARALLEL_FROM: usize = 4096;
 /// How far off a surface a particle is left after hitting it, px, so its
 /// next move does not start on the surface.
 const NUDGE: f32 = 1e-3;
+
+/// The top bit a spark's index carries, above the bursts' [`BURST_ID`].
+/// Below it sit its parent's index, with the burst bit brought down, and its
+/// place among the parent's sparks, so a spark is the same on every walk.
+pub const SPARK_ID: u64 = 1 << 63;
+
+/// How many bits of a spark's index count its place.
+const SPARK_SHIFT: u32 = 6;
+
+/// The most sparks one death throws out.
+const SPARKS_MAX: u32 = 50;
+
+/// Where a parent's burst bit sits in a spark's index, before the shift.
+const SPARK_BURST: u64 = 1 << 56;
+
+/// How quickly a flock at full strength steers, per second.
+const STEER: f32 = 4.0;
+
+/// The most others one particle steers by. Past it, an even spread of them.
+const NEIGHBOURS: usize = 64;
 
 /// A placement that moves nothing: a collider already in this layer's pixels.
 pub const SAME: Place = Place {
@@ -131,14 +153,19 @@ pub struct Inputs {
     params: PointsParams,
     /// The polyline a Mask path emitter walks, px@comp.
     path: MaskPolyline,
-    /// What the particles hit.
-    collider: Collider,
+    /// What the particles hit, if anything.
+    collider: Option<Collider>,
 }
 
 impl Inputs {
     /// `frame` is the layer's picture size, px@comp, for the Edge row.
     #[must_use]
-    pub fn new(rows: Particulate, frame: [f32; 2], path: MaskPolyline, collider: Collider) -> Self {
+    pub fn new(
+        rows: Particulate,
+        frame: [f32; 2],
+        path: MaskPolyline,
+        collider: Option<Collider>,
+    ) -> Self {
         let mut params = rows.points().framed(frame[0], frame[1]);
         params.cap = params.cap.min(STEPPED_CAP);
         Inputs {
@@ -294,7 +321,7 @@ impl Collider {
             let at: [f32; 3] = std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s);
             let off: [f32; 3] = std::array::from_fn(|k| at[k] + n[k] * NUDGE);
             let keep = match contact {
-                Contact::Kill => return Hit::Gone,
+                Contact::Kill => return Hit::Gone(off),
                 Contact::Stick => return Hit::Held(off),
                 Contact::Bounce => keep,
                 Contact::Slide => 0.0,
@@ -405,8 +432,8 @@ enum Hit {
     Clear([f32; 3], [f32; 3]),
     /// It stuck here.
     Held([f32; 3]),
-    /// It died.
-    Gone,
+    /// It died here.
+    Gone([f32; 3]),
 }
 
 /// The edges by where they are, so a particle only looks at the few near it.
@@ -518,24 +545,24 @@ impl Grid {
 /// Everything a walk reads, as one name: its kept states are found by it.
 ///
 /// `layer` is the layer Particulate is on and `target` the one it collides
-/// with. Their tracks, masks, shapes, wires and parents are read whole, so an
-/// edit at any time renames every frame. What an expression or a tap reads
-/// from somewhere else is not, as the frame keys already treat it.
+/// with, if any. Their tracks, masks, shapes, wires and parents are read
+/// whole, so an edit at any time renames every frame. What an expression or a
+/// tap reads from somewhere else is not, as the frame keys already treat it.
 #[must_use]
 pub fn definition(
     doc: &Document,
     comp: &Composition,
     layer: &Layer,
     inst: &EffectInstance,
-    target: &Layer,
+    target: Option<&Layer>,
 ) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     let _ = serde_json::to_writer(&mut h, &inst.params);
     let _ = serde_json::to_writer(&mut h, &layer.graph);
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
-    let _ = serde_json::to_writer(&mut h, target);
-    for one in [layer, target] {
+    let _ = serde_json::to_writer(&mut h, &target);
+    for one in std::iter::once(layer).chain(target) {
         // A solid's size is the frame Edge acts at, and the rectangle a
         // layer with no shapes is hit at.
         if let LayerKind::Solid { def } = one.kind {
@@ -573,6 +600,43 @@ pub fn definition(
 pub fn target<'a>(comp: &'a Composition, inst: &EffectInstance) -> Option<&'a Layer> {
     let id = inst.layer_ref("collide_with")?;
     comp.layers.iter().find(|l| l.id == id)
+}
+
+/// The rows beside Collide with that walk once above nought.
+const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
+
+/// Whether Particulate `inst` walks in `comp`: Collide with names a layer
+/// there, or a flock or sparks row is above nought. A keyed, expression or
+/// wired row counts as above nought, as it may be at some time.
+#[must_use]
+pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
+    use crate::anim::Animation;
+    use crate::graph::{InputRef, NodeRef};
+    if inst.effect.match_name != "particulate" {
+        return false;
+    }
+    let wired = |id: &str| {
+        let owner = comp
+            .layers
+            .iter()
+            .find(|l| l.effects.iter().any(|e| e.id == inst.id));
+        owner.is_some_and(|l| {
+            l.graph.edges.iter().any(|e| {
+                matches!(&e.to, InputRef::Param { node: NodeRef::Effect(n), port }
+                    if *n == inst.id && port == id)
+            })
+        })
+    };
+    target(comp, inst).is_some()
+        || WALK_ROWS.iter().any(|id| {
+            let on = match inst.param(id) {
+                Some(EffectValue::Float(track)) => {
+                    !matches!(track.animation, Animation::Static(v) if v <= 0.0)
+                }
+                _ => false,
+            };
+            on || wired(id)
+        })
 }
 
 /// The particles at layer time `t`, walked from the layer's in point a frame
@@ -644,15 +708,22 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
     let whole = h >= dt;
     let p = &now.params;
     let hf = h as f32;
-    let advance = |mut q: Particle| {
+    let steer = flock(&s.particles, &now.rows);
+    // A particle that dies hands back its id and where, for its sparks.
+    let advance = |(i, mut q): (usize, Particle)| -> Result<Particle, (u64, [f32; 3])> {
         let age = q.age + hf;
         if age >= q.life {
-            return None;
+            return Err((q.id, q.pos));
         }
         q.age = age;
         if let Some(local) = q.held {
-            q.pos = narrow(then.collider.to_layer.point(wide(local)));
-            return Some(q);
+            if let Some(c) = &then.collider {
+                q.pos = narrow(c.to_layer.point(wide(local)));
+            }
+            return Ok(q);
+        }
+        if let Some(a) = steer.as_ref().and_then(|all| all.get(i)) {
+            q.vel = std::array::from_fn(|k| q.vel[k] + a[k] * hf);
         }
         let base = [
             q.pos[0] - q.drift[0],
@@ -664,15 +735,23 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
         let drift = turbulence([q.born[0], q.born[1], 0.0], phase, &p.forces, p.seed, age);
         let to = [next[0] + drift[0], next[1] + drift[1], next[2] + drift[2]];
         q.drift = drift;
-        settle(q, q.pos, to, vel, then)
+        settle(q, q.pos, to, vel, then).map_err(|at| (q.id, at))
     };
     let all = std::mem::take(&mut s.particles);
     // A few hundred particles are quicker on this thread than handed round.
-    s.particles = if all.len() < PARALLEL_FROM {
-        all.into_iter().filter_map(advance).collect()
+    let moved: Vec<_> = if all.len() < PARALLEL_FROM {
+        all.into_iter().enumerate().map(advance).collect()
     } else {
-        all.into_par_iter().filter_map(advance).collect()
+        all.into_par_iter().enumerate().map(advance).collect()
     };
+    let mut deaths = Vec::new();
+    s.particles.reserve(moved.len());
+    for m in moved {
+        match m {
+            Ok(q) => s.particles.push(q),
+            Err(death) => deaths.push(death),
+        }
+    }
 
     // The steady flow's births in this frame, spread through it as the
     // schedule spreads them, each moved on from its own moment.
@@ -695,17 +774,20 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
         let Some((q, start)) = born(p, walk, s.births + u64::from(j), (h - off) as f32) else {
             continue;
         };
-        if let Some(q) = settle(q, start, q.pos, q.vel, then) {
-            s.particles.push(q);
+        match settle(q, start, q.pos, q.vel, then) {
+            Ok(q) => s.particles.push(q),
+            Err(at) => deaths.push((q.id, at)),
         }
     }
+    sparks(s, &mut deaths, then);
     if whole {
         s.carry = carry - f64::from(n);
         s.births += u64::from(n);
         s.frame += 1;
         bursts(s, then);
     }
-    // Bursts number above the steady flow, so births can land out of order.
+    // Bursts and sparks number above the steady flow, so births can land out
+    // of order.
     s.particles.sort_unstable_by_key(|q| q.id);
     let cap = then.params.cap as usize;
     if s.particles.len() > cap {
@@ -756,6 +838,153 @@ fn bursts(s: &mut State, now: &Inputs) {
     }
 }
 
+/// Spark `j` of the particle `parent`.
+fn spark_id(parent: u64, j: u32) -> u64 {
+    let burst = if parent & BURST_ID != 0 {
+        SPARK_BURST
+    } else {
+        0
+    };
+    SPARK_ID | ((burst | (parent & (SPARK_BURST - 1))) << SPARK_SHIFT) | u64::from(j)
+}
+
+/// The particle spark `id` came from.
+fn parent_of(id: u64) -> u64 {
+    let field = (id & !SPARK_ID) >> SPARK_SHIFT;
+    let burst = if field & SPARK_BURST != 0 {
+        BURST_ID
+    } else {
+        0
+    };
+    burst | (field & (SPARK_BURST - 1))
+}
+
+/// The sparks of the particles in `deaths` (id and where), read at the end
+/// of the step. Only the newest Max particles of them could survive the cap.
+fn sparks(s: &mut State, deaths: &mut [(u64, [f32; 3])], now: &Inputs) {
+    let rows = &now.rows;
+    let n = if rows.sparks.is_finite() {
+        rows.sparks.round().clamp(0.0, SPARKS_MAX as f32) as u32
+    } else {
+        0
+    };
+    let life = rows.spark_life;
+    if n == 0 || life.is_nan() || life <= 0.0 {
+        return;
+    }
+    let speed = if rows.spark_speed.is_finite() {
+        rows.spark_speed.max(0.0)
+    } else {
+        0.0
+    };
+    let p = &now.params;
+    // Newest first, as a spark's index follows its parent's.
+    deaths.sort_unstable_by_key(|d| std::cmp::Reverse(d.0));
+    let mut room = p.cap as usize;
+    for &(parent, at) in deaths.iter().filter(|d| d.0 & SPARK_ID == 0) {
+        for j in (0..n).rev() {
+            if room == 0 {
+                return;
+            }
+            room -= 1;
+            let id = spark_id(parent, j);
+            // Evenly over a sphere.
+            let z = 2.0 * draw(p.seed, id, attr::DIRECTION_Z) - 1.0;
+            let (sa, ca) = (draw(p.seed, id, attr::DIRECTION) * std::f32::consts::TAU).sin_cos();
+            let r = (1.0 - z * z).max(0.0).sqrt();
+            let phase = draw(p.seed, id, attr::TURB_PHASE) * 1000.0;
+            s.particles.push(Particle {
+                id,
+                born: [at[0], at[1]],
+                pos: at,
+                vel: [speed * r * ca, speed * r * sa, speed * z],
+                drift: turbulence([at[0], at[1], 0.0], phase, &p.forces, p.seed, 0.0),
+                age: 0.0,
+                life,
+                held: None,
+            });
+        }
+    }
+}
+
+/// How each particle steers by its neighbours, px/s², read from where they
+/// all are before any of them moves, so the order of work changes nothing.
+/// `None` with the three strengths at nought.
+fn flock(particles: &[Particle], rows: &Particulate) -> Option<Vec<[f32; 3]>> {
+    let k = |v: f32| {
+        if v.is_finite() {
+            (v / 100.0).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    };
+    let (apart, along, together) = (k(rows.separation), k(rows.alignment), k(rows.cohesion));
+    let r = rows.flock_radius;
+    if apart + along + together <= 0.0 || !(r > 0.0 && r.is_finite()) {
+        return None;
+    }
+    // The free particles by the cell they are in, a radius on a side.
+    let cell = |p: [f32; 3]| p.map(|v| (v / r).floor() as i64);
+    let mut cells: Vec<([i64; 3], u32)> = particles
+        .iter()
+        .enumerate()
+        .filter(|(_, q)| q.held.is_none())
+        .map(|(i, q)| (cell(q.pos), i as u32))
+        .collect();
+    cells.sort_unstable();
+    let steer = |(i, q): (usize, &Particle)| -> [f32; 3] {
+        if q.held.is_some() {
+            return [0.0; 3];
+        }
+        let c = cell(q.pos);
+        let mut near = [(0, 0); 27];
+        let mut total = 0;
+        for (slot, ends) in near.iter_mut().enumerate() {
+            let d = [slot % 3, slot / 3 % 3, slot / 9].map(|v| v as i64 - 1);
+            let key: [i64; 3] = std::array::from_fn(|a| c[a].saturating_add(d[a]));
+            let from = cells.partition_point(|e| e.0 < key);
+            let to = from + cells[from..].partition_point(|e| e.0 == key);
+            *ends = (from, to);
+            total += to - from;
+        }
+        let every = total.div_ceil(NEIGHBOURS).max(1);
+        let (mut push, mut vel, mut mid, mut n) = ([0.0f32; 3], [0.0f32; 3], [0.0f32; 3], 0.0f32);
+        for at in near.iter().flat_map(|&(a, b)| a..b).step_by(every) {
+            let j = cells[at].1 as usize;
+            let o = &particles[j];
+            let d: [f32; 3] = std::array::from_fn(|a| q.pos[a] - o.pos[a]);
+            let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if j == i || len.is_nan() || len >= r {
+                continue;
+            }
+            if len > 0.0 {
+                let w = (1.0 - len / r) / len;
+                push = std::array::from_fn(|a| push[a] + d[a] * w);
+            }
+            vel = std::array::from_fn(|a| vel[a] + o.vel[a]);
+            mid = std::array::from_fn(|a| mid[a] + o.pos[a]);
+            n += 1.0;
+        }
+        if n == 0.0 {
+            return [0.0; 3];
+        }
+        // Away from close ones, towards their speed and towards their middle.
+        // A spread of the others stands for all of them, so the push counts
+        // each one it looked at for those it passed over.
+        let away = every as f32 * apart * STEER * STEER * r;
+        std::array::from_fn(|a| {
+            away * push[a]
+                + along * STEER * (vel[a] / n - q.vel[a])
+                + together * STEER * STEER * (mid[a] / n - q.pos[a])
+        })
+    };
+    Some(if particles.len() < PARALLEL_FROM {
+        particles.iter().enumerate().map(steer).collect()
+    } else {
+        particles.par_iter().enumerate().map(steer).collect()
+    })
+}
+
 /// Particle `b`, born under `p` and moved on `age` seconds by the closed
 /// form, and where it was drawn at birth. `None` when it has already died or
 /// there is nowhere to be born.
@@ -794,47 +1023,50 @@ fn born(p: &PointsParams, walk: &MaskPolyline, b: u64, age: f32) -> Option<(Part
 }
 
 /// `q` moved from `from` to `to` at `vel`, after what it hit on the way and
-/// the frame's edge. `None` when it died.
+/// the frame's edge. Where it died when it did.
 fn settle(
     mut q: Particle,
     from: [f32; 3],
     to: [f32; 3],
     vel: [f32; 3],
     then: &Inputs,
-) -> Option<Particle> {
+) -> Result<Particle, [f32; 3]> {
     let rows = &then.rows;
     let contact = Contact::from_code(rows.on_contact);
     let keep = (rows.bounciness / 100.0).clamp(0.0, 1.0);
     let slip = 1.0 - (rows.friction / 100.0).clamp(0.0, 1.0);
-    let c = &then.collider;
-    match c.hit(contact, keep, slip, from, to, vel) {
-        Hit::Gone => return None,
-        Hit::Held(at) => {
-            q.pos = at;
-            q.vel = [0.0; 3];
-            q.held = Some(narrow(c.from_layer.point(wide(at))));
-        }
-        Hit::Clear(at, v) => {
-            q.pos = at;
-            q.vel = v;
+    (q.pos, q.vel) = (to, vel);
+    if let Some(c) = &then.collider {
+        match c.hit(contact, keep, slip, from, to, vel) {
+            Hit::Gone(at) => return Err(at),
+            Hit::Held(at) => {
+                q.pos = at;
+                q.vel = [0.0; 3];
+                q.held = Some(narrow(c.from_layer.point(wide(at))));
+            }
+            Hit::Clear(at, v) => {
+                q.pos = at;
+                q.vel = v;
+            }
         }
     }
     let p = &then.params;
     if let Some(bx) = p.edge_box() {
         let out = q.pos[0] < bx[0] || q.pos[0] > bx[2] || q.pos[1] < bx[1] || q.pos[1] > bx[3];
         match p.edge {
-            Edge::Kill if out => return None,
+            Edge::Kill if out => return Err(q.pos),
             Edge::Wrap => q.pos = wrapped(bx, q.pos),
             _ => {}
         }
     }
-    Some(q)
+    Ok(q)
 }
 
 /// The stream `s` draws, looked at with `now`'s rows.
 fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
     let p = &now.params;
     let eps = (dt as f32 * 0.5).max(1e-6);
+    let small = (now.rows.spark_size / 100.0).max(0.0);
     let mut out = PointsStream::default();
     for q in &s.particles {
         let speed = if q.held.is_some() {
@@ -851,12 +1083,19 @@ fn stream_of(s: &State, now: &Inputs, dt: f64) -> PointsStream {
                 q.vel[2] + (next[2] - prev[2]) / (2.0 * eps),
             ]
         };
-        let (size, colour, rotation) = look_of(p, q.id, q.age, q.life, speed);
+        // A spark looks like the particle it came from, at its own age, and
+        // smaller.
+        let (look, scale) = if q.id & SPARK_ID != 0 {
+            (parent_of(q.id), small)
+        } else {
+            (q.id, 1.0)
+        };
+        let (size, colour, rotation) = look_of(p, look, q.age, q.life, speed);
         out.position.push(q.pos);
         out.speed.push(speed);
         out.age.push(q.age);
         out.life.push(q.life);
-        out.size.push(size);
+        out.size.push(size * scale);
         out.rotation.push(rotation);
         out.colour.push(colour);
         out.id.push(q.id);

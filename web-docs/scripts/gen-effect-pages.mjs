@@ -263,6 +263,7 @@ function panelNotes(effect) {
     else if (e.cond === "choice_is") when = `${onLabel} is set to ${on?.options?.[e.value] ?? e.value}`;
     else if (e.cond === "choice_is_not") when = `${onLabel} is anything but ${on?.options?.[e.value] ?? e.value}`;
     else if (e.cond === "layer_unset") when = `${onLabel} names no layer`;
+    else if (e.cond === "nought") when = `${onLabel} is 0`;
     else when = `${onLabel} names a layer`;
     out.push(`- **${label(e.param)}** is editable while ${when}.`);
   }

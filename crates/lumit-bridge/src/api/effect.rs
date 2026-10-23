@@ -1687,6 +1687,8 @@ pub enum BridgeEnabledCond {
     LayerSet,
     /// Editable while the named layer reference names no layer.
     LayerUnset,
+    /// Editable while the named number is a still nought.
+    Nought,
 }
 
 /// Every greying rule `effect` declares (empty for an effect whose controls are
@@ -1716,6 +1718,7 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
                 EnabledCond::ChoiceIsNot(i) => BridgeEnabledCond::ChoiceIsNot(i),
                 EnabledCond::LayerSet => BridgeEnabledCond::LayerSet,
                 EnabledCond::LayerUnset => BridgeEnabledCond::LayerUnset,
+                EnabledCond::Nought => BridgeEnabledCond::Nought,
             },
         })
         .collect()

@@ -663,6 +663,9 @@ pub enum EnabledCond {
     LayerSet,
     /// Editable while the named [`ParamKind::Layer`] names no layer.
     LayerUnset,
+    /// Editable while the named number is a still nought. A keyed or an
+    /// expression track greys the dependent row, as any other number does.
+    Nought,
 }
 
 /// The Add-effect menu's grouping: every schema declares one.

@@ -2562,6 +2562,8 @@ Set<String> disabledParams(
         BridgeEffectValue_Layer(field0: final v)
       ) =>
         v == null,
+      (BridgeEnabledCond_Nought(), BridgeEffectValue_Float(field0: final v)) =>
+        v is BridgeScalar_Static && v.field0 == 0,
       // A rule pointed at the wrong kind of parameter is a schema mistake the
       // Rust-side test fails the build for; here it leaves the row live rather
       // than locking one the owner can never reach.

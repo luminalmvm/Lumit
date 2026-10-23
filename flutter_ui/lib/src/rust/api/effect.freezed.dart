@@ -1248,6 +1248,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function(BridgeEnabledCond_ChoiceIsNot value)? choiceIsNot,
     TResult Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
+    TResult Function(BridgeEnabledCond_Nought value)? nought,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1262,6 +1263,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought(_that);
       case _:
         return orElse();
     }
@@ -1287,6 +1290,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function(BridgeEnabledCond_ChoiceIsNot value) choiceIsNot,
     required TResult Function(BridgeEnabledCond_LayerSet value) layerSet,
     required TResult Function(BridgeEnabledCond_LayerUnset value) layerUnset,
+    required TResult Function(BridgeEnabledCond_Nought value) nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1300,6 +1304,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset():
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought():
+        return nought(_that);
     }
   }
 
@@ -1322,6 +1328,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function(BridgeEnabledCond_ChoiceIsNot value)? choiceIsNot,
     TResult? Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult? Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
+    TResult? Function(BridgeEnabledCond_Nought value)? nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1335,6 +1342,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought(_that);
       case _:
         return null;
     }
@@ -1359,6 +1368,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function(int field0)? choiceIsNot,
     TResult Function()? layerSet,
     TResult Function()? layerUnset,
+    TResult Function()? nought,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1373,6 +1383,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset();
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought();
       case _:
         return orElse();
     }
@@ -1398,6 +1410,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function(int field0) choiceIsNot,
     required TResult Function() layerSet,
     required TResult Function() layerUnset,
+    required TResult Function() nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1411,6 +1424,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset():
         return layerUnset();
+      case BridgeEnabledCond_Nought():
+        return nought();
     }
   }
 
@@ -1433,6 +1448,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function(int field0)? choiceIsNot,
     TResult? Function()? layerSet,
     TResult? Function()? layerUnset,
+    TResult? Function()? nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1446,6 +1462,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset();
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought();
       case _:
         return null;
     }
@@ -1688,6 +1706,26 @@ class BridgeEnabledCond_LayerUnset extends BridgeEnabledCond {
   @override
   String toString() {
     return 'BridgeEnabledCond.layerUnset()';
+  }
+}
+
+/// @nodoc
+
+class BridgeEnabledCond_Nought extends BridgeEnabledCond {
+  const BridgeEnabledCond_Nought() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeEnabledCond_Nought);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeEnabledCond.nought()';
   }
 }
 

@@ -10660,6 +10660,90 @@
           "hard_max": 100.0
         },
         {
+          "id": "separation",
+          "label": "Separation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "alignment",
+          "label": "Alignment",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "cohesion",
+          "label": "Cohesion",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "flock_radius",
+          "label": "Flock radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "sparks",
+          "label": "Sparks",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 50.0
+        },
+        {
+          "id": "spark_speed",
+          "label": "Spark speed",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "spark_life",
+          "label": "Spark life",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.5,
+          "slider_min": 0.1,
+          "slider_max": 5.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "spark_size",
+          "label": "Spark size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "mode",
           "label": "Mode",
           "kind": "choice",
@@ -10928,6 +11012,26 @@
           "collapsed": false
         },
         {
+          "label": "Flock",
+          "params": [
+            "separation",
+            "alignment",
+            "cohesion",
+            "flock_radius"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Sparks",
+          "params": [
+            "sparks",
+            "spark_speed",
+            "spark_life",
+            "spark_size"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Render",
           "params": [
             "mode",
@@ -10988,6 +11092,66 @@
           "on": "path_from",
           "cond": "choice_is_not",
           "value": 1
+        },
+        {
+          "param": "particle_blend",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "sparks",
+          "cond": "nought"
         },
         {
           "param": "particle_blend",
