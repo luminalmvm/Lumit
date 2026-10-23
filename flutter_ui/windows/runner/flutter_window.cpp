@@ -6,6 +6,7 @@
 #include <shlobj.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -19,8 +20,12 @@
 namespace {
 
 // Put on the window while Lumit is kept running in the background, which is
-// what a second start looks for (ForwardToBackgroundLumit).
+// what a second start looks for (ForwardToOpenLumit).
 constexpr wchar_t kKeepRunningProp[] = L"LumitKeepRunning";
+
+// Put on every Lumit's window. A start asked to install an extension package
+// looks for this one, so the package goes to the Lumit already open.
+constexpr wchar_t kOpenProp[] = L"LumitOpen";
 
 // What the tray icon sends the window when it is clicked.
 constexpr UINT kTrayMessage = WM_APP + 1;
@@ -33,6 +38,17 @@ std::wstring ExePath() {
   std::wstring path(32768, L'\0');
   path.resize(::GetModuleFileNameW(nullptr, path.data(),
                                    static_cast<DWORD>(path.size())));
+  return path;
+}
+
+// The file |process| was started from, as Windows keeps it. A subst drive
+// reads as the folder behind it, so two starts from one file always agree.
+std::wstring ProcessPath(HANDLE process) {
+  std::wstring path(32768, L'\0');
+  DWORD size = static_cast<DWORD>(path.size());
+  const bool read =
+      ::QueryFullProcessImageNameW(process, 0, path.data(), &size);
+  path.resize(read ? size : 0);
   return path;
 }
 
@@ -161,18 +177,28 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 }  // namespace
 
-bool ForwardToBackgroundLumit() {
+bool ForwardToOpenLumit() {
+  const std::vector<std::string> arguments = GetCommandLineArguments();
+  // An extension package goes to any Lumit that is open. Anything else only
+  // to one kept running in the background.
+  const bool package = std::any_of(
+      arguments.begin(), arguments.end(), [](const std::string& argument) {
+        return argument.size() > 4 &&
+               _stricmp(argument.c_str() + argument.size() - 4, ".lfx") == 0;
+      });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
   // is left alone.
   struct Search {
     std::wstring exe;
+    const wchar_t* mark;
     HWND found;
-  } search{ExePath(), nullptr};
+  } search{ProcessPath(::GetCurrentProcess()),
+           package ? kOpenProp : kKeepRunningProp, nullptr};
   ::EnumWindows(
       [](HWND hwnd, LPARAM lparam) -> BOOL {
         auto* search = reinterpret_cast<Search*>(lparam);
-        if (!::GetPropW(hwnd, kKeepRunningProp)) {
+        if (!::GetPropW(hwnd, search->mark)) {
           return TRUE;
         }
         DWORD pid = 0;
@@ -182,12 +208,8 @@ bool ForwardToBackgroundLumit() {
         if (!process) {
           return TRUE;
         }
-        std::wstring path(32768, L'\0');
-        DWORD size = static_cast<DWORD>(path.size());
-        const bool read =
-            ::QueryFullProcessImageNameW(process, 0, path.data(), &size);
+        const std::wstring path = ProcessPath(process);
         ::CloseHandle(process);
-        path.resize(read ? size : 0);
         if (_wcsicmp(path.c_str(), search->exe.c_str()) != 0) {
           return TRUE;
         }
@@ -200,7 +222,7 @@ bool ForwardToBackgroundLumit() {
   }
   // The arguments one after another, each ended by a nought.
   std::string asked;
-  for (const std::string& argument : GetCommandLineArguments()) {
+  for (const std::string& argument : arguments) {
     asked += argument;
     asked += '\0';
   }
@@ -227,6 +249,7 @@ bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
     return false;
   }
+  ::SetPropW(GetHandle(), kOpenProp, reinterpret_cast<HANDLE>(1));
 
   RECT frame = GetClientArea();
 
@@ -514,7 +537,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       }
       return 0;
     case WM_COPYDATA: {
-      // A second start's arguments (ForwardToBackgroundLumit).
+      // A second start's arguments (ForwardToOpenLumit).
       const auto* copy = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
       if (copy->dwData != kOpenAskedCopy) {
         break;

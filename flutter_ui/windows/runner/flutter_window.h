@@ -77,8 +77,9 @@ class FlutterWindow : public Win32Window {
 };
 
 // Hand this start's arguments to a Lumit from the same folder that is kept
-// running in the background, and bring it forward. True when one took them,
-// and this start has nothing more to do.
-bool ForwardToBackgroundLumit();
+// running in the background, or that is open at all when they name an
+// extension package, and bring it forward. True when one took them, and this
+// start has nothing more to do.
+bool ForwardToOpenLumit();
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
