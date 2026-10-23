@@ -210,7 +210,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "item.list",
-        summary: "Every item in the project panel: comps, footage, folders and solids, with the folder each is in",
+        summary: "Every item in the project panel: comps, footage, folders and solids, with the folder each is in, and the size, rate and length of footage and solids",
         schema: none!(),
     },
     Command {
@@ -1008,7 +1008,7 @@ fn folder_of(doc: &Document, id: Uuid) -> Option<Uuid> {
     })
 }
 
-fn item_json(doc: &Document, item: &ProjectItem) -> Value {
+fn item_json(host: &dyn Host, doc: &Document, item: &ProjectItem) -> Value {
     let kind = match item {
         ProjectItem::Footage(_) => "footage",
         ProjectItem::Folder(_) => "folder",
@@ -1030,13 +1030,29 @@ fn item_json(doc: &Document, item: &ProjectItem) -> Value {
         answer["sequence"] = json!(f.sequence.is_some());
         answer["frame_rate"] = json!(rate.map(|r| json!({ "num": r.num(), "den": r.den() })));
         answer["path"] = json!(f.media.absolute_path);
+        // The file as it is read, or null when it will not read.
+        answer["media"] = json!(host.footage_info(f.id).map(|m| json!({
+            "width": m.width,
+            "height": m.height,
+            "frame_rate": m.frame_rate.map(|r| json!({ "num": r.num(), "den": r.den() })),
+            "duration": m.duration.map(|d| exact(d.0)),
+        })));
+    }
+    if let ProjectItem::Solid(s) = item {
+        // A still of its own size, as After Effects has a solid.
+        answer["media"] = json!({
+            "width": s.width,
+            "height": s.height,
+            "frame_rate": null,
+            "duration": null,
+        });
     }
     answer
 }
 
 fn item_list(host: &dyn Host, _: NoArgs) -> Result<Value, ScriptError> {
     let doc = host.store().snapshot();
-    let items: Vec<Value> = doc.items.iter().map(|i| item_json(&doc, i)).collect();
+    let items: Vec<Value> = doc.items.iter().map(|i| item_json(host, &doc, i)).collect();
     Ok(json!({ "items": items }))
 }
 
@@ -1105,7 +1121,7 @@ fn item_set(host: &dyn Host, a: ItemSetArgs) -> Result<Value, ScriptError> {
     let item = doc
         .item(id)
         .ok_or_else(|| ScriptError::Failed("The item went away.".into()))?;
-    Ok(item_json(&doc, item))
+    Ok(item_json(host, &doc, item))
 }
 
 #[derive(Deserialize)]
@@ -1126,7 +1142,7 @@ fn folder_new(host: &dyn Host, a: FolderArgs) -> Result<Value, ScriptError> {
     let item = doc
         .item(id)
         .ok_or_else(|| ScriptError::Failed("The folder was not made.".into()))?;
-    Ok(item_json(&doc, item))
+    Ok(item_json(host, &doc, item))
 }
 
 #[derive(Deserialize, Clone, Copy)]

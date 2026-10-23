@@ -7,6 +7,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{Composition, Document, Layer};
+use lumit_core::time::FrameRate;
 use lumit_core::DocumentStore;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lumit_script::{
-    dispatch, one_step, run, ExportStatus, Host, RunOptions, ScriptError, COMMANDS,
+    dispatch, one_step, run, ExportStatus, FootageInfo, Host, RunOptions, ScriptError, COMMANDS,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -61,6 +62,18 @@ impl Host for Bare {
     }
     fn export_cancel(&self, _: u64) -> Result<(), ScriptError> {
         Err(ScriptError::Failed("no export here".into()))
+    }
+    // Every file is 127 frames at 30 fps, 2544 by 1373.
+    fn footage_info(&self, _: Uuid) -> Option<FootageInfo> {
+        let rate = FrameRate::new(30, 1).unwrap();
+        Some(FootageInfo {
+            width: 2544,
+            height: 1373,
+            frame_rate: Some(rate),
+            duration: Some(lumit_core::time::Duration(
+                rate.time_of_frame(127).unwrap().0,
+            )),
+        })
     }
 }
 
@@ -601,6 +614,33 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
     let written = std::fs::read_to_string(folder.join("out").join("log.txt")).unwrap();
     assert_eq!(written.trim_end(), "layers 2");
     assert!(!dir.join("outside.txt").exists());
+
+    // A later run reads footage that was never placed.
+    let world: lumit_core::model::FootageItem = serde_json::from_value(json!({
+        "id": Uuid::now_v7(),
+        "name": "world",
+        "media": { "relative_path": "world_0000.png" },
+    }))
+    .unwrap();
+    host.store()
+        .commit(lumit_core::Op::AddItem {
+            index: 0,
+            item: Box::new(ProjectItem::Footage(world)),
+        })
+        .unwrap();
+    let later = r#"var world;
+for (var i = 1; i <= app.project.numItems; i++) {
+    if (app.project.item(i).name === "world") world = app.project.item(i);
+}
+[world.duration, world.width, world.height, world.frameRate, world.frameDuration]"#;
+    let read = run(&host, later, RunOptions::default()).result.unwrap();
+    let read: Vec<f64> = read
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
+    assert_eq!(read, [127.0 / 30.0, 2544.0, 1373.0, 30.0, 1.0 / 30.0]);
 
     // An error in an included file names it and its line, on the script's
     // include line.

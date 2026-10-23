@@ -377,23 +377,31 @@
 
     function FootageItem(id) {
         Item.call(this, id, 'FootageItem');
-        this._duration = null;
         return guard(this, 'FootageItem');
     }
     FootageItem.prototype = Object.create(Item.prototype);
     FootageItem.prototype.constructor = FootageItem;
+    // The file as Lumit reads it, at the rate it was given.
+    FootageItem.prototype._media = function () {
+        var media = itemInfo(this._id).media;
+        if (!media) throw new Error(this.name + ' could not be read, so its size, rate and length are not known.');
+        return media;
+    };
     Object.defineProperties(FootageItem.prototype, {
         typeName: { value: 'Footage' },
         mainSource: { get: function () { return new FootageSource(this); } },
         file: { get: function () { return new File(itemInfo(this._id).path); } },
-        frameRate: { get: function () { return this.mainSource.conformFrameRate; } },
-        // Lumit reads a file's length when it places it, so this is known once
-        // the footage has a layer.
+        width: { get: function () { return this._media().width; } },
+        height: { get: function () { return this._media().height; } },
+        // A still and sound alone have no rate, and a still no length.
+        frameRate: {
+            get: function () { var r = this._media().frame_rate; return r ? r.num / r.den : 0; },
+        },
+        frameDuration: {
+            get: function () { var r = this._media().frame_rate; return r ? r.den / r.num : 0; },
+        },
         duration: {
-            get: function () {
-                if (this._duration === null) unsupported('FootageItem.duration before the footage is in a comp');
-                return this._duration;
-            },
+            get: function () { var d = this._media().duration; return d ? seconds(d) : 0; },
         },
     });
 
@@ -522,8 +530,6 @@
             layer = this._add('precomp', undefined, item._id);
         } else if (item instanceof FootageItem) {
             layer = this._add('footage', undefined, item._id);
-            var info = layer._info();
-            item._duration = seconds(info.out) - seconds(info.in);
         } else {
             unsupported('layers.add of a ' + (item && item.typeName));
         }
