@@ -215,11 +215,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "item.set",
-        summary: "Rename an item, file it in a folder, or set the rate a footage item plays at",
+        summary: "Rename an item, file it in a folder, set the rate a footage item plays at, or set its comment",
         schema: concat!(
             r#"{"type":"object","properties":{"item":{"type":"string","description":"The item's id or name"},"name":{"type":"string"},"folder":{"type":["string","null"],"description":"The folder's id or name, or null for none"},"frame_rate":{"anyOf":["#,
             rate!(),
-            r#",{"type":"null","description":"A video's own rate"}]}},"required":["item"],"additionalProperties":false}"#
+            r#",{"type":"null","description":"A video's own rate"}]},"comment":{"type":"string","description":"Empty for none"}},"required":["item"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -670,6 +670,7 @@ fn comp_get(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
     let mut answer = comp_json(comp);
     answer["layers"] = comp.layers.iter().map(|l| layer_json(comp, l)).collect();
     answer["markers"] = markers_json(&comp.markers, comp.frame_rate, Rational::ZERO);
+    answer["comment"] = json!(doc.item_comments.get(&comp.id).map_or("", String::as_str));
     Ok(answer)
 }
 
@@ -1020,6 +1021,7 @@ fn item_json(host: &dyn Host, doc: &Document, item: &ProjectItem) -> Value {
         "name": item.name(),
         "kind": kind,
         "folder": folder_of(doc, item.id()),
+        "comment": doc.item_comments.get(&item.id()).map_or("", String::as_str),
     });
     if let ProjectItem::Footage(f) = item {
         let rate = f
@@ -1065,6 +1067,7 @@ struct ItemSetArgs {
     folder: Option<Option<String>>,
     #[serde(default, deserialize_with = "present")]
     frame_rate: Option<Option<Rate>>,
+    comment: Option<String>,
 }
 
 fn item_set(host: &dyn Host, a: ItemSetArgs) -> Result<Value, ScriptError> {
@@ -1075,6 +1078,9 @@ fn item_set(host: &dyn Host, a: ItemSetArgs) -> Result<Value, ScriptError> {
     let mut ops = Vec::new();
     if let Some(name) = a.name {
         ops.push(Op::RenameItem { id, name });
+    }
+    if let Some(comment) = a.comment {
+        ops.push(Op::SetItemComment { id, comment });
     }
     if let Some(rate) = a.frame_rate {
         let ProjectItem::Footage(f) = item else {

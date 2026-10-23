@@ -453,6 +453,7 @@ fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
 app.beginUndoGroup("");
 app.beginUndoGroup("Edit pass");
 var comp = app.project.items.addComp("Edit", 1920, 1080, 1, 4, 30);
+comp.comment = "Capture 120 fps";
 var inner = app.project.items.addComp("Inner", 640, 360, 1, 2, 30);
 var solid = comp.layers.addSolid([1, 0, 0], red(), 800, 600, 1);
 var nest = comp.layers.add(inner);
@@ -488,7 +489,7 @@ var packed = pack.layers.precompose([1, 2], "Packed", true);
 moved.transform.opacity.setValueAtTime(1, 25);
 packed.saveFrameToPng(0, new File(here.fsName + "/out/packed.png"));
 app.project.save(new File(here.fsName + "/out/saved.lum"));
-[app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name]
+[app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name, comp.comment]
 "#;
     std::fs::write(&path, script).unwrap();
     let host = Bare(DocumentStore::new(Document::new()));
@@ -511,6 +512,8 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
         (read[4].as_f64(), read[5].as_str()),
         (Some(2.0), Some("Packed"))
     );
+    // The comp keeps its comment.
+    assert_eq!(read[6], json!("Capture 120 fps"));
     // The History step takes the first name the script gave its undo group.
     assert_eq!(host.store().history()[0].name, "Edit pass");
 
@@ -525,6 +528,7 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
             .unwrap()
     };
     let (edit, inner) = (comp("Edit"), comp("Inner"));
+    assert_eq!(doc.item_comments[&edit.id], "Capture 120 fps");
     // A key made after the precompose lands on the layer in its new comp, and
     // is in the frame and the file saved straight after it.
     let keyed = |c: &Composition| {

@@ -218,6 +218,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         id: uid(0, 0),
         items,
         item_labels: Default::default(),
+        item_comments: Default::default(),
         // No proxies: the fixture's media is small already, and the master
         // switch is on like any new project.
         proxies: Default::default(),

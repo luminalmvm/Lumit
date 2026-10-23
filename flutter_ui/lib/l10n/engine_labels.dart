@@ -1548,6 +1548,7 @@ Map<String, String> get _built => {
       "Pack automatically": l10n.menuPackAutomatically,
       "Rename item": l10n.histRenameItem,
       "Set item colour": l10n.histSetItemColour,
+      "Set item comment": l10n.histSetItemComment,
       "Add layer": l10n.histAddLayer,
       "Delete layer": l10n.histDeleteLayer,
       "Move layer": l10n.histMoveLayer,
