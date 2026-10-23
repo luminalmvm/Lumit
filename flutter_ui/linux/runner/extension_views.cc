@@ -31,6 +31,12 @@ struct Page {
   WebKitWebView* web = nullptr;
   // Where the panel is, in the window.
   GdkRectangle where = {0, 0, 1, 1};
+  // The content filter is in. Until then a load waits in `waiting`, and a
+  // filter that fails leaves the page unloaded.
+  bool limited = false;
+  std::string waiting;
+  // Stops the filter being added to a page that has gone.
+  GCancellable* cancellable = nullptr;
 };
 
 struct Views {
@@ -40,8 +46,12 @@ struct Views {
   // Made with the first page, since it wants to know where to keep what
   // pages store.
   WebKitWebContext* context = nullptr;
-  // Each extension's folder, by its id, for the scheme to serve from.
+  // Where each extension's content filter is compiled to.
+  WebKitUserContentFilterStore* filters = nullptr;
+  // Each extension's folder, by its id, for the scheme to serve from, and
+  // the Content-Security-Policy its files are served with.
   std::map<std::string, std::string> folders;
+  std::map<std::string, std::string> policies;
   std::map<int64_t, Page*> pages;
 };
 
@@ -125,8 +135,17 @@ void serve_cb(WebKitURISchemeRequest* request, gpointer user_data) {
                                  : nullptr;
     type = guessed != nullptr ? guessed : "application/octet-stream";
   }
-  webkit_uri_scheme_request_finish(request, G_INPUT_STREAM(stream),
-                                   g_file_info_get_size(info), type);
+  WebKitURISchemeResponse* response = webkit_uri_scheme_response_new(
+      G_INPUT_STREAM(stream), g_file_info_get_size(info));
+  webkit_uri_scheme_response_set_status(response, 200, nullptr);
+  webkit_uri_scheme_response_set_content_type(response, type);
+  SoupMessageHeaders* headers =
+      soup_message_headers_new(SOUP_MESSAGE_HEADERS_RESPONSE);
+  soup_message_headers_append(headers, "Content-Security-Policy",
+                              self->policies[id].c_str());
+  webkit_uri_scheme_response_set_http_headers(response, headers);
+  webkit_uri_scheme_request_finish_with_response(request, response);
+  g_object_unref(response);
 }
 
 // One context for every page: the scheme, and where what pages store is
@@ -149,6 +168,28 @@ WebKitWebContext* make_context(Views* self, const char* data) {
   webkit_security_manager_register_uri_scheme_as_cors_enabled(security,
                                                               kScheme);
   return context;
+}
+
+// The page's content filter is compiled, so it can load.
+void filter_cb(GObject* source, GAsyncResult* result, gpointer user_data) {
+  g_autoptr(GError) error = nullptr;
+  WebKitUserContentFilter* filter =
+      webkit_user_content_filter_store_save_finish(
+          WEBKIT_USER_CONTENT_FILTER_STORE(source), result, &error);
+  // Null as well when the page went first, so `user_data` is only read
+  // once it is known to be there.
+  if (filter == nullptr) {
+    return;
+  }
+  Page* page = static_cast<Page*>(user_data);
+  webkit_user_content_manager_add_filter(
+      webkit_web_view_get_user_content_manager(page->web), filter);
+  webkit_user_content_filter_unref(filter);
+  page->limited = true;
+  if (!page->waiting.empty()) {
+    webkit_web_view_load_uri(page->web, page->waiting.c_str());
+    page->waiting.clear();
+  }
 }
 
 FlValue* about(Page* page) {
@@ -244,9 +285,11 @@ bool create(Views* self, FlValue* args) {
   const char* folder = text_of(args, "folder");
   const char* data = text_of(args, "data");
   const char* bootstrap = text_of(args, "bootstrap");
+  const char* rules = text_of(args, "rules");
+  const char* policy = text_of(args, "policy");
   if (view == nullptr || fl_value_get_type(view) != FL_VALUE_TYPE_INT ||
       id == nullptr || folder == nullptr || data == nullptr ||
-      bootstrap == nullptr ||
+      bootstrap == nullptr || rules == nullptr || policy == nullptr ||
       self->pages.count(fl_value_get_int(view)) != 0) {
     return false;
   }
@@ -256,8 +299,11 @@ bool create(Views* self, FlValue* args) {
   }
   self->folders[id] = real;
   free(real);
+  self->policies[id] = policy;
   if (self->context == nullptr) {
     self->context = make_context(self, data);
+    g_autofree gchar* filters = g_build_filename(data, "filters", nullptr);
+    self->filters = webkit_user_content_filter_store_new(filters);
   }
 
   Page* page = new Page();
@@ -290,6 +336,12 @@ bool create(Views* self, FlValue* args) {
   webkit_settings_set_enable_developer_extras(settings,
                                               flag_of(args, "inspect"));
   g_signal_connect(page->web, "notify::uri", G_CALLBACK(uri_cb), page);
+
+  page->cancellable = g_cancellable_new();
+  g_autoptr(GBytes) source = g_bytes_new(rules, strlen(rules));
+  g_autofree gchar* name = g_strconcat("lumit-extension-", id, nullptr);
+  webkit_user_content_filter_store_save(self->filters, name, source,
+                                        page->cancellable, filter_cb, page);
 
   // Out of sight until the Dart side has said where the panel is.
   gtk_widget_set_no_show_all(GTK_WIDGET(page->web), TRUE);
@@ -393,6 +445,8 @@ void picture_cb(GObject* source, GAsyncResult* result, gpointer user_data) {
 }
 
 void dispose(Views* self, Page* page) {
+  g_cancellable_cancel(page->cancellable);
+  g_object_unref(page->cancellable);
   g_signal_handlers_disconnect_by_data(page->web, page);
   g_signal_handlers_disconnect_by_data(
       webkit_web_view_get_user_content_manager(page->web), page);
@@ -442,8 +496,10 @@ void method_call_cb(FlMethodChannel* channel,
     place(page, args);
   } else if (strcmp(method, "load") == 0) {
     const char* url = text_of(args, "url");
-    if (url != nullptr) {
+    if (url != nullptr && page->limited) {
       webkit_web_view_load_uri(page->web, url);
+    } else if (url != nullptr) {
+      page->waiting = url;
     }
   } else if (strcmp(method, "run") == 0) {
     const char* script = text_of(args, "script");

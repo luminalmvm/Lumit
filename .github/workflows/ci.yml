@@ -392,7 +392,9 @@ jobs:
   # bridge needs FFmpeg and libclang), plus Xvfb and Mesa's software GL.
   ui-budget:
     name: UI budgets B1 and B2 (real window, record only)
-    runs-on: ubuntu-latest
+    # Held on 24.04 with the flutter job: on 26.04 its package install often
+    # crawls past the hour, and the engine shares that job's Mesa crash.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Not yet seen green on a runner. Until it has been, a failure here is
     # as likely the runner's as Lumit's, so it does not block a merge. Delete
