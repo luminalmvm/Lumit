@@ -77,8 +77,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   AddLibFolderToSearchPath();
 
   // Kept running in the background, Lumit is one Lumit: opening it again
-  // shows that one, with whatever this start was asked to open.
-  if (ForwardToBackgroundLumit()) {
+  // shows that one, with whatever this start was asked to open. A package
+  // always goes to the Lumit already open.
+  if (ForwardToOpenLumit()) {
     return EXIT_SUCCESS;
   }
 

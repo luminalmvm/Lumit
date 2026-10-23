@@ -209,6 +209,17 @@ class _BootGateState extends State<BootGate> {
     // are asked about, and the scripts chosen in Settings run.
     installUnsavedQuestion(context);
     installEventScripts(context);
+    // Something asked for while the welcome screen is up, a double-clicked
+    // package above all, stands it down. The shell takes it as it starts.
+    if (_welcoming) noticeOpenRequests(_standDown);
+  }
+
+  void _standDown() {
+    if (!mounted || !_welcoming) return;
+    setState(() {
+      _welcoming = false;
+      _handovers++;
+    });
   }
 
   /// How many times the window has changed hands: welcome to shell. The first
@@ -233,15 +244,7 @@ class _BootGateState extends State<BootGate> {
     if (_welcoming) {
       return WindowDragStrip(
         theme: theme,
-        child: WelcomeScreenFrb(
-          onDone: () {
-            if (!mounted) return;
-            setState(() {
-              _welcoming = false;
-              _handovers++;
-            });
-          },
-        ),
+        child: WelcomeScreenFrb(onDone: _standDown),
       );
     }
     return const LumitAppView();
@@ -354,9 +357,9 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   /// A project or an extension package double-clicked, or an invite link
   /// clicked in a browser, while Lumit is running. On macOS all three come to
-  /// this Lumit, and elsewhere when it is kept running in the background.
-  /// They are opened as File ▸ Open, the install window and the Shared
-  /// project window would.
+  /// this Lumit. Elsewhere a package always does, and the others when it is
+  /// kept running in the background. They are opened as File ▸ Open, the
+  /// install window and the Shared project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();

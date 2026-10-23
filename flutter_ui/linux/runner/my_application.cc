@@ -610,6 +610,36 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
+// Whether this start was asked to install an extension package.
+static gboolean asks_for_package(gchar** arguments) {
+  for (gchar** argument = arguments; *argument != nullptr; argument++) {
+    g_autofree gchar* lower = g_ascii_strdown(*argument, -1);
+    if (g_str_has_suffix(lower, ".lfx")) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+// Whether another Lumit already has Lumit's name on the session bus.
+static gboolean lumit_is_open() {
+  g_autoptr(GDBusConnection) bus =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
+  if (bus == nullptr) {
+    return FALSE;
+  }
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      bus, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+      "org.freedesktop.DBus", "NameHasOwner",
+      g_variant_new("(s)", APPLICATION_ID), G_VARIANT_TYPE("(b)"),
+      G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr);
+  gboolean open = FALSE;
+  if (reply != nullptr) {
+    g_variant_get(reply, "(b)", &open);
+  }
+  return open;
+}
+
 // Implements GApplication::local_command_line.
 static gboolean my_application_local_command_line(GApplication* application,
                                                   gchar*** arguments,
@@ -621,6 +651,14 @@ static gboolean my_application_local_command_line(GApplication* application,
   self->start_hidden = g_strv_contains(
       const_cast<const gchar* const*>(self->dart_entrypoint_arguments),
       "--background");
+
+  // A Lumit of its own still takes Lumit's name when no other Lumit has it,
+  // so a start asked to install an extension package can find it. That start
+  // asks for the name too, and hands the package over when it is taken.
+  if ((g_application_get_flags(application) & G_APPLICATION_NON_UNIQUE) &&
+      (asks_for_package(self->dart_entrypoint_arguments) || !lumit_is_open())) {
+    g_application_set_flags(application, static_cast<GApplicationFlags>(0));
+  }
 
   g_autoptr(GError) error = nullptr;
   gboolean registered = g_application_register(application, nullptr, &error);
@@ -639,8 +677,9 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  // A Lumit kept running in the background has this one's name. It is the
-  // one that shows itself and opens what was asked for.
+  // A Lumit kept running in the background, or any open Lumit when this start
+  // brings a package, has this one's name. It is the one that shows itself
+  // and opens what was asked for.
   if (g_application_get_is_remote(application)) {
     g_action_group_activate_action(
         G_ACTION_GROUP(application), "forward",

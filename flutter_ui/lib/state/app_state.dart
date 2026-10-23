@@ -90,8 +90,8 @@ String? inviteFromArgs(List<String> args) {
 }
 
 /// The macOS runner's end of this is `OpenRequests` in AppDelegate.swift.
-/// The Windows and Linux runners answer it too, for a Lumit kept running in
-/// the background that a second start hands its arguments to.
+/// The Windows and Linux runners answer it too, for the open Lumit a second
+/// start hands its arguments to.
 const _openRequests = MethodChannel('lumit/open');
 
 /// What macOS has asked Lumit to open and nobody has taken yet: a project
@@ -110,8 +110,8 @@ Future<List<String>> takeOpenRequests() async {
 }
 
 /// Hand [open] whatever Lumit is asked to open from here on. A click that
-/// finds Lumit running comes to it on macOS, and on the other systems when
-/// it is kept running in the background.
+/// finds Lumit running comes to it on macOS. On the other systems a package
+/// always does, and the rest when Lumit is kept running in the background.
 void listenForOpenRequests(void Function(List<String> asked) open) {
   Future<void> take() async {
     final asked = await takeOpenRequests();
@@ -122,6 +122,12 @@ void listenForOpenRequests(void Function(List<String> asked) open) {
   _openRequests.setMethodCallHandler((_) => take());
   // Once now as well, for a request that came after start-up took its own.
   take();
+}
+
+/// Call [asked] when something is waiting to be opened, leaving it for
+/// whoever calls [listenForOpenRequests] next.
+void noticeOpenRequests(VoidCallback asked) {
+  _openRequests.setMethodCallHandler((_) async => asked());
 }
 
 class LumitState extends ChangeNotifier {
