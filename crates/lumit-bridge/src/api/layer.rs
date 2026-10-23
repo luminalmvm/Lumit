@@ -604,6 +604,12 @@ impl BridgeShapeItem {
     /// would appear frozen under the pointer. `at` is where the playhead is;
     /// without it — an edit that is not a shape edit, such as an opacity drag —
     /// the keys are carried through untouched.
+    ///
+    /// An item that came back with the shape it already had is not a shape
+    /// edit either, even with `at` given. The list is sent whole, so the items
+    /// nobody touched arrive holding their still path (from the Timeline) or
+    /// the shape showing at the playhead (from the Viewer), and keying either
+    /// would snap the item or plant a key nobody asked for.
     #[frb(ignore)]
     pub(crate) fn write_item_over(
         &self,
@@ -621,6 +627,11 @@ impl BridgeShapeItem {
                 .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?;
             let path = std::mem::replace(&mut written.path, previous.path.clone());
+            if same_shape(&path, &previous.path)
+                || same_shape(&path, &previous.path_at(at.to_f64()))
+            {
+                return Ok(written);
+            }
             match written.path_keys.iter_mut().find(|k| k.time == at) {
                 Some(key) => key.path = path,
                 None => {
@@ -643,6 +654,17 @@ impl BridgeShapeItem {
         }
         Ok(written)
     }
+}
+
+/// Whether two paths are the same shape, give or take a thousandth of a
+/// pixel, which is rounding on the way across rather than an edit.
+fn same_shape(a: &lumit_core::mask::BezierPath, b: &lumit_core::mask::BezierPath) -> bool {
+    let near = |p: (f64, f64), q: (f64, f64)| (p.0 - q.0).abs() < 1e-3 && (p.1 - q.1).abs() < 1e-3;
+    a.closed == b.closed
+        && a.vertices.len() == b.vertices.len()
+        && a.vertices.iter().zip(&b.vertices).all(|(p, q)| {
+            near(p.pos, q.pos) && near(p.tan_in, q.tan_in) && near(p.tan_out, q.tan_out)
+        })
 }
 
 /// What a paint stroke does to the pixels under it.
