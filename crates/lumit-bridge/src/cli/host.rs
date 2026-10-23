@@ -418,6 +418,12 @@ impl Host for Headless {
                 ids.push(existing.id);
                 continue;
             }
+            #[cfg(feature = "media")]
+            if !crate::api::footage::FootageReference::resolve_source(&self.bridge_state(), &item)
+                .is_some_and(crate::probe::reads)
+            {
+                return Err(crate::script::unreadable(path));
+            }
             ids.push(item.id);
             ops.push(Op::AddItem {
                 index: doc.items.len() + added.len(),

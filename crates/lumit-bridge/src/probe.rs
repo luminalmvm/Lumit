@@ -333,6 +333,17 @@ pub(crate) fn ensure_probed(
     }
 }
 
+/// Whether this file reads as footage: it probes, and any picture in it has a
+/// size. A picture with no size is one FFmpeg found but could not read.
+#[cfg(feature = "media")]
+pub(crate) fn reads(src: impl Into<MediaSource>) -> bool {
+    ensure_probed(src).is_some_and(|info| {
+        info.video
+            .as_ref()
+            .is_none_or(|v| v.width > 0 && v.height > 0)
+    })
+}
+
 /// This file's vital statistics as they were last read, without asking
 /// the disk whether the file has changed since. Probed here and now, as
 /// [`ensure_probed`] does it, only when nothing is held.
