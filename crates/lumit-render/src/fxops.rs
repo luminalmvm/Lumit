@@ -1885,6 +1885,19 @@ fn op_keys(
                     // this op's picture moves, while nothing `feed_hash`
                     // walked has changed at all.
                     h.update(&[u8::from(sched.projection.is_some())]);
+                    // A walked stream is the whole walk from the in point,
+                    // which the bag does not name either, so it is named by
+                    // what it came to.
+                    if let Some(s) = &sched.stepped {
+                        let numbers = s.position.iter().chain(&s.speed).flatten();
+                        let numbers = numbers.chain(s.colour.iter().flatten());
+                        for v in numbers.chain(&s.size).chain(&s.rotation) {
+                            h.update(&v.to_le_bytes());
+                        }
+                        for id in &s.id {
+                            h.update(&id.to_le_bytes());
+                        }
+                    }
                     // **And the wire**. The stream itself is not hashed
                     // and must not be — it is a pure function of the producer's
                     // bag, the time and the camera, and the producer sits
