@@ -458,6 +458,8 @@
     };
     CompItem.prototype.saveFrameToPng = function (time, file) {
         var to = file instanceof Entry ? file : new File(file);
+        // The keys made so far go in first, so the frame shows them.
+        finish();
         command('comp.frame', { comp: this._id, time: this._frame(time), out: to.fsName });
     };
 
@@ -1672,6 +1674,8 @@
             return item;
         },
         save: function (file) {
+            // The keys made so far go in first, so the file has them.
+            finish();
             command('project.save', file ? { path: file.fsName } : {});
             return true;
         },
