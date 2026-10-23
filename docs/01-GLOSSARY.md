@@ -115,10 +115,11 @@ Not interchangeable.
 | **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
 | **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |
 | **Split channels**, **Combine channels** | Picture into four greyscale pictures, and back |
-| **Repeat start**, **Repeat end** nodes | Run the boxes wired between them several times. **Feedback** works each time on the last time's picture, **Copies** keeps every time and lays them over each other |
+| **Repeat start**, **Repeat end** nodes | Run the boxes wired between them several times, or once for each point or path. **Feedback** works each time on the last time's picture, **Copies** keeps every time and lays them over each other |
 | **Node graph effect** | Applies a node graph to a layer |
 | **Wire**, **port** | A connection on the Graph panel, and the typed socket it plugs into |
 | **Points stream** | Per-frame particle data an effect produces. Never stored |
+| **Shapes** | Paths on a wire: a Read box hands out the paths of the shape layers in the comp it reads |
 | **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |

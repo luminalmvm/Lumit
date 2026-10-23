@@ -25970,6 +25970,19 @@
       "category_slug": "compositing",
       "params": [
         {
+          "id": "for_each",
+          "label": "For",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Times",
+            "Each point",
+            "Each path"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "times",
           "label": "Times",
           "kind": "int",
@@ -26031,6 +26044,12 @@
       ],
       "groups": [],
       "enabled_when": [
+        {
+          "param": "times",
+          "on": "for_each",
+          "cond": "choice_is",
+          "value": 0
+        },
         {
           "param": "copies_blend",
           "on": "mode",

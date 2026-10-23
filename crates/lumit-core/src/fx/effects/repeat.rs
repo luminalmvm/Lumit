@@ -8,6 +8,11 @@
 //! The start hands each time its number on Index, Count, Normalised and
 //! Random, as Clone index does for a copy.
 //!
+//! **For** says what the times are: Times of them, one for each point of the
+//! stream wired into the start's Points socket, or one for each path on its
+//! Shapes socket. Each time is then handed its point's or path's place on X
+//! and Y, and its Size, Rotation and Colour.
+//!
 //! **A node graph's own**, beside the Merge: the graph walk runs the boxes
 //! between the pair once a time ([`crate::comp_graph::CompGraph::repeats`]),
 //! so neither box has a kernel. A start with no end, or an end with no start,
@@ -28,13 +33,52 @@ pub const NORMALISED_PORT: &str = "normalised";
 /// The port each time's own roll leaves by, 0 up to 1.
 pub const RANDOM_PORT: &str = "random";
 
-/// The numbers the start hands each time, in the order they are drawn.
+/// The numbers the start hands each time, in the order they are drawn: its
+/// own four, then its point's or path's.
 pub const PASS_PORTS: &[Port] = &[
     Port::new(INDEX_PORT, "Index", PortType::Number),
     Port::new(COUNT_PORT, "Count", PortType::Number),
     Port::new(NORMALISED_PORT, "Normalised", PortType::Number),
     Port::new(RANDOM_PORT, "Random", PortType::Number),
+    Port::new("x", "X", PortType::Number),
+    Port::new("y", "Y", PortType::Number),
+    Port::new("size", "Size", PortType::Number),
+    Port::new("rotation", "Rotation", PortType::Number),
+    Port::new("colour", "Colour", PortType::Colour),
 ];
+
+/// The stream Each point runs once a point of.
+pub const POINTS_PORT: &str = "points";
+/// The paths Each path runs once a path of.
+pub const SHAPES_PORT: &str = "shapes";
+
+const START_INPUTS: &[Port] = &[
+    Port::new(POINTS_PORT, "Points", PortType::Points),
+    Port::new(SHAPES_PORT, "Shapes", PortType::Shape),
+];
+
+/// The point or path one time is handed, in the graph's own pixels. Times
+/// with no point or path hand on nought, and white.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Element {
+    pub at: [f32; 2],
+    pub size: f32,
+    /// Degrees.
+    pub rotation: f32,
+    /// Straight scene-linear RGBA.
+    pub colour: [f32; 4],
+}
+
+impl Default for Element {
+    fn default() -> Self {
+        Element {
+            at: [0.0; 2],
+            size: 0.0,
+            rotation: 0.0,
+            colour: [1.0; 4],
+        }
+    }
+}
 
 /// The dice Random rolls, kept off the numbers Clone index uses.
 const RANDOM_ATTR: u32 = 51;
@@ -84,22 +128,36 @@ impl EffectDef for RepeatStartDef {
 
     fn signature(&self) -> Signature {
         Signature::Image {
-            inputs: &[],
+            inputs: START_INPUTS,
             extra: PASS_PORTS,
         }
     }
 }
+
+/// Times of them.
+pub const FOR_TIMES: u32 = 0;
+/// One for each point on the start's Points socket.
+pub const FOR_POINTS: u32 = 1;
+/// One for each path on the start's Shapes socket.
+pub const FOR_PATHS: u32 = 2;
 
 /// Each time works on what the time before made.
 pub const MODE_FEEDBACK: u32 = 0;
 /// Each time starts from the same picture, and every time is kept.
 pub const MODE_COPIES: u32 = 1;
 
-const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
-    param: "copies_blend",
-    on: "mode",
-    cond: EnabledCond::ChoiceIs(MODE_COPIES),
-}];
+const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[
+    EnabledWhen {
+        param: "times",
+        on: "for_each",
+        cond: EnabledCond::ChoiceIs(FOR_TIMES),
+    },
+    EnabledWhen {
+        param: "copies_blend",
+        on: "mode",
+        cond: EnabledCond::ChoiceIs(MODE_COPIES),
+    },
+];
 
 /// Repeat end's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -114,6 +172,15 @@ const REPEAT_END_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     enabled_when = REPEAT_END_ENABLED_WHEN,
 )]
 pub struct RepeatEnd {
+    /// What the times are: Times of them, or one for each point or path the
+    /// start is handed.
+    #[choice(
+        label = "For",
+        options = ["Times", "Each point", "Each path"],
+        default = 0
+    )]
+    pub for_each: u32,
+
     /// How many times the boxes between the pair run. Nought hands the
     /// start's picture straight on.
     #[counter(min = 0, max = 64, default = 4, hard_min = 0, hard_max = 4096, unit = Raw)]

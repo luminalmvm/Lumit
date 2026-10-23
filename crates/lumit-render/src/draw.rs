@@ -368,6 +368,9 @@ pub enum GraphStep {
         /// was made from the file's frame, so it is laid in the graph's frame
         /// exactly where the file's picture is.
         baked_from: Option<usize>,
+        /// A points box's birth schedule or wired streams, as a layer's points
+        /// effects are handed theirs. Empty for every other box.
+        points: Vec<lumit_core::fx::points::PointsSchedule>,
     },
     /// Picture A laid over picture B, the node a layer stack has no word for.
     Merge {

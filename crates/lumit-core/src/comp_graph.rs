@@ -37,6 +37,10 @@ pub const VALUE_PORT: Port = Port::new("value", "Value", PortType::Number);
 /// 3D layers is, metres (Scene depth).
 pub const READ_DEPTH_PORT: Port = Port::new("depth", "Depth", PortType::Depth);
 
+/// A Read's paths: the shape layers of the comp it reads, for a Repeat start
+/// to run once a path.
+pub const READ_SHAPES_PORT: Port = Port::new("shapes", "Shapes", PortType::Shape);
+
 /// The Merge's second picture: what its A is laid over.
 pub const BACKGROUND_PORT: Port = Port::new("background", "B", PortType::Image);
 
@@ -297,10 +301,14 @@ pub fn ports_of(
 ) -> (Vec<GraphPort>, Vec<GraphPort>) {
     match node {
         // A Read is a source: it brings a picture in and takes nothing.
-        GraphNode::Read { .. } => (
-            Vec::new(),
-            vec![GraphPort::of(OUTPUT_PORT), GraphPort::of(READ_DEPTH_PORT)],
-        ),
+        // A Read of a comp hands on its shape layers' paths too.
+        GraphNode::Read { item, .. } => {
+            let mut outs = vec![GraphPort::of(OUTPUT_PORT), GraphPort::of(READ_DEPTH_PORT)];
+            if doc.is_some_and(|d| d.comp(*item).is_some()) {
+                outs.push(GraphPort::of(READ_SHAPES_PORT));
+            }
+            (Vec::new(), outs)
+        }
         GraphNode::Input { input, .. } => {
             let out = match input.kind.value_type() {
                 None => GraphPort::of(OUTPUT_PORT),
@@ -1347,7 +1355,14 @@ impl CompGraph {
         for (k, port) in PASS_PORTS.iter().enumerate() {
             nodes.push(GraphNode::Input {
                 id: repeat_node(r.start, 1, k),
-                input: repeat_input(repeat_value_id(r.start, port.id), InputKind::Number),
+                input: repeat_input(
+                    repeat_value_id(r.start, port.id),
+                    if port.ty == PortType::Colour {
+                        InputKind::Colour
+                    } else {
+                        InputKind::Number
+                    },
+                ),
             });
         }
         nodes.extend(self.nodes.iter().filter(|n| inside(n.id())).cloned());
@@ -1429,25 +1444,99 @@ impl CompGraph {
 }
 
 /// The numbers time `index` of `count` of the pair starting at `start` reads,
-/// by the Input ids [`CompGraph::repeat_graph`] gave them.
+/// with its point's or path's, by the Input ids [`CompGraph::repeat_graph`]
+/// gave them.
 #[must_use]
-pub fn repeat_values(start: &EffectInstance, index: u32, count: u32) -> Vec<(String, EffectValue)> {
+pub fn repeat_values(
+    start: &EffectInstance,
+    index: u32,
+    count: u32,
+    element: &crate::fx::effects::repeat::Element,
+) -> Vec<(String, EffectValue)> {
+    use crate::anim::Property;
     use crate::fx::effects::repeat::{RepeatStart, PASS_PORTS};
     let seed = match start.param("seed") {
         Some(EffectValue::Seed(s)) => *s,
         _ => 0,
     };
-    let values = RepeatStart { seed }.pass(index, count);
+    let [i, n, u, r] = RepeatStart { seed }.pass(index, count);
+    let numbers = [
+        i,
+        n,
+        u,
+        r,
+        element.at[0],
+        element.at[1],
+        element.size,
+        element.rotation,
+    ];
+    let float = |v: f32| EffectValue::Float(Property::fixed(f64::from(v)));
     PASS_PORTS
         .iter()
-        .zip(values)
-        .map(|(port, v)| {
-            (
-                repeat_value_id(start.id, port.id),
-                EffectValue::Float(crate::anim::Property::fixed(f64::from(v))),
-            )
+        .enumerate()
+        .map(|(k, port)| {
+            let value = match numbers.get(k) {
+                Some(v) => float(*v),
+                None => EffectValue::Colour(element.colour.map(|c| Property::fixed(f64::from(c)))),
+            };
+            (repeat_value_id(start.id, port.id), value)
         })
         .collect()
+}
+
+/// The box round each path of the shape layers in comp `item` at comp time
+/// `t`, as a Read box of it lays them in a graph `size` across and down:
+/// left, top, right, bottom. What a Read's Shapes socket hands on.
+#[must_use]
+pub fn read_paths(
+    context: &crate::expression::ExpressionContext,
+    item: Uuid,
+    size: [f32; 2],
+    t: f64,
+) -> Vec<[f32; 4]> {
+    use crate::model::LayerKind;
+    let Some(comp) = context.document.comp(item) else {
+        return Vec::new();
+    };
+    // A Read lays its comp centred in the graph's frame.
+    let off = [
+        (size[0] - comp.width as f32) * 0.5,
+        (size[1] - comp.height as f32) * 0.5,
+    ];
+    let context = crate::expression::ExpressionContext {
+        comp: Some(comp.id),
+        layer: None,
+        comp_time: t,
+        inputs: None,
+        ..context.clone()
+    };
+    let mut out = Vec::new();
+    for layer in comp.layers.iter().rev() {
+        let LayerKind::Shape { contents } = &layer.kind else {
+            continue;
+        };
+        if !layer.switches.visible {
+            continue;
+        }
+        let lt = crate::time::layer_time(t, layer.start_offset.0);
+        let line = crate::shape::outline_at(contents, lt);
+        let world = crate::fx::drivers::measure::world(comp, layer, t, &context);
+        let mut bounds: Option<[f32; 4]> = None;
+        for i in 0..line.points.len() {
+            // A step with no length joins two paths of one run.
+            if i > 0 && line.arc[i] <= line.arc[i - 1] {
+                out.extend(bounds.take());
+            }
+            let p = line.points[i];
+            let (x, y) = world.apply((f64::from(p[0]), f64::from(p[1])));
+            let (x, y) = (x as f32 + off[0], y as f32 + off[1]);
+            bounds = Some(bounds.map_or([x, y, x, y], |b| {
+                [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)]
+            }));
+        }
+        out.extend(bounds);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -2200,7 +2289,7 @@ mod tests {
         let GraphNode::Fx(start_box) = &start else {
             panic!("the start is a box");
         };
-        let values = repeat_values(start_box, 2, 5);
+        let values = repeat_values(start_box, 2, 5, &Default::default());
         assert_eq!(values.len(), crate::fx::effects::repeat::PASS_PORTS.len());
         assert!(values
             .iter()
@@ -2245,5 +2334,41 @@ mod tests {
             ],
         );
         assert_eq!(graph.validate(None), Err(GraphError::RepeatUnpaired));
+
+        // Each path: a Read of a comp hands on a box round each path of its
+        // shape layers, laid where the Read lays the comp.
+        let mut art = comp();
+        let square = |x: f64| {
+            crate::shape::ShapeItem::filled(
+                "Rectangle",
+                crate::mask::Mask::rectangle(x, 100.0, 40.0, 40.0).path,
+                LinearColour([1.0; 4]),
+            )
+        };
+        let item = ProjectItem::Composition(art.clone());
+        let mut layer = read_layer(Uuid::now_v7(), &item, &art).expect("a layer");
+        layer.kind = LayerKind::Shape {
+            contents: vec![square(100.0), square(300.0)],
+        };
+        layer.transform = crate::model::TransformGroup {
+            position_x: crate::anim::Property::fixed(100.0),
+            position_y: crate::anim::Property::fixed(100.0),
+            ..Default::default()
+        };
+        art.layers.push(layer);
+        let art_id = art.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(art));
+        let context = crate::expression::ExpressionContext {
+            document: std::sync::Arc::new(doc),
+            comp: None,
+            layer: None,
+            comp_time: 0.0,
+            current_depth: 0,
+            inputs: None,
+        };
+        let boxes = read_paths(&context, art_id, [1920.0, 1080.0], 0.0);
+        assert_eq!(boxes.len(), 2, "{boxes:?}");
+        assert!((boxes[0][0] - 100.0).abs() < 1.0 && (boxes[1][2] - 340.0).abs() < 1.0);
     }
 }

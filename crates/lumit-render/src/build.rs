@@ -1024,6 +1024,41 @@ fn points_input_for(
     consumer: &lumit_core::model::EffectInstance,
     def: &'static dyn lumit_core::fx::EffectDef,
     t: f64,
+    dt: f64,
+    projection: lumit_core::fx::points::Projection,
+    context: &Arc<ExpressionContext>,
+    audio: &dyn lumit_core::fx::AudioTap,
+    clone: (u32, u32),
+) -> PointsInput {
+    let wiring = (&layer.graph, &layer.effects[..], None);
+    points_input_in(
+        Some(layer),
+        wiring,
+        consumer,
+        def,
+        t,
+        dt,
+        projection,
+        context,
+        audio,
+        clone,
+    )
+}
+
+/// [`points_input_for`] over any wiring: a layer's graph and stack, or a node
+/// graph's own wires and boxes, which the driver walk then finds the producer
+/// among. `layer` is the layer the consumer is on, which a node graph has none of.
+#[allow(clippy::too_many_arguments)]
+fn points_input_in(
+    layer: Option<&lumit_core::model::Layer>,
+    (graph, effects, stack): (
+        &lumit_core::graph::LayerGraph,
+        &[lumit_core::model::EffectInstance],
+        Option<&[lumit_core::model::EffectInstance]>,
+    ),
+    consumer: &lumit_core::model::EffectInstance,
+    def: &'static dyn lumit_core::fx::EffectDef,
+    t: f64,
     _dt: f64,
     projection: lumit_core::fx::points::Projection,
     context: &Arc<ExpressionContext>,
@@ -1034,7 +1069,9 @@ fn points_input_for(
     let mut found = PointsInput::default();
     // A Bake points reading its bake is handed that in place of its wire, so
     // nothing above it has to make the stream again.
-    if consumer.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+    if let Some(layer) = layer
+        .filter(|_| consumer.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME)
+    {
         let read = context
             .comp
             .and_then(|id| context.document.comp(id))
@@ -1073,7 +1110,7 @@ fn points_input_for(
         Tap(uuid::Uuid),
     }
     for port in &ports {
-        let wire = layer.graph.wire_into(&InputRef::Param {
+        let wire = graph.wire_into(&InputRef::Param {
             node: NodeRef::Effect(consumer.id),
             port: port.id.to_owned(),
         });
@@ -1088,8 +1125,7 @@ fn points_input_for(
         // is already folded into this layer's key by the graph's driver-node
         // hashing (node-graph.md §2.3).
         let from = match &source {
-            Some(Source::Effect(effect)) => layer
-                .effects
+            Some(Source::Effect(effect)) => effects
                 .iter()
                 .position(|e| e.id == *effect)
                 .and_then(|i| u32::try_from(i).ok()),
@@ -1099,23 +1135,23 @@ fn points_input_for(
             // The clone number goes with it, so a producer driven by a
             // Clone index hands on the points it draws.
             Some(Source::Effect(effect)) => lumit_core::fx::drivers::effect_stream_in(
-                &layer.graph,
+                graph,
                 *effect,
                 when,
                 context.clone(),
                 Some(audio),
                 projection,
-                None,
+                stack,
                 clone,
             ),
             Some(Source::Tap(node)) => lumit_core::fx::drivers::driver_stream_in(
-                &layer.graph,
+                graph,
                 *node,
                 when,
                 context.clone(),
                 Some(audio),
                 projection,
-                None,
+                stack,
                 clone,
             ),
             None => None,
@@ -1166,6 +1202,50 @@ fn points_input_for(
         }
     }
     found
+}
+
+/// The births a producer with an Emit rate row can still see at layer time
+/// `t`, scanned from the layer's in point. Trigger follows its wire in
+/// `graph` over the frames its bursts look back on, as the driver walk reads it.
+fn birth_schedule(
+    e: &lumit_core::model::EffectInstance,
+    t: f64,
+    dt: f64,
+    context: &Arc<ExpressionContext>,
+    graph: Option<&lumit_core::graph::LayerGraph>,
+    audio: &dyn lumit_core::fx::AudioTap,
+) -> lumit_core::fx::points::Schedule {
+    let upto = (t / dt).floor() as i64;
+    let rate_at = |lt: f64| -> f64 {
+        e.float_at_with_context("emit_rate", lt, context.clone())
+            .unwrap_or(150.0)
+    };
+    // How far back a particle born then could still be alive now:
+    // Life plus its jitter is the ceiling exactly, and a frame more
+    // because the frame the window opens on is one whose births are
+    // partly inside it.
+    let at = |id: &str, fallback: f64| -> f64 {
+        e.float_at_with_context(id, t, context.clone())
+            .unwrap_or(fallback)
+    };
+    let jitter = (at("life_jitter", 30.0) / 100.0).clamp(0.0, 1.0);
+    let longest = at("life", 2.0).max(0.0) * (1.0 + jitter);
+    let window = ((longest / dt).ceil() as i64).saturating_add(1);
+    let mut schedule = lumit_core::fx::points::Schedule::scan(dt, upto, window, &rate_at);
+    // Bursts read their rows over the window, and Trigger
+    // follows its wire there: the driver walk reads the same.
+    let row_at = |id: &str, lt: f64| -> f64 {
+        let wired = graph.filter(|_| id == "trigger").and_then(|graph| {
+            lumit_core::fx::drivers::driven_param(graph, e.id, id, lt, context.clone(), Some(audio))
+        });
+        wired.unwrap_or_else(|| {
+            e.float_at_with_context(id, lt, context.clone())
+                .unwrap_or(0.0)
+        })
+    };
+    lumit_core::fx::effects::particulate::Particulate::add_bursts(e, &mut schedule, &row_at);
+    schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+    schedule
 }
 
 /// What Text to points and Label points are handed beside the op: the letters
@@ -3356,48 +3436,7 @@ fn comp_walk(
                         stepped: walked,
                     };
                 }
-                let upto = (t / dt).floor() as i64;
-                let rate_at = |lt: f64| -> f64 {
-                    e.float_at_with_context("emit_rate", lt, context.clone())
-                        .unwrap_or(150.0)
-                };
-                // How far back a particle born then could still be alive now:
-                // Life plus its jitter is the ceiling exactly, and a frame more
-                // because the frame the window opens on is one whose births are
-                // partly inside it.
-                let at = |id: &str, fallback: f64| -> f64 {
-                    e.float_at_with_context(id, t, context.clone())
-                        .unwrap_or(fallback)
-                };
-                let jitter = (at("life_jitter", 30.0) / 100.0).clamp(0.0, 1.0);
-                let longest = at("life", 2.0).max(0.0) * (1.0 + jitter);
-                let window = ((longest / dt).ceil() as i64).saturating_add(1);
-                let mut schedule =
-                    lumit_core::fx::points::Schedule::scan(dt, upto, window, &rate_at);
-                // Bursts read their rows over the window, and Trigger
-                // follows its wire there: the driver walk reads the same.
-                let row_at = |id: &str, lt: f64| -> f64 {
-                    let wired = owner.filter(|_| id == "trigger").and_then(|layer| {
-                        lumit_core::fx::drivers::driven_param(
-                            &layer.graph,
-                            e.id,
-                            id,
-                            lt,
-                            context.clone(),
-                            Some(&audio),
-                        )
-                    });
-                    wired.unwrap_or_else(|| {
-                        e.float_at_with_context(id, lt, context.clone())
-                            .unwrap_or(0.0)
-                    })
-                };
-                lumit_core::fx::effects::particulate::Particulate::add_bursts(
-                    e,
-                    &mut schedule,
-                    &row_at,
-                );
-                schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+                let schedule = birth_schedule(e, t, dt, &context, owner.map(|l| &l.graph), &audio);
                 lumit_core::fx::points::PointsSchedule {
                     schedule,
                     t,
@@ -5144,6 +5183,7 @@ impl GraphLower<'_> {
                 roto: None,
                 plane: None,
                 baked_from: None,
+                points: Vec::new(),
             })
         };
         // Set channels picks, by their place in `SET_CHANNELS_OPTIONS`.
@@ -5392,8 +5432,17 @@ impl GraphLower<'_> {
                         REPEAT_START => input,
                         REPEAT_END => match repeat {
                             Some(r) => self.repeat_step(
-                                graph_comp, graph, view, r, inst, &steps, &drivers, diag, &context,
-                                visited, plan,
+                                graph_comp,
+                                graph,
+                                view,
+                                r,
+                                inst,
+                                &steps,
+                                (&drivers, &projection),
+                                diag,
+                                &context,
+                                visited,
+                                plan,
                             ),
                             None => input,
                         },
@@ -5456,6 +5505,12 @@ impl GraphLower<'_> {
                                     roto: roto.clone(),
                                     plane: plane.clone(),
                                     baked_from,
+                                    points: self.graph_points(
+                                        graph_comp,
+                                        &projection,
+                                        inst,
+                                        &context,
+                                    ),
                                 });
                                 Some(plan.steps.len() - 1)
                             };
@@ -5688,6 +5743,60 @@ impl GraphLower<'_> {
         Some(plan.steps.len() - 1)
     }
 
+    /// What a points box in a graph is handed beside its op, as a layer's
+    /// points effects are: its birth schedule, and the streams wired into its
+    /// Points sockets, made by the driver walk over the graph's own boxes.
+    /// Nothing for any other box.
+    fn graph_points(
+        &self,
+        graph_comp: &lumit_core::model::Composition,
+        projection: &lumit_core::comp_graph::Projection,
+        inst: &lumit_core::model::EffectInstance,
+        context: &Arc<ExpressionContext>,
+    ) -> Vec<lumit_core::fx::points::PointsSchedule> {
+        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(&inst.effect.match_name) else {
+            return Vec::new();
+        };
+        if !(lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op()) {
+            return Vec::new();
+        }
+        let (t, dt) = (self.t, 1.0 / graph_comp.frame_rate.fps().max(1.0));
+        let wired = points_input_in(
+            None,
+            (
+                &projection.drivers,
+                &projection.effects,
+                Some(&projection.effects),
+            ),
+            inst,
+            def,
+            t,
+            dt,
+            lumit_core::fx::points::Projection::FLAT,
+            context,
+            self.audio,
+            self.clone,
+        );
+        let schedule = if def.schema().params.iter().any(|p| p.id == "emit_rate") {
+            birth_schedule(inst, t, dt, context, Some(&projection.drivers), self.audio)
+        } else {
+            lumit_core::fx::points::Schedule::default()
+        };
+        vec![lumit_core::fx::points::PointsSchedule {
+            schedule,
+            t,
+            input_from: wired.from.first().copied().flatten(),
+            ports_from: wired
+                .from
+                .iter()
+                .skip(1)
+                .map(|f| f.unwrap_or(u32::MAX))
+                .collect(),
+            input: wired.streams,
+            ..Default::default()
+        }]
+    }
+
     /// A Repeat end: the boxes between it and its start, lowered once a time
     /// into this plan. In Feedback each time is handed the picture the time
     /// before made, and in Copies each is handed the start's own and laid
@@ -5701,14 +5810,19 @@ impl GraphLower<'_> {
         r: &lumit_core::comp_graph::Repeat,
         end: &lumit_core::model::EffectInstance,
         steps: &[Landed],
-        drivers: &lumit_core::fx::ResolvedDrivers,
+        (drivers, projection): (
+            &lumit_core::fx::ResolvedDrivers,
+            &lumit_core::comp_graph::Projection,
+        ),
         diag: f32,
         context: &Arc<ExpressionContext>,
         visited: &mut Vec<Uuid>,
         plan: &mut GraphDraw,
     ) -> Option<usize> {
         use lumit_core::comp_graph::GraphNode;
-        use lumit_core::fx::effects::repeat::MODE_COPIES;
+        use lumit_core::fx::effects::repeat::{
+            Element, FOR_PATHS, FOR_POINTS, MODE_COPIES, POINTS_PORT, SHAPES_PORT,
+        };
         use lumit_core::fx::ParamId;
         let landed = |node: Uuid, port: &str| {
             steps
@@ -5731,6 +5845,68 @@ impl GraphLower<'_> {
         );
         let p = rows.iter().next().map(|op| op.params);
         let times = p.map_or(0, |p| p.int(ParamId::new("times"), 4)).max(0) as u32;
+        // What each time is handed: a point of the stream on the start's
+        // Points socket, a path of the Read on its Shapes socket, or nothing.
+        let source = |port: &str| graph.wire_into(r.start, port);
+        let elements: Option<Vec<Element>> = match p
+            .map_or(0, |p| p.choice(ParamId::new("for_each"), 0))
+        {
+            FOR_POINTS => {
+                let stream = source(POINTS_PORT).and_then(|(from, _)| {
+                    lumit_core::fx::drivers::effect_stream_in(
+                        &projection.drivers,
+                        *from,
+                        self.t,
+                        context.clone(),
+                        Some(self.audio),
+                        lumit_core::fx::points::Projection::FLAT,
+                        Some(&projection.effects),
+                        self.clone,
+                    )
+                });
+                Some(stream.map_or_else(Vec::new, |s| {
+                    (0..s.len())
+                        .map(|i| {
+                            let c = s.colour.get(i).copied().unwrap_or([1.0; 4]);
+                            let a = if c[3] > 0.0 { c[3] } else { 1.0 };
+                            Element {
+                                at: s.projected(i),
+                                size: s.size.get(i).copied().unwrap_or(0.0),
+                                rotation: s.rotation.get(i).copied().unwrap_or(0.0).to_degrees(),
+                                colour: [c[0] / a, c[1] / a, c[2] / a, c[3]],
+                            }
+                        })
+                        .collect()
+                }))
+            }
+            FOR_PATHS => {
+                let item = source(SHAPES_PORT).and_then(|(from, _)| match graph.node(*from) {
+                    Some(GraphNode::Read { item, .. }) => Some(*item),
+                    _ => None,
+                });
+                let size = [plan.width as f32, plan.height as f32];
+                Some(item.map_or_else(Vec::new, |item| {
+                    lumit_core::comp_graph::read_paths(context, item, size, self.t)
+                        .into_iter()
+                        .map(|[l, t, r, b]| Element {
+                            at: [(l + r) * 0.5, (t + b) * 0.5],
+                            size: (r - l).max(b - t),
+                            ..Element::default()
+                        })
+                        .collect()
+                }))
+            }
+            _ => None,
+        };
+        let times = elements
+            .as_ref()
+            .map_or(times, |e| u32::try_from(e.len()).unwrap_or(u32::MAX));
+        let element = |k: u32| {
+            elements
+                .as_ref()
+                .and_then(|e| e.get(k as usize).copied())
+                .unwrap_or_default()
+        };
         let copies = p.map_or(0, |p| p.choice(ParamId::new("mode"), 0)) == MODE_COPIES;
         let blend = p.map_or(0, |p| p.choice(ParamId::new("copies_blend"), 0));
         let Some(GraphNode::Fx(start)) = graph.node(r.start) else {
@@ -5746,7 +5922,12 @@ impl GraphLower<'_> {
                 break;
             }
             let mut values = view.values.to_vec();
-            values.extend(lumit_core::comp_graph::repeat_values(start, k, times));
+            values.extend(lumit_core::comp_graph::repeat_values(
+                start,
+                k,
+                times,
+                &element(k),
+            ));
             let mut feeds = vec![GraphFeed::Step(if copies { into } else { last })];
             feeds.extend(outside.iter().map(|s| GraphFeed::Step(*s)));
             let out = self.lower(
