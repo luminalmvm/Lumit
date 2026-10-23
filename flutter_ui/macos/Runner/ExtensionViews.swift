@@ -12,7 +12,10 @@ import WebKit
 // takes `load`, `run` and `unfocus` and sends `message` and `url`.
 //
 // The page's files are served from the extension's folder under
-// lumit-extension://<id>/, and only to a page that is itself from there.
+// lumit-extension://<id>/, and only to a page that is itself from there,
+// with the Content-Security-Policy the Dart side made. A content rule list,
+// also from the Dart side, blocks every load but those and the sites the
+// manifest named, and nothing loads until it is in.
 // What the page asks of Lumit arrives as text through the one message
 // handler WebKit gives every frame, so only what the top frame of the
 // extension's own page sent is passed on. What the messages mean is for the
@@ -39,10 +42,12 @@ private let mimeTypes: [String: String] = [
 private final class ExtensionFiles: NSObject, WKURLSchemeHandler {
   private let id: String
   private let folder: URL
+  private let policy: String
 
-  init(id: String, folder: String) {
+  init(id: String, folder: String, policy: String) {
     self.id = id
     self.folder = URL(fileURLWithPath: folder, isDirectory: true).resolvingSymlinksInPath()
+    self.policy = policy
   }
 
   /// The file `url` names, if it is one inside the folder.
@@ -93,6 +98,7 @@ private final class ExtensionFiles: NSObject, WKURLSchemeHandler {
       "Content-Type": mimeTypes[file.pathExtension.lowercased()] ?? "application/octet-stream",
       "Accept-Ranges": "bytes",
       "Cache-Control": "no-cache",
+      "Content-Security-Policy": policy,
     ]
     // Sound and video are read a piece at a time.
     if let range = request.value(forHTTPHeaderField: "Range"),
@@ -138,6 +144,9 @@ private final class ExtensionWebView: WKWebView, WKUIDelegate {
   private var channel: FlutterMethodChannel?
   private var watching: NSKeyValueObservation?
   private weak var flutter: FlutterViewController?
+  /// The content rule list is in. Until then a load waits in `waiting`.
+  private var limited = false
+  private var waiting: URL?
 
   static func make(
     number: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger,
@@ -146,7 +155,9 @@ private final class ExtensionWebView: WKWebView, WKUIDelegate {
     let id = arguments["id"] as? String ?? ""
     let configuration = WKWebViewConfiguration()
     configuration.setURLSchemeHandler(
-      ExtensionFiles(id: id, folder: arguments["folder"] as? String ?? ""),
+      ExtensionFiles(
+        id: id, folder: arguments["folder"] as? String ?? "",
+        policy: arguments["policy"] as? String ?? "default-src 'none'"),
       forURLScheme: extensionScheme)
     // `window.lumit`, before any script of the page's own, and for the top
     // frame alone.
@@ -173,6 +184,21 @@ private final class ExtensionWebView: WKWebView, WKUIDelegate {
       result(nil)
     }
     view.channel = channel
+    // A list that fails to compile leaves the page unloaded.
+    WKContentRuleListStore.default().compileContentRuleList(
+      forIdentifier: "lumit-extension-\(id)",
+      encodedContentRuleList: arguments["rules"] as? String ?? ""
+    ) { [weak view] list, _ in
+      DispatchQueue.main.async {
+        guard let view, let list else { return }
+        view.configuration.userContentController.add(list)
+        view.limited = true
+        if let url = view.waiting {
+          view.waiting = nil
+          view.load(URLRequest(url: url))
+        }
+      }
+    }
     view.watching = view.observe(\.url, options: [.new]) { view, _ in
       if let url = view.url {
         view.channel?.invokeMethod("url", arguments: url.absoluteString)
@@ -189,7 +215,11 @@ private final class ExtensionWebView: WKWebView, WKUIDelegate {
     switch call.method {
     case "load":
       if let text = call.arguments as? String, let url = URL(string: text) {
-        load(URLRequest(url: url))
+        if limited {
+          load(URLRequest(url: url))
+        } else {
+          waiting = url
+        }
       }
     case "run":
       if let script = call.arguments as? String {
