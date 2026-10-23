@@ -629,9 +629,10 @@ void main() {
       expect(p.state.project!.getItems(), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('project-import')));
-      // The files are read off the interface's thread.
+      // The files are read off the interface's thread, and the panel hears of
+      // them a turn after the document has them.
       await settleFrb(tester,
-          until: () => p.state.project!.getItems().isNotEmpty);
+          until: () => find.textContaining('No items yet').evaluate().isEmpty);
 
       expect(p.state.project!.getItems(), hasLength(1),
           reason: 'the import reached the document');
