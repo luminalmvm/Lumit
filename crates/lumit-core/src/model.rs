@@ -3232,6 +3232,12 @@ pub struct Document {
     /// brings the item back still wearing its colour.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub item_labels: std::collections::BTreeMap<Uuid, u8>,
+    /// Project items' comments, by item id, kept beside the items as their
+    /// colour tags are. A line of text the item carries for whoever reads the
+    /// project, set and read by scripts as After Effects' `comment`. Absent
+    /// when empty, so older files read as having none.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub item_comments: std::collections::BTreeMap<Uuid, String>,
     /// Footage items' proxies, by item id ([`ProxyRef`], docs/03 §3a).
     ///
     /// **A map beside the items rather than a field on each of them**, for the
@@ -3683,6 +3689,7 @@ impl Document {
             items: Vec::new(),
             auto_folders: AutoFolders::default(),
             item_labels: std::collections::BTreeMap::new(),
+            item_comments: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
             use_proxies: true,

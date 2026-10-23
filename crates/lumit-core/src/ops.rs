@@ -134,6 +134,11 @@ pub enum Op {
         id: Uuid,
         label: u8,
     },
+    /// Set a project item's comment, empty for none. It changes no pixel.
+    SetItemComment {
+        id: Uuid,
+        comment: String,
+    },
     /// Insert a layer at a stack index (0 = top) of a comp.
     AddLayer {
         comp: Uuid,
@@ -864,6 +869,7 @@ impl Op {
             Op::SetAutoPack { .. } => "Pack automatically",
             Op::RenameItem { .. } => "Rename item",
             Op::SetItemLabel { .. } => "Set item colour",
+            Op::SetItemComment { .. } => "Set item comment",
             Op::SetFootageTrim { .. } => "Mark In and Out",
             Op::AddLayer { .. } => "Add layer",
             Op::RemoveLayer { .. } => "Delete layer",
@@ -1269,6 +1275,21 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetItemLabel {
                 id: *id,
                 label: previous,
+            })
+        }
+        Op::SetItemComment { id, comment } => {
+            if doc.item(*id).is_none() {
+                return Err(OpError::UnknownItem);
+            }
+            // No comment is no entry, as an untagged item has no label.
+            let previous = if comment.is_empty() {
+                doc.item_comments.remove(id)
+            } else {
+                doc.item_comments.insert(*id, comment.clone())
+            };
+            Ok(Op::SetItemComment {
+                id: *id,
+                comment: previous.unwrap_or_default(),
             })
         }
         Op::AddLayer { comp, index, layer } => {

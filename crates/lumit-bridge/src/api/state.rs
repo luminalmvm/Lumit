@@ -664,6 +664,8 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // A colour tag tints the item's row icon and feeds the panel's filter
         // chips, so the panel has to hear about it.
         | Op::SetItemLabel { .. }
+        // A comment is organisation too. No panel draws it yet.
+        | Op::SetItemComment { .. }
         // The marks are organisation like a colour tag: no picture changes.
         | Op::SetFootageTrim { .. }
         | Op::SetMediaRef { .. }

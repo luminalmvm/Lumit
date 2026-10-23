@@ -67,6 +67,15 @@ pub fn footprint(before: &Document, after: &Document) -> BTreeSet<Key> {
             keys.insert((*id, "label".into()));
         }
     }
+    for id in before
+        .item_comments
+        .keys()
+        .chain(after.item_comments.keys())
+    {
+        if before.item_comments.get(id) != after.item_comments.get(id) {
+            keys.insert((*id, "comment".into()));
+        }
+    }
     macro_rules! settings {
         ($($field:ident),+) => {$(
             if before.$field != after.$field {
