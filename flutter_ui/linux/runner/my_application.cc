@@ -508,7 +508,7 @@ static void my_application_activate(GApplication* application) {
   if (g_file_test(own_title_bar, G_FILE_TEST_EXISTS)) {
     gtk_window_set_titlebar(window, gtk_header_bar_new());
   }
-  gtk_window_set_title(window, "lumit_flutter");
+  gtk_window_set_title(window, "Lumit");
 
   gtk_window_set_default_size(window, 1280, 720);
   // The smallest it can be made, as on Windows (windows/runner/
