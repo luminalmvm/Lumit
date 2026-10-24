@@ -1650,7 +1650,7 @@ mod tests {
             panic!("queued");
         };
         crate::export::queue_remove(id);
-        let parts = std::fs::read_dir(rig.dir.path().join("guest").join(SENT))
+        let sent: Vec<String> = std::fs::read_dir(rig.dir.path().join("guest").join(SENT))
             .unwrap()
             .flatten()
             .flat_map(|folder| {
@@ -1659,10 +1659,13 @@ mod tests {
                     .flatten()
                     .flatten()
             })
-            .any(|file| file.file_name().to_string_lossy().starts_with("parts-"));
+            .map(|file| file.file_name().to_string_lossy().into_owned())
+            .collect();
+        // The names say what came instead when it fails, which only CI's
+        // Macs have seen.
         assert!(
-            parts,
-            "the frames the export reads came as a file of their own"
+            sent.iter().any(|name| name.starts_with("parts-")),
+            "the frames the export reads came as a file of their own: {sent:?}"
         );
 
         // Asked of the host instead, the host is asked, and says no.
