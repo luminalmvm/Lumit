@@ -1546,7 +1546,7 @@ pub fn texture_bytes(format: wgpu::TextureFormat, width: u32, height: u32) -> u6
         // format makes the budget cautious rather than blind.
         _ => 16,
     };
-    lumit_budget::checked_raster_bytes(u64::from(width), u64::from(height), 1, per_texel)
+    lumit_ingress::checked_raster_bytes(u64::from(width), u64::from(height), 1, per_texel)
         // A size whose product does not fit a u64 is not a texture any card
         // will make; reporting the largest number there is refuses it at the
         // ledger rather than at the driver.
