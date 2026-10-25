@@ -731,6 +731,8 @@ fn block_of(strokes: Vec<DocStroke>, prompts: Vec<lumit_core::roto::RotoPrompt>)
 /// The two names the same frame of two documents is filed under, asserted the
 /// same way for a stroke edit and for a prompt edit.
 fn renames_from(before: RotoBlock, after: RotoBlock, edited: usize) {
+    // The names read the store, which the test below fills.
+    let _guard = serially();
     let (doc_a, comp_a, item) = a_document(before, 0);
     let (doc_b, comp_b, _) = a_document(after, 0);
 
@@ -788,5 +790,57 @@ fn a_correction_renames_exactly_the_frames_it_spoiled() {
             Vec::new(),
         ),
         10,
+    );
+}
+
+/// **A propagation landing renames the frames it cuts**, for a brush seeded by
+/// its strokes as much as for one seeded by a model.
+///
+/// Nothing in the document moves when a run is published, so without the
+/// store's own turn in the key every frame looked at before Propagate, or while
+/// it ran, would be served back with no matte for as long as the cache held it.
+#[test]
+fn a_landed_propagation_renames_the_frames_it_cuts() {
+    let _guard = serially();
+    clear();
+    let block = block_of(
+        vec![stroke(
+            0,
+            RotoStrokeKind::Foreground,
+            (10.0, 10.0),
+            (20.0, 10.0),
+        )],
+        Vec::new(),
+    );
+    let (doc, comp, item) = a_document(block, 0);
+    let mut probes = std::collections::HashMap::new();
+    probes.insert(
+        item,
+        crate::source::SourceProbe::Video {
+            fps: 30.0,
+            width: 64,
+            height: 64,
+            frames: 120,
+            audio: false,
+        },
+    );
+    let quality = crate::plan::Quality::default();
+    let key = || crate::cache::frame_key(&doc, &comp, 0, quality, &probes).expect("a named frame");
+
+    let before = key();
+    let run =
+        run_from_planes(64, 64, 30.0, 120, &[(0, [5; 32], vec![255; 64 * 64])]).expect("a run");
+    publish(uuid::Uuid::from_u128(9), run);
+    assert_ne!(
+        before,
+        key(),
+        "the frame kept its name across a propagation"
+    );
+
+    clear();
+    assert_eq!(
+        before,
+        key(),
+        "dropping the run did not name the frame back"
     );
 }
