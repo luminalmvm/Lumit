@@ -2440,6 +2440,7 @@ name = "lumit_bridge"
 version = "0.9.1"
 dependencies = [
  "flutter_rust_bridge",
+ "interprocess",
  "lumit-aplug",
  "lumit-audio",
  "lumit-budget",
@@ -2455,6 +2456,7 @@ dependencies = [
  "lumit-ml",
  "lumit-ofx",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "lumit-project",
  "lumit-render",
  "lumit-script",

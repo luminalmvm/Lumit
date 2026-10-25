@@ -15,7 +15,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lumit_script::{
-    dispatch, one_step, run, ExportStatus, FootageInfo, Host, RunOptions, ScriptError, COMMANDS,
+    commands::COMMANDS, dispatch, one_step, script::run, script::RunOptions, ExportStatus,
+    FootageInfo, Host, ScriptError,
 };
 use serde_json::{json, Value};
 use uuid::Uuid;

@@ -1,7 +1,7 @@
 //! File > Run script: Lumit's own [`Host`] for `lumit_script`, and the thread
 //! a script runs from.
 //!
-//! The thread that owns the host is the one `lumit_script::run` blocks, and
+//! The thread that owns the host is the one `lumit_script::script::run` blocks, and
 //! every `lumit` call the script makes comes back to it. Edits commit through
 //! the project's store the way a shared project's threads do, so the
 //! interface hears them as ordinary changes. This project's lock is only
@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use lumit_core::model::{Composition, Layer};
 use lumit_core::time::CompTime;
 use lumit_core::DocumentStore;
-use lumit_script::{ExportState, ExportStatus, Host, RunOptions, ScriptError};
+use lumit_script::{script::RunOptions, ExportState, ExportStatus, Host, ScriptError};
 use uuid::Uuid;
 
 use crate::api::{
@@ -164,7 +164,7 @@ fn run_file(
         });
     };
     let dialog = |tree: Option<&str>| host.dialog(tree);
-    let report = lumit_script::run(
+    let report = lumit_script::script::run(
         &host,
         &source,
         RunOptions {

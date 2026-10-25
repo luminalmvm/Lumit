@@ -71,6 +71,9 @@ lumit-project = { path = "../lumit-project" }
 lumit-share = { path = "../lumit-share" }
 # File > Run script: the commands and the script runner behind them.
 lumit-script = { path = "../lumit-script" }
+# The live endpoint's pipe and the secret that guards it.
+interprocess = "2"
+lumit-peer = { path = "../lumit-peer" }
 # The command line reads the script it is given with a size cap.
 lumit-ingress = { path = "../lumit-ingress" }
 # Installed extensions: reading a manifest, and the folder they live in.
