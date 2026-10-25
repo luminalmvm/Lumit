@@ -32,11 +32,23 @@
   "@addonTaskSynthesis": {
     "description": "Settings window, Addons: what a model pack does, shown on its row. This one invents the frame between two real ones."
   },
-  "aeAudioLayerAsFootage": "تم الاستيراد كطبقة لقطات تحمل صوتها",
+  "aeAudioLayerAsFootage": "تم الاستيراد كطبقة لقطات",
   "@aeAudioLayerAsFootage": {
     "description": "Import report row reason, lower case. Lumit has no separate audio layer kind for this case."
   },
-  "aeBlendModeClassic": "تم استيراد {aeMode} كنظيره الحديث",
+  "aeAudioLevelsDiffer": "تم استيراد المستويين {left} و{right} ديسيبل كـ {left} ديسيبل",
+  "@aeAudioLevelsDiffer": {
+    "description": "Import report row reason. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
+    "placeholders": {
+      "left": {
+        "type": "String"
+      },
+      "right": {
+        "type": "String"
+      }
+    }
+  },
+  "aeBlendModeClassic": "تم استيراد {aeMode} كالوضع الحديث",
   "@aeBlendModeClassic": {
     "description": "Import report row reason, lower case. After Effects keeps older Classic versions of a few blend modes.",
     "placeholders": {
@@ -45,11 +57,20 @@
       }
     }
   },
-  "aeCastsShadowsNotCarried": "تُلقي الطبقة ظلالًا، وأضواء Lumit لا تُلقي ظلالًا، لذا استُوردت دونها",
+  "aeBlendModeUnavailable": "تم استيراد {aeMode} كوضع عادي",
+  "@aeBlendModeUnavailable": {
+    "description": "Import report row reason. The After Effects blend mode's own name is substituted; Normal is Lumit's plain composite.",
+    "placeholders": {
+      "aeMode": {
+        "type": "String"
+      }
+    }
+  },
+  "aeCastsShadowsNotCarried": "لم يُنقل إلقاء الظلال",
   "@aeCastsShadowsNotCarried": {
     "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
   },
-  "aeChunkUnreadable": "تعذّرت قراءة سجل في ملف المشروع ({chunk}) وتم تخطيه",
+  "aeChunkUnreadable": "تعذّرت قراءة سجل ({chunk})",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
     "placeholders": {
@@ -58,7 +79,7 @@
       }
     }
   },
-  "aeColourProfileIgnored": "ملف تعريف الألوان {profile} لا مقابل له، لذا تُستخدم ألوان الملف نفسه",
+  "aeColourProfileIgnored": "لم يُنقل ملف تعريف الألوان {profile}",
   "@aeColourProfileIgnored": {
     "description": "Import report row reason, lower case. After Effects read the footage through a colour profile, such as an ICC profile, that Lumit has no way to apply.",
     "placeholders": {
@@ -67,7 +88,7 @@
       }
     }
   },
-  "aeCompDurationGuessed": "لم تصل المدة — تم الاستيراد بطول {used} ثانية",
+  "aeCompDurationGuessed": "تم الاستيراد بطول {used} ثانية",
   "@aeCompDurationGuessed": {
     "description": "Import report row reason, lower case. The composition's duration was absent, so a default was used.",
     "placeholders": {
@@ -76,7 +97,7 @@
       }
     }
   },
-  "aeCompFrameRateGuessed": "لم يصل معدل الإطارات — تم الاستيراد بمعدل {used} fps",
+  "aeCompFrameRateGuessed": "تم الاستيراد بمعدل {used} إطارًا في الثانية",
   "@aeCompFrameRateGuessed": {
     "description": "Import report row reason, lower case. The composition's frame rate was absent, so a default was used.",
     "placeholders": {
@@ -85,11 +106,11 @@
       }
     }
   },
-  "aeCompMissing": "لم تصل بيانات التكوين — تم استيراده فارغًا",
+  "aeCompMissing": "لم تكن في التكوين بيانات",
   "@aeCompMissing": {
     "description": "Import report row reason, lower case (it follows the item's name). The bundle named a composition but carried none of its contents."
   },
-  "aeCompStartIgnored": "بدأ الرمز الزمني للتكوين عند {start} ثانية — تم الاستيراد بدءًا من الصفر",
+  "aeCompStartIgnored": "يبدأ من الصفر، لا من {start} ثانية",
   "@aeCompStartIgnored": {
     "description": "Import report row reason, lower case. After Effects can start a composition's timecode somewhere other than zero; Lumit's begin at zero.",
     "placeholders": {
@@ -107,7 +128,7 @@
       }
     }
   },
-  "aeEffectAsPlugin": "تم استيراد {matchName} كمكوّن {plugin} الإضافي المثبّت لديك، وهو التأثير نفسه — نُقل {carried} من عناصر التحكم البالغة {controls} بالاسم",
+  "aeEffectAsPlugin": "تم استيراد {matchName} كـ {plugin}، وطوبق {carried} من {controls} عناصر تحكم",
   "@aeEffectAsPlugin": {
     "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project is one the user also has installed as an OFX plug-in, so it imported as that plug-in rather than as Lumit's closest likeness. matchName is After Effects' internal name for the effect, plugin is the installed plug-in's own name, and the two numbers are how many of its controls carried across out of how many the After Effects effect had.",
     "placeholders": {
@@ -140,7 +161,7 @@
       }
     }
   },
-  "aeEffectParamNotCarried": "{param} في {effect} لا مقابل له — تم استيراد التأثير دونه",
+  "aeEffectParamNotCarried": "لم يُنقل {param} في {effect}",
   "@aeEffectParamNotCarried": {
     "description": "Import report row reason, lower case. Names an effect and one of its controls.",
     "placeholders": {
@@ -152,7 +173,7 @@
       }
     }
   },
-  "aeEffectParamRebased": "{param} في {effect} كان مقيسًا بوحدات After Effects — تم استيراده بالطول نفسه بوحدات Lumit",
+  "aeEffectParamRebased": "تم تحويل {param} في {effect} إلى وحدات Lumit",
   "@aeEffectParamRebased": {
     "description": "Import report row reason, lower case. Nothing was approximated: the same length is spelled with a different number.",
     "placeholders": {
@@ -164,7 +185,16 @@
       }
     }
   },
-  "aeEffectPlaceholder": "تم استيراد {matchName} كعنصر نائب — يُحتفظ بكل معلمة ولا يُصيّر شيئًا",
+  "aeEffectParamsUnreadable": "تعذّرت قراءة {count} من المعلمات",
+  "@aeEffectParamsUnreadable": {
+    "description": "Import report row reason. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "aeEffectPlaceholder": "تم استيراد {matchName} كعنصر نائب",
   "@aeEffectPlaceholder": {
     "description": "Import report row reason, lower case. The placeholder is the After Effects effect's internal name; leave it as written.",
     "placeholders": {
@@ -173,7 +203,7 @@
       }
     }
   },
-  "aeEffectSpeedAsKeyframes": "{param} في {effect} كان يقرأ الساعة — تم استيراده كإطارات رئيسية تعمل بالمعدل نفسه",
+  "aeEffectSpeedAsKeyframes": "تم استيراد {param} في {effect} كإطارات رئيسية",
   "@aeEffectSpeedAsKeyframes": {
     "description": "Import report row reason, lower case. A control that advanced by itself became ordinary keyframes.",
     "placeholders": {
@@ -185,7 +215,7 @@
       }
     }
   },
-  "aeEffectSuggestion": "تم استيراد {matchName} كعنصر نائب — {instead} يؤدي هذه المهمة في Lumit",
+  "aeEffectSuggestion": "تم استيراد {matchName} كعنصر نائب، جرّب {instead}",
   "@aeEffectSuggestion": {
     "description": "Import report row reason, lower case. An After Effects effect deliberately not mapped, naming the Lumit feature that replaces it.",
     "placeholders": {
@@ -197,15 +227,15 @@
       }
     }
   },
-  "aeExpressionCarried": "تم استيراد التعبير كنص مصدري ويتحكم في الخاصية",
+  "aeExpressionCarried": "تم استيراد التعبير",
   "@aeExpressionCarried": {
     "description": "Import report row reason, lower case. An expression is a small script that computes a property's value."
   },
-  "aeExpressionDisabledCarried": "تعبير معطّل — يُحتفظ بنصه، ولا يتحكم في شيء",
+  "aeExpressionDisabledCarried": "تم استيراد التعبير معطّلًا",
   "@aeExpressionDisabledCarried": {
     "description": "Import report row reason, lower case. After Effects keeps a disabled expression's text, and so does the import."
   },
-  "aeExpressionNotRunnable": "لا يعمل التعبير هنا وتم تعطيله — يُحتفظ بنصه، وتتحكم الإطارات الرئيسية تحته في الخاصية: {source}",
+  "aeExpressionNotRunnable": "تعذّر تشغيل التعبير فعُطّل: {source}",
   "@aeExpressionNotRunnable": {
     "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
     "placeholders": {
@@ -214,7 +244,7 @@
       }
     }
   },
-  "aeExpressionOverKeys": "تُستخدم الإطارات الرئيسية، ويُحتفظ بالتعبير كنص: {source}",
+  "aeExpressionOverKeys": "تُستخدم الإطارات الرئيسية لا التعبير: {source}",
   "@aeExpressionOverKeys": {
     "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
@@ -223,19 +253,28 @@
       }
     }
   },
-  "aeFilterAll": "الكل",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
-  "aeFlowEngineDiffers": "تم استيراد Pixel Motion كاستيفاء بالتدفق — محرك تدفق مختلف، لذا تختلف الإطارات البينية",
+  "aeFlowEngineDiffers": "تم استيراد Pixel Motion كاستيفاء تدفق",
   "@aeFlowEngineDiffers": {
     "description": "Import report row reason, lower case. Pixel Motion is an After Effects feature name; leave it as written."
   },
-  "aeItemUnreadable": "تعذّرت قراءة العنصر وتم تخطيه",
+  "aeGuideLayerNotSupported": "تم استيراد الطبقة الإرشادية ظاهرة",
+  "@aeGuideLayerNotSupported": {
+    "description": "Import report row reason. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."
+  },
+  "aeItemUnreadable": "تعذّرت قراءة العنصر",
   "@aeItemUnreadable": {
     "description": "Import report row reason. Lower case: it follows the item's name on the line above. Reasons are one line each."
   },
-  "aeLayerKindUnsupported": "نوع الطبقة {aeKind} لا مقابل له — تم استيرادها كطبقة فارغة ليبقى الربط بالأصل",
+  "aeItemsImported": "{count, plural, =1{تم استيراد عنصر واحد} other{تم استيراد {count} عنصرًا}}",
+  "@aeItemsImported": {
+    "description": "The line under the import report's title: how many items came across from After Effects. What was changed or left out is listed below it, under headings.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aeLayerKindUnsupported": "تم استيراد {aeKind} كطبقة فارغة",
   "@aeLayerKindUnsupported": {
     "description": "Import report row reason, lower case. A null layer is an invisible transform-only layer; keeping one preserves anything parented to it.",
     "placeholders": {
@@ -244,7 +283,7 @@
       }
     }
   },
-  "aeLayerQualityIgnored": "جودة الطبقة {quality} لا مقابل لها — تم الاستيراد بالجودة الكاملة",
+  "aeLayerQualityIgnored": "تم استيراد الجودة {quality} كجودة كاملة",
   "@aeLayerQualityIgnored": {
     "description": "Import report row reason, lower case. After Effects can draw a layer draft or wireframe; Lumit renders one quality.",
     "placeholders": {
@@ -253,15 +292,24 @@
       }
     }
   },
-  "aeLayerSpanRepaired": "نقطتا الدخول والخروج للطبقة لم تشكّلا مدى — تم استيرادها بطول إطار واحد",
+  "aeLayerSourceMissing": "المصدر {id} كان مفقودًا",
+  "@aeLayerSourceMissing": {
+    "description": "Import report row reason. The layer named an After Effects item the bundle does not contain.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "aeLayerSpanRepaired": "تم الاستيراد بطول إطار واحد",
   "@aeLayerSpanRepaired": {
     "description": "Import report row reason, lower case. The layer's start and end times were empty or the wrong way round."
   },
-  "aeLayerUnreadable": "لم يكن للطبقة مكان في المكدس وتم تخطيها",
+  "aeLayerUnreadable": "تعذّرت قراءة الطبقة",
   "@aeLayerUnreadable": {
     "description": "Import report row reason, lower case. The capture recorded no stacking position for the layer."
   },
-  "aeLightKindApproximated": "الضوء من نوع {aeKind} لا مقابل له — تم استيراده كأقرب نوع",
+  "aeLightKindApproximated": "تم استيراد ضوء {aeKind} كأقرب نوع",
   "@aeLightKindApproximated": {
     "description": "Import report row reason, lower case. After Effects has light kinds Lumit does not.",
     "placeholders": {
@@ -270,11 +318,32 @@
       }
     }
   },
-  "aeMaskRotoBezierFlattened": "منحنيات قناع RotoBezier يحسبها After Effects — تم استيراده كمضلع",
+  "aeMaskFeatherAxesDiffer": "تم استيراد التنعيم {x} × {y} كمتوسط",
+  "@aeMaskFeatherAxesDiffer": {
+    "description": "Import report row reason. After Effects softens a mask edge by different amounts horizontally and vertically.",
+    "placeholders": {
+      "x": {
+        "type": "String"
+      },
+      "y": {
+        "type": "String"
+      }
+    }
+  },
+  "aeMaskRotoBezierFlattened": "تم استيراد قناع RotoBezier كمضلع",
   "@aeMaskRotoBezierFlattened": {
     "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
   },
-  "aeMediaMissing": "الملف في {path} كان مفقودًا في After Effects أيضًا",
+  "aeMatteTargetMissing": "طبقة القناع {index} كانت مفقودة",
+  "@aeMatteTargetMissing": {
+    "description": "Import report row reason. A matte gates one layer's alpha with another layer's.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "aeMediaMissing": "الملف في {path} كان مفقودًا",
   "@aeMediaMissing": {
     "description": "Import report row reason, lower case. After Effects itself had already lost this footage file.",
     "placeholders": {
@@ -283,23 +352,31 @@
       }
     }
   },
-  "aeMediaNotFound": "الملف غير موجود على هذا الجهاز — تم استيراده غير متصل، جاهزًا لإعادة الربط",
+  "aeMediaNotFound": "لم يُعثر على الملف",
   "@aeMediaNotFound": {
     "description": "Import report row reason, lower case. The footage was fine in After Effects and is not on the machine doing the import."
   },
-  "aeMediaPlaceholder": "عنصر نائب من After Effects، وليس ملفًا حقيقيًا",
+  "aeMediaPlaceholder": "عنصر نائب من After Effects",
   "@aeMediaPlaceholder": {
     "description": "Import report row reason, lower case. The project item stood in for a file that was never chosen."
   },
-  "aeNoneOfThatKind": "لا شيء من هذا النوع",
-  "@aeNoneOfThatKind": {
-    "description": "Import report window — shown in place of the list when the chosen outcome filter matches no row."
+  "aeNestedPreserveBoth": "لم يُنقل الحفاظ على معدل الإطارات والدقة",
+  "@aeNestedPreserveBoth": {
+    "description": "Import report row reason. Names two After Effects composition switches Lumit does not have."
   },
-  "aeNothingToReport": "وصل كل شيء دون تغيير",
+  "aeNestedPreserveRate": "لم يُنقل الحفاظ على معدل الإطارات",
+  "@aeNestedPreserveRate": {
+    "description": "Import report row reason. Names an After Effects composition switch Lumit does not have."
+  },
+  "aeNestedPreserveResolution": "لم يُنقل الحفاظ على الدقة",
+  "@aeNestedPreserveResolution": {
+    "description": "Import report row reason. Names an After Effects composition switch Lumit does not have."
+  },
+  "aeNothingToReport": "تم استيراد كل شيء",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
   },
-  "aeOcioConfigNotFound": "إعداد OCIO {config} غير موجود على هذا الجهاز، لذا تُستخدم ألوان Lumit الخاصة",
+  "aeOcioConfigNotFound": "لم يُعثر على إعداد OCIO {config}",
   "@aeOcioConfigNotFound": {
     "description": "Import report row reason, lower case. The After Effects project was colour managed with an OCIO config that Lumit couldn't find, either a file path or the name of a config After Effects ships.",
     "placeholders": {
@@ -308,7 +385,7 @@
       }
     }
   },
-  "aeOrientationNotCarried": "تدور الطبقة بالاتجاه وبالدوران — يصل الدوران فقط، ولا يُنقل الاتجاه",
+  "aeOrientationNotCarried": "لم يُنقل الاتجاه",
   "@aeOrientationNotCarried": {
     "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
   },
@@ -328,7 +405,7 @@
   "@aeOutcomeSkipped": {
     "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
   },
-  "aeParentMissing": "الطبقة الأصل {index} ليست في هذا التكوين — تم استيرادها دون أصل",
+  "aeParentMissing": "الطبقة الأصل {index} كانت مفقودة",
   "@aeParentMissing": {
     "description": "Import report row reason, lower case. The layer named a parent that is not in the same composition.",
     "placeholders": {
@@ -337,7 +414,7 @@
       }
     }
   },
-  "aePixelAspectIgnored": "نسبة أبعاد البكسل {par} لا مقابل لها — تم الاستيراد ببكسلات مربعة",
+  "aePixelAspectIgnored": "تم استيراد نسبة البكسل {par} كمربعة",
   "@aePixelAspectIgnored": {
     "description": "Import report row reason, lower case. Lumit compositions have square pixels; After Effects' non-square ratio is recorded but not applied.",
     "placeholders": {
@@ -346,7 +423,20 @@
       }
     }
   },
-  "aePropertyUnreadable": "لم يتمكن After Effects نفسه من قراءة {matchName}، لذا لم يكن هناك ما يُستورد",
+  "aePreserveTransparencyNotSupported": "لم يُنقل الحفاظ على الشفافية الأساسية",
+  "@aePreserveTransparencyNotSupported": {
+    "description": "Import report row reason. Names an After Effects layer switch Lumit does not have."
+  },
+  "aeProjectBlendingDiffers": "تم استيراد المزج بعمق {bits} بت كمزج خطي",
+  "@aeProjectBlendingDiffers": {
+    "description": "Import report row reason. The After Effects project used different colour arithmetic from Lumit's.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      }
+    }
+  },
+  "aePropertyUnreadable": "تعذّرت قراءة {matchName}",
   "@aePropertyUnreadable": {
     "description": "Import report row reason, lower case. The placeholder is an After Effects internal property name; leave it as written.",
     "placeholders": {
@@ -355,7 +445,7 @@
       }
     }
   },
-  "aeRendererUnrecognised": "ميزات أداة التصيير {renderer} لا تُستورد — تصل الطبقات مسطحة",
+  "aeRendererUnrecognised": "لم يُنقل المُصيِّر {renderer}",
   "@aeRendererUnrecognised": {
     "description": "Import report row reason, lower case. The composition used an After Effects renderer whose extras have no Lumit counterpart.",
     "placeholders": {
@@ -368,7 +458,7 @@
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
-  "aeRotationOrderConverted": "تم تحويل الدوران إلى ترتيب محاور Lumit، دقيقًا عند كل إطار رئيسي وقريبًا بينها",
+  "aeRotationOrderConverted": "تم تحويل الدوران إلى ترتيب محاور Lumit",
   "@aeRotationOrderConverted": {
     "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
@@ -376,11 +466,46 @@
   "@aeShapeContentsNotMapped": {
     "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
   },
-  "aeSpatialTangentsFlattened": "المماسات المكانية لمسار الحركة لا تُنقل — يتحرك كل محور بمفرده",
+  "aeShapeGradientColoursDefault": "تم استيراد التدرج من الأبيض إلى الأسود",
+  "@aeShapeGradientColoursDefault": {
+    "description": "Import report row reason. A shape's gradient fill arrived with its type and direction but in After Effects' default colours."
+  },
+  "aeShapeOperatorApproximated": "تم استيراد {name} كأقرب مقابل",
+  "@aeShapeOperatorApproximated": {
+    "description": "Import report row reason. A shape layer operator such as Wiggle Paths that Lumit draws with its own nearest modifier. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapeOperatorNotCarried": "لم يُنقل {name}",
+  "@aeShapeOperatorNotCarried": {
+    "description": "Import report row reason. A shape layer operator such as Merge Paths or Zig Zag that Lumit's shapes have no place for. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapePaintKeptStill": "لم تُنقل حركة اللون",
+  "@aeShapePaintKeptStill": {
+    "description": "Import report row reason. A shape's fill or stroke colour, opacity or width was animated, and Lumit keeps these still."
+  },
+  "aeSpatialTangentsFlattened": "لم تُنقل منحنيات مسار الحركة",
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
   },
-  "aeStructureUnreadable": "تعذّرت قراءة بنية المشروع — استُوردت مراجع اللقطات فقط ({count})، دون تكوينات أو طبقات",
+  "aeStretchAsRetime": "تم استيراد تمديد الوقت {percent}% كـ Retime",
+  "@aeStretchAsRetime": {
+    "description": "Import report row reason. Retime is Lumit's retiming system and is a product term — leave it as written.",
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "aeStructureUnreadable": "أمكن قراءة {count} من عناصر اللقطات فقط",
   "@aeStructureUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it, once per import, when the item tree cannot be walked but the footage records can. The placeholder is how many references were recovered.",
     "placeholders": {
@@ -388,6 +513,10 @@
         "type": "String"
       }
     }
+  },
+  "aeTextStylingNotMapped": "لم تُنقل محرّكات النص ومساره وبعض تنسيقه",
+  "@aeTextStylingNotMapped": {
+    "description": "Import report row reason. A text layer arrived with its font and styling, but used at least one thing Lumit's text has no place for: text animators, text on a path, tsume, a justified last line, or source text that changes over time."
   },
   "animated": "متحرك",
   "@animated": {
