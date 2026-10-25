@@ -31,5 +31,10 @@ serde = { version = "1", features = ["derive"] }
 tempfile = "3"
 thiserror = "2"
 
+# The Linux FFmpeg build reaches libva through stubs that abort the process
+# when it isn't installed, so VAAPI checks it loads first.
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading = "0.8"
+
 [lints]
 workspace = true
