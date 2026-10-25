@@ -560,7 +560,7 @@ mod tests {
         let chain = resolve(style, Direction::Forward).expect("implemented");
         assert!(!chain.is_factorable());
         let baked = crate::bake::bake(&chain, crate::bake::Shaper::DEFAULT).expect("it bakes");
-        assert!(matches!(baked, crate::Artefact::ShaperCube { .. }));
+        assert!(matches!(baked, crate::bake::Artefact::ShaperCube { .. }));
         let probe = [0.18, 0.2, 0.16];
         let (want, got) = (chain.eval(probe), baked.eval(probe));
         assert!(close(got, want, 2e-3), "{got:?} vs {want:?}");

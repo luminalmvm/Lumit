@@ -19,7 +19,7 @@
 //!
 //! There is no CPU reference, for the reason the LUT has none: the table
 //! never reaches the single-buffer CPU dispatcher, so the degradation rung
-//! renders these as identity. The §1.6 oracle is `lumit_colour::Artefact::eval`,
+//! renders these as identity. The §1.6 oracle is `lumit_colour::bake::Artefact::eval`,
 //! held against the kernel in `lumit-render`'s `ocio_parity` test.
 
 use crate::fx::{EffectDef, EffectMetadata, EffectSchema};

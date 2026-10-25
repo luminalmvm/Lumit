@@ -1631,7 +1631,7 @@ pub enum OcioTables {
     },
 }
 
-/// `lumit_colour::Shaper`, repeated here for the same reason [`OcioTables`] is.
+/// `lumit_colour::bake::Shaper`, repeated here for the same reason [`OcioTables`] is.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OcioShaper {
     Lg2 {

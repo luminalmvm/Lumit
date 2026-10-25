@@ -150,7 +150,9 @@ impl LutCache {
                 } else {
                     chain
                 };
-                std::sync::Arc::new(lumit_colour::bake(&chain, lumit_colour::Shaper::DEFAULT).ok()?)
+                std::sync::Arc::new(
+                    lumit_colour::bake::bake(&chain, lumit_colour::bake::Shaper::DEFAULT).ok()?,
+                )
             }
         };
         let mut hasher = blake3::Hasher::new();
