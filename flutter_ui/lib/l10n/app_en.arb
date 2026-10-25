@@ -17923,6 +17923,30 @@
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
+  "signInBirthDate": "Date of birth",
+  "@signInBirthDate": {
+    "description": "Label over the day, month and year someone was born, on the page that creates an account."
+  },
+  "signInDay": "Day",
+  "@signInDay": {
+    "description": "Hint in the field for the day of the month someone was born, on the page that creates an account."
+  },
+  "signInMonth": "Month",
+  "@signInMonth": {
+    "description": "What the month list for a date of birth shows before a month is picked, on the page that creates an account."
+  },
+  "signInYearShort": "Year",
+  "@signInYearShort": {
+    "description": "Hint in the field for the year someone was born, on the page that creates an account. Four digits."
+  },
+  "signInErrorBirthDate": "Enter your date of birth.",
+  "@signInErrorBirthDate": {
+    "description": "Error when creating an account with the date of birth missing or not a real day, or after a Google, Discord or Apple sign-in that would make a new account without one."
+  },
+  "signInErrorTooYoung": "You're too young for a Lumit account.",
+  "@signInErrorTooYoung": {
+    "description": "Error when the year of birth given is under the least age for an account."
+  },
   "signInErrorProvider": "Verify your email with that account first.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
