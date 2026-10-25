@@ -164,6 +164,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.selector.start],
           -1000,
           1000,
+          0,
           (s) => putSelector(selectorWith(a.selector, start: s.first))),
       _numberRow(
           context,
@@ -172,6 +173,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.selector.end],
           -1000,
           1000,
+          100,
           (s) => putSelector(selectorWith(a.selector, end: s.first))),
       _numberRow(
           context,
@@ -180,6 +182,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.selector.offset],
           -1000,
           1000,
+          0,
           (s) => putSelector(selectorWith(a.selector, offset: s.first))),
       _plainRow(
         context,
@@ -216,6 +219,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.positionX, a.positionY],
           -100000,
           100000,
+          0,
           (s) => put(animatorWith(a, positionX: s[0], positionY: s[1]))),
       _numberRow(
           context,
@@ -224,6 +228,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.rotation],
           -100000,
           100000,
+          0,
           (s) => put(animatorWith(a, rotation: s.first))),
       _numberRow(
           context,
@@ -232,9 +237,11 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.scaleX, a.scaleY],
           -10000,
           10000,
+          100,
           (s) => put(animatorWith(a, scaleX: s[0], scaleY: s[1]))),
       _numberRow(context, l10n.transformOpacity, 'anim-opacity-$index',
-          [a.opacity], 0, 100, (s) => put(animatorWith(a, opacity: s.first))),
+          [a.opacity], 0, 100, 100,
+          (s) => put(animatorWith(a, opacity: s.first))),
       // A fill **offset**, added to the layer's own colour in scene-linear —
       // so it can be negative, and so two animators tinting the same letter
       // add up. That is why it is three numbers rather than a swatch: a
@@ -246,6 +253,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           [a.fillR, a.fillG, a.fillB],
           -10,
           10,
+          0,
           (s) => put(animatorWith(a, fillR: s[0], fillG: s[1], fillB: s[2]))),
     ];
   }
@@ -259,6 +267,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     List<BridgeScalar> scalars,
     double min,
     double max,
+    double resetTo,
     ValueChanged<List<BridgeScalar>> write,
   ) {
     // The playhead is listened to here, per row, rather than by the panel above
@@ -267,13 +276,13 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
     if (scalars.every((s) => s is BridgeScalar_Static)) {
-      return _numberRowAt(
-          context, label, keyName, scalars, min, max, write, playhead.value);
+      return _numberRowAt(context, label, keyName, scalars, min, max, resetTo,
+          write, playhead.value);
     }
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
-      builder: (context, at, _) =>
-          _numberRowAt(context, label, keyName, scalars, min, max, write, at),
+      builder: (context, at, _) => _numberRowAt(
+          context, label, keyName, scalars, min, max, resetTo, write, at),
     );
   }
 
@@ -284,6 +293,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     List<BridgeScalar> scalars,
     double min,
     double max,
+    double resetTo,
     ValueChanged<List<BridgeScalar>> write,
     int at,
   ) {
@@ -332,6 +342,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
                 value: shown(scalars[i]),
                 min: min,
                 max: max,
+                resetTo: resetTo,
                 decimals: 1,
                 onChanged: (v) => commit(i, v),
               ),
@@ -473,6 +484,16 @@ String textAnimatorValueLabel(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.fillR => '${l10n.textAnimatorFillOffset} r',
       TextAnimatorValue.fillG => '${l10n.textAnimatorFillOffset} g',
       TextAnimatorValue.fillB => '${l10n.textAnimatorFillOffset} b',
+    };
+
+/// What one of an animator's numbers is when it changes nothing, for Reset.
+double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
+      TextAnimatorValue.rangeEnd ||
+      TextAnimatorValue.scaleX ||
+      TextAnimatorValue.scaleY ||
+      TextAnimatorValue.opacity =>
+        100,
+      _ => 0,
     };
 
 /// Which of [a]'s numbers [value] names.
