@@ -38,6 +38,7 @@
 //! map. No code is vendored.
 
 mod btdk;
+mod gradient;
 mod keys;
 #[cfg(test)]
 use keys::DEFAULT_INFLUENCE;
@@ -335,8 +336,13 @@ fn read_node(
             false,
         ));
     }
-    // A gradient (`GCst`) is its own encoding and is phase C; a node type from
-    // a newer After Effects lands here too.
+    if let Some(gcst) = list(b"GCst") {
+        return Some((
+            gradient::read_gradient(match_name, gcst, chunks, ctx),
+            false,
+        ));
+    }
+    // A node type from a newer After Effects lands here.
     // Either way the property is named and marked rather than dropped, which is
     // what lets the import report say what was lost.
     let kind = chunks.first().and_then(|chunk| chunk.list_type)?;

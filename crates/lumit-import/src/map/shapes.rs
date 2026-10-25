@@ -290,17 +290,17 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
         let name = display_name(node, match_name_of(node)).to_string();
         let here = path.property(&name);
         let props = node.children();
-        match match_name_of(node) {
-            "ADBE Vector Graphic - G-Stroke" => not_carried(conv, &here, "Gradient stroke"),
-            // The colours are a record of their own, which neither way in
-            // reads yet, so the gradient arrives in After Effects' own
-            // starting colours.
-            "ADBE Vector Graphic - G-Fill" => conv.report.row(
+        if match_name_of(node) == "ADBE Vector Graphic - G-Stroke" {
+            not_carried(conv, &here, "Gradient stroke");
+        }
+        // The script route cannot read a gradient's colours at all, so they
+        // arrive in After Effects' own starting colours.
+        if child(props, "ADBE Vector Grad Colors").is_some_and(|node| node.unreadable.is_some()) {
+            conv.report.row(
                 here.clone(),
                 Outcome::Adjusted,
                 Reason::ShapeGradientColoursDefault,
-            ),
-            _ => {}
+            );
         }
         let moving = [
             "ADBE Vector Fill Color",
@@ -364,9 +364,29 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeIte
         item.stroke_width =
             still_value(props, "ADBE Vector Stroke Width", 2.0) * chain_scale(&drawn.chain);
     }
+    // A file leaves out a gradient at After Effects' own white to black.
+    let ramp = child(props, "ADBE Vector Grad Colors")
+        .and_then(|node| node.value.as_ref())
+        .and_then(Ramp::of)
+        .unwrap_or_else(Ramp::white_to_black);
+    if gradient && stroke {
+        // Lumit's outlines are one colour, so a gradient one takes its first.
+        item.stroke = Some(ramp.colour_at(0.0));
+    }
     if gradient && !stroke {
-        item.fill = Some(LinearColour([1.0, 1.0, 1.0, 1.0]));
-        item.gradient_colour = Some(LinearColour::BLACK);
+        item.fill = Some(ramp.colour_at(0.0));
+        item.gradient_colour = Some(ramp.colour_at(1.0));
+        item.gradient_start_opacity = LumProperty::fixed(ramp.alpha_at(0.0) * 100.0);
+        item.gradient_end_opacity = LumProperty::fixed(ramp.alpha_at(1.0) * 100.0);
+        item.gradient_stops = ramp
+            .inner()
+            .into_iter()
+            .map(|at| lumit_core::shape::GradientStop {
+                position: LumProperty::fixed(at * 100.0),
+                colour: ramp.colour_at(at),
+                opacity: LumProperty::fixed(ramp.alpha_at(at) * 100.0),
+            })
+            .collect();
         item.gradient = if still_value(props, "ADBE Vector Grad Type", 1.0) == 2.0 {
             2
         } else {
@@ -773,4 +793,99 @@ fn not_carried(conv: &mut Conv<'_>, path: &ItemPath, name: &str) {
 fn kept_still(conv: &mut Conv<'_>, path: &ItemPath) {
     conv.report
         .row(path.clone(), Outcome::Adjusted, Reason::ShapePaintKeptStill);
+}
+
+/// A gradient as the reader hands it over: its colour stops and its opacity
+/// stops, each at positions of their own from 0 to 1.
+struct Ramp {
+    colours: Vec<(f64, Vec<f64>)>,
+    alphas: Vec<(f64, Vec<f64>)>,
+}
+
+impl Ramp {
+    fn of(value: &serde_json::Value) -> Option<Self> {
+        let list = |key: &str| -> Vec<(f64, Vec<f64>)> {
+            value
+                .get(key)
+                .and_then(serde_json::Value::as_array)
+                .map(|stops| {
+                    stops
+                        .iter()
+                        .filter_map(|stop| {
+                            let numbers: Vec<f64> = stop
+                                .as_array()?
+                                .iter()
+                                .filter_map(serde_json::Value::as_f64)
+                                .collect();
+                            let (at, rest) = numbers.split_first()?;
+                            Some((*at, rest.to_vec()))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut ramp = Ramp {
+            colours: list("colours"),
+            alphas: list("alphas"),
+        };
+        ramp.colours.sort_by(|a, b| a.0.total_cmp(&b.0));
+        ramp.alphas.sort_by(|a, b| a.0.total_cmp(&b.0));
+        (!ramp.colours.is_empty()).then_some(ramp)
+    }
+
+    fn white_to_black() -> Self {
+        Ramp {
+            colours: vec![(0.0, vec![1.0, 1.0, 1.0]), (1.0, vec![0.0, 0.0, 0.0])],
+            alphas: Vec::new(),
+        }
+    }
+
+    fn colour_at(&self, at: f64) -> LinearColour {
+        let c = between(&self.colours, at, &[1.0, 1.0, 1.0]);
+        linear_colour(Some(&c))
+    }
+
+    fn alpha_at(&self, at: f64) -> f64 {
+        between(&self.alphas, at, &[1.0])
+            .first()
+            .copied()
+            .unwrap_or(1.0)
+    }
+
+    /// Every place strictly between the two ends where either list has a
+    /// stop, as many as Lumit's gradient holds.
+    fn inner(&self) -> Vec<f64> {
+        let mut at: Vec<f64> = self
+            .colours
+            .iter()
+            .chain(&self.alphas)
+            .map(|(at, _)| *at)
+            .filter(|at| *at > 0.0 && *at < 1.0)
+            .collect();
+        at.sort_by(f64::total_cmp);
+        at.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+        at.truncate(lumit_core::shape::MAX_GRADIENT_STOPS);
+        at
+    }
+}
+
+/// The stops' values at `at`, straight between the two either side and held
+/// past the first and the last.
+fn between(stops: &[(f64, Vec<f64>)], at: f64, none: &[f64]) -> Vec<f64> {
+    let Some(first) = stops.first() else {
+        return none.to_vec();
+    };
+    if at <= first.0 {
+        return first.1.clone();
+    }
+    for pair in stops.windows(2) {
+        let [(a, from), (b, to)] = pair else { continue };
+        if at <= *b {
+            let u = if b > a { (at - a) / (b - a) } else { 1.0 };
+            return from.iter().zip(to).map(|(x, y)| x + (y - x) * u).collect();
+        }
+    }
+    stops
+        .last()
+        .map_or_else(|| none.to_vec(), |last| last.1.clone())
 }

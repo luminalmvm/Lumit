@@ -28,9 +28,9 @@
 //! system — the `tdgp`/`tdbs`/`tdb4` trees, static values, keyframes, effects,
 //! masks, markers and expressions. **Phase C** is the surface: [`crate::open_ae`]
 //! routes a picked path to this reader or to the bundle reader by its magic, and
-//! the File menu offers both. One encoding is still owed after it, a gradient
-//! (`GCst`), which arrives named and marked unreadable rather than dropped. A
-//! text document (`btds`) is read for its words and how they are set.
+//! the File menu offers both. A text document (`btds`) is read for its words
+//! and how they are set, and a gradient (`GCst`) for its colour and opacity
+//! stops.
 //!
 //! One thing about the file is worth saying here because it shapes every
 //! number this route reports: **an `.aep` stores only what is not at its
