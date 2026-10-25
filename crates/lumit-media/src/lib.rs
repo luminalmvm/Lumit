@@ -18,6 +18,7 @@ pub mod probe;
 pub mod psd;
 pub mod sequence;
 pub mod slate;
+mod vaapi;
 
 use std::path::Path;
 
