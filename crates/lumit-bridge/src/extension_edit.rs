@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
 use lumit_core::time::CompTime;
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_script::{commands::COMMANDS, ExportStatus, Host, ScriptError};
 use serde_json::Value;
 use uuid::Uuid;

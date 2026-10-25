@@ -14,7 +14,10 @@
 //! leaves the §1.6 oracle checking the *lookup* rather than two spline fits
 //! agreeing by luck.
 
-use crate::fx::{cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::CurvePoints, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Curves' controls: one curve on each of Master, Red, Green, Blue and

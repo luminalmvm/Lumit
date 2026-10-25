@@ -727,7 +727,7 @@ pub fn corner_pin_from_track(
         }
     }
 
-    let mut pin = crate::fx::instantiate("corner_pin")?;
+    let mut pin = crate::fx::builtins::instantiate("corner_pin")?;
     let mut track = keys.into_iter();
     for (x, y) in CORNER_PIN_POINTS {
         for id in [x, y] {
@@ -1078,8 +1078,9 @@ mod tests {
     /// A tracked layer is one carrying the Camera track effect — that is the
     /// whole of what marks it.
     fn tracked(mut l: Layer) -> Layer {
-        l.effects
-            .push(crate::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        l.effects.push(
+            crate::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         l
     }
 
@@ -1596,8 +1597,9 @@ mod tests {
     /// A layer wearing the Planar track effect — the handle, exactly as the
     /// Camera track is one.
     fn planar(mut l: Layer) -> Layer {
-        l.effects
-            .push(crate::fx::instantiate(PLANAR_TRACK).expect("the effect is registered"));
+        l.effects.push(
+            crate::fx::builtins::instantiate(PLANAR_TRACK).expect("the effect is registered"),
+        );
         l
     }
 

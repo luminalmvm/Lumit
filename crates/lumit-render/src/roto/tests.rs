@@ -656,7 +656,7 @@ fn a_document(
             interpretation: Default::default(),
         }));
         let mut brush =
-            lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
+            lumit_core::fx::builtins::instantiate("roto_brush").expect("roto brush is a built-in");
         brush.id = uuid::Uuid::from_u128(9);
         brush.roto = Some(block);
         if let Some(row) = brush.params.iter_mut().find(|p| p.id == "seed") {

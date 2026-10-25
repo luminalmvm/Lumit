@@ -1,7 +1,10 @@
 //! RGB split (docs/08 §3.6): three tinted taps displaced along one angle, or —
 //! with Wavelength on — a smooth spectral dispersion along the same offset.
 
-use crate::fx::{cpu, normalise_tint_columns, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, maths::normalise_tint_columns, params::Params, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Which kernel an RGB split instance draws through, and the numbers that kernel
@@ -73,7 +76,7 @@ pub enum Split {
 pub struct RgbSplit {
     /// px@comp (§2.3); the impact-frame staple is a keyframed spike on this.
     /// Declared `Px`, so the resolve step scales it to the raster in play and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     #[slider(
         min = 0.0,

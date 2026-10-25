@@ -47,8 +47,8 @@ impl Abi {
     #[must_use]
     pub const fn prefix(self) -> &'static str {
         match self {
-            Self::Clap => lumit_core::fx::CLAP_MATCH_PREFIX,
-            Self::Vst3 => lumit_core::fx::VST3_MATCH_PREFIX,
+            Self::Clap => lumit_core::fx::builtins::CLAP_MATCH_PREFIX,
+            Self::Vst3 => lumit_core::fx::builtins::VST3_MATCH_PREFIX,
         }
     }
 

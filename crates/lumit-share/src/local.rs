@@ -3,7 +3,7 @@
 
 use crate::{Dropped, MAX_DROPPED};
 use lumit_core::model::{MediaRef, ProjectItem};
-use lumit_core::{Document, Op};
+use lumit_core::{model::Document, ops::Op};
 use lumit_project::{comp_size_is_sane, resolve_all_media, resolve_media, Resolved};
 use std::path::Path;
 use uuid::Uuid;

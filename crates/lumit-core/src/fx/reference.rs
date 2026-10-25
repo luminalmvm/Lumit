@@ -414,7 +414,7 @@ pub fn reference() -> Reference {
                 label: c.label(),
             })
             .collect(),
-        effects: super::BUILTINS.iter().map(effect).collect(),
+        effects: super::catalogue::BUILTINS.iter().map(effect).collect(),
     }
 }
 

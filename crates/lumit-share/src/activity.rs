@@ -17,7 +17,7 @@
 //! Plain data. What comes out of a batch or a snapshot was written by another
 //! machine, so all of it is cut down to size before it is kept. Any thread.
 
-use lumit_core::CompTime;
+use lumit_core::time::CompTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};

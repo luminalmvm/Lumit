@@ -43,7 +43,7 @@ impl Bounds {
         Self { x: 0, y: 0, w, h }
     }
 
-    /// `[left, top, right, bottom]`, as [`lumit_core::fx::EffectDef::bounds`]
+    /// `[left, top, right, bottom]`, as [`lumit_core::fx::registry::EffectDef::bounds`]
     /// takes it.
     fn rect(self) -> [f32; 4] {
         [
@@ -2845,7 +2845,7 @@ mod tests {
             blend: lumit_gpu::composite::Blend::Normal,
             mask_cov: None,
             pre: None,
-            fx: lumit_core::fx::ResolvedStack::new(),
+            fx: lumit_core::fx::params::ResolvedStack::new(),
             fx_ids: Vec::new(),
             graph_fx: Vec::new(),
             neighbours: Vec::new(),

@@ -49,10 +49,11 @@
 
 use std::sync::OnceLock;
 
-use crate::expression::{evaluate_value_in, ExprValue, Language};
+use crate::expression::{evaluate_value_in, script::Language, ExprValue};
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, ParamId, ParamKind, ParamSchema, Port,
-    PortType, Signature, Unit, Value,
+    params::ParamId, params::Unit, params::Value, registry::DriverCx, registry::EffectDef,
+    registry::EffectMetadata, registry::Signature, schema::EffectSchema, schema::ParamKind,
+    schema::ParamSchema, schema::Port, schema::PortType,
 };
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;

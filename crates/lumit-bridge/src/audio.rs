@@ -139,7 +139,7 @@ struct AudioState {
     /// The comp waiting for the worker, with the document to build it from —
     /// the snapshot is captured at request time so a later edit cannot change
     /// what a queued prepare is about to mix.
-    pending_prepare: Option<(Uuid, Arc<lumit_core::Document>)>,
+    pending_prepare: Option<(Uuid, Arc<lumit_core::model::Document>)>,
     /// The audio-jobs walk with its has-audio probe cache. Taken out of the
     /// state (never probed under the lock) by the worker and put back.
     jobs: AudioJobsBuilder,
@@ -161,7 +161,7 @@ struct AudioState {
     /// once per frame the playhead crosses, and only the first one after an
     /// edit has anything new to prepare. Weak, so remembering it does not
     /// keep a document alive that nothing else is holding.
-    scrub_doc: std::sync::Weak<lumit_core::Document>,
+    scrub_doc: std::sync::Weak<lumit_core::model::Document>,
     /// The burst a [`scrub`] asked for while the mix for it was still being
     /// prepared: where, and how long. Sounded once that mix lands, so a scrub
     /// straight after an edit is never the mix from before it.
@@ -299,7 +299,7 @@ fn hash_chain(
     if let Ok(disabled) = lumit_aplug::ipc::broker::session_disabled().lock() {
         for effect in &chain.effects {
             let name = effect.effect.match_name.as_str();
-            if let Some(id) = lumit_core::fx::audio_plugin_id(name) {
+            if let Some(id) = lumit_core::fx::builtins::audio_plugin_id(name) {
                 disabled.contains(id).hash(h);
             }
         }
@@ -512,7 +512,7 @@ fn send(st: &AudioState, cmd: Cmd) {
 
 /// Kick the prepare worker for `comp` (or park the request in the mailbox
 /// while one runs). Callers hold the state lock.
-fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::Document>) {
+fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::model::Document>) {
     if matches!(st.device, Device::Unavailable) {
         return; // calm terminal state: no sound, no worker
     }
@@ -526,7 +526,7 @@ fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::Document>)
 
 /// The prepare worker: build and install one comp's mix, then drain the
 /// mailbox. Never holds the audio lock across a probe, decode, or mix.
-fn run_prepare(mut comp: Uuid, mut doc: Arc<lumit_core::Document>) {
+fn run_prepare(mut comp: Uuid, mut doc: Arc<lumit_core::model::Document>) {
     loop {
         prepare_once(comp, &doc);
         let next = {
@@ -559,7 +559,7 @@ fn run_prepare(mut comp: Uuid, mut doc: Arc<lumit_core::Document>) {
 /// One prepare pass for `comp`: jobs → signature gate → decode → plan →
 /// install (swap when the same comp is already loaded, else load with the
 /// pending start + transport intent).
-fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
+fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::model::Document>) {
     let Some(c) = doc.comp(comp) else {
         // The comp is gone (deleted, undone): silence its mix if loaded.
         let mut st = lock();
@@ -673,7 +673,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
 /// Build (or refresh) `comp`'s mix in the background — called after an edit
 /// while audio is loaded or playing. Returns immediately; an unchanged mix is a
 /// no-op, a changed one is swapped in mid-playback.
-pub(crate) fn prepare(comp: Uuid, doc: Arc<lumit_core::Document>) {
+pub(crate) fn prepare(comp: Uuid, doc: Arc<lumit_core::model::Document>) {
     let mut st = lock();
     kick_prepare(&mut st, comp, doc);
 }
@@ -683,7 +683,7 @@ pub(crate) fn prepare(comp: Uuid, doc: Arc<lumit_core::Document>) {
 /// When its mix is already loaded this is an immediate seek and play; otherwise
 /// the mix is prepared in the background and starts from `start` when it lands,
 /// and the picture runs on the caller's own clock until then.
-pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
+pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::model::Document>) {
     let mut st = lock();
     st.playing = true;
     // The comp is what the user wants to hear now, so a preview still decoding
@@ -887,7 +887,7 @@ const SCRUB_BURST_S: f64 = 1.0 / 12.0;
 /// so the first drag of a session is silent for as long as the decode takes.
 /// The first burst after an edit prepares again too, so scrubbing straight
 /// after moving a clip is never the mix from before the move.
-pub(crate) fn scrub(comp: Uuid, frame: u64, doc: Arc<lumit_core::Document>) {
+pub(crate) fn scrub(comp: Uuid, frame: u64, doc: Arc<lumit_core::model::Document>) {
     let Some(fps) = doc
         .comp(comp)
         .map(|c| c.frame_rate.fps())
@@ -1213,7 +1213,8 @@ mod tests {
     fn build_plan_sums_a_precomp_layers_rack_onto_one_strip() {
         let rate = 48_000u32;
         let ceiling = 10f32.powf(-6.0 / 20.0);
-        let mut limiter = lumit_core::fx::instantiate("audio_limiter").expect("a limiter");
+        let mut limiter =
+            lumit_core::fx::builtins::instantiate("audio_limiter").expect("a limiter");
         for param in &mut limiter.params {
             if param.id == "ceiling" {
                 param.value = lumit_core::model::EffectValue::Float(Property::fixed(-6.0));
@@ -1373,20 +1374,22 @@ mod tests {
         latency: u32,
     }
 
-    impl lumit_core::fx::AudioProcessor for TestInsert {
+    impl lumit_core::fx::audio_chain::AudioProcessor for TestInsert {
         fn process(
             &self,
             input: &[f32],
             output: &mut [f32],
-            values: &[(lumit_core::fx::ParamId, f64)],
+            values: &[(lumit_core::fx::params::ParamId, f64)],
             steady: i64,
         ) -> bool {
-            if self.refuse == Some(steady as usize / lumit_core::fx::AUDIO_BLOCK_FRAMES) {
+            if self.refuse
+                == Some(steady as usize / lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES)
+            {
                 return false;
             }
             let g = values
                 .iter()
-                .find(|(id, _)| *id == lumit_core::fx::ParamId::new("p1"))
+                .find(|(id, _)| *id == lumit_core::fx::params::ParamId::new("p1"))
                 .map_or(1.0, |(_, v)| *v) as f32;
             for (o, i) in output.iter_mut().zip(input) {
                 *o = (i * g).clamp(-0.5, 0.5);
@@ -1400,13 +1403,13 @@ mod tests {
     }
 
     struct TestInsertDef {
-        schema: &'static lumit_core::fx::EffectSchema,
+        schema: &'static lumit_core::fx::schema::EffectSchema,
         refuse: Option<usize>,
         latency: u32,
     }
 
-    impl lumit_core::fx::EffectDef for TestInsertDef {
-        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+    impl lumit_core::fx::registry::EffectDef for TestInsertDef {
+        fn schema(&self) -> &'static lumit_core::fx::schema::EffectSchema {
             self.schema
         }
 
@@ -1417,10 +1420,10 @@ mod tests {
         fn open_audio(
             &self,
             _state: Option<Vec<u8>>,
-            _values: &[(lumit_core::fx::ParamId, f64)],
+            _values: &[(lumit_core::fx::params::ParamId, f64)],
             _rate: u32,
             _offline: bool,
-        ) -> Option<Arc<dyn lumit_core::fx::AudioProcessor>> {
+        ) -> Option<Arc<dyn lumit_core::fx::audio_chain::AudioProcessor>> {
             Some(Arc::new(TestInsert {
                 refuse: self.refuse,
                 latency: self.latency,
@@ -1432,35 +1435,35 @@ mod tests {
     /// by name, so each test takes a name of its own and they cannot tread on
     /// one another.
     fn register_insert(name: &'static str, refuse: Option<usize>, latency: u32) {
-        let schema: &'static lumit_core::fx::EffectSchema =
-            Box::leak(Box::new(lumit_core::fx::EffectSchema {
+        let schema: &'static lumit_core::fx::schema::EffectSchema =
+            Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
                 match_name: name,
                 label: "Test insert",
                 version: 1,
-                category: lumit_core::fx::FxCategory::Utility,
-                traits: lumit_core::fx::EffectTraits {
-                    cost: lumit_core::fx::CostClass::Heavy,
-                    roi: lumit_core::fx::Roi::FullFrame,
+                category: lumit_core::fx::schema::FxCategory::Utility,
+                traits: lumit_core::fx::schema::EffectTraits {
+                    cost: lumit_core::fx::schema::CostClass::Heavy,
+                    roi: lumit_core::fx::schema::Roi::FullFrame,
                     temporal: &[0],
                     premultiplied: true,
                     seeded: false,
                     beat_input: false,
                 },
-                params: Box::leak(Box::new([lumit_core::fx::ParamSchema {
+                params: Box::leak(Box::new([lumit_core::fx::schema::ParamSchema {
                     id: "p1",
                     label: "Gain",
-                    kind: lumit_core::fx::ParamKind::Slider {
+                    kind: lumit_core::fx::schema::ParamKind::Slider {
                         default: 1.0,
                         range: (0.0, 4.0),
                         log: false,
                     },
-                    unit: lumit_core::fx::Unit::Raw,
+                    unit: lumit_core::fx::params::Unit::Raw,
                 }])),
                 groups: &[],
                 enabled_when: &[],
-                matte: lumit_core::fx::MatteRole::None,
+                matte: lumit_core::fx::schema::MatteRole::None,
             }));
-        lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(TestInsertDef {
+        lumit_core::fx::catalogue::BUILTIN_DEFS.register(Box::leak(Box::new(TestInsertDef {
             schema,
             refuse,
             latency,
@@ -1497,7 +1500,7 @@ mod tests {
         effects: Vec<lumit_core::model::EffectInstance>,
     ) -> Arc<lumit_render::export::AudioChain> {
         Arc::new(lumit_render::export::AudioChain {
-            doc: Arc::new(lumit_core::Document::new()),
+            doc: Arc::new(lumit_core::model::Document::new()),
             comp: Uuid::now_v7(),
             layer: Uuid::now_v7(),
             effects,
@@ -1558,7 +1561,7 @@ mod tests {
         register_insert("clap:lumit.test.sweep", None, 0);
         // 0 → 1 across the second, on a quiet source so the clipper never bites.
         let key = |t: i64, v: f64| Keyframe {
-            time: lumit_core::Rational::new(t, 1).unwrap(),
+            time: lumit_core::time::Rational::new(t, 1).unwrap(),
             value: v,
             interp_in: SideInterp::Linear,
             interp_out: SideInterp::Linear,
@@ -1587,7 +1590,7 @@ mod tests {
 
         // Block b was handed the value at its own first frame, and held it for
         // the whole block — a step per 512 frames, not a slope per sample.
-        let block = lumit_core::fx::AUDIO_BLOCK_FRAMES;
+        let block = lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         for b in [0usize, 1, 10, 80] {
             let want = 0.2 * (b * block) as f32 / rate as f32;
             let at = b * block * 2;
@@ -1620,7 +1623,7 @@ mod tests {
         )]));
         let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
 
-        let block = lumit_core::fx::AUDIO_BLOCK_FRAMES;
+        let block = lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let inside = (4 * block + block / 2) * 2;
         assert!(
             (baked[inside] - 0.8).abs() < 1e-6,

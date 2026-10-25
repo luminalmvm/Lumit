@@ -7,8 +7,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{Composition, Document, Layer};
+use lumit_core::store::DocumentStore;
 use lumit_core::time::FrameRate;
-use lumit_core::DocumentStore;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -526,9 +526,12 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
     {
         let p = nest.prop(prop).unwrap();
         assert_eq!(p.animation, Animation::Expression("wiggle(2, 10)".into()));
-        let slot = lumit_core::expression::Slot::read(&p.extra);
+        let slot = lumit_core::expression::script::Slot::read(&p.extra);
         assert_eq!(usize::from(slot.axis), axis);
-        assert_eq!(slot.language, lumit_core::expression::Language::JavaScript);
+        assert_eq!(
+            slot.language,
+            lumit_core::expression::script::Language::JavaScript
+        );
     }
 
     // The file inside the folder, and nothing outside it.
@@ -544,7 +547,7 @@ app.project.save(new File(here.fsName + "/out/saved.lum"));
     }))
     .unwrap();
     host.store()
-        .commit(lumit_core::Op::AddItem {
+        .commit(lumit_core::ops::Op::AddItem {
             index: 0,
             item: Box::new(ProjectItem::Footage(world)),
         })

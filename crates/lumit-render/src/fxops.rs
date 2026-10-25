@@ -1,6 +1,6 @@
 //! The one place a resolved effect stack becomes GPU passes.
 //!
-//! In plain terms: `lumit_core::fx::resolve_stack` turns a layer's effect
+//! In plain terms: `lumit_core::fx::resolved::resolve_stack` turns a layer's effect
 //! list into plain numbers, and this module walks that list calling the
 //! matching `FxEngine` kernel for each entry. The preview, the export
 //! renderer, and adjustment-layer staging all call through here, so an
@@ -835,7 +835,7 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 /// lens): the k-th `lens_flare` op binds `flare_lens[k]`.
 ///
 /// `mattes` is the parallel **Matte** list (docs/08 §2.6): one slot per
-/// op whose effect declares any [`MatteRole`](lumit_core::fx::MatteRole) with a
+/// op whose effect declares any [`MatteRole`](lumit_core::fx::schema::MatteRole) with a
 /// parameter — which is every op — exactly as `build.rs`'s `mattes_for`
 /// enumerates them. What a bound slot *does* is the role's second question, and
 /// the only branch in this function that cares: an effect on the generic
@@ -848,7 +848,7 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 ///
 /// `mask_paths` is the parallel **mask-path** list (docs/08 §1.2):
 /// one flattened polyline per
-/// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row** of every
+/// [`ParamKind::MaskPath`](lumit_core::fx::schema::ParamKind::MaskPath) **row** of every
 /// op that declares any, exactly as `build.rs`'s `mask_paths_for` enumerates
 /// them — an op takes as many in a row as its schema declares (one for the three
 /// line-drawing effects, two for the Matte key's garbage mattes). Its own
@@ -877,8 +877,8 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 /// The room an op that spreads past its picture is given, in texels on each
 /// side across and down, kept inside the widest texture there is.
 fn spread_room(
-    def: &dyn lumit_core::fx::EffectDef,
-    p: lumit_core::fx::Params<'_>,
+    def: &dyn lumit_core::fx::registry::EffectDef,
+    p: lumit_core::fx::params::Params<'_>,
     w: u32,
     h: u32,
 ) -> [u32; 2] {
@@ -891,11 +891,14 @@ fn spread_room(
 
 /// `p` with every place it names moved `by` texels right and down.
 fn places_moved(
-    schema: &lumit_core::fx::EffectSchema,
-    p: lumit_core::fx::Params<'_>,
+    schema: &lumit_core::fx::schema::EffectSchema,
+    p: lumit_core::fx::params::Params<'_>,
     by: [u32; 2],
-) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
-    use lumit_core::fx::{ParamId, Value};
+) -> Vec<(
+    lumit_core::fx::params::ParamId,
+    lumit_core::fx::params::Value,
+)> {
+    use lumit_core::fx::{params::ParamId, params::Value};
     let slides: Vec<(ParamId, f32)> = schema
         .place_pairs()
         .flat_map(|pair| {
@@ -922,7 +925,7 @@ pub fn run_ops(
     tex: Tex,
     w: u32,
     h: u32,
-    ops: &lumit_core::fx::ResolvedStack,
+    ops: &lumit_core::fx::params::ResolvedStack,
     neighbours: &[(i32, Tex)],
     flow_fields: &[(i32, Tex)],
     tables: &[Option<ColourTable>],
@@ -1307,7 +1310,10 @@ pub fn run_ops(
         // every stack.
         let px_scale = resolved
             .params
-            .float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0)
+            .float(
+                lumit_core::fx::params::ParamId::new("derived.px_scale"),
+                1.0,
+            )
             .max(1e-6);
         let inset = [moved[0] as f32 / px_scale, moved[1] as f32 / px_scale];
         let moved_schedule = schedule.filter(|_| moved != [0, 0]).map(|s| {
@@ -1350,7 +1356,7 @@ pub fn run_ops(
         let moved_places = (moved != [0, 0] && slot.is_none())
             .then(|| places_moved(resolved.def.schema(), resolved.params, moved));
         let op_params = moved_places.as_ref().map_or(resolved.params, |entries| {
-            lumit_core::fx::Params::new(entries)
+            lumit_core::fx::params::Params::new(entries)
         });
         let schedule = moved_schedule.as_ref().or(schedule);
         // The picture this op is handed, kept for the recycling below: an op
@@ -1383,8 +1389,12 @@ pub fn run_ops(
         // Channel row) reads the raw RGBA as it always has, Invert included.
         let schema = resolved.def.schema();
         let matte = matte.map(|m| {
-            let channel = resolved.params.choice(lumit_core::fx::MATTE_CHANNEL_ID, 0);
-            let invert = resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false);
+            let channel = resolved
+                .params
+                .choice(lumit_core::fx::schema::MATTE_CHANNEL_ID, 0);
+            let invert = resolved
+                .params
+                .bool(lumit_core::fx::schema::MATTE_INVERT_ID, false);
             if schema.matte_channel() && lumit_core::fx::cpu::matte_needs_prepare(channel, invert) {
                 fx.matte_prepare(ctx, &m, w, h, channel, invert)
             } else {
@@ -1425,7 +1435,7 @@ pub fn run_ops(
             // runs no pass.
             let blend = lumit_core::fx::cpu::blend_seam(schema, op_params);
             let params = match &blend {
-                Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
+                Some((_, _, entries)) => lumit_core::fx::params::Params::new(entries),
                 None => op_params,
             };
             let mut blend_input = blend.as_ref().map(|_| tex.clone());
@@ -1491,14 +1501,13 @@ pub fn run_ops(
                 // to have measured, and a stack with both consumers no longer
                 // gives the second one whatever the first happened to want.
                 AuxKind::FlowField => AuxData::FlowField {
-                    field: lumit_core::fx::effect_flow_neighbour(gpu.match_name()).and_then(
-                        |offset| {
+                    field: lumit_core::fx::temporal::effect_flow_neighbour(gpu.match_name())
+                        .and_then(|offset| {
                             flow_fields
                                 .iter()
                                 .find(|(o, _)| *o == offset)
                                 .map(|(_, t)| t)
-                        },
-                    ),
+                        }),
                     neighbours,
                 },
             };
@@ -1554,9 +1563,9 @@ pub fn run_ops(
         // all and the picture is the graph's own, to the bit. The matte
         // dissolve below then runs as it runs after any kernel.
         if let Some(run) = graph {
-            let mode = resolved.params.choice(lumit_core::fx::BLEND_ID, 0);
-            let mix =
-                (resolved.params.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+            let mode = resolved.params.choice(lumit_core::fx::schema::BLEND_ID, 0);
+            let mix = (resolved.params.float(lumit_core::fx::schema::MIX_ID, 100.0) / 100.0)
+                .clamp(0.0, 1.0);
             let seam = mode != 0 || mix < 1.0;
             let input = seam.then(|| tex.clone());
             let out = run(tex, w, h);
@@ -1705,7 +1714,9 @@ pub fn run_ops(
         // effect with no Channel row — so it is applied exactly once.
         if let (Some(m), Some(input)) = (grown_matte.as_ref().or(generic_matte), unmatted_input) {
             let invert = !schema.matte_channel()
-                && resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false);
+                && resolved
+                    .params
+                    .bool(lumit_core::fx::schema::MATTE_INVERT_ID, false);
             tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
         }
 
@@ -1834,7 +1845,7 @@ fn op_keys(
     w: u32,
     h_px: u32,
     flare_substitutions: u64,
-    ops: &lumit_core::fx::ResolvedStack,
+    ops: &lumit_core::fx::params::ResolvedStack,
     tables: &[Option<ColourTable>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
@@ -2090,11 +2101,11 @@ mod tests {
 
     /// A stack of built-in effects with one float parameter set on each:
     /// `(match_name, param id, value)`.
-    fn stack(spec: &[(&str, &str, f32)]) -> lumit_core::fx::ResolvedStack {
+    fn stack(spec: &[(&str, &str, f32)]) -> lumit_core::fx::params::ResolvedStack {
         let insts: Vec<_> = spec
             .iter()
             .map(|(name, param, value)| {
-                let mut inst = lumit_core::fx::instantiate(name).expect("a built-in");
+                let mut inst = lumit_core::fx::builtins::instantiate(name).expect("a built-in");
                 for p in &mut inst.params {
                     if p.id == *param {
                         p.value = lumit_core::model::EffectValue::Float(
@@ -2105,12 +2116,12 @@ mod tests {
                 inst
             })
             .collect();
-        lumit_core::fx::resolve_stack(
+        lumit_core::fx::resolved::resolve_stack(
             &insts,
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         )
     }
@@ -2132,7 +2143,7 @@ mod tests {
     fn run(
         fx: &FxEngine,
         ctx: &GpuContext,
-        ops: &lumit_core::fx::ResolvedStack,
+        ops: &lumit_core::fx::params::ResolvedStack,
         cache: &std::cell::RefCell<FxCache>,
         key: u128,
     ) -> Vec<f32> {
@@ -2173,7 +2184,7 @@ mod tests {
     fn textures_made_by(
         fx: &FxEngine,
         ctx: &GpuContext,
-        ops: &lumit_core::fx::ResolvedStack,
+        ops: &lumit_core::fx::params::ResolvedStack,
         cache: &std::cell::RefCell<FxCache>,
         key: u128,
     ) -> u64 {
@@ -2206,7 +2217,7 @@ mod tests {
 
     /// A stack of `n` Exposure ops, each at its own value so each output has a
     /// name of its own.
-    fn long_stack(n: usize) -> lumit_core::fx::ResolvedStack {
+    fn long_stack(n: usize) -> lumit_core::fx::params::ResolvedStack {
         let spec: Vec<_> = (0..n)
             .map(|i| ("exposure", "stops", 0.05 * (i + 1) as f32))
             .collect();
@@ -2319,7 +2330,7 @@ mod tests {
         let warm = std::cell::RefCell::new(c);
 
         let inst = |name: &str, stops: f32| {
-            let mut i = lumit_core::fx::instantiate(name).expect("a built-in");
+            let mut i = lumit_core::fx::builtins::instantiate(name).expect("a built-in");
             for p in &mut i.params {
                 if p.id == "stops" {
                     p.value = lumit_core::model::EffectValue::Float(
@@ -2334,12 +2345,12 @@ mod tests {
             inst("exposure", 0.05),
             inst("exposure", 0.10),
         ];
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             &insts,
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
 
@@ -2378,18 +2389,18 @@ mod tests {
 
     /// One custom-shader instance holding `source`, resolved as the walk
     /// resolves it.
-    fn shader_stack(source: &str) -> lumit_core::fx::ResolvedStack {
-        let mut inst = lumit_core::fx::instantiate("custom_shader").expect("a built-in");
+    fn shader_stack(source: &str) -> lumit_core::fx::params::ResolvedStack {
+        let mut inst = lumit_core::fx::builtins::instantiate("custom_shader").expect("a built-in");
         let mut block = serde_json::Map::new();
         block.insert("source".into(), source.into());
         inst.extra
             .insert("shader".into(), serde_json::Value::Object(block));
-        lumit_core::fx::resolve_stack(
+        lumit_core::fx::resolved::resolve_stack(
             std::slice::from_ref(&inst),
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         )
     }
@@ -2629,7 +2640,7 @@ mod tests {
     /// two must name the same effects.
     #[test]
     fn table_effects_are_the_lut_aux_declarers() {
-        let mut declared: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
+        let mut declared: Vec<&str> = lumit_core::fx::catalogue::BUILTIN_DEFS
             .builtins()
             .map(|d| d.schema().match_name)
             .filter(|n| crate::gpufx::gpu_effect(n).is_some_and(|g| g.aux() == AuxKind::Lut))
@@ -2643,7 +2654,11 @@ mod tests {
     // ----- The frame's texture pool -----
 
     /// The chain, batched, with every side list empty and no cache.
-    fn chain(fx: &FxEngine, ctx: &GpuContext, ops: &lumit_core::fx::ResolvedStack) -> Vec<f32> {
+    fn chain(
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        ops: &lumit_core::fx::params::ResolvedStack,
+    ) -> Vec<f32> {
         let out = run_ops(
             fx,
             ctx,

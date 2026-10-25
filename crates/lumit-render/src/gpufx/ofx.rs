@@ -7,7 +7,7 @@
 //! give it to the definition, put what comes back onto the card again.
 //!
 //! That is a real cost — two transfers per plugin op per frame — and it is why a
-//! plugin's declared cost is [`CostClass::Heavy`](lumit_core::fx::CostClass) and
+//! plugin's declared cost is [`CostClass::Heavy`](lumit_core::fx::schema::CostClass) and
 //! why the degradation ladder gives one up before it gives up a built-in. OFX
 //! 1.5's GPU render suites are the answer to it (docs/12 §2.4) and are a later
 //! milestone; until then, the honest slow path beats a fast wrong one.
@@ -25,14 +25,14 @@
 //! with the frame in hand shows it a scene with no motion. It consumes no
 //! matte of its own, so the generic dissolve beside the dispatch spends it
 //! exactly as it does for any other effect on
-//! [`MatteRole::Strength`](lumit_core::fx::MatteRole). A plugin's rows
+//! [`MatteRole::Strength`](lumit_core::fx::schema::MatteRole). A plugin's rows
 //! are its own; a Matte the plugin never heard of would be a control nothing
 //! consumes.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use lumit_core::fx::{EffectDef, Params};
+use lumit_core::fx::{params::Params, registry::EffectDef};
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 use uuid::Uuid;
@@ -201,9 +201,11 @@ impl GpuEffect for CpuPass {
 /// long as the session.
 pub fn register(def: &'static dyn EffectDef) -> bool {
     let name = def.schema().match_name;
-    if super::gpu_effect(name).is_some() || lumit_core::fx::BUILTIN_DEFS.get(name).is_some() {
+    if super::gpu_effect(name).is_some()
+        || lumit_core::fx::catalogue::BUILTIN_DEFS.get(name).is_some()
+    {
         return false;
     }
     super::register_gpu_effect(Box::leak(Box::new(CpuPass(def))))
-        && lumit_core::fx::BUILTIN_DEFS.register(def)
+        && lumit_core::fx::catalogue::BUILTIN_DEFS.register(def)
 }

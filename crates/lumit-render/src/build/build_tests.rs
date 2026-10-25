@@ -444,7 +444,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     adj.name = "adjust".into();
     adj.kind = LayerKind::Adjustment;
     adj.effects
-        .push(lumit_core::fx::instantiate("saturation").unwrap());
+        .push(lumit_core::fx::builtins::instantiate("saturation").unwrap());
     adj.masks
         .push(lumit_core::mask::Mask::rectangle(0.0, 0.0, 960.0, 1080.0));
     let mut doc = Document::new();
@@ -826,23 +826,23 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     };
 
     let mut layer = base.clone();
-    let mut bypassed = lumit_core::fx::instantiate("saturation").unwrap();
+    let mut bypassed = lumit_core::fx::builtins::instantiate("saturation").unwrap();
     bypassed.enabled = false;
-    let mut pointed = lumit_core::fx::instantiate("glow").unwrap();
+    let mut pointed = lumit_core::fx::builtins::instantiate("glow").unwrap();
     for p in &mut pointed.params {
-        if p.id == lumit_core::fx::MATTE_PARAM {
+        if p.id == lumit_core::fx::schema::MATTE_PARAM {
             p.value = lumit_core::model::EffectValue::Layer(Some(layer.id));
         }
     }
     layer.effects = vec![
-        lumit_core::fx::instantiate("blur").unwrap(),
+        lumit_core::fx::builtins::instantiate("blur").unwrap(),
         bypassed,
         // Orchestration-only: a Matte row, but no op to hang it on.
-        lumit_core::fx::instantiate("posterize_time").unwrap(),
+        lumit_core::fx::builtins::instantiate("posterize_time").unwrap(),
         pointed,
         // Claims the matte under its own older id: still one slot on
         // the one carriage, filled from `depth` rather than `matte`.
-        lumit_core::fx::instantiate("dof").unwrap(),
+        lumit_core::fx::builtins::instantiate("dof").unwrap(),
     ];
 
     let comp = Composition {

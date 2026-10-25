@@ -5,7 +5,7 @@
 //! read a direction somebody set by turning it, and so that direction can be
 //! keyframed once and drive several properties at a time.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Angle control's one control.
@@ -21,7 +21,7 @@ use lumit_fx_macros::Effect;
 )]
 pub struct AngleControl {
     /// Degrees, unbounded — an angle animates through full turns rather than
-    /// stopping at 360 (the [`Angle`](crate::fx::ParamKind::Angle) kind's own
+    /// stopping at 360 (the [`Angle`](crate::fx::schema::ParamKind::Angle) kind's own
     /// rule), which is exactly what a rig spinning something wants.
     #[dial(default = 0.0, step = 15.0)]
     pub angle: f32,

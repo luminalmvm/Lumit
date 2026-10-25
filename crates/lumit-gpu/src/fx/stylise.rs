@@ -7,7 +7,7 @@ use super::{blur::BlurOp, work_texture, FxEngine};
 
 /// One resolved matte key (docs/08 §3.21): a Keylight-style
 /// colour-difference keyer on straight (unpremultiplied) colour. Mirrors
-/// `lumit_core::fx::MatteKeyParams` field-for-field so the kernel and the CPU
+/// `lumit_core::fx::resolved::MatteKeyParams` field-for-field so the kernel and the CPU
 /// oracle consume the identical numbers. The kernel derives the screen's
 /// primary channel and reference from `key`, exactly as the CPU reference does.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -52,7 +52,7 @@ pub struct MatteKeyOp {
 
 impl MatteKeyOp {
     /// Whether any spatial stage is asked for — mirrors
-    /// `lumit_core::fx::MatteKeyParams::spatial`, so both render paths choose
+    /// `lumit_core::fx::resolved::MatteKeyParams::spatial`, so both render paths choose
     /// the fast pointwise kernel or the staged pipeline on the same predicate.
     #[must_use]
     pub fn spatial(&self) -> bool {
@@ -209,7 +209,7 @@ struct VignetteParams {
 }
 
 /// One resolved transform (docs/08 §3.5): the inverse affine arrives
-/// host-computed (`lumit_core::fx::transform_op`) so the kernel never runs
+/// host-computed (`lumit_core::fx::maths::transform_op`) so the kernel never runs
 /// its own trigonometry and the CPU reference consumes bit-identical
 /// numbers. A degenerate (zero-scale) transform arrives as opacity 0 with
 /// an identity matrix — fully transparent, exactly like the reference.
@@ -246,7 +246,7 @@ struct TransformParams {
 /// The most Shake motion-blur sub-frame taps (T18): the fixed-size end of the
 /// uniform array and the WGSL kernel's `array<Tap, 64>` / `MAX_TAPS`. The
 /// Samples row picks how many of them are live.
-/// Must equal `lumit_core::fx::SHAKE_MB_SAMPLES` — the GPU crate can't name that
+/// Must equal `lumit_core::fx::maths::SHAKE_MB_SAMPLES` — the GPU crate can't name that
 /// const (lumit-core is a dev-dependency only), so the oracle tests assert the
 /// two agree, and the WGSL literal is kept in step by the same tests.
 pub const SHAKE_MB_SAMPLES: usize = 64;
@@ -299,7 +299,7 @@ struct ShakeMbParams {
 
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
 /// Glitch effect). `tick` arrives already computed from local time
-/// (`lumit_core::fx::GLITCH_TICK_HZ`), so the kernel never sees raw time or
+/// (`lumit_core::fx::maths::GLITCH_TICK_HZ`), so the kernel never sees raw time or
 /// does its own time maths.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BlockGlitchOp {

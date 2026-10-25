@@ -18,7 +18,7 @@
 //! as job state in stage 2. Faking it as a string row would put a progress bar
 //! in the save file.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Feature density's option labels, in index order (Low / Normal / High).

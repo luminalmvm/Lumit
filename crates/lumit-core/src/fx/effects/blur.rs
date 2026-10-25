@@ -1,7 +1,9 @@
 //! Gaussian blur (docs/08 §3.8): the separable two-pass blur, one job
 //! per effect since the mode-driven Blur was split.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Gaussian blur's controls.
@@ -37,7 +39,7 @@ pub struct Blur {
     ///
     /// Declared `Px`, so the resolve step scales it to the raster in play (a
     /// Half preview blurs the same part of the picture as the export) and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     #[slider(
         min = 0.0,

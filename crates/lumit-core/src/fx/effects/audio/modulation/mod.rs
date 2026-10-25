@@ -17,7 +17,7 @@
 //! Every effect here is the same four pieces: a `#[derive(Effect)]` struct of
 //! rows, a definition whose `open_audio` builds the processor from the first
 //! block's values, a processor holding its state behind a mutex because
-//! [`AudioProcessor::process`](crate::fx::AudioProcessor::process) takes
+//! [`AudioProcessor::process`](crate::fx::audio_chain::AudioProcessor::process) takes
 //! `&self`, and a block loop that recomputes its coefficients at the block's
 //! start and allocates nothing.
 
@@ -30,7 +30,7 @@ pub mod vibrato;
 pub mod wah;
 
 use super::dsp::lfo::Shape;
-use crate::fx::ParamId;
+use crate::fx::params::ParamId;
 
 /// What `id` holds in this block's baked values, or `fallback` where the bake
 /// sent no number for it.
@@ -84,8 +84,9 @@ pub(crate) mod harness {
     use std::sync::Arc;
 
     use crate::fx::{
-        AudioProcessor, EffectDef, ParamId, ParamKind, AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES,
-        AUDIO_CHANNELS,
+        audio_chain::AudioProcessor, audio_chain::AUDIO_BLOCK_FRAMES,
+        audio_chain::AUDIO_BLOCK_SAMPLES, audio_chain::AUDIO_CHANNELS, params::ParamId,
+        registry::EffectDef, schema::ParamKind,
     };
 
     /// The rate every test here bakes at.

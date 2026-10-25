@@ -196,7 +196,7 @@ pub enum Value {
     Text(ShortText),
 }
 
-/// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::ParamKind::Text)
+/// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::schema::ParamKind::Text)
 /// row holds. A text this long is no wider than a curve, so adding the kind
 /// left every arena slot the size it was. A curve has since grown to twice
 /// this, and the cap stayed: a name or a label has no use for more.
@@ -263,7 +263,7 @@ impl Default for ShortText {
     }
 }
 
-/// The most control points a [`ParamKind::Curve`](crate::fx::ParamKind::Curve)
+/// The most control points a [`ParamKind::Curve`](crate::fx::schema::ParamKind::Curve)
 /// carries. Thirty-two is well past what a grade needs, and is what a colour
 /// ramp of thirty-two stops asks for. It sets the width of every arena slot,
 /// 272 bytes with the id, so raise it again only with that in mind.
@@ -788,7 +788,7 @@ impl ResolvedStack {
 
     /// Set every op down on a bigger raster: each place it names moved `by`
     /// raster pixels right and down, and told where the frame is on that
-    /// raster under [`super::FRAME_RECT`]. A node graph box whose picture
+    /// raster under [`super::schema::FRAME_RECT`]. A node graph box whose picture
     /// reaches past the frame runs this way.
     pub fn set_in(&mut self, by: [f32; 2], frame: [f32; 4]) {
         let mut entries = Vec::with_capacity(self.entries.len() + self.ops.len());
@@ -814,7 +814,7 @@ impl ResolvedStack {
                     _ => (id, value),
                 });
             }
-            entries.push((super::FRAME_RECT, Value::Vec4(frame)));
+            entries.push((super::schema::FRAME_RECT, Value::Vec4(frame)));
             op.span = start..entries.len() as u32;
         }
         self.entries = entries;

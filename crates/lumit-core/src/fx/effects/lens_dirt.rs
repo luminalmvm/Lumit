@@ -11,7 +11,10 @@
 //! preview at any resolution shows the same dirt. It sits on curved glass,
 //! crowding towards the edges as the glass turns away.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup};
+use crate::fx::{
+    registry::EffectDef, registry::EffectMetadata, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 pub const LENS_DIRT_GROUPS: &[ParamGroup] = &[

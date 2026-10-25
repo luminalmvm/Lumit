@@ -69,7 +69,7 @@ pub struct CompJob {
     /// deduplicated: the decode worker measures the dense motion from this frame
     /// to the neighbour at each offset (already fetched via `temporal`) and
     /// stamps them onto [`CompLayerPixels::flow_fields`]. Empty for a stack that
-    /// consumes no flow. See [`lumit_core::fx::stack_flow_neighbours`] - a list
+    /// consumes no flow. See [`lumit_core::fx::temporal::stack_flow_neighbours`] - a list
     /// rather than the one slot it used to be.
     pub flow_neighbours: Vec<i32>,
     /// The file could not be found (docs/07 §3.3): the worker synthesises the

@@ -6,7 +6,9 @@
 //! becomes a flat block of colour with its edges intact rather than a hard
 //! stencil.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Fill's controls.

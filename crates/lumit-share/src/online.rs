@@ -47,7 +47,7 @@ use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use lumit_core::ops::apply;
 use lumit_core::shared::Conflict;
 use lumit_core::store::{Moved, RemoteTag, Tap};
-use lumit_core::{CompTime, Document, DocumentStore, Op};
+use lumit_core::{model::Document, ops::Op, store::DocumentStore, time::CompTime};
 use lumit_project::{semver_triple, SCHEMA_VERSION};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};

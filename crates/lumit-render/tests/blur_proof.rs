@@ -31,7 +31,7 @@
 //! and a throwaway encoder written for a diagnostic is exactly the code that
 //! should not exist. The runner converts them.
 
-use lumit_core::fx::{cpu, MbQuality, MbView};
+use lumit_core::fx::{cpu, resolved::MbQuality, resolved::MbView};
 
 /// v1's blur, kept only here and only to be the "before" picture: each pixel
 /// smeared along **its own** vector, the streak scaled to nothing by low

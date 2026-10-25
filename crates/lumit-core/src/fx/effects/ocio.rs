@@ -11,7 +11,7 @@
 //! grade sometimes needs and a project setting cannot give.
 //!
 //! The declarations are the whole of what lives here. A name row is a
-//! [`ParamKind::ColourName`](crate::fx::ParamKind::ColourName): the config's
+//! [`ParamKind::ColourName`](crate::fx::schema::ParamKind::ColourName): the config's
 //! own spelling, kept in the document, never in the arena. The render resolves
 //! the names against the loaded config, bakes the chain once, and threads the
 //! baked table beside the op exactly as a LUT's cube is threaded (docs/impl/
@@ -22,7 +22,7 @@
 //! renders these as identity. The §1.6 oracle is `lumit_colour::bake::Artefact::eval`,
 //! held against the kernel in `lumit-render`'s `ocio_parity` test.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The per cent Mix every one of these ends with, as the kernel's 0-1.

@@ -6,7 +6,9 @@
 //! both ways at once, opening like a pair of curtains), Completion how far round
 //! it has got, and Feather how soft the trailing edge is.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// The three sweep directions, in schema order.

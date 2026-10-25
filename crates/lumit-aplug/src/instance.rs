@@ -52,7 +52,7 @@ use crate::describe::{ParamDescription, PortInfo, Ports};
 use crate::module::{text, Module, ModuleError};
 use crate::process::ParamEvent;
 use crate::process::{input_events, output_events, to_clap, Block, BLOCK_FRAMES, CHANNELS};
-use lumit_core::fx::Denormals;
+use lumit_core::fx::audio_chain::Denormals;
 
 /// Everything a plugin can refuse to do, as a value.
 ///

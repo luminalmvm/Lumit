@@ -139,13 +139,13 @@ impl LayerReference {
         // Exactly what `add_effect` builds, minus its driver fork — the Roto
         // brush is an image op — so the instance a scribble adds and the one
         // the menu adds cannot drift apart.
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             ROTO_BRUSH,
             f64::from(comp.width),
             f64::from(comp.height),
         )
         .ok_or(BridgeError::UnknownEffectName)?;
-        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         instance.roto = Some(RotoBlock {
             base_frame: Some(frame),
             strokes: vec![stroke],

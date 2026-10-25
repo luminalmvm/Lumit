@@ -244,7 +244,7 @@ mod tests {
         EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue, Fingerprint,
         LayerKind, LinearColour, MatteChannel, MatteRef, SolidDef,
     };
-    use lumit_core::{DocumentStore, Rational};
+    use lumit_core::{store::DocumentStore, time::Rational};
     use std::collections::BTreeSet;
     use std::fs;
 

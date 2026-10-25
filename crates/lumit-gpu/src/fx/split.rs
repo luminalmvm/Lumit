@@ -7,7 +7,7 @@ use super::{work_texture, FxEngine};
 
 /// One resolved RGB split (docs/08 §3.6, T17): a linear, three-tinted-tap
 /// fringe. The offset vector is host-computed
-/// (`lumit_core::fx::rgb_split_offset`) so the kernel never runs its own
+/// (`lumit_core::fx::maths::rgb_split_offset`) so the kernel never runs its own
 /// trigonometry; the always-radial variant is chromatic aberration.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RgbSplitOp {
@@ -44,7 +44,7 @@ struct RgbSplitParams {
 /// One resolved spectral split — the RGB split's Wavelength mode (docs/08
 /// §3.6), its own kernel so the classic mode stays byte-identical.
 /// The offset vector and the wavelength basis both arrive host-computed
-/// (`lumit_core::fx::rgb_split_offset` / `spectral_basis_uniform`), so the
+/// (`lumit_core::fx::maths::rgb_split_offset` / `spectral_basis_uniform`), so the
 /// kernel consumes exactly the CPU reference's numbers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpectralSplitOp {
@@ -57,7 +57,7 @@ pub struct SpectralSplitOp {
     /// The spectral taps (FX-9): each row is `[r, g, b, fraction]` — the
     /// column-normalised weight and the tap's offset fraction in `[-1, +1]`.
     /// The first `count` rows are active; the rest are zero. From
-    /// `lumit_core::fx::spectral_basis_uniform`.
+    /// `lumit_core::fx::maths::spectral_basis_uniform`.
     pub basis: [[f32; 4]; 64],
     /// The number of active taps (`2..=64`).
     pub count: u32,

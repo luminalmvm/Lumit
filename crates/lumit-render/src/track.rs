@@ -2797,9 +2797,9 @@ mod tests {
             LayerKind::Footage { item: media },
             secs(FRAMES as i64, FPS as i64),
         );
-        footage
-            .effects
-            .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        footage.effects.push(
+            lumit_core::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         // The camera outlives the shot on purpose, so the walk past the end of
         // the solve — the hold — has somewhere to happen.
         let mut camera = layer(
@@ -3453,9 +3453,10 @@ mod tests {
             ]),
             extra: serde_json::Map::new(),
         };
-        field
-            .effects
-            .push(lumit_core::fx::instantiate("fractal_noise").expect("the effect is registered"));
+        field.effects.push(
+            lumit_core::fx::builtins::instantiate("fractal_noise")
+                .expect("the effect is registered"),
+        );
 
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
@@ -3482,9 +3483,9 @@ mod tests {
             LayerKind::Precomp { comp: nested_id },
             secs(frames as i64, FPS as i64),
         );
-        precomp
-            .effects
-            .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        precomp.effects.push(
+            lumit_core::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         (Arc::new(doc), nested_id, precomp)
     }
 
@@ -3735,7 +3736,7 @@ mod tests {
         let media = Uuid::now_v7();
         let span = secs(PlaneShot::FRAMES as i64, FPS as i64);
         let mut shot = layer("shot", LayerKind::Footage { item: media }, span);
-        let mut fx = lumit_core::fx::instantiate(PLANAR_TRACK).unwrap();
+        let mut fx = lumit_core::fx::builtins::instantiate(PLANAR_TRACK).unwrap();
         fx.id = effect;
         shot.effects.push(fx);
         let target = layer("screen", LayerKind::Null, span);
@@ -3970,27 +3971,27 @@ mod tests {
 
         // A board with a Scatter on it, baked, and a web drawn from the bake.
         // Neither of the first two draws, so the web is the whole picture.
-        let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+        let mut scatter = lumit_core::fx::builtins::instantiate("scatter").unwrap();
         set(&mut scatter, "density", number(3000.0));
         set(&mut scatter, "mix", number(0.0));
         // A Pick points between them marks half the points under a name, so
         // the stream that is baked carries a named column.
-        let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+        let mut pick = lumit_core::fx::builtins::instantiate("pick_points").unwrap();
         set(&mut pick, "result", EffectValue::Choice(1));
         set(&mut pick, "group_name", EffectValue::Text("kept".into()));
         set(&mut pick, "to", number(50.0));
         set(&mut pick, "mix", number(0.0));
         // And a Vary points stores each point's colour under another, so it
         // carries a column four numbers wide as well.
-        let mut vary = lumit_core::fx::instantiate("vary_points").unwrap();
+        let mut vary = lumit_core::fx::builtins::instantiate("vary_points").unwrap();
         set(&mut vary, "opacity", number(40.0));
         set(&mut vary, "set_number", EffectValue::Bool(true));
         set(&mut vary, "number_name", EffectValue::Text("tint".into()));
         set(&mut vary, "number_store", EffectValue::Choice(2));
         set(&mut vary, "mix", number(0.0));
-        let mut bake = lumit_core::fx::instantiate(bake_points::MATCH_NAME).unwrap();
+        let mut bake = lumit_core::fx::builtins::instantiate(bake_points::MATCH_NAME).unwrap();
         set(&mut bake, "mix", number(0.0));
-        let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+        let mut connect = lumit_core::fx::builtins::instantiate("connect_points").unwrap();
         set(&mut connect, "max_distance", number(8.0));
         let (scatter_id, bake_id, connect_id) = (scatter.id, bake.id, connect.id);
         let (pick_id, vary_id) = (pick.id, vary.id);
@@ -4056,8 +4057,8 @@ mod tests {
             let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
             let mut read = Vec::new();
             for source in [bake_id, scatter_id] {
-                let sample = lumit_core::fx::instantiate("points_sample").unwrap();
-                let slider = lumit_core::fx::instantiate("slider_control").unwrap();
+                let sample = lumit_core::fx::builtins::instantiate("points_sample").unwrap();
+                let slider = lumit_core::fx::builtins::instantiate("slider_control").unwrap();
                 board.graph.edges.extend([
                     wire(stream_of(source), NodeRef::Driver(sample.id), POINTS_PORT),
                     wire(
@@ -4075,7 +4076,7 @@ mod tests {
             }
             let doc = Arc::new(doc);
             let board = &doc.comp(comp_id).unwrap().layers[0];
-            let driven = lumit_core::fx::resolve_drivers(
+            let driven = lumit_core::fx::drivers::resolve_drivers(
                 &board.graph,
                 2.0 / 24.0,
                 Arc::new(lumit_core::expression::ExpressionContext {
@@ -4089,12 +4090,12 @@ mod tests {
                 None,
             );
             read.iter()
-                .map(
-                    |node| match driven.param(*node, lumit_core::fx::ParamId::new("slider")) {
-                        Some(lumit_core::fx::Value::Float(v)) => v,
+                .map(|node| {
+                    match driven.param(*node, lumit_core::fx::params::ParamId::new("slider")) {
+                        Some(lumit_core::fx::params::Value::Float(v)) => v,
                         _ => 0.0,
-                    },
-                )
+                    }
+                })
                 .collect::<Vec<f32>>()
         };
         assert_eq!(counts(&auto), [0.0, 0.0], "nothing to count before a bake");

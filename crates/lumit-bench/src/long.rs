@@ -29,7 +29,7 @@ use std::time::{Duration as Wall, Instant};
 use lumit_core::model::{Document, Layer, LayerKind};
 use lumit_core::sequence::{self, Clip, ClipSource};
 use lumit_core::time::{CompTime, Rational};
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_project::JournalFile;
 use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
@@ -450,7 +450,7 @@ fn clip_ops(comp: Uuid, row: &Layer, clips: Vec<Clip>) -> Vec<Op> {
 }
 
 /// A time that overflowed, as a scenario's error.
-fn time(e: lumit_core::TimeError) -> String {
+fn time(e: lumit_core::time::TimeError) -> String {
     format!("long comp time: {e}")
 }
 

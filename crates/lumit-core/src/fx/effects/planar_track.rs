@@ -38,12 +38,10 @@
 //! the Camera track's is not: "tracking, frame 214 of 900" is live job state,
 //! and a parameter is something the document saves and the timeline animates.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Feature density's option labels, in index order — the Camera track's own
-/// three, meaning the same three things to the same tracker.
-pub use super::camera_track::{density, DENSITY, DENSITY_DEFAULT, DENSITY_OPTIONS};
+use super::camera_track::{DENSITY_DEFAULT, DENSITY_OPTIONS};
 
 /// The **Follow** row's option labels, in index order: what the analysis is
 /// asked to follow, and therefore what shape of answer it can give.
@@ -112,7 +110,7 @@ pub struct PlanarTrack {
     ///
     /// The schema defaults are a nominal 1080p rectangle; a fresh instance is
     /// put on the actual comp by
-    /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster), because a
+    /// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster), because a
     /// schema constant cannot know the raster (§1.2).
     #[slider(label = "Upper left x", min = -1920.0, max = 3840.0, default = 660.0, unit = Px)]
     pub upper_left_x: f32,

@@ -30,7 +30,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use lumit_core::model::{FootageItem, ProjectItem};
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use lumit_render::standin::Smaller;
 use lumit_share::{bulk::Footage, bulk::Held, bulk::Limits, bulk::News, bulk::Wanted};
 use serde_json::{json, Value};
@@ -1351,7 +1351,7 @@ fn spec_from(_: &Value) -> Option<BridgeExportSpec> {
 mod tests {
     use super::*;
     use lumit_core::model::MediaRef;
-    use lumit_core::Op;
+    use lumit_core::ops::Op;
     use lumit_media::encode::{ColourTags, Encoder, Metadata, VideoCodec, VideoSettings};
     use std::net::{IpAddr, Ipv4Addr};
 

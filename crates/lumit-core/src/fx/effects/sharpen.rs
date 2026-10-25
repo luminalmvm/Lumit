@@ -2,7 +2,9 @@
 //! colour (§2.2 — sharpening premultiplied values haloes matte edges). The
 //! unpremultiply → sharpen → re-premultiply wrap is fused into the kernel.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// The Unsharp mask's controls.

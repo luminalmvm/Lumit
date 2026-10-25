@@ -15,7 +15,7 @@ use std::{
 
 use flutter_rust_bridge::frb;
 use lumit_core::shared::Conflict;
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use lumit_share::{
     bulk::Footage, bulk::News, bulk::Wanted, invite::Invite, Ending, Event, Person, Presence,
     Reach, Refusal, Relayed, ShareError, Sharing, Versions,

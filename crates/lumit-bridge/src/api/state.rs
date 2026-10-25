@@ -5,7 +5,7 @@ use std::{
 };
 
 use flutter_rust_bridge::frb;
-use lumit_core::{store::DocumentChange, Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentChange, store::DocumentStore};
 use lumit_project::JournalFile;
 use uuid::Uuid;
 
@@ -654,8 +654,8 @@ pub(crate) fn forget_streams_except(keep: Uuid) -> Result<(), BridgeError> {
 ///
 /// Structural layer ops (add / remove / reorder) report the comp but not the
 /// layer: what changed is the comp's layer list, not one layer's contents.
-pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool) {
-    use lumit_core::Op;
+pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>, bool) {
+    use lumit_core::ops::Op;
     match op {
         // The project item list itself.
         Op::AddItem { .. }

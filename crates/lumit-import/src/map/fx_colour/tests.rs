@@ -295,10 +295,10 @@ fn a_keyframed_dropdown_imports_its_first_key_and_reports_it() {
 /// Declared here rather than driven by a real bundle because what is under
 /// test is the *importer's* half of the seam: given a catalogue entry under a
 /// plug-in identifier, does an After Effects match name find it.
-struct PluginDef(&'static lumit_core::fx::EffectSchema);
+struct PluginDef(&'static lumit_core::fx::schema::EffectSchema);
 
-impl lumit_core::fx::EffectDef for PluginDef {
-    fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+impl lumit_core::fx::registry::EffectDef for PluginDef {
+    fn schema(&self) -> &'static lumit_core::fx::schema::EffectSchema {
         self.0
     }
 }
@@ -309,15 +309,17 @@ impl lumit_core::fx::EffectDef for PluginDef {
 fn a_discovered_plugin(
     identifier: &'static str,
     label: &'static str,
-    params: &'static [lumit_core::fx::ParamSchema],
+    params: &'static [lumit_core::fx::schema::ParamSchema],
 ) {
-    use lumit_core::fx::{CostClass, EffectTraits, FxCategory, MatteRole, Roi};
+    use lumit_core::fx::{
+        schema::CostClass, schema::EffectTraits, schema::FxCategory, schema::MatteRole, schema::Roi,
+    };
     let match_name: &'static str = Box::leak(format!("ofx:{identifier}").into_boxed_str());
-    if lumit_core::fx::schema(match_name).is_some() {
+    if lumit_core::fx::builtins::schema(match_name).is_some() {
         return;
     }
-    let schema: &'static lumit_core::fx::EffectSchema =
-        Box::leak(Box::new(lumit_core::fx::EffectSchema {
+    let schema: &'static lumit_core::fx::schema::EffectSchema =
+        Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
             match_name,
             label,
             version: 1,
@@ -336,7 +338,7 @@ fn a_discovered_plugin(
             matte: MatteRole::None,
         }));
     assert!(
-        lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(PluginDef(schema)))),
+        lumit_core::fx::catalogue::BUILTIN_DEFS.register(Box::leak(Box::new(PluginDef(schema)))),
         "the plug-in registered"
     );
 }
@@ -346,32 +348,32 @@ const fn control(
     id: &'static str,
     label: &'static str,
     default: f64,
-) -> lumit_core::fx::ParamSchema {
-    lumit_core::fx::ParamSchema {
+) -> lumit_core::fx::schema::ParamSchema {
+    lumit_core::fx::schema::ParamSchema {
         id,
         label,
-        kind: lumit_core::fx::ParamKind::Float {
+        kind: lumit_core::fx::schema::ParamKind::Float {
             default,
             slider: (0.0, 100.0),
             hard: (None, None),
         },
-        unit: lumit_core::fx::Unit::Raw,
+        unit: lumit_core::fx::params::Unit::Raw,
     }
 }
 
 /// S_Glow's three: one the After Effects side hands over as a colour, and one
 /// it keeps in pixels where the plug-in reads a share of the width.
-const GLOW_CONTROLS: &[lumit_core::fx::ParamSchema] = &[
+const GLOW_CONTROLS: &[lumit_core::fx::schema::ParamSchema] = &[
     control("brightness", "Brightness", 1.0),
     control("centre_x", "Centre", 0.5),
-    lumit_core::fx::ParamSchema {
-        unit: lumit_core::fx::Unit::FrameWidth,
+    lumit_core::fx::schema::ParamSchema {
+        unit: lumit_core::fx::params::Unit::FrameWidth,
         ..control("width", "Width", 0.1)
     },
 ];
 
 /// S_DissolveLuma's one that matters: the transition itself.
-const DISSOLVE_CONTROLS: &[lumit_core::fx::ParamSchema] =
+const DISSOLVE_CONTROLS: &[lumit_core::fx::schema::ParamSchema] =
     &[control("dissolve_percent", "Dissolve Percent", 0.0)];
 
 /// One After Effects leaf of a third-party effect: a numbered match name, which

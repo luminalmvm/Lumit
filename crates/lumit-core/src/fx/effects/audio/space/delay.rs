@@ -36,7 +36,10 @@ use super::super::dsp::db::{db_of_gain, SILENCE_FLOOR_DB};
 use super::super::dsp::delay_line::DelayLine;
 use super::super::dsp::smoother::Smoother;
 use super::{aim, held, value_of};
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId};
+use crate::fx::{
+    audio_chain::AudioProcessor, params::ParamId, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// The longest repeat the Time row offers, in milliseconds. The line is taken
@@ -316,7 +319,7 @@ mod tests {
     use super::*;
 
     use crate::fx::effects::audio::space::{noise, play, play_all};
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_BLOCK_SAMPLES};
 
     const RATE: u32 = 48_000;
 

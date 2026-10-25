@@ -392,7 +392,10 @@ pub mod particulate {
     use lumit_core::expression::ExpressionContext;
     use lumit_core::fx::effects::particulate::Particulate;
     use lumit_core::fx::points::{PointsSchedule, Schedule, CAP_DEFAULT, CAP_HARD};
-    use lumit_core::fx::{instantiate, resolve_stack, EffectMetadata, MarkerContext};
+    use lumit_core::fx::{
+        builtins::instantiate, markers::MarkerContext, registry::EffectMetadata,
+        resolved::resolve_stack,
+    };
     use lumit_core::model::EffectValue;
 
     /// 1080p, which is what docs/13 §1's display target and every B-row assume.

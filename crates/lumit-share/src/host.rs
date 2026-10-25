@@ -15,7 +15,7 @@ use crate::{
     Relayed, ShareError, MAX_PEOPLE,
 };
 use lumit_core::store::{Moved, RemoteTag};
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use parking_lot::Mutex;
 use std::net::{IpAddr, Ipv6Addr, Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;

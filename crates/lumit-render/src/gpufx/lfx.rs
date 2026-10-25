@@ -11,7 +11,7 @@ use std::sync::Mutex;
 
 use lumit_core::fx::effects::custom_shader as cs;
 use lumit_core::fx::lfx::{self, LfxEffect, LfxError};
-use lumit_core::fx::{EffectDef, Params};
+use lumit_core::fx::{params::Params, registry::EffectDef};
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
@@ -32,7 +32,7 @@ pub fn register(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
     if super::gpu_effect(name).is_none() {
         super::register_gpu_effect(Box::leak(Box::new(LfxPass(name))));
     }
-    lumit_core::fx::BUILTIN_DEFS.register(def);
+    lumit_core::fx::catalogue::BUILTIN_DEFS.register(def);
     Ok(def)
 }
 
@@ -151,8 +151,8 @@ impl GpuEffect for LfxPass {
         let seed = (instance.as_u128() as u64 ^ (instance.as_u128() >> 64) as u64) as u32;
         let input2 = aux.layer_input();
         let [fx0, fy0, fw, fh] =
-            lumit_core::fx::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
-        let mix = (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+            lumit_core::fx::schema::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
+        let mix = (p.float(lumit_core::fx::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
         let params = program.pack(p);
         let passes = built.passes();
         ctx.note_in_flight(key);
@@ -283,17 +283,18 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
                 _ => (i % 13) as f32 / 13.0,
             })
             .collect();
-        let inst = lumit_core::fx::instantiate(def.schema().match_name).expect("instantiates");
+        let inst =
+            lumit_core::fx::builtins::instantiate(def.schema().match_name).expect("instantiates");
         assert_eq!(
             inst.effect.namespace,
             lumit_core::model::EffectNamespace::Lfx
         );
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             std::slice::from_ref(&inst),
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         let out = crate::fxops::run_ops(
@@ -437,7 +438,8 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     fn a_missing_lfx_effect_opens_draws_nothing_and_keeps_its_values() {
         // Built from the Custom shader's rows, then renamed: what a project
         // made on a machine with the Tape extension would hold.
-        let mut missing = lumit_core::fx::instantiate("custom_shader").expect("a built-in");
+        let mut missing =
+            lumit_core::fx::builtins::instantiate("custom_shader").expect("a built-in");
         missing.effect.namespace = lumit_core::model::EffectNamespace::Lfx;
         missing.effect.match_name = lfx::match_name("nowhere", "tape");
         missing.effect.version = 3;

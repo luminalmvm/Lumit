@@ -33,7 +33,10 @@ use super::super::dsp::delay_line::DelayLine;
 use super::super::dsp::lfo::{Lfo, Phase, Shape};
 use super::super::dsp::smoother::Smoother;
 use super::{frame, put, row};
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// How long a moved row takes to arrive. Long, because the delay is what
 /// moves and a delay dragged quickly is a pitch bend.
@@ -252,7 +255,7 @@ mod tests {
     /// smoothing. A ramp reads it back directly: the line hands back what went
     /// in that many frames ago, so the difference is the delay itself.
     fn delays(over: &[(&str, f64)]) -> Vec<f64> {
-        let frames = 128 * crate::fx::AUDIO_BLOCK_FRAMES;
+        let frames = 128 * crate::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let input: Vec<f32> = (0..frames).flat_map(|n| [n as f32, n as f32]).collect();
         let mut over = over.to_vec();
         over.extend([("voices", 1.0), ("wet", 100.0)]);

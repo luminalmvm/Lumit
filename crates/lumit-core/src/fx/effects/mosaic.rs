@@ -14,7 +14,9 @@
 //! the same answer for a hundredth of the work. A block under 8 pixels across is
 //! sampled completely, so a fine mosaic *is* an exact mean.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Mosaic's controls.

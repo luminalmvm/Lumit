@@ -155,7 +155,7 @@ fn picture_input(id: &str) -> GraphNode {
             default: [0.0; 4],
             min: 0.0,
             max: 1.0,
-            unit: lumit_core::fx::Unit::Raw,
+            unit: lumit_core::fx::params::Unit::Raw,
             preview: None,
         },
     }
@@ -171,7 +171,7 @@ fn number_input(id: &str, default: f64) -> GraphNode {
             default: [default, 0.0, 0.0, 0.0],
             min: -8.0,
             max: 8.0,
-            unit: lumit_core::fx::Unit::Raw,
+            unit: lumit_core::fx::params::Unit::Raw,
             preview: None,
         },
     }
@@ -183,8 +183,8 @@ fn output() -> GraphNode {
 
 /// A fresh builtin instance with `edits` applied to its float rows.
 fn effect(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
-    let mut inst =
-        lumit_core::fx::instantiate(name).unwrap_or_else(|| panic!("{name} is a builtin"));
+    let mut inst = lumit_core::fx::builtins::instantiate(name)
+        .unwrap_or_else(|| panic!("{name} is a builtin"));
     for (id, value) in edits {
         set_float(&mut inst, id, *value);
     }
@@ -215,7 +215,7 @@ fn set_value(inst: &mut EffectInstance, id: &str, value: EffectValue) {
 
 /// A Node graph effect bound to `comp`, with the Inputs copy the panel writes.
 fn node_graph_effect(comp: &Composition) -> EffectInstance {
-    let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+    let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
     let graph = comp.graph.as_ref().expect("a node graph comp");
     lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
     inst
@@ -800,7 +800,7 @@ fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
     // The comp's own id is minted first, so its graph can name itself.
     let mut comp = graph_comp("self", Vec::new(), Vec::new());
     let comp_id = comp.id;
-    let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+    let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
     lumit_core::fx::effects::node_graph::bind(&mut inst, comp_id, &CompGraph::new_with_output());
     let (src, box_, o) = (read(red), GraphNode::Fx(inst), output());
     let (src_id, box_id, o_id) = (src.id(), box_.id(), o.id());

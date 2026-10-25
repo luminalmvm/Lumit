@@ -769,7 +769,7 @@ impl<'a, 'c> Fx<'a, 'c> {
         lumit: &str,
     ) -> Option<Self> {
         let (w, h) = conv.size;
-        let mut inst = lumit_core::fx::instantiate_for_raster(lumit, w, h)?;
+        let mut inst = lumit_core::fx::builtins::instantiate_for_raster(lumit, w, h)?;
         let name = display_name(node, ae).to_string();
         // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);

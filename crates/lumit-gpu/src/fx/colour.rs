@@ -344,7 +344,7 @@ struct HueSaturationParams {
 }
 
 /// One resolved hue shift (docs/08 §3.17): a row-major linear 3×3 colour
-/// matrix, computed host-side (`lumit_core::fx::hue_matrix`) so the CPU
+/// matrix, computed host-side (`lumit_core::fx::maths::hue_matrix`) so the CPU
 /// reference and the kernel multiply by identical coefficients. The identity
 /// matrix is the neutral point; alpha is untouched.
 #[derive(Debug, Clone, Copy, PartialEq)]

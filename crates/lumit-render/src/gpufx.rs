@@ -22,7 +22,7 @@
 //! multiply by values that came from one expression, not two.
 
 use lumit_core::fx::effects;
-use lumit_core::fx::{EffectMetadata, Params};
+use lumit_core::fx::{params::Params, registry::EffectMetadata};
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
@@ -70,7 +70,7 @@ pub enum AuxKind {
 /// matte is a whole picture and Blur's is too. Making it a variant would mean a
 /// combinatorial variant per (kind, matte) pair, and the first effect that
 /// wanted both would add a seam. It rides beside instead, so the schema's
-/// [`MatteRole`](lumit_core::fx::MatteRole) is the *only* thing that decides who
+/// [`MatteRole`](lumit_core::fx::schema::MatteRole) is the *only* thing that decides who
 /// consumes the matte — one seam, whatever else the effect happens to need.
 #[derive(Clone, Copy)]
 pub struct AuxSlot<'a> {
@@ -187,7 +187,7 @@ impl<'a> AuxSlot<'a> {
     /// seam to the first effect that wanted two things.
     ///
     /// `None` unless the effect declares a
-    /// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) row, and
+    /// [`ParamKind::MaskPath`](lumit_core::fx::schema::ParamKind::MaskPath) row, and
     /// [`MaskPolyline::is_empty`](lumit_core::mask::MaskPolyline::is_empty)
     /// whenever the row comes to no mask. Both mean the same thing to a kernel
     /// — render the input unchanged — which is why an effect need only check
@@ -202,7 +202,7 @@ impl<'a> AuxSlot<'a> {
     }
 
     /// This op's **n-th** mask path, in the order the effect declares
-    /// its [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) rows.
+    /// its [`ParamKind::MaskPath`](lumit_core::fx::schema::ParamKind::MaskPath) rows.
     ///
     /// Three effects walk one line and answer with [`Self::mask_path`]; the
     /// Matte key takes two, an inside hold-out and an outside one, so the slot
@@ -216,7 +216,7 @@ impl<'a> AuxSlot<'a> {
     /// chain is carrying — so a matte pointed at the effect's own layer
     /// is a real texture by the time it arrives here.
     ///
-    /// `None` unless the effect's [`MatteRole`](lumit_core::fx::MatteRole) says
+    /// `None` unless the effect's [`MatteRole`](lumit_core::fx::schema::MatteRole) says
     /// it consumes the matte itself *and* a layer is bound: an effect on the
     /// generic strength semantic never sees one, because its matte is spent in
     /// the dissolve beside the dispatch instead. An override with an unset row
@@ -603,7 +603,7 @@ impl GpuEffect for DirectionalBlur {
         // The unit direction and the tap count are derived here exactly as the
         // old `run_ops` arm derived them, from the same two numbers the CPU
         // reference derives them from.
-        let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, angle_deg);
+        let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(1.0, angle_deg);
         fx.dir_blur(
             ctx,
             tex,
@@ -870,7 +870,7 @@ impl GpuEffect for CustomShader {
         // UV 0 to 1 spans the frame. On a node graph box whose picture
         // reaches past it, the room either side is below 0 and above 1.
         let [fx0, fy0, fw, fh] =
-            lumit_core::fx::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
+            lumit_core::fx::schema::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
         let header = Self::header(
             [fx0 as u32, fy0 as u32],
             [fw as u32, fh as u32],
@@ -878,7 +878,7 @@ impl GpuEffect for CustomShader {
             p.float(cs::COMP_SCALE, 1.0),
             lt,
             seed,
-            (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0),
+            (p.float(lumit_core::fx::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0),
             matte.is_some(),
             layer_input.is_some(),
         );
@@ -968,7 +968,7 @@ impl GpuEffect for RgbSplit {
                 tints,
                 mix,
             } => {
-                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, angle_deg);
+                let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount_px, angle_deg);
                 fx.rgb_split(
                     ctx,
                     tex,
@@ -991,8 +991,8 @@ impl GpuEffect for RgbSplit {
                 tints,
                 mix,
             } => {
-                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, angle_deg);
-                let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+                let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount_px, angle_deg);
+                let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
                 fx.spectral_split(
                     ctx,
                     tex,
@@ -1054,8 +1054,8 @@ impl GpuEffect for ChromaticAberration {
                 tints,
                 mix,
             } => {
-                let (dx, dy) = lumit_core::fx::rgb_split_offset(amount_px, 0.0);
-                let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+                let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount_px, 0.0);
+                let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
                 fx.spectral_split(
                     ctx,
                     tex,
@@ -1714,7 +1714,7 @@ impl GpuEffect for DisplacementMap {
                 amount: d.amount,
                 edge: d.edge,
                 mix: d.mix,
-                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+                matte_invert: p.bool(lumit_core::fx::schema::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -2616,7 +2616,7 @@ impl GpuEffect for DofPro {
                 display_depth: e.display == 1,
                 depth_channel: e
                     .depth_channel
-                    .min(lumit_core::fx::CHANNEL_OPTIONS.len() as u32 - 1),
+                    .min(lumit_core::fx::builtins::CHANNEL_OPTIONS.len() as u32 - 1),
                 depth_invert: e.depth_invert,
                 focus_m: e.focus_m.max(0.01),
                 use_focus_point: e.use_focus_point,
@@ -3036,7 +3036,7 @@ impl GpuEffect for SetMatte {
             &lumit_gpu::fx::utility::SetMatteOp {
                 channel,
                 combine,
-                invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+                invert: p.bool(lumit_core::fx::schema::MATTE_INVERT_ID, false),
                 mix,
             },
         )
@@ -3270,8 +3270,14 @@ impl GpuEffect for Transform {
             effects::transform::Transform::read(p).packed();
         // The affine is the one lumit-core helper both paths build through, so
         // the CPU reference and the kernel consume identical numbers.
-        let (m, off, opacity) =
-            lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
+        let (m, off, opacity) = lumit_core::fx::maths::transform_op(
+            anchor,
+            position,
+            scale,
+            rotation_deg,
+            skew,
+            opacity,
+        );
         // No matte: the Transform keeps the strength dissolve (scaling a
         // whole-frame move is not a picture a per-pixel matte should draw;
         // the Shake is the one that claims this kernel's matte).
@@ -3321,19 +3327,19 @@ impl GpuEffect for Shake {
         let params = ShakeParams::read(p);
         match params.packed(ShakeParams::derived_of(p)) {
             Shaken::Plain { wobble, edge, mix } => {
-                let (anchor, position, scale, rot) = lumit_core::fx::shake_affine(
+                let (anchor, position, scale, rot) = lumit_core::fx::maths::shake_affine(
                     w,
                     h,
                     wobble.offset_px,
                     wobble.rotation_deg,
                     wobble.zoom,
                 );
-                let (m, off, opacity) = lumit_core::fx::transform_op(
+                let (m, off, opacity) = lumit_core::fx::maths::transform_op(
                     anchor,
                     position,
                     scale,
                     rot,
-                    lumit_core::fx::NO_SKEW,
+                    lumit_core::fx::maths::NO_SKEW,
                     1.0,
                 );
                 // **The shake claims its matte**: it scales the
@@ -3365,14 +3371,19 @@ impl GpuEffect for Shake {
                     off: [0.0, 0.0],
                 }; lumit_gpu::fx::stylise::SHAKE_MB_SAMPLES];
                 for (t, s) in taps.iter_mut().zip(samples.iter()) {
-                    let (anchor, position, scale, rot) =
-                        lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-                    let (m, off, _opacity) = lumit_core::fx::transform_op(
+                    let (anchor, position, scale, rot) = lumit_core::fx::maths::shake_affine(
+                        w,
+                        h,
+                        s.offset_px,
+                        s.rotation_deg,
+                        s.zoom,
+                    );
+                    let (m, off, _opacity) = lumit_core::fx::maths::transform_op(
                         anchor,
                         position,
                         scale,
                         rot,
-                        lumit_core::fx::NO_SKEW,
+                        lumit_core::fx::maths::NO_SKEW,
                         1.0,
                     );
                     *t = lumit_gpu::fx::stylise::ShakeMbTap { m, off };
@@ -3420,10 +3431,12 @@ impl GpuEffect for Glow {
         // along one direction. No amount, no pass.
         let fringe = (halo.chromatic_px > 0.0).then(|| {
             let (dx, dy) =
-                lumit_core::fx::rgb_split_offset(halo.chromatic_px, halo.fringe_angle_deg);
+                lumit_core::fx::maths::rgb_split_offset(halo.chromatic_px, halo.fringe_angle_deg);
             if halo.fringe_wavelength {
-                let (basis, count) =
-                    lumit_core::fx::spectral_basis_uniform(halo.fringe_samples, halo.fringe_tints);
+                let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(
+                    halo.fringe_samples,
+                    halo.fringe_tints,
+                );
                 lumit_gpu::fx::blur::GlowFringe::Spectral(lumit_gpu::fx::split::SpectralSplitOp {
                     dx,
                     dy,
@@ -5133,7 +5146,7 @@ impl GpuEffect for PointsModifier {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        use lumit_core::fx::ParamId;
+        use lumit_core::fx::params::ParamId;
         let px_scale = p.float(ParamId::new("derived.px_scale"), 1.0);
         let mix = (p.float(ParamId::new("mix"), 100.0) / 100.0).clamp(0.0, 1.0);
         let stream = self.modified(fx, ctx, tex, w, h, p, aux, px_scale);
@@ -5174,7 +5187,10 @@ impl GpuEffect for PointsModifier {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Option<lumit_core::fx::points::PointsStream> {
-        let px_scale = p.float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0);
+        let px_scale = p.float(
+            lumit_core::fx::params::ParamId::new("derived.px_scale"),
+            1.0,
+        );
         let made = self.modified(fx, ctx, tex, w, h, p, aux, px_scale)?;
         Some(made.rescaled(1.0 / px_scale.max(1e-6)))
     }
@@ -5196,13 +5212,13 @@ impl PointsModifier {
         aux: AuxSlot<'_>,
         px_scale: f32,
     ) -> Option<lumit_core::fx::points::PointsStream> {
-        let def = lumit_core::fx::BUILTIN_DEFS.get(self.0)?;
+        let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(self.0)?;
         let sched = aux.schedule()?;
         let ports = def
             .signature()
             .inputs()
             .iter()
-            .filter(|port| port.ty == lumit_core::fx::PortType::Points)
+            .filter(|port| port.ty == lumit_core::fx::schema::PortType::Points)
             .count();
         // One stream per input, or just the first where the list is a history.
         let inputs: Vec<lumit_core::fx::points::PointsStream> = sched
@@ -5236,7 +5252,7 @@ impl PointsModifier {
         let inputs: Vec<&lumit_core::fx::points::PointsStream> = inputs.iter().collect();
         def.modify_points(
             p,
-            &lumit_core::fx::ModifyCx {
+            &lumit_core::fx::registry::ModifyCx {
                 inputs: &inputs,
                 t: sched.t,
                 sampled: sampled.as_deref(),
@@ -5314,7 +5330,7 @@ impl Thrown {
             // default.
             field: aux.matte().cloned(),
             test: lumit_gpu::fx::points_draw::FieldTest::Alpha {
-                invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
+                invert: p.bool(lumit_core::fx::schema::MATTE_INVERT_ID, false),
             },
             seed: inst.seed,
             style: inst.draw_style(),
@@ -5999,7 +6015,7 @@ impl GpuEffect for AddGrain {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lumit_core::fx::BUILTIN_DEFS;
+    use lumit_core::fx::catalogue::BUILTIN_DEFS;
 
     // ------------------------------------------------------ Particulate (PS2)
 
@@ -6070,8 +6086,8 @@ mod tests {
             life_jitter: 35.0,
             size: 9.0,
             size_jitter: 45.0,
-            size_over_life: lumit_core::fx::CurvePoints::default(),
-            opacity_over_life: lumit_core::fx::CurvePoints::default(),
+            size_over_life: lumit_core::fx::params::CurvePoints::default(),
+            opacity_over_life: lumit_core::fx::params::CurvePoints::default(),
             colour: [0.9, 0.6, 0.3, 1.0],
             end_colour: [0.2, 0.4, 1.0, 1.0],
             rotation: 15.0,
@@ -7457,7 +7473,7 @@ mod tests {
             // styles, which declare themselves on their own list rather than
             // in the catalogue.
             assert!(
-                lumit_core::fx::def(name).is_some(),
+                lumit_core::fx::builtins::def(name).is_some(),
                 "the GPU table names {name}, which no effect or style declares"
             );
         }
@@ -7502,7 +7518,7 @@ mod tests {
     /// quietly ignores its grade.
     #[test]
     fn a_side_table_effect_declares_the_list_it_consumes() {
-        use lumit_core::fx::ParamKind;
+        use lumit_core::fx::schema::ParamKind;
         for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
             // The Matte row is deliberately not counted: it is carried
@@ -7528,7 +7544,7 @@ mod tests {
             let extra_layer = def.schema().params.iter().any(|p| {
                 let is_matte = matte_row.is_some_and(|m| p.id == m || p.id.starts_with(m));
                 !is_matte
-                    && p.id != lumit_core::fx::MATTE_INVERT_PARAM
+                    && p.id != lumit_core::fx::schema::MATTE_INVERT_PARAM
                     && matches!(p.kind, ParamKind::Layer { .. })
             });
             if !has_file && !extra_layer {
@@ -7585,13 +7601,13 @@ mod tests {
     /// `lumit-ofx` proves the other half — that a real plugin makes one of
     /// these.
     struct RunTimeDef {
-        schema: &'static lumit_core::fx::EffectSchema,
+        schema: &'static lumit_core::fx::schema::EffectSchema,
         /// Whether this definition's render fails, as a disabled plugin's does.
         fails: std::sync::atomic::AtomicBool,
     }
 
-    impl lumit_core::fx::EffectDef for RunTimeDef {
-        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+    impl lumit_core::fx::registry::EffectDef for RunTimeDef {
+        fn schema(&self) -> &'static lumit_core::fx::schema::EffectSchema {
             self.schema
         }
         fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {
@@ -7615,14 +7631,14 @@ mod tests {
     /// one for a plugin it has just described.
     fn a_run_time_def(match_name: &'static str) -> &'static RunTimeDef {
         Box::leak(Box::new(RunTimeDef {
-            schema: Box::leak(Box::new(lumit_core::fx::EffectSchema {
+            schema: Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
                 match_name,
                 label: "Run-time effect",
                 version: 1,
-                category: lumit_core::fx::FxCategory::Utility,
-                traits: lumit_core::fx::EffectTraits {
-                    cost: lumit_core::fx::CostClass::Heavy,
-                    roi: lumit_core::fx::Roi::FullFrame,
+                category: lumit_core::fx::schema::FxCategory::Utility,
+                traits: lumit_core::fx::schema::EffectTraits {
+                    cost: lumit_core::fx::schema::CostClass::Heavy,
+                    roi: lumit_core::fx::schema::Roi::FullFrame,
                     temporal: &[0],
                     premultiplied: true,
                     seeded: false,
@@ -7631,7 +7647,7 @@ mod tests {
                 params: &[],
                 groups: &[],
                 enabled_when: &[],
-                matte: lumit_core::fx::MatteRole::None,
+                matte: lumit_core::fx::schema::MatteRole::None,
             })),
             fails: std::sync::atomic::AtomicBool::new(false),
         }))
@@ -7639,7 +7655,7 @@ mod tests {
 
     /// An instance of a registered effect, in the namespace a plugin's carries.
     fn a_run_time_instance(match_name: &str) -> lumit_core::model::EffectInstance {
-        lumit_core::fx::instantiate(match_name).expect("the catalogue knows it")
+        lumit_core::fx::builtins::instantiate(match_name).expect("the catalogue knows it")
     }
 
     /// **Built-in, plugin, built-in**: a stack with a run-time effect in
@@ -7676,16 +7692,16 @@ mod tests {
             .collect();
 
         let stack = vec![
-            lumit_core::fx::instantiate("invert").expect("a built-in"),
+            lumit_core::fx::builtins::instantiate("invert").expect("a built-in"),
             a_run_time_instance("ofx:test.render.stack"),
-            lumit_core::fx::instantiate("exposure").expect("a built-in"),
+            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
         ];
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             &stack,
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         assert_eq!(
@@ -7749,12 +7765,12 @@ mod tests {
         let (w, h) = (4u32, 4u32);
         let source: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 5) as f32 / 5.0).collect();
         let inst = a_run_time_instance("ofx:test.render.errored");
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             std::slice::from_ref(&inst),
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
 
@@ -7845,13 +7861,13 @@ mod tests {
             domain_max: [1.0; 3],
         };
 
-        let inst = lumit_core::fx::instantiate("lut").expect("lut is a built-in");
-        let ops = lumit_core::fx::resolve_stack(
+        let inst = lumit_core::fx::builtins::instantiate("lut").expect("lut is a built-in");
+        let ops = lumit_core::fx::resolved::resolve_stack(
             &[inst.clone(), inst],
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         assert_eq!(ops.len(), 2, "two LUT ops, two slots to bind");
@@ -7909,13 +7925,13 @@ mod tests {
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [0.2f32, 0.2, 0.2, 1.0]).collect();
         let previous: Vec<f32> = (0..(w * h)).flat_map(|_| [0.8f32, 0.8, 0.8, 1.0]).collect();
 
-        let inst = lumit_core::fx::instantiate("echo").expect("echo is a built-in");
-        let ops = lumit_core::fx::resolve_stack(
+        let inst = lumit_core::fx::builtins::instantiate("echo").expect("echo is a built-in");
+        let ops = lumit_core::fx::resolved::resolve_stack(
             std::slice::from_ref(&inst),
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
 
@@ -7994,7 +8010,7 @@ mod tests {
                 ("saturation", "saturation", 30.0),
                 ("glow", "intensity", 1.5),
             ] {
-                let mut inst = lumit_core::fx::instantiate(name).expect("a built-in");
+                let mut inst = lumit_core::fx::builtins::instantiate(name).expect("a built-in");
                 for p in &mut inst.params {
                     if p.id == param {
                         p.value = lumit_core::model::EffectValue::Float(
@@ -8004,23 +8020,23 @@ mod tests {
                 }
                 if strip_matte {
                     inst.params.retain(|p| {
-                        p.id != lumit_core::fx::MATTE_PARAM
-                            && p.id != lumit_core::fx::MATTE_INVERT_PARAM
+                        p.id != lumit_core::fx::schema::MATTE_PARAM
+                            && p.id != lumit_core::fx::schema::MATTE_INVERT_PARAM
                     });
                 }
                 insts.push(inst);
             }
-            lumit_core::fx::resolve_stack(
+            lumit_core::fx::resolved::resolve_stack(
                 &insts,
                 0.0,
                 ((w * w + h * h) as f32).sqrt(),
                 1.0,
-                &lumit_core::fx::MarkerContext::NONE,
+                &lumit_core::fx::markers::MarkerContext::NONE,
                 std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
             )
         };
 
-        let rendered = |ops: &lumit_core::fx::ResolvedStack,
+        let rendered = |ops: &lumit_core::fx::params::ResolvedStack,
                         mattes: &[crate::fxops::LayerInput]| {
             let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
@@ -8097,24 +8113,24 @@ mod tests {
             .collect();
         let shape_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &shape, w, h);
 
-        let inst = lumit_core::fx::instantiate("set_matte").expect("a built-in");
-        let ops = lumit_core::fx::resolve_stack(
+        let inst = lumit_core::fx::builtins::instantiate("set_matte").expect("a built-in");
+        let ops = lumit_core::fx::resolved::resolve_stack(
             std::slice::from_ref(&inst),
             0.0,
             ((w * w + h * h) as f32).sqrt(),
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         let schema = ops.iter().next().expect("one op").def.schema();
         assert_eq!(
             schema.matte,
-            lumit_core::fx::MatteRole::None,
+            lumit_core::fx::schema::MatteRole::None,
             "Set matte carries no Matte row"
         );
         assert_eq!(
             schema.layer_input(),
-            Some(lumit_core::fx::MATTE_PARAM),
+            Some(lumit_core::fx::schema::MATTE_PARAM),
             "its source is the layer-input carriage, under its own stored id"
         );
 
@@ -8199,7 +8215,8 @@ mod tests {
             .collect();
 
         let exposure = |stops: f64| {
-            let mut inst = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+            let mut inst =
+                lumit_core::fx::builtins::instantiate("exposure").expect("exposure is a built-in");
             for p in &mut inst.params {
                 if p.id == "stops" {
                     p.value = lumit_core::model::EffectValue::Float(
@@ -8209,12 +8226,12 @@ mod tests {
             }
             inst
         };
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             &[exposure(2.0), exposure(-2.0)],
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         assert_eq!(ops.len(), 2, "two ops, two matte slots to bind");

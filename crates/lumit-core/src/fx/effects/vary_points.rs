@@ -13,8 +13,10 @@ use crate::fx::cpu;
 use crate::fx::noise::value3;
 use crate::fx::points::{self, Column, PointsStream};
 use crate::fx::{
-    CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    ParamId, Params, Port, PortType, ResolveCx, ShortText, Signature, Value, MAP_PLACEMENT_OPTIONS,
+    builtins::MAP_PLACEMENT_OPTIONS, params::CurvePoints, params::ParamId, params::Params,
+    params::ShortText, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -937,7 +939,11 @@ impl EffectDef for VaryPointsDef {
 
     /// `None` while it needs a picture and has none, which leaves the stream
     /// to be made during the render.
-    fn modify_points(&self, p: Params<'_>, cx: &crate::fx::ModifyCx<'_>) -> Option<PointsStream> {
+    fn modify_points(
+        &self,
+        p: Params<'_>,
+        cx: &crate::fx::registry::ModifyCx<'_>,
+    ) -> Option<PointsStream> {
         let vary = VaryPoints::read(p);
         if vary.needs_picture() && cx.sampled.is_none() {
             return None;

@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
 use lumit_core::time::{CompTime, Duration, FrameRate};
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -196,10 +196,10 @@ impl ScriptError {
     }
 }
 
-impl From<lumit_core::OpError> for ScriptError {
+impl From<lumit_core::ops::OpError> for ScriptError {
     /// The op's reason as a sentence: "the layer is locked" reads as
     /// "The layer is locked."
-    fn from(e: lumit_core::OpError) -> Self {
+    fn from(e: lumit_core::ops::OpError) -> Self {
         let reason = e.to_string();
         let mut letters = reason.chars();
         let first = letters.next().map(|c| c.to_uppercase().collect::<String>());

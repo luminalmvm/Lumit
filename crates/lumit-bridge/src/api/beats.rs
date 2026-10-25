@@ -165,8 +165,9 @@ impl CompositionReference {
             .beats
             .iter()
             .filter_map(|beat| {
-                let time = lumit_core::Rational::from_f64_on_grid(beat.time_seconds.max(0.0), 1000)
-                    .ok()?;
+                let time =
+                    lumit_core::time::Rational::from_f64_on_grid(beat.time_seconds.max(0.0), 1000)
+                        .ok()?;
                 Some(lumit_core::markers::Marker::beat(
                     uuid::Uuid::now_v7(),
                     time,
@@ -185,7 +186,7 @@ impl CompositionReference {
         // be the panel making the tempo up.
         let grid = (found.bpm > 0.0 && placed > 0)
             .then(|| {
-                lumit_core::Rational::from_f64_on_grid(phase_ms / 1000.0, 1000)
+                lumit_core::time::Rational::from_f64_on_grid(phase_ms / 1000.0, 1000)
                     .ok()
                     .map(|phase| lumit_core::model::BeatGrid {
                         bpm: found.bpm,
@@ -214,7 +215,7 @@ impl CompositionReference {
             None => None,
             Some(g) => Some(lumit_core::model::BeatGrid {
                 bpm: g.bpm,
-                phase: lumit_core::Rational::from_f64_on_grid(g.phase_seconds, 1000)
+                phase: lumit_core::time::Rational::from_f64_on_grid(g.phase_seconds, 1000)
                     .map_err(|_| BridgeError::InvalidTime)?,
             }),
         };
@@ -222,7 +223,7 @@ impl CompositionReference {
         let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
         state
             .store
-            .commit(lumit_core::Op::SetBeatGrid {
+            .commit(lumit_core::ops::Op::SetBeatGrid {
                 comp: self.id,
                 grid,
             })
@@ -275,14 +276,14 @@ impl CompositionReference {
         let outcome = (|| {
             state
                 .store
-                .commit(lumit_core::Op::SetCompMarkers {
+                .commit(lumit_core::ops::Op::SetCompMarkers {
                     comp: self.id,
                     markers,
                 })
                 .map_err(BridgeError::OpError)?;
             state
                 .store
-                .commit(lumit_core::Op::SetBeatGrid {
+                .commit(lumit_core::ops::Op::SetBeatGrid {
                     comp: self.id,
                     grid,
                 })

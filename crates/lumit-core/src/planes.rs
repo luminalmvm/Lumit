@@ -182,7 +182,7 @@ pub fn frame_stamp(fx: &EffectInstance, frame: i64) -> Option<[u8; 32]> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::instantiate;
+    use crate::fx::builtins::instantiate;
     use crate::model::EffectParam;
 
     /// Write one row on an instance, adding it when the declaration's default

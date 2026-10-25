@@ -155,7 +155,7 @@ impl LayerReference {
                 (policy, parked)
             }
         };
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation,
@@ -194,7 +194,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn set_flow_params(&self, params: BridgeFlowParams) -> Result<(), BridgeError> {
         let base = self.live_flow_params(&self.item()?);
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params.onto(&base)),
@@ -243,7 +243,7 @@ impl LayerReference {
         let animation = value.animation_at(layer.start_offset.0)?;
         let mut params = self.live_flow_params(&layer);
         params.input_fps.animation = animation;
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params),

@@ -4,7 +4,8 @@
 //! recombine.
 
 use crate::fx::{
-    cpu, normalise_tint_columns, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params,
+    cpu, maths::normalise_tint_columns, params::Params, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 

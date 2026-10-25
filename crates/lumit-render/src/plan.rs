@@ -243,11 +243,11 @@ pub(crate) fn rebuild_offsets(
     crosses: impl Fn(i32) -> bool,
 ) -> Vec<(i32, Option<i32>)> {
     let fx_on = layer.switches.fx;
-    let flow = lumit_core::fx::stack_flow_sides(&layer.effects, fx_on, crosses);
+    let flow = lumit_core::fx::temporal::stack_flow_sides(&layer.effects, fx_on, crosses);
     let mut offsets: Vec<i32> = flow.iter().map(|&(_, side)| side).collect();
-    if lumit_core::fx::stack_is_temporal(&layer.effects, fx_on) {
+    if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, fx_on) {
         // Asked at the layer's frame, as a footage layer's window is.
-        offsets.extend(lumit_core::fx::stack_temporal_window(
+        offsets.extend(lumit_core::fx::temporal::stack_temporal_window(
             &layer.effects,
             fx_on,
             lt / comp_dt,
@@ -445,7 +445,11 @@ pub fn collect_comp_jobs(
             let lt = lumit_core::time::layer_time(t, l.start_offset.0);
             let below = &comp.layers[idx + 1..];
             let crosses = |o| {
-                lumit_core::fx::cut_between(below, t, lumit_core::time::frames_on(t, o, comp_dt))
+                lumit_core::fx::temporal::cut_between(
+                    below,
+                    t,
+                    lumit_core::time::frames_on(t, o, comp_dt),
+                )
             };
             rebuilt.extend(
                 rebuild_offsets(l, lt, comp_dt, crosses)
@@ -529,7 +533,7 @@ pub fn collect_comp_jobs(
                 //
                 // At the time this layer's own ops resolve at, so a Posterize
                 // time on the layer holds the graph's decodes with them (§5.2).
-                let lt = lumit_core::fx::this_layer_effect_time(
+                let lt = lumit_core::fx::temporal::this_layer_effect_time(
                     &l.effects,
                     l.switches.fx,
                     lumit_core::time::layer_time(t, l.start_offset.0),
@@ -575,11 +579,11 @@ pub fn collect_comp_jobs(
     // held re-render the draw builder performs. `sample_times[idx]` is the
     // held comp time for `comp.layers[idx]`; equal to `t` for every layer
     // when no Posterize is live, so an ordinary comp is unchanged.
-    let sample_times = lumit_core::fx::posterize_sample_times(&comp.layers, t);
+    let sample_times = lumit_core::fx::temporal::posterize_sample_times(&comp.layers, t);
     // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
     // layer's footage is wanted at by the adjustments above it, in comp
     // frames. Empty everywhere in an ordinary comp.
-    let shutter_offsets = lumit_core::fx::accumulation_shutter_offsets(&comp.layers, t);
+    let shutter_offsets = lumit_core::fx::temporal::accumulation_shutter_offsets(&comp.layers, t);
     for (idx, layer) in comp.layers.iter().enumerate() {
         if !wanted.contains(&layer.id) || !(in_span(layer) || moment_in_span(idx, layer)) {
             continue;
@@ -600,8 +604,10 @@ pub fn collect_comp_jobs(
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
-                let flow_neighbours =
-                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
+                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
+                    &layer.effects,
+                    layer.switches.fx,
+                );
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 // The job for one clip at layer time `lt`, alone (a clip
                 // whose source is a comp has no job). `whole` asks for
@@ -657,7 +663,7 @@ pub fn collect_comp_jobs(
                         temporal: Vec::new(),
                         flow_neighbours: Vec::new(),
                         slate: false,
-                        channels: lumit_core::fx::stack_extracted_channels(
+                        channels: lumit_core::fx::temporal::stack_extracted_channels(
                             &layer.effects,
                             layer.switches.fx,
                         ),
@@ -780,8 +786,13 @@ pub fn collect_comp_jobs(
                 // this job's footage is one more frame of it, and any other
                 // is a job of its own, as is one inside a fade or a dissolve.
                 // A gap is no neighbour.
-                if !in_gap && lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
-                    let window = lumit_core::fx::stack_temporal_window(
+                if !in_gap
+                    && lumit_core::fx::temporal::stack_is_temporal(
+                        &layer.effects,
+                        layer.switches.fx,
+                    )
+                {
+                    let window = lumit_core::fx::temporal::stack_temporal_window(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
@@ -850,7 +861,7 @@ pub fn collect_comp_jobs(
                         nested_moments.extend(layer_moments[idx].iter().map(|&tau| nested_at(tau)));
                         if !collapsed && !layer.is_adjustment() {
                             let crosses = |o| {
-                                lumit_core::fx::cut_between(
+                                lumit_core::fx::temporal::cut_between(
                                     &nested.layers,
                                     st,
                                     nested_at(t + f64::from(o) * comp_dt),
@@ -938,8 +949,10 @@ pub fn collect_comp_jobs(
                 let interp = &layer.interpolation;
                 let blend_on = matches!(interp, Interpolation::Blend) || flow.is_some();
                 let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                let flow_neighbours =
-                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
+                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
+                    &layer.effects,
+                    layer.switches.fx,
+                );
                 // A layer that needs flow decodes at its own width whatever the
                 // preview tier says: flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
@@ -965,29 +978,31 @@ pub fn collect_comp_jobs(
                 // mapped through the retime like the primary frame. Empty
                 // unless the stack actually reads other frames, so a plain
                 // footage layer decodes exactly one frame.
-                let temporal =
-                    if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
-                        let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
-                        // Asked at the layer's frame, the unit a plugin counts
-                        // in, and the same number the frame key asks at.
-                        lumit_core::fx::stack_temporal_window(
-                            &layer.effects,
-                            layer.switches.fx,
-                            lt / comp_dt,
-                        )
-                        .into_iter()
-                        .filter(|&o| o != 0)
-                        .map(|o| {
-                            let nlt = lt + f64::from(o) * comp_dt;
-                            let nst = layer.source_time_at(nlt);
-                            let (nf, _) =
-                                lumit_core::pixels::frame_pick(nst, fps, src_frames, false, None);
-                            (o, nf)
-                        })
-                        .collect()
-                    } else {
-                        Vec::new()
-                    };
+                let temporal = if lumit_core::fx::temporal::stack_is_temporal(
+                    &layer.effects,
+                    layer.switches.fx,
+                ) {
+                    let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+                    // Asked at the layer's frame, the unit a plugin counts
+                    // in, and the same number the frame key asks at.
+                    lumit_core::fx::temporal::stack_temporal_window(
+                        &layer.effects,
+                        layer.switches.fx,
+                        lt / comp_dt,
+                    )
+                    .into_iter()
+                    .filter(|&o| o != 0)
+                    .map(|o| {
+                        let nlt = lt + f64::from(o) * comp_dt;
+                        let nst = layer.source_time_at(nlt);
+                        let (nf, _) =
+                            lumit_core::pixels::frame_pick(nst, fps, src_frames, false, None);
+                        (o, nf)
+                    })
+                    .collect()
+                } else {
+                    Vec::new()
+                };
                 // Accumulation motion blur above this layer (docs/08 §3.26):
                 // the clip at each moment of the open shutter, so the
                 // sub-frame re-renders smear footage motion and not only
@@ -1054,7 +1069,7 @@ pub fn collect_comp_jobs(
                     // since they want opposite directions.
                     flow_neighbours,
                     slate: false,
-                    channels: lumit_core::fx::stack_extracted_channels(
+                    channels: lumit_core::fx::temporal::stack_extracted_channels(
                         &layer.effects,
                         layer.switches.fx,
                     ),
@@ -1937,7 +1952,7 @@ mod tests {
         // Four samples over a whole frame, centred: offsets -3/8, -1/8, 1/8,
         // 3/8 of a comp frame.
         let mut adjust = layer(LayerKind::Adjustment);
-        let mut mb = lumit_core::fx::instantiate("accumulation_mb").unwrap();
+        let mut mb = lumit_core::fx::builtins::instantiate("accumulation_mb").unwrap();
         for p in &mut mb.params {
             let v = match p.id.as_str() {
                 "samples" => 4.0,
@@ -2221,7 +2236,8 @@ mod tests {
         // A Node graph effect on a layer plans the graph's footage, and the
         // further picture row it names is planned by the pass that already
         // walks Layer parameters.
-        let mut inst = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        let mut inst =
+            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
         lumit_core::fx::effects::node_graph::bind(
             &mut inst,
             graph_id,
@@ -2251,7 +2267,8 @@ mod tests {
 
         // A Node graph box inside another graph: the same descent, planned by
         // the box rather than by a layer.
-        let mut nested_box = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        let mut nested_box =
+            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
         lumit_core::fx::effects::node_graph::bind(
             &mut nested_box,
             graph_id,
@@ -2279,7 +2296,8 @@ mod tests {
 
         // And on a live group's header, whose stack runs on the members'
         // composite: the walk above never sees it, so it is planned here.
-        let mut header = lumit_core::fx::instantiate("node_graph").expect("the effect exists");
+        let mut header =
+            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
         lumit_core::fx::effects::node_graph::bind(
             &mut header,
             graph_id,
@@ -2304,7 +2322,8 @@ mod tests {
         // knows the pick, so both are fetched.
         let switch_jobs = |driven: bool| {
             let (a, b, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-            let mut switch = lumit_core::fx::instantiate("switch").expect("the effect exists");
+            let mut switch =
+                lumit_core::fx::builtins::instantiate("switch").expect("the effect exists");
             if let Some(p) = switch.params.iter_mut().find(|p| p.id == "index") {
                 p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
             }
@@ -2326,7 +2345,8 @@ mod tests {
                 wire(switch_id, "output", out, "input"),
             ];
             if driven {
-                let wiggle = lumit_core::fx::instantiate("wiggle").expect("the driver exists");
+                let wiggle =
+                    lumit_core::fx::builtins::instantiate("wiggle").expect("the driver exists");
                 edges.push(wire(wiggle.id, "value", switch_id, "index"));
                 nodes.push(GraphNode::Fx(wiggle));
             }

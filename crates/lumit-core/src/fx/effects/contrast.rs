@@ -1,6 +1,8 @@
 //! Contrast (docs/08 §3.14): a scale about mid-grey.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Contrast's controls.

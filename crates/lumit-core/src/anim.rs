@@ -567,7 +567,7 @@ impl Property {
     }
 
     /// Change what drives this property, and keep the note an expression reads
-    /// its own value from ([`crate::expression::Slot`]) in step with it.
+    /// its own value from ([`crate::expression::script::Slot`]) in step with it.
     ///
     /// **In plain terms.** `value` in an expression means what the property
     /// held before the expression, and `wiggle` wanders around that. So the
@@ -575,7 +575,7 @@ impl Property {
     /// number down. Editing the text afterwards leaves the note alone, and
     /// taking the expression off removes it.
     pub fn set_animation(&mut self, animation: Animation) {
-        use crate::expression::{Slot, SLOT_KEY};
+        use crate::expression::{script::Slot, script::SLOT_KEY};
         match (&self.animation, &animation) {
             (Animation::Expression(_), Animation::Expression(_)) => {}
             (_, Animation::Expression(_)) => {
@@ -594,13 +594,13 @@ impl Property {
     /// The language this property's expression is written in. Rhai when
     /// nothing says otherwise.
     #[must_use]
-    pub fn expression_language(&self) -> crate::expression::Language {
-        crate::expression::Language::of(&self.extra)
+    pub fn expression_language(&self) -> crate::expression::script::Language {
+        crate::expression::script::Language::of(&self.extra)
     }
 
     /// Say which language this property's expression is written in.
-    pub fn set_expression_language(&mut self, language: crate::expression::Language) {
-        use crate::expression::Slot;
+    pub fn set_expression_language(&mut self, language: crate::expression::script::Language) {
+        use crate::expression::script::Slot;
         Slot::read(&self.extra)
             .in_language(language)
             .write(&mut self.extra);

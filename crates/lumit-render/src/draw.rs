@@ -47,7 +47,7 @@ pub struct MatteDraw {
     /// Temporal inputs (neighbours/flow/depth) are not fed through an
     /// effects-and-masks matte in v1, so an echo or flow effect on the matte
     /// source degrades to a still (documented boundary).
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The matte source's `lut` file paths, 1:1 and in order with the `lut`
     /// ops in `fx` (as for a layer's own `colour_tables`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
@@ -137,7 +137,7 @@ pub struct DofInputDraw {
     /// depth source is `EffectsAndMasks` (mirroring the matte). Empty for
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The depth layer's `lut` file paths, 1:1 with the `lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
@@ -333,7 +333,7 @@ pub enum GraphStep {
     Fx {
         /// The picture the op runs on, transparent when nothing is wired.
         input: Option<usize>,
-        ops: lumit_core::fx::ResolvedStack,
+        ops: lumit_core::fx::params::ResolvedStack,
         /// The instance behind each op, as [`CompLayerDraw::fx_ids`] carries
         /// it, so the profiler can name the box that spent the millisecond.
         fx_ids: Vec<uuid::Uuid>,
@@ -541,9 +541,9 @@ pub struct CompLayerDraw {
     /// The layer's live effect stack, resolved to plain numbers at this
     /// frame (docs/08; radius already in texture pixels). Applied to the
     /// linear source texture after masks, before the transform.
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The effect *instance* id behind each op in `fx`, 1:1 and in order
-    /// (`lumit_core::fx::resolve_stack_temporal_named`). Only the profiler
+    /// (`lumit_core::fx::resolved::resolve_stack_temporal_named`). Only the profiler
     /// reads it: a measured millisecond has to land on the row of the stack
     /// that spent it, and this is the list the resolve walk itself reported.
     pub fx_ids: Vec<uuid::Uuid>,
@@ -590,7 +590,7 @@ pub struct CompLayerDraw {
     /// `MatteRole` answers both — so nothing here needs to know.
     pub mattes: Vec<LayerInputDraw>,
     /// **Every path op's mask** (docs/08 §1.2): one flattened polyline
-    /// per [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row**
+    /// per [`ParamKind::MaskPath`](lumit_core::fx::schema::ParamKind::MaskPath) **row**
     /// of every op that declares any (the Matte key declares two), in
     /// stack order and then declaration order within an op — the same
     /// one-predicate, one-order rule [`Self::mattes`] follows, with its own

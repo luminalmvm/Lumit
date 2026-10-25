@@ -3,7 +3,10 @@
 //! streak. Deliberately a separate effect from the physically simulated §3.27
 //! rather than a mode of it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 /// The panel's disclosure groups. Held as a named constant because the derive
@@ -37,7 +40,7 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
 ///
 /// Every distance is px@comp, declared `Px` so the resolve step scales
 /// each by the §2.3 preview factor and
-/// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+/// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial)
 /// moves them together if the stack is reused at another size — the light's
 /// position included, or the whole flare would slide. Ghost spacing is a
 /// *fraction* of the light→centre distance, not a length, so it follows nothing.

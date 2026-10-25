@@ -218,7 +218,7 @@ struct DiskWant {
 #[frb(ignore)]
 fn frame_name(
     state: &mut WorkerState,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     revision: u64,
     comp: Uuid,
     frame: u64,
@@ -974,7 +974,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
 #[frb(ignore)]
 fn frame_tier(
     state: &mut WorkerState,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     revision: u64,
     comp: Uuid,
     frame: u64,
@@ -1312,7 +1312,7 @@ fn playback_quality(
 #[frb(ignore)]
 fn prepare_frame(
     state: &mut WorkerState,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     comp: Uuid,
     frame: u64,
     quality: lumit_render::plan::Quality,
@@ -1458,7 +1458,7 @@ fn measure_pending(state: &mut WorkerState) {
 #[frb(ignore)]
 fn measure_document(
     project: &crate::api::project::ProjectReference,
-) -> Option<std::sync::Arc<lumit_core::Document>> {
+) -> Option<std::sync::Arc<lumit_core::model::Document>> {
     let state = project.state().ok()?;
     let held = state.read().ok()?;
     Some(held.store.snapshot())
@@ -1469,7 +1469,7 @@ fn measure_document(
 #[frb(ignore)]
 fn measure_frame(
     renderer: &mut HeadlessRenderer,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     comp: Uuid,
     frame: u64,
     quality: lumit_render::plan::Quality,
@@ -1932,7 +1932,7 @@ pub struct PlayRequest {
     /// as it was when the button was pressed. The sound itself is started here,
     /// after the pre-roll ([`Playback::pre_roll_done`]). `None` on a reverse
     /// leg, which has no sound.
-    pub audio: Option<std::sync::Arc<lumit_core::Document>>,
+    pub audio: Option<std::sync::Arc<lumit_core::model::Document>>,
 }
 
 /// Playback in progress: what is being played, and where it has got to.
@@ -2021,7 +2021,7 @@ struct Playback {
     /// banked enough to start with it (the pre-roll,
     /// [`Self::pre_roll_done`]). `None` once the sound has been started, or
     /// when this run never had any.
-    pending_audio: Option<std::sync::Arc<lumit_core::Document>>,
+    pending_audio: Option<std::sync::Arc<lumit_core::model::Document>>,
     /// True while the sound is stopped **because the picture is not keeping the
     /// composition's rate**, as against stopped because the user asked.
     /// Every-frame playback stops the track rather than let it run over a
@@ -2318,7 +2318,11 @@ impl Playback {
 /// Start the sound for `comp` at `start` seconds, from the snapshot playback
 /// captured. A build with no media support has nothing to start.
 #[frb(ignore)]
-fn start_audio(comp: Uuid, start: f64, document: Option<std::sync::Arc<lumit_core::Document>>) {
+fn start_audio(
+    comp: Uuid,
+    start: f64,
+    document: Option<std::sync::Arc<lumit_core::model::Document>>,
+) {
     let Some(document) = document else {
         return;
     };
@@ -2336,7 +2340,7 @@ fn start_audio(comp: Uuid, start: f64, document: Option<std::sync::Arc<lumit_cor
 /// is recognised by its signature and costs nothing. A comp that was silent
 /// until this edit has no clock to keep, so its sound starts at the picture.
 #[frb(ignore)]
-fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::Document>) {
+fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::model::Document>) {
     // A reverse leg or a shuttle has no sound to bring up to date.
     if playback.silent() {
         return;
@@ -4445,8 +4449,8 @@ fn set_prefix(state: &mut WorkerState, prefix: Option<crate::api::state::BridgeP
 #[frb(ignore)]
 fn viewed(
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    document: std::sync::Arc<lumit_core::Document>,
-) -> std::sync::Arc<lumit_core::Document> {
+    document: std::sync::Arc<lumit_core::model::Document>,
+) -> std::sync::Arc<lumit_core::model::Document> {
     // Taken by value rather than off the state, so a caller that already holds
     // a mutable borrow of another of its fields (playback does) can still ask.
     let Some(prefix) = prefix else {
@@ -4472,8 +4476,8 @@ fn viewed_kept(
     prefix: Option<crate::api::state::BridgePrefixPoint>,
     view: Option<(Uuid, lumit_core::model::CameraPose)>,
     revision: u64,
-    document: std::sync::Arc<lumit_core::Document>,
-) -> std::sync::Arc<lumit_core::Document> {
+    document: std::sync::Arc<lumit_core::model::Document>,
+) -> std::sync::Arc<lumit_core::model::Document> {
     if prefix.is_none() && view.is_none() {
         // Nothing is copied, so there is nothing to keep.
         *kept = None;
@@ -4500,7 +4504,7 @@ struct Viewed {
     revision: u64,
     prefix: Option<crate::api::state::BridgePrefixPoint>,
     view: Option<(Uuid, lumit_core::model::CameraPose)>,
-    document: std::sync::Arc<lumit_core::Document>,
+    document: std::sync::Arc<lumit_core::model::Document>,
 }
 
 /// [`viewed`], then looked through the Viewer's 3D view when one is set
@@ -4513,8 +4517,8 @@ struct Viewed {
 fn viewed_through(
     prefix: Option<crate::api::state::BridgePrefixPoint>,
     view: Option<(Uuid, lumit_core::model::CameraPose)>,
-    document: std::sync::Arc<lumit_core::Document>,
-) -> std::sync::Arc<lumit_core::Document> {
+    document: std::sync::Arc<lumit_core::model::Document>,
+) -> std::sync::Arc<lumit_core::model::Document> {
     let document = viewed(prefix, document);
     let Some((comp_id, pose)) = view else {
         return document;
@@ -4559,8 +4563,8 @@ fn set_view(state: &mut WorkerState, view: Option<(Uuid, lumit_core::model::Came
 #[frb(ignore)]
 fn cut_to_prefix(
     prefix: &crate::api::state::BridgePrefixPoint,
-    document: &std::sync::Arc<lumit_core::Document>,
-) -> Option<std::sync::Arc<lumit_core::Document>> {
+    document: &std::sync::Arc<lumit_core::model::Document>,
+) -> Option<std::sync::Arc<lumit_core::model::Document>> {
     // A node graph's point is the other arm: the box is shown by wiring it
     // into the Output on a patched copy, and the copy names its own frame by
     // construction, the key feeding the Output's wire. `None` where the
@@ -4962,7 +4966,7 @@ fn publish_preview(
     comp: &CompositionReference,
     frame: u64,
     asked: f32,
-    document: lumit_core::Document,
+    document: lumit_core::model::Document,
 ) -> Result<(), BridgeError> {
     let (comp_width, comp_height) = document
         .comp(comp.id)
@@ -5294,7 +5298,7 @@ fn sample_pixels(
 /// pointer. An edit moves the document's revision, which retires the entry.
 #[frb(ignore)]
 fn sample_layer_alone(
-    document: &lumit_core::Document,
+    document: &lumit_core::model::Document,
     revision: u64,
     layer: Uuid,
     req: &SamplePixelsRequest,
@@ -5309,7 +5313,7 @@ fn sample_layer_alone(
 
     // A patched *copy* of the snapshot: soloing for the read must never be
     // something the document remembers, so nothing here goes near `commit`.
-    let mut patched = lumit_core::Document::clone(document);
+    let mut patched = lumit_core::model::Document::clone(document);
     let comp = patched.comp_mut(req.comp.id)?;
     for l in &mut comp.layers {
         l.switches.solo = l.id == layer;
@@ -5415,7 +5419,7 @@ fn publish_frame(
     comp: Uuid,
     frame: u64,
     scale: f32,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     stream: &mut WorkerResponseStream,
     mode: BridgePlaybackMode,
     cacheable: bool,
@@ -5461,7 +5465,7 @@ fn stand_in(
     comp: Uuid,
     frame: u64,
     scale: f32,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     bgra: bool,
 ) -> Option<lumit_render::headless::PreparedFrame> {
     let view = state.view_id();
@@ -5525,7 +5529,7 @@ fn publish_zero_copy(
     comp: Uuid,
     frame: u64,
     scale: f32,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     stream: &mut WorkerResponseStream,
     mode: BridgePlaybackMode,
     cacheable: bool,
@@ -5626,7 +5630,7 @@ fn publish_zero_copy(
     comp: Uuid,
     frame: u64,
     scale: f32,
-    document: &std::sync::Arc<lumit_core::Document>,
+    document: &std::sync::Arc<lumit_core::model::Document>,
     stream: &mut WorkerResponseStream,
     mode: BridgePlaybackMode,
     cacheable: bool,
@@ -5741,15 +5745,15 @@ mod tests {
             state.store.snapshot().comp(comp).expect("comp").layers[0].id
         };
         let (first, second) = (
-            lumit_core::fx::instantiate("exposure").expect("a built-in"),
-            lumit_core::fx::instantiate("exposure").expect("a built-in"),
+            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
+            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
         );
         {
             let state = project.state().expect("state");
             let state = state.write().expect("write");
             state
                 .store
-                .commit(lumit_core::Op::SetLayerEffects {
+                .commit(lumit_core::ops::Op::SetLayerEffects {
                     comp,
                     layer: layer_id,
                     effects: vec![first.clone(), second.clone()],
@@ -5761,7 +5765,7 @@ mod tests {
             let state = state.read().expect("read");
             state.store.snapshot()
         };
-        let stack = |doc: &std::sync::Arc<lumit_core::Document>| {
+        let stack = |doc: &std::sync::Arc<lumit_core::model::Document>| {
             doc.comp(comp)
                 .expect("comp")
                 .layers
@@ -5875,7 +5879,7 @@ mod tests {
         // A graph of one Read into a blur into the Output, so the picture at
         // the Read is genuinely a different picture from the Output's.
         let read = Uuid::now_v7();
-        let blur = lumit_core::fx::instantiate("blur").expect("a built-in");
+        let blur = lumit_core::fx::builtins::instantiate("blur").expect("a built-in");
         let blur_id = blur.id;
         let mut graph = CompGraph::new_with_output();
         let output = graph.output_id().expect("the seeded Output");
@@ -5904,7 +5908,7 @@ mod tests {
             let state = state.write().expect("write");
             state
                 .store
-                .commit(lumit_core::Op::AddItem {
+                .commit(lumit_core::ops::Op::AddItem {
                     index: 0,
                     item: Box::new(ProjectItem::Composition(Composition {
                         graph: Some(graph),
@@ -5939,7 +5943,7 @@ mod tests {
             effect: None,
             graph: Some(crate::api::state::BridgeGraphPoint { comp, node }),
         };
-        let feeds = |doc: &std::sync::Arc<lumit_core::Document>| {
+        let feeds = |doc: &std::sync::Arc<lumit_core::model::Document>| {
             doc.comp(comp)
                 .expect("comp")
                 .graph
@@ -6293,7 +6297,7 @@ mod tests {
             let state = state.write().expect("write");
             state
                 .store
-                .commit(lumit_core::Op::AddItem {
+                .commit(lumit_core::ops::Op::AddItem {
                     index: 0,
                     item: Box::new(ProjectItem::Composition(comp)),
                 })
@@ -6331,7 +6335,7 @@ mod tests {
             let state = state.write().expect("write");
             state
                 .store
-                .commit(lumit_core::Op::SetTransformProperty {
+                .commit(lumit_core::ops::Op::SetTransformProperty {
                     comp,
                     layer,
                     prop: lumit_core::model::TransformProp::Rotation,

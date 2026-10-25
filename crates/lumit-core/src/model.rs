@@ -533,7 +533,7 @@ pub struct Composition {
     /// A comp is one thing or the other and never both: every op that adds,
     /// removes, reorders or edits a layer is refused on a comp that has one of
     /// these, and writing one onto a comp that has layers is refused the same
-    /// way ([`crate::OpError::CompIsNodeGraph`]).
+    /// way ([`crate::ops::OpError::CompIsNodeGraph`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph: Option<crate::comp_graph::CompGraph>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
@@ -1297,7 +1297,7 @@ pub enum EffectValue {
     /// curve blob steps rather than animating.
     ///
     /// Stored as written and straightened on read
-    /// ([`crate::fx::CurvePoints::sanitised`]) rather than on write, so a
+    /// ([`crate::fx::params::CurvePoints::sanitised`]) rather than on write, so a
     /// project a hand or an importer edited opens and renders instead of being
     /// rejected.
     Curve(Vec<[f32; 2]>),
@@ -1347,7 +1347,7 @@ pub struct EffectInstance {
     pub custom_name: Option<String>,
     /// Which of this effect's **vector pairs** are linked, by the
     /// pair's stem — `light` for `light_x` / `light_y`, as
-    /// [`EffectSchema::pairs`](crate::fx::EffectSchema::pairs) names them.
+    /// [`EffectSchema::pairs`](crate::fx::schema::EffectSchema::pairs) names them.
     ///
     /// # In plain terms
     ///
@@ -2764,7 +2764,7 @@ pub struct Layer {
     /// Same shape as [`Self::effects`] — each entry an [`EffectInstance`] whose
     /// match name is one of the nine `style_*` definitions — but **order-locked**
     /// to §2's painting order and capped at one instance per style
-    /// ([`crate::fx::normalise_styles`], run by the edit commands and restored on
+    /// ([`crate::fx::styles::normalise_styles`], run by the edit commands and restored on
     /// load). Empty is no styles at all, and a layer with none renders and saves
     /// byte for byte what it did before the field existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2906,7 +2906,7 @@ pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
 
 /// Would pointing `layer`'s parent at `new_parent` form a cycle — either a
 /// self-parent, or `layer` already being an ancestor of `new_parent`? Used to
-/// reject a bad [`crate::Op::SetLayerParent`] before it lands. (Whether
+/// reject a bad [`crate::ops::Op::SetLayerParent`] before it lands. (Whether
 /// `new_parent` exists in the comp is a separate check the op also makes.)
 pub fn parenting_would_cycle(comp: &Composition, layer: Uuid, new_parent: Uuid) -> bool {
     new_parent == layer || layer_parent_chain(comp, new_parent).contains(&layer)
@@ -4180,7 +4180,7 @@ mod tests {
     fn effect_layer_source_reads_choice_then_legacy_bool() {
         // `layer_source` prefers the `<id>_source` Choice, falls back to
         // the legacy `<id>_after_effects` bool, then the default.
-        let mut e = crate::fx::instantiate("dof").unwrap();
+        let mut e = crate::fx::builtins::instantiate("dof").unwrap();
         // Fresh instance carries neither sibling, so it is the default
         // (Effects and masks).
         assert_eq!(e.layer_source("depth"), LayerInputSource::EffectsAndMasks);
@@ -4488,7 +4488,7 @@ mod tests {
         let mut effected = pre.clone();
         effected
             .effects
-            .push(crate::fx::instantiate("blur").unwrap());
+            .push(crate::fx::builtins::instantiate("blur").unwrap());
         assert_eq!(
             collapse_state(&doc, &comp, &effected, 1.0),
             CollapseState::Forced

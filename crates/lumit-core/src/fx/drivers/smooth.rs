@@ -17,7 +17,8 @@
 //! a chain that was already timed.
 
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    params::Value, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -94,7 +95,7 @@ impl EffectDef for SmoothDef {
         }
     }
 
-    fn driver_window(&self, p: crate::fx::Params<'_>) -> f64 {
+    fn driver_window(&self, p: crate::fx::params::Params<'_>) -> f64 {
         // Centred, so it reaches half the window either side of the frame.
         f64::from(Smooth::read(p).time.max(0.0)) / 2.0
     }

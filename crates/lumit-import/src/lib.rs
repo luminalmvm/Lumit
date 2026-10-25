@@ -26,7 +26,7 @@
 //! is commentary and the capture is the work.
 //!
 //! [`map::map_capture`] is the other half: it turns the parsed capture into a
-//! whole new [`lumit_core::Document`] plus an [`report::ImportReport`] saying
+//! whole new [`lumit_core::model::Document`] plus an [`report::ImportReport`] saying
 //! what changed on the way across. Import always makes a *new* project —
 //! merging a capture into one that is already open is later work.
 //!
@@ -438,7 +438,7 @@ mod tests {
         let controls = &effects[0];
         assert_eq!(controls.effect.match_name, "custom_controls");
         assert_eq!(controls.custom_name.as_deref(), Some("Shake"));
-        let rows = lumit_core::fx::def("custom_controls")
+        let rows = lumit_core::fx::builtins::def("custom_controls")
             .unwrap()
             .derived(controls);
         assert_eq!(rows.len(), 1);

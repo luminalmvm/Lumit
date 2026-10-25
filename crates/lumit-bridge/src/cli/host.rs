@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use lumit_core::model::{Composition, Document, FootageItem, Layer, ProjectItem};
 use lumit_core::time::CompTime;
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_project::OpenClaim;
 use lumit_render::export::{ExportEvent, ExportHandle, ExportSpec};
 use lumit_script::{ExportState, ExportStatus, Host, ScriptError};
@@ -236,7 +236,7 @@ impl Headless {
     fn load_plugins(&self, doc: &Document) {
         let unknown = doc.items.iter().any(|item| match item {
             ProjectItem::Composition(c) => c.effects().any(|fx| {
-                lumit_core::fx::BUILTIN_DEFS
+                lumit_core::fx::catalogue::BUILTIN_DEFS
                     .get(&fx.effect.match_name)
                     .is_none()
             }),

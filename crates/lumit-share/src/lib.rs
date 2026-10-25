@@ -38,7 +38,7 @@ use bulk::{Footage, Held, Limits, Wanted};
 use guest::Guest;
 use host::Host;
 
-use lumit_core::CompTime;
+use lumit_core::time::CompTime;
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, UdpSocket};
 use std::sync::atomic::{AtomicU16, Ordering};
@@ -535,7 +535,7 @@ mod tests {
     use super::invite::Lock;
     use super::*;
     use lumit_core::model::{LinearColour, ProjectItem, SolidDef};
-    use lumit_core::{Document, DocumentStore, Op};
+    use lumit_core::{model::Document, ops::Op, store::DocumentStore};
     use parking_lot::Mutex;
     use std::io::{Read, Write};
     use std::net::{IpAddr, Ipv4Addr, Shutdown, TcpListener, TcpStream};

@@ -19,8 +19,8 @@ use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 
 use lumit_core::model::{Composition, Layer};
+use lumit_core::store::DocumentStore;
 use lumit_core::time::CompTime;
-use lumit_core::DocumentStore;
 use lumit_script::{script::RunOptions, ExportState, ExportStatus, Host, ScriptError};
 use uuid::Uuid;
 
@@ -594,7 +594,7 @@ impl Host for AppHost<'_> {
         layer: Uuid,
         parent: Option<Uuid>,
         at: CompTime,
-    ) -> Vec<lumit_core::Op> {
+    ) -> Vec<lumit_core::ops::Op> {
         let doc = self.store().snapshot();
         lumit_render::build::parent_ops(&doc, comp, layer, parent, at.0.to_f64())
     }

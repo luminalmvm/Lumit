@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
-use lumit_core::expression::{Language, Slot, SLOT_KEY};
+use lumit_core::expression::{script::Language, script::Slot, script::SLOT_KEY};
 use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
+use lumit_core::store::DocumentStore;
 use lumit_core::time::{CompTime, FrameRate, Rational};
-use lumit_core::DocumentStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};

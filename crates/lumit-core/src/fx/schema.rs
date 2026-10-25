@@ -25,7 +25,7 @@ pub enum Roi {
 
 impl Roi {
     /// The padding in raster pixels at the raster in play. `px_scale` is raster
-    /// pixels per comp pixel — exactly the factor a [`Unit::Px`](super::Unit::Px)
+    /// pixels per comp pixel — exactly the factor a [`Unit::Px`](super::params::Unit::Px)
     /// parameter is multiplied by in the resolve step, so a padding and the
     /// radius it has to cover move together under preview resolution.
     ///
@@ -423,7 +423,7 @@ pub enum ParamKind {
     /// The value is an [`EffectValue::Curve`](crate::model::EffectValue::
     /// Curve): an ordered list of **2..=16** points in the unit square,
     /// defaulting to the identity diagonal `[[0, 0], [1, 1]]`. It is read
-    /// through [`CurvePoints::sanitised`](crate::fx::CurvePoints::sanitised),
+    /// through [`CurvePoints::sanitised`](crate::fx::params::CurvePoints::sanitised),
     /// which sorts by x, drops repeated x, clamps into the square and falls
     /// back to the diagonal — quietly, never a panic
     /// (14-ENGINEERING-RULES §4), because a curve arriving out of order is a
@@ -464,7 +464,7 @@ pub enum ParamKind {
     ///
     /// Three consequences, and they are the whole of the kind:
     ///
-    /// - **No value.** [`default_param_value`](crate::fx::default_param_value)
+    /// - **No value.** [`default_param_value`](crate::fx::builtins::default_param_value)
     ///   answers `None`, so `instantiate` writes no `EffectParam` for it and
     ///   the backfill appends none. There is no
     ///   [`EffectValue`](crate::model::EffectValue) variant to add.
@@ -542,7 +542,7 @@ pub enum EdgesMode {
 impl EdgesMode {
     /// The Choice option labels, in code order (index 0/1/2). A schema's Edges
     /// parameter declares `options: EdgesMode::OPTIONS` (aliased as the shared
-    /// [`EDGE_OPTIONS`](crate::fx::EDGE_OPTIONS) const the blur family already
+    /// [`EDGE_OPTIONS`](crate::fx::builtins::EDGE_OPTIONS) const the blur family already
     /// uses).
     pub const OPTIONS: &'static [&'static str] = &["Transparent", "Repeat", "Mirror"];
 
@@ -715,7 +715,7 @@ pub enum FxCategory {
     Controls,
     /// The **drivers**: the nodes that make a *value* rather than a
     /// picture — Wiggle, Audio level, Colour cycle, Math, Remap, Smooth. Each
-    /// declares a [`Signature::Data`](crate::fx::Signature::Data) instead of an
+    /// declares a [`Signature::Data`](crate::fx::registry::Signature::Data) instead of an
     /// image kernel, and a wire from one into an effect's socket makes that
     /// parameter follow the value instead of its keyframes.
     ///
@@ -807,7 +807,7 @@ pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(
 
 /// The id of the Channel choice that rides beside [`MATTE_PARAM`]:
 /// which channel of the matte layer drives the effect, by the shared
-/// [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index (Luminance by default).
+/// [`CHANNEL_OPTIONS`](super::builtins::CHANNEL_OPTIONS) index (Luminance by default).
 ///
 /// Injected on every effect that takes the injected matte row and does not
 /// already own a channel choice for it (Depth of field, Displacement map and

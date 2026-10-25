@@ -19,14 +19,13 @@
 //! the helpers.
 
 mod ae;
-mod interp;
+pub(crate) mod interp;
 mod lex;
-mod parse;
+pub(crate) mod parse;
 
 use crate::expression::ExpressionContext;
-pub(crate) use interp::sparingly;
 use interp::{to_number, Interp, Value};
-pub(crate) use parse::Program;
+use parse::Program;
 
 /// The language an expression is written in.
 ///

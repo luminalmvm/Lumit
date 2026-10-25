@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-use lumit_core::Op;
+use lumit_core::ops::Op;
 use uuid::Uuid;
 
 use crate::api::{
@@ -331,7 +331,7 @@ impl ProjectReference {
     /// The two are counted apart, so making a graph does not push the next
     /// comp's number along and neither reads as the other's.
     #[frb(ignore)]
-    fn next_comp_name_in(doc: &lumit_core::Document, node_graph: bool) -> String {
+    fn next_comp_name_in(doc: &lumit_core::model::Document, node_graph: bool) -> String {
         lumit_core::edits::next_comp_name(doc, node_graph)
     }
 
@@ -433,7 +433,7 @@ impl ProjectReference {
     /// Nothing is committed, so a caller can add to the batch.
     #[frb(ignore)]
     pub(crate) fn new_comp_ops(
-        doc: &lumit_core::Document,
+        doc: &lumit_core::model::Document,
         name: String,
         settings: Option<BridgeCompSettings>,
         graph: Option<lumit_core::comp_graph::CompGraph>,
@@ -1202,7 +1202,7 @@ impl ProjectReference {
         let claim = crate::claim::take(&target).map_err(|_| BridgeError::WriteFailed)?;
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
-        let is_footage = |doc: &lumit_core::Document, id: Uuid| {
+        let is_footage = |doc: &lumit_core::model::Document, id: Uuid| {
             matches!(
                 doc.item(id),
                 Some(lumit_core::model::ProjectItem::Footage(_))

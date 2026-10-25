@@ -54,7 +54,7 @@
 
 use std::sync::Arc;
 
-use super::ParamId;
+use super::params::ParamId;
 
 /// Frames in one block — fixed at 512 (~10.7 ms at the session's 48 kHz), the
 /// same control rate the Volume envelope already uses.

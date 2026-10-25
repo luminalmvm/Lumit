@@ -10,7 +10,7 @@
 //! (docs/08 §1.1) — a point needs no schema kind of its own, only the naming
 //! convention.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Point control's one control, as its two halves.

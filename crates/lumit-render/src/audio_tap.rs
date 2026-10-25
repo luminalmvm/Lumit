@@ -289,7 +289,7 @@ impl<'a> DocumentAudio<'a> {
     }
 }
 
-impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
+impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
     /// `from` and `to` are **layer time**, which for sound is source time: a
     /// layer's start offset is exactly what the mixer subtracts to find its
     /// place in the file (`lumit_audio::mix::place_on_timeline`), so the two
@@ -324,7 +324,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// (docs/impl/audio-nodes.md §2). `layer` keeps the jobs filed under that
     /// mixer strip and `clip` the ones a Sequence row made from that clip; with
     /// neither of them set it is the whole mix, which is what
-    /// [`lumit_core::fx::AudioTap::mix`] asks for. A job from a nested comp is
+    /// [`lumit_core::fx::registry::AudioTap::mix`] asks for. A job from a nested comp is
     /// filed under the outer Precomp layer, as it is for the Mixer's own
     /// strips, so a row that has become a row precomp still answers by the
     /// layer standing where it stood.
@@ -554,7 +554,7 @@ pub fn mix_fingerprint(doc: &Arc<Document>, comp: &Composition) -> u64 {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lumit_core::fx::AudioTap;
+    use lumit_core::fx::registry::AudioTap;
     use std::path::{Path, PathBuf};
 
     /// A document with one footage layer pointing at `path`: the document, its

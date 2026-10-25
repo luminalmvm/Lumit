@@ -1062,7 +1062,7 @@ impl PointsStream {
     /// it on the layer's own plane.
     ///
     /// The wire carries one type. A consumer that declares 3D awareness on its
-    /// port ([`crate::fx::Port::three_d`]) reads [`position`](Self::position)
+    /// port ([`crate::fx::schema::Port::three_d`]) reads [`position`](Self::position)
     /// and does its own geometry; everything else — the Points sample driver,
     /// and the whole 2D half of the family — reads this, and on a 2D layer the
     /// two are the same numbers.
@@ -2429,19 +2429,19 @@ fn capsule_cover(radius: f32, edge: f32, far: f32) -> f32 {
 /// happened to sit above. It lives here rather than on `Signature` because the
 /// rule belongs to this programme, not to the shape of a registry entry.
 #[must_use]
-pub fn wants_schedule(sig: crate::fx::Signature) -> bool {
+pub fn wants_schedule(sig: crate::fx::registry::Signature) -> bool {
     sig.outputs()
         .iter()
-        .any(|p| p.ty == crate::fx::PortType::Points)
+        .any(|p| p.ty == crate::fx::schema::PortType::Points)
 }
 
 /// Whether an entry **reads** a points stream off a wire: the other
 /// half of the family, and the other reason to want a carriage.
 #[must_use]
-pub fn consumes_points(sig: crate::fx::Signature) -> bool {
+pub fn consumes_points(sig: crate::fx::registry::Signature) -> bool {
     sig.inputs()
         .iter()
-        .any(|p| p.ty == crate::fx::PortType::Points)
+        .any(|p| p.ty == crate::fx::schema::PortType::Points)
 }
 
 /// Whether an entry wants a [`PointsSchedule`] threaded beside its op at all —
@@ -2453,7 +2453,7 @@ pub fn consumes_points(sig: crate::fx::Signature) -> bool {
 /// that answers yes, and two rules spelled two ways would hand a carriage to
 /// whichever effect happened to sit above.
 #[must_use]
-pub fn wants_carriage(sig: crate::fx::Signature) -> bool {
+pub fn wants_carriage(sig: crate::fx::registry::Signature) -> bool {
     wants_schedule(sig) || consumes_points(sig)
 }
 

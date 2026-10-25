@@ -22,7 +22,9 @@
 //! where I am?" — which for a one-point projection is a single division. That is
 //! the whole reason this is one cheap pass and not a geometry pipeline.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Which line the card turns about, in schema order. AE's X and Y under names

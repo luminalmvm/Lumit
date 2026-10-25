@@ -474,7 +474,7 @@ fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
         ..InstanceSetup::default()
     };
     let host = BrokerHost::open(Arc::clone(&broker), &setup).expect("an instance");
-    let link = lumit_core::fx::ChainLink {
+    let link = lumit_core::fx::audio_chain::ChainLink {
         processor: Arc::new(lumit_aplug::def::HostedAudio::new(
             Box::new(host),
             Vec::new(),
@@ -483,9 +483,9 @@ fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
     };
 
     // Three blocks of a steady tone; the plugin aborts during the second.
-    let frames = 3 * lumit_core::fx::AUDIO_BLOCK_FRAMES;
-    let input = vec![0.25f32; frames * lumit_core::fx::AUDIO_CHANNELS];
-    let out = lumit_core::fx::run_chain(&[link], &input);
+    let frames = 3 * lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
+    let input = vec![0.25f32; frames * lumit_core::fx::audio_chain::AUDIO_CHANNELS];
+    let out = lumit_core::fx::audio_chain::run_chain(&[link], &input);
 
     assert_eq!(
         out.dry_blocks, 1,

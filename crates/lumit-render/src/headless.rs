@@ -3112,10 +3112,12 @@ fn bus_chain_of(
     base_s: f64,
 ) -> Option<std::sync::Arc<crate::export::AudioChain>> {
     let sounds = layer.effects.iter().filter(|e| e.enabled).any(|e| {
-        lumit_core::fx::audio_plugin_id(&e.effect.match_name).is_some()
-            || lumit_core::fx::BUILTIN_DEFS
+        lumit_core::fx::builtins::audio_plugin_id(&e.effect.match_name).is_some()
+            || lumit_core::fx::catalogue::BUILTIN_DEFS
                 .get(&e.effect.match_name)
-                .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Audio)
+                .is_some_and(|def| {
+                    def.schema().category == lumit_core::fx::schema::FxCategory::Audio
+                })
     });
     if !sounds {
         return None;
@@ -3580,7 +3582,7 @@ impl AudioJobsBuilder {
             // overlaps nothing at that end; where it does overlap, the overlap
             // is the length and the stored seconds are not read. Either way
             // the clip's own stored shape is the curve.
-            let stored = |seconds: lumit_core::Rational| seconds.to_f64().max(0.0).min(span);
+            let stored = |seconds: lumit_core::time::Rational| seconds.to_f64().max(0.0).min(span);
             let head_overlap = overlap(true);
             let tail_overlap = overlap(false);
             let fade = crate::export::ClipFade {
@@ -4563,7 +4565,7 @@ mod tests {
                 height: 8,
                 extra: serde_json::Map::new(),
             }));
-            let mut tile = lumit_core::fx::instantiate_for_raster("tile", 8.0, 8.0)
+            let mut tile = lumit_core::fx::builtins::instantiate_for_raster("tile", 8.0, 8.0)
                 .expect("tile is a builtin");
             for p in &mut tile.params {
                 if p.id == "output_width" || p.id == "output_height" {
@@ -4705,7 +4707,8 @@ mod tests {
                 height: 8,
                 extra: serde_json::Map::new(),
             }));
-            let mut blur = lumit_core::fx::instantiate("blur").expect("blur is a builtin");
+            let mut blur =
+                lumit_core::fx::builtins::instantiate("blur").expect("blur is a builtin");
             for p in &mut blur.params {
                 match p.id.as_str() {
                     "radius" => {
@@ -4726,7 +4729,8 @@ mod tests {
             layer.effects = vec![blur];
             // Folded about the layer's own middle, at this angle.
             if let Some(angle) = mirror {
-                let mut fold = lumit_core::fx::instantiate("mirror").expect("mirror is a builtin");
+                let mut fold =
+                    lumit_core::fx::builtins::instantiate("mirror").expect("mirror is a builtin");
                 for p in &mut fold.params {
                     let v = match p.id.as_str() {
                         "centre_x" | "centre_y" => 4.0,
@@ -4826,7 +4830,7 @@ mod tests {
             }
         };
         let fill = |rgb: [f64; 3]| {
-            let mut inst = lumit_core::fx::instantiate("fill").expect("fill");
+            let mut inst = lumit_core::fx::builtins::instantiate("fill").expect("fill");
             for p in &mut inst.params {
                 if p.id == "colour" {
                     p.value = lumit_core::model::EffectValue::Colour(
@@ -5371,7 +5375,7 @@ mod tests {
         push_layer(&mut doc, comp, LayerKind::Footage { item: song });
 
         // Remap held at a constant −40 dB, wired onto the Volume socket.
-        let mut remap = lumit_core::fx::instantiate("remap").expect("catalogue");
+        let mut remap = lumit_core::fx::builtins::instantiate("remap").expect("catalogue");
         for p in &mut remap.params {
             if p.id == "out_low" || p.id == "out_high" {
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(-40.0));
@@ -5649,10 +5653,11 @@ mod tests {
             r(1, 1),
             r(1, 1),
         );
-        only.effects = vec![lumit_core::fx::instantiate("blur").expect("a blur exists")];
+        only.effects = vec![lumit_core::fx::builtins::instantiate("blur").expect("a blur exists")];
         push_layer(&mut doc, comp, LayerKind::Sequence { clips: vec![only] });
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
-            c.layers[0].effects = vec![lumit_core::fx::instantiate("blur").expect("blur")];
+            c.layers[0].effects =
+                vec![lumit_core::fx::builtins::instantiate("blur").expect("blur")];
         }
 
         let mut builder = AudioJobsBuilder::new();
@@ -5834,7 +5839,8 @@ mod tests {
         };
         let (store, comp_id) = doc_with_solid(LinearColour([0.0, 0.0, 0.0, 1.0]), 256, 256);
         let mut doc = (*store.snapshot()).clone();
-        let mut flare = lumit_core::fx::instantiate("lens_flare").expect("the flare is a builtin");
+        let mut flare =
+            lumit_core::fx::builtins::instantiate("lens_flare").expect("the flare is a builtin");
         // Nothing else touched: the light in frame is the one thing a 256²
         // comp needs that the 1080p schema default does not give it.
         for p in &mut flare.params {
@@ -6175,9 +6181,11 @@ mod tests {
         // Brightness on the solid, wired to the level of that music. The Remap
         // is what makes the level readable as a percentage: the whole track's
         // RMS is a fraction of one, and Brightness is a percentage.
-        let brightness = lumit_core::fx::instantiate("brightness").expect("the catalogue knows it");
+        let brightness =
+            lumit_core::fx::builtins::instantiate("brightness").expect("the catalogue knows it");
         let brightness_id = brightness.id;
-        let mut level = lumit_core::fx::instantiate("audio_level").expect("the catalogue knows it");
+        let mut level =
+            lumit_core::fx::builtins::instantiate("audio_level").expect("the catalogue knows it");
         for p in &mut level.params {
             match p.id.as_str() {
                 // This comp reads the mixer's whole sum, which here is that
@@ -6198,7 +6206,7 @@ mod tests {
             }
         }
         let level_id = level.id;
-        let remap = lumit_core::fx::instantiate("remap").expect("the catalogue knows it");
+        let remap = lumit_core::fx::builtins::instantiate("remap").expect("the catalogue knows it");
         let remap_id = remap.id;
 
         let to_brightness = Edge {
@@ -6567,7 +6575,7 @@ mod tests {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
                 let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
                 adj.effects
-                    .push(lumit_core::fx::instantiate("invert").unwrap());
+                    .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
                 doc.comp_mut(comp_id).unwrap().layers.insert(0, adj);
                 (doc, comp_id, 0)
             }),
@@ -6594,7 +6602,7 @@ mod tests {
                 l.transform.rotation = ramp(0.0, 180.0, 1);
                 let mut adj = matrix_layer("Hold", LayerKind::Adjustment, w, h);
                 adj.effects
-                    .push(lumit_core::fx::instantiate("posterize_time").unwrap());
+                    .push(lumit_core::fx::builtins::instantiate("posterize_time").unwrap());
                 comp.layers.insert(0, adj);
                 (doc, comp_id, 15)
             }),
@@ -6621,7 +6629,7 @@ mod tests {
             ("particulate draws its particles", |w, h, red, blue| {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
                 let (_, top) = matrix_top(&mut doc, comp_id, blue);
-                let mut fx = lumit_core::fx::instantiate("particulate").unwrap();
+                let mut fx = lumit_core::fx::builtins::instantiate("particulate").unwrap();
                 for p in &mut fx.params {
                     let v = match p.id.as_str() {
                         // In the middle of this small comp, and large enough to
@@ -6652,9 +6660,9 @@ mod tests {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
                 let (_, top) = matrix_top(&mut doc, comp_id, blue);
 
-                let blur = lumit_core::fx::instantiate("blur").unwrap();
+                let blur = lumit_core::fx::builtins::instantiate("blur").unwrap();
                 let blur_id = blur.id;
-                let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+                let mut wiggle = lumit_core::fx::builtins::instantiate("wiggle").unwrap();
                 for p in &mut wiggle.params {
                     if p.id == "amount" {
                         p.value = lumit_core::model::EffectValue::Float(Property::fixed(6.0));
@@ -6848,7 +6856,7 @@ mod tests {
             let (mut doc, comp_id, _) = matrix_base(w, h, LinearColour([0.8, 0.2, 0.1, 1.0]));
             let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
             adj.effects
-                .push(lumit_core::fx::instantiate("invert").unwrap());
+                .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
             let mut parent = matrix_layer("Parent", LayerKind::Null, w, h);
             // Half the frame to the right, by the parent or by hand.
             let right = Property::fixed(f64::from(w));
@@ -7094,7 +7102,7 @@ mod tests {
         let build = |graph: Option<bool>, stops: f64| -> (Document, Uuid) {
             let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
             let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let mut blur = lumit_core::fx::instantiate("exposure").unwrap();
+            let mut blur = lumit_core::fx::builtins::instantiate("exposure").unwrap();
             for p in &mut blur.params {
                 if p.id == "stops" {
                     p.value = lumit_core::model::EffectValue::Float(Property::fixed(stops));
@@ -7102,7 +7110,7 @@ mod tests {
             }
             let blur_id = blur.id;
 
-            let mut remap = lumit_core::fx::instantiate("remap").unwrap();
+            let mut remap = lumit_core::fx::builtins::instantiate("remap").unwrap();
             for p in &mut remap.params {
                 let v = match p.id.as_str() {
                     "value" | "in_high" => 1.0,
@@ -7251,7 +7259,8 @@ mod tests {
                 ]),
                 extra: serde_json::Map::new(),
             });
-            let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+            let mut mb =
+                lumit_core::fx::builtins::instantiate("accumulation_mb").expect("registered");
             for p in &mut mb.params {
                 let v = match p.id.as_str() {
                     "samples" => 4.0,
@@ -7409,7 +7418,7 @@ mod tests {
                 // nothing without one live effect on it.
                 layer
                     .effects
-                    .push(lumit_core::fx::instantiate("saturation").expect("saturation"));
+                    .push(lumit_core::fx::builtins::instantiate("saturation").expect("saturation"));
             }
             // Something for it to grade. The same clip, plainly placed: the
             // flagged layer's own frames are never decoded, this one's are.
@@ -7807,7 +7816,7 @@ mod tests {
             height: h,
             extra: serde_json::Map::new(),
         }));
-        let mut fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let mut fx = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         for p in &mut fx.params {
             if p.id == "stops" {
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(1.0));
@@ -7862,7 +7871,7 @@ mod tests {
             height: h,
             extra: serde_json::Map::new(),
         }));
-        let fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let fx = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         let (fx_id, read, amount, out) = (fx.id, Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
         let comp = graph_composition(
             w,
@@ -7884,7 +7893,7 @@ mod tests {
                             default: [0.0; 4],
                             min: -8.0,
                             max: 8.0,
-                            unit: lumit_core::fx::Unit::Raw,
+                            unit: lumit_core::fx::params::Unit::Raw,
                             preview: None,
                         },
                     },
@@ -7901,7 +7910,7 @@ mod tests {
                 groups: Vec::new(),
             },
         );
-        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
         if let Some(graph) = comp.graph.as_ref() {
             lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
         }
@@ -7919,7 +7928,7 @@ mod tests {
     /// out - filed in `doc`, and a Node graph effect bound to it.
     fn push_preset_graph(doc: &mut Document, w: u32, h: u32) -> lumit_core::model::EffectInstance {
         use lumit_core::comp_graph::{CompGraph, GraphInput, GraphNode, InputKind};
-        let mut fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let mut fx = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         for p in &mut fx.params {
             if p.id == "stops" {
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(1.5));
@@ -7941,7 +7950,7 @@ mod tests {
                             default: [0.0; 4],
                             min: 0.0,
                             max: 1.0,
-                            unit: lumit_core::fx::Unit::Raw,
+                            unit: lumit_core::fx::params::Unit::Raw,
                             preview: None,
                         },
                     },
@@ -7957,7 +7966,7 @@ mod tests {
                 groups: Vec::new(),
             },
         );
-        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
         if let Some(graph) = comp.graph.as_ref() {
             lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
         }
@@ -7993,7 +8002,7 @@ mod tests {
         };
 
         let (cx, cy) = (f64::from(w) * 0.5, f64::from(h) * 0.5);
-        let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
+        let mut producer = lumit_core::fx::builtins::instantiate("particulate").unwrap();
         for (id, v) in [
             ("position_x", cx),
             ("position_y", cy),
@@ -8009,12 +8018,12 @@ mod tests {
         ] {
             set(&mut producer, id, v);
         }
-        let mut lift = lumit_core::fx::instantiate("exposure").unwrap();
+        let mut lift = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         set(&mut lift, "stops", 0.0);
         let lift_id = lift.id;
         let producer_id = producer.id;
 
-        let mut sampler = lumit_core::fx::instantiate("points_sample").unwrap();
+        let mut sampler = lumit_core::fx::builtins::instantiate("points_sample").unwrap();
         set(&mut sampler, "position_x", cx + 5.0);
         set(&mut sampler, "position_y", cy);
         let sampler_id = sampler.id;
@@ -8074,7 +8083,7 @@ mod tests {
             panic!("no parameter {id}");
         };
 
-        let mut producer = lumit_core::fx::instantiate("grid").unwrap();
+        let mut producer = lumit_core::fx::builtins::instantiate("grid").unwrap();
         for (id, v) in [
             ("position_x", f64::from(w) * 0.5),
             ("position_y", f64::from(h) * 0.5),
@@ -8092,7 +8101,7 @@ mod tests {
         set(&mut producer, "mix", 0.0);
         let producer_id = producer.id;
 
-        let mut consumer = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        let mut consumer = lumit_core::fx::builtins::instantiate("clone_to_points").unwrap();
         for p in &mut consumer.params {
             if p.id == "clone_layer" {
                 p.value = lumit_core::model::EffectValue::Layer(Some(source));
@@ -8152,7 +8161,7 @@ mod tests {
                 panic!("no parameter {id}");
             };
 
-            let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
+            let mut producer = lumit_core::fx::builtins::instantiate("particulate").unwrap();
             for (id, v) in [
                 ("position_x", f64::from(cw) * 0.5),
                 ("position_y", f64::from(ch) * 0.5),
@@ -8173,7 +8182,7 @@ mod tests {
             }
             let producer_id = producer.id;
 
-            let mut consumer = lumit_core::fx::instantiate("trail").unwrap();
+            let mut consumer = lumit_core::fx::builtins::instantiate("trail").unwrap();
             for (id, v) in [
                 ("back_samples", 6.0),
                 ("back_step", 0.05),
@@ -8213,7 +8222,7 @@ mod tests {
         // fields and would say nothing about determinism.
         let wired = build(true);
         let cut_built = build(false);
-        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
             r.render_rgba(doc, *comp_id, 20, 1.0)
                 .expect("the export path renders")
                 .0
@@ -8257,12 +8266,12 @@ mod tests {
             };
             // Every box draws nothing of its own but the last, so a line on
             // the frame can only have come down both wires.
-            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            let mut scatter = lumit_core::fx::builtins::instantiate("scatter").unwrap();
             set(&mut scatter, "density", 5000.0);
             set(&mut scatter, "mix", 0.0);
-            let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+            let mut pick = lumit_core::fx::builtins::instantiate("pick_points").unwrap();
             set(&mut pick, "mix", 0.0);
-            let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+            let mut connect = lumit_core::fx::builtins::instantiate("connect_points").unwrap();
             set(&mut connect, "max_distance", 6.0);
             let wire = |from: Uuid, to: Uuid| Edge {
                 from: OutputRef::EffectData {
@@ -8289,7 +8298,7 @@ mod tests {
         };
         let wired = build(true);
         let cut = build(false);
-        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
             r.render_rgba(doc, *comp_id, 0, 1.0)
                 .expect("the export path renders")
                 .0
@@ -8322,7 +8331,7 @@ mod tests {
             let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
             let comp = doc.comp_mut(comp_id).unwrap();
             let source = comp.layers[1].id;
-            let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+            let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
             for p in &mut darken.params {
                 if p.id == "stops" {
                     p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
@@ -8343,7 +8352,7 @@ mod tests {
         };
         let off = build(0);
         let in_order = build(1);
-        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
             r.render_rgba(doc, *comp_id, 15, 1.0)
                 .expect("the export path renders")
                 .0
@@ -8394,9 +8403,9 @@ mod tests {
             let comp = doc.comp_mut(comp_id).unwrap();
 
             // The clone layer: its hue follows the copy's number.
-            let hue = lumit_core::fx::instantiate("hue_shift").unwrap();
-            let index = lumit_core::fx::instantiate("clone_index").unwrap();
-            let mut remap = lumit_core::fx::instantiate("remap").unwrap();
+            let hue = lumit_core::fx::builtins::instantiate("hue_shift").unwrap();
+            let index = lumit_core::fx::builtins::instantiate("clone_index").unwrap();
+            let mut remap = lumit_core::fx::builtins::instantiate("remap").unwrap();
             set(&mut remap, "out_high", fixed(300.0));
             let source = &mut comp.layers[1];
             let source_id = source.id;
@@ -8429,10 +8438,10 @@ mod tests {
             source.effects = vec![hue];
 
             // Scatter draws nothing of its own, so what lands is the stamps.
-            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            let mut scatter = lumit_core::fx::builtins::instantiate("scatter").unwrap();
             set(&mut scatter, "density", fixed(5000.0));
             set(&mut scatter, "mix", fixed(0.0));
-            let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+            let mut clone = lumit_core::fx::builtins::instantiate("clone_to_points").unwrap();
             set(
                 &mut clone,
                 "clone_layer",
@@ -8460,7 +8469,7 @@ mod tests {
         let auto = build(0, true);
         let off = build(1, true);
         let cut = build(0, false);
-        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
             r.render_rgba(doc, *comp_id, 0, 1.0)
                 .expect("the export path renders")
                 .0
@@ -8509,7 +8518,7 @@ mod tests {
         let build = |cap: f64| {
             let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
             let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let mut fx = lumit_core::fx::instantiate("particulate").unwrap();
+            let mut fx = lumit_core::fx::builtins::instantiate("particulate").unwrap();
             for p in &mut fx.params {
                 let v = match p.id.as_str() {
                     "position_x" => f64::from(cw) * 0.5,
@@ -8805,7 +8814,8 @@ mod tests {
             let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
             if accumulate {
                 let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, cw, ch);
-                let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
+                let mut mb =
+                    lumit_core::fx::builtins::instantiate("accumulation_mb").expect("registered");
                 for p in &mut mb.params {
                     if p.id == "samples" {
                         p.value =
@@ -8873,7 +8883,7 @@ mod tests {
             .push(lumit_core::mask::Mask::rectangle(0.0, 0.0, 6.0, 12.0));
         matte_layer
             .effects
-            .push(lumit_core::fx::instantiate("invert").unwrap());
+            .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
         let mut consumer = matrix_layer("Red", LayerKind::Solid { def: red_solid }, w, h);
         consumer.matte = Some(lumit_core::model::MatteRef {
             layer: matte_layer.id,
@@ -8941,7 +8951,7 @@ mod tests {
 
         // A parent-only edit: the Precomp layer turns, the nested comp does not.
         store
-            .commit(lumit_core::Op::SetTransformProperty {
+            .commit(lumit_core::ops::Op::SetTransformProperty {
                 comp: comp_id,
                 layer: layer_id,
                 prop: lumit_core::model::TransformProp::Rotation,
@@ -8964,7 +8974,7 @@ mod tests {
 
         // An edit inside the nested comp renames its frame.
         store
-            .commit(lumit_core::Op::SetSolidDef {
+            .commit(lumit_core::ops::Op::SetSolidDef {
                 def: child_solid,
                 name: "Base".into(),
                 colour: LinearColour([0.1, 0.8, 0.1, 1.0]),
@@ -8984,7 +8994,7 @@ mod tests {
 
         // A collapsed Precomp is spliced into the parent, never named.
         store
-            .commit(lumit_core::Op::SetLayerCollapse {
+            .commit(lumit_core::ops::Op::SetLayerCollapse {
                 comp: comp_id,
                 layer: layer_id,
                 collapse: true,
@@ -9033,7 +9043,7 @@ mod tests {
         let nested = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, 64, 64);
         let mut blur = matrix_layer("Blur", LayerKind::Adjustment, 64, 64);
         blur.effects
-            .push(lumit_core::fx::instantiate("motion_blur").unwrap());
+            .push(lumit_core::fx::builtins::instantiate("motion_blur").unwrap());
         let comp = doc.comp_mut(comp_id).unwrap();
         comp.layers.insert(0, nested);
         comp.layers.insert(0, blur);
@@ -9072,14 +9082,14 @@ mod tests {
         };
         let (store, comp_id) = doc_with_solid(LinearColour([1.0, 0.0, 0.0, 1.0]), 16, 16);
         // One real effect on the one layer, so there is something to attribute.
-        let blur = lumit_core::fx::instantiate("blur").expect("blur exists");
+        let blur = lumit_core::fx::builtins::instantiate("blur").expect("blur exists");
         let (layer_id, effect_id) = {
             let doc = store.snapshot();
             let comp = doc.comp(comp_id).expect("comp");
             (comp.layers[0].id, blur.id)
         };
         store
-            .commit(lumit_core::Op::SetLayerEffects {
+            .commit(lumit_core::ops::Op::SetLayerEffects {
                 comp: comp_id,
                 layer: layer_id,
                 effects: vec![blur],

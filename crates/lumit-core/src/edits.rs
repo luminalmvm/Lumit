@@ -325,7 +325,7 @@ pub fn graph_inputs_for(
 ) -> Option<lumit_core::model::EffectInstance> {
     let placed = doc.comp(comp)?;
     let graph = placed.graph.as_ref()?;
-    let mut instance = lumit_core::fx::instantiate_for_raster(
+    let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
         lumit_core::comp_graph::NODE_GRAPH,
         f64::from(placed.width),
         f64::from(placed.height),
@@ -340,8 +340,8 @@ pub fn graph_inputs_for(
 /// Shared with the frb surface (`api::effect::list_effects`) rather than
 /// restated there, so the two frontends cannot disagree about a category key.
 /// **It therefore has to move rather than die when v0 is deleted.**
-pub fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
-    use lumit_core::fx::FxCategory;
+pub fn fx_category_key(cat: lumit_core::fx::schema::FxCategory) -> &'static str {
+    use lumit_core::fx::schema::FxCategory;
     match cat {
         FxCategory::BlurSharpen => "blur_sharpen",
         FxCategory::Colour => "colour",
@@ -508,9 +508,9 @@ pub fn precompose_ops(
     doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
     asked: Precompose<'_>,
-) -> Result<(Vec<Op>, Uuid), lumit_core::OpError> {
+) -> Result<(Vec<Op>, Uuid), lumit_core::ops::OpError> {
     use lumit_core::model::{Composition, MotionBlur};
-    use lumit_core::OpError;
+    use lumit_core::ops::OpError;
 
     let Precompose {
         layers: layer_ids,
@@ -1231,9 +1231,9 @@ pub fn transform_ops(
     layer: &Layer,
     prop: lumit_core::model::TransformProp,
     animation: lumit_core::anim::Animation,
-    language: Option<lumit_core::expression::Language>,
+    language: Option<lumit_core::expression::script::Language>,
 ) -> Vec<Op> {
-    use lumit_core::expression::SLOT_KEY;
+    use lumit_core::expression::script::SLOT_KEY;
 
     let mut ops = vec![Op::SetTransformProperty {
         comp,
@@ -1265,7 +1265,7 @@ pub fn transform_ops(
 mod tests {
     use super::*;
     use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-    use lumit_core::expression::Language;
+    use lumit_core::expression::script::Language;
     use lumit_core::model::{Composition, Document, TransformProp};
     use lumit_core::ops::apply;
     use lumit_core::time::FrameRate;
@@ -1646,7 +1646,7 @@ mod tests {
 
     #[test]
     fn category_keys_are_distinct_snake_case() {
-        use lumit_core::fx::FxCategory::*;
+        use lumit_core::fx::schema::FxCategory::*;
         let all = [
             BlurSharpen,
             Colour,
@@ -1725,7 +1725,7 @@ mod tests {
         let [a, b, c, d, e] = [(); 5].map(|_| add_comp(&mut doc, CompSettings::default()));
         let graph = CompGraph::new_with_output();
         let bound = |to| {
-            let mut inst = lumit_core::fx::instantiate(NODE_GRAPH).unwrap();
+            let mut inst = lumit_core::fx::builtins::instantiate(NODE_GRAPH).unwrap();
             node_graph::bind(&mut inst, to, &graph);
             inst
         };
@@ -1900,11 +1900,11 @@ mod tests {
         };
         assert!(matches!(
             asked(&[a.id, b.id], true),
-            Err(lumit_core::OpError::UnknownLayer)
+            Err(lumit_core::ops::OpError::UnknownLayer)
         ));
         assert!(matches!(
             asked(&[Uuid::now_v7()], false),
-            Err(lumit_core::OpError::UnknownLayer)
+            Err(lumit_core::ops::OpError::UnknownLayer)
         ));
 
         let (ops, id) = precompose_ops(

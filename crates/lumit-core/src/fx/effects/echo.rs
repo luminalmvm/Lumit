@@ -18,7 +18,7 @@
 //! the old `Resolved::Echo` arm did; the §1.6 oracle is [`crate::fx::cpu::echo`],
 //! exercised directly from the lumit-gpu test, which can upload the neighbours.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Echo's controls.

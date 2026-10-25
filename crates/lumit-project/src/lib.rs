@@ -6,9 +6,9 @@ pub mod fixtures;
 pub mod pack;
 pub mod plugins;
 
+use lumit_core::model::Document;
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
 use lumit_core::ops::Op;
-use lumit_core::Document;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
@@ -621,22 +621,22 @@ pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
             }
             let (w, h) = (f64::from(comp.width), f64::from(comp.height));
             for layer in &mut comp.layers {
-                lumit_core::fx::backfill_builtin_params(&mut layer.effects);
+                lumit_core::fx::builtins::backfill_builtin_params(&mut layer.effects);
                 // And convert the share-of-the-frame values that became
                 // px@comp. Separate because it needs the composition's own
                 // size, which is why it is done here rather than in the
                 // backfill: a per cent is only a pixel count once the frame is
                 // known.
-                lumit_core::fx::migrate_percent_to_px(&mut layer.effects, w, h);
+                lumit_core::fx::builtins::migrate_percent_to_px(&mut layer.effects, w, h);
                 // The layer's styles take the same forward migration —
                 // they are effect instances, and a style whose schema grew
                 // needs its new rows just as much. And then §1's invariants are
                 // restored: a file hand-edited (or written by a tool that did
                 // not know the order) comes back one-per-style and sorted, so
                 // the render never has to wonder what order it is looking at.
-                lumit_core::fx::backfill_builtin_params(&mut layer.styles);
-                lumit_core::fx::migrate_percent_to_px(&mut layer.styles, w, h);
-                lumit_core::fx::normalise_styles(&mut layer.styles);
+                lumit_core::fx::builtins::backfill_builtin_params(&mut layer.styles);
+                lumit_core::fx::builtins::migrate_percent_to_px(&mut layer.styles, w, h);
+                lumit_core::fx::styles::normalise_styles(&mut layer.styles);
             }
             if let Some(graph) = &mut comp.graph {
                 graph.migrate_dof_pro_depth();
@@ -2878,7 +2878,7 @@ mod tests {
             motion_blur: Default::default(),
             extra: serde_json::Map::new(),
         };
-        let blur = lumit_core::fx::instantiate("blur").unwrap();
+        let blur = lumit_core::fx::builtins::instantiate("blur").unwrap();
         let blur_id = blur.id;
         let mut layer = lumit_core::model::Layer {
             id: Uuid::now_v7(),
@@ -2948,7 +2948,7 @@ mod tests {
         );
 
         // 3. A wired layer round-trips whole.
-        let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        let mut wiggle = lumit_core::fx::builtins::instantiate("wiggle").unwrap();
         wiggle.custom_name = Some("The wobble".into());
         let wiggle_id = wiggle.id;
         layer.graph = LayerGraph {
@@ -3096,14 +3096,14 @@ mod tests {
                 default: [7.0, 0.0, 0.0, 1.0],
                 min: 0.0,
                 max: 100.0,
-                unit: lumit_core::fx::Unit::Px,
+                unit: lumit_core::fx::params::Unit::Px,
                 preview: None,
             },
         };
-        let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+        let mut blur = lumit_core::fx::builtins::instantiate("blur").unwrap();
         blur.custom_name = Some("Soften the sign".into());
         let blur_id = blur.id;
-        let wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        let wiggle = lumit_core::fx::builtins::instantiate("wiggle").unwrap();
         let wiggle_id = wiggle.id;
         let out = GraphNode::Output { id: Uuid::now_v7() };
         let (read_id, input_id, out_id) = (read.id(), input.id(), out.id());

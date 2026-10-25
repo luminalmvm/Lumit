@@ -346,7 +346,7 @@ impl FootageReference {
                                 .all(|(a, b)| a == b || (a.is_ascii_digit() && b.is_ascii_digit()))
                     });
                     if automatic && *name != other.name {
-                        ops.push(lumit_core::Op::RenameItem {
+                        ops.push(lumit_core::ops::Op::RenameItem {
                             id: other.id,
                             name: name.clone(),
                         });
@@ -361,7 +361,7 @@ impl FootageReference {
                     interpret: lumit_render::source::interpretation(other),
                     stamp: None,
                 });
-                ops.push(lumit_core::Op::SetMediaRef {
+                ops.push(lumit_core::ops::Op::SetMediaRef {
                     id: other.id,
                     media: Box::new(media),
                 });
@@ -377,7 +377,7 @@ impl FootageReference {
         let op = if ops.len() == 1 {
             ops.into_iter().next().ok_or(BridgeError::InvalidItem)?
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         proj.store.commit(op).map_err(BridgeError::OpError)?;
         drop(proj);
@@ -450,7 +450,7 @@ impl FootageReference {
         {
             let proj = state.write().map_err(|_| BridgeError::WriteFailed)?;
             proj.store
-                .commit(lumit_core::Op::SetSequenceRate {
+                .commit(lumit_core::ops::Op::SetSequenceRate {
                     id: self.id,
                     frame_rate,
                 })
@@ -513,7 +513,7 @@ impl FootageReference {
             return Ok(());
         }
         proj.store
-            .commit(lumit_core::Op::SetFootageTrim {
+            .commit(lumit_core::ops::Op::SetFootageTrim {
                 id: self.id,
                 trim: Some(Box::new(trim)),
             })
@@ -1003,7 +1003,7 @@ impl FootageReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetItemProxy {
+            .commit(lumit_core::ops::Op::SetItemProxy {
                 id: self.id,
                 proxy: None,
             })
@@ -1021,7 +1021,7 @@ impl FootageReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetItemUseProxy {
+            .commit(lumit_core::ops::Op::SetItemUseProxy {
                 id: self.id,
                 use_proxy: on,
             })
@@ -1127,7 +1127,7 @@ pub(crate) fn attach_proxy(
 
     let p = proj.write().map_err(|_| BridgeError::WriteFailed)?;
     p.store
-        .commit(lumit_core::Op::SetItemProxy {
+        .commit(lumit_core::ops::Op::SetItemProxy {
             id: item,
             proxy: Some(Box::new(lumit_core::model::ProxyRef {
                 media,

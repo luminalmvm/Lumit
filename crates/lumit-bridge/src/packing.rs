@@ -11,8 +11,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+use lumit_core::model::Document;
 use lumit_core::model::{packed_id, MediaRef, ProjectItem};
-use lumit_core::Document;
 use lumit_project::pack::PackSource;
 use uuid::Uuid;
 

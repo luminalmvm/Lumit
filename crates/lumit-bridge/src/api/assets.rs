@@ -359,7 +359,7 @@ impl LayerReference {
         let after = text_document_of(document, offset)?;
         let shift = restyle_shift(before, &after);
 
-        let set = lumit_core::Op::SetTextDocument {
+        let set = lumit_core::ops::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
             document: after,
@@ -381,14 +381,14 @@ impl LayerReference {
             ),
         ] {
             shift_property(&mut property, shift);
-            ops.push(lumit_core::Op::SetTransformProperty {
+            ops.push(lumit_core::ops::Op::SetTransformProperty {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 prop,
                 animation: property.animation,
             });
         }
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// Replace a text layer's document **and its anchor and position
@@ -415,7 +415,7 @@ impl LayerReference {
             return Err(BridgeError::NotText);
         };
         let offset = layer.start_offset.0;
-        let mut ops = vec![lumit_core::Op::SetTextDocument {
+        let mut ops = vec![lumit_core::ops::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
             document: text_document_of(document, offset)?,
@@ -426,14 +426,14 @@ impl LayerReference {
             (TransformProp::PositionX, position_x),
             (TransformProp::PositionY, position_y),
         ] {
-            ops.push(lumit_core::Op::SetTransformProperty {
+            ops.push(lumit_core::ops::Op::SetTransformProperty {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 prop,
                 animation: BridgeScalar::Static(value).animation_at(offset)?,
             });
         }
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// **Text to shapes**: a copy of this Type layer beside it, whose
@@ -525,7 +525,7 @@ impl LayerReference {
         crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
 
         let new_id = copy.id;
-        self.commit(lumit_core::Op::AddLayer {
+        self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
             index,
             layer: Box::new(copy),
@@ -553,7 +553,7 @@ impl LayerReference {
             .position(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
 
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             "emit_from_image",
             f64::from(comp.width),
             f64::from(comp.height),
@@ -570,12 +570,12 @@ impl LayerReference {
         // the words underneath it. Pointing it at the copy by name would say
         // the same thing in a way that breaks the moment the layer is renamed
         // or duplicated.
-        lumit_core::fx::point_self_layer_params_at(&mut instance, copy.id);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, copy.id);
         copy.effects.push(instance);
         crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
 
         let new_id = copy.id;
-        self.commit(lumit_core::Op::AddLayer {
+        self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
             index,
             layer: Box::new(copy),
@@ -604,7 +604,7 @@ impl LayerReference {
             return Err(BridgeError::NotCamera);
         };
         let animation = zoom.animation_at(layer.start_offset.0)?;
-        self.commit(lumit_core::Op::SetCameraZoom {
+        self.commit(lumit_core::ops::Op::SetCameraZoom {
             comp: self.comp_id,
             layer: self.layer_id,
             animation,
@@ -636,7 +636,7 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Camera { .. } = layer.kind else {
             return Err(BridgeError::NotCamera);
         };
-        self.commit(lumit_core::Op::SetCameraSettings {
+        self.commit(lumit_core::ops::Op::SetCameraSettings {
             comp: self.comp_id,
             layer: self.layer_id,
             settings: settings.core(),
@@ -700,7 +700,7 @@ impl SolidReference {
             return Err(BridgeError::EmptyName);
         }
         self.definition()?;
-        self.commit(lumit_core::Op::SetSolidDef {
+        self.commit(lumit_core::ops::Op::SetSolidDef {
             def: self.id(),
             name: definition.name,
             colour: linear_of(definition.colour),

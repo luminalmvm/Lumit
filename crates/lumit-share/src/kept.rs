@@ -21,7 +21,7 @@ use crate::host::VERSION;
 use crate::wire::DOCUMENT_LIMIT;
 use crate::{Dropped, MAX_DROPPED};
 use lumit_core::shared::Conflict;
-use lumit_core::{Document, Op};
+use lumit_core::{model::Document, ops::Op};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};

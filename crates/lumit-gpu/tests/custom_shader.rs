@@ -156,7 +156,7 @@ fn a_golden_shader_renders_deterministically() {
         .shader_pipeline(&ctx, 1, p.source_hash, &p.assembled)
         .expect("invert compiles");
     assert!(badge.is_none(), "a shader that compiles wears no badge");
-    let params = p.pack(lumit_core::fx::Params::new(&[]));
+    let params = p.pack(lumit_core::fx::params::Params::new(&[]));
     let draw = || {
         let out = fx.custom_shader(
             &ctx,
@@ -353,7 +353,7 @@ fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
         w,
         h,
         &header(w, h),
-        &p.pack(lumit_core::fx::Params::new(&[])),
+        &p.pack(lumit_core::fx::params::Params::new(&[])),
     );
     let back = readback_linear_f32(&ctx, &out, w, h).expect("readback");
     assert!(

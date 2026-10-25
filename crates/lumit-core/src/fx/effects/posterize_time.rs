@@ -5,11 +5,11 @@
 //! nothing. It does not change the colours of any pixel — it changes *what time*
 //! the layers it covers render at, which is a decision taken a level above the
 //! effect stack, in the frame walk that both the preview and the export share
-//! ([`crate::fx::stack_posterize`] reads the instance directly). So it declares
+//! ([`crate::fx::temporal::stack_posterize`] reads the instance directly). So it declares
 //! its controls, and declares that it has no image operation: the render path
 //! skips it, and the registry-agreement test excuses it from needing a GPU pass.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Posterize time's controls.

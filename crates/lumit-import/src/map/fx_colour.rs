@@ -181,7 +181,7 @@ impl<'a> Fx<'a> {
     /// effect — which an edited `ae-effect-map.toml` can now ask for, and which
     /// is a placeholder rather than a panic when it does (docs/14 §4).
     pub(super) fn new(path: &ItemPath, node: &'a Property, row: &'static Row) -> Option<Fx<'a>> {
-        let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
+        let mut inst = lumit_core::fx::builtins::instantiate(&row.lumit)?;
         // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         Some(Fx {
@@ -207,7 +207,7 @@ impl<'a> Fx<'a> {
         ae: &'static str,
         lumit: &str,
     ) -> Option<Fx<'a>> {
-        let mut inst = lumit_core::fx::instantiate(lumit)?;
+        let mut inst = lumit_core::fx::builtins::instantiate(lumit)?;
         // A style switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         Some(Fx {

@@ -177,7 +177,12 @@ impl DrivenVolume {
             inputs: None,
         });
         let tap = crate::audio_tap::DocumentAudio::pre_duck(&self.doc, comp, t_comp);
-        lumit_core::fx::driven_volume_db(&self.graph, t - self.offset_s, context, Some(&tap))
+        lumit_core::fx::drivers::driven_volume_db(
+            &self.graph,
+            t - self.offset_s,
+            context,
+            Some(&tap),
+        )
     }
 }
 
@@ -207,7 +212,7 @@ impl PartialEq for DrivenVolume {
 /// the mixed timeline.
 ///
 /// Which entries are audio is not decided here: the catalogue is asked, once,
-/// when the chain opens ([`lumit_core::fx::EffectDef::open_audio`]). A stack
+/// when the chain opens ([`lumit_core::fx::registry::EffectDef::open_audio`]). A stack
 /// full of blurs opens nothing and the sound goes through untouched.
 ///
 /// A **Precomp** layer's chain is a chain like any other, and it rides on the
@@ -285,7 +290,7 @@ pub fn chain_bake(
     rate: u32,
     offline: bool,
 ) -> Option<(Vec<f32>, u32)> {
-    use lumit_core::fx::AUDIO_BLOCK_FRAMES;
+    use lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
 
     let frames = samples.len() / 2;
     if frames == 0 {
@@ -298,7 +303,8 @@ pub fn chain_bake(
     // nothing, so opening is handed one time point rather than the envelope.
     let mut opened = Vec::new();
     for instance in chain.effects.iter().filter(|e| e.enabled) {
-        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(&instance.effect.match_name) else {
+        let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&instance.effect.match_name)
+        else {
             continue;
         };
         let first = bake_values(chain, instance, def, start_frame, 1, rate)
@@ -326,14 +332,16 @@ pub fn chain_bake(
         .sum::<usize>();
     let blocks = (frames + latency + tail).div_ceil(AUDIO_BLOCK_FRAMES);
     let ids: Vec<Uuid> = opened.iter().map(|(instance, _, _)| instance.id).collect();
-    let links: Vec<lumit_core::fx::ChainLink> = opened
+    let links: Vec<lumit_core::fx::audio_chain::ChainLink> = opened
         .into_iter()
-        .map(|(instance, def, processor)| lumit_core::fx::ChainLink {
-            values: bake_values(chain, instance, def, start_frame, blocks, rate),
-            processor,
-        })
+        .map(
+            |(instance, def, processor)| lumit_core::fx::audio_chain::ChainLink {
+                values: bake_values(chain, instance, def, start_frame, blocks, rate),
+                processor,
+            },
+        )
         .collect();
-    let out = lumit_core::fx::run_chain(&links, samples);
+    let out = lumit_core::fx::audio_chain::run_chain(&links, samples);
     // The badge, per link (AP5, docs/12 §2.3): a link that shipped any block
     // dry files the host's own sentence against *its* instance — the same
     // table an OFX frame files into, read by the same `badge_of` — and a link
@@ -399,7 +407,7 @@ pub fn job_bake(
 /// bakes **one** entry, which the chain then holds past the end: an
 /// un-automated plugin costs no per-block work at all.
 ///
-/// ponytail: the driver walk is given no [`lumit_core::fx::AudioTap`], so an
+/// ponytail: the driver walk is given no [`lumit_core::fx::registry::AudioTap`], so an
 /// *Audio level* driver wired into a plugin parameter reads nothing here.
 /// Handing it the real tap would mix a window of the comp per block — tens of
 /// thousands of mixes for a song. Bake the tap's levels once at control rate
@@ -407,12 +415,12 @@ pub fn job_bake(
 fn bake_values(
     chain: &AudioChain,
     instance: &lumit_core::model::EffectInstance,
-    def: &'static dyn lumit_core::fx::EffectDef,
+    def: &'static dyn lumit_core::fx::registry::EffectDef,
     start_frame: i64,
     blocks: usize,
     rate: u32,
-) -> Vec<Vec<(lumit_core::fx::ParamId, f64)>> {
-    use lumit_core::fx::{hard_range, ParamId, AUDIO_BLOCK_FRAMES};
+) -> Vec<Vec<(lumit_core::fx::params::ParamId, f64)>> {
+    use lumit_core::fx::{audio_chain::AUDIO_BLOCK_FRAMES, params::ParamId, resolved::hard_range};
     use lumit_core::graph::{InputRef, NodeRef};
     use lumit_core::model::EffectValue;
 
@@ -469,9 +477,9 @@ fn bake_values(
                     current_depth: 0,
                     inputs: None,
                 });
-                lumit_core::fx::resolve_drivers(&chain.graph, lt, context, None)
+                lumit_core::fx::drivers::resolve_drivers(&chain.graph, lt, context, None)
             } else {
-                lumit_core::fx::ResolvedDrivers::default()
+                lumit_core::fx::drivers::ResolvedDrivers::default()
             };
             rows.iter()
                 .map(|row| {
@@ -3969,7 +3977,8 @@ mod tests {
     fn gradient_doc(w: u32, h: u32) -> (Arc<Document>, Uuid) {
         let (doc, comp_id) = solid_doc(w, h);
         let mut doc = Document::clone(&doc);
-        let mut fx = lumit_core::fx::instantiate("gradient").expect("gradient is a built-in");
+        let mut fx =
+            lumit_core::fx::builtins::instantiate("gradient").expect("gradient is a built-in");
         for p in &mut fx.params {
             let set = match p.id.as_str() {
                 // White at the top row to black at the bottom, straight down.
@@ -4072,7 +4081,7 @@ mod tests {
     #[test]
     fn volume_bake_static_gain_and_animated_envelope() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        use lumit_core::Rational;
+        use lumit_core::time::Rational;
         let job = |volume: Property, offset_s: f64| AudioJob {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
@@ -4253,7 +4262,7 @@ mod tests {
     #[test]
     fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        use lumit_core::Rational;
+        use lumit_core::time::Rational;
         use std::sync::Arc;
 
         let rate = 48_000u32;
@@ -5108,7 +5117,7 @@ mod tests {
                     // Its own picture as the depth, so the whole layer is in
                     // focus and the stripes, when on, cover it.
                     let id = c.layers[0].id;
-                    let mut dof = lumit_core::fx::instantiate("dof").unwrap();
+                    let mut dof = lumit_core::fx::builtins::instantiate("dof").unwrap();
                     for p in &mut dof.params {
                         match p.id.as_str() {
                             "zebra" => p.value = lumit_core::model::EffectValue::Bool(zebra),
@@ -5501,7 +5510,8 @@ mod tests {
         use lumit_core::anim::Property;
         use lumit_core::model::EffectValue;
 
-        let mut instance = lumit_core::fx::instantiate(match_name).expect("a catalogue entry");
+        let mut instance =
+            lumit_core::fx::builtins::instantiate(match_name).expect("a catalogue entry");
         for param in &mut instance.params {
             if let Some((_, value)) = over.iter().find(|(id, _)| *id == param.id) {
                 param.value = EffectValue::Float(Property::fixed(*value));
