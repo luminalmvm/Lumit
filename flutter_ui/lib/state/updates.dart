@@ -549,6 +549,11 @@ class UpdateService extends ChangeNotifier {
   /// write to.
   final Directory Function() _downloadFolder;
 
+  /// The release key a download must be signed with, or empty to trust the
+  /// digest alone. [updateSigningKey] in the shipped application; tests that
+  /// are not about signing pass an empty one.
+  final String _signingKey;
+
   UpdateService({
     required this.currentVersion,
     bool? Function()? nightly,
@@ -563,7 +568,9 @@ class UpdateService extends ChangeNotifier {
     Quitter? quit,
     int Function()? now,
     Directory Function()? downloadFolder,
-  })  : _nightlyChoice = nightly ?? _noChoice,
+    String signingKey = updateSigningKey,
+  })  : _signingKey = signingKey,
+        _nightlyChoice = nightly ?? _noChoice,
         platform = platform ?? Platform.operatingSystem,
         site = site ?? InstallSite.detect(),
         _fetch = fetch ?? _fetchReleaseJson,
@@ -849,7 +856,7 @@ class UpdateService extends ChangeNotifier {
       void Function(int received, int total) onProgress) async {
     final map = release.blockmapUrl;
     if (map == null || !base.existsSync()) return false;
-    if (release.sha256 == null && !releaseSigningIsEnforced) return false;
+    if (release.sha256 == null && _signingKey.isEmpty) return false;
     try {
       final wanted =
           decodeBlockmap(utf8.decode(await _fetchBytes(map, blockmapMaxBytes)));
@@ -915,7 +922,7 @@ class UpdateService extends ChangeNotifier {
     // decides, and a release that cannot answer it is refused rather than
     // fallen back on — falling back would mean anything able to publish a
     // release could also delete the manifest and be trusted again.
-    if (releaseSigningIsEnforced) {
+    if (_signingKey.isNotEmpty) {
       return _verifySignature(release,
           length: length, digest: await _digestOf(file));
     }
@@ -973,7 +980,8 @@ class UpdateService extends ChangeNotifier {
       return l10n.updateNotSigned;
     }
 
-    final (manifest, trust) = await verifyManifest(manifestBytes, signature);
+    final (manifest, trust) =
+        await verifyManifestWithKey(manifestBytes, signature, _signingKey);
     switch (trust) {
       case ReleaseTrust.unsigned:
         return l10n.updateNotSigned;
