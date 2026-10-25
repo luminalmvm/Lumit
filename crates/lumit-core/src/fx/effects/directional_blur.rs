@@ -1,7 +1,9 @@
 //! Directional blur (docs/08 §3.8): a line-integral streak along an
 //! angle.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Directional blur's controls.
@@ -105,7 +107,7 @@ impl EffectDef for DirectionalBlurDef {
         }
         // The streak is centred on the pixel, so half of it leaves each way,
         // and only along its own direction.
-        let (dx, dy) = crate::fx::rgb_split_offset(length_px * 0.5, angle_deg);
+        let (dx, dy) = crate::fx::maths::rgb_split_offset(length_px * 0.5, angle_deg);
         [dx.abs(), dy.abs()]
     }
 }

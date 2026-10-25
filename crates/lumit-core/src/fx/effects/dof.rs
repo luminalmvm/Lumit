@@ -27,8 +27,10 @@
 //! upload a depth map.
 
 use crate::fx::{
-    aperture_blades, cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
-    ParamGroup, ParamId, Params, ResolveCx, Value, CHANNEL_OPTIONS, MAX_BLADES,
+    builtins::CHANNEL_OPTIONS, cpu, maths::aperture_blades, maths::MAX_BLADES, params::ParamId,
+    params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
+    schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 

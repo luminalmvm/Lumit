@@ -22,7 +22,7 @@
 //! and the progress are not here either, for the Camera track's reason: "frame
 //! 214 of 900" is live job state, and a parameter is something the file saves.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// What the matte does to the layer's alpha, in index order.

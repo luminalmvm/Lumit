@@ -12,8 +12,8 @@ use lumit_core::model::{Document, Layer, LayerKind, ProjectItem};
 
 fn imported() -> Document {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/shapes-and-text.aep");
-    let bundle = lumit_import::open_aep(&file).expect("the project opens");
-    lumit_import::map_capture(&bundle.capture).0
+    let bundle = lumit_import::aep::open_aep(&file).expect("the project opens");
+    lumit_import::map::map_capture(&bundle.capture).0
 }
 
 fn layer<'a>(doc: &'a Document, name: &str) -> &'a Layer {

@@ -12,7 +12,9 @@
 //! preview and another in the export (docs/08 §2.4). Evolution is the same
 //! motion with the timeline holding the stopwatch.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Ripple's controls.
@@ -49,7 +51,7 @@ pub struct Ripple {
 
     /// px@comp: where the stone landed (point parameters are pixels).
     /// The schema default is a nominal 1080p centre;
-    /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
+    /// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,

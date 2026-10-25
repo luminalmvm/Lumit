@@ -30,9 +30,14 @@ import Base from "../layouts/Base.astro";
     if (!error) return;
     document.getElementById("in-ok").hidden = true;
     document.getElementById("in-failed").hidden = false;
-    if (error === "unverified_email") {
+    const reason = {
+      unverified_email: "Verify your email with Google or Discord, then try again.",
+      need_birth_date: "Enter your date of birth in Lumit, then try again.",
+      too_young: "You're too young for a Lumit account.",
+    }[error];
+    if (reason) {
       const why = document.getElementById("in-why");
-      why.textContent = "Verify your email with Google or Discord, then try again.";
+      why.textContent = reason;
       why.hidden = false;
     }
   })();

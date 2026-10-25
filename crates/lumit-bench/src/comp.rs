@@ -281,7 +281,7 @@ pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
 
 /// A built-in effect instance at its declared defaults.
 fn effect(match_name: &str) -> Result<EffectInstance, String> {
-    lumit_core::fx::instantiate(match_name)
+    lumit_core::fx::builtins::instantiate(match_name)
         .ok_or_else(|| format!("reference comp: no built-in effect `{match_name}`"))
 }
 

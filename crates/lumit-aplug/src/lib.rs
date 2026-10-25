@@ -79,30 +79,6 @@ mod tests;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests_vst3;
 
-pub use abi::{Abi, AnyInstance, AnyModule};
-pub use def::{
-    AudioEffectDef, AudioHost, BlockJob, BrokerHost, HostedAudio, InstanceSetup, LocalHost,
-    BLOCK_SAMPLES, LOOKAHEAD_MARGIN,
-};
-pub use describe::{
-    describe, describe_module, describe_module_except, ParamDescription, PluginDescriptor,
-    PortInfo, Ports, Refusal, Rejection, ScanReport, STEREO,
-};
-pub use discover::{
-    clap_search_paths, scan, scan_brokered, scan_brokered_reporting, scan_dir, search_paths,
-    vst3_search_paths, CachedModule, DiscoveredPlugin, ScanCache, ScanOptions, ScanOutcome,
-};
-pub use instance::{HostError, HostFlags, Instance};
-pub use ipc::broker::{
-    module_broker, nothing_disabled, session_disabled, set_disabled, set_enabled, Broker,
-    BrokerConfig, BrokerError, DisableList, STRIKES_BEFORE_DISABLED,
-};
-pub use module::{Module, ModuleEntry, ModuleError};
-pub use process::{Block, Denormals, ParamEvent, BLOCK_FRAMES, CHANNELS, INTERLEAVED_LEN};
-pub use quirks::{Quirks, QuirksTable, BLOCK_PERIOD};
-pub use schema::{match_name, row_id, schema_of, value_routes, ValueRoute, MATCH_PREFIX};
-pub use vst3::{Vst3Instance, Vst3Module};
-
 /// Every call this host makes to a plugin, from the factory to the grave, in
 /// the order it makes them.
 ///

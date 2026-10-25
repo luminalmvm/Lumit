@@ -13,7 +13,9 @@
 //! the Mix every effect ends with would instead lay the finished bend over the
 //! untouched frame and show both at once.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Polar coordinates' controls.

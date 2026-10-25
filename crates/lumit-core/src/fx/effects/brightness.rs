@@ -1,7 +1,9 @@
 //! Brightness (docs/08 §3.32): AE's Brightness & Contrast as one
 //! effect — a sibling of the one-knob Contrast (§3.18), not a mode of it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Brightness' controls: AE's two sliders, under AE's names and at AE's

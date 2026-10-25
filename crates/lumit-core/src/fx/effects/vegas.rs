@@ -20,7 +20,10 @@
 //! §3.78 and §3.79 also use — and on it Segment length means what AE's Segments
 //! means, because there is a real arc length to count round.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
+};
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
@@ -149,16 +152,16 @@ pub struct Vegas {
 
 /// The two rows that answer to Source: a mask is not a control while the line
 /// is being found in the picture, and a level is not a control while it is not.
-pub const VEGAS_ENABLED_WHEN: &[crate::fx::EnabledWhen] = &[
-    crate::fx::EnabledWhen {
+pub const VEGAS_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] = &[
+    crate::fx::schema::EnabledWhen {
         param: "path",
         on: "source",
-        cond: crate::fx::EnabledCond::ChoiceIs(Vegas::SOURCE_MASK_PATH),
+        cond: crate::fx::schema::EnabledCond::ChoiceIs(Vegas::SOURCE_MASK_PATH),
     },
-    crate::fx::EnabledWhen {
+    crate::fx::schema::EnabledWhen {
         param: "threshold",
         on: "source",
-        cond: crate::fx::EnabledCond::ChoiceIsNot(Vegas::SOURCE_MASK_PATH),
+        cond: crate::fx::schema::EnabledCond::ChoiceIsNot(Vegas::SOURCE_MASK_PATH),
     },
 ];
 

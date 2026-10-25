@@ -10,7 +10,7 @@
 use std::time::Duration;
 
 use lumit_media::ai::fixture::{document, Layer};
-use lumit_media::ai::{open, read_layer, read_layer_within, BROKER_EXE_ENV};
+use lumit_media::ai::{helper::BROKER_EXE_ENV, open, read_layer, read_layer_within};
 use lumit_media::MediaError;
 
 #[test]

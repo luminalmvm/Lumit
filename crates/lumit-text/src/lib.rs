@@ -22,8 +22,6 @@ use lumit_core::text::{GlyphXform, ParagraphStyle, TextStyle};
 pub mod fonts;
 mod styled;
 
-pub use fonts::{faces, families};
-
 /// Inter Regular, embedded at compile time — deterministic across machines.
 pub(crate) static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");
 

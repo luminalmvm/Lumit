@@ -7,7 +7,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::ProjectItem;
-use lumit_render::{HeadlessRenderer, Quality};
+use lumit_render::{headless::HeadlessRenderer, plan::Quality};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -46,7 +46,8 @@ fn main() {
             ));
         })));
     }
-    let profiles: Arc<Mutex<Vec<lumit_render::FrameProfile>>> = Arc::new(Mutex::new(Vec::new()));
+    let profiles: Arc<Mutex<Vec<lumit_render::profile::FrameProfile>>> =
+        Arc::new(Mutex::new(Vec::new()));
     {
         let profiles = Arc::clone(&profiles);
         r.set_profile_sink(Some(Arc::new(move |p| {
@@ -65,7 +66,7 @@ fn main() {
             let t_mid = c.duration.0.to_f64() * 0.5;
             let t = Instant::now();
             let mut visited = vec![c.id];
-            std::hint::black_box(lumit_render::build_comp_draws_at(
+            std::hint::black_box(lumit_render::build::build_comp_draws_at(
                 &doc,
                 c,
                 t_mid,
@@ -120,7 +121,7 @@ fn main() {
                 let t_at = c.duration.0.to_f64() * 0.25 + fresh;
                 let t = Instant::now();
                 let mut visited = vec![c.id];
-                std::hint::black_box(lumit_render::build_comp_draws_at(
+                std::hint::black_box(lumit_render::build::build_comp_draws_at(
                     &doc,
                     c,
                     t_at,
@@ -175,7 +176,7 @@ fn main() {
                 let t_at = clips.duration.0.to_f64() * 0.5 + fresh;
                 let t = Instant::now();
                 let mut visited = vec![alone.id];
-                std::hint::black_box(lumit_render::build_comp_draws_at(
+                std::hint::black_box(lumit_render::build::build_comp_draws_at(
                     &doc,
                     &alone,
                     t_at,
@@ -207,7 +208,7 @@ fn main() {
                     for round in 0..2 {
                         let t = Instant::now();
                         let mut visited = vec![alone.id];
-                        std::hint::black_box(lumit_render::build_comp_draws_at(
+                        std::hint::black_box(lumit_render::build::build_comp_draws_at(
                             &doc,
                             &alone,
                             t_at,
@@ -285,7 +286,7 @@ fn main() {
             let t = Instant::now();
             for i in 0..n {
                 let mut visited = vec![comp.id];
-                std::hint::black_box(lumit_render::build_comp_draws_at(
+                std::hint::black_box(lumit_render::build::build_comp_draws_at(
                     &doc,
                     comp,
                     t_mid + i as f64 * 1e-7,

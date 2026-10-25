@@ -9,9 +9,9 @@
 //
 // So the fixture below is a real manifest and a real signature, produced by the
 // exact shell in .github/workflows/release.yml, checked here by the exact code
-// the updater runs. Regenerating it is the two commands in
-// docs/impl/release-signing.md; the values are otherwise meaningless and deliberately
-// so — what is being tested is the agreement, not the contents.
+// the updater runs. Regenerating it is the commands in the comment above that
+// step; the values are otherwise meaningless and deliberately so — what is
+// being tested is the agreement, not the contents.
 
 import 'dart:convert';
 

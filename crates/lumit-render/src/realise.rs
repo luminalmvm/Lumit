@@ -43,7 +43,7 @@ impl Bounds {
         Self { x: 0, y: 0, w, h }
     }
 
-    /// `[left, top, right, bottom]`, as [`lumit_core::fx::EffectDef::bounds`]
+    /// `[left, top, right, bottom]`, as [`lumit_core::fx::registry::EffectDef::bounds`]
     /// takes it.
     fn rect(self) -> [f32; 4] {
         [
@@ -129,8 +129,8 @@ impl Bounds {
     }
 
     /// This window of the frame's space, for the compositor.
-    fn region(self) -> lumit_gpu::Region {
-        lumit_gpu::Region {
+    fn region(self) -> lumit_gpu::composite::Region {
+        lumit_gpu::composite::Region {
             x: self.x as f32,
             y: self.y as f32,
             w: self.w as f32,
@@ -152,7 +152,7 @@ pub struct Realiser<'a> {
     /// engines below cannot be cloned, so they stay borrowed.
     pub ctx: lumit_gpu::GpuContext,
     pub engine: &'a lumit_gpu::ColourEngine,
-    pub compositor: &'a lumit_gpu::Compositor,
+    pub compositor: &'a lumit_gpu::composite::Compositor,
     pub fx: &'a lumit_gpu::fx::FxEngine,
     pub lut_cache: &'a std::cell::RefCell<crate::fxops::LutCache>,
     /// The per-effect intermediate cache, held by the same owner as
@@ -161,7 +161,7 @@ pub struct Realiser<'a> {
     /// [`crate::fxops::FxCache::keep_outputs`]).
     pub fx_cache: &'a std::cell::RefCell<crate::fxops::FxCache>,
     /// The preview render scale: every composite this
-    /// walk performs allocates its target at [`lumit_gpu::scaled_size`] of the
+    /// walk performs allocates its target at [`lumit_gpu::composite::scaled_size`] of the
     /// comp dims while all geometry stays in logical comp pixels. A field
     /// rather than a parameter so the nested/below/adjustment recursions
     /// inherit it with no signature ripple. Export always builds with 1.0, so
@@ -283,22 +283,22 @@ impl Realiser<'_> {
         rgba: &[u8],
         w: u32,
         h: u32,
-        format: lumit_media::PixelFormat,
+        format: lumit_media::decode::PixelFormat,
         colour_space: &Option<String>,
     ) -> wgpu::Texture {
         let ocio = self.input_transform(colour_space);
         match (format, ocio) {
-            (lumit_media::PixelFormat::LinearF32, None) => {
+            (lumit_media::decode::PixelFormat::LinearF32, None) => {
                 self.engine.upload_float_frame(&self.ctx, rgba, w, h)
             }
-            (lumit_media::PixelFormat::LinearF32, ocio) => {
+            (lumit_media::decode::PixelFormat::LinearF32, ocio) => {
                 let src = self.engine.upload_float_frame(&self.ctx, rgba, w, h);
                 // Into the source's own format, not the narrower working one:
                 // the transform must not be where the precision goes.
                 let format = src.format();
                 self.engine.linearise_into(&self.ctx, &src, ocio, format)
             }
-            (lumit_media::PixelFormat::Srgb8, ocio) => {
+            (lumit_media::decode::PixelFormat::Srgb8, ocio) => {
                 let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
                 self.engine.linearise_through(&self.ctx, &src, ocio)
             }
@@ -460,7 +460,7 @@ impl Realiser<'_> {
                             let high = p.data.get(i * 2 + 1).copied().unwrap_or(0);
                             let v =
                                 f32::from(u16::from_le_bytes([low, high])) / f32::from(u16::MAX);
-                            let bits = lumit_gpu::fx::f16_bits(v);
+                            let bits = lumit_gpu::fx::common::f16_bits(v);
                             halfs.extend_from_slice(&[bits, bits, bits, bits]);
                         }
                     }
@@ -470,7 +470,7 @@ impl Realiser<'_> {
                         // holds, with no full-plane f32 temporary in between.
                         let mut table = [0u16; 256];
                         for (v, bits) in table.iter_mut().enumerate() {
-                            *bits = lumit_gpu::fx::f16_bits(v as f32 / 255.0);
+                            *bits = lumit_gpu::fx::common::f16_bits(v as f32 / 255.0);
                         }
                         for i in 0..n {
                             let bits = table[usize::from(p.data.get(i).copied().unwrap_or(0))];
@@ -478,7 +478,7 @@ impl Realiser<'_> {
                         }
                     }
                 }
-                lumit_gpu::fx::upload_linear_f16(&self.ctx, &halfs, p.width, p.height)
+                lumit_gpu::fx::common::upload_linear_f16(&self.ctx, &halfs, p.width, p.height)
             })
     }
 
@@ -509,7 +509,7 @@ impl Realiser<'_> {
             w,
             h,
             [0.0, 0.0, 0.0, 0.0],
-            &[lumit_gpu::CompositeLayer {
+            &[lumit_gpu::composite::CompositeLayer {
                 texture: baked,
                 size: (bw, bh),
                 position: (read.position.0 * scale, read.position.1 * scale),
@@ -522,7 +522,7 @@ impl Realiser<'_> {
                 // Full opacity: a matte is read as a number, never dimmed.
                 opacity: 100.0,
                 matte: None,
-                blend: lumit_gpu::Blend::Normal,
+                blend: lumit_gpu::composite::Blend::Normal,
                 z: 0.0,
                 rotation_x_deg: 0.0,
                 rotation_y_deg: 0.0,
@@ -949,7 +949,7 @@ impl Realiser<'_> {
                     // The whole picture is kept, wherever it lands, so a
                     // file bigger than the frame can still be scaled down
                     // into it by a box further on.
-                    let m = lumit_gpu::place_matrix(
+                    let m = lumit_gpu::composite::place_matrix(
                         position,
                         anchor,
                         draw.scale,
@@ -976,7 +976,7 @@ impl Realiser<'_> {
                             w,
                             h,
                             [0.0, 0.0, 0.0, 0.0],
-                            &[lumit_gpu::CompositeLayer {
+                            &[lumit_gpu::composite::CompositeLayer {
                                 texture: &linear,
                                 size,
                                 position,
@@ -985,7 +985,7 @@ impl Realiser<'_> {
                                 rotation_deg: draw.rotation_deg,
                                 opacity: draw.opacity,
                                 matte: None,
-                                blend: lumit_gpu::Blend::Normal,
+                                blend: lumit_gpu::composite::Blend::Normal,
                                 z: 0.0,
                                 rotation_x_deg: 0.0,
                                 rotation_y_deg: 0.0,
@@ -1163,10 +1163,10 @@ impl Realiser<'_> {
                         // Each laid where it sits, on a raster that holds both.
                         fn full(
                             (texture, at): &(wgpu::Texture, Bounds),
-                            blend: lumit_gpu::Blend,
+                            blend: lumit_gpu::composite::Blend,
                             opacity: f32,
-                        ) -> lumit_gpu::CompositeLayer<'_> {
-                            lumit_gpu::CompositeLayer {
+                        ) -> lumit_gpu::composite::CompositeLayer<'_> {
+                            lumit_gpu::composite::CompositeLayer {
                                 texture,
                                 size: (at.w as f32, at.h as f32),
                                 position: (at.x as f32, at.y as f32),
@@ -1190,7 +1190,7 @@ impl Realiser<'_> {
                             .fold(frame, |all, (_, at)| all.union(*at));
                         let mut layers = Vec::with_capacity(2);
                         if let Some(b) = &b {
-                            layers.push(full(b, lumit_gpu::Blend::Normal, 100.0));
+                            layers.push(full(b, lumit_gpu::composite::Blend::Normal, 100.0));
                         }
                         if let Some(a) = &a {
                             let mode = lumit_core::model::BlendMode::ALL
@@ -1317,7 +1317,7 @@ impl Realiser<'_> {
         height: u32,
         background: [f64; 4],
         layers: &[CompLayerDraw],
-        region: Option<lumit_gpu::Region>,
+        region: Option<lumit_gpu::composite::Region>,
     ) -> wgpu::Texture {
         let region = region.filter(|_| region_is_safe(layers));
         // Depth is what tells the profiler which layers are rows of the
@@ -1336,7 +1336,7 @@ impl Realiser<'_> {
         // It is also the one place a frame's video memory can still be refused
         // (docs/13 §3): a texture cannot be denied half way through a pass, so
         // the whole frame is reserved for before a single one of them records.
-        let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
+        let (tw, th) = lumit_gpu::composite::scaled_size(width, height, self.render_scale);
         self.open_frame(tw, th, layers);
         let out = self.realise_at_depth(camera, width, height, background, layers, region);
         self.ctx.end_frame();
@@ -1413,11 +1413,11 @@ impl Realiser<'_> {
         height: u32,
         background: [f64; 4],
         layers: &[CompLayerDraw],
-        region: Option<lumit_gpu::Region>,
+        region: Option<lumit_gpu::composite::Region>,
     ) -> wgpu::Texture {
         // The actual raster this comp's composites land on; all geometry
         // below stays in the logical `width`×`height` comp pixels.
-        let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
+        let (tw, th) = lumit_gpu::composite::scaled_size(width, height, self.render_scale);
         let mut acc: Option<wgpu::Texture> = None;
         let mut start = 0usize;
         for (i, l) in layers.iter().enumerate() {
@@ -1564,7 +1564,7 @@ impl Realiser<'_> {
     /// Accumulation motion blur (docs/08 §3.26, docs/impl/temporal-rerender.md
     /// §3): render each sub-frame below-stack through the same realise path,
     /// average the N finished composites with the hardware additive-at-`1/N` pass
-    /// ([`lumit_gpu::Compositor::accumulate`]), then blend that average against
+    /// ([`lumit_gpu::composite::Compositor::accumulate`]), then blend that average against
     /// the frame-time below-composite `below` by `mix` (a linear interpolation
     /// the additive blend gives exactly). The result stands in for the
     /// below-composite the adjustment's own effects and coverage blend see. A
@@ -1584,7 +1584,7 @@ impl Realiser<'_> {
         }
         // The sub-frames and `below` are all at the ACTUAL raster size; the
         // combine is a full-frame identity pass, so it runs at that size too.
-        let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
+        let (tw, th) = lumit_gpu::composite::scaled_size(width, height, self.render_scale);
         // **The Matte scales Shutter angle per pixel**. With none bound
         // — the default, and every project saved before this — the equal-weight
         // hardware pass below runs exactly as it always did, byte for byte.
@@ -1802,7 +1802,7 @@ impl Realiser<'_> {
         if turned {
             u.iter_mut().chain(v.iter_mut()).for_each(|x| *x = -*x);
         }
-        Some(lumit_gpu::fx::upload_flow_field(
+        Some(lumit_gpu::fx::common::upload_flow_field(
             &self.ctx, &u, &v, &c, w, h,
         ))
     }
@@ -1828,9 +1828,9 @@ impl Realiser<'_> {
         &self,
         width: u32,
         height: u32,
-        cam_mat: Option<lumit_gpu::Mat4>,
+        cam_mat: Option<glam::Mat4>,
         m: &crate::draw::MatteDraw,
-        region: Option<lumit_gpu::Region>,
+        region: Option<lumit_gpu::composite::Region>,
     ) -> wgpu::Texture {
         // A Precomp matte realises its nested comp exactly as a Precomp
         // layer's picture does (the layer-input shape); anything else is the
@@ -1931,7 +1931,7 @@ impl Realiser<'_> {
             width,
             height,
             [0.0, 0.0, 0.0, 0.0],
-            &[lumit_gpu::CompositeLayer {
+            &[lumit_gpu::composite::CompositeLayer {
                 texture: &linear,
                 size: m.natural_size,
                 position: m.position,
@@ -1940,7 +1940,7 @@ impl Realiser<'_> {
                 rotation_deg: m.rotation_deg,
                 opacity: m.opacity,
                 matte: None,
-                blend: lumit_gpu::Blend::Normal,
+                blend: lumit_gpu::composite::Blend::Normal,
                 z: m.z,
                 rotation_x_deg: m.rotation_x_deg,
                 rotation_y_deg: m.rotation_y_deg,
@@ -1982,11 +1982,13 @@ impl Realiser<'_> {
             .as_ref()
             // No region: a comp with an adjustment layer never gets one.
             .map(|m| self.matte_texture(width, height, cam_mat, m, None));
-        let matte = matte_tex.as_ref().map(|mt| lumit_gpu::MatteInput {
-            texture: mt,
-            luma: l.matte.as_ref().is_some_and(|m| m.luma),
-            inverted: l.matte.as_ref().is_some_and(|m| m.inverted),
-        });
+        let matte = matte_tex
+            .as_ref()
+            .map(|mt| lumit_gpu::composite::MatteInput {
+                texture: mt,
+                luma: l.matte.as_ref().is_some_and(|m| m.luma),
+                inverted: l.matte.as_ref().is_some_and(|m| m.inverted),
+            });
         // Rendered at the render scale: `adjust_blend` reads coverage texel by
         // texel against the below/processed rasters, so they must match.
         self.compositor.composite_seeded(
@@ -1994,7 +1996,7 @@ impl Realiser<'_> {
             width,
             height,
             [0.0, 0.0, 0.0, 0.0],
-            &[lumit_gpu::CompositeLayer {
+            &[lumit_gpu::composite::CompositeLayer {
                 texture: &linear,
                 size: l.natural_size,
                 position: l.position,
@@ -2004,7 +2006,7 @@ impl Realiser<'_> {
                 // Layer opacity is applied once, in the blend itself.
                 opacity: 100.0,
                 matte,
-                blend: lumit_gpu::Blend::Normal,
+                blend: lumit_gpu::composite::Blend::Normal,
                 z: l.z,
                 rotation_x_deg: l.rotation_x_deg,
                 rotation_y_deg: l.rotation_y_deg,
@@ -2035,9 +2037,9 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
         seed: &Option<wgpu::Texture>,
-        region: Option<lumit_gpu::Region>,
+        region: Option<lumit_gpu::composite::Region>,
         scene_depth: Option<f32>,
-        capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
+        capture: Option<&mut Option<lumit_gpu::fx::lens_blur::SceneLayers>>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
@@ -2061,7 +2063,7 @@ impl Realiser<'_> {
                     format,
                     colour_space,
                 } if straight_to_composite(l, camera)
-                    && matches!(format, lumit_media::PixelFormat::Srgb8)
+                    && matches!(format, lumit_media::decode::PixelFormat::Srgb8)
                     && self.input_transform(colour_space).is_none() =>
                 {
                     // Nothing between here and the composite draw, so the
@@ -2105,8 +2107,11 @@ impl Realiser<'_> {
                 // own pixels, so the scale applies once and a graph renders at
                 // half preview what a layer comp of the same picture does.
                 DrawSource::Graph(plan) => {
-                    let (gw, gh) =
-                        lumit_gpu::scaled_size(plan.width, plan.height, self.render_scale);
+                    let (gw, gh) = lumit_gpu::composite::scaled_size(
+                        plan.width,
+                        plan.height,
+                        self.render_scale,
+                    );
                     self.realise_graph(plan, None, gw, gh, self.render_scale)
                 }
                 DrawSource::Adjust => {
@@ -2165,7 +2170,9 @@ impl Realiser<'_> {
                             .map(|(offset, u, v, conf, _, _)| {
                                 (
                                     *offset,
-                                    lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h),
+                                    lumit_gpu::fx::common::upload_flow_field(
+                                        &self.ctx, u, v, conf, w, h,
+                                    ),
                                 )
                             })
                             .collect();
@@ -2284,7 +2291,7 @@ impl Realiser<'_> {
                     w,
                     h,
                     None,
-                    &lumit_gpu::fx::BlurOp {
+                    &lumit_gpu::fx::blur::BlurOp {
                         radius_px,
                         edge: 1,
                         mix: 1.0,
@@ -2313,12 +2320,12 @@ impl Realiser<'_> {
                     // A grown picture is placed by the grown transform at every
                     // sub-frame too, or the smear would be of a layer
                     // in a different place from the one the composite draws.
-                    let mb: Vec<lumit_gpu::MbSample> = if *g == (1.0, 1.0) {
+                    let mb: Vec<lumit_gpu::composite::MbSample> = if *g == (1.0, 1.0) {
                         Vec::new()
                     } else {
                         let (dx, dy) = grow_offset(l.natural_size, *g);
                         l.mb.iter()
-                            .map(|smp| lumit_gpu::MbSample {
+                            .map(|smp| lumit_gpu::composite::MbSample {
                                 anchor: (smp.anchor.0 + dx, smp.anchor.1 + dy),
                                 ..*smp
                             })
@@ -2382,7 +2389,7 @@ impl Realiser<'_> {
                     .map(|m| self.matte_texture(width, height, cam_mat, m, region))
             })
             .collect();
-        let comp_layers: Vec<lumit_gpu::CompositeLayer> = linear_textures
+        let comp_layers: Vec<lumit_gpu::composite::CompositeLayer> = linear_textures
             .iter()
             .zip(layers)
             .zip(&matte_textures)
@@ -2390,16 +2397,18 @@ impl Realiser<'_> {
             .zip(&mb_textures)
             .zip(&grown)
             .map(|(((((texture, l), matte_tex), mask_tex), mb_tex), g)| {
-                let matte = matte_tex.as_ref().map(|mt| lumit_gpu::MatteInput {
-                    texture: mt,
-                    luma: l.matte.as_ref().is_some_and(|m| m.luma),
-                    inverted: l.matte.as_ref().is_some_and(|m| m.inverted),
-                });
+                let matte = matte_tex
+                    .as_ref()
+                    .map(|mt| lumit_gpu::composite::MatteInput {
+                        texture: mt,
+                        luma: l.matte.as_ref().is_some_and(|m| m.luma),
+                        inverted: l.matte.as_ref().is_some_and(|m| m.inverted),
+                    });
                 match mb_tex {
                     // Motion-blurred: composite the averaged comp-sized smear
                     // 1:1 (identity placement), the layer's real blend, opacity,
                     // matte and mask applied once to the averaged image.
-                    Some(avg) => lumit_gpu::CompositeLayer {
+                    Some(avg) => lumit_gpu::composite::CompositeLayer {
                         texture: avg,
                         size: (width as f32, height as f32),
                         position: (0.0, 0.0),
@@ -2416,7 +2425,7 @@ impl Realiser<'_> {
                         layer_mask: mask_tex.as_ref(),
                         pre: None,
                     },
-                    None => lumit_gpu::CompositeLayer {
+                    None => lumit_gpu::composite::CompositeLayer {
                         texture,
                         // A picture its stack grew covers more of layer
                         // space than the layer's own rectangle, evenly on all
@@ -2458,7 +2467,7 @@ impl Realiser<'_> {
             // its plane in the camera's frame, and the 2D layers drawn flat
             // behind everything.
             if let (Some(out), Some(pose)) = (capture, camera) {
-                let frame = lumit_gpu::camera_frame(
+                let frame = lumit_gpu::composite::camera_frame(
                     width as f32,
                     height as f32,
                     pose.zoom as f32,
@@ -2480,7 +2489,7 @@ impl Realiser<'_> {
                         continue;
                     }
                     let (dx, dy) = grow_offset(l.natural_size, *g);
-                    let placed = lumit_gpu::CompositeLayer {
+                    let placed = lumit_gpu::composite::CompositeLayer {
                         texture,
                         size: grow_size(l.natural_size, *g),
                         position: l.position,
@@ -2498,7 +2507,7 @@ impl Realiser<'_> {
                         pre: l.pre,
                     };
                     let m = frame * placed.world();
-                    planes.push(lumit_gpu::fx::ScenePlane {
+                    planes.push(lumit_gpu::fx::lens_blur::ScenePlane {
                         u: m.col(0).truncate().to_array(),
                         v: m.col(1).truncate().to_array(),
                         origin: m.col(3).truncate().to_array(),
@@ -2506,7 +2515,7 @@ impl Realiser<'_> {
                     });
                     textures.push(texture.clone());
                 }
-                let flat: Vec<lumit_gpu::CompositeLayer> =
+                let flat: Vec<lumit_gpu::composite::CompositeLayer> =
                     comp_layers.into_iter().filter(|c| !c.three_d).collect();
                 let backdrop = (!flat.is_empty()).then(|| {
                     self.compositor.composite_seeded(
@@ -2522,7 +2531,7 @@ impl Realiser<'_> {
                         None,
                     )
                 });
-                *out = Some(lumit_gpu::fx::SceneLayers {
+                *out = Some(lumit_gpu::fx::lens_blur::SceneLayers {
                     planes,
                     textures,
                     backdrop,
@@ -2555,7 +2564,7 @@ impl Realiser<'_> {
     pub fn realise_scene_depth(
         &self,
         n: &crate::draw::NestedInputDraw,
-        capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
+        capture: Option<&mut Option<lumit_gpu::fx::lens_blur::SceneLayers>>,
     ) -> wgpu::Texture {
         // ponytail: 2D layers are still made here and only dropped by the depth
         // pass. Skip them before making them if a heavy 2D layer ever shows.
@@ -2563,7 +2572,7 @@ impl Realiser<'_> {
         let metres_per_w = n
             .camera
             .map_or(1.0, |c| (c.zoom / n.px_per_metre.max(1e-6)) as f32);
-        let (tw, th) = lumit_gpu::scaled_size(n.width, n.height, self.render_scale);
+        let (tw, th) = lumit_gpu::composite::scaled_size(n.width, n.height, self.render_scale);
         self.open_frame(tw, th, draws);
         let out = self.realise_segment(
             n.camera,
@@ -2672,7 +2681,7 @@ fn lighting_op(
     l: &crate::draw::CompLayerDraw,
     w: u32,
     h: u32,
-) -> Option<lumit_gpu::fx::LightingOp> {
+) -> Option<lumit_gpu::fx::lighting::LightingOp> {
     use crate::build::{place_dir, place_point, unit};
 
     if l.lights.is_empty() || w == 0 || h == 0 {
@@ -2686,16 +2695,23 @@ fn lighting_op(
     } else {
         (0.0, 0.0, 0.0)
     };
-    let mut place =
-        lumit_gpu::place_matrix(l.position, l.anchor, l.scale, l.rotation_deg, z, rx, ry);
+    let mut place = lumit_gpu::composite::place_matrix(
+        l.position,
+        l.anchor,
+        l.scale,
+        l.rotation_deg,
+        z,
+        rx,
+        ry,
+    );
     if let Some(pre) = &l.pre {
-        place = lumit_gpu::concat_place(*pre, place);
+        place = lumit_gpu::composite::concat_place(*pre, place);
     }
     let (nw, nh) = l.natural_size;
     let origin = place_point(&place, 0.0, 0.0, 0.0);
     let du = place_dir(&place, nw / w as f32, 0.0, 0.0);
     let dv = place_dir(&place, 0.0, nh / h as f32, 0.0);
-    Some(lumit_gpu::fx::LightingOp {
+    Some(lumit_gpu::fx::lighting::LightingOp {
         origin,
         du,
         dv,
@@ -2772,7 +2788,7 @@ fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
 fn upload_roto_matte(ctx: &lumit_gpu::GpuContext, m: &crate::draw::RotoMatteDraw) -> wgpu::Texture {
     let mut table = [0u16; 256];
     for (v, bits) in table.iter_mut().enumerate() {
-        *bits = lumit_gpu::fx::f16_bits(v as f32 / 255.0);
+        *bits = lumit_gpu::fx::common::f16_bits(v as f32 / 255.0);
     }
     let n = (m.width as usize) * (m.height as usize);
     let mut halfs = Vec::with_capacity(n * 4);
@@ -2780,7 +2796,7 @@ fn upload_roto_matte(ctx: &lumit_gpu::GpuContext, m: &crate::draw::RotoMatteDraw
         let a = table[usize::from(m.gray.get(i).copied().unwrap_or(0))];
         halfs.extend_from_slice(&[a, a, a, a]);
     }
-    lumit_gpu::fx::upload_linear_f16(ctx, &halfs, m.width, m.height)
+    lumit_gpu::fx::common::upload_linear_f16(ctx, &halfs, m.width, m.height)
 }
 
 #[cfg(test)]
@@ -2812,7 +2828,7 @@ mod tests {
                 rgba: rgba.clone(),
                 tex_w: W,
                 tex_h: H,
-                format: lumit_media::PixelFormat::Srgb8,
+                format: lumit_media::decode::PixelFormat::Srgb8,
                 colour_space: None,
             },
             natural_size: (W as f32, H as f32),
@@ -2826,10 +2842,10 @@ mod tests {
             rotation_y_deg: 0.0,
             three_d: false,
             matte: None,
-            blend: lumit_gpu::Blend::Normal,
+            blend: lumit_gpu::composite::Blend::Normal,
             mask_cov: None,
             pre: None,
-            fx: lumit_core::fx::ResolvedStack::new(),
+            fx: lumit_core::fx::params::ResolvedStack::new(),
             fx_ids: Vec::new(),
             graph_fx: Vec::new(),
             neighbours: Vec::new(),
@@ -2854,8 +2870,11 @@ mod tests {
 
     /// The placement `realise_segment` gives that draw, so the hand-built
     /// reference below composites the same rectangle in the same place.
-    fn placed<'a>(l: &CompLayerDraw, texture: &'a wgpu::Texture) -> lumit_gpu::CompositeLayer<'a> {
-        lumit_gpu::CompositeLayer {
+    fn placed<'a>(
+        l: &CompLayerDraw,
+        texture: &'a wgpu::Texture,
+    ) -> lumit_gpu::composite::CompositeLayer<'a> {
+        lumit_gpu::composite::CompositeLayer {
             texture,
             size: l.natural_size,
             position: l.position,
@@ -2924,7 +2943,8 @@ mod tests {
         let out = f();
         let after = ctx.live_objects().0;
         ctx.end_frame();
-        let px = lumit_gpu::fx::readback_linear_f32(ctx, &out, W, H).expect("the comp reads back");
+        let px = lumit_gpu::fx::common::readback_linear_f32(ctx, &out, W, H)
+            .expect("the comp reads back");
         drop(out);
         ctx.settle();
         (px, after.saturating_sub(before))

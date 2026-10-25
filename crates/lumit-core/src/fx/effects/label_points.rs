@@ -17,8 +17,9 @@
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{Column, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledWhen, ParamId, Params, Port, PortType,
-    ResolveCx, ShortText, Signature, Value,
+    params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

@@ -28,9 +28,9 @@
 //! baked rack's output is and what the tests mix. It reads the same way and
 //! is never dropped.
 
+use lumit_media::audio::AudioBuffer;
 use lumit_media::audio::SoundReader;
-use lumit_media::AudioBuffer;
-pub use lumit_media::SoundSource;
+use lumit_media::audio::SoundSource;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::path::Path;

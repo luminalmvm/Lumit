@@ -25,7 +25,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::fx::{FxCategory, ParamKind, Port, PortType, Unit};
+use crate::fx::{
+    params::Unit, schema::FxCategory, schema::ParamKind, schema::Port, schema::PortType,
+};
 use crate::graph::{GraphError, INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, ProjectItem};
 
@@ -261,7 +263,7 @@ pub struct Projection {
 /// driver declares [`FxCategory::Drivers`] and a data signature together.
 #[must_use]
 fn is_driver(inst: &EffectInstance) -> bool {
-    crate::fx::def(&inst.effect.match_name)
+    crate::fx::builtins::def(&inst.effect.match_name)
         .is_some_and(|def| def.schema().category == FxCategory::Drivers)
 }
 
@@ -374,7 +376,9 @@ fn fx_ports(
             }
             // The Matte, as every effect has, dissolving back to `input` where
             // the matte is dark.
-            if crate::fx::def(NODE_GRAPH).is_some_and(|d| d.schema().matte.param().is_some()) {
+            if crate::fx::builtins::def(NODE_GRAPH)
+                .is_some_and(|d| d.schema().matte.param().is_some())
+            {
                 ins.insert(1, GraphPort::of(MATTE_PORT));
             }
             return (ins, out);
@@ -382,7 +386,7 @@ fn fx_ports(
         _ => {}
     }
 
-    let Some(def) = crate::fx::def(&inst.effect.match_name) else {
+    let Some(def) = crate::fx::builtins::def(&inst.effect.match_name) else {
         // An entry this build does not know draws no sockets, so no wire can
         // name one - the same answer a missing box gets.
         return (Vec::new(), Vec::new());
@@ -441,7 +445,7 @@ fn fx_ports(
 
 /// The view menu `inst`'s effect declares: its parameter id and its options.
 fn view_menu(inst: &EffectInstance) -> Option<(&'static str, &'static [&'static str])> {
-    let def = crate::fx::def(&inst.effect.match_name)?;
+    let def = crate::fx::builtins::def(&inst.effect.match_name)?;
     let param = def.view()?;
     def.schema().params.iter().find_map(|p| match p.kind {
         ParamKind::Choice { options, .. } if p.id == param => Some((param, options)),
@@ -461,7 +465,8 @@ pub fn view_ports(inst: &EffectInstance) -> Vec<GraphPort> {
     let Some((param, options)) = view_menu(inst) else {
         return Vec::new();
     };
-    let types = crate::fx::def(&inst.effect.match_name).map_or(&[][..], |d| d.view_types());
+    let types =
+        crate::fx::builtins::def(&inst.effect.match_name).map_or(&[][..], |d| d.view_types());
     options
         .iter()
         .enumerate()
@@ -726,9 +731,8 @@ impl CompGraph {
             // reads a grey depth pass takes a picture for the same reason.
             // Everywhere else a wire's type must equal its socket's.
             let takes_a_pass = || match to {
-                GraphNode::Fx(inst) => {
-                    crate::fx::def(&inst.effect.match_name).is_some_and(|d| d.depth_takes_a_pass())
-                }
+                GraphNode::Fx(inst) => crate::fx::builtins::def(&inst.effect.match_name)
+                    .is_some_and(|d| d.depth_takes_a_pass()),
                 _ => false,
             };
             let matched = source.ty == sink.ty
@@ -928,17 +932,17 @@ impl CompGraph {
         }
         // Resolved by the code the builder resolves it with, so the two
         // cannot round it differently.
-        let rows = crate::fx::resolve_instance(
+        let rows = crate::fx::resolved::resolve_instance(
             inst,
             &crate::fx::drivers::ResolvedDrivers::default(),
             t,
             1.0,
             1.0,
-            &crate::fx::MarkerContext::NONE,
+            &crate::fx::markers::MarkerContext::NONE,
             std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
         );
         let index = rows.iter().next().map_or(0, |op| {
-            i64::from(op.params.int(crate::fx::ParamId::new("index"), 0))
+            i64::from(op.params.int(crate::fx::params::ParamId::new("index"), 0))
         });
         Some(index)
     }
@@ -956,7 +960,7 @@ impl CompGraph {
     /// lowering, the planner and the frame key cannot disagree.
     ///
     /// The frame `dt` a window is measured in is the caller's, held by the
-    /// closure it hands in: [`crate::fx::input_times`] wants it and this walk
+    /// closure it hands in: [`crate::fx::temporal::input_times`] wants it and this walk
     /// has no other use for it.
     #[must_use]
     pub fn time_demands(
@@ -1003,7 +1007,7 @@ impl CompGraph {
 /// signature repeats it.
 #[must_use]
 fn data_output(inst: &EffectInstance, port: &str) -> bool {
-    crate::fx::def(&inst.effect.match_name)
+    crate::fx::builtins::def(&inst.effect.match_name)
         .is_some_and(|def| def.signature().output(port).is_some())
 }
 
@@ -1037,7 +1041,7 @@ fn makes_a_picture(node: &GraphNode) -> bool {
         GraphNode::Read { .. } => true,
         GraphNode::Input { input, .. } => input.kind == InputKind::Picture,
         GraphNode::Fx(inst) => {
-            crate::fx::def(&inst.effect.match_name).is_some() && !is_driver(inst)
+            crate::fx::builtins::def(&inst.effect.match_name).is_some() && !is_driver(inst)
         }
         GraphNode::Output { .. } => false,
     }
@@ -1113,9 +1117,9 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         id,
         name: item.name().to_owned(),
         kind,
-        in_point: crate::CompTime(crate::Rational::ZERO),
-        out_point: crate::CompTime(comp.duration.0),
-        start_offset: crate::CompTime(crate::Rational::ZERO),
+        in_point: crate::time::CompTime(crate::time::Rational::ZERO),
+        out_point: crate::time::CompTime(comp.duration.0),
+        start_offset: crate::time::CompTime(crate::time::Rational::ZERO),
         transform: TransformGroup {
             anchor_x: Property::fixed(nat_w * 0.5),
             anchor_y: Property::fixed(nat_h * 0.5),
@@ -1153,7 +1157,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::instantiate;
+    use crate::fx::builtins::instantiate;
     use crate::model::{
         FootageItem, LayerKind, LinearColour, MediaRef, MotionBlur, ProjectItem, SolidDef,
     };
@@ -1631,7 +1635,7 @@ mod tests {
         let graph = built(vec![read, inner, shift, outer, out], edges);
 
         let demands = graph.time_demands(out_id, 4.0, &|inst, at| {
-            crate::fx::input_times(inst, at, 0.5)
+            crate::fx::temporal::input_times(inst, at, 0.5)
         });
         let times = |node: Uuid| -> Vec<f64> {
             let mut ts: Vec<f64> = demands

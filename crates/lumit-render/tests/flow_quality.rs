@@ -218,11 +218,11 @@ fn variants() -> Vec<(&'static str, FlowSettings)> {
 /// `LUMIT_ML_RUNTIME_DIR` is honoured the way the `lumit-ml` tests honour it,
 /// so the harness runs against a runtime sitting in a scratch folder rather
 /// than only against one installed as an addon.
-fn open_rife() -> Option<lumit_ml::Synthesis> {
+fn open_rife() -> Option<lumit_ml::synthesis::Synthesis> {
     if let Some(dir) = std::env::var_os("LUMIT_ML_RUNTIME_DIR") {
         let _ = lumit_ml::runtime::load(std::path::Path::new(&dir));
     }
-    match lumit_ml::Synthesis::open() {
+    match lumit_ml::synthesis::Synthesis::open() {
         Ok(model) => Some(model),
         Err(why) => {
             eprintln!("no model engine in this run: {why}");

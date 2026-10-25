@@ -26,16 +26,16 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
-use crate::Document;
+use crate::model::Document;
 use rhai::{exported_module, Dynamic, Engine, Scope};
 use uuid::Uuid;
 
 mod comp;
 mod layer;
 mod math;
-mod script;
+pub mod script;
 
-pub use script::{Language, Slot, SLOT_KEY};
+use script::{Language, Slot, SLOT_KEY};
 
 // What one expression is allowed to build. A property wants a number, a point,
 // a colour or a line of text, so these are far above anything a real expression
@@ -225,7 +225,7 @@ fn eval_dynamic(
 const MAXIMUM_DEPTH: u32 = 100;
 
 /// A JavaScript text read into a program, or why it does not read.
-type Read = Result<Rc<script::Program>, Rc<str>>;
+type Read = Result<Rc<script::parse::Program>, Rc<str>>;
 
 thread_local! {
     /// JavaScript programs already read, by their text. A text that does not
@@ -398,7 +398,7 @@ pub const INTERFACE_STEPS: u32 = MAX_EXPRESSION_OPERATIONS as u32;
 /// its curve, on the thread that draws the window. A loop that never ends
 /// would otherwise freeze it for as long as a render lets the same loop run.
 pub fn within_steps<T>(steps: u32, work: impl FnOnce() -> T) -> T {
-    script::sparingly(steps, work)
+    script::interp::sparingly(steps, work)
 }
 
 /// Run a Rhai expression for the one number a property wants. `-1` when it
@@ -865,7 +865,7 @@ mod tests {
                 default: [first, 0.25, 0.5, 1.0],
                 min: 0.0,
                 max: 100.0,
-                unit: crate::fx::Unit::Raw,
+                unit: crate::fx::params::Unit::Raw,
                 preview: None,
             },
         };

@@ -162,12 +162,13 @@ fn project(bind: bool) -> (Arc<Document>, Uuid) {
     matte_layer.switches.visible = false;
 
     let mut base = layer("base", LayerKind::Solid { def: grey_def });
-    let mut exposure = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+    let mut exposure =
+        lumit_core::fx::builtins::instantiate("exposure").expect("exposure is a built-in");
     for p in &mut exposure.params {
         if p.id == "stops" {
             p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
         }
-        if bind && p.id == lumit_core::fx::MATTE_PARAM {
+        if bind && p.id == lumit_core::fx::schema::MATTE_PARAM {
             p.value = EffectValue::Layer(Some(matte_layer.id));
         }
     }
@@ -357,7 +358,8 @@ fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
     matte_layer.switches.visible = false;
 
     let mut adjust = layer("adjustment", LayerKind::Adjustment);
-    let mut exposure = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+    let mut exposure =
+        lumit_core::fx::builtins::instantiate("exposure").expect("exposure is a built-in");
     for p in &mut exposure.params {
         if p.id == "stops" {
             p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
@@ -416,21 +418,22 @@ fn project_with(
         for layer in &mut c.layers {
             for fx in &mut layer.effects {
                 for p in &mut fx.params {
-                    if p.id == lumit_core::fx::MATTE_INVERT_PARAM {
+                    if p.id == lumit_core::fx::schema::MATTE_INVERT_PARAM {
                         p.value = EffectValue::Bool(invert);
                     }
-                    if let (true, Some(ch)) = (p.id == lumit_core::fx::MATTE_CHANNEL_PARAM, channel)
+                    if let (true, Some(ch)) =
+                        (p.id == lumit_core::fx::schema::MATTE_CHANNEL_PARAM, channel)
                     {
                         p.value = EffectValue::Choice(ch);
                     }
-                    if let (true, Some(b)) = (p.id == lumit_core::fx::BLEND_PARAM, blend) {
+                    if let (true, Some(b)) = (p.id == lumit_core::fx::schema::BLEND_PARAM, blend) {
                         p.value = EffectValue::Choice(b);
                     }
                 }
                 if strip {
                     fx.params.retain(|p| {
-                        p.id != lumit_core::fx::MATTE_CHANNEL_PARAM
-                            && p.id != lumit_core::fx::BLEND_PARAM
+                        p.id != lumit_core::fx::schema::MATTE_CHANNEL_PARAM
+                            && p.id != lumit_core::fx::schema::BLEND_PARAM
                     });
                 }
             }
@@ -502,7 +505,7 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
     let mut base = layer("base", LayerKind::Solid { def: black_def });
     base.transform.position_x = Property::fixed(8.0);
     base.transform.position_y = Property::fixed(4.0);
-    let mut emit = lumit_core::fx::instantiate("emit_from_image").expect("a built-in");
+    let mut emit = lumit_core::fx::builtins::instantiate("emit_from_image").expect("a built-in");
     for p in &mut emit.params {
         match p.id.as_str() {
             "source" => p.value = EffectValue::Layer(Some(logo.id)),
@@ -513,7 +516,7 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
         }
     }
     // Still particles born over the whole of the base layer, a second in.
-    let mut dense = lumit_core::fx::instantiate("particulate").expect("a built-in");
+    let mut dense = lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
     for p in &mut dense.params {
         let f = |v: f64| EffectValue::Float(Property::fixed(v));
         match p.id.as_str() {

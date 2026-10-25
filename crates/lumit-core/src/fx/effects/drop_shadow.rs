@@ -9,7 +9,9 @@
 //! Shadow only throws the layer away and keeps the shadow, which is how a
 //! shadow is put on a different layer from the thing casting it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Drop shadow's controls.

@@ -30,7 +30,10 @@ use crate::fx::effects::audio::dsp::{
     db::{db_of_gain, gain_of_db},
     envelope::GainReduction,
 };
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 // The declared defaults, repeated as the fallback a missing row takes.
 const THRESHOLD_DB: f64 = -40.0;
@@ -215,7 +218,7 @@ impl AudioProcessor for Gate {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_BLOCK_SAMPLES};
     use std::f64::consts::TAU;
 
     const RATE: u32 = 48_000;

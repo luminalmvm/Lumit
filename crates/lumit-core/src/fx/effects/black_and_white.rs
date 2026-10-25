@@ -14,7 +14,10 @@
 //! two those parts name. On a grey pixel both parts are zero, so the six sliders
 //! do nothing at all — which is what makes them trustworthy.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// A tint colour means nothing until the tint is on.

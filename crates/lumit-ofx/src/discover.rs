@@ -40,7 +40,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use lumit_core::fx::{EffectDef, EffectSchema};
+use lumit_core::fx::{registry::EffectDef, schema::EffectSchema};
 use uuid::Uuid;
 
 use crate::bundle::{self, Bundle};

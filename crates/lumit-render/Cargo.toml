@@ -23,6 +23,8 @@ lumit-colour = { path = "../lumit-colour" }
 lumit-eval = { path = "../lumit-eval" }
 lumit-flow = { path = "../lumit-flow" }
 lumit-gpu = { path = "../lumit-gpu" }
+# The matrix type the draw lists carry.
+glam = "0.29"
 lumit-ingress = { path = "../lumit-ingress" }
 lumit-media = { path = "../lumit-media" }
 # The model runtime and the installed packs. Here for the reason the tracker

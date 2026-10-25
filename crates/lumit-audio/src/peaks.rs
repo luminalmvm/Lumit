@@ -29,7 +29,7 @@
 //! ([`load_or_build`]) so the next run of Lumit reads it back instead of decoding
 //! the file again.
 
-use lumit_media::SoundSource;
+use lumit_media::audio::SoundSource;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 

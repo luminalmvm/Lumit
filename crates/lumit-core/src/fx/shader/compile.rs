@@ -746,6 +746,11 @@ fn cache() -> &'static CompileCache {
 /// cached `source` beside it, so a `source` that has been tampered with in the
 /// file is a stale convenience, not a conflict.
 ///
+/// Keyed on the nodes and wires only. Moving a box changes no text, so a drag
+/// is a cache hit rather than another compiled copy kept for the session. Past
+/// [`super::MAX_CACHED_PROGRAMS`] distinct graphs a new one is refused, as
+/// [`super::program_for`] refuses a new source.
+///
 /// # Errors
 /// The [`GraphError`] sentence, or what did not parse — either way a badge, a
 /// last good picture, and an effect that still resolves.
@@ -753,15 +758,26 @@ pub fn source_for(graph: &serde_json::Value) -> Result<&'static str, &'static st
     let mut hw = HashWriter(0xcbf2_9ce4_8422_2325);
     // Serialising a Value cannot fail and the writer cannot either; a failure
     // here would still only cost a cache miss, never a wrong answer.
-    let _ = serde_json::to_writer(&mut hw, graph);
+    let _ = serde_json::to_writer(&mut hw, &graph.get("nodes"));
+    let _ = serde_json::to_writer(&mut hw, &graph.get("edges"));
     let key = hw.0;
     if let Ok(map) = cache().read() {
         if let Some(hit) = map.get(&key) {
             return *hit;
         }
+        if map.len() >= super::MAX_CACHED_PROGRAMS {
+            return Err(
+                "this session has read as many different shader graphs as Lumit \
+                        keeps; reopen the project to start again",
+            );
+        }
+    }
+    let mut graph = graph.clone();
+    if let Some(fields) = graph.as_object_mut() {
+        fields.remove("layout");
     }
     let built: Result<&'static str, &'static str> =
-        match serde_json::from_value::<ShaderGraph>(graph.clone()) {
+        match serde_json::from_value::<ShaderGraph>(graph) {
             Err(why) => Err(&*Box::leak(
                 format!("the stored graph does not parse: {why}").into_boxed_str(),
             )),
@@ -771,7 +787,9 @@ pub fn source_for(graph: &serde_json::Value) -> Result<&'static str, &'static st
             },
         };
     if let Ok(mut map) = cache().write() {
-        map.insert(key, built);
+        if map.len() < super::MAX_CACHED_PROGRAMS || map.contains_key(&key) {
+            map.insert(key, built);
+        }
     }
     built
 }
@@ -877,7 +895,8 @@ mod tests {
     /// even when the cached `source` has been tampered with in the file.
     #[test]
     fn the_graph_is_master() {
-        let mut inst = crate::fx::instantiate("custom_shader").expect("the effect exists");
+        let mut inst =
+            crate::fx::builtins::instantiate("custom_shader").expect("the effect exists");
         let mut block = serde_json::Map::new();
         block.insert(
             "source".into(),

@@ -38,8 +38,8 @@ use interprocess::local_socket::{
 use lumit_peer::{Nonce, Proof, Token};
 use serde::{Deserialize, Serialize};
 
-pub use interprocess::local_socket::Listener;
-pub use lumit_peer::Secret;
+use interprocess::local_socket::Listener;
+use lumit_peer::Secret;
 
 /// How long a program has to prove itself once it has connected.
 const HANDSHAKE: Duration = Duration::from_secs(5);

@@ -33,7 +33,7 @@
 //! Lumit that grows the field can pick it up.
 
 mod curves;
-mod effects;
+pub mod effects;
 mod fx_colour;
 mod fx_distort;
 mod layers;
@@ -42,7 +42,7 @@ mod props;
 mod shape_paths;
 mod shapes;
 mod styles;
-mod table;
+pub mod table;
 mod text;
 mod time;
 
@@ -57,9 +57,6 @@ use uuid::Uuid;
 
 use crate::capture::{Capture, Comp, Item};
 use crate::report::{ImportReport, ItemPath, Outcome, Reason};
-
-pub use effects::{map_effect, MappedEffect};
-pub use table::{ae_match_name, ae_match_name_of, other_names_of};
 
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};

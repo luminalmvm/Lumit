@@ -3,7 +3,10 @@
 //! workhorse. The one-knob Hue shift (§3.17) stays: that is a
 //! constant-luminance matrix rotation, and this is not.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 /// One band's twirl. Master opens; the six ranges start closed, because a

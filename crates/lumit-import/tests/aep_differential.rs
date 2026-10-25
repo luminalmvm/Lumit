@@ -106,7 +106,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lumit_import::capture::{Capture, Layer, Property};
-use lumit_import::{open_aep, Bundle};
+use lumit_import::{aep::open_aep, Bundle};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -718,7 +718,7 @@ fn the_curves_blob_decodes_to_the_curve_after_effects_baked() {
     assert_eq!(counts, vec![2; 5], "the fixture's Curves is at its default");
 
     // And the effect that comes out of it.
-    let (doc, report) = lumit_import::map_capture(&bundle.capture);
+    let (doc, report) = lumit_import::map::map_capture(&bundle.capture);
     let curves = doc
         .items
         .iter()
@@ -753,7 +753,7 @@ fn the_curves_blob_decodes_to_the_curve_after_effects_baked() {
         .rows
         .iter()
         .filter(|row| {
-            matches!(&row.reason, lumit_import::Reason::EffectDiffers { effect, .. } if effect == "Curves")
+            matches!(&row.reason, lumit_import::report::Reason::EffectDiffers { effect, .. } if effect == "Curves")
         })
         .count();
     assert_eq!(differs, 2, "the working space and the end condition");
@@ -991,8 +991,8 @@ fn expressions_effects_masks_and_separated_dimensions_match() {
 /// recorded six properties its own DOM could not read.
 #[test]
 fn the_parsed_document_counts_the_same_as_the_bundles() {
-    let from_aep = lumit_import::map_capture(&parsed().capture).0;
-    let from_bundle = lumit_import::map_capture(&golden()).0;
+    let from_aep = lumit_import::map::map_capture(&parsed().capture).0;
+    let from_bundle = lumit_import::map::map_capture(&golden()).0;
 
     let count = |document: &lumit_core::model::Document| {
         let mut totals = [0_usize; 6];

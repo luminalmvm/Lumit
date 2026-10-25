@@ -14,8 +14,8 @@
 //! One implementation, one WGSL twin, one oracle.
 
 use crate::fx::{
-    cpu, noise, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    Params,
+    cpu, noise, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 
@@ -85,7 +85,7 @@ pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
 ///
 /// Every size here is px@comp (§2.3), declared `Px`, so the resolve step converts
 /// each to the raster in play and
-/// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+/// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial)
 /// moves them together if the stack is reused at another size. That is the
 /// deliberate divergence from AE's per-cent Scale (§3.37 decision 1): a per cent
 /// of an unnamed base is exactly the "pixels of whatever buffer I was handed"

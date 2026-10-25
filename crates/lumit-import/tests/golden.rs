@@ -39,7 +39,9 @@ use lumit_core::model::{
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::Rational;
-use lumit_import::{Bundle, ImportReport, Outcome, Reason, Summary};
+use lumit_import::{
+    report::ImportReport, report::Outcome, report::Reason, report::Summary, Bundle,
+};
 
 // ---------------------------------------------------------------------------
 // One open, one map, shared
@@ -64,7 +66,7 @@ fn golden() -> &'static (Bundle, Document, ImportReport) {
     static ONCE: OnceLock<(Bundle, Document, ImportReport)> = OnceLock::new();
     ONCE.get_or_init(|| {
         let bundle = lumit_import::open_bundle(&bundle_path()).expect("the golden bundle opens");
-        let (doc, report) = lumit_import::map_capture(&bundle.capture);
+        let (doc, report) = lumit_import::map::map_capture(&bundle.capture);
         (bundle, doc, report)
     })
 }

@@ -19,14 +19,15 @@
 //!   that kind exists for: four flat `derived.*` entries per sub-frame would
 //!   have drowned the bag.
 //!
-//! [`Shake::packed`] reassembles [`ShakeWobble::at`](crate::fx::ShakeWobble::at)
+//! [`Shake::packed`] reassembles [`ShakeWobble::at`](crate::fx::maths::ShakeWobble::at)
 //! step for step — same association, same cast points — so a shake that has not
 //! been touched renders the bits it always did.
 
 use crate::fx::{
-    cpu, shake_affine, shake_mb_offsets, shake_noise, transform_op, EdgesMode, EffectDef,
-    EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, ShakeSample, Value,
-    NO_SKEW, SHAKE_MB_DEFAULT_SAMPLES, SHAKE_MB_SAMPLES,
+    cpu, maths::shake_affine, maths::shake_mb_offsets, maths::shake_noise, maths::transform_op,
+    maths::ShakeSample, maths::NO_SKEW, maths::SHAKE_MB_DEFAULT_SAMPLES, maths::SHAKE_MB_SAMPLES,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EdgesMode, schema::EffectSchema, schema::ParamGroup,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
@@ -86,7 +87,7 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
 pub struct Shake {
     /// px@comp (§2.3): how far the wobble roams. Declared `Px`, so the resolve
     /// step scales it to the raster in play and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     /// The old arm scaled the *resolved offsets* by hand; declaring the unit
     /// does it one multiply earlier.
@@ -246,7 +247,7 @@ pub struct Shake {
     /// reads more naturally under the shake's own motion blur than a smeared
     /// repeat edge. What the kernel reads is [`Shake::DERIVED_EDGE`], not this
     /// row: a project saved before FX-11 carries an `auto_scale` bool instead.
-    #[choice(label = "Edges", options = *crate::fx::EDGE_OPTIONS, default = 2)]
+    #[choice(label = "Edges", options = *crate::fx::builtins::EDGE_OPTIONS, default = 2)]
     pub edge: u32,
 
     /// Per instance (§1.3), so two shakes on two layers do not wobble in step.
@@ -377,7 +378,7 @@ impl Shake {
     /// Which dispatch to run and what to hand it (docs/impl/effect-registry.md
     /// §2.4).
     ///
-    /// The wobble is [`ShakeWobble::at`](crate::fx::ShakeWobble::at) reassembled
+    /// The wobble is [`ShakeWobble::at`](crate::fx::maths::ShakeWobble::at) reassembled
     /// from the pieces: `amp_px · axis amount · noise` for the offsets, `rotation
     /// amount · noise` for the twist, `1 + z · noise` for the zoom — the same
     /// association and the same `f64 → f32` cast points, so an untouched shake
@@ -426,7 +427,7 @@ impl EffectDef for ShakeDef {
     /// Everything here that feeds the noise stays `f64` to the last step: layer
     /// time, the master frequency and the per-axis multipliers, exactly as the
     /// arm had them. Only the sample itself narrows to `f32`, at the point
-    /// [`ShakeWobble::at`](crate::fx::ShakeWobble::at) narrowed it.
+    /// [`ShakeWobble::at`](crate::fx::maths::ShakeWobble::at) narrowed it.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         let (e, lt) = (cx.inst, cx.lt);
         let fl = |id: &str| e.float_at_with_context(id, lt, cx.context.clone());

@@ -1,7 +1,7 @@
 //! File > Run script: Lumit's own [`Host`] for `lumit_script`, and the thread
 //! a script runs from.
 //!
-//! The thread that owns the host is the one `lumit_script::run` blocks, and
+//! The thread that owns the host is the one `lumit_script::script::run` blocks, and
 //! every `lumit` call the script makes comes back to it. Edits commit through
 //! the project's store the way a shared project's threads do, so the
 //! interface hears them as ordinary changes. This project's lock is only
@@ -19,9 +19,9 @@ use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 
 use lumit_core::model::{Composition, Layer};
+use lumit_core::store::DocumentStore;
 use lumit_core::time::CompTime;
-use lumit_core::DocumentStore;
-use lumit_script::{ExportState, ExportStatus, Host, RunOptions, ScriptError};
+use lumit_script::{script::RunOptions, ExportState, ExportStatus, Host, ScriptError};
 use uuid::Uuid;
 
 use crate::api::{
@@ -164,7 +164,7 @@ fn run_file(
         });
     };
     let dialog = |tree: Option<&str>| host.dialog(tree);
-    let report = lumit_script::run(
+    let report = lumit_script::script::run(
         &host,
         &source,
         RunOptions {
@@ -307,7 +307,7 @@ pub(crate) fn unreadable(path: &Path) -> ScriptError {
 pub(crate) fn footage_source(
     state: &crate::api::state::LumitBridgeState,
     item: Uuid,
-) -> Option<lumit_media::MediaSource> {
+) -> Option<lumit_media::sequence::MediaSource> {
     match state.store.snapshot().item(item) {
         Some(lumit_core::model::ProjectItem::Footage(f)) => {
             crate::api::footage::FootageReference::resolve_source(state, f)
@@ -319,7 +319,9 @@ pub(crate) fn footage_source(
 /// What a script's `item.list` says of the footage `source` reads, as the
 /// project panel reads it.
 #[cfg(feature = "media")]
-pub(crate) fn footage_info(source: lumit_media::MediaSource) -> Option<lumit_script::FootageInfo> {
+pub(crate) fn footage_info(
+    source: lumit_media::sequence::MediaSource,
+) -> Option<lumit_script::FootageInfo> {
     use lumit_core::time::{Duration, FrameRate, Rational};
     let info = crate::probe::held_or_probed(source)?;
     let video = info.video.as_ref();
@@ -592,7 +594,7 @@ impl Host for AppHost<'_> {
         layer: Uuid,
         parent: Option<Uuid>,
         at: CompTime,
-    ) -> Vec<lumit_core::Op> {
+    ) -> Vec<lumit_core::ops::Op> {
         let doc = self.store().snapshot();
         lumit_render::build::parent_ops(&doc, comp, layer, parent, at.0.to_f64())
     }

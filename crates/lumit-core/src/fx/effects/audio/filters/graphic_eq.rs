@@ -22,7 +22,10 @@ use super::{decibels, COEFF_FRAMES, SMOOTH_MS};
 use crate::fx::effects::audio::dsp::biquad::{Cascade, Coeffs};
 use crate::fx::effects::audio::dsp::db::gain_of_db;
 use crate::fx::effects::audio::dsp::smoother::Smoother;
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// Bands: ten octaves, which is the whole of hearing.
 const BANDS: usize = 10;

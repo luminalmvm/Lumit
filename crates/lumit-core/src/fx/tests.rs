@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use super::catalogue::*;
+use super::maths::*;
+use super::resolved::*;
+use super::temporal::*;
 use super::*;
 use crate::anim::{Animation, Property};
 use crate::expression::ExpressionContext;
@@ -42,7 +46,7 @@ fn resolve_stack(
     px_scale: f32,
     markers: &MarkerContext,
 ) -> Shape {
-    shape(&super::resolve_stack(
+    shape(&super::resolved::resolve_stack(
         effects,
         lt,
         diag_px,
@@ -60,7 +64,7 @@ fn resolve_stack_temporal(
     px_scale: f32,
     markers: &MarkerContext,
 ) -> Shape {
-    shape(&super::resolve_stack_temporal(
+    shape(&super::resolved::resolve_stack_temporal(
         effects,
         sample_lt,
         frame_lt,
@@ -86,7 +90,7 @@ fn resolve_migrated<T: EffectMetadata>(
     px_scale: f32,
     markers: &MarkerContext,
 ) -> T {
-    let ops = super::resolve_stack(
+    let ops = super::resolved::resolve_stack(
         effects,
         lt,
         diag_px,
@@ -108,7 +112,7 @@ fn resolve_bag(
     px_scale: f32,
     markers: &MarkerContext,
 ) -> Vec<(ParamId, Value)> {
-    let ops = super::resolve_stack(
+    let ops = super::resolved::resolve_stack(
         effects,
         lt,
         diag_px,
@@ -202,7 +206,7 @@ fn flash_packed(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> (f32, [
 /// `Resolved::LensFlare` variant carried, read back out of the resolved arena
 /// through the effect's own `packed` — Lights mode's sources included, since they
 /// are a resolve-time derivation rather than a row.
-fn flare_packed(ops: &super::ResolvedStack) -> crate::fx::lens_flare::LensFlareParams {
+fn flare_packed(ops: &super::params::ResolvedStack) -> crate::fx::lens_flare::LensFlareParams {
     let fx = ops.get(0).expect("the flare op");
     let (lights, count) = effects::lens_flare::LensFlare::lights_of(fx.params);
     effects::lens_flare::LensFlare::read(fx.params).packed(lights, count)
@@ -564,7 +568,7 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
     // Blur has moved to the registry, so its radius comes back out of the
     // arena through its own typed reader rather than out of a variant.
     fn radius_of(e: &EffectInstance) -> f32 {
-        let ops = super::resolve_stack_temporal(
+        let ops = super::resolved::resolve_stack_temporal(
             std::slice::from_ref(e),
             0.2,
             0.8,
@@ -608,7 +612,7 @@ fn resolve_stack_temporal_pins_non_sampling_effects_to_the_frame_time() {
 /// take its historical path. Spelled once here because a twenty-field
 /// struct is not something to write out twice.
 fn neutral_dof(near_aperture: f32, far_aperture: f32, focus_point: [f32; 2]) -> cpu::DofParams {
-    let (blade_normals, apothem2) = crate::fx::aperture_blades(6, 0.0);
+    let (blade_normals, apothem2) = crate::fx::maths::aperture_blades(6, 0.0);
     cpu::DofParams {
         focus: 0.5,
         range: 0.1,
@@ -702,7 +706,7 @@ fn input_times_are_the_boxs_own_time_and_the_frames_it_reads() {
 
     // Accumulation motion blur takes its own time and every shutter moment.
     let acc = instantiate("accumulation_mb").unwrap();
-    let want = crate::fx::stack_accumulation_mb(std::slice::from_ref(&acc), true, 4.0)
+    let want = crate::fx::temporal::stack_accumulation_mb(std::slice::from_ref(&acc), true, 4.0)
         .expect("the effect resolves")
         .sample_offsets();
     let got = input_times(&acc, 4.0, dt);
@@ -2575,7 +2579,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
 
     // A shake carrying a wobble, resolved without motion blur.
     let resolved = |e: &EffectInstance| {
-        super::resolve_stack(
+        super::resolved::resolve_stack(
             std::slice::from_ref(e),
             0.4,
             1000.0,
@@ -2977,9 +2981,9 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
         let def = BUILTIN_DEFS.get(name).expect("declared");
         assert!(!def.is_image_op(), "{name} draws nothing");
         let e = instantiate(name).unwrap_or_else(|| panic!("{name} does not instantiate"));
-        let (ids, ops) = super::resolve_stack_temporal_named(
+        let (ids, ops) = super::resolved::resolve_stack_temporal_named(
             std::slice::from_ref(&e),
-            super::ResolvedDrivers::NONE,
+            super::drivers::ResolvedDrivers::NONE,
             0.0,
             0.0,
             1000.0,
@@ -3000,7 +3004,7 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
         }
     }
     assert!(
-        super::stack_posterize(std::slice::from_ref(&post), true, 0.0).is_some(),
+        super::temporal::stack_posterize(std::slice::from_ref(&post), true, 0.0).is_some(),
         "the held-time detector still reads the instance"
     );
 }
@@ -4580,7 +4584,8 @@ fn lens_flare_params_evaluate_expressions_in_context() {
         comp_time: 3.0,
         ..ExpressionContext::detached()
     });
-    let ops = super::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context);
+    let ops =
+        super::resolved::resolve_stack(&[inst], 0.0, 2202.9, 1.0, &MarkerContext::NONE, context);
     assert_eq!(ops.len(), 1, "lens_flare resolves to exactly one op");
     let p = flare_packed(&ops);
     assert!(
@@ -5141,7 +5146,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
         comp_time: 1.0,
         ..ExpressionContext::detached()
     });
-    let ops = super::resolve_stack(
+    let ops = super::resolved::resolve_stack(
         std::slice::from_ref(&flare),
         0.0,
         2202.9,
@@ -5180,7 +5185,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     // Manual mode carries none of it: the derivation pushes nothing at all, so
     // the flare is the single light at the parameter position it always was.
     let manual = instantiate("lens_flare").unwrap();
-    let ops = super::resolve_stack(
+    let ops = super::resolved::resolve_stack(
         std::slice::from_ref(&manual),
         0.0,
         2202.9,
@@ -5444,7 +5449,7 @@ fn the_default_aperture_is_the_historical_disc_bit_for_bit() {
     }
 
     let (focus, range, near, far, mix) = (0.5f32, 0.1f32, 6.0f32, 6.0f32, 1.0f32);
-    let (blade_normals, apothem2) = crate::fx::aperture_blades(6, 0.0);
+    let (blade_normals, apothem2) = crate::fx::maths::aperture_blades(6, 0.0);
     let p = cpu::DofParams {
         focus,
         range,
@@ -5759,7 +5764,7 @@ fn a_text_row_round_trips_resolves_and_feeds_the_key() {
     use crate::fx::effects::label_points::LabelPoints;
 
     let read = |e: &EffectInstance| {
-        let stack = super::resolve_stack(
+        let stack = super::resolved::resolve_stack(
             std::slice::from_ref(e),
             0.0,
             1000.0,
@@ -6064,7 +6069,7 @@ fn a_derived_roll_moves_with_the_raster() {
         }
     }
     let resolve = |px_scale: f32| {
-        super::resolve_stack(
+        super::resolved::resolve_stack(
             std::slice::from_ref(&e),
             0.5,
             1000.0 * px_scale,
@@ -6199,7 +6204,7 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
 fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
     // 30 px@comp at a px_scale of 1 = 30 px, the comp-raster resolve.
     let e = instantiate("blur").expect("blur is a built-in");
-    let mut ops = super::resolve_stack(
+    let mut ops = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
@@ -6207,7 +6212,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
         &MarkerContext::NONE,
         Arc::new(ExpressionContext::detached()),
     );
-    let radius = |ops: &super::ResolvedStack| -> f32 {
+    let radius = |ops: &super::params::ResolvedStack| -> f32 {
         effects::blur::Blur::read(ops.get(0).expect("the blur op").params)
             .packed()
             .0
@@ -6228,7 +6233,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
 
     // Resolving directly against the smaller raster must land in the same
     // place — which is the whole point of the correction.
-    let direct = super::resolve_stack(
+    let direct = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
         500.0,
@@ -6239,7 +6244,7 @@ fn a_migrated_spatial_parameter_rescales_as_the_old_op_did() {
     assert_eq!(radius(&direct), radius(&ops));
 
     // Factor 1 is exactly a no-op, as it was for the variants.
-    let mut same = super::resolve_stack(
+    let mut same = super::resolved::resolve_stack(
         std::slice::from_ref(&e),
         0.0,
         1000.0,
@@ -7297,7 +7302,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
 /// a deliberate act, and it lands here.
 #[test]
 fn every_effect_carries_a_matte_row() {
-    use crate::fx::MatteRole;
+    use crate::fx::schema::MatteRole;
     for def in BUILTIN_DEFS.builtins() {
         let s = def.schema();
         // The Controls family opts out entirely, the Drivers family with it,
@@ -7750,7 +7755,7 @@ fn apply_stack_runs_the_kernel_at_full_mix_and_blends_once() {
                 p.value = EffectValue::Choice(blend);
             }
         }
-        super::resolve_stack(
+        super::resolved::resolve_stack(
             &[inst],
             0.0,
             1000.0,
@@ -8178,7 +8183,7 @@ fn a_curve_parameter_resolves_and_feeds_the_key() {
     );
 
     let hash = |fx: &EffectInstance| {
-        let stack = super::resolve_stack(
+        let stack = super::resolved::resolve_stack(
             std::slice::from_ref(fx),
             0.0,
             1000.0,
@@ -8226,11 +8231,17 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         // Strip whatever the fresh instance wrote under those ids, then put
         // back what a project saved before the drop would hold.
         e.params
-            .retain(|p| !p.id.starts_with(crate::fx::MATTE_PARAM));
+            .retain(|p| !p.id.starts_with(crate::fx::schema::MATTE_PARAM));
         for (id, value) in [
-            (crate::fx::MATTE_PARAM, EffectValue::Layer(None)),
-            (crate::fx::MATTE_INVERT_PARAM, EffectValue::Bool(true)),
-            (crate::fx::MATTE_CHANNEL_PARAM, EffectValue::Choice(3)),
+            (crate::fx::schema::MATTE_PARAM, EffectValue::Layer(None)),
+            (
+                crate::fx::schema::MATTE_INVERT_PARAM,
+                EffectValue::Bool(true),
+            ),
+            (
+                crate::fx::schema::MATTE_CHANNEL_PARAM,
+                EffectValue::Choice(3),
+            ),
         ] {
             e.params.push(EffectParam {
                 id: id.to_owned(),
@@ -8239,7 +8250,7 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
             });
         }
         let mut list = vec![e];
-        crate::fx::backfill_builtin_params(&mut list);
+        crate::fx::builtins::backfill_builtin_params(&mut list);
         let e = &list[0];
 
         // Every row the schema declares is present, at a readable value.
@@ -8255,21 +8266,21 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         // a save, and a load that silently threw part of one away would be the
         // worse failure of the two.
         assert_eq!(
-            e.param(crate::fx::MATTE_INVERT_PARAM),
+            e.param(crate::fx::schema::MATTE_INVERT_PARAM),
             Some(&EffectValue::Bool(true)),
             "{name}: the stored Invert was thrown away"
         );
         assert_eq!(
-            e.param(crate::fx::MATTE_CHANNEL_PARAM),
+            e.param(crate::fx::schema::MATTE_CHANNEL_PARAM),
             Some(&EffectValue::Choice(3)),
             "{name}: the dropped Channel was rewritten"
         );
 
         // And it resolves: the stack builds, the effect keeps its op, and
         // nothing about the undeclared rows reaches it.
-        let (ids, ops) = super::resolve_stack_temporal_named(
+        let (ids, ops) = super::resolved::resolve_stack_temporal_named(
             &list,
-            super::ResolvedDrivers::NONE,
+            super::drivers::ResolvedDrivers::NONE,
             0.0,
             0.0,
             1000.0,
@@ -9896,7 +9907,7 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
 fn head_on_camera(centre: [f32; 2], zoom: f32) -> points::Projection {
     // x' = cx + (x − cx)·zoom/(zoom + z), which as a 3×4 is:
     //   X = x + cx·z/zoom      Y = y + cy·z/zoom      W = 1 + z/zoom
-    // — the same column `lumit_gpu::camera_matrix` writes its perspective into.
+    // — the same column `lumit_gpu::composite::camera_matrix` writes its perspective into.
     points::Projection {
         m: [
             [1.0, 0.0, centre[0] / zoom, 0.0],
@@ -10007,7 +10018,7 @@ fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
 #[test]
 fn particulates_frame_key_follows_its_seed_and_its_controls() {
     let key = |e: &EffectInstance, lt: f64| {
-        let stack = super::resolve_stack(
+        let stack = super::resolved::resolve_stack(
             std::slice::from_ref(e),
             lt,
             1000.0,
@@ -10068,7 +10079,7 @@ fn particulates_frame_key_follows_its_seed_and_its_controls() {
 fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
     let (w, h) = (32u32, 24u32);
     let of = |ow: f32, oh: f32, mix: f32| {
-        let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
+        let mut t = effects::tile::Tile::read(crate::fx::params::Params::EMPTY);
         t.tile_centre_x = 16.0;
         t.tile_centre_y = 12.0;
         t.tile_width = w as f32 * 0.5;
@@ -10145,7 +10156,7 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
 #[test]
 fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
     let (w, h) = (32u32, 24u32);
-    let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
+    let mut t = effects::tile::Tile::read(crate::fx::params::Params::EMPTY);
     t.tile_centre_x = 8.0;
     t.tile_centre_y = 6.0;
     t.tile_width = w as f32 * 0.25;
@@ -10443,7 +10454,7 @@ fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
         .expect("the catalogue answers to it");
     assert_eq!(found.schema().match_name, "ofx:test.core.joins");
     assert!(std::ptr::eq(found.schema(), schema));
-    assert!(crate::fx::schema("ofx:test.core.joins").is_some());
+    assert!(crate::fx::builtins::schema("ofx:test.core.joins").is_some());
 
     // The built-ins are still the first `BUILTINS.len()` entries, in their own
     // order: the Add-effect menu, the command palette and the preset browser all
@@ -10480,7 +10491,7 @@ fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
         "a built-in cannot be shadowed"
     );
     assert_eq!(
-        crate::fx::schema("blur").map(|s| s.match_name),
+        crate::fx::builtins::schema("blur").map(|s| s.match_name),
         Some("blur")
     );
 }
@@ -10550,7 +10561,7 @@ fn a_plugin_instance_resolves_between_two_builtins() {
         a_plugin_instance("ofx:test.core.stack"),
         instantiate("exposure").expect("a built-in"),
     ];
-    let resolved = super::resolve_stack(
+    let resolved = super::resolved::resolve_stack(
         &stack,
         1.5,
         1000.0,
@@ -10580,7 +10591,7 @@ fn a_plugin_instance_resolves_between_two_builtins() {
 fn pixel_sort_moves_pixels_only_inside_their_own_span() {
     use super::cpu::{self, PixelSortParams};
     use super::effects::pixel_sort::PixelSort;
-    use super::{EffectMetadata, Params};
+    use super::{params::Params, registry::EffectMetadata};
 
     // A line of distinct greys, so a pixel can be recognised wherever it lands.
     // Luminance is the weighted sum of the three, which for a grey is the grey.

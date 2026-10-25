@@ -49,7 +49,7 @@ use uuid::Uuid;
 const COMP: u32 = 64;
 
 fn exposure(stops: f64) -> EffectInstance {
-    let mut fx = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+    let mut fx = lumit_core::fx::builtins::instantiate("exposure").expect("exposure is a built-in");
     for p in &mut fx.params {
         if p.id == "stops" {
             p.value = EffectValue::Float(lumit_core::anim::Property::fixed(stops));

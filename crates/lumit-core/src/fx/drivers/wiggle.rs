@@ -13,7 +13,8 @@
 //! identically in the preview and in the export.
 
 use crate::fx::{
-    noise, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    noise, params::Value, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

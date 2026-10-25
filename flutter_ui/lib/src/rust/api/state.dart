@@ -387,7 +387,7 @@ class BridgeRenderProgress {
   final BigInt frame;
 
   /// The stage's wire code — 0 planning, 1 decoding, 2 building, 3
-  /// compositing, 4 presenting ([`lumit_render::RenderStage::code`]).
+  /// compositing, 4 presenting ([`lumit_render::profile::RenderStage::code`]).
   final int stage;
 
   /// How much of the whole frame is done, 0..=1. An estimate built from

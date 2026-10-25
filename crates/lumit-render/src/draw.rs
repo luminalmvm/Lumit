@@ -22,7 +22,7 @@ pub struct MatteDraw {
     pub tex_w: u32,
     pub tex_h: u32,
     /// How wide `rgba`'s samples are; see [`DrawSource::Pixels::format`].
-    pub format: lumit_media::PixelFormat,
+    pub format: lumit_media::decode::PixelFormat,
     pub natural_size: (f32, f32),
     pub position: (f32, f32),
     pub anchor: (f32, f32),
@@ -47,7 +47,7 @@ pub struct MatteDraw {
     /// Temporal inputs (neighbours/flow/depth) are not fed through an
     /// effects-and-masks matte in v1, so an echo or flow effect on the matte
     /// source degrades to a still (documented boundary).
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The matte source's `lut` file paths, 1:1 and in order with the `lut`
     /// ops in `fx` (as for a layer's own `colour_tables`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
@@ -131,13 +131,13 @@ pub struct DofInputDraw {
     pub tex_h: u32,
     /// How wide `rgba`'s samples are — a depth pass arrives as an OpenEXR
     /// more often than not, and that is exactly the input this carries.
-    pub format: lumit_media::PixelFormat,
+    pub format: lumit_media::decode::PixelFormat,
     /// The depth layer's own effect stack, resolved at its layer time — run on
     /// the depth texture before it is resampled, when the consuming effect's
     /// depth source is `EffectsAndMasks` (mirroring the matte). Empty for
     /// None / Masks (the raw pixels are carried in `rgba`). Temporal inputs are
     /// not fed through an effects-and-masks depth input in v1 (matte boundary).
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The depth layer's `lut` file paths, 1:1 with the `lut` ops in
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
@@ -333,7 +333,7 @@ pub enum GraphStep {
     Fx {
         /// The picture the op runs on, transparent when nothing is wired.
         input: Option<usize>,
-        ops: lumit_core::fx::ResolvedStack,
+        ops: lumit_core::fx::params::ResolvedStack,
         /// The instance behind each op, as [`CompLayerDraw::fx_ids`] carries
         /// it, so the profiler can name the box that spent the millisecond.
         fx_ids: Vec<uuid::Uuid>,
@@ -409,7 +409,7 @@ pub enum DrawSource {
         /// scene-linear and already the compositor's own width, so it is
         /// uploaded straight into a working texture and the linearise pass is
         /// skipped rather than made to do nothing.
-        format: lumit_media::PixelFormat,
+        format: lumit_media::decode::PixelFormat,
         /// The footage item's OCIO colour space, by the loaded config's
         /// name. `None` — every layer that is not footage, and every
         /// footage item nobody has assigned — is the built-in interpretation
@@ -478,7 +478,7 @@ pub struct TemporalBelow {
 /// blur adjustment (docs/08 §3.26; docs/impl/temporal-rerender.md §3): one draw
 /// list + camera per shutter sample. `Realiser::realise` renders each, averages
 /// the N finished composites with the hardware additive-at-1/N pass
-/// ([`lumit_gpu::Compositor::accumulate`]), then blends that average against the
+/// ([`lumit_gpu::composite::Compositor::accumulate`]), then blends that average against the
 /// plain frame-time below-composite by `mix`, and the result stands in for the
 /// below-composite the adjustment's own effects and coverage blend see — the
 /// same `render_below_at` (via `below_draws_at`) export drives, so preview equals
@@ -530,20 +530,20 @@ pub struct CompLayerDraw {
     pub rotation_y_deg: f32,
     pub three_d: bool,
     pub matte: Option<MatteDraw>,
-    pub blend: lumit_gpu::Blend,
+    pub blend: lumit_gpu::composite::Blend,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for
     /// GPU-sourced layers — Precomps, whose pixels never exist CPU-side.
     pub mask_cov: Option<(Vec<u8>, u32, u32)>,
     /// Parent placement for layers spliced out of a collapsed Precomp
     /// (docs/06 §1.4): multiplied in front of this draw's own placement so
-    /// content is resampled once, never twice. From lumit_gpu::place_matrix.
+    /// content is resampled once, never twice. From lumit_gpu::composite::place_matrix.
     pub pre: Option<[[f32; 4]; 4]>,
     /// The layer's live effect stack, resolved to plain numbers at this
     /// frame (docs/08; radius already in texture pixels). Applied to the
     /// linear source texture after masks, before the transform.
-    pub fx: lumit_core::fx::ResolvedStack,
+    pub fx: lumit_core::fx::params::ResolvedStack,
     /// The effect *instance* id behind each op in `fx`, 1:1 and in order
-    /// (`lumit_core::fx::resolve_stack_temporal_named`). Only the profiler
+    /// (`lumit_core::fx::resolved::resolve_stack_temporal_named`). Only the profiler
     /// reads it: a measured millisecond has to land on the row of the stack
     /// that spent it, and this is the list the resolve walk itself reported.
     pub fx_ids: Vec<uuid::Uuid>,
@@ -590,7 +590,7 @@ pub struct CompLayerDraw {
     /// `MatteRole` answers both — so nothing here needs to know.
     pub mattes: Vec<LayerInputDraw>,
     /// **Every path op's mask** (docs/08 §1.2): one flattened polyline
-    /// per [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row**
+    /// per [`ParamKind::MaskPath`](lumit_core::fx::schema::ParamKind::MaskPath) **row**
     /// of every op that declares any (the Matte key declares two), in
     /// stack order and then declaration order within an op — the same
     /// one-predicate, one-order rule [`Self::mattes`] follows, with its own
@@ -693,13 +693,13 @@ pub struct CompLayerDraw {
     /// which case the compositor draws the layer's SAME texture at each of
     /// these and averages them into one smeared layer; the single-placement
     /// fields above stay the frame-time (k=0-ish) representative placement.
-    pub mb: Vec<lumit_gpu::MbSample>,
+    pub mb: Vec<lumit_gpu::composite::MbSample>,
     /// The comp's Light layers that shade this one (docs/06), already
     /// reduced to comp-pixel rectangles. Empty unless the comp holds lights
     /// and this layer's Accepts lights switch is on — and empty means the
     /// lighting pass never runs, which is how a comp without lights renders
     /// byte-for-byte as it did before lighting existed.
-    pub lights: Vec<lumit_gpu::fx::LightingLight>,
+    pub lights: Vec<lumit_gpu::fx::lighting::LightingLight>,
     /// The below-stack re-rendered at a held time for a temporal adjustment
     /// (Posterize Time, docs/08 §3.25). Some only on an adjustment
     /// [`DrawSource::Adjust`] draw whose stack holds a Posterize Time effect

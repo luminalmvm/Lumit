@@ -10,7 +10,7 @@ use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
 
-use lumit_core::fx::EffectSchema;
+use lumit_core::fx::schema::EffectSchema;
 
 use half::f16;
 use lumit_eval::epoch::Epoch;
@@ -1548,7 +1548,7 @@ fn the_thread_suite_counts_honestly_and_indexes_correctly() {
 
 use crate::def::{LocalHost, OfxEffectDef, PluginHost, Rendering};
 use crate::describe::PluginDescriptor;
-use lumit_core::fx::{EffectDef, Params, Value};
+use lumit_core::fx::{params::Params, params::Value, registry::EffectDef};
 use lumit_core::model::EffectValue;
 
 /// A host that never renders — what a disabled or crashed plugin is, from the
@@ -1586,7 +1586,7 @@ impl PluginHost for DeadHost {
         _params: &ParamSnapshot,
         _name: &str,
         _source: Frame16,
-    ) -> Result<crate::Settled, String> {
+    ) -> Result<crate::instance::Settled, String> {
         Err("the plugin is disabled".to_owned())
     }
 }
@@ -1609,7 +1609,7 @@ fn a_registered_plugin(test: &str, identifier: &str, major: u32) -> Option<&'sta
     let descriptor = found(&report, identifier, major)?.descriptor.clone();
     let host = std::sync::Arc::new(LocalHost::new(bundle, descriptor.clone()));
     let def = OfxEffectDef::new(&descriptor, schema, host).leak();
-    let registered = lumit_core::fx::BUILTIN_DEFS.register(def);
+    let registered = lumit_core::fx::catalogue::BUILTIN_DEFS.register(def);
     // The temporary directory outlives nothing on purpose: the library is open
     // and stays open, and Windows will not delete an open binary. Leaking the
     // handle is how the test says so rather than failing on the tidy-up.
@@ -1630,18 +1630,18 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     };
     assert_eq!(schema.match_name, "ofx:com.lumitlab.testplug");
 
-    let found = lumit_core::fx::BUILTIN_DEFS
+    let found = lumit_core::fx::catalogue::BUILTIN_DEFS
         .get("ofx:com.lumitlab.testplug")
         .expect("the catalogue answers to the plugin");
     assert!(std::ptr::eq(found.schema(), schema));
     assert_eq!(
-        lumit_core::fx::schema("ofx:com.lumitlab.testplug").map(|s| s.label),
+        lumit_core::fx::builtins::schema("ofx:com.lumitlab.testplug").map(|s| s.label),
         Some(schema.label)
     );
 
     // And it instantiates in the plugin namespace, with the plugin's own
     // defaults, so a project that saves it round-trips as a plugin instance.
-    let inst = lumit_core::fx::instantiate("ofx:com.lumitlab.testplug")
+    let inst = lumit_core::fx::builtins::instantiate("ofx:com.lumitlab.testplug")
         .expect("the catalogue instantiates it");
     assert_eq!(
         inst.effect.namespace,
@@ -1651,11 +1651,11 @@ fn a_plugin_registers_and_is_found_by_the_catalogue() {
     assert!(inst.params.iter().any(|p| p.id == "gain"));
 
     // The built-in menu order is untouched by its arrival.
-    let order: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
+    let order: Vec<&str> = lumit_core::fx::catalogue::BUILTIN_DEFS
         .iter()
         .map(|d| d.schema().match_name)
         .collect();
-    let builtins: Vec<&str> = lumit_core::fx::BUILTINS
+    let builtins: Vec<&str> = lumit_core::fx::catalogue::BUILTINS
         .iter()
         .map(|s| s.match_name)
         .collect();
@@ -1673,28 +1673,29 @@ fn a_plugin_definition_renders_from_the_resolved_bag() {
     else {
         return;
     };
-    let def = lumit_core::fx::BUILTIN_DEFS
+    let def = lumit_core::fx::catalogue::BUILTIN_DEFS
         .get("ofx:com.lumitlab.testplug")
         .expect("registered");
 
     // Gain of two, set on the instance exactly as the panel would set it.
-    let mut inst = lumit_core::fx::instantiate("ofx:com.lumitlab.testplug").expect("instantiated");
+    let mut inst =
+        lumit_core::fx::builtins::instantiate("ofx:com.lumitlab.testplug").expect("instantiated");
     for param in &mut inst.params {
         if param.id == "gain" {
             param.value = EffectValue::Float(lumit_core::anim::Property::fixed(2.0));
         }
     }
-    let stack = lumit_core::fx::resolve_stack(
+    let stack = lumit_core::fx::resolved::resolve_stack(
         std::slice::from_ref(&inst),
         0.0,
         1000.0,
         1.0,
-        &lumit_core::fx::MarkerContext::NONE,
+        &lumit_core::fx::markers::MarkerContext::NONE,
         std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
     );
     let op = stack.get(0).expect("the plugin resolved to an op");
     assert_eq!(
-        op.params.get(lumit_core::fx::ParamId::new("gain")),
+        op.params.get(lumit_core::fx::params::ParamId::new("gain")),
         Some(Value::Float(2.0))
     );
 
@@ -1722,10 +1723,10 @@ fn a_disabled_plugin_renders_identity_byte_for_byte() {
         match_name: "ofx:test.disabled",
         label: "Disabled test plugin",
         version: 1,
-        category: lumit_core::fx::FxCategory::Utility,
-        traits: lumit_core::fx::EffectTraits {
-            cost: lumit_core::fx::CostClass::Heavy,
-            roi: lumit_core::fx::Roi::FullFrame,
+        category: lumit_core::fx::schema::FxCategory::Utility,
+        traits: lumit_core::fx::schema::EffectTraits {
+            cost: lumit_core::fx::schema::CostClass::Heavy,
+            roi: lumit_core::fx::schema::Roi::FullFrame,
             temporal: &[0],
             premultiplied: true,
             seeded: false,
@@ -1734,7 +1735,7 @@ fn a_disabled_plugin_renders_identity_byte_for_byte() {
         params: &[],
         groups: &[],
         enabled_when: &[],
-        matte: lumit_core::fx::MatteRole::None,
+        matte: lumit_core::fx::schema::MatteRole::None,
     }));
     let descriptor = PluginDescriptor {
         identifier: "test.disabled".to_owned(),
@@ -1790,12 +1791,12 @@ fn a_pressed_button_brings_back_what_the_plugin_wrote() {
     else {
         return;
     };
-    let def = lumit_core::fx::BUILTIN_DEFS
+    let def = lumit_core::fx::catalogue::BUILTIN_DEFS
         .get(schema.match_name)
         .expect("registered");
-    let inst = lumit_core::fx::instantiate(schema.match_name).expect("instantiated");
+    let inst = lumit_core::fx::builtins::instantiate(schema.match_name).expect("instantiated");
     let rgba = vec![255u8; 4 * 4 * 4];
-    let source = lumit_core::fx::PressFrame {
+    let source = lumit_core::fx::registry::PressFrame {
         rgba: &rgba,
         width: 4,
         height: 4,
@@ -1869,7 +1870,7 @@ fn a_plugins_memory_reaches_its_render() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -1926,12 +1927,12 @@ fn a_plugins_memory_reaches_its_render() {
 
     let mut rgba = vec![0.5f32; 2 * 2 * 4];
     let resolve = |inst: &lumit_core::model::EffectInstance| {
-        let cx = lumit_core::fx::ResolveCx {
+        let cx = lumit_core::fx::registry::ResolveCx {
             inst,
             lt: 0.0,
             diag_px: 100.0,
             px_scale: 1.0,
-            markers: &lumit_core::fx::MarkerContext::NONE,
+            markers: &lumit_core::fx::markers::MarkerContext::NONE,
             context: std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         };
         let mut pushed = Vec::new();
@@ -1981,7 +1982,7 @@ fn a_plugins_memory_reaches_its_render() {
 #[test]
 fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     use lumit_core::expression::ExpressionContext;
-    use lumit_core::fx::{MarkerContext, ResolveCx};
+    use lumit_core::fx::{markers::MarkerContext, registry::ResolveCx};
     use lumit_core::model::{Composition, Document, LinearColour, ProjectItem};
     use lumit_core::time::{Duration, FrameRate, Rational};
 
@@ -2024,7 +2025,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2125,7 +2126,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     def.resolve_derived(&cx, &mut |id, value| bag.push((id, value)));
     assert!(
         bag.contains(&(
-            lumit_core::fx::ParamId::new("derived.quiet.gain"),
+            lumit_core::fx::params::ParamId::new("derived.quiet.gain"),
             Value::Bool(true)
         )),
         "a moving row is marked quiet in the bag: {bag:?}"
@@ -2228,12 +2229,12 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             _instance: uuid::Uuid,
             _made_with: &ParamSnapshot,
             handed: &ParamSnapshot,
-        ) -> Result<crate::Settled, String> {
-            Ok(crate::Settled {
+        ) -> Result<crate::instance::Settled, String> {
+            Ok(crate::instance::Settled {
                 params: handed.clone(),
-                controls: crate::Controls {
+                controls: crate::instance::Controls {
                     secret: self.0.clone(),
-                    ..crate::Controls::default()
+                    ..crate::instance::Controls::default()
                 },
             })
         }
@@ -2254,7 +2255,7 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2481,7 +2482,7 @@ fn a_plugins_window_is_asked_with_its_own_values() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }

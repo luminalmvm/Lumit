@@ -253,7 +253,7 @@ pub(crate) fn from_node(
 /// pair and their own place in it. The seed is made from where the property
 /// sits, which keeps two properties with the same text from wandering in step
 /// and keeps an import the same every time it is run.
-fn slot_of(path: &ItemPath, node: &Property, axis: usize) -> lumit_core::expression::Slot {
+fn slot_of(path: &ItemPath, node: &Property, axis: usize) -> lumit_core::expression::script::Slot {
     let numbers = |value: &serde_json::Value| -> Vec<f64> {
         match value {
             serde_json::Value::Array(items) => {
@@ -268,8 +268,8 @@ fn slot_of(path: &ItemPath, node: &Property, axis: usize) -> lumit_core::express
     let seed = text.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
         (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
     });
-    lumit_core::expression::Slot::new(&value, axis, seed.max(1))
-        .in_language(lumit_core::expression::Language::JavaScript)
+    lumit_core::expression::script::Slot::new(&value, axis, seed.max(1))
+        .in_language(lumit_core::expression::script::Language::JavaScript)
 }
 
 /// One capture key, one axis, in the layer's own timebase.

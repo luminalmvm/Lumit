@@ -11,11 +11,11 @@ use crate::local::{place, sane};
 use crate::reach::{self, Closed};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
 use crate::{
-    dialled, local_address, room, Event, Events, Invite, Person, Presence, Reach, Refusal, Relayed,
-    ShareError, MAX_PEOPLE,
+    dialled, invite::Invite, local_address, room, Event, Events, Person, Presence, Reach, Refusal,
+    Relayed, ShareError, MAX_PEOPLE,
 };
 use lumit_core::store::{Moved, RemoteTag};
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use parking_lot::Mutex;
 use std::net::{IpAddr, Ipv6Addr, Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;

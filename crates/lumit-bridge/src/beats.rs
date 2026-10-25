@@ -94,7 +94,7 @@ enum Step {
 
 /// What the worker is asked to do, and where to send the answer.
 struct Job {
-    document: Arc<lumit_core::Document>,
+    document: Arc<lumit_core::model::Document>,
     comp: Uuid,
     duration_seconds: f64,
     options: BridgeBeatOptions,
@@ -171,7 +171,7 @@ fn run(rx: &Receiver<Job>) {
 /// walk needs no graphics card — asking for it through the export-input builder
 /// meant a machine with no adapter could not find a beat.
 fn analyse(
-    document: &Arc<lumit_core::Document>,
+    document: &Arc<lumit_core::model::Document>,
     comp: Uuid,
     duration_seconds: f64,
     options: &BridgeBeatOptions,
@@ -277,7 +277,7 @@ fn spaced(mut beats: Vec<Beat>, min_spacing_ms: u32) -> Vec<Beat> {
 /// already deep — the same "never a change of behaviour" fallback footage
 /// probing has.
 pub(crate) fn detect(
-    document: Arc<lumit_core::Document>,
+    document: Arc<lumit_core::model::Document>,
     comp: Uuid,
     duration_seconds: f64,
     options: BridgeBeatOptions,
@@ -363,7 +363,7 @@ mod tests {
     #[test]
     fn a_silent_comp_is_answered_by_the_worker() {
         let _serial = serially();
-        let document = Arc::new(lumit_core::Document::new());
+        let document = Arc::new(lumit_core::model::Document::new());
         let answer = detect(
             document,
             Uuid::now_v7(),
@@ -386,7 +386,7 @@ mod tests {
         let _serial = serially();
         let (reply, answer) = channel();
         let job = Job {
-            document: Arc::new(lumit_core::Document::new()),
+            document: Arc::new(lumit_core::model::Document::new()),
             comp: Uuid::now_v7(),
             duration_seconds: 1.0,
             options: BridgeBeatOptions::standard(),

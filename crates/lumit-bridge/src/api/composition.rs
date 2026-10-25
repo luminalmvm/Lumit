@@ -496,7 +496,7 @@ impl CompositionReference {
 
     /// This composition's neighbours in the nesting, one step each way, for
     /// the flowchart. Which comp places which is the engine's rule
-    /// ([`lumit_core::Document::comp_flow`]), the one the `in use` badge
+    /// ([`lumit_core::model::Document::comp_flow`]), the one the `in use` badge
     /// follows, so the chart and the badge cannot disagree.
     #[frb(sync)]
     pub fn get_flow(&self) -> Result<BridgeCompFlow, BridgeError> {
@@ -645,7 +645,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetCompBackground {
+            .commit(lumit_core::ops::Op::SetCompBackground {
                 comp: self.id,
                 background: lumit_core::model::LinearColour(rgba),
             })
@@ -662,7 +662,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetCompMotionBlur {
+            .commit(lumit_core::ops::Op::SetCompMotionBlur {
                 comp: self.id,
                 motion_blur: lumit_core::model::MotionBlur {
                     enabled: on,
@@ -692,7 +692,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetMasterVolume { comp: self.id, db })
+            .commit(lumit_core::ops::Op::SetMasterVolume { comp: self.id, db })
             .map_err(BridgeError::OpError)?;
         Ok(())
     }
@@ -711,7 +711,7 @@ impl CompositionReference {
     /// is already marked, so looking at a mix writes nothing.
     #[frb(sync)]
     pub fn set_sound_mix(&self, mixed: bool) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::SetSoundMix {
+        self.commit(lumit_core::ops::Op::SetSoundMix {
             comp: self.id,
             on: mixed,
         })
@@ -765,9 +765,9 @@ impl CompositionReference {
             Composition, EffectInstance, Layer, LayerKind, MotionBlur, ProjectItem,
         };
         use lumit_core::ops::AutoFolderKind;
+        use lumit_core::ops::Op;
         use lumit_core::sequence::{Clip, ClipSource};
         use lumit_core::time::{CompTime, Rational};
-        use lumit_core::Op;
 
         /// A row's clips with every crossfade baked into the stored fade
         /// seconds, earliest first, so each goes on ramping once it stands
@@ -1087,13 +1087,13 @@ impl CompositionReference {
         let (mut layer, mut ops) = crate::edits::white_solid_layer(&doc, &comp);
         crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
-        ops.push(lumit_core::Op::AddLayer {
+        ops.push(lumit_core::ops::Op::AddLayer {
             comp: self.id,
             index: insert_row(row, comp.layers.len()),
             layer: Box::new(layer),
         });
 
-        self.commit(lumit_core::Op::Batch { ops })?;
+        self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, id))
     }
 
@@ -1186,11 +1186,11 @@ impl CompositionReference {
             },
         )
         .map_err(|e| match e {
-            lumit_core::OpError::UnknownLayer => BridgeError::InvalidLayer,
-            lumit_core::OpError::InvalidSpan => BridgeError::InvalidTime,
+            lumit_core::ops::OpError::UnknownLayer => BridgeError::InvalidLayer,
+            lumit_core::ops::OpError::InvalidSpan => BridgeError::InvalidTime,
             e => BridgeError::OpError(e),
         })?;
-        self.commit(lumit_core::Op::Batch { ops })?;
+        self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, layer_id))
     }
 
@@ -1499,7 +1499,7 @@ impl CompositionReference {
                 Some((CompTime(a), CompTime(b)))
             }
         };
-        self.commit(lumit_core::Op::SetWorkArea {
+        self.commit(lumit_core::ops::Op::SetWorkArea {
             comp: self.id,
             work_area,
         })
@@ -1514,7 +1514,7 @@ impl CompositionReference {
     /// already its own work area and nothing happens.
     #[frb(sync)]
     pub fn trim_to_work_area(&self) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::TrimCompToWorkArea { comp: self.id })
+        self.commit(lumit_core::ops::Op::TrimCompToWorkArea { comp: self.id })
     }
 
     /// **Crop comp to region of interest**: the comp's frame becomes
@@ -1540,7 +1540,7 @@ impl CompositionReference {
         if width < 1.0 || height < 1.0 {
             return Err(BridgeError::InvalidRegion);
         }
-        self.commit(lumit_core::Op::CropCompToRegion {
+        self.commit(lumit_core::ops::Op::CropCompToRegion {
             comp: self.id,
             x: (u0 * w).round(),
             y: (v0 * h).round(),
@@ -1569,7 +1569,7 @@ impl CompositionReference {
         let comp = self.composition()?;
         let markers = core_markers(markers, &comp.markers, comp.frame_rate)?;
 
-        self.commit(lumit_core::Op::SetCompMarkers {
+        self.commit(lumit_core::ops::Op::SetCompMarkers {
             comp: self.id,
             markers,
         })
@@ -1667,7 +1667,7 @@ impl CompositionReference {
     #[frb(sync)]
     pub fn duplicate(&self, separate: bool) -> Result<CompositionReference, BridgeError> {
         use lumit_core::model::ProjectItem;
-        use lumit_core::Op;
+        use lumit_core::ops::Op;
         use std::collections::HashMap;
 
         let doc = self.document()?;
@@ -1762,7 +1762,7 @@ impl CompositionReference {
         let comp = self.composition()?;
         crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
-        self.commit(lumit_core::Op::AddLayer {
+        self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.id,
             index: insert_row(row, comp.layers.len()),
             layer: Box::new(layer),
@@ -1771,14 +1771,16 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    pub(crate) fn document(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+    pub(crate) fn document(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())
     }
 
     #[frb(ignore)]
-    fn commit(&self, op: lumit_core::Op) -> Result<(), BridgeError> {
+    fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -1895,13 +1897,13 @@ impl CompositionReference {
 
         // The layer, and directly below it each row split off beside it.
         let index = insert_row(row, comp.layers.len());
-        let mut ops = vec![lumit_core::Op::AddLayer {
+        let mut ops = vec![lumit_core::ops::Op::AddLayer {
             comp: self.id,
             index,
             layer: Box::new(layer),
         }];
         for (n, sound) in beside.into_iter().enumerate() {
-            ops.push(lumit_core::Op::AddLayer {
+            ops.push(lumit_core::ops::Op::AddLayer {
                 comp: self.id,
                 index: index + 1 + n,
                 layer: Box::new(sound),
@@ -1909,7 +1911,7 @@ impl CompositionReference {
         }
         let op = match ops.len() {
             1 => ops.remove(0),
-            _ => lumit_core::Op::Batch { ops },
+            _ => lumit_core::ops::Op::Batch { ops },
         };
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -1922,7 +1924,7 @@ impl CompositionReference {
     #[frb(ignore)]
     pub(crate) fn footage_layers(
         p: &LumitBridgeState,
-        doc: &lumit_core::Document,
+        doc: &lumit_core::model::Document,
         comp: &lumit_core::model::Composition,
         item: Uuid,
         as_sequence: bool,
@@ -3061,7 +3063,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::GroupLayers {
+            .commit(lumit_core::ops::Op::GroupLayers {
                 comp: self.id,
                 index: comp.groups.len(),
                 group: Box::new(group),
@@ -3077,7 +3079,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::UngroupLayers {
+            .commit(lumit_core::ops::Op::UngroupLayers {
                 comp: self.id,
                 group,
             })
@@ -3090,7 +3092,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetGroupName {
+            .commit(lumit_core::ops::Op::SetGroupName {
                 comp: self.id,
                 group,
                 name,
@@ -3104,7 +3106,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetGroupLabel {
+            .commit(lumit_core::ops::Op::SetGroupLabel {
                 comp: self.id,
                 group,
                 label,
@@ -3119,7 +3121,7 @@ impl CompositionReference {
     /// [`BridgeEffectInstance`](crate::api::effect::BridgeEffectInstance)
     /// handles, so `get_value` / `set_value` and the
     /// staged commit through `LayerReference::set_effects` — which routes a
-    /// group instance to [`lumit_core::Op::SetGroupEffects`] by the shared
+    /// group instance to [`lumit_core::ops::Op::SetGroupEffects`] by the shared
     /// instance lookup — work on a header row unchanged. Offset zero: a group
     /// resolves at comp time.
     #[frb(sync)]
@@ -3132,7 +3134,7 @@ impl CompositionReference {
             .groups
             .iter()
             .find(|g| g.id == group)
-            .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?;
+            .ok_or(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup))?;
         Ok(g.effects
             .iter()
             .map(|e| {
@@ -3223,7 +3225,7 @@ impl CompositionReference {
         // Seeded at the graph's own size, because a few defaults are positions
         // and a fresh box should look like identity rather than dragging the
         // picture to a corner.
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             &name,
             f64::from(comp.width),
             f64::from(comp.height),
@@ -3244,7 +3246,7 @@ impl CompositionReference {
     }
 
     /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
-    /// [`lumit_core::Op::SetCompGraph`].
+    /// [`lumit_core::ops::Op::SetCompGraph`].
     ///
     /// The whole-graph shape is `LayerReference::set_graph`'s and is deliberate.
     /// Add a box, remove one, wire, unwire, drag one, twirl one, name a group:
@@ -3280,7 +3282,7 @@ impl CompositionReference {
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
         graph.notes = self.graph_of(&doc)?.notes.clone();
-        self.commit(lumit_core::Op::SetCompGraph {
+        self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
         })
@@ -3312,7 +3314,7 @@ impl CompositionReference {
             .into_iter()
             .map(crate::api::graph::BridgeGraphNote::core)
             .collect();
-        self.commit(lumit_core::Op::SetCompGraph {
+        self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
         })
@@ -3347,7 +3349,7 @@ impl CompositionReference {
     /// Every node id is minted here, so dropping one group twice never makes
     /// two boxes share an id. The Output is left exactly as it was: a group
     /// carries none, and a hand-written file that does carry one is refused
-    /// whole by [`lumit_core::Op::SetCompGraph`] with its own calm sentence,
+    /// whole by [`lumit_core::ops::Op::SetCompGraph`] with its own calm sentence,
     /// which is the treatment every other bad graph gets.
     #[frb(sync)]
     pub fn insert_graph_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
@@ -3418,7 +3420,7 @@ impl CompositionReference {
             graph.groups.extend(added.inner);
         }
 
-        self.commit(lumit_core::Op::SetCompGraph {
+        self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
         })?;
@@ -3430,7 +3432,7 @@ impl CompositionReference {
     #[frb(ignore)]
     pub(crate) fn graph_of<'a>(
         &self,
-        doc: &'a lumit_core::Document,
+        doc: &'a lumit_core::model::Document,
     ) -> Result<&'a lumit_core::comp_graph::CompGraph, BridgeError> {
         doc.comp(self.id)
             .and_then(|comp| comp.graph.as_ref())
@@ -3453,26 +3455,26 @@ impl CompositionReference {
             .groups
             .iter()
             .find(|g| g.id == group)
-            .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?;
-        if lumit_core::fx::BUILTIN_DEFS
+            .ok_or(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup))?;
+        if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
         {
             return Err(BridgeError::UnknownEffectName);
         }
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             &name,
             f64::from(comp.width),
             f64::from(comp.height),
         )
         .ok_or(BridgeError::UnknownEffectName)?;
-        lumit_core::fx::point_self_layer_params_at(&mut instance, group);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, group);
         let mut effects = g.effects.clone();
         effects.push(instance);
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetGroupEffects {
+            .commit(lumit_core::ops::Op::SetGroupEffects {
                 comp: self.id,
                 group,
                 effects,
@@ -3501,7 +3503,7 @@ impl CompositionReference {
         let comp = self.composition()?;
         let stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
         let Some(g) = comp.groups.iter().find(|g| g.id == group) else {
-            return Err(BridgeError::OpError(lumit_core::OpError::UnknownGroup));
+            return Err(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup));
         };
         let members = lumit_core::group::drawn_members(&stack, g);
         let switch = match switch {
@@ -3510,7 +3512,7 @@ impl CompositionReference {
             BridgeGroupSwitch::Solo => BridgeLayerSwitch::Solo,
             BridgeGroupSwitch::Locked => BridgeLayerSwitch::Locked,
         };
-        let ops: Vec<lumit_core::Op> = comp
+        let ops: Vec<lumit_core::ops::Op> = comp
             .layers
             .iter()
             .filter(|l| members.contains(&l.id))
@@ -3522,7 +3524,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::Batch { ops })
+            .commit(lumit_core::ops::Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
         Ok(())
     }
@@ -3560,7 +3562,7 @@ impl CompositionReference {
                 && !matches!(switch, BridgeLayerSwitch::Locked | BridgeLayerSwitch::Shy)
             {
                 if l.id == clicked {
-                    return Err(BridgeError::OpError(lumit_core::OpError::LayerLocked));
+                    return Err(BridgeError::OpError(lumit_core::ops::OpError::LayerLocked));
                 }
                 continue;
             }
@@ -3591,12 +3593,12 @@ impl CompositionReference {
             };
             ops.append(&mut solid);
             for layer in born_off {
-                ops.push(lumit_core::Op::SetLayerKind {
+                ops.push(lumit_core::ops::Op::SetLayerKind {
                     comp: self.id,
                     layer,
                     kind: Box::new(LayerKind::Solid { def }),
                 });
-                ops.push(lumit_core::Op::SetLayerAdjustment {
+                ops.push(lumit_core::ops::Op::SetLayerAdjustment {
                     comp: self.id,
                     layer,
                     adjustment: false,
@@ -3611,7 +3613,7 @@ impl CompositionReference {
         let op = if ops.len() == 1 {
             ops.remove(0)
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -3622,16 +3624,16 @@ impl CompositionReference {
     /// Take away **every group the given layers touch**, as one undo step —
     /// what Ctrl+Shift+G on a multi-selection commits. Answers whether
     /// anything went; one undo restores every band in its old slot,
-    /// because [`lumit_core::Op::UngroupLayers`]'s inverse carries it.
+    /// because [`lumit_core::ops::Op::UngroupLayers`]'s inverse carries it.
     #[frb(sync)]
     pub fn ungroup_selection(&self, layer_ids: Vec<Uuid>) -> Result<bool, BridgeError> {
         let comp = self.composition()?;
         let ids: std::collections::HashSet<Uuid> = layer_ids.into_iter().collect();
-        let mut ops: Vec<lumit_core::Op> = comp
+        let mut ops: Vec<lumit_core::ops::Op> = comp
             .groups
             .iter()
             .filter(|g| g.members.iter().any(|m| ids.contains(m)))
-            .map(|g| lumit_core::Op::UngroupLayers {
+            .map(|g| lumit_core::ops::Op::UngroupLayers {
                 comp: self.id,
                 group: g.id,
             })
@@ -3642,7 +3644,7 @@ impl CompositionReference {
         let op = if ops.len() == 1 {
             ops.remove(0)
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -3669,7 +3671,7 @@ impl CompositionReference {
         let comp = self.composition()?;
         let stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
         let Some(g) = comp.groups.iter().find(|g| g.id == group) else {
-            return Err(BridgeError::OpError(lumit_core::OpError::UnknownGroup));
+            return Err(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup));
         };
         let members = lumit_core::group::drawn_members(&stack, g);
         let moving: Vec<&lumit_core::model::Layer> = comp
@@ -3836,7 +3838,7 @@ impl CompositionReference {
             let at = |t: lumit_core::time::CompTime| {
                 t.add_dur(travel).map_err(|_| BridgeError::InvalidFrameRate)
             };
-            ops.push(lumit_core::Op::SetLayerSpan {
+            ops.push(lumit_core::ops::Op::SetLayerSpan {
                 comp: self.id,
                 layer: l.id,
                 in_point: at(l.in_point)?,
@@ -3850,7 +3852,7 @@ impl CompositionReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::Batch { ops })
+            .commit(lumit_core::ops::Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
         Ok(())
     }
@@ -3872,8 +3874,8 @@ fn layer_switch_op(
     l: &lumit_core::model::Layer,
     switch: BridgeLayerSwitch,
     on: bool,
-) -> Option<lumit_core::Op> {
-    use lumit_core::Op;
+) -> Option<lumit_core::ops::Op> {
+    use lumit_core::ops::Op;
     let layer = l.id;
     let current = match switch {
         BridgeLayerSwitch::Visible => l.switches.visible,

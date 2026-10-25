@@ -20,7 +20,8 @@
 
 use crate::fx::points::PointsStream;
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    params::Value, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

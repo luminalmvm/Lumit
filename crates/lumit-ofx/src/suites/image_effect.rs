@@ -359,7 +359,7 @@ unsafe extern "C" fn clip_get_region_of_definition(
 /// `abort` answers a plain int, and **nought is the answer that lets work
 /// continue**. A plugin polls it inside its own render loop; the host answers
 /// from the epoch token the render was given, which is set for the duration of
-/// the render action ([`crate::render`]) — so a scrub that lands mid-render
+/// the render action ([`crate::render::render`]) — so a scrub that lands mid-render
 /// stops the plugin at its next poll rather than at the end of the frame
 /// (docs/13 §6).
 unsafe extern "C" fn abort(image_effect: OfxImageEffectHandle) -> c_int {

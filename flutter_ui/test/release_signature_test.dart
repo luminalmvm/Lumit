@@ -6,11 +6,9 @@
 // somebody else, signed and then edited, well-formed and about a different
 // file, or simply absent.
 //
-// The key pair is generated in the test rather than checked in, and the pinned
-// constant the shipped code reads cannot be reassigned, so the verification is
-// driven through `verifyManifestWithKey` — the same code path with the key
-// passed in, which is what `verifyManifest` calls once it has read the pinned
-// one.
+// The key pair is generated in the test rather than checked in, and passed to
+// `verifyManifestWithKey`, the same call the updater makes with the pinned
+// key.
 
 import 'dart:convert';
 
@@ -139,15 +137,6 @@ void main() {
     final (_, trust) =
         await verifyManifestWithKey(huge, await sign(huge), publicKeyBase64);
     expect(trust, ReleaseTrust.malformed);
-  });
-
-  test('the shipped build pins no key yet, and says so rather than pretending',
-      () {
-    // A guard, not a preference: if this ever fails because somebody pinned a
-    // key, the right change is to delete this test — and to notice, at that
-    // moment, that unsigned releases stop installing from then on.
-    expect(updateSigningKey, isEmpty);
-    expect(releaseSigningIsEnforced, isFalse);
   });
 
   test('a manifest somebody else signed is refused', () async {

@@ -27,7 +27,7 @@ pub struct FrameIndex {
     /// How the source this index was asked for reads its frames. Not part of
     /// the sidecar, which is the file's own and shared by every reading of it.
     #[serde(skip)]
-    pub interpret: crate::Interpretation,
+    pub interpret: crate::interpret::Interpretation,
 }
 
 impl FrameIndex {

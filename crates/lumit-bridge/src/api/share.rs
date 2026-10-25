@@ -14,10 +14,11 @@ use std::{
 };
 
 use flutter_rust_bridge::frb;
-use lumit_core::{Document, DocumentStore};
+use lumit_core::shared::Conflict;
+use lumit_core::{model::Document, store::DocumentStore};
 use lumit_share::{
-    Conflict, Ending, Event, Footage, Invite, News, Person, Presence, Reach, Refusal, Relayed,
-    ShareError, Sharing, Versions, Wanted,
+    bulk::Footage, bulk::News, bulk::Wanted, invite::Invite, Ending, Event, Person, Presence,
+    Reach, Refusal, Relayed, ShareError, Sharing, Versions,
 };
 use uuid::Uuid;
 
@@ -778,7 +779,7 @@ impl crate::api::footage::FootageReference {
             _ => BridgeFootageHere::Missing,
         };
         let (holders, bytes) = holders_of(self.project, self.id);
-        let wanted = lumit_share::Wanted::StandIn { item: self.id };
+        let wanted = lumit_share::bulk::Wanted::StandIn { item: self.id };
         let refused = crate::footage::carrier(self.project).is_some_and(|c| c.was_refused(&wanted));
         Ok(BridgeFootageShare {
             here,
@@ -932,8 +933,8 @@ pub fn share_link_online(text: String) -> bool {
 /// What a host keeps to share by the same invite again: its secret, and
 /// after a full stop what its password came to if it set one.
 #[frb(ignore)]
-fn kept_text(host: &lumit_share::Host) -> String {
-    let key = lumit_share::key_text(&host.key());
+fn kept_text(host: &lumit_share::host::Host) -> String {
+    let key = lumit_share::invite::key_text(&host.key());
     match host.lock() {
         Some(lock) => format!("{key}.{}", lock.text()),
         None => key,
@@ -1300,7 +1301,7 @@ pub(crate) fn saved(project: Uuid, document: Uuid, path: &Path, mark: Option<usi
         // saving goes back to.
         (Some(Sharing::Guest(guest)), Some(mark)) => guest.saved(mark),
         (Some(Sharing::Online(member)), Some(mark)) => member.saved(mark),
-        _ => lumit_share::forget(document),
+        _ => lumit_share::kept::forget(document),
     }
 }
 
@@ -1446,12 +1447,12 @@ impl ProjectReference {
         let kept = key
             .as_deref()
             .map(|kept| kept.split_once('.').unwrap_or((kept, "")));
-        let key = kept.and_then(|(key, _)| lumit_share::key_from(key));
+        let key = kept.and_then(|(key, _)| lumit_share::invite::key_from(key));
         let lock = match password.filter(|password| !password.is_empty()) {
-            Some(password) => lumit_share::Lock::new(&password).ok(),
+            Some(password) => lumit_share::invite::Lock::new(&password).ok(),
             None => key
                 .and(kept)
-                .and_then(|(_, lock)| lumit_share::Lock::from_text(lock)),
+                .and_then(|(_, lock)| lumit_share::invite::Lock::from_text(lock)),
         };
         let mut shared = SHARED.lock().map_err(|_| BridgeError::WriteFailed)?;
         if shared.contains_key(&self.id) {
@@ -1460,7 +1461,16 @@ impl ProjectReference {
         let sink = Arc::new(events);
         let events = events_for(self.id, store.clone(), sink.clone());
         Ok(
-            match lumit_share::host(store.clone(), &name, LISTEN, port, key, lock, root, events) {
+            match lumit_share::host::host(
+                store.clone(),
+                &name,
+                LISTEN,
+                port,
+                key,
+                lock,
+                root,
+                events,
+            ) {
                 Ok(host) => {
                     let (port, key) = (host.port(), kept_text(&host));
                     let restored = host.restored() as u32;
@@ -1705,7 +1715,7 @@ impl ProjectReference {
         Ok(moving
             .map(|(wanted, done, total, sending)| BridgeShareTransfer {
                 name: name(wanted.item()),
-                original: matches!(wanted, lumit_share::Wanted::Original { .. }),
+                original: matches!(wanted, lumit_share::bulk::Wanted::Original { .. }),
                 sending,
                 done,
                 total,
@@ -1821,8 +1831,8 @@ impl ProjectReference {
     pub fn share_return_copies(&self) -> Result<Vec<BridgeShareReturnCopy>, BridgeError> {
         let state = self.state()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-        let copies = lumit_share::before_returns(state.store.snapshot().id);
-        let copy = |kept: lumit_share::BeforeReturn| BridgeShareReturnCopy {
+        let copies = lumit_share::kept::before_returns(state.store.snapshot().id);
+        let copy = |kept: lumit_share::kept::BeforeReturn| BridgeShareReturnCopy {
             path: kept.path.to_string_lossy().into_owned(),
             at: i64::try_from(kept.at).unwrap_or(i64::MAX),
             refused: kept.refused as u32,
@@ -1838,7 +1848,7 @@ impl ProjectReference {
     pub fn share_return_copy_forget(&self) -> Result<(), BridgeError> {
         let state = self.state()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-        lumit_share::forget_before_return(state.store.snapshot().id);
+        lumit_share::kept::forget_before_return(state.store.snapshot().id);
         Ok(())
     }
 
@@ -1874,7 +1884,7 @@ impl ProjectReference {
         // hash stops it here, where sharing with none would be a surprise.
         let lock = password
             .filter(|password| !password.is_empty())
-            .map(|password| lumit_share::Lock::new(&password))
+            .map(|password| lumit_share::invite::Lock::new(&password))
             .transpose();
         let Ok(lock) = lock else {
             return Ok(BridgeOnlineStarted::Failed);
@@ -2389,7 +2399,7 @@ pub fn join_shared_project(
             (document, start)
         })
     } else {
-        lumit_share::join(invite, &name, root.clone()).map(|(document, joining)| {
+        lumit_share::guest::join(invite, &name, root.clone()).map(|(document, joining)| {
             let start: Start =
                 Box::new(|store, events| joining.start(store, events).map(Sharing::Guest));
             (document, start)

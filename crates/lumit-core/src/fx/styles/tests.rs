@@ -4,11 +4,11 @@
 //! with no styles is the file and the picture it always was.
 
 use super::*;
-use crate::fx::{cpu, EffectMetadata, ParamKind};
+use crate::fx::{cpu, registry::EffectMetadata, schema::ParamKind};
 use crate::model::{EffectInstance, EffectValue};
 
 fn style(name: &str) -> EffectInstance {
-    crate::fx::instantiate(name).unwrap_or_else(|| panic!("{name} is a declared style"))
+    crate::fx::builtins::instantiate(name).unwrap_or_else(|| panic!("{name} is a declared style"))
 }
 
 /// A hand-shuffled list — the shape a file written by another tool, or edited
@@ -166,12 +166,12 @@ fn a_colour_overlay_adds_no_pixels_outside_the_alpha() {
     let before = square(w, h, 1.0);
     let mut after = before.clone();
     let inst = style("style_colour_overlay");
-    let ops = crate::fx::resolve_stack(
+    let ops = crate::fx::resolved::resolve_stack(
         std::slice::from_ref(&inst),
         0.0,
         1000.0,
         1.0,
-        &crate::fx::MarkerContext::NONE,
+        &crate::fx::markers::MarkerContext::NONE,
         std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
     );
     assert_eq!(ops.len(), 1, "a style resolves through the ordinary walk");
@@ -264,8 +264,8 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
 // a kernel failure read as a resolution failure.
 // ---------------------------------------------------------------------------
 
+use crate::fx::params::Params;
 use crate::fx::styles::defs::{GradientOverlay, InnerShadow, StrokeStyle};
-use crate::fx::Params;
 
 /// **An inner style stays inside the shape** (§9). Both halves matter: the
 /// alpha is never touched, and no pixel outside the layer's own coverage is

@@ -3,8 +3,7 @@
 //! In plain terms: the compositor hands over finished RGBA frames (and the
 //! mixer hands over finished stereo samples); this module compresses them
 //! into an .mp4 (a .mov for ProRes). The video encoder is picked from a
-//! ladder — NVENC (NVIDIA), then AMF (AMD), then Quick Sync (Intel), then
-//! software x264/x265 — and
+//! ladder of hardware encoders, then software x264/x265, and
 //! each rung is *proven* with a short test encode before it is trusted,
 //! because hardware encoders can exist in the FFmpeg build yet fail at
 //! runtime (wrong vendor's GPU, driver sessions exhausted). Whatever rung
@@ -406,12 +405,25 @@ impl Metadata {
 }
 
 /// The encoder ladder for a codec, best first (docs/impl/media-io.md §7):
-/// NVIDIA NVENC → AMD AMF → Intel Quick Sync → software. Pure data so the
-/// priority is unit-tested, not folklore.
+/// NVENC, AMD AMF, Intel Quick Sync, VAAPI for AMD and Intel on Linux,
+/// then software. A rung missing from a platform's FFmpeg build fails
+/// straight away and the next is tried.
 pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
     match codec {
-        VideoCodec::H264 => &["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
-        VideoCodec::Hevc => &["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
+        VideoCodec::H264 => &[
+            "h264_nvenc",
+            "h264_amf",
+            "h264_qsv",
+            "h264_vaapi",
+            "libx264",
+        ],
+        VideoCodec::Hevc => &[
+            "hevc_nvenc",
+            "hevc_amf",
+            "hevc_qsv",
+            "hevc_vaapi",
+            "libx265",
+        ],
         _ => &["prores_ks"],
     }
 }
@@ -426,14 +438,14 @@ pub fn pick_first_working<'a>(
     candidates.iter().copied().find(|name| works(name))
 }
 
-/// The pixel format each encoder is fed. Quick Sync encoders take NV12 only;
+/// The pixel format each encoder is fed. Quick Sync and VAAPI take NV12 only;
 /// everything else on the H.264 and HEVC ladders accepts planar 4:2:0. ProRes
 /// is ten-bit: 4:4:4 with alpha for the 4444 kinds, 4:2:2 for the rest.
 pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
     match codec {
         c if c.has_alpha() => ffi::AV_PIX_FMT_YUVA444P10LE,
         c if c.is_prores() => ffi::AV_PIX_FMT_YUV422P10LE,
-        _ if encoder.ends_with("_qsv") => ffi::AV_PIX_FMT_NV12,
+        _ if encoder.ends_with("_qsv") || encoder.ends_with("_vaapi") => ffi::AV_PIX_FMT_NV12,
         _ => ffi::AV_PIX_FMT_YUV420P,
     }
 }
@@ -444,6 +456,7 @@ pub fn encoder_label(encoder: &str) -> &'static str {
         "h264_nvenc" | "hevc_nvenc" => "NVENC",
         "h264_amf" | "hevc_amf" => "AMD AMF",
         "h264_qsv" | "hevc_qsv" => "Intel Quick Sync",
+        "h264_vaapi" | "hevc_vaapi" => "VAAPI",
         "libx264" => "software x264",
         "libx265" => "software x265",
         "prores_ks" => "software ProRes",
@@ -1341,6 +1354,7 @@ impl Encoder {
         if scaled < 0 {
             return Err(MediaError::Ffmpeg(format!("swscale failed ({scaled})")));
         }
+        let mut dst = crate::vaapi::to_device(&mut track.ctx, dst)?;
         dst.set_pts(track.next_pts);
         track.next_pts += 1;
         stamp_colour(&mut dst, track.colour);
@@ -1601,6 +1615,9 @@ fn build_video_ctx(
         den: v.fps_den,
     });
     ctx.set_pix_fmt(pix_fmt_for(v.codec, name));
+    if name.ends_with("_vaapi") {
+        crate::vaapi::attach(&mut ctx, width, height)?;
+    }
     ctx.set_gop_size(30);
     if let Some(rate) = v.bit_rate {
         ctx.set_bit_rate(rate);
@@ -1631,6 +1648,13 @@ fn build_video_ctx(
         }
     }
     ctx.open(None)?;
+    // Some VAAPI drivers can't write the stream header an mp4 needs up
+    // front, and many players won't open the file without it.
+    if global_header && name.ends_with("_vaapi") && ctx.extradata_size == 0 {
+        return Err(MediaError::Ffmpeg(
+            "the VAAPI driver gave no stream header".into(),
+        ));
+    }
     Ok(ctx)
 }
 
@@ -1641,8 +1665,9 @@ fn build_video_ctx(
 /// rung, please", never a failed export.
 fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
     let mut ctx = build_video_ctx(name, v, false)?;
-    let mut frame = blank_frame(pix_fmt_for(v.codec, name), v.width, v.height)?;
+    let blank = blank_frame(pix_fmt_for(v.codec, name), v.width, v.height)?;
     for n in 0..16 {
+        let mut frame = crate::vaapi::to_device(&mut ctx, blank.clone())?;
         frame.set_pts(n);
         ctx.send_frame(Some(&frame))?;
         discard_packets(&mut ctx, false)?;
@@ -2669,7 +2694,7 @@ mod tests {
         }
         enc.finish().unwrap();
 
-        let input = crate::probe::open_input(&crate::MediaSource::file(&path)).unwrap();
+        let input = crate::probe::open_input(&crate::sequence::MediaSource::file(&path)).unwrap();
         let dict = input.metadata().expect("the file carries metadata");
         let got = |key: &str| {
             dict.get(&CString::new(key).unwrap(), None, 0)

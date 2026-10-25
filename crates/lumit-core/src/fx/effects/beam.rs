@@ -12,7 +12,9 @@
 //! timeline keyframes, which is docs/08 §3.53's ruling and the reason a preview
 //! and an export cannot disagree about where the beam is.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Beam's controls.

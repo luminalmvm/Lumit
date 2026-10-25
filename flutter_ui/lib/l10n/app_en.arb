@@ -1,9 +1,9 @@
 {
   "@@locale": "en",
   "@@x-notes": "Lumit's user-facing text, British English, the single source translation works from. Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
-  "aboutBlurb": "A motion-graphics and compositing editor. Free software under the GNU General Public Licence, version 3.",
+  "aboutBlurb": "Free software under the GNU General Public Licence, version 3.",
   "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
+    "description": "About window: Lumit's licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
   },
   "addAtPlayhead": "Add at playhead",
   "@addAtPlayhead": {
@@ -1635,17 +1635,13 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows the time value of the source.",
+  "firstRunAfterEffects": "Footage arrives as a layer. Retime graphs show source time.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
   "firstRunAfterEffectsShortcuts": "Use the After Effects shortcuts",
   "@firstRunAfterEffectsShortcuts": {
     "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
-  "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
   "@firstRunCut": {
@@ -1659,7 +1655,7 @@
   "@firstRunTitle": {
     "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
-  "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
+  "firstRunVegas": "Video arrives as a Sequence layer. Retime graphs show speed.",
   "@firstRunVegas": {
     "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
   },
@@ -3326,10 +3322,6 @@
   "fxConsoleAll": "All",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
-  },
-  "fxConsoleApplies": "Enter applies to the selected layer",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
   "fxConsoleCompositions": "Compositions",
   "@fxConsoleCompositions": {
@@ -5195,10 +5187,6 @@
       }
     }
   },
-  "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
-  "@settingsHelpProjectTemplate": {
-    "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
-  },
   "templateNotOpened": "The project template would not open, so the new project is empty",
   "@templateNotOpened": {
     "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
@@ -6248,6 +6236,10 @@
   "@menuCentreInView": {
     "description": "Layer ▸ Transform submenu item: moves the selected layers so each sits in the middle of the composition."
   },
+  "menuCentreAnchorPoint": "Centre anchor point",
+  "@menuCentreAnchorPoint": {
+    "description": "Layer ▸ Transform submenu item: moves each selected layer's anchor point to the middle of its content without moving the picture."
+  },
   "menuClearBeatMarkers": "Clear beat markers",
   "@menuClearBeatMarkers": {
     "description": "Menu item."
@@ -7168,22 +7160,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Use this option to create a new intermediate composition with only '{layer}' in it. The new composition will become the source to the current layer.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Move all attributes into the new composition",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Use this option to place the currently selected layers together into a new intermediate composition.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "New composition name",
   "@precomposeNewName": {
@@ -7382,7 +7361,7 @@
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
-  "recoveryQuestion": "It looks like Lumit crashed with unsaved changes, would you like to restore them?",
+  "recoveryQuestion": "Lumit crashed with unsaved changes. Restore them?",
   "@recoveryQuestion": {
     "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
@@ -7592,10 +7571,6 @@
   "settingsGraphRoom": "Node graph overscan",
   "@settingsGraphRoom": {
     "description": "Project settings: the name of the row choosing how far past the composition's frame a node graph box keeps its picture, so a later box can bring it back."
-  },
-  "settingsGraphRoomHint": "How far past the frame each box keeps its picture. More uses more memory.",
-  "@settingsGraphRoomHint": {
-    "description": "Project settings: the line under Node graph overscan."
   },
   "graphRoomOne": "One frame",
   "@graphRoomOne": {
@@ -8199,15 +8174,6 @@
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
   },
-  "themeCopiedTo": "Copied to {name}.",
-  "@themeCopiedTo": {
-    "description": "Shown after duplicating a theme. {name} is the new theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeCopySuffix": "{name} copy",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -8220,15 +8186,6 @@
   "themeDefaultName": "My theme",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
-  },
-  "themeDeleted": "{name} deleted.",
-  "@themeDeleted": {
-    "description": "Shown after deleting a custom theme. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeEditorTitle": "Customise theme",
   "@themeEditorTitle": {
@@ -8252,50 +8209,17 @@
       }
     }
   },
-  "themeFileNoColours": "That theme file carries no colours.",
+  "themeFileNoColours": "That theme file has no colours.",
   "@themeFileNoColours": {
     "description": "Refusal when a theme file has a name but nothing to draw with."
   },
-  "themeFileNoName": "That theme file has no name, so there would be nothing to select.",
+  "themeFileNoName": "That theme file has no name.",
   "@themeFileNoName": {
     "description": "Refusal when a theme file is valid but unnamed."
   },
   "themeFileNotATheme": "That file is not a Lumit theme.",
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
-  },
-  "themeImported": "{name} imported, and selected.",
-  "@themeImported": {
-    "description": "Shown after reading a theme file in. {name} is the theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeImportedRenamed": "A theme was already called {wanted}, so this one came in as {name}.",
-  "@themeImportedRenamed": {
-    "description": "Shown when an imported theme collided with an existing one; an import never overwrites the user’s own.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeNameTaken": "A theme was already called {wanted}, so this one is {name}.",
-  "@themeNameTaken": {
-    "description": "Shown when a rename collided with an existing theme and Lumit picked a free name instead.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeNameTheCopy": "Name the copy",
   "@themeNameTheCopy": {
@@ -8308,15 +8232,6 @@
   "themeRenameTitle": "Rename this theme",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
-  },
-  "themeRenamedTo": "Renamed to {name}.",
-  "@themeRenamedTo": {
-    "description": "Shown after renaming a theme. {name} is the new name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeSaveACopy": "Save a copy…",
   "@themeSaveACopy": {
@@ -8906,25 +8821,13 @@
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccentHelp": "The one accent: focus, the playhead, what is chosen.",
-  "@tokenAccentHelp": {
-    "description": "Theme editor: the sentence under the \"Accent\" colour, saying where it is used."
-  },
   "tokenAccenthover": "Accent hover",
   "@tokenAccenthover": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccenthoverHelp": "The accent with the pointer on it.",
-  "@tokenAccenthoverHelp": {
-    "description": "Theme editor: the sentence under the \"Accent hover\" colour, saying where it is used."
-  },
   "tokenCachedisk": "Cache, on disk",
   "@tokenCachedisk": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenCachediskHelp": "The disk tier of the Timeline's cache bar.",
-  "@tokenCachediskHelp": {
-    "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
   "tokenCurve": "Curve {number}",
   "@tokenCurve": {
@@ -8935,17 +8838,9 @@
       }
     }
   },
-  "tokenCurveHelp": "A property's stroke in the graph editor.",
-  "@tokenCurveHelp": {
-    "description": "Theme editor: the sentence under the graph curve colours."
-  },
   "tokenError": "Error",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenErrorHelp": "Something that did not work.",
-  "@tokenErrorHelp": {
-    "description": "Theme editor: the sentence under the \"Error\" colour, saying where it is used."
   },
   "tokenGroupGraphCurves": "Graph curves",
   "@tokenGroupGraphCurves": {
@@ -8979,225 +8874,113 @@
   "@tokenHairline": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenHairlineHelp": "The line between rows and panels.",
-  "@tokenHairlineHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline\" colour, saying where it is used."
-  },
   "tokenHairlinestrong": "Hairline, strong",
   "@tokenHairlinestrong": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenHairlinestrongHelp": "The same line where it has to carry more weight.",
-  "@tokenHairlinestrongHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
   "tokenLayercamera": "Camera",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayercameraHelp": "Camera layers.",
-  "@tokenLayercameraHelp": {
-    "description": "Theme editor: the sentence under the \"Camera\" colour, saying where it is used."
-  },
   "tokenLayerfootage": "Footage",
   "@tokenLayerfootage": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayerfootageHelp": "Footage layers.",
-  "@tokenLayerfootageHelp": {
-    "description": "Theme editor: the sentence under the \"Footage\" colour, saying where it is used."
   },
   "tokenLayerprecomp": "Precomp",
   "@tokenLayerprecomp": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayerprecompHelp": "Precomp layers.",
-  "@tokenLayerprecompHelp": {
-    "description": "Theme editor: the sentence under the \"Precomp\" colour, saying where it is used."
-  },
   "tokenLayersequence": "Sequence",
   "@tokenLayersequence": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayersequenceHelp": "Sequence layers.",
-  "@tokenLayersequenceHelp": {
-    "description": "Theme editor: the sentence under the \"Sequence\" colour, saying where it is used."
   },
   "tokenLayersolid": "Solid",
   "@tokenLayersolid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayersolidHelp": "Solid layers.",
-  "@tokenLayersolidHelp": {
-    "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
-  },
   "tokenLayertext": "Text",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayertextHelp": "Text layers.",
-  "@tokenLayertextHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
   "tokenAnimated": "Animated",
   "@tokenAnimated": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAnimatedHelp": "Keyframes, the stopwatch when it is on, a handle or value field in hand, and the work-area band.",
-  "@tokenAnimatedHelp": {
-    "description": "Theme editor: the sentence under the \"Animated\" colour, saying where it is used."
-  },
   "tokenMarker": "Marker",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenMarkerHelp": "Comp markers on the time ruler, and the box holding what one says. A grey by default — a marker says *here*, not *careful*.",
-  "@tokenMarkerHelp": {
-    "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
   },
   "tokenRoom": "Room",
   "@tokenRoom": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenRoomHelp": "The ground the panes stand on when the shape is Lantern; the other shapes never draw it.",
-  "@tokenRoomHelp": {
-    "description": "Theme editor: the sentence under the \"Room\" colour, saying where it is used."
-  },
   "tokenSelectionfill": "Selected row",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSelectionfillHelp": "Under a selected layer or property; half as strong under a highlighted one.",
-  "@tokenSelectionfillHelp": {
-    "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
   "tokenSuccess": "Success",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSuccessHelp": "Something finished, or held in the cache.",
-  "@tokenSuccessHelp": {
-    "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
-  },
   "tokenSurface0": "Background",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface0Help": "The deepest ground — behind panels, and the app backdrop.",
-  "@tokenSurface0Help": {
-    "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
   "tokenSurface1": "Panel",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface1Help": "A panel's own ground, and the Timeline inside the work area.",
-  "@tokenSurface1Help": {
-    "description": "Theme editor: the sentence under the \"Panel\" colour, saying where it is used."
-  },
   "tokenSurface2": "Raised",
   "@tokenSurface2": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface2Help": "Rows and cards lifted off the panel.",
-  "@tokenSurface2Help": {
-    "description": "Theme editor: the sentence under the \"Raised\" colour, saying where it is used."
   },
   "tokenSurface3": "Control",
   "@tokenSurface3": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface3Help": "A field or button at rest.",
-  "@tokenSurface3Help": {
-    "description": "Theme editor: the sentence under the \"Control\" colour, saying where it is used."
-  },
   "tokenSurface4": "Control hover",
   "@tokenSurface4": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface4Help": "The same, with the pointer over it.",
-  "@tokenSurface4Help": {
-    "description": "Theme editor: the sentence under the \"Control hover\" colour, saying where it is used."
   },
   "tokenTextdisabled": "Text, disabled",
   "@tokenTextdisabled": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextdisabledHelp": "A control that cannot be used right now.",
-  "@tokenTextdisabledHelp": {
-    "description": "Theme editor: the sentence under the \"Text, disabled\" colour, saying where it is used."
-  },
   "tokenTextmuted": "Text, muted",
   "@tokenTextmuted": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextmutedHelp": "Hints and the lines under a setting.",
-  "@tokenTextmutedHelp": {
-    "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
   "tokenTextprimary": "Text",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextprimaryHelp": "Names, values, anything you read first.",
-  "@tokenTextprimaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
-  },
   "tokenTextsecondary": "Text, secondary",
   "@tokenTextsecondary": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextsecondaryHelp": "Supporting text beside the primary.",
-  "@tokenTextsecondaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text, secondary\" colour, saying where it is used."
   },
   "tokenTimelineoutofrange": "Timeline outside the work area",
   "@tokenTimelineoutofrange": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTimelineoutofrangeHelp": "The Timeline's ground either side of the work area, so the part you are delivering reads apart from the rest.",
-  "@tokenTimelineoutofrangeHelp": {
-    "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
-  },
   "tokenWarning": "Warning",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWarningHelp": "Something worth reading before carrying on.",
-  "@tokenWarningHelp": {
-    "description": "Theme editor: the sentence under the \"Warning\" colour, saying where it is used."
   },
   "tokenWaveformhigh": "Multiwave, treble",
   "@tokenWaveformhigh": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformhighHelp": "The top band — hats, sibilance, transient edge.",
-  "@tokenWaveformhighHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, treble\" colour, saying where it is used."
-  },
   "tokenWaveformlow": "Multiwave, bass",
   "@tokenWaveformlow": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformlowHelp": "The bottom band of the multiwave stack — kicks and bass.",
-  "@tokenWaveformlowHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, bass\" colour, saying where it is used."
   },
   "tokenWaveformmid": "Multiwave, middle",
   "@tokenWaveformmid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformmidHelp": "The middle band — most of a voice, a snare's body.",
-  "@tokenWaveformmidHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, middle\" colour, saying where it is used."
-  },
   "tokenWaveformrest": "Waveform",
   "@tokenWaveformrest": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformrestHelp": "The single wave a layer or a clip draws. Content, not state — never the accent.",
-  "@tokenWaveformrestHelp": {
-    "description": "Theme editor: the sentence under the \"Waveform\" colour, saying where it is used."
   },
   "toolAnchor": "Anchor point",
   "@toolAnchor": {
@@ -9801,7 +9584,7 @@
   "@transportSharedTexture": {
     "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
-  "typeVerticalNotBuilt": "Vertical type is not built yet — the engine lays out one horizontal line",
+  "typeVerticalNotBuilt": "Vertical type is not built yet",
   "@typeVerticalNotBuilt": {
     "description": "Notice when the vertical type tool is used."
   },
@@ -9934,7 +9717,7 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
-  "updateNightlyBody": "New features first, less tested. Projects saved in a nightly may not open in the stable version. Keep a copy.",
+  "updateNightlyBody": "Less tested. Projects saved in a nightly may not open in the stable version.",
   "@updateNightlyBody": {
     "description": "Body of the dialogue asking before updates switch to nightly builds."
   },
@@ -10057,15 +9840,6 @@
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
-  "updateNoticeBody": "Lumit {version} is downloaded. Before it is installed, its release notes say:",
-  "@updateNoticeBody": {
-    "description": "Body of the dialogue showing a release's warning, above the warning itself. {version} is the new version, such as 0.4.0.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
   "updateNoticeTitle": "Before you update to Lumit {version}",
   "@updateNoticeTitle": {
     "description": "Title of the dialogue showing what a release warns about before it is installed. {version} is the new version, such as 0.4.0.",
@@ -10075,9 +9849,9 @@
       }
     }
   },
-  "updateOfferBody": "{name} is {size}. Lumit downloads it now and installs it when you restart, so you can carry on working in the meantime.",
+  "updateOfferBody": "{name} is {size}. It installs when you restart.",
   "@updateOfferBody": {
-    "description": "Body of the dialogue offering a new version: what the download costs and that work can continue. {name} is the installer's file name, {size} an amount such as 240 MB.",
+    "description": "Body of the dialogue offering a new version: what the download costs and when it installs. {name} is the installer's file name, {size} an amount such as 240 MB.",
     "placeholders": {
       "name": {
         "type": "String"
@@ -10129,7 +9903,7 @@
       }
     }
   },
-  "updateReadyInPlace": "Lumit {version} is ready. Restarting puts it in place and opens it — no installer, and nothing to answer.",
+  "updateReadyInPlace": "Lumit {version} is ready. Restart to finish.",
   "@updateReadyInPlace": {
     "description": "Update dialogue, for installs Lumit can replace by itself.",
     "placeholders": {
@@ -10138,7 +9912,7 @@
       }
     }
   },
-  "updateReadyInstaller": "Lumit {version} is downloaded. It installs while Lumit is closed, so the update finishes the next time you open it.",
+  "updateReadyInstaller": "Lumit {version} is downloaded. It installs the next time Lumit closes.",
   "@updateReadyInstaller": {
     "description": "Update dialogue, for installs that need the setup program to run.",
     "placeholders": {
@@ -11948,21 +11722,9 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Save later",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeOpenProject": "Open",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum file",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
-  },
-  "emptyStageImportNote": "Video, stills, sound",
-  "@emptyStageImportNote": {
-    "description": "Empty editor: the small note under the Import footage card that stands where the picture would be before anything is open. One line in a 180px card."
   },
   "welcomeRecent": "Recent",
   "@welcomeRecent": {
@@ -12019,10 +11781,6 @@
   "@settingsAppliesOnRelease": {
     "description": "Settings window, Appearance: a note beside the interface scale slider saying the new scale is taken when the handle is let go. Lower case on purpose — it is an aside, not a label."
   },
-  "settingsChangesApplyImmediately": "Changes apply immediately",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
-  },
   "settingsGroupKeymap": "Keymap",
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
@@ -12047,7 +11805,7 @@
   "@settingsAudioSystemDefault": {
     "description": "Settings window, Audio: the first entry in the output device list — follow whatever the operating system is set to, rather than pinning one device."
   },
-  "settingsAudioDeviceMissing": "That device is not connected — playing through the system default until it is back.",
+  "settingsAudioDeviceMissing": "Not connected. Playing through the system default.",
   "@settingsAudioDeviceMissing": {
     "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },
@@ -12699,14 +12457,6 @@
   "@graphTypeAudio": {
     "description": "Graph panel legend: what a green wire carries. Lower case."
   },
-  "graphConsoleAdds": "Adds a box to the graph",
-  "@graphConsoleAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened over the node graph with no wire in hand: picking an entry (an effect, a driver or a saved group) adds that box to the canvas."
-  },
-  "graphSearchWires": "Connects the dragged wire where it fits",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
-  },
   "graphSaveGroup": "Save group…",
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button, and a row of the menu on a group's bar: asks for a name, then writes the picked boxes to the user's library as a group that can be dropped into another graph later. Boxes that are not a group yet become one."
@@ -13058,10 +12808,6 @@
   "exportColourOcio": "No OCIO configuration",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
-  },
-  "exportColourNote": "An export asking for a space this build cannot transform to is refused rather than written wrongly.",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
   },
   "exportAudioAuto": "Auto",
   "@exportAudioAuto": {
@@ -13914,7 +13660,7 @@
       }
     }
   },
-  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} of the names are greyed out because they need things Lumit does not support yet.",
+  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} are greyed out and not supported yet.",
   "@projectColourLoadedPartly": {
     "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use, but some of the colour spaces, views or looks it lists cannot be used. All three blanks are counts; a greyed-out name shows its reason on hover.",
     "placeholders": {
@@ -13929,7 +13675,7 @@
       }
     }
   },
-  "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
+  "projectColourNotInForce": "Not in force: {reason}. Using the built-in colour handling.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
     "placeholders": {
@@ -13978,7 +13724,7 @@
   "@tipExportNoMetadata": {
     "description": "Export dialog: the hover reason on the Metadata section when the chosen format has nowhere to keep any. Two words at most."
   },
-  "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
+  "exportColourConfigUntagged": "Written untagged.",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   },
@@ -14232,7 +13978,7 @@
       }
     }
   },
-  "workspaceImported": "{name} imported, and selected.",
+  "workspaceImported": "{name} imported.",
   "@workspaceImported": {
     "description": "Status-line notice after reading a workspace file in. {name} is its name.",
     "placeholders": {
@@ -14660,17 +14406,13 @@
   "@shaderPortTint": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the tint colour. Lower case: socket labels are quiet row text beside the wire dots."
   },
-  "shaderSearchAdds": "Adds a shader box",
-  "@shaderSearchAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened inside a Custom shader's inner node graph: picking an entry adds that box to the shader's canvas."
-  },
   "shaderDetachTitle": "Detach graph",
   "@shaderDetachTitle": {
     "description": "Title of the small window offered when the user opens the text editor on a Custom shader that is built from its node graph. The graph is the master copy, so the text cannot be edited until the graph is detached."
   },
-  "shaderDetachBody": "This shader is built from its graph, so the text cannot be edited while the graph is in charge. Detaching keeps the compiled text and removes the graph. This cannot be reassembled afterwards.",
+  "shaderDetachBody": "Detaching keeps the compiled text and removes the graph for good.",
   "@shaderDetachBody": {
-    "description": "Body of the detach-graph window: explains that editing the text of a graph-built Custom shader requires detaching the graph first, that the compiled text stays, and that the boxes do not come back (undo aside)."
+    "description": "Body of the detach-graph window: the compiled text of a graph-built Custom shader stays, and the graph goes for good (undo aside)."
   },
   "shaderDetachAction": "Detach",
   "@shaderDetachAction": {
@@ -15167,7 +14909,7 @@
   "@startupFailedTitle": {
     "description": "Heading of the screen that takes the place of the whole editor when something went wrong before the window opened. Nothing else is on screen but this, the line below it, and the error itself."
   },
-  "startupFailedBody": "Something went wrong on the way up. What follows is the reason and the file the same line was written to — the useful thing to send with a bug report.",
+  "startupFailedBody": "Send this with a bug report.",
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
@@ -16455,10 +16197,6 @@
   "@firstRunSetup": {
     "description": "Title of the screen shown the first time Lumit opens, over its five questions."
   },
-  "firstRunSetupBlurb": "Customise Lumit, all of them can be later changed in Settings.",
-  "@firstRunSetupBlurb": {
-    "description": "First-run screen: the line under its title."
-  },
   "firstRunStyle": "Style",
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
@@ -16596,10 +16334,6 @@
   "@shareFootageFolder": {
     "description": "Row label on the Join page of the Shared project window, beside the folder the person chose and a Choose button. Optional."
   },
-  "shareFootageHint": "Where this computer keeps the project's footage. Anything not found there can be relinked later.",
-  "@shareFootageHint": {
-    "description": "Quiet line under the Footage folder row on the Join page of the Shared project window."
-  },
   "shareJoin": "Join",
   "@shareJoin": {
     "description": "The filled button in the Shared project window's footer, on its Join page."
@@ -16624,7 +16358,7 @@
   "@shareConflictsTitle": {
     "description": "Title of the window that lists a guest's changes that collided with other people's, drawn in capitals by the style."
   },
-  "shareConflictsIntro": "These changes of yours touch something another person changed while this computer was away. Their version is in place until you choose otherwise.",
+  "shareConflictsIntro": "Someone else changed these while this computer was away. Their version is in place until you choose.",
   "@shareConflictsIntro": {
     "description": "The two lines at the top of the Conflicts window. Away means this computer had lost the host of the shared project."
   },
@@ -16683,7 +16417,7 @@
   "@shareTabJoin": {
     "description": "Page tab in the Shared project window, drawn in capitals by the style: the page where an invite to somebody else's shared project is pasted."
   },
-  "shareSameInvite": "The same invite as last time. Anyone still waiting for this project comes back by themselves.",
+  "shareSameInvite": "The same invite as last time.",
   "@shareSameInvite": {
     "description": "Quiet line under the invite in the Shared project window, shown to a host sharing a project they shared before without stopping it, for instance after restarting Lumit."
   },
@@ -16836,6 +16570,10 @@
   "@keyCentreTheLayerInTheComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyCentreTheAnchorPointInTheLayer": "Centre the anchor point in the layer",
+  "@keyCentreTheAnchorPointInTheLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keySetTheMaskSFeather": "Set the mask's feather",
   "@keySetTheMaskSFeather": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -16956,7 +16694,7 @@
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Adds this computer's VPN address to the link. Most people leave it empty.",
+  "shareAddressHint": "Adds this computer's VPN address to the link.",
   "@shareAddressHint": {
     "description": "Quiet line under the Extra address field, under Advanced, while a project is being shared. What is typed is an IP address or a host name of this computer, not a relay's."
   },
@@ -17928,6 +17666,30 @@
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
+  "signInBirthDate": "Date of birth",
+  "@signInBirthDate": {
+    "description": "Label over the day, month and year someone was born, on the page that creates an account."
+  },
+  "signInDay": "Day",
+  "@signInDay": {
+    "description": "Hint in the field for the day of the month someone was born, on the page that creates an account."
+  },
+  "signInMonth": "Month",
+  "@signInMonth": {
+    "description": "What the month list for a date of birth shows before a month is picked, on the page that creates an account."
+  },
+  "signInYearShort": "Year",
+  "@signInYearShort": {
+    "description": "Hint in the field for the year someone was born, on the page that creates an account. Four digits."
+  },
+  "signInErrorBirthDate": "Enter your date of birth.",
+  "@signInErrorBirthDate": {
+    "description": "Error when creating an account with the date of birth missing or not a real day, or after a Google, Discord or Apple sign-in that would make a new account without one."
+  },
+  "signInErrorTooYoung": "You're too young for a Lumit account.",
+  "@signInErrorTooYoung": {
+    "description": "Error when the year of birth given is under the least age for an account."
+  },
   "signInErrorProvider": "Verify your email with that account first.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
@@ -18024,6 +17786,24 @@
   "proPreviewNote": "Pro is free while we test it.",
   "@proPreviewNote": {
     "description": "Line in the Lumit Pro window while Pro is free for everyone, before it goes on sale."
+  },
+  "proRenewsMonthly": "Renews at {price} a month until you cancel.",
+  "@proRenewsMonthly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the monthly plan is picked. {price} is the written price, such as £5.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "proRenewsYearly": "Renews at {price} a year until you cancel.",
+  "@proRenewsYearly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the yearly plan is picked. {price} is the written price, such as £50.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
   },
   "proRenews": "Renews on {date}.",
   "@proRenews": {

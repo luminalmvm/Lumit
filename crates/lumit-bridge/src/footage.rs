@@ -30,9 +30,9 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use lumit_core::model::{FootageItem, ProjectItem};
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use lumit_render::standin::Smaller;
-use lumit_share::{Footage, Held, Limits, News, Wanted};
+use lumit_share::{bulk::Footage, bulk::Held, bulk::Limits, bulk::News, bulk::Wanted};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -283,7 +283,7 @@ fn moves(footage: &FootageItem, path: &Path) -> bool {
     if footage.sequence.is_some() || sent_whole(&file_name(footage)) {
         return false;
     }
-    let source = lumit_media::MediaSource::file(path.to_path_buf());
+    let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
     let pictured = lumit_media::probe::probe(&source).is_ok_and(|probe| probe.video.is_some());
     pictured
         && lumit_render::media_index::load_or_build_index(&source)
@@ -293,8 +293,9 @@ fn moves(footage: &FootageItem, path: &Path) -> bool {
 /// Whether the file at `path` says its pictures are interlaced.
 #[cfg(feature = "media")]
 fn has_fields(path: &Path) -> bool {
-    let source = lumit_media::MediaSource::file(path.to_path_buf());
-    lumit_media::probe::facts(&source).is_ok_and(|f| f.fields != lumit_media::Fields::Off)
+    let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
+    lumit_media::probe::facts(&source)
+        .is_ok_and(|f| f.fields != lumit_media::interpret::Fields::Off)
 }
 
 /// Encode a stand-in of `source` at `dest`, to one side first so a file at
@@ -331,7 +332,7 @@ fn moves(_: &FootageItem, _: &Path) -> bool {
 /// How many frames the moving picture at `path` has.
 #[cfg(feature = "media")]
 fn frames_of(path: &Path) -> Option<u64> {
-    let source = lumit_media::MediaSource::file(path.to_path_buf());
+    let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
     let index = lumit_render::media_index::load_or_build_index(&source).ok()?;
     Some(index.frame_count() as u64)
 }
@@ -1350,7 +1351,7 @@ fn spec_from(_: &Value) -> Option<BridgeExportSpec> {
 mod tests {
     use super::*;
     use lumit_core::model::MediaRef;
-    use lumit_core::Op;
+    use lumit_core::ops::Op;
     use lumit_media::encode::{ColourTags, Encoder, Metadata, VideoCodec, VideoSettings};
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -1408,7 +1409,7 @@ mod tests {
         // sharing, and a folder of its own for what it is sent.
         let quiet: lumit_share::Events = Arc::new(|_| {});
         let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
-        let host = lumit_share::host(
+        let host = lumit_share::host::host(
             hosted.clone(),
             "Host",
             loopback,
@@ -1420,7 +1421,7 @@ mod tests {
         )
         .unwrap();
         let (document, joining) =
-            lumit_share::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
+            lumit_share::guest::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
         let joined = Arc::new(DocumentStore::new(document));
         let guest = joining.start(joined.clone(), quiet).unwrap();
         let (host_project, guest_project) = (Uuid::now_v7(), Uuid::now_v7());
@@ -1464,7 +1465,7 @@ mod tests {
             panic!("a stand-in");
         };
         let frames = |path: &Path| {
-            let source = lumit_media::MediaSource::file(path.to_path_buf());
+            let source = lumit_media::sequence::MediaSource::file(path.to_path_buf());
             lumit_render::media_index::load_or_build_index(&source)
                 .unwrap()
                 .frame_count()
@@ -1561,7 +1562,7 @@ mod tests {
             })
         };
         let events = notes_for(projects.0);
-        let host = lumit_share::host(
+        let host = lumit_share::host::host(
             hosted.clone(),
             "Host",
             loopback,
@@ -1573,7 +1574,7 @@ mod tests {
         )
         .unwrap();
         let (document, joining) =
-            lumit_share::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
+            lumit_share::guest::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
         let joined = Arc::new(DocumentStore::new(document));
         let guest = joining
             .start(joined.clone(), notes_for(projects.1))

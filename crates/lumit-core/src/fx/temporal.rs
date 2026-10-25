@@ -264,13 +264,15 @@ pub fn stack_accumulation_mb(
                 // at the dispatch seam because this effect has no dispatch: it
                 // orchestrates a re-render, and the combine prepares its own
                 // matte.
-                matte_channel: match e.param(crate::fx::MATTE_CHANNEL_PARAM) {
+                matte_channel: match e.param(crate::fx::schema::MATTE_CHANNEL_PARAM) {
                     Some(crate::model::EffectValue::Choice(c)) => {
-                        (*c).min(crate::fx::CHANNEL_OPTIONS.len() as u32 - 1)
+                        (*c).min(crate::fx::builtins::CHANNEL_OPTIONS.len() as u32 - 1)
                     }
                     _ => 0,
                 },
-                matte_invert: e.bool_of(crate::fx::MATTE_INVERT_PARAM).unwrap_or(false),
+                matte_invert: e
+                    .bool_of(crate::fx::schema::MATTE_INVERT_PARAM)
+                    .unwrap_or(false),
             }
         })
 }
@@ -358,7 +360,7 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// about the effect and comes off its declaration, exactly as it always did. A
 /// plugin's is a fact about *this copy of it at this frame*: a retimer answers
 /// `getFramesNeeded` per instance and per time (docs/12 §2.1), so the definition
-/// is asked ([`EffectDef::frames_needed`](super::EffectDef::frames_needed)) and
+/// is asked ([`EffectDef::frames_needed`](super::registry::EffectDef::frames_needed)) and
 /// answers for itself, falling back to the declaration when it has nothing more
 /// specific to say. The frames it names are then in the frame key and in the
 /// prefetch, which is what keeps a cached frame from outliving what it sampled.
@@ -366,7 +368,7 @@ pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64
     let mut offsets = vec![0i32];
     if fx_on {
         for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
-            let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
+            let Some(def) = super::catalogue::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
             match def.frames_needed(e, frame) {
@@ -409,7 +411,7 @@ pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
         out.extend(p.sample_offsets().into_iter().map(|off| t + off * dt));
         return out;
     }
-    let Some(def) = super::BUILTIN_DEFS.get(&inst.effect.match_name) else {
+    let Some(def) = super::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name) else {
         return vec![t];
     };
     if inst.effect.match_name == TIME_OFFSET {

@@ -405,7 +405,7 @@ pub fn rgb_split_offset(amount_px: f32, angle_deg: f32) -> (f32, f32) {
 /// The most aperture blades the depth-of-field polygon test carries (docs/08
 /// §3.22). Bounds the per-tap loop and the kernel uniform's normal array, and is
 /// the hard ceiling on the effect's Blades parameter.
-/// `lumit_gpu::fx::MAX_BLADES` mirrors it, pinned by a test there (lumit-core is
+/// `lumit_gpu::fx::dof::MAX_BLADES` mirrors it, pinned by a test there (lumit-core is
 /// only a dev-dependency of that crate).
 pub const MAX_BLADES: usize = 8;
 
