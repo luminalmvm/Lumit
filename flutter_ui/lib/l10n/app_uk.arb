@@ -4635,15 +4635,6 @@
   "@textAnimatorRemove": {
     "description": "Button on one animator's heading row in the Animators section that deletes that animator."
   },
-  "themeCopiedTo": "Copied to {name}.",
-  "@themeCopiedTo": {
-    "description": "Shown after duplicating a theme. {name} is the new theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeCopySuffix": "{name} copy",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -4656,15 +4647,6 @@
   "themeDefaultName": "Моя тема",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
-  },
-  "themeDeleted": "{name} видалено.",
-  "@themeDeleted": {
-    "description": "Shown after deleting a custom theme. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeEditorTitle": "Налаштувати тему",
   "@themeEditorTitle": {
@@ -4700,39 +4682,6 @@
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
   },
-  "themeImported": "{name} імпортовано та вибрано.",
-  "@themeImported": {
-    "description": "Shown after reading a theme file in. {name} is the theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeImportedRenamed": "A theme was already called {wanted}, so this one came in as {name}.",
-  "@themeImportedRenamed": {
-    "description": "Shown when an imported theme collided with an existing one; an import never overwrites the user’s own.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeNameTaken": "A theme was already called {wanted}, so this one is {name}.",
-  "@themeNameTaken": {
-    "description": "Shown when a rename collided with an existing theme and Lumit picked a free name instead.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeNameTheCopy": "Назвіть копію",
   "@themeNameTheCopy": {
     "description": "Title of the dialogue asking what a duplicated theme is called."
@@ -4744,15 +4693,6 @@
   "themeRenameTitle": "Перейменувати цю тему",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
-  },
-  "themeRenamedTo": "Перейменовано на {name}.",
-  "@themeRenamedTo": {
-    "description": "Shown after renaming a theme. {name} is the new name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeSaveACopy": "Зберегти копію…",
   "@themeSaveACopy": {
@@ -5011,25 +4951,13 @@
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccentHelp": "The one accent: focus, the playhead, what is chosen.",
-  "@tokenAccentHelp": {
-    "description": "Theme editor: the sentence under the \"Accent\" colour, saying where it is used."
-  },
   "tokenAccenthover": "Accent hover",
   "@tokenAccenthover": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccenthoverHelp": "The accent with the pointer on it.",
-  "@tokenAccenthoverHelp": {
-    "description": "Theme editor: the sentence under the \"Accent hover\" colour, saying where it is used."
-  },
   "tokenCachedisk": "Cache, on disk",
   "@tokenCachedisk": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenCachediskHelp": "The disk tier of the Timeline's cache bar.",
-  "@tokenCachediskHelp": {
-    "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
   "tokenCurve": "Крива {number}",
   "@tokenCurve": {
@@ -5040,17 +4968,9 @@
       }
     }
   },
-  "tokenCurveHelp": "A property's stroke in the graph editor.",
-  "@tokenCurveHelp": {
-    "description": "Theme editor: the sentence under the graph curve colours."
-  },
   "tokenError": "Помилка",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenErrorHelp": "Something that did not work.",
-  "@tokenErrorHelp": {
-    "description": "Theme editor: the sentence under the \"Error\" colour, saying where it is used."
   },
   "tokenGroupGraphCurves": "Graph curves",
   "@tokenGroupGraphCurves": {
@@ -5084,209 +5004,105 @@
   "@tokenHairline": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenHairlineHelp": "The line between rows and panels.",
-  "@tokenHairlineHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline\" colour, saying where it is used."
-  },
   "tokenHairlinestrong": "Hairline, strong",
   "@tokenHairlinestrong": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenHairlinestrongHelp": "The same line where it has to carry more weight.",
-  "@tokenHairlinestrongHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
   "tokenLayercamera": "Камера",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayercameraHelp": "Camera layers.",
-  "@tokenLayercameraHelp": {
-    "description": "Theme editor: the sentence under the \"Camera\" colour, saying where it is used."
-  },
   "tokenLayerfootage": "Footage",
   "@tokenLayerfootage": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayerfootageHelp": "Footage layers.",
-  "@tokenLayerfootageHelp": {
-    "description": "Theme editor: the sentence under the \"Footage\" colour, saying where it is used."
   },
   "tokenLayerprecomp": "Precomp",
   "@tokenLayerprecomp": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayerprecompHelp": "Precomp layers.",
-  "@tokenLayerprecompHelp": {
-    "description": "Theme editor: the sentence under the \"Precomp\" colour, saying where it is used."
-  },
   "tokenLayersequence": "Sequence",
   "@tokenLayersequence": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayersequenceHelp": "Sequence layers.",
-  "@tokenLayersequenceHelp": {
-    "description": "Theme editor: the sentence under the \"Sequence\" colour, saying where it is used."
   },
   "tokenLayersolid": "Solid",
   "@tokenLayersolid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayersolidHelp": "Solid layers.",
-  "@tokenLayersolidHelp": {
-    "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
-  },
   "tokenLayertext": "Текст",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayertextHelp": "Text layers.",
-  "@tokenLayertextHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
   "tokenMarker": "Маркер",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenMarkerHelp": "Comp markers on the time ruler, and the box holding what one says. A grey by default — a marker says *here*, not *careful*.",
-  "@tokenMarkerHelp": {
-    "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
-  },
   "tokenSelectionfill": "Selected row",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSelectionfillHelp": "Under a selected layer or property; half as strong under a highlighted one.",
-  "@tokenSelectionfillHelp": {
-    "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
   "tokenSuccess": "Успіх",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSuccessHelp": "Something finished, or held in the cache.",
-  "@tokenSuccessHelp": {
-    "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
-  },
   "tokenSurface0": "Background",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface0Help": "The deepest ground — behind panels, and the app backdrop.",
-  "@tokenSurface0Help": {
-    "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
   "tokenSurface1": "Панель",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface1Help": "A panel's own ground, and the Timeline inside the work area.",
-  "@tokenSurface1Help": {
-    "description": "Theme editor: the sentence under the \"Panel\" colour, saying where it is used."
-  },
   "tokenSurface2": "Raised",
   "@tokenSurface2": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface2Help": "Rows and cards lifted off the panel.",
-  "@tokenSurface2Help": {
-    "description": "Theme editor: the sentence under the \"Raised\" colour, saying where it is used."
   },
   "tokenSurface3": "Control",
   "@tokenSurface3": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface3Help": "A field or button at rest.",
-  "@tokenSurface3Help": {
-    "description": "Theme editor: the sentence under the \"Control\" colour, saying where it is used."
-  },
   "tokenSurface4": "Control hover",
   "@tokenSurface4": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface4Help": "The same, with the pointer over it.",
-  "@tokenSurface4Help": {
-    "description": "Theme editor: the sentence under the \"Control hover\" colour, saying where it is used."
   },
   "tokenTextdisabled": "Text, disabled",
   "@tokenTextdisabled": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextdisabledHelp": "A control that cannot be used right now.",
-  "@tokenTextdisabledHelp": {
-    "description": "Theme editor: the sentence under the \"Text, disabled\" colour, saying where it is used."
-  },
   "tokenTextmuted": "Text, muted",
   "@tokenTextmuted": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextmutedHelp": "Hints and the lines under a setting.",
-  "@tokenTextmutedHelp": {
-    "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
   "tokenTextprimary": "Текст",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextprimaryHelp": "Names, values, anything you read first.",
-  "@tokenTextprimaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
-  },
   "tokenTextsecondary": "Text, secondary",
   "@tokenTextsecondary": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextsecondaryHelp": "Supporting text beside the primary.",
-  "@tokenTextsecondaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text, secondary\" colour, saying where it is used."
   },
   "tokenTimelineoutofrange": "Timeline outside the work area",
   "@tokenTimelineoutofrange": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTimelineoutofrangeHelp": "The Timeline's ground either side of the work area, so the part you are delivering reads apart from the rest.",
-  "@tokenTimelineoutofrangeHelp": {
-    "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
-  },
   "tokenWarning": "Попередження",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWarningHelp": "Something worth reading before carrying on.",
-  "@tokenWarningHelp": {
-    "description": "Theme editor: the sentence under the \"Warning\" colour, saying where it is used."
   },
   "tokenWaveformhigh": "Multiwave, treble",
   "@tokenWaveformhigh": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformhighHelp": "The top band — hats, sibilance, transient edge.",
-  "@tokenWaveformhighHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, treble\" colour, saying where it is used."
-  },
   "tokenWaveformlow": "Multiwave, bass",
   "@tokenWaveformlow": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformlowHelp": "The bottom band of the multiwave stack — kicks and bass.",
-  "@tokenWaveformlowHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, bass\" colour, saying where it is used."
   },
   "tokenWaveformmid": "Multiwave, middle",
   "@tokenWaveformmid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformmidHelp": "The middle band — most of a voice, a snare's body.",
-  "@tokenWaveformmidHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, middle\" colour, saying where it is used."
-  },
   "tokenWaveformrest": "Waveform",
   "@tokenWaveformrest": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformrestHelp": "The single wave a layer or a clip draws. Content, not state — never the accent.",
-  "@tokenWaveformrestHelp": {
-    "description": "Theme editor: the sentence under the \"Waveform\" colour, saying where it is used."
   },
   "toolAnchor": "Anchor point",
   "@toolAnchor": {
