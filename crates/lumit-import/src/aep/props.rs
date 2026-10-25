@@ -37,6 +37,7 @@
 //! `binary/ldat_chunks.py`, `binary/misc_chunks.py` and `parsers/*.py` are the
 //! map. No code is vendored.
 
+mod btdk;
 mod keys;
 #[cfg(test)]
 use keys::DEFAULT_INFLUENCE;
@@ -328,8 +329,14 @@ fn read_node(
             .is_some_and(|flags| bit(flags, 1));
         return Some((read_leaf(match_name, tdbs, chunks, ctx, skipped), separated));
     }
-    // A text document (`btds`) and a gradient (`GCst`) are their own encodings
-    // and are phase C; a node type from a newer After Effects lands here too.
+    if let Some(btds) = list(b"btds") {
+        return Some((
+            btdk::read_text(match_name, btds, chunks, ctx, skipped),
+            false,
+        ));
+    }
+    // A gradient (`GCst`) is its own encoding and is phase C; a node type from
+    // a newer After Effects lands here too.
     // Either way the property is named and marked rather than dropped, which is
     // what lets the import report say what was lost.
     let kind = chunks.first().and_then(|chunk| chunk.list_type)?;

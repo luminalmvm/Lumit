@@ -84,6 +84,13 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
         );
     }
 
+    // A project file names its font by PostScript name alone, where the
+    // script writes the family and the face as well.
+    let (family, face) = match word("fontFamily") {
+        family if !family.is_empty() => (family, word("fontStyle")),
+        _ => lumit_text::fonts::by_postscript_name(&word("font")).unwrap_or_default(),
+    };
+
     TextDocument {
         text: word("text"),
         expression: None,
@@ -95,8 +102,8 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
         path_offset: lumit_core::anim::Property::zero(),
         animators: Vec::new(),
         style: Box::new(TextStyle {
-            family: word("fontFamily"),
-            face: word("fontStyle"),
+            family,
+            face,
             // With auto leading on, After Effects still writes the number it
             // worked out. Lumit works out its own.
             leading: number("leading").filter(|_| on("autoLeading") == Some(false)),

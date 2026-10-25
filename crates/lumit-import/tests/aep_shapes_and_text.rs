@@ -56,3 +56,28 @@ fn shape_contents_arrive_where_after_effects_draws_them() {
     assert_eq!(path.trim_end.value_at(2.0), 100.0);
     assert_eq!(path.trim_end.value_at(0.0), 0.0);
 }
+
+#[test]
+fn text_layers_keep_their_words_and_how_they_are_set() {
+    use lumit_core::text::TextAlign;
+
+    let doc = imported();
+
+    let LayerKind::Text { document } = &layer(&doc, "Title").kind else {
+        panic!("a text layer");
+    };
+    assert_eq!(document.text, "Hello Lumit");
+    assert_eq!(document.size, 100.0);
+    assert_eq!(document.paragraph.align, TextAlign::Centre);
+    assert_eq!(document.paragraph.box_width, 0.0);
+
+    let LayerKind::Text { document } = &layer(&doc, "Caption").kind else {
+        panic!("a text layer");
+    };
+    assert_eq!(document.text, "A second line of words in a box");
+    assert_eq!(document.size, 48.0);
+    assert_eq!(document.paragraph.box_width, 600.0);
+    assert_eq!(document.style.tracking, 50.0);
+    assert!(document.style.stroke_on);
+    assert_eq!(document.style.stroke_width, 4.0);
+}
