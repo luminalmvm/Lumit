@@ -110,6 +110,11 @@ pub struct VideoDecoder {
     /// stands in for. Its frames are handed back at that size, as the probe
     /// says they are.
     own: Option<(u32, u32)>,
+    /// Quarter turns clockwise every frame is handed back at, for a phone clip
+    /// stored on its side ([`crate::probe::quarter_turns`]), and the stored
+    /// picture's size before the turn.
+    turns: u8,
+    stored: (u32, u32),
     /// The numbered run this reads, with the source's own path its unreadable
     /// files are noted under. `None` for a plain file.
     run: Option<(crate::sequence::Run, std::path::PathBuf)>,
@@ -245,6 +250,7 @@ impl VideoDecoder {
             u32::try_from(par.height).unwrap_or(0),
         );
         let own = crate::probe::stand_in_size(input.metadata(), coded);
+        let turns = crate::probe::quarter_turns(&par);
         let run = src.run().map(|(run, _)| (run, src.path.clone()));
         Ok(Self {
             input,
@@ -256,6 +262,8 @@ impl VideoDecoder {
             seeks: 0,
             hardware,
             own,
+            turns,
+            stored: own.unwrap_or(coded),
             run,
         })
     }
@@ -282,6 +290,24 @@ impl VideoDecoder {
     /// (`crate::interpret`): a field, a film frame with its pulldown removed,
     /// or a later play-through are each a frame here.
     pub fn frame_rgba(
+        &mut self,
+        n: usize,
+        target_width: Option<u32>,
+    ) -> Result<DecodedFrame, MediaError> {
+        if self.turns.is_multiple_of(2) {
+            return Ok(turn(self.frame_stored(n, target_width)?, self.turns));
+        }
+        // On its side the picture's width is the stored height, so the
+        // stored picture is scaled to give the height asked for.
+        let (w, h) = self.stored;
+        let width = target_width.map(|t| {
+            u32::try_from((u64::from(t) * u64::from(w)).div_ceil(u64::from(h.max(1)))).unwrap_or(t)
+        });
+        Ok(turn(self.frame_stored(n, width)?, self.turns))
+    }
+
+    /// [`Self::frame_rgba`] as the file stores it, before any turn.
+    fn frame_stored(
         &mut self,
         n: usize,
         target_width: Option<u32>,
@@ -354,8 +380,9 @@ impl VideoDecoder {
         use crate::interpret::Pick;
         let it = self.index.interpret;
         // A smaller stand-in is measured at its original's size, so a track
-        // made on it is in the original's pixels.
-        if self.own.is_some() {
+        // made on it is in the original's pixels. A turned picture is
+        // measured the way it is shown.
+        if self.own.is_some() || self.turns != 0 {
             return Ok(luma_of(&self.frame_rgba(n, None)?));
         }
         if it.is_plain() {
@@ -768,6 +795,39 @@ pub(crate) fn fit(
         u32::try_from(dst_w).unwrap_or(0),
         u32::try_from(dst_h).unwrap_or(0),
     )
+}
+
+/// `frame` turned clockwise by `turns` quarter turns.
+///
+/// ponytail: a pixel at a time on the CPU, tens of milliseconds a 4K frame.
+/// Turn on the graphics card if phone footage ever plays slowly.
+fn turn(frame: DecodedFrame, turns: u8) -> DecodedFrame {
+    let turns = turns % 4;
+    if turns == 0 {
+        return frame;
+    }
+    let (w, h) = (frame.width as usize, frame.height as usize);
+    let px = frame.format.bytes_per_px();
+    let (out_w, out_h) = if turns % 2 == 1 { (h, w) } else { (w, h) };
+    let mut out = vec![0u8; frame.rgba.len()];
+    for (i, from) in frame.rgba.chunks_exact(px).take(w * h).enumerate() {
+        let (x, y) = (i % w.max(1), i / w.max(1));
+        let (to_x, to_y) = match turns {
+            1 => (h - 1 - y, x),
+            2 => (w - 1 - x, h - 1 - y),
+            _ => (y, w - 1 - x),
+        };
+        let at = (to_y * out_w + to_x) * px;
+        if let Some(to) = out.get_mut(at..at + px) {
+            to.copy_from_slice(from);
+        }
+    }
+    DecodedFrame {
+        width: u32::try_from(out_w).unwrap_or(0),
+        height: u32::try_from(out_h).unwrap_or(0),
+        rgba: out,
+        format: frame.format,
+    }
 }
 
 /// A colour frame's brightness, 0 to 1, by the Rec. 709 weights.
@@ -1399,6 +1459,59 @@ mod tests {
             assert_eq!(frame_hash(&f), truth[n], "frame {n} differs after seek");
             assert_eq!((f.width, f.height), (320, 240));
         }
+    }
+
+    /// A clip a phone filmed upright stores its picture on its side with a
+    /// turn beside it. The probe and the frames are the upright picture, the
+    /// same one ffmpeg itself shows.
+    #[test]
+    fn a_phone_clip_filmed_upright_comes_back_upright() {
+        let dir = tempfile::tempdir().unwrap();
+        use crate::index::tests_support::ffmpeg_bin;
+        let (Some(file), Some(bin)) = (fixture(dir.path()), ffmpeg_bin()) else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let turned = dir.path().join("upright.mp4");
+        let made = std::process::Command::new(bin)
+            .args(["-v", "error", "-y", "-display_rotation", "90", "-i"])
+            .arg(&file)
+            .args(["-c", "copy"])
+            .arg(&turned)
+            .status()
+            .unwrap();
+        assert!(made.success());
+
+        let probe = crate::probe::probe(&turned).unwrap();
+        let video = probe.video.unwrap();
+        assert_eq!((video.width, video.height), (240, 320));
+
+        let index = build_frame_index(&turned).unwrap();
+        let mut decoder = VideoDecoder::open(&turned, index).unwrap();
+        let ours = decoder.frame_rgba(0, None).unwrap();
+        assert_eq!((ours.width, ours.height), (240, 320));
+        let half = decoder.frame_rgba(0, Some(120)).unwrap();
+        assert_eq!(half.width, 120, "a preview width is the upright width");
+
+        let theirs = std::process::Command::new(bin)
+            .args(["-v", "error", "-i"])
+            .arg(&turned)
+            .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+            .output()
+            .unwrap()
+            .stdout;
+        assert_eq!(theirs.len(), ours.rgba.len());
+        let off = ours
+            .rgba
+            .iter()
+            .zip(&theirs)
+            .map(|(a, b)| f64::from(a.abs_diff(*b)))
+            .sum::<f64>()
+            / theirs.len() as f64;
+        assert!(
+            off < 4.0,
+            "the picture is turned the wrong way, off by {off}"
+        );
     }
 
     /// Hardware decode is an implementation detail, never a look: the frames

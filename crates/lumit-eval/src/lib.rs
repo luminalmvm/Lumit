@@ -65,7 +65,9 @@ pub mod schedule;
 ///   of the edge pixel.
 /// * 17: a 3D layer's outline blurs under the camera's depth of field, and a
 ///   plain solid under one is blurred at its own size.
-pub const ALGO_VERSION: u32 = 17;
+/// * 18: a phone clip filmed upright is drawn upright, where it was on its
+///   side.
+pub const ALGO_VERSION: u32 = 18;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4562,12 +4564,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 17, which renamed every frame.
+        // Pinned under ALGO_VERSION 18, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                109_588_339_425_146_761_875_782_770_488_626_120_550,
-                222_431_429_589_919_992_755_804_217_156_224_230_894
+                43_642_340_716_799_632_156_674_495_559_012_742_681,
+                253_619_975_629_639_521_298_965_030_168_473_732_135
             )
         );
 
