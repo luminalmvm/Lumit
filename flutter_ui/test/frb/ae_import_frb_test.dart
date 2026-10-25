@@ -149,7 +149,7 @@ void main() {
       // Repeat Edge Pixels. The text layer's words are read now, so nothing
       // is skipped, and the shape layer's contents arrive, so one fewer
       // adjusted. 63, 51, 0 and 0, and only the adjusted are listed.
-      expect(find.text(l10n.aeCameAcross(63)), findsOneWidget,
+      expect(find.text(l10n.aeItemsImported(63)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
       expect(find.text(l10n.aeOutcomeAdjusted), findsOneWidget);
       expect(find.text('51'), findsOneWidget);

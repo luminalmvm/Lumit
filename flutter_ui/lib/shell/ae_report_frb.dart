@@ -123,7 +123,7 @@ class _ReportBodyState extends State<_ReportBody> {
             child: Text(l10n.aeReportTitle, style: t.heading),
           ),
           Text(
-            l10n.aeCameAcross(widget.report.imported),
+            l10n.aeItemsImported(widget.report.imported),
             style: t.small.copyWith(color: t.textSecondary),
           ),
           const SizedBox(height: 10),
