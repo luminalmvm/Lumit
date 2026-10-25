@@ -6248,6 +6248,10 @@
   "@menuCentreInView": {
     "description": "Layer ▸ Transform submenu item: moves the selected layers so each sits in the middle of the composition."
   },
+  "menuCentreAnchorPoint": "Centre anchor point",
+  "@menuCentreAnchorPoint": {
+    "description": "Layer ▸ Transform submenu item: moves each selected layer's anchor point to the middle of its content without moving the picture."
+  },
   "menuClearBeatMarkers": "Clear beat markers",
   "@menuClearBeatMarkers": {
     "description": "Menu item."
@@ -16829,6 +16833,10 @@
   },
   "keyCentreTheLayerInTheComposition": "Centre the layer in the composition",
   "@keyCentreTheLayerInTheComposition": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCentreTheAnchorPointInTheLayer": "Centre the anchor point in the layer",
+  "@keyCentreTheAnchorPointInTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keySetTheMaskSFeather": "Set the mask's feather",

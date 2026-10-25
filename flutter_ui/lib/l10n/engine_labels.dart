@@ -1474,6 +1474,8 @@ Map<String, String> get _built => {
       "Move the layer ten frames later": l10n.keyMoveTheLayerTenFramesLater,
       "Centre the layer in the composition":
           l10n.keyCentreTheLayerInTheComposition,
+      "Centre the anchor point in the layer":
+          l10n.keyCentreTheAnchorPointInTheLayer,
       "Set the mask's feather": l10n.keySetTheMaskSFeather,
       "Invert the mask": l10n.keyInvertTheMask,
       "Show or hide the layer controls": l10n.keyShowOrHideTheLayerControls,
