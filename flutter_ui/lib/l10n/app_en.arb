@@ -16341,10 +16341,6 @@
   "@shareFootageFolder": {
     "description": "Row label on the Join page of the Shared project window, beside the folder the person chose and a Choose button. Optional."
   },
-  "shareFootageHint": "Where this computer keeps the project's footage. Anything not found there can be relinked later.",
-  "@shareFootageHint": {
-    "description": "Quiet line under the Footage folder row on the Join page of the Shared project window."
-  },
   "shareJoin": "Join",
   "@shareJoin": {
     "description": "The filled button in the Shared project window's footer, on its Join page."
@@ -16369,7 +16365,7 @@
   "@shareConflictsTitle": {
     "description": "Title of the window that lists a guest's changes that collided with other people's, drawn in capitals by the style."
   },
-  "shareConflictsIntro": "These changes of yours touch something another person changed while this computer was away. Their version is in place until you choose otherwise.",
+  "shareConflictsIntro": "Someone else changed these while this computer was away. Their version is in place until you choose.",
   "@shareConflictsIntro": {
     "description": "The two lines at the top of the Conflicts window. Away means this computer had lost the host of the shared project."
   },
@@ -16428,7 +16424,7 @@
   "@shareTabJoin": {
     "description": "Page tab in the Shared project window, drawn in capitals by the style: the page where an invite to somebody else's shared project is pasted."
   },
-  "shareSameInvite": "The same invite as last time. Anyone still waiting for this project comes back by themselves.",
+  "shareSameInvite": "The same invite as last time.",
   "@shareSameInvite": {
     "description": "Quiet line under the invite in the Shared project window, shown to a host sharing a project they shared before without stopping it, for instance after restarting Lumit."
   },
@@ -16701,7 +16697,7 @@
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Adds this computer's VPN address to the link. Most people leave it empty.",
+  "shareAddressHint": "Adds this computer's VPN address to the link.",
   "@shareAddressHint": {
     "description": "Quiet line under the Extra address field, under Advanced, while a project is being shared. What is typed is an IP address or a host name of this computer, not a relay's."
   },
