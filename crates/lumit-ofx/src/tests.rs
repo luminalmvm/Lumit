@@ -1586,7 +1586,7 @@ impl PluginHost for DeadHost {
         _params: &ParamSnapshot,
         _name: &str,
         _source: Frame16,
-    ) -> Result<crate::Settled, String> {
+    ) -> Result<crate::instance::Settled, String> {
         Err("the plugin is disabled".to_owned())
     }
 }
@@ -1869,7 +1869,7 @@ fn a_plugins_memory_reaches_its_render() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2024,7 +2024,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2228,12 +2228,12 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             _instance: uuid::Uuid,
             _made_with: &ParamSnapshot,
             handed: &ParamSnapshot,
-        ) -> Result<crate::Settled, String> {
-            Ok(crate::Settled {
+        ) -> Result<crate::instance::Settled, String> {
+            Ok(crate::instance::Settled {
                 params: handed.clone(),
-                controls: crate::Controls {
+                controls: crate::instance::Controls {
                     secret: self.0.clone(),
-                    ..crate::Controls::default()
+                    ..crate::instance::Controls::default()
                 },
             })
         }
@@ -2254,7 +2254,7 @@ fn a_secret_parameter_is_a_hidden_row_until_the_plugin_says_otherwise() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }
@@ -2481,7 +2481,7 @@ fn a_plugins_window_is_asked_with_its_own_values() {
             _params: &ParamSnapshot,
             _name: &str,
             _source: Frame16,
-        ) -> Result<crate::Settled, String> {
+        ) -> Result<crate::instance::Settled, String> {
             Err("not this test".to_owned())
         }
     }

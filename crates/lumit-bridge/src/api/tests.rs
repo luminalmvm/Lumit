@@ -8278,16 +8278,16 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         shown: Mutex<Option<(usize, usize)>>,
     }
 
-    impl lumit_ofx::PluginHost for Pressing {
+    impl lumit_ofx::def::PluginHost for Pressing {
         fn render(
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
-            source: lumit_ofx::Frame16,
-            _neighbours: &[(i32, lumit_ofx::Frame16)],
-        ) -> lumit_ofx::Rendering {
-            lumit_ofx::Rendering {
+            _params: &lumit_ofx::instance::ParamSnapshot,
+            source: lumit_ofx::image::Frame16,
+            _neighbours: &[(i32, lumit_ofx::image::Frame16)],
+        ) -> lumit_ofx::def::Rendering {
+            lumit_ofx::def::Rendering {
                 frame: source,
                 error: None,
             }
@@ -8297,7 +8297,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
         ) -> Option<Vec<i32>> {
             None
         }
@@ -8306,21 +8306,21 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             &self,
             _instance: Uuid,
             _time: f64,
-            params: &lumit_ofx::ParamSnapshot,
+            params: &lumit_ofx::instance::ParamSnapshot,
             name: &str,
-            source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::Settled, String> {
+            source: lumit_ofx::image::Frame16,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
             assert_eq!(name, "trigger", "the plugin's own name for the button");
             *self.shown.lock().expect("the record") = Some((source.width(), source.height()));
             let mut after = params.clone();
-            after.set("gain", lumit_ofx::PropValue::double(0.75));
+            after.set("gain", lumit_ofx::props::PropValue::double(0.75));
             after.set(
                 "vendorBlob",
-                lumit_ofx::PropValue::string("pressed").expect("a string"),
+                lumit_ofx::props::PropValue::string("pressed").expect("a string"),
             );
-            Ok(lumit_ofx::Settled {
+            Ok(lumit_ofx::instance::Settled {
                 params: after,
-                controls: lumit_ofx::Controls::default(),
+                controls: lumit_ofx::instance::Controls::default(),
             })
         }
 
@@ -8329,14 +8329,14 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         fn settle(
             &self,
             _instance: Uuid,
-            _made_with: &lumit_ofx::ParamSnapshot,
-            handed: &lumit_ofx::ParamSnapshot,
-        ) -> Result<lumit_ofx::Settled, String> {
-            let mut controls = lumit_ofx::Controls::default();
-            if handed.get("gain") != Some(&lumit_ofx::PropValue::double(1.0)) {
+            _made_with: &lumit_ofx::instance::ParamSnapshot,
+            handed: &lumit_ofx::instance::ParamSnapshot,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
+            let mut controls = lumit_ofx::instance::Controls::default();
+            if handed.get("gain") != Some(&lumit_ofx::props::PropValue::double(1.0)) {
                 controls.disabled.insert("trigger".to_owned());
             }
-            Ok(lumit_ofx::Settled {
+            Ok(lumit_ofx::instance::Settled {
                 params: handed.clone(),
                 controls,
             })
@@ -8344,11 +8344,11 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
     }
 
     let param = |name: &str, kind: &str, default: Option<f64>| {
-        let mut props = lumit_ofx::PropertySet::new();
+        let mut props = lumit_ofx::props::PropertySet::new();
         if let Some(default) = default {
             props.seed(
                 lumit_ofx::ffi::prop_keys::PARAM_DEFAULT,
-                lumit_ofx::PropValue::double(default),
+                lumit_ofx::props::PropValue::double(default),
             );
         }
         lumit_ofx::describe::ParamDescription {
@@ -8357,12 +8357,12 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             props,
         }
     };
-    let descriptor = lumit_ofx::PluginDescriptor {
+    let descriptor = lumit_ofx::describe::PluginDescriptor {
         identifier: "com.lumitlab.pressing".to_owned(),
         version: (1, 0),
         grouping: "Lumit/Test".to_owned(),
         label: "Pressing".to_owned(),
-        contexts: vec![lumit_ofx::Context::Filter],
+        contexts: vec![lumit_ofx::describe::Context::Filter],
         params: vec![
             param("gain", lumit_ofx::ffi::param_types::DOUBLE, Some(1.0)),
             param("vendorBlob", lumit_ofx::ffi::param_types::CUSTOM, None),
@@ -8373,12 +8373,12 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         render_thread_safety: None,
     };
     let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
-        lumit_ofx::schema_of(&descriptor).expect("a schema"),
+        lumit_ofx::schema::schema_of(&descriptor).expect("a schema"),
     ));
     let host = Arc::new(Pressing {
         shown: Mutex::new(None),
     });
-    let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host.clone()).leak();
+    let def = lumit_ofx::def::OfxEffectDef::new(&descriptor, schema, host.clone()).leak();
     assert!(lumit_render::gpufx::ofx::register(def));
 
     let (project, layer) = project_with_layer();
@@ -8594,22 +8594,22 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         why: String,
     }
 
-    impl lumit_ofx::PluginHost for Moody {
+    impl lumit_ofx::def::PluginHost for Moody {
         fn render(
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
-            source: lumit_ofx::Frame16,
-            _neighbours: &[(i32, lumit_ofx::Frame16)],
-        ) -> lumit_ofx::Rendering {
+            _params: &lumit_ofx::instance::ParamSnapshot,
+            source: lumit_ofx::image::Frame16,
+            _neighbours: &[(i32, lumit_ofx::image::Frame16)],
+        ) -> lumit_ofx::def::Rendering {
             if self.failing.load(Ordering::SeqCst) {
-                return lumit_ofx::Rendering {
+                return lumit_ofx::def::Rendering {
                     frame: source,
                     error: Some(self.why.clone()),
                 };
             }
-            lumit_ofx::Rendering {
+            lumit_ofx::def::Rendering {
                 frame: source,
                 error: None,
             }
@@ -8619,7 +8619,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
         ) -> Option<Vec<i32>> {
             None
         }
@@ -8628,10 +8628,10 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
             _name: &str,
-            _source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::Settled, String> {
+            _source: lumit_ofx::image::Frame16,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
             Err(self.why.clone())
         }
     }
@@ -8640,24 +8640,25 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     /// definition and the name it answers to.
     fn a_registered_plugin(
         identifier: &str,
-        host: Arc<dyn lumit_ofx::PluginHost>,
+        host: Arc<dyn lumit_ofx::def::PluginHost>,
     ) -> (&'static dyn lumit_core::fx::EffectDef, String) {
-        let descriptor = lumit_ofx::PluginDescriptor {
+        let descriptor = lumit_ofx::describe::PluginDescriptor {
             identifier: identifier.to_owned(),
             version: (1, 0),
             grouping: "Lumit/Test".to_owned(),
             label: "Moody".to_owned(),
-            contexts: vec![lumit_ofx::Context::Filter],
+            contexts: vec![lumit_ofx::describe::Context::Filter],
             params: Vec::new(),
             clips: Vec::new(),
             temporal: false,
             render_thread_safety: None,
         };
         let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
-            lumit_ofx::schema_of(&descriptor).expect("a plugin with no parameters has a schema"),
+            lumit_ofx::schema::schema_of(&descriptor)
+                .expect("a plugin with no parameters has a schema"),
         ));
         let name = schema.match_name.to_owned();
-        let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host).leak();
+        let def = lumit_ofx::def::OfxEffectDef::new(&descriptor, schema, host).leak();
         assert!(
             lumit_render::gpufx::ofx::register(def),
             "the catalogue and the pass table both took {name}"
@@ -8727,7 +8728,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     // "switched off" rather than reporting somebody's failure.
     let disabled = Arc::new(Moody {
         failing: AtomicBool::new(true),
-        why: lumit_ofx::DISABLED_REASON.to_owned(),
+        why: lumit_ofx::discover::DISABLED_REASON.to_owned(),
     });
     let (off_def, off_name) = a_registered_plugin("com.lumitlab.moody.off", disabled);
     let off = lumit_core::fx::instantiate(&off_name).expect("the plugin is in the catalogue");
