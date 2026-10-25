@@ -82,7 +82,7 @@ pub fn clap_search_paths() -> Vec<PathBuf> {
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        paths.push(PathBuf::from("/usr/lib/clap"));
+        push_system(&mut paths, "/usr/lib/clap");
         if let Some(home) = std::env::var_os("HOME") {
             paths.push(PathBuf::from(home).join(".clap"));
         }
@@ -127,7 +127,7 @@ pub fn vst3_search_paths() -> Vec<PathBuf> {
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        paths.push(PathBuf::from("/usr/lib/vst3"));
+        push_system(&mut paths, "/usr/lib/vst3");
         if let Some(home) = std::env::var_os("HOME") {
             paths.push(PathBuf::from(home).join(".vst3"));
         }
@@ -137,6 +137,16 @@ pub fn vst3_search_paths() -> Vec<PathBuf> {
         paths.extend(std::env::split_paths(&extra));
     }
     paths
+}
+
+/// A folder under /usr. In the Flatpak, /usr is the runtime's and the
+/// machine's own is at /run/host/usr, shared read-only by the manifest.
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn push_system(paths: &mut Vec<PathBuf>, dir: &str) {
+    paths.push(PathBuf::from(dir));
+    if Path::new("/.flatpak-info").exists() {
+        paths.push(PathBuf::from("/run/host").join(dir.trim_start_matches('/')));
+    }
 }
 
 /// Every folder a scan looks in: CLAP's, then VST3's.
