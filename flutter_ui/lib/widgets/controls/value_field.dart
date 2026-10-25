@@ -5,8 +5,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../l10n/strings.dart';
+import '../../src/rust/api/project.dart' show ProjectReference;
+import '../../state/app_state.dart' show LumitState;
 import '../../theme/theme.dart';
 import '../time_readout.dart' show monoSlotWidth;
 import 'base.dart';
@@ -293,6 +296,16 @@ class _DragValueFieldState extends State<DragValueField>
   /// (nothing to commit — a no-op cancel, which still opens the editor: the
   /// press was a click that wobbled, not a scrub).
   num? _lastDragValue;
+
+  /// The project while a drag holds an undo group open. A row that writes on
+  /// every tick would otherwise leave one undo step per tick.
+  ProjectReference? _group;
+
+  void _closeGroup() {
+    _group?.endUndoGroup();
+    _group = null;
+  }
+
   late TextEditingController _controller;
   late final FocusNode _focus = FocusNode(onKeyEvent: _onEditorKey);
 
@@ -415,6 +428,7 @@ class _DragValueFieldState extends State<DragValueField>
     // The chip lives in the Overlay rather than under this field, so a field
     // disposed mid-drag would leave it on screen over whatever came next.
     _hideLadder();
+    _closeGroup();
     _refusal?.cancel();
     _factor.dispose();
     _controller.dispose();
@@ -684,6 +698,10 @@ class _DragValueFieldState extends State<DragValueField>
           _lastDragValue = null;
           setState(() => _dragging = true);
           _showLadder();
+          _closeGroup();
+          // Null in a bare widget test, where there is no history to group.
+          _group = Provider.of<LumitState?>(context, listen: false)?.project
+            ?..beginUndoGroup();
           _edit(false, () => widget.onChangeStart?.call());
         },
         onHorizontalDragUpdate: (d) {
@@ -709,7 +727,11 @@ class _DragValueFieldState extends State<DragValueField>
           _hideLadder();
           setState(() => _dragging = false);
           if (v != null) {
-            _edit(false, () => (widget.onChangeEnd ?? widget.onChanged)(v));
+            try {
+              _edit(false, () => (widget.onChangeEnd ?? widget.onChanged)(v));
+            } finally {
+              _closeGroup();
+            }
           } else {
             // Never crossed one speed-increment: nothing was ticked, so the
             // press was a click that wobbled a few pixels, not a scrub. It
@@ -717,6 +739,7 @@ class _DragValueFieldState extends State<DragValueField>
             // is open the editor. Before this, a click that moved
             // at all did nothing, and value boxes felt like they swallowed
             // clicks.
+            _closeGroup();
             widget.onDragCancel?.call();
             _beginEdit();
           }
@@ -726,6 +749,7 @@ class _DragValueFieldState extends State<DragValueField>
           _hideLadder();
           setState(() => _dragging = false);
           widget.onDragCancel?.call();
+          _closeGroup();
         },
         // Animated for the edge alone. It lights at once under a scrub, which
         // is the hand already moving, and eases for hover and focus.
