@@ -1010,7 +1010,7 @@ pub fn projected_points(media: Uuid, frame: i64) -> Vec<ProjectedPoint> {
     // Only the points followed on this frame: the whole cloud at once buries
     // the picture, and a feature hidden here is not one to pick.
     let seen =
-        |p: &&lumit_track::ScenePoint| p.frames[0] <= pose.frame && pose.frame <= p.frames[1];
+        |p: &&lumit_track::solve::ScenePoint| (p.frames[0]..=p.frames[1]).contains(&pose.frame);
     for point in solved.solve.points.iter().filter(seen) {
         let d = [
             point.position[0] - c[0],
