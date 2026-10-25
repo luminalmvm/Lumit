@@ -6621,10 +6621,12 @@ fn a_tracked_layer() -> (
             ScenePoint {
                 track: 7,
                 position: [10.0, 20.0, 100.0],
+                frames: [0, 49],
             },
             ScenePoint {
                 track: 9,
                 position: [30.0, 40.0, 200.0],
+                frames: [0, 49],
             },
         ],
         keyframes: vec![0, 49],

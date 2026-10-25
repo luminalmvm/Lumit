@@ -280,6 +280,9 @@ pub struct SolvedPose {
 pub struct ScenePoint {
     pub track: u32,
     pub position: [f64; 3],
+    /// The first and last frame its feature was followed on, so the point is
+    /// only drawn where it can be seen.
+    pub frames: [i64; 2],
 }
 
 /// The whole answer: what phase 4's export reads.
@@ -485,6 +488,9 @@ pub fn solve_camera_cancellable(
         .map(|(id, p)| ScenePoint {
             track: *id,
             position: *p,
+            frames: set
+                .get(*id)
+                .map_or([first, last], |t| [t.first_frame(), t.last_frame()]),
         })
         .collect();
     cloud.sort_by_key(|p| p.track);

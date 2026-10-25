@@ -718,7 +718,9 @@ fn euler_of_transpose(r: &Mat3) -> (f64, f64, f64) {
 /// planar track is cached in the same folder under the same rules.
 /// Every version 2 record is orphaned by it — a re-analysis each, once — which
 /// is the disposal this constant exists to perform.
-const FORMAT_VERSION: u16 = 3;
+///
+/// **4** gave each solved point the frames it was seen on, for the overlay.
+const FORMAT_VERSION: u16 = 4;
 
 /// `LUMTRK\0` — read before anything is deserialised, so a file that is not one
 /// of ours is refused rather than fed to a decoder.
@@ -1005,7 +1007,11 @@ pub fn projected_points(media: Uuid, frame: i64) -> Vec<ProjectedPoint> {
     let r = pose.rotation;
     let c = pose.position;
     let mut out: Vec<ProjectedPoint> = Vec::with_capacity(solved.solve.points.len());
-    for point in &solved.solve.points {
+    // Only the points followed on this frame: the whole cloud at once buries
+    // the picture, and a feature hidden here is not one to pick.
+    let seen =
+        |p: &&lumit_track::ScenePoint| p.frames[0] <= pose.frame && pose.frame <= p.frames[1];
+    for point in solved.solve.points.iter().filter(seen) {
         let d = [
             point.position[0] - c[0],
             point.position[1] - c[1],
@@ -2901,6 +2907,7 @@ mod tests {
             points: vec![lumit_track::solve::ScenePoint {
                 track: 0,
                 position: [0.0, 0.0, 0.0],
+                frames: [0, FRAMES as i64 - 1],
             }],
             keyframes: vec![0, FRAMES as i64 - 1],
             mean_reprojection_px: 0.0,
