@@ -764,7 +764,7 @@ pub(crate) mod gpu {
 }
 
 pub(crate) mod disk {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
 
@@ -861,6 +861,63 @@ pub(crate) mod disk {
     pub(crate) fn root() -> Option<String> {
         let guard = ROOT.lock().unwrap_or_else(|p| p.into_inner());
         guard.clone()
+    }
+
+    /// What the cache always leaves free on its drive, for everything else.
+    const KEEP_FREE_BYTES: u64 = 10 << 30;
+
+    /// The most the cache in `root` may hold while it holds `used`: that plus
+    /// the drive's free space, less what is kept free. `u64::MAX` where the
+    /// drive can't be asked.
+    pub(crate) fn room(root: &Path, used: u64) -> u64 {
+        free_bytes(root).map_or(u64::MAX, |free| {
+            used.saturating_add(free).saturating_sub(KEEP_FREE_BYTES)
+        })
+    }
+
+    /// Free space on the drive `path` is on. The folder may not exist yet, so
+    /// the nearest one that does is asked.
+    fn free_bytes(path: &Path) -> Option<u64> {
+        let path = path.ancestors().find(|p| p.is_dir())?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+            let mut free = 0u64;
+            // SAFETY: `wide` is a NUL-terminated path that outlives the call,
+            // and `free` is the one out value asked for. The result is checked
+            // before `free` is trusted.
+            unsafe {
+                windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+                    windows::core::PCWSTR(wide.as_ptr()),
+                    Some(&mut free),
+                    None,
+                    None,
+                )
+            }
+            .ok()?;
+            Some(free)
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+            // SAFETY: `c` is a NUL-terminated path that outlives the call, and
+            // `stat` is zeroed and written by statvfs. The return code is
+            // checked before `stat` is trusted.
+            let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+            if unsafe { libc::statvfs(c.as_ptr(), &mut stat) } != 0 {
+                return None;
+            }
+            // The field widths differ between macOS and Linux.
+            #[allow(clippy::unnecessary_cast)]
+            let free = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
+            Some(free)
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            None
+        }
     }
 }
 
