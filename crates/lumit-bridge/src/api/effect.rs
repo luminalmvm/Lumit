@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-pub use lumit_core::model::EffectInstance;
+use lumit_core::model::EffectInstance;
 use lumit_core::{
     anim::{Animation, Keyframe, Property, SideInterp},
     expression::ExpressionContext,
