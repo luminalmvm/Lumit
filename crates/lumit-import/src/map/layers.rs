@@ -36,23 +36,22 @@ use std::collections::BTreeMap;
 
 use lumit_core::anim::Property as LumProperty;
 use lumit_core::markers::{Marker, MarkerKind};
-use lumit_core::mask::{BezierPath, Mask, MaskMode, PathKeyframe, Vertex};
 use lumit_core::model::{
     BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, MatteChannel, MatteRef,
-    Switches, TextDocument, TransformGroup,
+    Switches, TransformGroup,
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
 
-use crate::capture::{Layer as AeLayer, Marker as AeMarker, Property, Shape};
+use crate::capture::{Layer as AeLayer, Marker as AeMarker, Property};
 use crate::report::{ItemPath, Outcome, Reason};
 
 use super::effects::map_effect;
-use super::props::{
-    ae_map, axis_of, child, display_name, from_node, group, match_name_of, ramp, scalar, still,
-};
-use super::{linear_colour, srgb_to_linear, Conv, ItemKind, Items};
+use super::masks::masks;
+use super::props::{ae_map, child, display_name, from_node, group, ramp, scalar, still};
+use super::text::{source_text, text, text_origin};
+use super::{srgb_to_linear, Conv, ItemKind, Items};
 
 /// One layer, whole. Never fails: a layer whose source has vanished still
 /// arrives, keeps its slot and its transform, and says so in the report.
@@ -346,170 +345,6 @@ fn layer_kind(
             LayerKind::Null
         }
     }
-}
-
-/// The Source Text value as the script wrote it, or null when there is none.
-fn source_text(props: &[Property]) -> &serde_json::Value {
-    child(group(props, "ADBE Text Properties"), "ADBE Text Document")
-        .and_then(|node| node.value.as_ref())
-        .unwrap_or(&serde_json::Value::Null)
-}
-
-/// The words and what the script can read of how they are set: the font, the
-/// spacing, the outline and the alignment. What Lumit's text has no place for
-/// is reported, and stays in the bundle.
-fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> TextDocument {
-    use lumit_core::text::{Caps, Kerning, ParagraphStyle, Script, TextAlign, TextStyle};
-
-    let parts = group(props, "ADBE Text Properties");
-    let node = child(parts, "ADBE Text Document");
-    // The project file's own reader cannot decode a text document yet.
-    if let Some(node) = node.filter(|node| node.unreadable.is_some()) {
-        conv.report.row(
-            path.property(display_name(node, "Source Text")),
-            Outcome::Skipped,
-            Reason::PropertyUnreadable {
-                match_name: match_name_of(node).to_string(),
-            },
-        );
-    }
-    let doc = source_text(props);
-    let number = |key: &str| doc.get(key).and_then(serde_json::Value::as_f64);
-    let on = |key: &str| doc.get(key).and_then(serde_json::Value::as_bool);
-    let word = |key: &str| {
-        doc.get(key)
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string()
-    };
-    let colour = |key: &str| {
-        let c: Vec<f64> = (0..3).filter_map(|i| axis_of(doc.get(key)?, i)).collect();
-        (c.len() == 3).then(|| linear_colour(Some(&c)))
-    };
-
-    // ParagraphJustification by After Effects' own numbers, which is how the
-    // script writes it. 7413 is left. The four from 7416 justify a box and say
-    // where its last line goes.
-    let justification = doc.get("justification").and_then(serde_json::Value::as_i64);
-    let (align, justify) = match justification {
-        Some(7414) => (TextAlign::Right, false),
-        Some(7415) => (TextAlign::Centre, false),
-        Some(7416) => (TextAlign::Left, true),
-        Some(7417) => (TextAlign::Right, true),
-        Some(7418) => (TextAlign::Centre, true),
-        // 7419 stretches the last line too, which Lumit leaves alone.
-        Some(7419) => (TextAlign::Left, true),
-        _ => (TextAlign::Left, false),
-    };
-
-    let changes = node.is_some_and(|node| {
-        node.keyframes.as_deref().is_some_and(|k| !k.is_empty())
-            || (node.expression_enabled == Some(true)
-                && node
-                    .expression
-                    .as_deref()
-                    .is_some_and(|s| !s.trim().is_empty()))
-    });
-    if changes
-        || !group(parts, "ADBE Text Animators").is_empty()
-        || still(parts, "ADBE Text Path", 0).is_some_and(|mask| mask != 0.0)
-        || number("tsume").is_some_and(|tsume| tsume != 0.0)
-        || !matches!(justification, None | Some(7413..=7418))
-    {
-        conv.report.row(
-            path.clone(),
-            Outcome::Adjusted,
-            Reason::TextStylingNotMapped,
-        );
-    }
-
-    TextDocument {
-        text: word("text"),
-        expression: None,
-        size: number("fontSize").unwrap_or(72.0),
-        fill: colour("fillColor").unwrap_or(lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])),
-        // After Effects' text-on-a-path rides in the layer's own mask list,
-        // which the importer does not read yet: an imported title lays straight.
-        path: None,
-        path_offset: lumit_core::anim::Property::zero(),
-        animators: Vec::new(),
-        style: Box::new(TextStyle {
-            family: word("fontFamily"),
-            face: word("fontStyle"),
-            // With auto leading on, After Effects still writes the number it
-            // worked out. Lumit works out its own.
-            leading: number("leading").filter(|_| on("autoLeading") == Some(false)),
-            // After Effects kerns by the font's own metrics unless told not to.
-            kerning: Kerning::Metrics,
-            tracking: number("tracking").unwrap_or(0.0),
-            // After Effects writes a scale of 100 % as 1.
-            scale_x: number("horizontalScale").unwrap_or(1.0) * 100.0,
-            scale_y: number("verticalScale").unwrap_or(1.0) * 100.0,
-            baseline_shift: number("baselineShift").unwrap_or(0.0),
-            caps: match (on("allCaps"), on("smallCaps")) {
-                (Some(true), _) => Caps::All,
-                (_, Some(true)) => Caps::Small,
-                _ => Caps::Normal,
-            },
-            script: match (on("superscript"), on("subscript")) {
-                (Some(true), _) => Script::Superscript,
-                (_, Some(true)) => Script::Subscript,
-                _ => Script::Normal,
-            },
-            faux_bold: on("fauxBold").unwrap_or(false),
-            faux_italic: on("fauxItalic").unwrap_or(false),
-            fill_on: on("applyFill").unwrap_or(true),
-            stroke_on: on("applyStroke").unwrap_or(false),
-            stroke: colour("strokeColor").unwrap_or(lumit_core::model::LinearColour::BLACK),
-            stroke_width: number("strokeWidth").unwrap_or(1.0),
-            stroke_over: on("strokeOverFill").unwrap_or(true),
-            ..TextStyle::default()
-        }),
-        paragraph: ParagraphStyle {
-            align,
-            justify,
-            box_width: doc
-                .get("boxTextSize")
-                .filter(|_| on("boxText") == Some(true))
-                .and_then(|size| axis_of(size, 0))
-                .unwrap_or(0.0),
-            ..ParagraphStyle::default()
-        },
-        extra: serde_json::Map::new(),
-    }
-}
-
-/// Where After Effects' origin for a text layer falls inside the raster Lumit
-/// lays the same words into.
-///
-/// Point text hangs from its first baseline, at the side it is aligned to. Box
-/// text hangs from its box, whose top left corner the script records.
-fn text_origin(document: &TextDocument, ae: &serde_json::Value) -> (f64, f64) {
-    use lumit_core::text::TextAlign;
-
-    let block = lumit_text::layout(&lumit_text::TextBlock::of(document, &document.text), false);
-    let (left, right) = (f64::from(block.left), f64::from(block.right));
-    let baseline = block
-        .lines
-        .first()
-        .map_or(0.0, |line| f64::from(line.baseline));
-    if document.paragraph.box_width > 0.0 {
-        let corner = |axis: usize| {
-            ae.get("boxTextPos")
-                .and_then(|pos| axis_of(pos, axis))
-                .unwrap_or(0.0)
-        };
-        return (
-            left - corner(0),
-            baseline - f64::from(block.ascent) - corner(1),
-        );
-    }
-    let x = match document.paragraph.align {
-        TextAlign::Left => left,
-        TextAlign::Centre => (left + right) / 2.0,
-        TextAlign::Right => right,
-    };
-    (x, baseline)
 }
 
 /// Move every value of a property by the same amount, keys and all.
@@ -1028,124 +863,6 @@ fn retime(
         Reason::StretchAsRetime { percent: stretch },
     );
     (Some(ramp(local_in, v_from, local_out, v_to)), interpolation)
-}
-
-/// Every mask on the layer, in AE's own order.
-fn masks(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Vec<Mask> {
-    group(props, "ADBE Mask Parade")
-        .iter()
-        .filter_map(|node| mask(conv, path, node))
-        .collect()
-}
-
-fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
-    let facts = node.mask.clone()?;
-    let name = display_name(node, match_name_of(node)).to_string();
-    let here = path.property(&name);
-    let props = node.children();
-
-    let mode = match facts.mode.as_deref() {
-        Some("NONE") => MaskMode::None,
-        Some("SUBTRACT") => MaskMode::Subtract,
-        Some("INTERSECT") => MaskMode::Intersect,
-        Some("DIFFERENCE") => MaskMode::Difference,
-        Some("LIGHTEN") => MaskMode::Lighten,
-        Some("DARKEN") => MaskMode::Darken,
-        _ => MaskMode::Add,
-    };
-
-    if facts.roto_bezier == Some(true) {
-        conv.report.row(
-            here.clone(),
-            Outcome::Adjusted,
-            Reason::MaskRotoBezierFlattened,
-        );
-    }
-
-    // AE feathers separately in x and y; Lumit has one width.
-    let (fx, fy) = (
-        still(props, "ADBE Mask Feather", 0).unwrap_or(0.0),
-        still(props, "ADBE Mask Feather", 1).unwrap_or(0.0),
-    );
-    if (fx - fy).abs() > 1e-9 {
-        conv.report.row(
-            here.clone(),
-            Outcome::Adjusted,
-            Reason::MaskFeatherAxesDiffer { x: fx, y: fy },
-        );
-    }
-
-    let shape = child(props, "ADBE Mask Shape");
-    let path_keys: Vec<PathKeyframe> = shape
-        .and_then(|node| node.keyframes.as_deref())
-        .map(|keys| {
-            keys.iter()
-                .filter_map(|key| {
-                    let shape: Shape = serde_json::from_value(key.v.clone()?).ok()?;
-                    Some(PathKeyframe {
-                        time: conv.layer_time(key.t?),
-                        path: bezier(&shape),
-                        interp_in: super::props::path_side(key.in_interp.as_deref()),
-                        interp_out: super::props::path_side(key.out_interp.as_deref()),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let still_path = shape
-        .and_then(crate::capture::Property::shape)
-        .as_ref()
-        .map(bezier)
-        .or_else(|| path_keys.first().map(|k| k.path.clone()))
-        .unwrap_or(BezierPath {
-            vertices: Vec::new(),
-            closed: true,
-        });
-
-    conv.report.imported();
-    Some(Mask {
-        id: Uuid::now_v7(),
-        name,
-        path: still_path,
-        path_keys,
-        inverted: facts.inverted.unwrap_or(false),
-        opacity: scalar(conv, &here, props, "ADBE Mask Opacity", 0, 100.0),
-        mode,
-        feather: LumProperty::fixed((fx + fy) / 2.0),
-        // AE's variable feather is a second point set with positions of its
-        // own, which Lumit's per-vertex widths are not a place to put:
-        // no fixture proves the layout, and guessing one would draw a shape
-        // nobody asked for. The single width above stands, as it always has.
-        vertex_feather: Vec::new(),
-        expansion: scalar(conv, &here, props, "ADBE Mask Offset", 0, 0.0),
-        extra: ae_map(vec![
-            ("mode", serde_json::json!(facts.mode)),
-            ("feather", serde_json::json!([fx, fy])),
-            ("colour", serde_json::json!(facts.colour)),
-        ]),
-    })
-}
-
-/// A capture path as Lumit's own — parallel arrays become one vertex each.
-fn bezier(shape: &Shape) -> BezierPath {
-    let point = |list: &[Vec<f64>], i: usize| {
-        list.get(i).map_or((0.0, 0.0), |p| {
-            (
-                p.first().copied().unwrap_or(0.0),
-                p.get(1).copied().unwrap_or(0.0),
-            )
-        })
-    };
-    BezierPath {
-        vertices: (0..shape.vertices.len())
-            .map(|i| Vertex {
-                pos: point(&shape.vertices, i),
-                tan_in: point(&shape.in_tangents, i),
-                tan_out: point(&shape.out_tangents, i),
-            })
-            .collect(),
-        closed: shape.closed.unwrap_or(true),
-    }
 }
 
 #[cfg(test)]

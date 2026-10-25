@@ -37,9 +37,11 @@ mod effects;
 mod fx_colour;
 mod fx_distort;
 mod layers;
+mod masks;
 mod props;
 mod styles;
 mod table;
+mod text;
 mod time;
 
 use std::collections::{BTreeMap, HashMap};
