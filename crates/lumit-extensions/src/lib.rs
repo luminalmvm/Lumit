@@ -439,7 +439,7 @@ pub fn machine_dirs() -> Vec<PathBuf> {
 /// The folders the person added, in the order they added them.
 #[must_use]
 pub fn extra_dirs() -> Vec<PathBuf> {
-    lumit_project::PluginPrefs::load_default().extension_folders
+    lumit_project::plugins::PluginPrefs::load_default().extension_folders
 }
 
 /// Every folder extensions are found in, in the order they are scanned:
@@ -471,7 +471,7 @@ pub fn add_dir(folder: &Path) -> Result<bool, ExtensionError> {
     if dirs().iter().any(|dir| dir == folder) {
         return Ok(false);
     }
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     prefs.extension_folders.push(folder.to_path_buf());
     prefs
         .save_default()
@@ -482,7 +482,7 @@ pub fn add_dir(folder: &Path) -> Result<bool, ExtensionError> {
 /// Stop scanning a folder the person added. Nothing in it is deleted. False
 /// when it was not one of theirs.
 pub fn remove_dir(folder: &Path) -> bool {
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     let before = prefs.extension_folders.len();
     prefs.extension_folders.retain(|dir| dir != folder);
     prefs.extension_folders.len() != before && prefs.save_default().is_ok()

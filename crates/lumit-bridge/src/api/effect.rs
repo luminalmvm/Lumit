@@ -402,7 +402,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     // opened, so a project opened during the scan finds them soonest.
     say(BridgeScanStage::Extensions, "", "", 0, 1);
     let (lfx_added, lfx_skipped) = crate::api::extensions::register_effects();
-    let prefs = lumit_project::PluginPrefs::load_default();
+    let prefs = lumit_project::plugins::PluginPrefs::load_default();
     // The stored preference becomes the running one first, so a plugin
     // registered by an earlier scan and switched off since is switched off for
     // this scan's renders too, not only absent from it.
@@ -459,7 +459,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     // Written beside plugins.json so someone whose plugin is missing can send
     // us why. Only when something was turned away, so the last report stays.
     if !scan.skipped.is_empty() {
-        if let Some(dir) = lumit_project::plugin_prefs_path()
+        if let Some(dir) = lumit_project::plugins::plugin_prefs_path()
             .as_deref()
             .and_then(std::path::Path::parent)
         {
@@ -487,7 +487,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
 /// A machine with neither folder scans nothing, registers nothing and reports
 /// nothing, which is what a build with no audio plugins installed should cost.
 fn scan_audio_plugins(
-    prefs: &lumit_project::PluginPrefs,
+    prefs: &lumit_project::plugins::PluginPrefs,
     scan: &mut BridgePluginScan,
     file: &mut dyn FnMut(&std::path::Path, usize, usize),
 ) {
@@ -504,7 +504,7 @@ fn scan_audio_plugins(
         file,
     );
     // Read again so a switch flicked during the scan is not overwritten.
-    let mut latest = lumit_project::PluginPrefs::load_default();
+    let mut latest = lumit_project::plugins::PluginPrefs::load_default();
     latest.audio_cache = serde_json::to_value(&cache).unwrap_or_default();
     let _ = latest.save_default();
     for found in outcome.found {
@@ -573,7 +573,7 @@ pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeErr
         }
         _ => return Ok(()),
     };
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     if !prefs.set_enabled(identifier, enabled) {
         return Ok(());
     }

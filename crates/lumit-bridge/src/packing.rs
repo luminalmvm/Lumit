@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 use lumit_core::model::{packed_id, MediaRef, ProjectItem};
 use lumit_core::Document;
-use lumit_project::PackSource;
+use lumit_project::pack::PackSource;
 use uuid::Uuid;
 
 /// Set to stop the pack, unpack, open or import in flight. One flag for the
@@ -22,7 +22,7 @@ use uuid::Uuid;
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// The read-out folders this process has taken, by document
-/// (`lumit_project::hold_read_out`). Kept until the process ends and never let
+/// (`lumit_project::pack::hold_read_out`). Kept until the process ends and never let
 /// go sooner: a project that has been closed may still have a file open, and
 /// holding a folder costs one small handle. One entry a document opened.
 static HELD: Mutex<BTreeMap<Uuid, File>> = Mutex::new(BTreeMap::new());
@@ -208,7 +208,7 @@ fn run_files(first: PathBuf, sequence: bool) -> Vec<PathBuf> {
 /// carries the document and not the footage.
 pub(crate) fn archives(path: &Path) -> Vec<PathBuf> {
     std::iter::once(path.to_path_buf())
-        .chain(lumit_project::autosave_owner(path))
+        .chain(lumit_project::pack::autosave_owner(path))
         .collect()
 }
 
@@ -239,7 +239,7 @@ pub(crate) fn restore(
     // away under this one. Every open also clears the folders nobody holds
     // and nobody has opened for a week.
     if let Some(root) = dest.parent() {
-        let held = lumit_project::hold_read_out(root, doc.id, !doc.packed.is_empty());
+        let held = lumit_project::pack::hold_read_out(root, doc.id, !doc.packed.is_empty());
         if let (Some(held), Ok(mut all)) = (held, HELD.lock()) {
             all.insert(doc.id, held);
         }
@@ -254,8 +254,13 @@ pub(crate) fn restore(
         }
         !cancelled()
     };
-    let restored =
-        lumit_project::restore_packed(doc, &archives(archive), project_dir, &dest, &mut copied);
+    let restored = lumit_project::pack::restore_packed(
+        doc,
+        &archives(archive),
+        project_dir,
+        &dest,
+        &mut copied,
+    );
     if let (Ok((_, unplaced)), Ok(mut all)) = (restored, UNPLACED.lock()) {
         let unplaced = unplaced.into_iter().map(|id| (id, String::new()));
         all.insert(doc.id, unplaced.collect());

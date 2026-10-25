@@ -847,7 +847,7 @@ impl ProjectReference {
     /// from its history, or any other `.lum`.
     ///
     /// Each arrives as a new composition with what it places, and footage the
-    /// project already has is used again ([`lumit_project::bring`]). They are
+    /// project already has is used again ([`lumit_project::bring::bring`]). They are
     /// filed where a composition and a solid made here would be.
     ///
     /// `earlier_save` says the file is a save of this project that was fetched
@@ -903,7 +903,7 @@ impl ProjectReference {
         let (comps, footage) = {
             let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
             let doc = state.store.snapshot();
-            let Ok(brought) = lumit_project::bring(&doc, &from, &comps, &source) else {
+            let Ok(brought) = lumit_project::bring::bring(&doc, &from, &comps, &source) else {
                 return Ok(None);
             };
             let mut ops = brought.ops;
@@ -1088,7 +1088,7 @@ impl ProjectReference {
                 let _ = sink.add(fraction);
             }
         });
-        let unpacked = match lumit_project::unpack(
+        let unpacked = match lumit_project::pack::unpack(
             &document,
             &crate::packing::archives(&path),
             dir,
@@ -1234,7 +1234,7 @@ impl ProjectReference {
             });
             // The file as it stands is where footage already packed is copied
             // from, and it may be the file being written.
-            let packed = match lumit_project::save_packed(
+            let packed = match lumit_project::pack::save_packed(
                 &doc,
                 &target,
                 previous.as_deref(),

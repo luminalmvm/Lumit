@@ -306,13 +306,13 @@ fn read_out_packed(doc: &mut Document, archive: &Path, dir: &Path) -> Option<Fil
     });
     let held = dest
         .parent()
-        .and_then(|root| lumit_project::hold_read_out(root, doc.id, !doc.packed.is_empty()));
+        .and_then(|root| lumit_project::pack::hold_read_out(root, doc.id, !doc.packed.is_empty()));
     if !doc.packed.is_empty() {
         let archives: Vec<PathBuf> = std::iter::once(archive.to_path_buf())
-            .chain(lumit_project::autosave_owner(archive))
+            .chain(lumit_project::pack::autosave_owner(archive))
             .collect();
         // An item that could not be read out is left for the resolver.
-        let _ = lumit_project::restore_packed(doc, &archives, dir, &dest, &mut |_, _| true);
+        let _ = lumit_project::pack::restore_packed(doc, &archives, dir, &dest, &mut |_, _| true);
     }
     held
 }
@@ -373,7 +373,8 @@ impl Host for Headless {
             // What the project packs comes over from the file it was opened
             // from. Nothing new is packed: that is a choice made in Lumit.
             let previous = self.archive.as_deref();
-            lumit_project::save_packed(&doc, &target, previous, &[], &mut |_, _| true).map(|_| ())
+            lumit_project::pack::save_packed(&doc, &target, previous, &[], &mut |_, _| true)
+                .map(|_| ())
         };
         saved.map_err(|e| {
             ScriptError::Failed(format!("{} could not be saved: {e}.", target.display()))
@@ -582,11 +583,11 @@ mod tests {
             interpretation: Default::default(),
         }));
         let lum = dir.path().join("scene.lum");
-        let source = lumit_project::PackSource {
+        let source = lumit_project::pack::PackSource {
             item: id,
             files: vec![clip.clone()],
         };
-        lumit_project::save_packed(&doc, &lum, None, &[source], &mut |_, _| true).unwrap();
+        lumit_project::pack::save_packed(&doc, &lum, None, &[source], &mut |_, _| true).unwrap();
         std::fs::remove_dir_all(dir.path().join("footage")).unwrap();
 
         let (host, missing) = Headless::open(&lum).unwrap();
@@ -602,7 +603,7 @@ mod tests {
         assert!(saved.packed.contains_key(&id));
         // Its bytes are in the file, not only its entry.
         let out = dir.path().join("read-out");
-        let restored = lumit_project::restore_packed(
+        let restored = lumit_project::pack::restore_packed(
             &mut saved,
             std::slice::from_ref(&lum),
             dir.path(),
