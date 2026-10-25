@@ -3,7 +3,7 @@ layout: ../layouts/Prose.astro
 title: Privacy
 kicker: The small print
 description: What information Lumit stores.
-updated: 17 October 2026
+updated: 25 October 2026
 ---
 
 This page covers the items that interact with our system: a Lumit account, Lumit Pro,
@@ -50,7 +50,8 @@ whoever sent the preview, or us.
 - To keep the servers safe from abuse, which is a legitimate interest of ours.
 
 Nothing is sold, used for adverts, or used to track you. This website has no analytics.
-An account is for people aged 13 or over, and we never ask for or store your age.
+An account is for people aged 13 or over, or 16 in the EU. We ask for your date of birth when
+you sign up to check this, and don't keep it.
 The only emails we send are about your account, and about comments on your previews
 unless you turn those off.
 

@@ -440,10 +440,17 @@ class AccountState extends ChangeNotifier {
   /// Ask for an account under [email]. The server posts a six-digit code to
   /// it either way, and says nothing here about whether the address was
   /// already known, so nobody can use this to find out who has an account.
-  Future<void> signUp(String email, String password, String name) async {
+  /// The server checks the date of birth, [born] as YYYY-MM-DD, against the
+  /// least age and keeps none of it.
+  Future<void> signUp(
+      String email, String password, String name, String born) async {
     final key = await _keyFor(email, password);
-    await _send('POST', '/v1/auth/signup',
-        body: {'email': email.trim(), 'key': key, 'name': name.trim()});
+    await _send('POST', '/v1/auth/signup', body: {
+      'email': email.trim(),
+      'key': key,
+      'name': name.trim(),
+      'born': born,
+    });
   }
 
   /// The key last made here, and the address it was made for. Held between
@@ -515,7 +522,11 @@ class AccountState extends ChangeNotifier {
   /// process, so another program listening in on this machine gains nothing.
   /// Throws `cancelled` when [cancelSignIn] is called, and `timed_out` after
   /// five minutes of nobody coming back.
-  Future<void> signInWith(SignInWith provider) async {
+  ///
+  /// A date of birth, [born], comes from the page that creates an account.
+  /// Without one, the server says `need_birth_date` if this would make a new
+  /// account.
+  Future<void> signInWith(SignInWith provider, {String? born}) async {
     cancelSignIn();
     final verifier = _base64Url(_random(32));
     final challenge = _base64Url(sha256.convert(ascii.encode(verifier)).bytes);
@@ -529,6 +540,7 @@ class AccountState extends ChangeNotifier {
         'challenge': challenge,
         'port': '${server.port}',
         'state': state,
+        if (born != null) 'born': born,
       });
       if (!await openExternalLink('$start')) {
         throw const CloudError('no_browser');

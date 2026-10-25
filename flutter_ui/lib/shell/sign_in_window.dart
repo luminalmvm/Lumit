@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -56,10 +57,23 @@ String cloudErrorText(CloudError e) => switch (e.code) {
       'bad_email' => l10n.signInErrorEmail,
       'bad_name' => l10n.signInErrorName,
       'unverified_email' => l10n.signInErrorProvider,
+      'need_birth_date' => l10n.signInErrorBirthDate,
+      'too_young' => l10n.signInErrorTooYoung,
       'timed_out' => l10n.signInErrorTimedOut,
       'no_browser' => l10n.signInErrorBrowser,
       _ => l10n.signInErrorGeneric,
     };
+
+/// A date format in the language in use, or the plain one where its dates
+/// are not loaded, as the Pro window's dates do.
+DateFormat _dateFormat(DateFormat Function([String?]) make) {
+  final tag = l10n.localeName;
+  try {
+    return make(tag == 'en' ? 'en_GB' : tag);
+  } catch (_) {
+    return make();
+  }
+}
 
 enum _Page { signIn, create, code, reset, browser }
 
@@ -77,6 +91,9 @@ class _SignInState extends State<_SignIn> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _code = TextEditingController();
+  final _day = TextEditingController();
+  final _year = TextEditingController();
+  int? _month;
 
   _Page _page = _Page.signIn;
 
@@ -101,6 +118,8 @@ class _SignInState extends State<_SignIn> {
     _password.dispose();
     _name.dispose();
     _code.dispose();
+    _day.dispose();
+    _year.dispose();
     super.dispose();
   }
 
@@ -153,10 +172,26 @@ class _SignInState extends State<_SignIn> {
       return l10n.signInErrorEmail;
     }
     if (name && _name.text.trim().isEmpty) return l10n.signInErrorName;
+    if (name && _born == null) return l10n.signInErrorBirthDate;
     if (password && _password.text.length < shortestPassword) {
       return l10n.signInErrorPassword(shortestPassword);
     }
     return null;
+  }
+
+  /// The date of birth on the create page as YYYY-MM-DD, once it is a real
+  /// day that has been.
+  String? get _born {
+    final day = int.tryParse(_day.text.trim());
+    final year = int.tryParse(_year.text.trim());
+    final month = _month;
+    if (day == null || month == null || year == null || year < 1900) {
+      return null;
+    }
+    final date = DateTime(year, month, day);
+    if (date.month != month || date.day != day) return null;
+    if (date.isAfter(DateTime.now())) return null;
+    return date.toIso8601String().substring(0, 10);
   }
 
   void _submit() {
@@ -179,7 +214,7 @@ class _SignInState extends State<_SignIn> {
           return;
         }
         unawaited(_try(
-            () => account.signUp(email, _password.text, _name.text),
+            () => account.signUp(email, _password.text, _name.text, _born!),
             then: () {
           _resetting = false;
           _page = _Page.code;
@@ -216,24 +251,29 @@ class _SignInState extends State<_SignIn> {
   void _resend() => unawaited(_try(
       () => _resetting
           ? widget.account.resetStart(_email.text)
-          : widget.account.signUp(_email.text, _password.text, _name.text),
+          : widget.account
+              .signUp(_email.text, _password.text, _name.text, _born!),
       then: () => _resent = true));
 
   Future<void> _with(SignInWith provider) async {
+    final from = _page;
     _go(_Page.browser);
     try {
-      await widget.account.signInWith(provider);
+      await widget.account
+          .signInWith(provider, born: from == _Page.create ? _born : null);
       if (mounted) widget.close(true);
     } on CloudError catch (e) {
       if (!mounted) return;
       setState(() {
-        _page = _Page.signIn;
+        // A new account needs the date of birth, which only the create page
+        // asks.
+        _page = e.code == 'need_birth_date' ? _Page.create : from;
         _error = e.code == 'cancelled' ? null : cloudErrorText(e);
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _page = _Page.signIn;
+        _page = from;
         _error = l10n.signInErrorGeneric;
       });
     }
@@ -349,6 +389,8 @@ class _SignInState extends State<_SignIn> {
             const SizedBox(height: 8),
             _field(t, 'password', _password, l10n.signInPassword,
                 obscure: true),
+            const SizedBox(height: 8),
+            _birthDate(t),
             const SizedBox(height: 12),
             _action(t, l10n.signInCreateAction),
             const SizedBox(height: 10),
@@ -456,6 +498,45 @@ class _SignInState extends State<_SignIn> {
           ],
         ),
       ];
+
+  /// Day, month and year of birth on one row, in the order the language
+  /// writes a date.
+  Widget _birthDate(LumitTheme t) {
+    final order = _dateFormat(DateFormat.yMd).pattern ?? 'd/M/y';
+    final parts = {
+      'd': _field(t, 'day', _day, l10n.signInDay),
+      'M': SizedBox(
+        height: _control,
+        child: BareDropdown<int?>(
+          key: const ValueKey('sign-in-month'),
+          value: _month,
+          options: [for (var m = 1; m <= 12; m++) m],
+          label: (m) => m == null
+              ? l10n.signInMonth
+              : _dateFormat(DateFormat.MMMM).format(DateTime(2000, m)),
+          onChanged: (m) => setState(() => _month = m),
+        ),
+      ),
+      'y': _field(t, 'year', _year, l10n.signInYearShort),
+    }.entries.toList()
+      ..sort((a, b) => order.indexOf(a.key).compareTo(order.indexOf(b.key)));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.signInBirthDate,
+            style: t.small.copyWith(color: t.textSecondary)),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            for (final (i, part) in parts.indexed) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(flex: part.key == 'M' ? 2 : 1, child: part.value),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _field(LumitTheme t, String id, TextEditingController controller,
           String hint,
