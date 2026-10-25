@@ -457,7 +457,10 @@ pub struct DecodePool {
     /// [`synthesis_refusal`] instead. The number is the addons folder's
     /// generation when it was opened, so installing the pack is enough to get
     /// the model painting without restarting Lumit.
-    synthesis: Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     /// Whether a model that will not paint is a failure rather than a
     /// substitution. Set on the pool an export renders through: a preview is a
     /// thing you are looking at and a file is a thing you keep, so preview
@@ -1179,7 +1182,8 @@ pub fn addon_needs(doc: &lumit_core::model::Document) -> Vec<Need> {
     if lumit_ml::synthesis::installed_identity().is_some()
         && !matches!(
             lumit_ml::runtime::status(),
-            lumit_ml::RuntimeStatus::Missing | lumit_ml::RuntimeStatus::Failed { .. }
+            lumit_ml::runtime::RuntimeStatus::Missing
+                | lumit_ml::runtime::RuntimeStatus::Failed { .. }
         )
         && machine_refusal().is_none()
     {
@@ -1228,10 +1232,10 @@ fn refusal_sentence(why: &SynthesisRefusal) -> String {
 }
 
 /// A model's own refusal as the row's.
-fn synthesis_refusal_of(why: &lumit_ml::MlError) -> SynthesisRefusal {
+fn synthesis_refusal_of(why: &lumit_ml::error::MlError) -> SynthesisRefusal {
     match why {
-        lumit_ml::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
-        lumit_ml::MlError::PackMissing(_) => SynthesisRefusal::PackMissing,
+        lumit_ml::error::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
+        lumit_ml::error::MlError::PackMissing(_) => SynthesisRefusal::PackMissing,
         other => SynthesisRefusal::Failed(other.to_string()),
     }
 }
@@ -1301,7 +1305,10 @@ fn combine_pair(
     decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     refuse: bool,
     refused: &mut Option<SynthesisRefusal>,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
@@ -1405,7 +1412,10 @@ fn combine_pair(
 /// Installing one moves the addons folder's generation, and the next frame
 /// opens the pack that has just arrived.
 fn synthesised(
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     a: &FramePixels,
     b: &FramePixels,
     width: usize,
@@ -1420,7 +1430,7 @@ fn synthesised(
     // one the user has just pressed a button to get.
     let now = lumit_ml::store::generation();
     if synthesis.as_ref().is_none_or(|(at, _)| *at != now) {
-        *synthesis = Some((now, lumit_ml::Synthesis::open()));
+        *synthesis = Some((now, lumit_ml::synthesis::Synthesis::open()));
     }
     let (_, door) = synthesis.as_mut().ok_or(SynthesisRefusal::PackMissing)?;
     let model = door.as_mut().map_err(|why| synthesis_refusal_of(why))?;
@@ -1434,7 +1444,10 @@ fn decode_comp(
     decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     refuse: bool,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,

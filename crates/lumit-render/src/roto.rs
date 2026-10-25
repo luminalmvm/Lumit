@@ -251,8 +251,8 @@ impl RotoFailure {
     /// The detail a library wrote is dropped on purpose: this enum is what the
     /// bridge hands the interface, and a sentence from ONNX Runtime is not
     /// something a reason can carry (§9).
-    fn of(e: &lumit_ml::MlError) -> Self {
-        use lumit_ml::MlError as E;
+    fn of(e: &lumit_ml::error::MlError) -> Self {
+        use lumit_ml::error::MlError as E;
         match e {
             E::RuntimeMissing
             | E::RuntimeFailed(_)
@@ -291,7 +291,7 @@ pub trait RotoModel {
 
 /// The segmentation model, wrapped so this file never names `lumit_ml` twice.
 struct SegmentModel {
-    model: lumit_ml::Segment,
+    model: lumit_ml::segment::Segment,
     /// The base frame as the encoder described it, kept for the run.
     frame: Option<lumit_ml::segment::Embedding>,
 }
@@ -318,7 +318,7 @@ impl RotoModel for SegmentModel {
         // that a matte can be asked later which pack seeded it, and an updated
         // pack under the same id answers that only by its hash.
         let runtime = match lumit_ml::runtime::status() {
-            lumit_ml::RuntimeStatus::Loaded { version, .. } => version,
+            lumit_ml::runtime::RuntimeStatus::Loaded { version, .. } => version,
             _ => String::new(),
         };
         let hash: String = self
@@ -337,7 +337,7 @@ impl RotoModel for SegmentModel {
 
 /// Open the installed segmentation pack, on the thread that will run it.
 fn open_segment() -> Result<Box<dyn RotoModel>, RotoFailure> {
-    lumit_ml::Segment::open()
+    lumit_ml::segment::Segment::open()
         .map(|model| Box::new(SegmentModel { model, frame: None }) as Box<dyn RotoModel>)
         .map_err(|e| RotoFailure::of(&e))
 }

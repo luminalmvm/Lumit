@@ -15,7 +15,7 @@
 //! `BridgeError` variant the panel has a sentence for.
 
 use flutter_rust_bridge::frb;
-use lumit_ml::{store, MlError};
+use lumit_ml::{error::MlError, store};
 
 use crate::api::BridgeError;
 
@@ -156,8 +156,8 @@ fn flatten(installed: store::Installed) -> BridgeAddon {
     BridgeAddon {
         id: manifest.id,
         kind: match manifest.kind {
-            lumit_ml::Kind::Runtime => BridgeAddonKind::Runtime,
-            lumit_ml::Kind::Model => BridgeAddonKind::Model,
+            lumit_ml::manifest::Kind::Runtime => BridgeAddonKind::Runtime,
+            lumit_ml::manifest::Kind::Model => BridgeAddonKind::Model,
         },
         name: manifest.name,
         version: manifest.version,
@@ -174,17 +174,17 @@ fn flatten(installed: store::Installed) -> BridgeAddon {
 }
 
 /// The runtime's own status, flattened.
-fn flatten_runtime(status: &lumit_ml::RuntimeStatus) -> BridgeRuntimeStatus {
+fn flatten_runtime(status: &lumit_ml::runtime::RuntimeStatus) -> BridgeRuntimeStatus {
     let (state, provider, version, detail) = match status {
-        lumit_ml::RuntimeStatus::Missing => (BridgeRuntimeState::Missing, "", "", ""),
-        lumit_ml::RuntimeStatus::Present => (BridgeRuntimeState::Present, "", "", ""),
-        lumit_ml::RuntimeStatus::Loaded { provider, version } => (
+        lumit_ml::runtime::RuntimeStatus::Missing => (BridgeRuntimeState::Missing, "", "", ""),
+        lumit_ml::runtime::RuntimeStatus::Present => (BridgeRuntimeState::Present, "", "", ""),
+        lumit_ml::runtime::RuntimeStatus::Loaded { provider, version } => (
             BridgeRuntimeState::Loaded,
             provider.as_str(),
             version.as_str(),
             "",
         ),
-        lumit_ml::RuntimeStatus::Failed { detail } => {
+        lumit_ml::runtime::RuntimeStatus::Failed { detail } => {
             (BridgeRuntimeState::Failed, "", "", detail.as_str())
         }
     };

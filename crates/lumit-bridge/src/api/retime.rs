@@ -326,7 +326,7 @@ impl LayerReference {
     pub fn flow_engine_state(&self) -> BridgeFlowEngineState {
         if matches!(
             lumit_ml::runtime::status(),
-            lumit_ml::RuntimeStatus::Missing
+            lumit_ml::runtime::RuntimeStatus::Missing
         ) {
             return BridgeFlowEngineState::RuntimeMissing;
         }
