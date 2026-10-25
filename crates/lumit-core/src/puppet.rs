@@ -1590,7 +1590,7 @@ pub fn apply_puppet(
 }
 
 /// [`apply_puppet`] for a scene-linear float raster
-/// (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+/// (`lumit_media::decode::PixelFormat::LinearF32`), sixteen bytes a pixel.
 pub fn apply_puppet_f32(
     rgba: &mut [u8],
     w: u32,

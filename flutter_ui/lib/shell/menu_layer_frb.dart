@@ -34,6 +34,7 @@ import '../panels/layer_fold_frb.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
     show hasThreeDSwitch, transformGroups;
+import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
@@ -381,6 +382,65 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
               );
             }),
       action: 'layer.centre',
+    ),
+    MenuEntry(
+      l10n.menuCentreAnchorPoint,
+      comp == null
+          ? null
+          : onSelection(
+              app,
+              ui,
+              (entry) {
+                // The pivot moves to the middle of the content and Position
+                // makes up the difference, so the picture stays put.
+                final tf = entry.info.transform;
+                double still(BridgeScalar s) =>
+                    (s as BridgeScalar_Static).field0;
+                final anchor = ui.layerBounds
+                    .boundsOf(entry,
+                        compSize: comp.getSize(),
+                        revision: ui.model.heldRevision,
+                        t: frame / ui.model.heldFps)
+                    .center(Offset.zero);
+                final position = panBehindPosition(
+                  oldAnchor: Offset(still(tf.anchorX), still(tf.anchorY)),
+                  newAnchor: anchor,
+                  position: Offset(still(tf.positionX), still(tf.positionY)),
+                  scaleXPercent: still(tf.scaleX),
+                  scaleYPercent: still(tf.scaleY),
+                  rotationDegrees: still(tf.rotation),
+                );
+                entry.layer.setTransforms(
+                  props: const [
+                    BridgeTransformProp.anchorX,
+                    BridgeTransformProp.anchorY,
+                    BridgeTransformProp.positionX,
+                    BridgeTransformProp.positionY,
+                  ],
+                  values: [
+                    BridgeScalar.static_(anchor.dx),
+                    BridgeScalar.static_(anchor.dy),
+                    BridgeScalar.static_(position.dx),
+                    BridgeScalar.static_(position.dy),
+                  ],
+                );
+              },
+              // Keyed values have no one number to make up the difference
+              // with, and cameras and lights have no anchor.
+              when: (entry) =>
+                  entry.info.kind != BridgeLayerKind.camera &&
+                  entry.info.kind != BridgeLayerKind.light &&
+                  [
+                    entry.info.transform.anchorX,
+                    entry.info.transform.anchorY,
+                    entry.info.transform.positionX,
+                    entry.info.transform.positionY,
+                    entry.info.transform.scaleX,
+                    entry.info.transform.scaleY,
+                    entry.info.transform.rotation,
+                  ].every((s) => s is BridgeScalar_Static),
+            ),
+      action: 'layer.centre.anchor',
     ),
     MenuEntry.divider(),
     ...axisModeRows(app, ui),

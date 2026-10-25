@@ -12,7 +12,9 @@
 //! on it: flat mid-grey. Mix is what turns the effect down (§3.57's Fractal
 //! influence makes the same point from the other side).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Emboss's controls.

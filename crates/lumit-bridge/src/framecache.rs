@@ -78,7 +78,7 @@ pub(crate) type FrameKey = u128;
 
 /// Where a held frame sits in its composition, and at what preview scale — kept
 /// beside the bytes but never part of the name (see [`best_frame`]).
-pub(crate) type Provenance = lumit_render::FrameProvenance;
+pub(crate) type Provenance = lumit_render::headless::FrameProvenance;
 
 /// One cached frame: its dimensions, the tightly-packed display bytes, and the
 /// bookkeeping the store and its consumers need.
@@ -286,7 +286,11 @@ pub(crate) fn put_rendered(
 /// File a frame the demotion ladder brought down off the graphics card
 /// (docs/06 §5.3). Its bytes stay in the channel order they were composited in,
 /// so the trip back up needs no conversion.
-pub(crate) fn put_demoted(key: FrameKey, frame: &lumit_render::DemotedFrame, bytes: Arc<Vec<u8>>) {
+pub(crate) fn put_demoted(
+    key: FrameKey,
+    frame: &lumit_render::headless::DemotedFrame,
+    bytes: Arc<Vec<u8>>,
+) {
     with_cache(|c| {
         c.put(
             key,
@@ -403,7 +407,7 @@ pub(crate) fn contains(key: FrameKey) -> bool {
 pub(crate) fn best_frame(
     comp: uuid::Uuid,
     frame: u64,
-    still_current: impl Fn(FrameKey, lumit_render::Quality) -> bool,
+    still_current: impl Fn(FrameKey, lumit_render::plan::Quality) -> bool,
 ) -> Option<(u32, u32, Vec<u8>)> {
     with_cache(|c| {
         let key = *c
@@ -456,7 +460,7 @@ pub(crate) fn best_frame(
 pub(crate) fn with_best_frame<R>(
     comp: uuid::Uuid,
     frame: u64,
-    still_current: impl Fn(FrameKey, lumit_render::Quality) -> bool,
+    still_current: impl Fn(FrameKey, lumit_render::plan::Quality) -> bool,
     read: impl FnOnce(&[u8], u32, u32, bool) -> R,
 ) -> Option<R> {
     with_cache(|c| {
@@ -541,7 +545,7 @@ pub(crate) mod vram {
 
     /// The budget the settings asked for; the worker applies it on its next
     /// turn.
-    static BUDGET: AtomicUsize = AtomicUsize::new(lumit_render::DEFAULT_VRAM_CACHE_BYTES);
+    static BUDGET: AtomicUsize = AtomicUsize::new(lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES);
     /// Bumped by Clear cache; the worker clears when it sees it move.
     static CLEARS: AtomicU64 = AtomicU64::new(0);
     /// What the worker last reported holding.
@@ -553,7 +557,8 @@ pub(crate) mod vram {
     /// if the applying ever breaks. The meter shows this one, because a meter
     /// that draws a wish it cannot see being honoured is how "the cache stops
     /// at 512 MB while Settings says 8 GB" goes unnoticed.
-    static APPLIED: AtomicUsize = AtomicUsize::new(lumit_render::DEFAULT_VRAM_CACHE_BYTES);
+    static APPLIED: AtomicUsize =
+        AtomicUsize::new(lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES);
 
     pub(crate) fn publish_applied(bytes: usize) {
         APPLIED.store(bytes, Ordering::Relaxed);
@@ -575,7 +580,7 @@ pub(crate) mod vram {
     pub(super) fn size_to_machine(bytes: usize) {
         if !CHOSEN.load(Ordering::Relaxed) {
             BUDGET.store(
-                bytes.max(lumit_render::DEFAULT_VRAM_CACHE_BYTES),
+                bytes.max(lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES),
                 Ordering::Relaxed,
             );
         }
@@ -1096,13 +1101,13 @@ mod tests {
             comp,
             frame,
             scale_q,
-            quality: lumit_render::Quality::default(),
+            quality: lumit_render::plan::Quality::default(),
         }
     }
 
     /// A positional lookup that accepts every candidate — for the tests that
     /// are about the lookup itself rather than about staleness.
-    fn anything(_key: FrameKey, _quality: lumit_render::Quality) -> bool {
+    fn anything(_key: FrameKey, _quality: lumit_render::plan::Quality) -> bool {
         true
     }
 
@@ -1170,7 +1175,7 @@ mod tests {
             c.put(1, entry(64, at(comp, 5, 250)));
             c.put(2, entry(256, at(comp, 5, 1000)));
         });
-        let current = |key: FrameKey, _q: lumit_render::Quality| key == 1;
+        let current = |key: FrameKey, _q: lumit_render::plan::Quality| key == 1;
 
         let (_, _, bytes) = best_frame(comp, 5, current).expect("the current frame is held");
         assert_eq!(

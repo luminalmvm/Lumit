@@ -15,8 +15,8 @@ use serde::de::{Deserializer, MapAccess, Visitor};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::commands::COMMANDS;
 use crate::mcp::tool_name;
-use crate::COMMANDS;
 
 /// What rewrites the page.
 const REGENERATE: &str = "cargo test -p lumit-script regenerate_scripting_reference -- --ignored";

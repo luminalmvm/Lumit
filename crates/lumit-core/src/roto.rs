@@ -71,7 +71,7 @@ pub const ROTO_BRUSH: &str = "roto_brush";
 
 /// What a stroke claims about the pixels under it.
 ///
-/// The document's own copy of `lumit_roto::StrokeKind`. `lumit-core` is the
+/// The document's own copy of `lumit_roto::stroke::StrokeKind`. `lumit-core` is the
 /// bottom of the crate graph and may not depend on the arithmetic crate above
 /// it (docs/05 §1.1) — the same split the Camera track's density table takes
 /// (docs/impl/tracking.md §5a, deviation 1). The render path converts.

@@ -35,7 +35,7 @@ pub const IDENTITY: Matrix34 = [
 ];
 
 /// The coefficients as the samplers see them: single precision, exactly what
-/// [`crate::bake`] hands the graphics card. Every evaluation goes through this,
+/// [`crate::bake::bake`] hands the graphics card. Every evaluation goes through this,
 /// so the processor and the card multiply the same twelve numbers.
 #[must_use]
 pub fn single(m: &Matrix34) -> [f32; 12] {

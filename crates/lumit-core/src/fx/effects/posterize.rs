@@ -14,7 +14,9 @@
 //! close enough that the CPU and the GPU always agree on which rung a value
 //! lands on (§3.58 decision 2).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Posterize's controls.

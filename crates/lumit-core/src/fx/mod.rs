@@ -17,9 +17,9 @@
 /// The layer's audio insert chain: sound through the plugins in its stack,
 /// ahead of Volume and Pan (docs/impl/audio-plugins.md §2).
 pub mod audio_chain;
-mod builtins;
+pub mod builtins;
 /// Registration: the list of effects this build has (§2.6).
-mod catalogue;
+pub mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
 /// The drivers and the driver-graph evaluation: one module per driver,
@@ -41,24 +41,24 @@ pub mod lens_flare;
 pub mod lens_library;
 /// The WGSL effects extensions carry: the table of them.
 pub mod lfx;
-mod markers;
-mod maths;
+pub mod markers;
+pub mod maths;
 /// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and
 /// Perlin noise and the fractal sum over them, reused by the displacement
 /// family.
 pub mod noise;
 /// The resolved key/value parameter form a frame renders from
 /// (docs/impl/effect-registry.md §2.3).
-mod params;
+pub mod params;
 /// The points stream and its closed forms: one frame's
 /// particles, worked out from their birth indices and nothing else.
 pub mod points;
 /// The catalogue as JSON, for the manual's per-effect parameter tables.
 pub mod reference;
 /// What an effect is, as a value rather than a variant (§2.4).
-mod registry;
-mod resolved;
-mod schema;
+pub mod registry;
+pub mod resolved;
+pub mod schema;
 /// The Custom shader's text side: the declaration grammar, the assembler and
 /// the uniform layout (docs/impl/custom-shader.md).
 pub mod shader;
@@ -66,7 +66,7 @@ pub mod shader;
 /// layer wears, in one pinned order — a second, order-locked list beside the
 /// effect stack rather than entries in the catalogue.
 pub mod styles;
-mod temporal;
+pub mod temporal;
 
 /// CPU reference implementations (docs/08 §1.6): identical semantics to the
 /// WGSL kernels, plain and readable — the oracle the GPU must agree with.
@@ -76,24 +76,9 @@ pub mod cpu;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-pub use audio_chain::{
-    run_chain, AudioProcessor, ChainLink, ChainOutput, Denormals, AUDIO_BLOCK_FRAMES,
-    AUDIO_BLOCK_SAMPLES, AUDIO_CHANNELS, AUDIO_SPLICE_FRAMES,
-};
-pub use builtins::*;
-pub use catalogue::*;
-pub use drivers::{
-    driven_volume_db, driver_stream, effect_stream, resolve_drivers, resolve_drivers_projected,
-    temporal_window, ResolvedDrivers,
-};
-pub use markers::*;
-pub use maths::*;
-pub use params::*;
-pub use registry::*;
-pub use resolved::*;
-pub use schema::*;
-pub use styles::{
-    normalise_styles, offered as offered_styles, style_index, style_is_outer, STYLE_DEFS,
-    UNRENDERED as UNRENDERED_STYLES,
-};
-pub use temporal::*;
+use builtins::*;
+use drivers::ResolvedDrivers;
+use markers::*;
+use params::*;
+use registry::*;
+use schema::*;

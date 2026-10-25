@@ -10,8 +10,9 @@
 use crate::fx::effects::vary_points::{POINTS_OUT, POINTS_PORT};
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    Port, PortType, ResolveCx, Signature, Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -178,7 +179,11 @@ impl EffectDef for MergePointsDef {
         push(MergePoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }
 
-    fn modify_points(&self, p: Params<'_>, cx: &crate::fx::ModifyCx<'_>) -> Option<PointsStream> {
+    fn modify_points(
+        &self,
+        p: Params<'_>,
+        cx: &crate::fx::registry::ModifyCx<'_>,
+    ) -> Option<PointsStream> {
         Some(MergePoints::read(p).apply(cx.inputs))
     }
 }

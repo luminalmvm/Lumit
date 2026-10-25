@@ -15,7 +15,10 @@
 //! Every wave is the same shape at a different size, so §3.71's sector solve is
 //! done here once for a **unit** shape and the kernel multiplies it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// A star's depth means nothing until the star is switched on — §3.71's row.
@@ -47,7 +50,7 @@ pub const RADIO_WAVES_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
 pub struct RadioWaves {
     /// Where the waves are emitted, px@comp (point parameters are PIXELS). The
     /// schema default is nominal 1080p centre;
-    /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
+    /// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Producer x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,

@@ -12,7 +12,7 @@
 //! **Every answer is worked out from the start each frame**, never carried
 //! from the frame before, so scrubbing to a moment and playing up to it reach
 //! the same numbers, and so does the export. The sound is read once and kept by
-//! the host ([`crate::fx::AudioTap::onsets`]); what each frame pays for is the
+//! the host ([`crate::fx::registry::AudioTap::onsets`]); what each frame pays for is the
 //! picking, at the Sensitivity, Minimum gap and Threshold each moment was keyed
 //! to. A wire into one of those rows is read at this frame only, and the
 //! moments before it read their keyframes.
@@ -24,8 +24,9 @@ use crate::fx::drivers::audio_level::{
     SOURCE_CLIP, SOURCE_LAYER, SOURCE_OPTIONS, SOURCE_THIS_COMP,
 };
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, MarkerContext,
-    Port, PortType, Signature, Value,
+    markers::MarkerContext, params::Value, registry::DriverCx, registry::EffectDef,
+    registry::EffectMetadata, registry::Signature, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -204,7 +205,7 @@ impl EffectDef for BeatTriggerDef {
         let frame = if fps > 0.0 { 1.0 / fps } else { 0.0 };
         let pulse = last.is_some_and(|e| lt - e < frame || e == lt);
         let envelope = last.map_or(0.0, |e| {
-            crate::fx::decayed_hit(lt - e, f64::from(p.decay.max(0.0)))
+            crate::fx::markers::decayed_hit(lt - e, f64::from(p.decay.max(0.0)))
         });
         let out = [
             f32::from(u8::from(pulse)),

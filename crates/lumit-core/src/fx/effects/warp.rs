@@ -13,7 +13,9 @@
 //! back to pixels — which is what makes Bend 0 the bit-exact identity rather
 //! than a rebuilt coordinate a rounding away from it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Warp's controls.

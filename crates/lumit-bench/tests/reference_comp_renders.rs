@@ -20,8 +20,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use lumit_bench::comp::reference_comp;
 use lumit_bench::comp::LAYER_COUNT;
-use lumit_bench::reference_comp;
 use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
 

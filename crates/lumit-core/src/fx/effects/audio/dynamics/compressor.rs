@@ -26,7 +26,10 @@ use crate::fx::effects::audio::dsp::{
     envelope::{GainReduction, RmsFollower},
     smoother::Smoother,
 };
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// The window the RMS detector averages over. Fixed rather than a row: RMS
 /// means "how loud over about ten milliseconds", and a second time constant
@@ -262,7 +265,7 @@ impl AudioProcessor for Compressor {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_BLOCK_SAMPLES};
     use std::f64::consts::TAU;
 
     const RATE: u32 = 48_000;

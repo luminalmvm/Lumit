@@ -45,11 +45,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::markers::MarkerContext;
+use super::params::ResolvedStack;
 use super::params::{ParamId, Value};
 use super::points::{self, PointsStream};
 use super::registry::{AudioTap, DriverCx, EffectMetadata};
 use super::resolved::resolve_into_arena;
-use super::ResolvedStack;
 use crate::expression::ExpressionContext;
 use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 use crate::model::EffectInstance;
@@ -525,7 +525,7 @@ pub fn driver_stream_in(
 pub fn temporal_window(graph: &LayerGraph, lt: f64, context: Arc<ExpressionContext>) -> f64 {
     let mut widest = 0.0f64;
     for inst in &graph.nodes {
-        let Some(def) = super::BUILTIN_DEFS.get(&inst.effect.match_name) else {
+        let Some(def) = super::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name) else {
             continue;
         };
         let mut bag = ResolvedStack::new();
@@ -694,7 +694,7 @@ impl Eval<'_> {
         &self,
         effect: Uuid,
         inst: &EffectInstance,
-        def: &'static dyn super::EffectDef,
+        def: &'static dyn super::registry::EffectDef,
         layer: &crate::model::Layer,
         target: &crate::model::Layer,
         t: f64,
@@ -768,7 +768,7 @@ impl Eval<'_> {
         if !inst.enabled {
             return None;
         }
-        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
+        let def = super::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name)?;
 
         // This node's own incoming wires, evaluated first — which is what makes
         // the walk topological without a sort.
@@ -894,7 +894,7 @@ impl Eval<'_> {
         if !inst.enabled {
             return None;
         }
-        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
+        let def = super::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name)?;
         self.with_arena(|bag| {
             resolve_into_arena(
                 def,
@@ -999,7 +999,7 @@ impl Eval<'_> {
         // first one is tapped.
         let producer = layer.effects.iter().find(|e| {
             e.enabled
-                && super::BUILTIN_DEFS
+                && super::catalogue::BUILTIN_DEFS
                     .get(&e.effect.match_name)
                     .is_some_and(|def| {
                         points::wants_schedule(def.signature())
@@ -1011,7 +1011,7 @@ impl Eval<'_> {
         let mut tapped = producer.id;
         for _ in 0..layer.effects.len() {
             let reads_tapped = |e: &EffectInstance| {
-                let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
+                let Some(def) = super::catalogue::BUILTIN_DEFS.get(&e.effect.match_name) else {
                     return false;
                 };
                 points::wants_schedule(def.signature())
@@ -1103,7 +1103,7 @@ impl Eval<'_> {
         if !inst.enabled {
             return None;
         }
-        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
+        let def = super::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name)?;
         // Something that does not emit points has no stream to hand over, and
         // the walk asks the signature rather than a list of names.
         // **Which** producer it is still decides how the stream is made, at the
@@ -1154,7 +1154,7 @@ impl Eval<'_> {
             let mut inputs: Vec<Rc<PointsStream>> = Vec::new();
             let mut any = false;
             for port in def.signature().inputs() {
-                if port.ty != super::PortType::Points {
+                if port.ty != super::schema::PortType::Points {
                     continue;
                 }
                 let to = InputRef::Param {
@@ -1189,7 +1189,7 @@ impl Eval<'_> {
                 // reads one answers `None` here and is made on the card.
                 def.modify_points(
                     bag.get(0)?.params,
-                    &super::ModifyCx {
+                    &super::registry::ModifyCx {
                         inputs: &inputs,
                         t,
                         sampled: None,
@@ -1343,7 +1343,7 @@ impl Eval<'_> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::{instantiate, MarkerContext, ResolvedStack};
+    use crate::fx::{builtins::instantiate, markers::MarkerContext, params::ResolvedStack};
     use crate::graph::Edge;
     use crate::model::{EffectInstance, EffectValue};
 
@@ -1707,7 +1707,7 @@ mod tests {
         };
 
         let mut list = vec![saved(Some(tap.layer)), saved(None)];
-        crate::fx::backfill_builtin_params(&mut list);
+        crate::fx::builtins::backfill_builtin_params(&mut list);
         assert_eq!(
             list[0].param("source"),
             Some(&EffectValue::Choice(audio_level::SOURCE_LAYER)),
@@ -2025,7 +2025,7 @@ mod tests {
         let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
 
         let resolve = |drivers: &ResolvedDrivers| -> ResolvedStack {
-            crate::fx::resolve_stack_temporal_named(
+            crate::fx::resolved::resolve_stack_temporal_named(
                 std::slice::from_ref(&blur),
                 drivers,
                 0.5,
@@ -2239,7 +2239,7 @@ mod tests {
         use crate::fx::points::{self, Schedule};
 
         let dt = 1.0 / 60.0;
-        let (_, bag) = crate::fx::resolve_stack_temporal_named(
+        let (_, bag) = crate::fx::resolved::resolve_stack_temporal_named(
             std::slice::from_ref(producer),
             drivers,
             t,
@@ -2964,7 +2964,7 @@ mod tests {
     /// otherwise, and the choice sits beside the text without disturbing it.
     #[test]
     fn an_expression_box_runs_in_the_language_it_was_given() {
-        use crate::expression::Language;
+        use crate::expression::script::Language;
 
         let mut e = expression("Math.max(20, 1.5) / 8");
         assert_eq!(expression::language_of(&e), Language::Rhai);
@@ -3000,7 +3000,7 @@ mod tests {
             };
             let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
             assert!(drivers.is_empty(), "{source:?} carried something");
-            crate::fx::resolve_stack_temporal_named(
+            crate::fx::resolved::resolve_stack_temporal_named(
                 std::slice::from_ref(&blur),
                 &drivers,
                 0.5,

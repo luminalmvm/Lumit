@@ -11,7 +11,6 @@
 use lumit_audio::mix::MixPlan;
 use lumit_audio::stream::Source;
 use lumit_core::model::{Document, LayerKind, ProjectItem};
-pub use lumit_core::pixels::{px_tile, solid_rgba, srgb_decode, srgb_encode};
 use lumit_core::retime::Interpolation;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -48,7 +47,7 @@ impl ExportHandle {
 pub struct ItemInfo {
     /// Where the pixels come from: one file, or the numbered run of stills the
     /// item names one file of.
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub fps: f64,
     pub frames: usize,
     /// The file could not be found (docs/07 §3.3): render the test-bar slate
@@ -89,7 +88,7 @@ pub struct AudioJob {
     /// The file the sound is read from, and which of its audio streams: the
     /// first for nearly every layer, another or several mixed for a layer or
     /// clip that has chosen (`lumit_core::model::AudioStreams`).
-    pub sound: lumit_media::SoundSource,
+    pub sound: lumit_media::audio::SoundSource,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
@@ -178,7 +177,12 @@ impl DrivenVolume {
             inputs: None,
         });
         let tap = crate::audio_tap::DocumentAudio::pre_duck(&self.doc, comp, t_comp);
-        lumit_core::fx::driven_volume_db(&self.graph, t - self.offset_s, context, Some(&tap))
+        lumit_core::fx::drivers::driven_volume_db(
+            &self.graph,
+            t - self.offset_s,
+            context,
+            Some(&tap),
+        )
     }
 }
 
@@ -208,7 +212,7 @@ impl PartialEq for DrivenVolume {
 /// the mixed timeline.
 ///
 /// Which entries are audio is not decided here: the catalogue is asked, once,
-/// when the chain opens ([`lumit_core::fx::EffectDef::open_audio`]). A stack
+/// when the chain opens ([`lumit_core::fx::registry::EffectDef::open_audio`]). A stack
 /// full of blurs opens nothing and the sound goes through untouched.
 ///
 /// A **Precomp** layer's chain is a chain like any other, and it rides on the
@@ -286,7 +290,7 @@ pub fn chain_bake(
     rate: u32,
     offline: bool,
 ) -> Option<(Vec<f32>, u32)> {
-    use lumit_core::fx::AUDIO_BLOCK_FRAMES;
+    use lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
 
     let frames = samples.len() / 2;
     if frames == 0 {
@@ -299,7 +303,8 @@ pub fn chain_bake(
     // nothing, so opening is handed one time point rather than the envelope.
     let mut opened = Vec::new();
     for instance in chain.effects.iter().filter(|e| e.enabled) {
-        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(&instance.effect.match_name) else {
+        let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&instance.effect.match_name)
+        else {
             continue;
         };
         let first = bake_values(chain, instance, def, start_frame, 1, rate)
@@ -327,14 +332,16 @@ pub fn chain_bake(
         .sum::<usize>();
     let blocks = (frames + latency + tail).div_ceil(AUDIO_BLOCK_FRAMES);
     let ids: Vec<Uuid> = opened.iter().map(|(instance, _, _)| instance.id).collect();
-    let links: Vec<lumit_core::fx::ChainLink> = opened
+    let links: Vec<lumit_core::fx::audio_chain::ChainLink> = opened
         .into_iter()
-        .map(|(instance, def, processor)| lumit_core::fx::ChainLink {
-            values: bake_values(chain, instance, def, start_frame, blocks, rate),
-            processor,
-        })
+        .map(
+            |(instance, def, processor)| lumit_core::fx::audio_chain::ChainLink {
+                values: bake_values(chain, instance, def, start_frame, blocks, rate),
+                processor,
+            },
+        )
         .collect();
-    let out = lumit_core::fx::run_chain(&links, samples);
+    let out = lumit_core::fx::audio_chain::run_chain(&links, samples);
     // The badge, per link (AP5, docs/12 §2.3): a link that shipped any block
     // dry files the host's own sentence against *its* instance — the same
     // table an OFX frame files into, read by the same `badge_of` — and a link
@@ -400,7 +407,7 @@ pub fn job_bake(
 /// bakes **one** entry, which the chain then holds past the end: an
 /// un-automated plugin costs no per-block work at all.
 ///
-/// ponytail: the driver walk is given no [`lumit_core::fx::AudioTap`], so an
+/// ponytail: the driver walk is given no [`lumit_core::fx::registry::AudioTap`], so an
 /// *Audio level* driver wired into a plugin parameter reads nothing here.
 /// Handing it the real tap would mix a window of the comp per block — tens of
 /// thousands of mixes for a song. Bake the tap's levels once at control rate
@@ -408,12 +415,12 @@ pub fn job_bake(
 fn bake_values(
     chain: &AudioChain,
     instance: &lumit_core::model::EffectInstance,
-    def: &'static dyn lumit_core::fx::EffectDef,
+    def: &'static dyn lumit_core::fx::registry::EffectDef,
     start_frame: i64,
     blocks: usize,
     rate: u32,
-) -> Vec<Vec<(lumit_core::fx::ParamId, f64)>> {
-    use lumit_core::fx::{hard_range, ParamId, AUDIO_BLOCK_FRAMES};
+) -> Vec<Vec<(lumit_core::fx::params::ParamId, f64)>> {
+    use lumit_core::fx::{audio_chain::AUDIO_BLOCK_FRAMES, params::ParamId, resolved::hard_range};
     use lumit_core::graph::{InputRef, NodeRef};
     use lumit_core::model::EffectValue;
 
@@ -470,9 +477,9 @@ fn bake_values(
                     current_depth: 0,
                     inputs: None,
                 });
-                lumit_core::fx::resolve_drivers(&chain.graph, lt, context, None)
+                lumit_core::fx::drivers::resolve_drivers(&chain.graph, lt, context, None)
             } else {
-                lumit_core::fx::ResolvedDrivers::default()
+                lumit_core::fx::drivers::ResolvedDrivers::default()
             };
             rows.iter()
                 .map(|row| {
@@ -2723,7 +2730,7 @@ pub fn mixdown_counting(
 
 /// As [`mixdown`], but over buffers already in memory.
 pub fn mixdown_prepared(
-    decoded: &[(std::sync::Arc<lumit_media::AudioBuffer>, AudioJob)],
+    decoded: &[(std::sync::Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
     rate: u32,
     duration_s: f64,
     master_gain: f32,
@@ -3074,7 +3081,10 @@ pub fn live_plan(
                 if let RunOf::Bus(samples) = run.of {
                     let frames = samples.len() / 2;
                     clips.push(lumit_audio::mix::PlacedClip {
-                        source: Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
+                            rate,
+                            samples,
+                        })),
                         start_frame: run.start_frame,
                         src_start: 0,
                         len: frames,
@@ -3120,7 +3130,7 @@ pub fn live_plan(
                     let (samples, latency) = job_bake(job, &dry, at, rate, false)
                         .or_else(|| job.retime.is_some().then_some((dry, 0)))?;
                     Some((
-                        Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        Source::whole(Arc::new(lumit_media::audio::AudioBuffer { rate, samples })),
                         latency,
                     ))
                 }),
@@ -3316,7 +3326,7 @@ fn run(
                 None => (None, None),
             };
             opened.store(true, Ordering::Relaxed);
-            let encoder = lumit_media::Encoder::open(
+            let encoder = lumit_media::encode::Encoder::open(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
                     codec,
@@ -3683,7 +3693,7 @@ fn run_audio_only(
 ) -> Result<(), String> {
     let rate = spec.audio_rate;
     let chans = usize::from(spec.audio_layout.channels());
-    let mut encoder = lumit_media::Encoder::open(
+    let mut encoder = lumit_media::encode::Encoder::open(
         out_path,
         None,
         Some(&lumit_media::encode::AudioSettings {
@@ -3742,7 +3752,7 @@ enum Rendered {
 
 enum Sink {
     Video {
-        encoder: lumit_media::Encoder,
+        encoder: lumit_media::encode::Encoder,
         size: (u32, u32),
     },
     Images {
@@ -3807,12 +3817,8 @@ pub fn mask_rgba(coverage: &[u8]) -> Vec<u8> {
 
 /// CameraPose (core model) -> GPU camera matrix: the single conversion both
 /// the preview and the export path share, so they cannot disagree.
-pub fn camera_mat(
-    comp_w: u32,
-    comp_h: u32,
-    pose: lumit_core::model::CameraPose,
-) -> lumit_gpu::Mat4 {
-    lumit_gpu::camera_matrix(
+pub fn camera_mat(comp_w: u32, comp_h: u32, pose: lumit_core::model::CameraPose) -> glam::Mat4 {
+    lumit_gpu::composite::camera_matrix(
         comp_w as f32,
         comp_h as f32,
         pose.zoom as f32,
@@ -3848,7 +3854,7 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    source: lumit_media::MediaSource {
+                    source: lumit_media::sequence::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
                         source_layer: f.source_layer,
@@ -3869,7 +3875,7 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    source: lumit_media::MediaSource {
+                    source: lumit_media::sequence::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
                         source_layer: f.source_layer,
@@ -3971,7 +3977,8 @@ mod tests {
     fn gradient_doc(w: u32, h: u32) -> (Arc<Document>, Uuid) {
         let (doc, comp_id) = solid_doc(w, h);
         let mut doc = Document::clone(&doc);
-        let mut fx = lumit_core::fx::instantiate("gradient").expect("gradient is a built-in");
+        let mut fx =
+            lumit_core::fx::builtins::instantiate("gradient").expect("gradient is a built-in");
         for p in &mut fx.params {
             let set = match p.id.as_str() {
                 // White at the top row to black at the bottom, straight down.
@@ -4074,12 +4081,12 @@ mod tests {
     #[test]
     fn volume_bake_static_gain_and_animated_envelope() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        use lumit_core::Rational;
+        use lumit_core::time::Rational;
         let job = |volume: Property, offset_s: f64| AudioJob {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 10.0,
             offset_s,
@@ -4255,7 +4262,7 @@ mod tests {
     #[test]
     fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
         use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        use lumit_core::Rational;
+        use lumit_core::time::Rational;
         use std::sync::Arc;
 
         let rate = 48_000u32;
@@ -4279,7 +4286,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -4318,7 +4325,7 @@ mod tests {
         );
         let plan = lumit_audio::mix::MixPlan {
             clips: vec![lumit_audio::mix::PlacedClip {
-                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                     rate,
                     samples: samples.clone(),
                 })),
@@ -5110,7 +5117,7 @@ mod tests {
                     // Its own picture as the depth, so the whole layer is in
                     // focus and the stripes, when on, cover it.
                     let id = c.layers[0].id;
-                    let mut dof = lumit_core::fx::instantiate("dof").unwrap();
+                    let mut dof = lumit_core::fx::builtins::instantiate("dof").unwrap();
                     for p in &mut dof.params {
                         match p.id.as_str() {
                             "zebra" => p.value = lumit_core::model::EffectValue::Bool(zebra),
@@ -5503,7 +5510,8 @@ mod tests {
         use lumit_core::anim::Property;
         use lumit_core::model::EffectValue;
 
-        let mut instance = lumit_core::fx::instantiate(match_name).expect("a catalogue entry");
+        let mut instance =
+            lumit_core::fx::builtins::instantiate(match_name).expect("a catalogue entry");
         for param in &mut instance.params {
             if let Some((_, value)) = over.iter().find(|(id, _)| *id == param.id) {
                 param.value = EffectValue::Float(Property::fixed(*value));
@@ -5534,7 +5542,7 @@ mod tests {
             item: Uuid::nil(),
             layer: Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -5632,7 +5640,7 @@ mod tests {
         let rate = 48_000u32;
         let frames = rate as usize / 4;
         let ceiling = 10f32.powf(-6.0 / 20.0);
-        let tone = Arc::new(lumit_media::AudioBuffer {
+        let tone = Arc::new(lumit_media::audio::AudioBuffer {
             rate,
             samples: (0..frames)
                 .flat_map(|n| {

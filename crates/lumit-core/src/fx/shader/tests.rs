@@ -9,7 +9,7 @@ use super::*;
 use crate::anim::{Animation, Keyframe, Property, SideInterp};
 use crate::expression::ExpressionContext;
 use crate::fx::effects::custom_shader::{source_of, EXTRA_KEY};
-use crate::fx::{instantiate, MarkerContext, ParamId, Value};
+use crate::fx::{builtins::instantiate, markers::MarkerContext, params::ParamId, params::Value};
 use crate::model::{EffectParam, EffectValue};
 
 /// The §1.4 declaration block, all nine forms, exactly as the note pins it.
@@ -208,7 +208,7 @@ fn the_packed_bytes_land_where_the_struct_says() {
         (ParamId::new("centre_x"), Value::Float(960.0)),
         (ParamId::new("centre_y"), Value::Float(540.0)),
     ];
-    let bytes = p.pack(crate::fx::Params::new(&entries));
+    let bytes = p.pack(crate::fx::params::Params::new(&entries));
     assert_eq!(bytes.len(), 64);
     let f32_at = |o: usize| f32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let u32_at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
@@ -259,7 +259,7 @@ fn instance_with_shader() -> crate::model::EffectInstance {
 }
 
 fn resolved_radius(inst: &crate::model::EffectInstance, lt: f64, px_scale: f32) -> Option<f32> {
-    let ops = crate::fx::resolve_stack(
+    let ops = crate::fx::resolved::resolve_stack(
         std::slice::from_ref(inst),
         lt,
         2202.9,
@@ -303,7 +303,9 @@ fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
         inst.params.iter().any(|p| p.id == "radius"),
         "the stored row outlives the uniform it was derived from"
     );
-    let def = crate::fx::BUILTIN_DEFS.get("custom_shader").unwrap();
+    let def = crate::fx::catalogue::BUILTIN_DEFS
+        .get("custom_shader")
+        .unwrap();
     assert_eq!(
         def.derived(&inst).iter().map(|r| r.id).collect::<Vec<_>>(),
         vec!["steps"],
@@ -320,7 +322,7 @@ fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
 /// the second half of what it promises.
 #[test]
 fn the_starter_shader_compiles_and_changes_nothing() {
-    let inst = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
+    let inst = crate::fx::builtins::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
         .expect("the catalogue knows it");
     let source =
         crate::fx::effects::custom_shader::source_of(&inst).expect("a fresh instance has one");
@@ -338,7 +340,7 @@ fn the_starter_shader_compiles_and_changes_nothing() {
     // Neutral: gain 1, white tint, so dropping the effect on changes no pixel
     // until the user writes something.
     assert_eq!(
-        crate::fx::instantiate("custom_shader")
+        crate::fx::builtins::instantiate("custom_shader")
             .map(|plain| crate::fx::effects::custom_shader::source_of(&plain).is_none()),
         Some(true),
         "the pure schema default is still empty - presets and tests keep it"

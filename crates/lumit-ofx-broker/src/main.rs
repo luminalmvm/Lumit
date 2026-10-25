@@ -24,12 +24,14 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
+use interprocess::local_socket::RecvHalf;
+use interprocess::local_socket::SendHalf;
 use lumit_eval::epoch::Epoch;
 use lumit_ofx::bundle::Bundle;
 use lumit_ofx::describe::{describe, Context, PluginDescriptor};
 use lumit_ofx::image::{Frame16, RectI};
 use lumit_ofx::instance::{time_key, Instance, ParamSnapshot};
-use lumit_ofx::ipc::pipe::{self, RecvHalf, SendHalf};
+use lumit_ofx::ipc::pipe::{self};
 use lumit_ofx::ipc::proto::{
     BrokerMessage, FrameWanted, HostMessage, InstanceId, PROTOCOL_VERSION,
 };

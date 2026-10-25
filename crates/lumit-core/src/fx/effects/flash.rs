@@ -11,8 +11,9 @@
 
 use crate::fx::markers::flash_nth;
 use crate::fx::{
-    cpu, flash_beat_envelope, flash_envelope, EffectDef, EffectMetadata, EffectSchema, ParamId,
-    Params, ResolveCx, Value,
+    cpu, markers::flash_beat_envelope, markers::flash_envelope, params::ParamId, params::Params,
+    params::Value, registry::EffectDef, registry::EffectMetadata, registry::ResolveCx,
+    schema::EffectSchema,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;

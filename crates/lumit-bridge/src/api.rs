@@ -1,6 +1,6 @@
 use std::{error::Error, fmt};
 
-use lumit_core::OpError;
+use lumit_core::ops::OpError;
 
 pub mod addons;
 pub mod assets;

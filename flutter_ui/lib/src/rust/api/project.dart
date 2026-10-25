@@ -380,7 +380,7 @@ class ProjectReference {
   /// from its history, or any other `.lum`.
   ///
   /// Each arrives as a new composition with what it places, and footage the
-  /// project already has is used again ([`lumit_project::bring`]). They are
+  /// project already has is used again ([`lumit_project::bring::bring`]). They are
   /// filed where a composition and a solid made here would be.
   ///
   /// `earlier_save` says the file is a save of this project that was fetched

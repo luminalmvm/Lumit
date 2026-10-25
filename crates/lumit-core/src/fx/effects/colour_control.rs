@@ -4,7 +4,7 @@
 //! colour, so that six effects reading it through expressions all change
 //! together when the swatch is changed once.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Colour control's one control.

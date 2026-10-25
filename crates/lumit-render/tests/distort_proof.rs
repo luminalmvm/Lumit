@@ -37,7 +37,7 @@ use lumit_core::fx::effects::{
     lens_distort::LensDistort, mirror::Mirror, offset::Offset, tile::Tile,
     turbulent_displace::TurbulentDisplace,
 };
-use lumit_core::fx::{EffectMetadata, Params};
+use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
 fn to_linear(rgba: &[u8]) -> Vec<f32> {
     rgba.chunks_exact(4)

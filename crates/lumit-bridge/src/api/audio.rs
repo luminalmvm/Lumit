@@ -137,7 +137,9 @@ impl CompositionReference {
     /// the comp as it was when playback was asked for, and the worker may not
     /// start for some milliseconds.
     #[frb(ignore)]
-    fn document_snapshot(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+    fn document_snapshot(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let state = self.project()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(state.store.snapshot())

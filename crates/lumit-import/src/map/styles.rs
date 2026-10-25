@@ -104,7 +104,7 @@ pub(crate) fn styles(
     }
 
     // §1's invariants, restored rather than assumed: one of each, in order.
-    lumit_core::fx::normalise_styles(&mut out);
+    lumit_core::fx::styles::normalise_styles(&mut out);
 
     // The Blending Options subgroup is v1's one wholly unmapped part of the
     // group — Fill Opacity, the per-channel switches, the blend ranges. Said
@@ -497,7 +497,7 @@ fn interior_blend(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
     {
         let index = BlendMode::ALL.iter().position(|b| *b == mode).unwrap_or(0);
         fx.set(
-            lumit_core::fx::BLEND_PARAM,
+            lumit_core::fx::schema::BLEND_PARAM,
             EffectValue::Choice(u32::try_from(index).unwrap_or(0)),
         );
     }

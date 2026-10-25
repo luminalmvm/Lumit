@@ -24,7 +24,7 @@ use crate::api::{
     BridgeError,
 };
 use lumit_core::model::{Folder, FootageItem, MediaRef, ProjectItem};
-use lumit_core::Op;
+use lumit_core::ops::Op;
 use uuid::Uuid;
 
 /// A project holding a folder that lists one footage item, plus a second
@@ -973,7 +973,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     seed_stack(
         &project,
         &layer,
-        vec![lumit_core::fx::instantiate("custom_shader").expect("the effect exists")],
+        vec![lumit_core::fx::builtins::instantiate("custom_shader").expect("the effect exists")],
     );
 
     let graph = serde_json::json!({
@@ -1059,7 +1059,7 @@ fn an_old_instance_reaches_a_parameter_its_schema_grew_later() {
     let (project, layer) = project_with_layer();
     // A Depth of field as it would have been saved before its aperture controls
     // existed: the schema's instance with those parameters taken back out.
-    let mut old = lumit_core::fx::instantiate("dof").expect("dof");
+    let mut old = lumit_core::fx::builtins::instantiate("dof").expect("dof");
     let grown = [
         "blades",
         "roundness",
@@ -1440,7 +1440,7 @@ fn every_builtin_lists_its_parameters() {
             continue;
         }
         let params = crate::api::effect::list_parameters(info.name.clone());
-        let declared = lumit_core::fx::BUILTINS
+        let declared = lumit_core::fx::catalogue::BUILTINS
             .iter()
             .find(|s| s.match_name == info.name)
             .expect("listed effects are built in")
@@ -1469,7 +1469,7 @@ fn every_builtin_lists_its_layout() {
             .into_iter()
             .map(|p| p.id)
             .collect();
-        let declared = lumit_core::fx::BUILTINS
+        let declared = lumit_core::fx::catalogue::BUILTINS
             .iter()
             .find(|s| s.match_name == info.name)
             .expect("listed effects are built in");
@@ -2598,7 +2598,10 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
     assert_eq!(late.place_start, clips_before[0].place_start);
     assert_eq!(music.layers[0].in_point.0, early.place_start);
     assert_eq!(music.layers[0].out_point.0, early.place_end());
-    assert_eq!(music.layers[0].start_offset.0, lumit_core::Rational::ZERO);
+    assert_eq!(
+        music.layers[0].start_offset.0,
+        lumit_core::time::Rational::ZERO
+    );
 
     // The crossfade is baked, because a clip alone on a row has no neighbour
     // left to read the join off.
@@ -2606,7 +2609,7 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
         .place_end()
         .checked_sub(late.place_start)
         .expect("the two clips overlap");
-    assert!(overlap > lumit_core::Rational::ZERO);
+    assert!(overlap > lumit_core::time::Rational::ZERO);
     assert_eq!(late.fade_in.seconds, overlap);
     assert_eq!(early.fade_out.seconds, overlap);
 
@@ -4313,7 +4316,7 @@ fn conversion_places_the_clip_at_the_layers_in_point() {
     let clip = clips.first().expect("one clip");
     assert_eq!(
         clip.source_in,
-        lumit_core::Rational::new(1, 2).expect("½ s")
+        lumit_core::time::Rational::new(1, 2).expect("½ s")
     );
     assert_eq!(clip.place_start, clip.source_in, "placed where it is read");
 }
@@ -4611,7 +4614,7 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     // An edge nothing meets fades on its own.
     let done = comp.cut_transition(a, false, 30, false);
     assert_eq!(done.expect("faded"), BridgeCutResult::Done);
-    let half = lumit_core::Rational::new(1, 2).expect("½ s");
+    let half = lumit_core::time::Rational::new(1, 2).expect("½ s");
     assert_eq!(row_clips(&top)[0].fade_in.seconds, half);
 }
 
@@ -4630,7 +4633,7 @@ fn extracting_a_span_cuts_both_ends_and_closes_it_in_one_step() {
     let later = &row_clips(&top)[1];
     assert_eq!(
         later.source_in,
-        lumit_core::Rational::new(2, 1).expect("2 s"),
+        lumit_core::time::Rational::new(2, 1).expect("2 s"),
         "the later piece opens on the frame the span ended at"
     );
 
@@ -4706,7 +4709,7 @@ fn a_move_follows_the_timelines_switches() {
     assert_eq!(done.expect("answered"), BridgeCutResult::Done);
     assert_eq!(
         row_clips(&top)[2].place_start,
-        lumit_core::Rational::new(4, 1).expect("4 s"),
+        lumit_core::time::Rational::new(4, 1).expect("4 s"),
         "a picture stays on its frame"
     );
     let footage = FootageReference {
@@ -4728,7 +4731,7 @@ fn a_move_follows_the_timelines_switches() {
             .place_start
             .checked_sub(sound.place_start)
             .expect("travel"),
-        lumit_core::Rational::new(1, 100).expect("480 samples"),
+        lumit_core::time::Rational::new(1, 100).expect("480 samples"),
         "sound goes a hundredth of a second, between two frames"
     );
     let drawn = &below.get_clips().expect("clips")[0];
@@ -5438,14 +5441,14 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
         let mut markers = comp.composition().expect("comp").markers;
         markers.push(lumit_core::markers::Marker::beat(
             Uuid::now_v7(),
-            lumit_core::Rational::new(1, 1).expect("1 s"),
+            lumit_core::time::Rational::new(1, 1).expect("1 s"),
             0.9,
         ));
         let state = project.state().expect("state");
         let state = state.write().expect("write");
         state
             .store
-            .commit(lumit_core::Op::SetCompMarkers {
+            .commit(lumit_core::ops::Op::SetCompMarkers {
                 comp: comp.id,
                 markers,
             })
@@ -5496,17 +5499,17 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
     {
         let mut beat = lumit_core::markers::Marker::beat(
             beat_id,
-            lumit_core::Rational::new(1, 1).expect("1 s"),
+            lumit_core::time::Rational::new(1, 1).expect("1 s"),
             0.9,
         );
-        beat.duration = Some(lumit_core::Rational::new(1, 4).expect("a quarter second"));
+        beat.duration = Some(lumit_core::time::Rational::new(1, 4).expect("a quarter second"));
         beat.extra
             .insert("from_a_newer_lumit".into(), serde_json::json!(true));
         let state = project.state().expect("state");
         let state = state.write().expect("write");
         state
             .store
-            .commit(lumit_core::Op::SetCompMarkers {
+            .commit(lumit_core::ops::Op::SetCompMarkers {
                 comp: comp.id,
                 markers: vec![beat],
             })
@@ -5534,7 +5537,7 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
     assert_eq!(stored[0].label, "Moved", "the edit landed");
     assert_eq!(
         stored[0].time.0,
-        lumit_core::Rational::new(3, 2).expect("1.5 s"),
+        lumit_core::time::Rational::new(3, 2).expect("1.5 s"),
         "and so did the move"
     );
     assert!(
@@ -5548,7 +5551,7 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
     );
     assert_eq!(
         stored[0].duration,
-        Some(lumit_core::Rational::new(1, 4).expect("a quarter second")),
+        Some(lumit_core::time::Rational::new(1, 4).expect("a quarter second")),
         "a span nobody resized keeps its exact length, sub-frame and all"
     );
     assert_eq!(
@@ -6196,7 +6199,7 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
     {
         let state = project.state().expect("state");
         let state = state.write().expect("write");
-        let mut doc = lumit_core::Document::clone(&state.store.snapshot());
+        let mut doc = lumit_core::model::Document::clone(&state.store.snapshot());
         let stored = doc
             .comp_mut(layer.comp_id)
             .expect("the comp")
@@ -6557,7 +6560,10 @@ fn a_tracked_layer() -> (
     LayerReference,
     Uuid,
 ) {
-    use lumit_track::{CameraSolve, PoseSource, ScenePoint, SolveSegment, SolvedPose};
+    use lumit_track::{
+        solve::CameraSolve, solve::PoseSource, solve::ScenePoint, solve::SolveSegment,
+        solve::SolvedPose,
+    };
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project
@@ -6615,10 +6621,12 @@ fn a_tracked_layer() -> (
             ScenePoint {
                 track: 7,
                 position: [10.0, 20.0, 100.0],
+                frames: [0, 49],
             },
             ScenePoint {
                 track: 9,
                 position: [30.0, 40.0, 200.0],
+                frames: [0, 49],
             },
         ],
         keyframes: vec![0, 49],
@@ -7785,10 +7793,10 @@ fn a_planar_tracked_layer() -> (
         .expect("the Pin layer row takes a layer");
     shot.set_effects(staged, None).expect("committed");
 
-    let frames: Vec<lumit_track::PlanarFrame> = (0..50)
+    let frames: Vec<lumit_track::planar::PlanarFrame> = (0..50)
         .map(|frame| {
             let d = frame as f64 * 10.0;
-            lumit_track::PlanarFrame {
+            lumit_track::planar::PlanarFrame {
                 frame,
                 corners: [
                     [100.0 + d, 200.0],
@@ -7805,7 +7813,7 @@ fn a_planar_tracked_layer() -> (
         effect,
         25.0,
         50,
-        lumit_track::PlanarTrack {
+        lumit_track::planar::PlanarTrack {
             reference_frame: 0,
             reference_quad: frames[0].corners,
             frames,
@@ -8230,7 +8238,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
             "and the instance is kept exactly as it was"
         );
         assert_eq!(
-            lumit_core::fx::instantiate(name),
+            lumit_core::fx::builtins::instantiate(name),
             None,
             "a name nothing answers to instantiates nothing, rather than              borrowing some other effect's declaration"
         );
@@ -8243,7 +8251,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
     assert_eq!(stranger.badge_reason.as_deref(), Some("unknown_effect"));
 
     // And a built-in wears no badge at all.
-    let blur = lumit_core::fx::instantiate("blur").expect("Gaussian blur is built in");
+    let blur = lumit_core::fx::builtins::instantiate("blur").expect("Gaussian blur is built in");
     let ordinary = crate::api::effect::read_instance_info(&blur, lumit_core::time::Rational::ZERO);
     assert_eq!(ordinary.badge_reason, None);
 
@@ -8278,16 +8286,16 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         shown: Mutex<Option<(usize, usize)>>,
     }
 
-    impl lumit_ofx::PluginHost for Pressing {
+    impl lumit_ofx::def::PluginHost for Pressing {
         fn render(
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
-            source: lumit_ofx::Frame16,
-            _neighbours: &[(i32, lumit_ofx::Frame16)],
-        ) -> lumit_ofx::Rendering {
-            lumit_ofx::Rendering {
+            _params: &lumit_ofx::instance::ParamSnapshot,
+            source: lumit_ofx::image::Frame16,
+            _neighbours: &[(i32, lumit_ofx::image::Frame16)],
+        ) -> lumit_ofx::def::Rendering {
+            lumit_ofx::def::Rendering {
                 frame: source,
                 error: None,
             }
@@ -8297,7 +8305,7 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
         ) -> Option<Vec<i32>> {
             None
         }
@@ -8306,21 +8314,21 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             &self,
             _instance: Uuid,
             _time: f64,
-            params: &lumit_ofx::ParamSnapshot,
+            params: &lumit_ofx::instance::ParamSnapshot,
             name: &str,
-            source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::Settled, String> {
+            source: lumit_ofx::image::Frame16,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
             assert_eq!(name, "trigger", "the plugin's own name for the button");
             *self.shown.lock().expect("the record") = Some((source.width(), source.height()));
             let mut after = params.clone();
-            after.set("gain", lumit_ofx::PropValue::double(0.75));
+            after.set("gain", lumit_ofx::props::PropValue::double(0.75));
             after.set(
                 "vendorBlob",
-                lumit_ofx::PropValue::string("pressed").expect("a string"),
+                lumit_ofx::props::PropValue::string("pressed").expect("a string"),
             );
-            Ok(lumit_ofx::Settled {
+            Ok(lumit_ofx::instance::Settled {
                 params: after,
-                controls: lumit_ofx::Controls::default(),
+                controls: lumit_ofx::instance::Controls::default(),
             })
         }
 
@@ -8329,14 +8337,14 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         fn settle(
             &self,
             _instance: Uuid,
-            _made_with: &lumit_ofx::ParamSnapshot,
-            handed: &lumit_ofx::ParamSnapshot,
-        ) -> Result<lumit_ofx::Settled, String> {
-            let mut controls = lumit_ofx::Controls::default();
-            if handed.get("gain") != Some(&lumit_ofx::PropValue::double(1.0)) {
+            _made_with: &lumit_ofx::instance::ParamSnapshot,
+            handed: &lumit_ofx::instance::ParamSnapshot,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
+            let mut controls = lumit_ofx::instance::Controls::default();
+            if handed.get("gain") != Some(&lumit_ofx::props::PropValue::double(1.0)) {
                 controls.disabled.insert("trigger".to_owned());
             }
-            Ok(lumit_ofx::Settled {
+            Ok(lumit_ofx::instance::Settled {
                 params: handed.clone(),
                 controls,
             })
@@ -8344,11 +8352,11 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
     }
 
     let param = |name: &str, kind: &str, default: Option<f64>| {
-        let mut props = lumit_ofx::PropertySet::new();
+        let mut props = lumit_ofx::props::PropertySet::new();
         if let Some(default) = default {
             props.seed(
                 lumit_ofx::ffi::prop_keys::PARAM_DEFAULT,
-                lumit_ofx::PropValue::double(default),
+                lumit_ofx::props::PropValue::double(default),
             );
         }
         lumit_ofx::describe::ParamDescription {
@@ -8357,12 +8365,12 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
             props,
         }
     };
-    let descriptor = lumit_ofx::PluginDescriptor {
+    let descriptor = lumit_ofx::describe::PluginDescriptor {
         identifier: "com.lumitlab.pressing".to_owned(),
         version: (1, 0),
         grouping: "Lumit/Test".to_owned(),
         label: "Pressing".to_owned(),
-        contexts: vec![lumit_ofx::Context::Filter],
+        contexts: vec![lumit_ofx::describe::Context::Filter],
         params: vec![
             param("gain", lumit_ofx::ffi::param_types::DOUBLE, Some(1.0)),
             param("vendorBlob", lumit_ofx::ffi::param_types::CUSTOM, None),
@@ -8372,13 +8380,13 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
         temporal: false,
         render_thread_safety: None,
     };
-    let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
-        lumit_ofx::schema_of(&descriptor).expect("a schema"),
+    let schema: &'static lumit_core::fx::schema::EffectSchema = Box::leak(Box::new(
+        lumit_ofx::schema::schema_of(&descriptor).expect("a schema"),
     ));
     let host = Arc::new(Pressing {
         shown: Mutex::new(None),
     });
-    let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host.clone()).leak();
+    let def = lumit_ofx::def::OfxEffectDef::new(&descriptor, schema, host.clone()).leak();
     assert!(lumit_render::gpufx::ofx::register(def));
 
     let (project, layer) = project_with_layer();
@@ -8450,48 +8458,52 @@ fn pressing_a_plugins_button_writes_what_it_did_into_the_document() {
 /// declares.
 /// Registration is by name and additive, so each test takes names of its own.
 fn register_audio_def(name: &'static str, label: &'static str) {
-    register_def_in(name, label, lumit_core::fx::FxCategory::Utility);
+    register_def_in(name, label, lumit_core::fx::schema::FxCategory::Utility);
 }
 
-fn register_def_in(name: &'static str, label: &'static str, category: lumit_core::fx::FxCategory) {
-    struct AudioDef(&'static lumit_core::fx::EffectSchema);
-    impl lumit_core::fx::EffectDef for AudioDef {
-        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+fn register_def_in(
+    name: &'static str,
+    label: &'static str,
+    category: lumit_core::fx::schema::FxCategory,
+) {
+    struct AudioDef(&'static lumit_core::fx::schema::EffectSchema);
+    impl lumit_core::fx::registry::EffectDef for AudioDef {
+        fn schema(&self) -> &'static lumit_core::fx::schema::EffectSchema {
             self.0
         }
         fn is_image_op(&self) -> bool {
             false
         }
     }
-    let schema: &'static lumit_core::fx::EffectSchema =
-        Box::leak(Box::new(lumit_core::fx::EffectSchema {
+    let schema: &'static lumit_core::fx::schema::EffectSchema =
+        Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
             match_name: name,
             label,
             version: 1,
             category,
-            traits: lumit_core::fx::EffectTraits {
-                cost: lumit_core::fx::CostClass::Heavy,
-                roi: lumit_core::fx::Roi::FullFrame,
+            traits: lumit_core::fx::schema::EffectTraits {
+                cost: lumit_core::fx::schema::CostClass::Heavy,
+                roi: lumit_core::fx::schema::Roi::FullFrame,
                 temporal: &[0],
                 premultiplied: true,
                 seeded: false,
                 beat_input: false,
             },
-            params: Box::leak(Box::new([lumit_core::fx::ParamSchema {
+            params: Box::leak(Box::new([lumit_core::fx::schema::ParamSchema {
                 id: "p1",
                 label: "Gain",
-                kind: lumit_core::fx::ParamKind::Slider {
+                kind: lumit_core::fx::schema::ParamKind::Slider {
                     default: 1.0,
                     range: (0.0, 4.0),
                     log: false,
                 },
-                unit: lumit_core::fx::Unit::Raw,
+                unit: lumit_core::fx::params::Unit::Raw,
             }])),
             groups: &[],
             enabled_when: &[],
-            matte: lumit_core::fx::MatteRole::None,
+            matte: lumit_core::fx::schema::MatteRole::None,
         }));
-    lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(AudioDef(schema))));
+    lumit_core::fx::catalogue::BUILTIN_DEFS.register(Box::leak(Box::new(AudioDef(schema))));
 }
 
 /// **The browser's share of AP5, bridge side**: an audio plugin lists under
@@ -8551,7 +8563,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
     // Switch it off: the session list holds the bare identifier, and every
     // instance wears the calm badge at once — the layer keeps its rows.
     let _ = crate::api::effect::set_plugin_enabled("clap:com.lumitlab.aptest".to_owned(), false);
-    assert!(lumit_aplug::session_disabled()
+    assert!(lumit_aplug::ipc::broker::session_disabled()
         .lock()
         .expect("list")
         .contains("com.lumitlab.aptest"));
@@ -8594,22 +8606,22 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         why: String,
     }
 
-    impl lumit_ofx::PluginHost for Moody {
+    impl lumit_ofx::def::PluginHost for Moody {
         fn render(
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
-            source: lumit_ofx::Frame16,
-            _neighbours: &[(i32, lumit_ofx::Frame16)],
-        ) -> lumit_ofx::Rendering {
+            _params: &lumit_ofx::instance::ParamSnapshot,
+            source: lumit_ofx::image::Frame16,
+            _neighbours: &[(i32, lumit_ofx::image::Frame16)],
+        ) -> lumit_ofx::def::Rendering {
             if self.failing.load(Ordering::SeqCst) {
-                return lumit_ofx::Rendering {
+                return lumit_ofx::def::Rendering {
                     frame: source,
                     error: Some(self.why.clone()),
                 };
             }
-            lumit_ofx::Rendering {
+            lumit_ofx::def::Rendering {
                 frame: source,
                 error: None,
             }
@@ -8619,7 +8631,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
         ) -> Option<Vec<i32>> {
             None
         }
@@ -8628,10 +8640,10 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
             &self,
             _instance: Uuid,
             _time: f64,
-            _params: &lumit_ofx::ParamSnapshot,
+            _params: &lumit_ofx::instance::ParamSnapshot,
             _name: &str,
-            _source: lumit_ofx::Frame16,
-        ) -> Result<lumit_ofx::Settled, String> {
+            _source: lumit_ofx::image::Frame16,
+        ) -> Result<lumit_ofx::instance::Settled, String> {
             Err(self.why.clone())
         }
     }
@@ -8640,24 +8652,25 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     /// definition and the name it answers to.
     fn a_registered_plugin(
         identifier: &str,
-        host: Arc<dyn lumit_ofx::PluginHost>,
-    ) -> (&'static dyn lumit_core::fx::EffectDef, String) {
-        let descriptor = lumit_ofx::PluginDescriptor {
+        host: Arc<dyn lumit_ofx::def::PluginHost>,
+    ) -> (&'static dyn lumit_core::fx::registry::EffectDef, String) {
+        let descriptor = lumit_ofx::describe::PluginDescriptor {
             identifier: identifier.to_owned(),
             version: (1, 0),
             grouping: "Lumit/Test".to_owned(),
             label: "Moody".to_owned(),
-            contexts: vec![lumit_ofx::Context::Filter],
+            contexts: vec![lumit_ofx::describe::Context::Filter],
             params: Vec::new(),
             clips: Vec::new(),
             temporal: false,
             render_thread_safety: None,
         };
-        let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
-            lumit_ofx::schema_of(&descriptor).expect("a plugin with no parameters has a schema"),
+        let schema: &'static lumit_core::fx::schema::EffectSchema = Box::leak(Box::new(
+            lumit_ofx::schema::schema_of(&descriptor)
+                .expect("a plugin with no parameters has a schema"),
         ));
         let name = schema.match_name.to_owned();
-        let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host).leak();
+        let def = lumit_ofx::def::OfxEffectDef::new(&descriptor, schema, host).leak();
         assert!(
             lumit_render::gpufx::ofx::register(def),
             "the catalogue and the pass table both took {name}"
@@ -8672,7 +8685,8 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     });
     let (def, name) = a_registered_plugin("com.lumitlab.moody", moody.clone());
 
-    let instance = lumit_core::fx::instantiate(&name).expect("the plugin is in the catalogue");
+    let instance =
+        lumit_core::fx::builtins::instantiate(&name).expect("the plugin is in the catalogue");
     let mut rgba = vec![0.25_f32; 4 * 4 * 4];
     let before = rgba.clone();
     lumit_render::gpufx::ofx::apply_and_note(
@@ -8682,7 +8696,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         &mut rgba,
         4,
         4,
-        lumit_core::fx::Params::EMPTY,
+        lumit_core::fx::params::Params::EMPTY,
         &[],
     );
 
@@ -8715,7 +8729,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         &mut rgba,
         4,
         4,
-        lumit_core::fx::Params::EMPTY,
+        lumit_core::fx::params::Params::EMPTY,
         &[],
     );
     let cleared =
@@ -8727,10 +8741,11 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     // "switched off" rather than reporting somebody's failure.
     let disabled = Arc::new(Moody {
         failing: AtomicBool::new(true),
-        why: lumit_ofx::DISABLED_REASON.to_owned(),
+        why: lumit_ofx::discover::DISABLED_REASON.to_owned(),
     });
     let (off_def, off_name) = a_registered_plugin("com.lumitlab.moody.off", disabled);
-    let off = lumit_core::fx::instantiate(&off_name).expect("the plugin is in the catalogue");
+    let off =
+        lumit_core::fx::builtins::instantiate(&off_name).expect("the plugin is in the catalogue");
     lumit_render::gpufx::ofx::apply_and_note(
         off_def,
         off.id,
@@ -8738,7 +8753,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         &mut rgba,
         4,
         4,
-        lumit_core::fx::Params::EMPTY,
+        lumit_core::fx::params::Params::EMPTY,
         &[],
     );
     let switched_off =

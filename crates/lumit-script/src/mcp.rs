@@ -17,7 +17,7 @@
 use serde_json::{json, Value};
 
 use crate::reach::Reach;
-use crate::{commands, run, Host, Limits, RunOptions, COMMANDS};
+use crate::{commands, commands::COMMANDS, script::run, script::Limits, script::RunOptions, Host};
 
 /// The revision where each request carries its version.
 const MODERN: &str = "2026-07-28";

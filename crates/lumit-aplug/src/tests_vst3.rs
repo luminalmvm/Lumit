@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use lumit_aplug_testplug::{Kind, PARAM_GAIN, PARAM_KNOB, PARAM_SWEEP, STATE_ECHO_DEFAULT};
-use lumit_core::fx::{EffectDef, ParamId, ParamKind};
+use lumit_core::fx::{params::ParamId, registry::EffectDef, schema::ParamKind};
 
 use crate::abi::{Abi, AnyModule};
 use crate::def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost};

@@ -7,7 +7,9 @@
 //! The twist eases out toward the rim rather than stopping dead, which is why a
 //! twirl blends into the untouched picture instead of leaving a visible ring.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Twirl's controls.
@@ -51,7 +53,7 @@ pub struct Twirl {
 
     /// px@comp: where the twirl's middle sits (point parameters are pixels).
     /// The schema default is a nominal 1080p centre;
-    /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
+    /// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,

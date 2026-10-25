@@ -1,6 +1,8 @@
 //! Gamma (docs/08 §3.15): the power curve, raising to 1/gamma.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Gamma's controls.

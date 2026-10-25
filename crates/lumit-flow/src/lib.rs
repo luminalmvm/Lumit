@@ -1355,7 +1355,7 @@ impl Texel for Bytes {
     }
 }
 
-/// Scene-linear float frames (`lumit_media::PixelFormat::LinearF32`), counted
+/// Scene-linear float frames (`lumit_media::decode::PixelFormat::LinearF32`), counted
 /// in their own units — so nothing rounds and nothing clips at white.
 pub struct Floats;
 
@@ -1589,7 +1589,7 @@ pub fn flow_grays(
 }
 
 /// [`flow_grays`] for scene-linear float frames
-/// (`lumit_media::PixelFormat::LinearF32`).
+/// (`lumit_media::decode::PixelFormat::LinearF32`).
 ///
 /// Motion is measured on brightness, and brightness is brightness at any
 /// width — this exists so the read finds the samples where they actually are,
@@ -1806,7 +1806,7 @@ impl FlowEngine {
     }
 
     /// [`Self::synthesize_at`] for scene-linear float frames
-    /// (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+    /// (`lumit_media::decode::PixelFormat::LinearF32`), sixteen bytes a pixel.
     ///
     /// **This one always takes the CPU path**, and deliberately. The compute
     /// kernel keeps its two frames in storage buffers of packed bytes, four to

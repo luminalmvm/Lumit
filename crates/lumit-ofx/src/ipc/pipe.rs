@@ -110,11 +110,7 @@ pub fn accept(listener: &Listener) -> Result<Stream, PipeError> {
     Ok(listener.incoming().next().ok_or(PipeError::Closed)??)
 }
 
-/// The two ends of a connected pipe, so that one thread can read while another
-/// writes. Re-exported here rather than named through `interprocess` by every
-/// caller: the transport is this module's business, and the broker process
-/// should not have to depend on the crate that happens to provide it.
-pub use interprocess::local_socket::{RecvHalf, SendHalf};
+use interprocess::local_socket::{RecvHalf, SendHalf};
 
 /// Split a connection into its reading and writing halves.
 #[must_use]

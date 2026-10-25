@@ -66,7 +66,7 @@ pub fn frames_span(fx: &EffectInstance, layer: &Layer, comp: &Composition) -> Op
 
 /// What a planes-tier effect asks a model for.
 ///
-/// The document's own copy of `lumit_ml::Task`, because `lumit-core` is the
+/// The document's own copy of `lumit_ml::manifest::Task`, because `lumit-core` is the
 /// bottom of the crate graph and may not depend on the crate that opens a model
 /// (docs/05 §1.1) - the same split the Camera track's density table takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,7 +182,7 @@ pub fn frame_stamp(fx: &EffectInstance, frame: i64) -> Option<[u8; 32]> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::instantiate;
+    use crate::fx::builtins::instantiate;
     use crate::model::EffectParam;
 
     /// Write one row on an instance, adding it when the declaration's default

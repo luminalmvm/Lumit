@@ -24,13 +24,11 @@
 // release account can publish whatever it likes; without the private key it
 // cannot make this application run any of it.
 //
-// **Pinning a key is a deliberate act.** [updateSigningKey] is empty in a tree
-// where nobody has generated one yet, and while it is empty this file refuses
-// nothing — the updater falls back to the digest check, which is where it was
-// before. The moment a key is pinned, a signed manifest becomes compulsory and
-// an update that has none is refused. That is the whole of the switch, and the
-// steps to throw it are in the comment above the signing step of
-// `.github/workflows/release.yml`.
+// **Pinning a key is a deliberate act.** While [updateSigningKey] is empty this
+// file refuses nothing, and the updater falls back to the digest check. With a
+// key pinned, a signed manifest is compulsory and an update that has none is
+// refused. That is the whole of the switch, and the steps to make a key are in
+// the comment above the signing step of `.github/workflows/release.yml`.
 //
 // **Nothing here reads the network or the disk.** It is given bytes and answers
 // yes or no, which is what lets the updater's tests drive the whole sequence.
@@ -42,21 +40,12 @@ import 'package:cryptography/cryptography.dart';
 
 /// The public half of the release signing key, base64, raw 32 bytes.
 ///
-/// Empty until somebody generates the pair and pins it here. The two
-/// commands are in the comment above the signing step of
-/// `.github/workflows/release.yml`.
+/// Pinned 2026-10-25. The private half is the `RELEASE_SIGNING_KEY` secret,
+/// and the release job refuses to sign with any other key.
 ///
 /// This is a **public** key: it is meant to be read, copied and published. The
-/// private half never goes near this repository or the release runner's
-/// ordinary secrets — it is what makes a release a release.
-const String updateSigningKey = '';
-
-/// Whether this build insists on a signed release manifest.
-///
-/// The single switch. False in a tree with no key pinned, where the updater
-/// keeps the behaviour it had; true the moment one is, from which point an
-/// unsigned update is refused rather than installed.
-bool get releaseSigningIsEnforced => updateSigningKey.isNotEmpty;
+/// private half is never committed.
+const String updateSigningKey = 'wdKj5QBAiMqg4MrywhedvTYx9zChP8UCebYHvtyvwxY=';
 
 /// What one attachment is, as the signed manifest says it.
 class SignedAsset {
@@ -130,7 +119,7 @@ class VerifiedManifest {
   }
 }
 
-/// Check a detached signature over `manifestBytes` against [updateSigningKey],
+/// Check a detached signature over `manifestBytes` against `publicKeyBase64`,
 /// and read the manifest if it holds up.
 ///
 /// `signatureBase64` is the signature file's contents: base64 of the raw 64
@@ -139,19 +128,10 @@ class VerifiedManifest {
 /// Returns the manifest and [ReleaseTrust.trusted], or null and the reason.
 /// **The signature is checked before the JSON is parsed**, so a manifest nobody
 /// signed never reaches the parser at all.
-Future<(VerifiedManifest?, ReleaseTrust)> verifyManifest(
-  List<int> manifestBytes,
-  String signatureBase64,
-) =>
-    verifyManifestWithKey(manifestBytes, signatureBase64, updateSigningKey);
-
-/// [verifyManifest], against a key the caller names.
 ///
-/// The same code, one step earlier: [verifyManifest] is this with the pinned
-/// key filled in. Split out because the pinned key is a `const` and a test
-/// cannot assign one — so the tests generate a real Ed25519 pair, sign real
-/// manifests with it, and drive exactly the path the shipped updater takes.
-/// A verification nobody has watched succeed *and* fail is not one to rely on.
+/// The key is passed in, not read from [updateSigningKey], so the tests can
+/// make a real Ed25519 pair, sign real manifests with it, and drive exactly
+/// the path the shipped updater takes.
 Future<(VerifiedManifest?, ReleaseTrust)> verifyManifestWithKey(
   List<int> manifestBytes,
   String signatureBase64,
@@ -196,7 +176,7 @@ Future<(VerifiedManifest?, ReleaseTrust)> verifyManifestWithKey(
 }
 
 /// Read a manifest's JSON. Public for the tests; callers go through
-/// [verifyManifest], which will not parse an unsigned one.
+/// [verifyManifestWithKey], which will not parse an unsigned one.
 ///
 /// Every field is checked rather than cast: this is a file off the network, and
 /// a shape that is nearly right is exactly the shape that gets believed by

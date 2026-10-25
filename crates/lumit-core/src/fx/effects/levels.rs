@@ -1,7 +1,10 @@
 //! Levels (docs/08 §3.31): input black/white, gamma and output black/white,
 //! per channel — the five numbers an eye can aim, where Curves is a shape.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 /// Levels' four channel groups (docs/08 §3.31), the same shape Curves uses:

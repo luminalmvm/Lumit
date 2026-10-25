@@ -16,13 +16,13 @@
 //! Commands run on the caller's thread and commit through the store, as a
 //! shared project's threads do (docs/14 §1).
 
-mod commands;
+pub mod commands;
 mod include;
 pub mod live;
 pub mod mcp;
 mod reach;
-mod reference;
-mod script;
+pub mod reference;
+pub mod script;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -30,14 +30,10 @@ use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
 use lumit_core::time::{CompTime, Duration, FrameRate};
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
-
-pub use commands::COMMANDS;
-pub use reference::reference_page;
-pub use script::{run, Dialog, Limits, RunError, RunOptions, RunReport};
 
 /// What a command needs from the program it runs in. Lumit has one, and the
 /// command line has its own.
@@ -200,10 +196,10 @@ impl ScriptError {
     }
 }
 
-impl From<lumit_core::OpError> for ScriptError {
+impl From<lumit_core::ops::OpError> for ScriptError {
     /// The op's reason as a sentence: "the layer is locked" reads as
     /// "The layer is locked."
-    fn from(e: lumit_core::OpError) -> Self {
+    fn from(e: lumit_core::ops::OpError) -> Self {
         let reason = e.to_string();
         let mut letters = reason.chars();
         let first = letters.next().map(|c| c.to_uppercase().collect::<String>());

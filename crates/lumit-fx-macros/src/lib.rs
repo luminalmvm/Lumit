@@ -106,7 +106,7 @@ struct EffectAttr {
 }
 
 /// The generic Matte parameter's id, repeated here because a proc-macro crate
-/// cannot depend on `lumit-core`. `lumit_core::fx::MATTE_PARAM` is the
+/// cannot depend on `lumit-core`. `lumit_core::fx::schema::MATTE_PARAM` is the
 /// definition — the emitted schema uses *that* const for the id, and this copy
 /// only decides whether to emit at all. If the two ever drift, the effect either
 /// gains no row or gains a second one under the same id, and
@@ -122,7 +122,7 @@ const MIX_PARAM: &str = "mix";
 const BLEND_PARAM: &str = "blend";
 
 /// The `matte = ...` attribute's three spellings, which become
-/// `lumit_core::fx::MatteRole` in the emitted schema.
+/// `lumit_core::fx::schema::MatteRole` in the emitted schema.
 enum MatteAttr {
     /// `matte = false` — no row, no slot, no dissolve.
     None,
@@ -150,10 +150,10 @@ impl MatteAttr {
 
     fn tokens(&self) -> TokenStream2 {
         match self {
-            MatteAttr::None => quote! { ::lumit_core::fx::MatteRole::None },
-            MatteAttr::Strength => quote! { ::lumit_core::fx::MatteRole::Strength },
+            MatteAttr::None => quote! { ::lumit_core::fx::schema::MatteRole::None },
+            MatteAttr::Strength => quote! { ::lumit_core::fx::schema::MatteRole::Strength },
             MatteAttr::Own(id, meaning) => quote! {
-                ::lumit_core::fx::MatteRole::Own { param: #id, meaning: #meaning }
+                ::lumit_core::fx::schema::MatteRole::Own { param: #id, meaning: #meaning }
             },
         }
     }
@@ -200,7 +200,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         let kind = &param.kind;
         let unit = &param.unit;
         schemas.push(quote! {
-            ::lumit_core::fx::ParamSchema {
+            ::lumit_core::fx::schema::ParamSchema {
                 id: #id,
                 label: #label,
                 kind: #kind,
@@ -210,8 +210,8 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         let const_name = format_ident!("{}", name.to_string().to_uppercase());
         id_consts.push(quote! {
             /// The compile-time id of this effect's parameter of the same name.
-            pub const #const_name: ::lumit_core::fx::ParamId =
-                ::lumit_core::fx::ParamId::new(#id);
+            pub const #const_name: ::lumit_core::fx::params::ParamId =
+                ::lumit_core::fx::params::ParamId::new(#id);
         });
         let read = &param.read;
         readers.push(quote! { #name: #read });
@@ -244,15 +244,15 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
             schemas.insert(
                 at + 1,
                 quote! {
-                    ::lumit_core::fx::ParamSchema {
-                        id: ::lumit_core::fx::BLEND_PARAM,
+                    ::lumit_core::fx::schema::ParamSchema {
+                        id: ::lumit_core::fx::schema::BLEND_PARAM,
                         label: "Blend",
-                        kind: ::lumit_core::fx::ParamKind::Choice {
+                        kind: ::lumit_core::fx::schema::ParamKind::Choice {
                             options: ::lumit_core::model::BlendMode::NAMES,
                             default: 0,
-                            dividers_after: ::lumit_core::fx::CHOICE_UNGROUPED,
+                            dividers_after: ::lumit_core::fx::builtins::CHOICE_UNGROUPED,
                         },
-                        unit: ::lumit_core::fx::Unit::Raw,
+                        unit: ::lumit_core::fx::params::Unit::Raw,
                     }
                 },
             );
@@ -278,34 +278,34 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
     let inject = matte.role() == Some(MATTE_PARAM) && !declared.iter().any(|d| d == MATTE_PARAM);
     if inject {
         schemas.push(quote! {
-            ::lumit_core::fx::ParamSchema {
-                id: ::lumit_core::fx::MATTE_PARAM,
+            ::lumit_core::fx::schema::ParamSchema {
+                id: ::lumit_core::fx::schema::MATTE_PARAM,
                 label: "Matte",
-                kind: ::lumit_core::fx::ParamKind::Layer { self_default: false },
-                unit: ::lumit_core::fx::Unit::Raw,
+                kind: ::lumit_core::fx::schema::ParamKind::Layer { self_default: false },
+                unit: ::lumit_core::fx::params::Unit::Raw,
             }
         });
         schemas.push(quote! {
-            ::lumit_core::fx::ParamSchema {
-                id: ::lumit_core::fx::MATTE_INVERT_PARAM,
+            ::lumit_core::fx::schema::ParamSchema {
+                id: ::lumit_core::fx::schema::MATTE_INVERT_PARAM,
                 label: "Invert",
-                kind: ::lumit_core::fx::ParamKind::Bool { default: false },
-                unit: ::lumit_core::fx::Unit::Raw,
+                kind: ::lumit_core::fx::schema::ParamKind::Bool { default: false },
+                unit: ::lumit_core::fx::params::Unit::Raw,
             }
         });
         // The Channel choice, unless the effect picks its matte's
         // channels itself.
         if matte_channel {
             schemas.push(quote! {
-                ::lumit_core::fx::ParamSchema {
-                    id: ::lumit_core::fx::MATTE_CHANNEL_PARAM,
+                ::lumit_core::fx::schema::ParamSchema {
+                    id: ::lumit_core::fx::schema::MATTE_CHANNEL_PARAM,
                     label: "Channel",
-                    kind: ::lumit_core::fx::ParamKind::Choice {
-                        options: ::lumit_core::fx::CHANNEL_OPTIONS,
+                    kind: ::lumit_core::fx::schema::ParamKind::Choice {
+                        options: ::lumit_core::fx::builtins::CHANNEL_OPTIONS,
                         default: 0,
-                        dividers_after: ::lumit_core::fx::CHOICE_UNGROUPED,
+                        dividers_after: ::lumit_core::fx::builtins::CHOICE_UNGROUPED,
                     },
-                    unit: ::lumit_core::fx::Unit::Raw,
+                    unit: ::lumit_core::fx::params::Unit::Raw,
                 }
             });
         }
@@ -319,16 +319,16 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
             #(#id_consts)*
         }
 
-        impl ::lumit_core::fx::EffectMetadata for #ty {
+        impl ::lumit_core::fx::registry::EffectMetadata for #ty {
             #[doc = #doc]
-            const SCHEMA: ::lumit_core::fx::EffectSchema = ::lumit_core::fx::EffectSchema {
+            const SCHEMA: ::lumit_core::fx::schema::EffectSchema = ::lumit_core::fx::schema::EffectSchema {
                 match_name: #match_name,
                 label: #label,
                 version: #version,
-                category: ::lumit_core::fx::FxCategory::#category,
-                traits: ::lumit_core::fx::EffectTraits {
-                    cost: ::lumit_core::fx::CostClass::#cost,
-                    roi: ::lumit_core::fx::Roi::#roi,
+                category: ::lumit_core::fx::schema::FxCategory::#category,
+                traits: ::lumit_core::fx::schema::EffectTraits {
+                    cost: ::lumit_core::fx::schema::CostClass::#cost,
+                    roi: ::lumit_core::fx::schema::Roi::#roi,
                     temporal: #temporal,
                     premultiplied: #premultiplied,
                     seeded: #seeded,
@@ -340,7 +340,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 matte: #matte_role,
             };
 
-            fn read(p: ::lumit_core::fx::Params<'_>) -> Self {
+            fn read(p: ::lumit_core::fx::params::Params<'_>) -> Self {
                 let _ = &p;
                 Self { #(#readers),* }
             }
@@ -561,7 +561,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         })
         .unwrap_or_else(|| sentence_case(&id));
 
-    let idc = quote! { ::lumit_core::fx::ParamId::new(#id) };
+    let idc = quote! { ::lumit_core::fx::params::ParamId::new(#id) };
     // What the number means (the unit rider, and the resolve step's spatial
     // rescale). A `#[dial]` is degrees by definition and a control that carries
     // no number carries no unit, so those two answer themselves; a slider, a
@@ -570,11 +570,11 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
     // than the silent `Raw` that used to make "dimensionless" and "nobody
     // decided" the same declaration.
     let unit = match get("unit") {
-        Some(u) => quote! { ::lumit_core::fx::Unit::#u },
+        Some(u) => quote! { ::lumit_core::fx::params::Unit::#u },
         None => match which.as_str() {
-            "slider" | "bounded" | "counter" => quote! { ::lumit_core::fx::Unit::Unset },
-            "dial" => quote! { ::lumit_core::fx::Unit::Degrees },
-            _ => quote! { ::lumit_core::fx::Unit::Raw },
+            "slider" | "bounded" | "counter" => quote! { ::lumit_core::fx::params::Unit::Unset },
+            "dial" => quote! { ::lumit_core::fx::params::Unit::Degrees },
+            _ => quote! { ::lumit_core::fx::params::Unit::Raw },
         },
     };
 
@@ -587,7 +587,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let hard_max = opt(get("hard_max"));
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Float {
+                    ::lumit_core::fx::schema::ParamKind::Float {
                         default: #default,
                         slider: (#min, #max),
                         hard: (#hard_min, #hard_max),
@@ -610,7 +610,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let log = get("log").unwrap_or_else(|| quote! { false });
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Slider {
+                    ::lumit_core::fx::schema::ParamKind::Slider {
                         default: #default,
                         range: (#min, #max),
                         log: #log,
@@ -627,7 +627,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let hard_max = opt(get("hard_max"));
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Int {
+                    ::lumit_core::fx::schema::ParamKind::Int {
                         default: #default,
                         slider: (#min, #max),
                         hard: (#hard_min, #hard_max),
@@ -641,7 +641,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let step = get("step").unwrap_or_else(|| quote! { 15.0 });
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Angle {
+                    ::lumit_core::fx::schema::ParamKind::Angle {
                         default: #default,
                         dial_step: #step,
                     }
@@ -652,7 +652,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "toggle" => {
             let default = get("default").unwrap_or_else(|| quote! { false });
             (
-                quote! { ::lumit_core::fx::ParamKind::Bool { default: #default } },
+                quote! { ::lumit_core::fx::schema::ParamKind::Bool { default: #default } },
                 quote! { p.bool(#idc, #default) },
             )
         }
@@ -664,7 +664,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let dividers = get("dividers_after").unwrap_or_else(|| quote! { &[] });
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Choice {
+                    ::lumit_core::fx::schema::ParamKind::Choice {
                         options: &#options,
                         default: #default,
                         dividers_after: #dividers,
@@ -679,7 +679,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let max = get("max").unwrap_or_else(|| quote! { 1.0 });
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::Colour {
+                    ::lumit_core::fx::schema::ParamKind::Colour {
                         default: #default,
                         range: (#min, #max),
                     }
@@ -691,7 +691,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             )
         }
         "seed" => (
-            quote! { ::lumit_core::fx::ParamKind::Seed },
+            quote! { ::lumit_core::fx::schema::ParamKind::Seed },
             quote! { p.int(#idc, 0) as u32 },
         ),
         "file" => {
@@ -699,7 +699,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             let filter_name = get("filter_name").unwrap_or_else(|| quote! { "File" });
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::File {
+                    ::lumit_core::fx::schema::ParamKind::File {
                         filter: &#filter,
                         filter_name: #filter_name,
                     }
@@ -719,8 +719,8 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             })?;
             (
                 quote! {
-                    ::lumit_core::fx::ParamKind::ColourName {
-                        role: ::lumit_core::fx::ColourNameRole::#role,
+                    ::lumit_core::fx::schema::ParamKind::ColourName {
+                        role: ::lumit_core::fx::schema::ColourNameRole::#role,
                     }
                 },
                 quote! { () },
@@ -731,14 +731,14 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "text" => {
             let default = get("default").unwrap_or_else(|| quote! { "" });
             (
-                quote! { ::lumit_core::fx::ParamKind::Text { default: #default } },
+                quote! { ::lumit_core::fx::schema::ParamKind::Text { default: #default } },
                 quote! { p.text(#idc, #default) },
             )
         }
         "layer" => {
             let self_default = get("self_default").unwrap_or_else(|| quote! { false });
             (
-                quote! { ::lumit_core::fx::ParamKind::Layer { self_default: #self_default } },
+                quote! { ::lumit_core::fx::schema::ParamKind::Layer { self_default: #self_default } },
                 quote! { p.layer_bound(#idc) },
             )
         }
@@ -746,7 +746,10 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         // (docs/impl/audio-nodes.md §3). No arguments, and nothing to read:
         // the host that reads the sound resolves the clip, as it resolves the
         // layer, so the field is the unit type an OCIO name's is.
-        "clip" => (quote! { ::lumit_core::fx::ParamKind::Clip }, quote! { () }),
+        "clip" => (
+            quote! { ::lumit_core::fx::schema::ParamKind::Clip },
+            quote! { () },
+        ),
         // One of this layer's masks, handed to the effect as geometry.
         // `self_default` mirrors `#[layer]`'s and defaults the other way round:
         // an unset row means the layer's **first mask**, because an effect that
@@ -755,7 +758,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "mask_path" => {
             let self_default = get("self_default").unwrap_or_else(|| quote! { true });
             (
-                quote! { ::lumit_core::fx::ParamKind::MaskPath { self_default: #self_default } },
+                quote! { ::lumit_core::fx::schema::ParamKind::MaskPath { self_default: #self_default } },
                 quote! { p.mask_named(#idc) },
             )
         }
@@ -764,10 +767,10 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         // default is the identity diagonal unless the declaration gives a shape
         // of its own, which only an over-life curve does (particulate.md §2).
         "curve" => {
-            let default =
-                get("default").unwrap_or_else(|| quote! { ::lumit_core::fx::CURVE_IDENTITY });
+            let default = get("default")
+                .unwrap_or_else(|| quote! { ::lumit_core::fx::params::CURVE_IDENTITY });
             (
-                quote! { ::lumit_core::fx::ParamKind::Curve { default: &#default } },
+                quote! { ::lumit_core::fx::schema::ParamKind::Curve { default: &#default } },
                 quote! { p.curve(#idc) },
             )
         }
@@ -779,7 +782,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         // is the only argument it takes, and it comes from the shared label
         // handling above like every other kind's.
         "action" => (
-            quote! { ::lumit_core::fx::ParamKind::Action },
+            quote! { ::lumit_core::fx::schema::ParamKind::Action },
             quote! { () },
         ),
         other => {

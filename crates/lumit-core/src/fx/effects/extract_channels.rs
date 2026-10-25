@@ -36,7 +36,8 @@
 //! picture exists.
 
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamKind, ParamSchema, Unit, CHOICE_UNGROUPED,
+    builtins::CHOICE_UNGROUPED, params::Unit, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema, schema::ParamKind, schema::ParamSchema,
 };
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;

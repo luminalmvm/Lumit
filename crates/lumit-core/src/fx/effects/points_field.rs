@@ -12,8 +12,9 @@
 
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamId, Params, Port,
-    PortType, ResolveCx, ShortText, Signature, Value,
+    params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

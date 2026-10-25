@@ -13,7 +13,9 @@
 //! taken in a square root of the light, the same curve §3.58's rungs are spaced
 //! on, which puts the lines where a person would draw them.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Find edges' controls.

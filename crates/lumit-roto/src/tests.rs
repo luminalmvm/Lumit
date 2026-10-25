@@ -3,8 +3,9 @@
 //! assertion rather than a look.
 
 use crate::{
-    base_seeds, mask_seeds, warp_and_seed, FlowField, FrameRgb, RotoError, RotoSettings,
-    RotoSolver, RotoStroke, Seed, Seeds, StrokeKind,
+    solve::RotoSolver, stroke::base_seeds, stroke::RotoStroke, stroke::Seed, stroke::Seeds,
+    stroke::StrokeKind, warp::mask_seeds, warp::warp_and_seed, warp::FlowField, FrameRgb,
+    RotoError, RotoSettings,
 };
 
 const SUBJECT: [f32; 3] = [0.85, 0.55, 0.20];

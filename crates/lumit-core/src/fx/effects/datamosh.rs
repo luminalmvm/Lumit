@@ -22,7 +22,10 @@
 //! §1.6 oracle is [`crate::fx::cpu::datamosh`], exercised directly from the
 //! lumit-gpu test, which can upload both.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Datamosh's controls.

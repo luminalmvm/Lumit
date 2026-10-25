@@ -31,7 +31,10 @@ use std::sync::{OnceLock, RwLock};
 
 use crate::comp_graph::{CompGraph, GraphInput, InputKind};
 use crate::fx::shader::hash64;
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamKind, ParamSchema, Unit};
+use crate::fx::{
+    params::Unit, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamKind, schema::ParamSchema,
+};
 use crate::model::{Document, EffectInstance};
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
@@ -168,7 +171,7 @@ pub fn refresh(inst: &mut EffectInstance, doc: &Document) -> bool {
 pub fn overrides_of(
     inst: &EffectInstance,
     graph: &CompGraph,
-    drivers: Option<&crate::fx::ResolvedDrivers>,
+    drivers: Option<&crate::fx::drivers::ResolvedDrivers>,
 ) -> Vec<(String, crate::model::EffectValue)> {
     use crate::anim::Property;
     use crate::model::EffectValue;
@@ -182,7 +185,7 @@ pub fn overrides_of(
                 .and_then(|d| {
                     d.param(
                         crate::graph::NodeRef::Effect(inst.id),
-                        crate::fx::ParamId::new(&input.id),
+                        crate::fx::params::ParamId::new(&input.id),
                     )
                 })
                 .map(|v| EffectValue::Float(Property::fixed(f64::from(v.as_f32()))));
@@ -437,7 +440,7 @@ mod tests {
     /// for a picture Input or an Input under one of this effect's own ids.
     #[test]
     fn the_overrides_prefer_a_driver_and_skip_the_declared_ids() {
-        use crate::fx::ParamId;
+        use crate::fx::params::ParamId;
         use crate::graph::NodeRef;
         use crate::model::{EffectParam, EffectValue};
 
@@ -448,7 +451,8 @@ mod tests {
             declared("mix", InputKind::Number, Unit::Raw),
         ];
         let graph = graph_of(&inputs);
-        let mut inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
+        let mut inst =
+            crate::fx::builtins::instantiate("node_graph").expect("the catalogue knows it");
         for id in ["gain", "turn"] {
             inst.params.push(EffectParam {
                 id: id.to_owned(),
@@ -467,7 +471,7 @@ mod tests {
 
         // A wire onto the row hands its number over instead of the stored one.
         // Math, because its answer is arithmetic anybody can predict.
-        let mut math = crate::fx::instantiate("math").expect("the catalogue knows it");
+        let mut math = crate::fx::builtins::instantiate("math").expect("the catalogue knows it");
         for p in &mut math.params {
             match p.id.as_str() {
                 "a" => p.value = EffectValue::Float(crate::anim::Property::fixed(3.0)),
@@ -490,7 +494,7 @@ mod tests {
             }],
             ..crate::graph::LayerGraph::default()
         };
-        let driven = crate::fx::resolve_drivers(
+        let driven = crate::fx::drivers::resolve_drivers(
             &wires,
             0.0,
             std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
@@ -498,7 +502,7 @@ mod tests {
         );
         assert_eq!(
             driven.param(NodeRef::Effect(inst.id), ParamId::new("gain")),
-            Some(crate::fx::Value::Float(9.0)),
+            Some(crate::fx::params::Value::Float(9.0)),
             "three times three"
         );
         let with_wire = overrides_of(&inst, &graph, Some(&driven));
@@ -524,7 +528,8 @@ mod tests {
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(comp));
 
-        let mut inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
+        let mut inst =
+            crate::fx::builtins::instantiate("node_graph").expect("the catalogue knows it");
         bind(&mut inst, comp_id, &graph);
         assert_eq!(comp_of(&inst), Some(comp_id));
         assert_eq!(inputs_of(&inst), first);

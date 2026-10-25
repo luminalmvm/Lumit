@@ -13,7 +13,10 @@
 //! the points; [`CornerPin::packed`] derives the matrix, inverts it, and hands
 //! both kernels the same nine numbers.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params, EDGE_OPTIONS};
+use crate::fx::{
+    builtins::EDGE_OPTIONS, cpu, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Corner pin's controls.
@@ -21,7 +24,7 @@ use lumit_fx_macros::Effect;
 /// Every point is px@comp (§2.3 — point parameters are pixels, never per
 /// cent). The schema defaults are a nominal 1080p keystone; a fresh instance is
 /// put on the actual comp by
-/// [`instantiate_for_raster`](crate::fx::instantiate_for_raster), because a
+/// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster), because a
 /// schema constant cannot know the raster and a pin sitting in the top-left
 /// quarter of a 4K comp is exactly the "drop it on and it already looks right"
 /// failure §1.2 names.

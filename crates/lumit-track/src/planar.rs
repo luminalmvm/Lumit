@@ -54,7 +54,7 @@
 
 use crate::geom::{self, project};
 use crate::pairs::homography_ransac;
-use crate::{GeometrySettings, Mat3, TrackSet};
+use crate::{geom::Mat3, pairs::GeometrySettings, TrackSet};
 
 /// The four corners of the tracked quad, in **source raster pixels**, in the
 /// order Corner pin declares them: upper left, upper right, lower left, lower

@@ -60,44 +60,24 @@
 //! # Ok::<(), lumit_track::TrackError>(())
 //! ```
 
-mod blobs;
+pub mod blobs;
 mod bundle;
 mod detect;
-mod exclude;
-mod geom;
+pub mod exclude;
+pub mod geom;
 mod klt;
-mod pairs;
-mod planar;
+pub mod pairs;
+pub mod planar;
 mod pyramid;
-mod segment;
-mod solve;
+pub mod segment;
+pub mod solve;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-pub use blobs::{BlobPoint, BlobSettings, BlobTrack, BlobTracker};
-pub use exclude::ExclusionMask;
-pub use geom::{
-    fundamental_eight_point, fundamental_seven_point, homography_dlt, project, sampson_distance,
-    transfer_distance, Mat3,
-};
-pub use pairs::{
-    estimate_pair, homography_ransac, select_keyframes, GeometrySettings, PairGeometry, PairVerdict,
-};
-pub use planar::{
-    point_outlines, points_quad, quad_outline, solve_planar, solve_planar_cancellable,
-    solve_points, solve_points_cancellable, PlanarError, PlanarFrame, PlanarSettings, PlanarTrack,
-    PointSettings, Quad,
-};
-pub use segment::{
-    detect_zoom, segment_dynamic_tracks, SegmentSettings, Segmentation, TrackSplit, ZoomBoundary,
-    ZoomKind, ZoomSettings,
-};
-pub use solve::{
-    solve_camera, solve_camera_cancellable, CameraSolve, PoseSource, ScenePoint, SolveError,
-    SolveNote, SolveSegment, SolveSettings, SolvedPose,
-};
+use exclude::ExclusionMask;
+use pairs::{estimate_pair, GeometrySettings, PairGeometry};
 
 use detect::{BucketGrid, Scratch};
 use pyramid::Pyramid;

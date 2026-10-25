@@ -147,10 +147,10 @@ impl PlaneSettings {
 
 /// The tier's own copy of a task, in the crate that opens a model.
 #[must_use]
-pub fn ml_task(task: PlaneTask) -> lumit_ml::Task {
+pub fn ml_task(task: PlaneTask) -> lumit_ml::manifest::Task {
     match task {
-        PlaneTask::Depth => lumit_ml::Task::Depth,
-        PlaneTask::Matte => lumit_ml::Task::Matte,
+        PlaneTask::Depth => lumit_ml::manifest::Task::Depth,
+        PlaneTask::Matte => lumit_ml::manifest::Task::Matte,
     }
 }
 
@@ -334,8 +334,8 @@ impl PlaneFailure {
     /// library wrote is dropped here on purpose: the badge reads the missing
     /// pack's name off the effect, and a sentence from ONNX Runtime is not
     /// something a reason enum can carry (§9).
-    fn of(e: &lumit_ml::MlError) -> Self {
-        use lumit_ml::MlError as E;
+    fn of(e: &lumit_ml::error::MlError) -> Self {
+        use lumit_ml::error::MlError as E;
         match e {
             E::RuntimeMissing | E::RuntimeFailed(_) | E::RuntimeInUse => {
                 PlaneFailure::RuntimeMissing
@@ -389,7 +389,7 @@ pub trait PlaneModel {
 }
 
 /// The depth model, wrapped so the job never names `lumit_ml` itself.
-struct DepthModel(lumit_ml::Depth);
+struct DepthModel(lumit_ml::depth::Depth);
 
 impl PlaneModel for DepthModel {
     fn run(&mut self, rgba: &[u8], w: u32, h: u32) -> Result<PlaneOut, PlaneFailure> {
@@ -415,7 +415,7 @@ impl PlaneModel for DepthModel {
 }
 
 /// The matte model, wrapped the same way.
-struct MatteModel(lumit_ml::Matte);
+struct MatteModel(lumit_ml::matte::Matte);
 
 impl PlaneModel for MatteModel {
     fn run(&mut self, rgba: &[u8], w: u32, h: u32) -> Result<PlaneOut, PlaneFailure> {
@@ -438,7 +438,7 @@ impl PlaneModel for MatteModel {
 /// which version of it, then the runtime that ran it.
 fn made_with(provider: &str, pack: &str, identity: [u8; 32]) -> String {
     let runtime = match lumit_ml::runtime::status() {
-        lumit_ml::RuntimeStatus::Loaded { version, .. } => version,
+        lumit_ml::runtime::RuntimeStatus::Loaded { version, .. } => version,
         _ => String::new(),
     };
     let hash: String = identity.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -471,14 +471,15 @@ fn matte_detail(index: u32) -> lumit_ml::tensor::Detail {
 /// Open the model `settings` names, on the thread that will run it.
 fn open_model(settings: PlaneSettings) -> Result<Box<dyn PlaneModel>, PlaneFailure> {
     match settings.task {
-        PlaneTask::Depth => lumit_ml::Depth::open()
+        PlaneTask::Depth => lumit_ml::depth::Depth::open()
             .map(|model| Box::new(DepthModel(model)) as Box<dyn PlaneModel>)
             .map_err(|e| PlaneFailure::of(&e)),
-        PlaneTask::Matte => {
-            lumit_ml::Matte::open(matte_arch(settings.arch), matte_detail(settings.downsample))
-                .map(|model| Box::new(MatteModel(model)) as Box<dyn PlaneModel>)
-                .map_err(|e| PlaneFailure::of(&e))
-        }
+        PlaneTask::Matte => lumit_ml::matte::Matte::open(
+            matte_arch(settings.arch),
+            matte_detail(settings.downsample),
+        )
+        .map(|model| Box::new(MatteModel(model)) as Box<dyn PlaneModel>)
+        .map_err(|e| PlaneFailure::of(&e)),
     }
 }
 
@@ -493,7 +494,7 @@ pub fn refusal_for(fx: &EffectInstance) -> Option<PlaneFailure> {
     let task = lumit_core::planes::task_of(fx)?;
     if matches!(
         lumit_ml::runtime::status(),
-        lumit_ml::RuntimeStatus::Missing
+        lumit_ml::runtime::RuntimeStatus::Missing
     ) {
         return Some(PlaneFailure::RuntimeMissing);
     }
@@ -1430,11 +1431,11 @@ pub fn analyse(
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<PlaneJob> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let settings = PlaneSettings::of(fx)?;
     Some(PlaneJob {
         instance: fx.id,

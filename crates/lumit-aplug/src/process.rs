@@ -260,11 +260,3 @@ unsafe extern "C" fn sink_push(
 }
 
 // -------------------------------------------------------------- denormals --
-
-/// Flush-to-zero and denormals-are-zero, for as long as this value lives.
-///
-/// Lives in `lumit-core` beside the chain that wraps its block loop, because
-/// the built-in audio effects need the same guard and nothing in the engine may
-/// depend on this crate (docs/impl/audio-effects.md §2). Re-exported here so
-/// the host's own call sites read as they always did.
-pub use lumit_core::fx::Denormals;

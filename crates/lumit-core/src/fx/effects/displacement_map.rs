@@ -19,8 +19,8 @@
 //! test, which can upload a map.
 
 use crate::fx::{
-    cpu, EffectDef, EffectMetadata, EffectSchema, CHANNEL_OPTIONS, EDGE_OPTIONS,
-    MAP_PLACEMENT_OPTIONS,
+    builtins::CHANNEL_OPTIONS, builtins::EDGE_OPTIONS, builtins::MAP_PLACEMENT_OPTIONS, cpu,
+    registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 

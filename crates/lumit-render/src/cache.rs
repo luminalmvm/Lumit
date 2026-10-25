@@ -90,14 +90,14 @@ impl Stamper<'_> {
             _ => None,
         };
         let stamp = match run {
-            Some(fps) => lumit_media::MediaSource {
+            Some(fps) => lumit_media::sequence::MediaSource {
                 path: (&media.absolute_path).into(),
                 sequence_fps: Some(fps),
                 ..Default::default()
             }
             .frame_stamp(frame)
             .filter(|(_, at)| fingerprint.is_none_or(|fp| secs(*at) > fp.mtime_secs)),
-            None => lumit_media::MediaSource::file(&media.absolute_path)
+            None => lumit_media::sequence::MediaSource::file(&media.absolute_path)
                 .stamped()
                 .stamp
                 .filter(|(size, at)| {
@@ -171,17 +171,20 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         Some(out)
     }
 
-    /// Which pack cuts a prompted Roto brush's base frame, and what its run
-    /// holds at this frame (docs/impl/addons.md §7). The planes tier's answer
-    /// in every respect, one tier along, and asked only of a brush whose seed
-    /// row says Segment.
+    /// What a Roto brush's run holds at this frame, and for a prompted brush
+    /// which pack cuts its base frame (docs/impl/addons.md §7). The planes
+    /// tier's answer in every respect, one tier along.
     ///
     /// The frame's own stored chain hash rather than the whole run's content,
     /// because that is what this tier already files a matte under: a
     /// re-propagation after a correction renames exactly the frames whose
     /// matte moved, and leaves the ones it copied where they were.
-    fn roto_identity(&self, instance: Uuid, frame: i64) -> Option<[u8; 32]> {
-        let mut out = lumit_ml::segment::installed_identity().unwrap_or_default();
+    fn roto_identity(&self, instance: Uuid, frame: i64, segments: bool) -> Option<[u8; 32]> {
+        let mut out = if segments {
+            lumit_ml::segment::installed_identity().unwrap_or_default()
+        } else {
+            [0; 32]
+        };
         let run = crate::roto::stored_chain(instance, frame).unwrap_or_default();
         for (slot, byte) in out.iter_mut().zip(run) {
             *slot ^= byte;

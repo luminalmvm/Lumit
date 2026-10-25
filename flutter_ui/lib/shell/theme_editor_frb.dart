@@ -185,20 +185,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(token.label, style: t.body),
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(token.description,
-                      style: t.small.copyWith(color: t.textMuted)),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: Text(token.label, style: t.body)),
           const SizedBox(width: 12),
           _Swatch(
             key: ValueKey('theme-token-${token.key}'),

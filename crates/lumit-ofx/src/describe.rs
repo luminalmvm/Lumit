@@ -40,7 +40,7 @@ use crate::host::state;
 use crate::props::{PropValue, PropertySet};
 use crate::schema::schema_of;
 use crate::status::Status;
-use lumit_core::fx::EffectSchema;
+use lumit_core::fx::schema::EffectSchema;
 
 /// One clip a plugin defined, on a descriptor or on an instance.
 pub struct ClipRef {
@@ -268,7 +268,7 @@ pub enum Rejection {
         /// What the plugin answered.
         status: Status,
     },
-    /// Two parameters would land on the same [`ParamId`](lumit_core::fx::ParamId).
+    /// Two parameters would land on the same [`ParamId`](lumit_core::fx::params::ParamId).
     #[error("two parameters share the id {first:?} (the second is {second:?})")]
     DuplicateParamId {
         /// The parameter that got there first.

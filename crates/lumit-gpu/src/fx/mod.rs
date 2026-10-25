@@ -10,48 +10,26 @@
 
 use crate::GpuContext;
 
-mod blur;
-mod colour;
-mod common;
+pub mod blur;
+pub mod colour;
+pub mod common;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
-mod custom_shader;
-mod distort;
-mod dof;
+pub mod custom_shader;
+pub mod distort;
+pub mod dof;
 mod engine;
-mod generate;
-mod lens_blur;
-mod lens_dirt;
-mod lens_flare;
-mod lighting;
-mod particulate;
-mod points_draw;
-mod points_field;
-mod split;
-mod stylise;
-mod temporal;
-mod utility;
-
-pub use blur::*;
-pub use colour::*;
-pub use common::*;
-pub use custom_shader::*;
-pub use distort::*;
-// `dof` exposes its `impl FxEngine` methods, which are reachable without a
-// re-export — but it also houses the `DofOp` parameter struct that carries the
-// effect's two dozen scalars, and a public type does need naming.
-pub use dof::*;
-pub use generate::*;
-pub use lens_blur::*;
-pub use lens_dirt::*;
-pub use lens_flare::*;
-pub use lighting::*;
-pub use particulate::*;
-pub use points_draw::*;
-pub use points_field::*;
-pub use split::*;
-pub use stylise::*;
-pub use temporal::*;
-pub use utility::*;
+pub mod generate;
+pub mod lens_blur;
+pub mod lens_dirt;
+pub mod lens_flare;
+pub mod lighting;
+pub mod particulate;
+pub mod points_draw;
+pub mod points_field;
+pub mod split;
+pub mod stylise;
+pub mod temporal;
+pub mod utility;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

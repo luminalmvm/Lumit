@@ -56,7 +56,6 @@ Future<void> showPrecomposeDialogFrb({
     id: 'precompose',
     builder: (close) => _PrecomposeBody(
       parentCompName: comp.getSettings().name,
-      layerName: layers.first.getName(),
       selectedCount: layers.length,
       defaultName: '${layers.first.getName()} Comp',
       initialMoveAttributes: workspace.precomposeMoveAttributes,
@@ -131,7 +130,6 @@ typedef _Confirm = Future<String?> Function(
 
 class _PrecomposeBody extends StatefulWidget {
   final String parentCompName;
-  final String layerName;
   final int selectedCount;
   final String defaultName;
   final bool initialMoveAttributes;
@@ -142,7 +140,6 @@ class _PrecomposeBody extends StatefulWidget {
 
   const _PrecomposeBody({
     required this.parentCompName,
-    required this.layerName,
     required this.selectedCount,
     required this.defaultName,
     required this.initialMoveAttributes,
@@ -254,7 +251,6 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
             enabled: _single,
             onPick: () => setState(() => _moveAttributes = false),
             label: l10n.precomposeLeave(widget.parentCompName),
-            caption: l10n.precomposeLeaveHelp(widget.layerName),
           ),
           const SizedBox(height: 12),
           _choice(
@@ -264,7 +260,6 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
             enabled: true,
             onPick: () => setState(() => _moveAttributes = true),
             label: l10n.precomposeMove,
-            caption: l10n.precomposeMoveHelp,
           ),
           const SizedBox(height: 14),
           // Indented under the choices above: it qualifies the new composition
@@ -319,8 +314,8 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
     );
   }
 
-  /// One radio choice: the button, its sentence, and the explanation under it.
-  /// The whole block is the target, so the sentence is as clickable as the dot.
+  /// One radio choice: the button and its sentence. The whole row is the
+  /// target, so the sentence is as clickable as the dot.
   Widget _choice(
     LumitTheme t, {
     required String key,
@@ -328,48 +323,26 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
     required bool enabled,
     required VoidCallback onPick,
     required String label,
-    required String caption,
   }) =>
       HoverMark(
         cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-        builder: (context, lit) => GestureDetector(
+        builder: (context, _) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? onPick : null,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  HouseRadio(
-                    key: ValueKey(key),
-                    selected: selected,
-                    enabled: enabled,
-                    onChanged: onPick,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: t.small.copyWith(
-                        color: enabled ? t.textPrimary : t.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
+              HouseRadio(
+                key: ValueKey(key),
+                selected: selected,
+                enabled: enabled,
+                onChanged: onPick,
               ),
-              Padding(
-                padding: const EdgeInsets.only(left: 22, top: 4),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Text(
-                  caption,
-                  style: t.caption.copyWith(
-                    height: 1.3,
-                    // A dimmed explanation under a dimmed choice: it
-                    // describes something that is not on offer for this
-                    // selection. One on offer lights under the pointer, the
-                    // sentence above it being as bright as it goes.
-                    color: enabled
-                        ? Color.lerp(t.textMuted, t.textSecondary, lit)
-                        : t.textMuted.withValues(alpha: 0.5),
+                  label,
+                  style: t.small.copyWith(
+                    color: enabled ? t.textPrimary : t.textMuted,
                   ),
                 ),
               ),

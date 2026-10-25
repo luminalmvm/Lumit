@@ -20,7 +20,9 @@
 //! and would blend the result a second time against the input, which is the bug
 //! schema.rs records against the Lens flare.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, CHOICE_UNGROUPED};
+use crate::fx::{
+    builtins::CHOICE_UNGROUPED, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// The Merge's controls.

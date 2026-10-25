@@ -1580,7 +1580,7 @@ pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
 fn scale_mix(effects: &mut [EffectInstance], share: f64) {
     for effect in effects {
         for param in &mut effect.params {
-            if param.id != crate::fx::MIX_PARAM {
+            if param.id != crate::fx::schema::MIX_PARAM {
                 continue;
             }
             if let crate::model::EffectValue::Float(mix) = &mut param.value {
@@ -2248,7 +2248,7 @@ mod tests {
     /// One effect instance for a clip's own rack. Any effect will do: nothing
     /// here opens it, and the rules under test are about identity.
     fn instance() -> EffectInstance {
-        crate::fx::instantiate("blur").expect("a blur exists")
+        crate::fx::builtins::instantiate("blur").expect("a blur exists")
     }
 
     /// The five preset shapes are all fades: silent at the start, full at the

@@ -58,7 +58,7 @@ use std::path::Path;
 use crate::capture::{
     Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Property, Switches, Unreadable,
 };
-use crate::{Bundle, BundleSource, ImportError, Manifest, Report, FORMAT};
+use crate::{capture::Manifest, capture::Report, Bundle, BundleSource, ImportError, FORMAT};
 use rifx::{
     bit, f32_at, i32_at, open_egg, rational_at, text_of, u16_at, u32_at, u8_at, Chunk, RifxError,
 };
@@ -1386,7 +1386,7 @@ mod tests {
             (Some(30.0), Some(24.0))
         );
 
-        let (doc, _) = crate::map_capture(&parsed.capture);
+        let (doc, _) = crate::map::map_capture(&parsed.capture);
         let footage = doc
             .items
             .iter()

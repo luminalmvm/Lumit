@@ -165,7 +165,7 @@ fn a_clips_effects_and_blend_reach_that_clip_alone() {
     // Invert on the first clip: cyan while it shows, red once the second does.
     let (inverted, comp) = two_clips(|c| {
         c.effects
-            .push(lumit_core::fx::instantiate("invert").unwrap());
+            .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
     });
     let cyan = centre(&inverted, comp, 30);
     assert!(
@@ -187,7 +187,7 @@ fn a_clips_effects_and_blend_reach_that_clip_alone() {
     // The stack's bypass takes it off again.
     let (bypassed, comp) = two_clips(|c| {
         c.effects
-            .push(lumit_core::fx::instantiate("invert").unwrap());
+            .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
         c.fx = false;
     });
     assert_eq!(centre(&bypassed, comp, 30), red);
@@ -217,7 +217,7 @@ fn a_clips_effects_fade_with_it_through_a_dissolve() {
     let mut first = clip(0, 2);
     first
         .effects
-        .push(lumit_core::fx::instantiate("invert").unwrap());
+        .push(lumit_core::fx::builtins::instantiate("invert").unwrap());
     let row = layer(
         "row",
         LayerKind::Sequence {

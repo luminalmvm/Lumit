@@ -16,8 +16,8 @@
 //! module.
 
 use crate::fx::{
-    cpu, noise, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    Params,
+    cpu, noise, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 

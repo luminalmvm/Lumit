@@ -25,7 +25,10 @@ use lumit_fx_macros::Effect;
 use super::super::dsp::lfo::{Lfo, Phase};
 use super::super::dsp::smoother::Smoother;
 use super::{frame, put, row, shape_of};
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 10.0;
@@ -166,7 +169,7 @@ mod tests {
     #[test]
     fn the_cycle_tops_out_at_unity_and_bottoms_at_the_depth_asked() {
         // A constant input reads the gain back directly.
-        let frames = 96 * crate::fx::AUDIO_BLOCK_FRAMES;
+        let frames = 96 * crate::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let input = vec![1.0f32; frames * AUDIO_CHANNELS];
         let values = harness::values(&AudioTremoloDef, &[("rate", 2.0), ("depth", 60.0)]);
         let out = harness::run(&*harness::open(&AudioTremoloDef, &values), &input, &values);

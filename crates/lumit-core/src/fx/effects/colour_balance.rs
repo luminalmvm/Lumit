@@ -1,6 +1,8 @@
 //! Colour balance (docs/08 §3.10, as amended): lift / gamma / gain.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Colour balance's controls.

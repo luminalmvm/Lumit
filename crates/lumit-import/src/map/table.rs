@@ -224,7 +224,7 @@ mod tests {
                 None => {
                     assert!(!row.lumit.is_empty(), "{} names no Lumit effect", row.ae);
                     assert!(
-                        lumit_core::fx::instantiate(&row.lumit).is_some(),
+                        lumit_core::fx::builtins::instantiate(&row.lumit).is_some(),
                         "{} maps to \"{}\", which this build does not ship",
                         row.ae,
                         row.lumit

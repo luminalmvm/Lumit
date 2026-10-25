@@ -40,7 +40,9 @@
 //! stroke — keep their own Opacity, because there it means how dark the shadow
 //! is and not how much of the style you take.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Drop shadow (style) — §2's entry 1, behind everything.

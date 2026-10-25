@@ -761,7 +761,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 /// Start an export of `comp` in `doc` — the frb entry, which brings its own
 /// document rather than reading the process-wide v0 bridge.
 pub(crate) fn start_export_with_document(
-    doc: std::sync::Arc<lumit_core::Document>,
+    doc: std::sync::Arc<lumit_core::model::Document>,
     comp: uuid::Uuid,
     spec: &BridgeExportSpec,
     out_path: &str,
@@ -822,7 +822,7 @@ pub(crate) enum QueueRowState {
 /// The document is snapshotted by the caller, so later edits never alter a
 /// queued item. Returns the item's id.
 pub(crate) fn queue_add(
-    doc: std::sync::Arc<lumit_core::Document>,
+    doc: std::sync::Arc<lumit_core::model::Document>,
     comp: uuid::Uuid,
     comp_name: String,
     spec: &BridgeExportSpec,
@@ -985,7 +985,7 @@ mod driving {
     struct Item {
         id: u32,
         comp_name: String,
-        doc: std::sync::Arc<lumit_core::Document>,
+        doc: std::sync::Arc<lumit_core::model::Document>,
         comp: Uuid,
         /// The dialogue's fields as they stood when this was queued — the
         /// *when done* ticks included, which is why the queue can honour them
@@ -1046,7 +1046,7 @@ mod driving {
     /// reads its document from the process-wide bridge, and an frb project is
     /// not in it. Everything after this point is shared.
     pub(super) fn start_with_document(
-        doc: std::sync::Arc<lumit_core::Document>,
+        doc: std::sync::Arc<lumit_core::model::Document>,
         comp: Uuid,
         spec: &BridgeExportSpec,
         out_path: &str,
@@ -1080,7 +1080,7 @@ mod driving {
     /// one way to begin an export, whoever asked for it.
     fn launch(
         run: &mut Run,
-        doc: &std::sync::Arc<lumit_core::Document>,
+        doc: &std::sync::Arc<lumit_core::model::Document>,
         comp: Uuid,
         spec: &BridgeExportSpec,
         out_path: &str,
@@ -1126,7 +1126,7 @@ mod driving {
     }
 
     pub(super) fn queue_add(
-        doc: std::sync::Arc<lumit_core::Document>,
+        doc: std::sync::Arc<lumit_core::model::Document>,
         comp: Uuid,
         comp_name: String,
         spec: &BridgeExportSpec,

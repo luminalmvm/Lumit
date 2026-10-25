@@ -11,10 +11,10 @@
 //! mean, and a rig that wants 0 to 3000 is as ordinary as one that wants 0 to 1.
 //! So the row declares the soft 0..100 travel After Effects gives it and no hard
 //! bound at all — typing past the end is the point. The
-//! [`Slider`](crate::fx::ParamKind::Slider) *kind* is the opposite case, a
+//! [`Slider`](crate::fx::schema::ParamKind::Slider) *kind* is the opposite case, a
 //! parameter whose whole meaning lives inside a closed range.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Slider control's one control.

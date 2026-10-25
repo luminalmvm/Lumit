@@ -26,8 +26,8 @@ use std::path::PathBuf;
 /// directory, an unwritable cache folder or a corrupt sidecar all still decode,
 /// they just scan. Only a file whose index cannot be built at all is an error.
 pub fn load_or_build_index(
-    src: impl Into<lumit_media::MediaSource>,
-) -> Result<lumit_media::FrameIndex, lumit_media::MediaError> {
+    src: impl Into<lumit_media::sequence::MediaSource>,
+) -> Result<lumit_media::index::FrameIndex, lumit_media::MediaError> {
     lumit_media::index::load_or_build_index(src, cache_dir().as_deref())
 }
 

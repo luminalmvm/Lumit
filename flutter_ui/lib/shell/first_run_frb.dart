@@ -155,13 +155,9 @@ class _FirstRunState extends State<_FirstRun> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                 child: Text(l10n.firstRunSetup,
                     style: t.bodyStrong.copyWith(color: t.textPrimary)),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                child: Text(l10n.firstRunSetupBlurb, style: t.body),
               ),
               // Scrolls when the window is too short for all of it, so no
               // question is ever out of reach.
@@ -352,7 +348,7 @@ class _FirstRunState extends State<_FirstRun> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        l10n.firstRunAutoUpdate,
+                        l10n.settingsAutomaticUpdates,
                         style: t.small.copyWith(color: t.textMuted),
                       ),
                     ),

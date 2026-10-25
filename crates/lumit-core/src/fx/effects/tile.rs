@@ -17,7 +17,9 @@
 //! middle, stamped over exactly the frame it came from. Dropping Tile on a layer
 //! changes nothing until a number is moved.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Tile's controls.

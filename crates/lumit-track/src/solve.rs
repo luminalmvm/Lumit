@@ -280,6 +280,9 @@ pub struct SolvedPose {
 pub struct ScenePoint {
     pub track: u32,
     pub position: [f64; 3],
+    /// The first and last frame its feature was followed on, so the point is
+    /// only drawn where it can be seen.
+    pub frames: [i64; 2],
 }
 
 /// The whole answer: what phase 4's export reads.
@@ -301,8 +304,8 @@ pub struct CameraSolve {
 
 /// Solve the camera for a whole shot (docs/impl/tracking.md §4).
 ///
-/// `pairs` are phase 2's keyframe pairs ([`crate::select_keyframes`]) and
-/// `zooms` its focal-change boundaries ([`crate::detect_zoom`]); a zoom
+/// `pairs` are phase 2's keyframe pairs ([`crate::pairs::select_keyframes`]) and
+/// `zooms` its focal-change boundaries ([`crate::segment::detect_zoom`]); a zoom
 /// [`ZoomKind::Cut`] splits the focal unknowns into segments while pose stays
 /// continuous across it. Tracks marked [`TrackState::Moving`] never enter the
 /// solve.
@@ -485,6 +488,9 @@ pub fn solve_camera_cancellable(
         .map(|(id, p)| ScenePoint {
             track: *id,
             position: *p,
+            frames: set
+                .get(*id)
+                .map_or([first, last], |t| [t.first_frame(), t.last_frame()]),
         })
         .collect();
     cloud.sort_by_key(|p| p.track);

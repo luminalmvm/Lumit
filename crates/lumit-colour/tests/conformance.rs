@@ -13,7 +13,7 @@
 use lumit_colour::bake::{bake, Shaper};
 use lumit_colour::matrix;
 use lumit_colour::op::{CdlParams, Direction, LogParams, Op};
-use lumit_colour::{Chain, LoadedConfig};
+use lumit_colour::{op::Chain, resolve::LoadedConfig};
 
 /// The chains the fixture rows name. A fixture naming an id that is not here
 /// fails the run rather than being skipped.
@@ -184,8 +184,8 @@ fn every_published_row_passes_the_baked_gate() {
         let tolerance = row.baked_tolerance.unwrap_or(match &baked {
             // §5.4: the factorised form's only error is sampling density; the
             // shaper and cube form carries the interpolation bound.
-            lumit_colour::Artefact::Factorised { .. } => row.tolerance.max(1e-5),
-            lumit_colour::Artefact::ShaperCube { .. } => 2e-3,
+            lumit_colour::bake::Artefact::Factorised { .. } => row.tolerance.max(1e-5),
+            lumit_colour::bake::Artefact::ShaperCube { .. } => 2e-3,
         });
         for k in 0..3 {
             let off = (got[k] - row.expected[k]).abs();
@@ -295,7 +295,7 @@ fn gate_rows(rows: &[Row], mut resolve: impl FnMut(&str, usize) -> Chain) {
     // One resolve and one bake per **edge**, not per row. A fixture gives an
     // edge sixteen probes in a row, and baking a 65³ cube sixteen times over to
     // ask it sixteen questions turned one gate into a minute of CI (docs/13).
-    let mut cached: Option<(&str, Chain, lumit_colour::Artefact)> = None;
+    let mut cached: Option<(&str, Chain, lumit_colour::bake::Artefact)> = None;
     for row in rows {
         if cached.as_ref().map(|(id, _, _)| *id) != Some(row.id.as_str()) {
             let chain = resolve(&row.id, row.line);
@@ -333,7 +333,7 @@ fn gate_rows(rows: &[Row], mut resolve: impl FnMut(&str, usize) -> Chain) {
         // proved it at 0.2 on ACEScg → ADX10 with a −0.05 input. The exact
         // gate above has already held such a row to its full tolerance; the
         // baked comparison stands down for it, and only for it.
-        if matches!(&baked, lumit_colour::Artefact::ShaperCube { .. })
+        if matches!(&baked, lumit_colour::bake::Artefact::ShaperCube { .. })
             && row.input.iter().any(|&v| !(0.0..=32.0).contains(&v))
         {
             continue;
@@ -345,8 +345,8 @@ fn gate_rows(rows: &[Row], mut resolve: impl FnMut(&str, usize) -> Chain) {
             // 1e-5 default was stricter than the documented promise, and the
             // legacy config's ACEScc toe at a denormal probe (off 1.95e-5)
             // showed it.
-            lumit_colour::Artefact::Factorised { .. } => row.tolerance.max(3e-5),
-            lumit_colour::Artefact::ShaperCube { .. } => 2e-3,
+            lumit_colour::bake::Artefact::Factorised { .. } => row.tolerance.max(3e-5),
+            lumit_colour::bake::Artefact::ShaperCube { .. } => 2e-3,
         });
         let sampled = baked.eval(row.input);
         for k in 0..3 {

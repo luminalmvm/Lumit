@@ -11,7 +11,7 @@
 pub mod eq;
 pub mod graphic_eq;
 
-use crate::fx::ParamId;
+use crate::fx::params::ParamId;
 
 /// How often a block rebuilds its coefficients, in frames.
 ///
@@ -65,10 +65,10 @@ fn decibels(values: &[(ParamId, f64)], id: ParamId, default: f64) -> f64 {
 /// 3072 frames is four cycles of 62.5 Hz and sixty-four of a kilohertz, so
 /// there is nothing to leak into the neighbouring bins.
 #[cfg(test)]
-fn measured_db(def: &dyn crate::fx::EffectDef, over: &[(&str, f64)], hz: f64) -> f64 {
+fn measured_db(def: &dyn crate::fx::registry::EffectDef, over: &[(&str, f64)], hz: f64) -> f64 {
     use super::dsp::db::db_of_gain;
     use super::modulation::harness;
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_CHANNELS};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_CHANNELS};
 
     /// How many frames are counted, and as many again ahead of them to settle.
     const WINDOW_FRAMES: usize = 3_072;

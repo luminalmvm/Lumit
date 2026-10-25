@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-use lumit_core::Op;
+use lumit_core::ops::Op;
 use uuid::Uuid;
 
 use crate::api::{
@@ -331,7 +331,7 @@ impl ProjectReference {
     /// The two are counted apart, so making a graph does not push the next
     /// comp's number along and neither reads as the other's.
     #[frb(ignore)]
-    fn next_comp_name_in(doc: &lumit_core::Document, node_graph: bool) -> String {
+    fn next_comp_name_in(doc: &lumit_core::model::Document, node_graph: bool) -> String {
         lumit_core::edits::next_comp_name(doc, node_graph)
     }
 
@@ -433,7 +433,7 @@ impl ProjectReference {
     /// Nothing is committed, so a caller can add to the batch.
     #[frb(ignore)]
     pub(crate) fn new_comp_ops(
-        doc: &lumit_core::Document,
+        doc: &lumit_core::model::Document,
         name: String,
         settings: Option<BridgeCompSettings>,
         graph: Option<lumit_core::comp_graph::CompGraph>,
@@ -826,7 +826,7 @@ impl ProjectReference {
         // Outside the lock, and after the item exists: start reading the file
         // now so the first question about it is a look-up.
         #[cfg(feature = "media")]
-        crate::probe::request(lumit_media::MediaSource {
+        crate::probe::request(lumit_media::sequence::MediaSource {
             path: file,
             sequence_fps: run.then(|| {
                 let r = lumit_core::model::SequenceRef::default().frame_rate;
@@ -847,7 +847,7 @@ impl ProjectReference {
     /// from its history, or any other `.lum`.
     ///
     /// Each arrives as a new composition with what it places, and footage the
-    /// project already has is used again ([`lumit_project::bring`]). They are
+    /// project already has is used again ([`lumit_project::bring::bring`]). They are
     /// filed where a composition and a solid made here would be.
     ///
     /// `earlier_save` says the file is a save of this project that was fetched
@@ -903,7 +903,7 @@ impl ProjectReference {
         let (comps, footage) = {
             let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
             let doc = state.store.snapshot();
-            let Ok(brought) = lumit_project::bring(&doc, &from, &comps, &source) else {
+            let Ok(brought) = lumit_project::bring::bring(&doc, &from, &comps, &source) else {
                 return Ok(None);
             };
             let mut ops = brought.ops;
@@ -1088,7 +1088,7 @@ impl ProjectReference {
                 let _ = sink.add(fraction);
             }
         });
-        let unpacked = match lumit_project::unpack(
+        let unpacked = match lumit_project::pack::unpack(
             &document,
             &crate::packing::archives(&path),
             dir,
@@ -1202,7 +1202,7 @@ impl ProjectReference {
         let claim = crate::claim::take(&target).map_err(|_| BridgeError::WriteFailed)?;
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
         let doc = lumit_project::rebase_for_save(&document, dir);
-        let is_footage = |doc: &lumit_core::Document, id: Uuid| {
+        let is_footage = |doc: &lumit_core::model::Document, id: Uuid| {
             matches!(
                 doc.item(id),
                 Some(lumit_core::model::ProjectItem::Footage(_))
@@ -1234,7 +1234,7 @@ impl ProjectReference {
             });
             // The file as it stands is where footage already packed is copied
             // from, and it may be the file being written.
-            let packed = match lumit_project::save_packed(
+            let packed = match lumit_project::pack::save_packed(
                 &doc,
                 &target,
                 previous.as_deref(),
@@ -1447,7 +1447,7 @@ impl ProjectReference {
         // The adapter's own answer where one has been opened, and the
         // project's setting until then — never a lock on the renderer behind a
         // panel's read.
-        Ok(lumit_render::adapter_sample_count(asked).unwrap_or(asked))
+        Ok(lumit_gpu::adapter_sample_count(asked).unwrap_or(asked))
     }
 
     /// Set how hard the renderer works at the edges of transformed layers.
@@ -1491,7 +1491,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn colour_depth_in_use(&self) -> Result<u32, BridgeError> {
         let asked = self.colour_depth()?;
-        Ok(lumit_render::adapter_colour_depth(asked).unwrap_or(asked))
+        Ok(lumit_gpu::adapter_colour_depth(asked).unwrap_or(asked))
     }
 
     /// Set how many bits a channel the compositor works in.

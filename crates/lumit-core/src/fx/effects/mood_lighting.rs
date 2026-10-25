@@ -12,7 +12,9 @@
 //! (docs/impl/ae-effect-parity.md). Contrast is §3.14's own curve for the same
 //! reason: one grade, spelled once.
 
-use crate::fx::{cpu, noise, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, noise, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Mood lighting's controls.
