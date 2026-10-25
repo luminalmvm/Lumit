@@ -229,7 +229,7 @@ pub fn track_status(layer: LayerReference) -> BridgeTrackStatus {
 
 fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_render::track::AnalysisError;
-    use lumit_track::SolveError;
+    use lumit_track::solve::SolveError;
     match why {
         AnalysisError::Unreadable => BridgeTrackFailure::Unreadable,
         // A cancelled run is reported as `Cancelled`, never as a failure, so
@@ -248,11 +248,15 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
         // it to follow reads as the same "nothing to work with" the camera
         // half calls `NoFeatures`, and a quad that is not one flat surface has
         // its own reason.
-        AnalysisError::Planar(lumit_track::PlanarError::TooFewFeatures) => {
+        AnalysisError::Planar(lumit_track::planar::PlanarError::TooFewFeatures) => {
             BridgeTrackFailure::NoFeatures
         }
-        AnalysisError::Planar(lumit_track::PlanarError::NotPlanar) => BridgeTrackFailure::NotPlanar,
-        AnalysisError::Planar(lumit_track::PlanarError::Cancelled) => BridgeTrackFailure::NoSolve,
+        AnalysisError::Planar(lumit_track::planar::PlanarError::NotPlanar) => {
+            BridgeTrackFailure::NotPlanar
+        }
+        AnalysisError::Planar(lumit_track::planar::PlanarError::Cancelled) => {
+            BridgeTrackFailure::NoSolve
+        }
     }
 }
 

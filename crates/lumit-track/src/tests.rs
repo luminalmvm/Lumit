@@ -5,6 +5,23 @@
 //! an exact formula rather than an eyeballed number, and the tests mean the same
 //! thing on every machine.
 
+use super::blobs::{BlobSettings, BlobTracker};
+use super::geom::{
+    fundamental_eight_point, fundamental_seven_point, homography_dlt, project, Mat3,
+};
+use super::pairs::{select_keyframes, PairVerdict};
+use super::planar::{
+    point_outlines, points_quad, quad_outline, solve_planar, solve_planar_cancellable,
+    solve_points, solve_points_cancellable, PlanarError, PlanarSettings, PlanarTrack,
+    PointSettings, Quad,
+};
+use super::segment::{
+    detect_zoom, segment_dynamic_tracks, SegmentSettings, ZoomBoundary, ZoomKind, ZoomSettings,
+};
+use super::solve::{
+    solve_camera, solve_camera_cancellable, CameraSolve, PoseSource, SolveError, SolveNote,
+    SolveSettings,
+};
 use super::*;
 use lumit_core::mask::Mask;
 

@@ -6557,7 +6557,10 @@ fn a_tracked_layer() -> (
     LayerReference,
     Uuid,
 ) {
-    use lumit_track::{CameraSolve, PoseSource, ScenePoint, SolveSegment, SolvedPose};
+    use lumit_track::{
+        solve::CameraSolve, solve::PoseSource, solve::ScenePoint, solve::SolveSegment,
+        solve::SolvedPose,
+    };
 
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project
@@ -7785,10 +7788,10 @@ fn a_planar_tracked_layer() -> (
         .expect("the Pin layer row takes a layer");
     shot.set_effects(staged, None).expect("committed");
 
-    let frames: Vec<lumit_track::PlanarFrame> = (0..50)
+    let frames: Vec<lumit_track::planar::PlanarFrame> = (0..50)
         .map(|frame| {
             let d = frame as f64 * 10.0;
-            lumit_track::PlanarFrame {
+            lumit_track::planar::PlanarFrame {
                 frame,
                 corners: [
                     [100.0 + d, 200.0],
@@ -7805,7 +7808,7 @@ fn a_planar_tracked_layer() -> (
         effect,
         25.0,
         50,
-        lumit_track::PlanarTrack {
+        lumit_track::planar::PlanarTrack {
             reference_frame: 0,
             reference_quad: frames[0].corners,
             frames,

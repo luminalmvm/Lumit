@@ -15,7 +15,7 @@
 //!
 //! **It can be stopped, and it says how far it has got.** The frame loop is the
 //! cancellation seam — one flag, checked between frames — and the solve has its
-//! own ([`lumit_track::solve_camera_cancellable`]). Progress is a value anyone
+//! own ([`lumit_track::solve::solve_camera_cancellable`]). Progress is a value anyone
 //! can read, not a callback anyone has to hold.
 //!
 //! **It stops where the pictures stop carrying the answer.** Not every shot
@@ -68,11 +68,13 @@ use lumit_core::track::{
     CameraSolveStore, LinkedPose, PlanarTrackStore, Quad, SolvedRange, CAMERA_TRACK, PLANAR_TRACK,
 };
 use lumit_track::{
-    detect_zoom, point_outlines, points_quad, quad_outline, segment_dynamic_tracks,
-    select_keyframes, solve_camera_cancellable, solve_planar_cancellable, solve_points_cancellable,
-    BlobSettings, BlobTracker, CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3,
-    PlanarError, PlanarSettings, PlanarTrack, PointSettings, SegmentSettings, SolveError,
-    SolveSettings, SolvedPose, TrackError, TrackSettings, Tracker, ZoomSettings,
+    blobs::BlobSettings, blobs::BlobTracker, exclude::ExclusionMask, geom::Mat3,
+    pairs::select_keyframes, pairs::GeometrySettings, planar::point_outlines, planar::points_quad,
+    planar::quad_outline, planar::solve_planar_cancellable, planar::solve_points_cancellable,
+    planar::PlanarError, planar::PlanarSettings, planar::PlanarTrack, planar::PointSettings,
+    segment::detect_zoom, segment::segment_dynamic_tracks, segment::SegmentSettings,
+    segment::ZoomSettings, solve::solve_camera_cancellable, solve::CameraSolve, solve::SolveError,
+    solve::SolveSettings, solve::SolvedPose, FramePlane, TrackError, TrackSettings, Tracker,
 };
 use uuid::Uuid;
 
@@ -2885,18 +2887,18 @@ mod tests {
                 segment: 0,
                 focal_px: FOCAL,
                 mean_reprojection_px: 0.0,
-                source: lumit_track::PoseSource::Keyframe,
+                source: lumit_track::solve::PoseSource::Keyframe,
             })
             .collect();
         CameraSolve {
             poses,
-            segments: vec![lumit_track::SolveSegment {
+            segments: vec![lumit_track::solve::SolveSegment {
                 first_frame: 0,
                 last_frame: FRAMES as i64 - 1,
                 focal_px: FOCAL,
                 ramp: false,
             }],
-            points: vec![lumit_track::ScenePoint {
+            points: vec![lumit_track::solve::ScenePoint {
                 track: 0,
                 position: [0.0, 0.0, 0.0],
             }],
@@ -3592,7 +3594,7 @@ mod tests {
         }
 
         fn corner_at(n: usize, p: [f64; 2]) -> [f64; 2] {
-            lumit_track::project(&Self::warp(n), p).expect("the fixture's warps stay finite")
+            lumit_track::geom::project(&Self::warp(n), p).expect("the fixture's warps stay finite")
         }
     }
 
@@ -3611,7 +3613,7 @@ mod tests {
             let mut out = vec![0.35f32; W * H];
             for y in 0..H {
                 for x in 0..W {
-                    let p = lumit_track::project(&back, [x as f64, y as f64])?;
+                    let p = lumit_track::geom::project(&back, [x as f64, y as f64])?;
                     if (30.0..370.0).contains(&p[0]) && (20.0..280.0).contains(&p[1]) {
                         out[y * W + x] = texture(p[0], p[1]);
                     }
