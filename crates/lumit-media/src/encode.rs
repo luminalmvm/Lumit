@@ -405,16 +405,15 @@ impl Metadata {
 }
 
 /// The encoder ladder for a codec, best first (docs/impl/media-io.md §7):
-/// NVENC, AMD AMF, Intel Quick Sync, VideoToolbox on a Mac, VAAPI for AMD
-/// and Intel on Linux, then software. A rung missing from a platform's
-/// FFmpeg build fails straight away and the next is tried.
+/// NVENC, AMD AMF, Intel Quick Sync, VAAPI for AMD and Intel on Linux,
+/// then software. A rung missing from a platform's FFmpeg build fails
+/// straight away and the next is tried.
 pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
     match codec {
         VideoCodec::H264 => &[
             "h264_nvenc",
             "h264_amf",
             "h264_qsv",
-            "h264_videotoolbox",
             "h264_vaapi",
             "libx264",
         ],
@@ -422,7 +421,6 @@ pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
             "hevc_nvenc",
             "hevc_amf",
             "hevc_qsv",
-            "hevc_videotoolbox",
             "hevc_vaapi",
             "libx265",
         ],
@@ -458,7 +456,6 @@ pub fn encoder_label(encoder: &str) -> &'static str {
         "h264_nvenc" | "hevc_nvenc" => "NVENC",
         "h264_amf" | "hevc_amf" => "AMD AMF",
         "h264_qsv" | "hevc_qsv" => "Intel Quick Sync",
-        "h264_videotoolbox" | "hevc_videotoolbox" => "VideoToolbox",
         "h264_vaapi" | "hevc_vaapi" => "VAAPI",
         "libx264" => "software x264",
         "libx265" => "software x265",
