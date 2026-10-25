@@ -314,7 +314,7 @@ fn splice(out: &mut [f32], dry: &[f32], wet: &[bool]) {
 /// processing role gives it back exactly as it found it.
 ///
 /// Here rather than in the plugin host because the built-ins need it too and
-/// nothing in the engine may depend on `lumit-aplug`; the host re-exports this
+/// nothing in the engine may depend on `lumit-aplug`; the host uses this
 /// one.
 pub struct Denormals {
     /// The MXCSR word as it was, or `None` where this architecture has no such

@@ -296,7 +296,7 @@ fn hash_chain(
     // document, and the rebake this provokes is what actually silences the
     // plugin rather than only badging it. This chain's plugins, not the whole
     // list, so switching off a plugin no comp uses re-plans nothing.
-    if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
+    if let Ok(disabled) = lumit_aplug::ipc::broker::session_disabled().lock() {
         for effect in &chain.effects {
             let name = effect.effect.match_name.as_str();
             if let Some(id) = lumit_core::fx::audio_plugin_id(name) {
@@ -362,7 +362,7 @@ pub(crate) fn build_plan(
 fn rack_stamp() -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
+    if let Ok(disabled) = lumit_aplug::ipc::broker::session_disabled().lock() {
         format!("{disabled:?}").hash(&mut h);
     }
     h.finish()

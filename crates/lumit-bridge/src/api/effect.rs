@@ -491,14 +491,14 @@ fn scan_audio_plugins(
     scan: &mut BridgePluginScan,
     file: &mut dyn FnMut(&std::path::Path, usize, usize),
 ) {
-    lumit_aplug::set_disabled(&prefs.disabled);
+    lumit_aplug::ipc::broker::set_disabled(&prefs.disabled);
     // Cached modules are offered without being opened; a cache that does not
     // read is an empty one, and everything is described again.
-    let mut cache: lumit_aplug::ScanCache =
+    let mut cache: lumit_aplug::discover::ScanCache =
         serde_json::from_value(prefs.audio_cache.clone()).unwrap_or_default();
-    let outcome = lumit_aplug::scan_brokered_reporting(
-        &lumit_aplug::search_paths(),
-        &lumit_aplug::session_disabled(),
+    let outcome = lumit_aplug::discover::scan_brokered_reporting(
+        &lumit_aplug::discover::search_paths(),
+        &lumit_aplug::ipc::broker::session_disabled(),
         None,
         &mut cache,
         file,
@@ -568,7 +568,7 @@ pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeErr
             ofx
         }
         (_, Some(plugin)) => {
-            lumit_aplug::set_enabled(plugin, enabled);
+            lumit_aplug::ipc::broker::set_enabled(plugin, enabled);
             plugin
         }
         _ => return Ok(()),
@@ -2359,7 +2359,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // match name shorn of its prefix — exactly what `set_plugin_enabled`
     // wrote into the list.
     if let Some(identifier) = lumit_core::fx::audio_plugin_id(name) {
-        if lumit_aplug::session_disabled()
+        if lumit_aplug::ipc::broker::session_disabled()
             .lock()
             .is_ok_and(|list| list.contains(identifier))
         {

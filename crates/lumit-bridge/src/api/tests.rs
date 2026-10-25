@@ -8551,7 +8551,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
     // Switch it off: the session list holds the bare identifier, and every
     // instance wears the calm badge at once — the layer keeps its rows.
     let _ = crate::api::effect::set_plugin_enabled("clap:com.lumitlab.aptest".to_owned(), false);
-    assert!(lumit_aplug::session_disabled()
+    assert!(lumit_aplug::ipc::broker::session_disabled()
         .lock()
         .expect("list")
         .contains("com.lumitlab.aptest"));

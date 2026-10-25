@@ -897,7 +897,7 @@ impl Vst3Instance {
 
         // Denormals off for the call and restored after it, as both standards
         // assume (§3).
-        let _denormals = crate::process::Denormals::on();
+        let _denormals = lumit_core::fx::Denormals::on();
         // SAFETY: every pointer in `data` is to a live local that outlives this
         // call, the planes are `numSamples` long, and the plugin is in the
         // processing state VST3 requires.

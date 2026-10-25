@@ -24,11 +24,13 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use interprocess::local_socket::RecvHalf;
+use interprocess::local_socket::SendHalf;
 use lumit_aplug::abi::AnyModule;
 use lumit_aplug::def::{AudioHost, InstanceSetup, LocalHost};
 use lumit_aplug::describe::describe_module_except;
 use lumit_aplug::ipc::handles::{Handle, Registry, KIND_INSTANCE};
-use lumit_aplug::ipc::pipe::{self, RecvHalf, SendHalf};
+use lumit_aplug::ipc::pipe::{self};
 use lumit_aplug::ipc::proto::{
     Bring, BrokerMessage, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };

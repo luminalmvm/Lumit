@@ -25,8 +25,10 @@ use std::time::Duration;
 use lumit_aplug::def::{BlockJob, BrokerHost};
 use lumit_aplug::ipc::proto::Bring;
 use lumit_aplug::{
-    nothing_disabled, scan_brokered, scan_brokered_reporting, AudioHost, Broker, BrokerConfig,
-    BrokerError, DisableList, InstanceSetup, ScanCache, INTERLEAVED_LEN,
+    def::AudioHost, def::InstanceSetup, discover::scan_brokered, discover::scan_brokered_reporting,
+    discover::ScanCache, ipc::broker::nothing_disabled, ipc::broker::Broker,
+    ipc::broker::BrokerConfig, ipc::broker::BrokerError, ipc::broker::DisableList,
+    process::INTERLEAVED_LEN,
 };
 use lumit_aplug_testplug::{Kind, CRASH_ON_BLOCK_ENV, HANG_ENV, PARAM_GAIN};
 
@@ -473,7 +475,10 @@ fn a_dying_vst3_broker_costs_the_chain_one_dry_block_and_no_hole() {
     };
     let host = BrokerHost::open(Arc::clone(&broker), &setup).expect("an instance");
     let link = lumit_core::fx::ChainLink {
-        processor: Arc::new(lumit_aplug::HostedAudio::new(Box::new(host), Vec::new())),
+        processor: Arc::new(lumit_aplug::def::HostedAudio::new(
+            Box::new(host),
+            Vec::new(),
+        )),
         values: Vec::new(),
     };
 

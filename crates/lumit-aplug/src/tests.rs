@@ -460,7 +460,7 @@ fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
     assert_ne!(before, 0.0, "a denormal is a real number by default");
 
     let inside = {
-        let _guard = crate::process::Denormals::on();
+        let _guard = lumit_core::fx::Denormals::on();
         black_box(tiny) * black_box(half)
     };
     assert_eq!(inside, 0.0, "flush to zero, as both standards assume");

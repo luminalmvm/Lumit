@@ -2022,6 +2022,7 @@ dependencies = [
 name = "lumit-aplug-broker"
 version = "0.9.1"
 dependencies = [
+ "interprocess",
  "lumit-aplug",
  "lumit-aplug-testplug",
  "lumit-core",
