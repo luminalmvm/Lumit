@@ -3,7 +3,7 @@ use std::sync::mpsc::Receiver;
 use crate::api::composition::BridgePlaybackMode;
 use flutter_rust_bridge::frb;
 use lumit_core::model::EffectInstance;
-use lumit_render::HeadlessRenderer;
+use lumit_render::headless::HeadlessRenderer;
 
 // The quality policy is v0's, shared rather than copied: two implementations of
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
@@ -65,7 +65,7 @@ pub struct WorkerState {
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
     /// than before it.
-    prefetcher: lumit_render::Prefetcher,
+    prefetcher: lumit_render::prefetch::Prefetcher,
     /// Which Viewer view the worker is serving (docs/impl/multi-viewer.md
     /// §2.1). Latched by every request that says what a view is showing, and
     /// read by the publish paths, the look and the shared-texture pool, so a
@@ -180,12 +180,12 @@ pub struct WorkerState {
     /// The idle turn composites it once more, measured, and discards the
     /// picture (serve the hit, measure afterwards). One slot: only the
     /// frame being looked at is worth the numbers.
-    pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
+    pending_measure: Option<(Uuid, u64, lumit_render::plan::Quality)>,
     /// The last picture each view showed of each comp, newest last, so going
     /// back to a comp shows it at once while its frame is made ([`stand_in`]).
     // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
     // of the card at 4K; count them against it if that ever matters.
-    stand_ins: Vec<(u32, Uuid, lumit_render::PreparedFrame)>,
+    stand_ins: Vec<(u32, Uuid, lumit_render::headless::PreparedFrame)>,
     /// Turned over by each request as it is sent ([`WorkerSender`]).
     epochs: std::sync::Arc<WorkerEpochs>,
 }
@@ -207,7 +207,7 @@ impl WorkerState {
 /// that follows) and when it was asked (for the bounded grace).
 #[frb(ignore)]
 struct DiskWant {
-    provenance: lumit_render::FrameProvenance,
+    provenance: lumit_render::headless::FrameProvenance,
     asked: std::time::Instant,
 }
 
@@ -222,7 +222,7 @@ fn frame_name(
     revision: u64,
     comp: Uuid,
     frame: u64,
-    quality: lumit_render::Quality,
+    quality: lumit_render::plan::Quality,
 ) -> Option<u128> {
     // The name folds in the look the renderer is set to
     // (`named_under_view`), and each view looks its own way, so the memo is
@@ -291,7 +291,7 @@ fn look_at(state: &mut WorkerState, view: u32) {
 /// Put a look on a renderer. The only place these four setters are called.
 #[frb(ignore)]
 fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
-    renderer.set_display_view(lumit_render::DisplayParams::from_stops(
+    renderer.set_display_view(lumit_gpu::DisplayParams::from_stops(
         look.stops,
         look.tone_map,
     ));
@@ -328,7 +328,7 @@ static ENGINES_BACK: std::sync::Condvar = std::sync::Condvar::new();
 
 #[frb(ignore)]
 struct Engines {
-    parked: Option<lumit_render::SharedGpu>,
+    parked: Option<lumit_gpu::SharedGpu>,
     out: Vec<Uuid>,
     /// How long the last set took to build, which is how long a new worker
     /// waits for one to come back before it builds its own.
@@ -576,12 +576,12 @@ fn disk_root(
     match location {
         Location::AppData => lumit_project::frame_cache_dir(doc_id),
         Location::BesideProject => match path.as_deref() {
-            Some(path) => lumit_render::diskio::sidecar_root(path),
+            Some(path) => lumit_cache::disk::sidecar_root(path),
             // Nowhere to sit beside yet.
             None => lumit_project::frame_cache_dir(doc_id),
         },
         Location::Custom(root) => match path.as_deref() {
-            Some(path) => lumit_render::diskio::cache_root_for(path, Some(&root)),
+            Some(path) => lumit_cache::disk::cache_root_for(path, Some(&root)),
             None => Some(root.join(format!("{doc_id}-cache"))),
         },
     }
@@ -715,7 +715,7 @@ fn collect_disk_loads(state: &mut WorkerState) {
         );
         let promoted = state
             .renderer
-            .upload_frame_texture(lumit_render::Promotion {
+            .upload_frame_texture(lumit_render::headless::Promotion {
                 key: frame.hash,
                 bgra: frame.bgra,
                 width: frame.width,
@@ -978,7 +978,7 @@ fn frame_tier(
     revision: u64,
     comp: Uuid,
     frame: u64,
-    quality: lumit_render::Quality,
+    quality: lumit_render::plan::Quality,
     scale: f32,
     bgra: bool,
     fast: bool,
@@ -1160,11 +1160,11 @@ fn zero_copy_wants_bgra() -> bool {
 /// nothing, thus it does not count.
 #[frb(ignore)]
 fn line_up_frame(
-    renderer: &mut lumit_render::HeadlessRenderer,
+    renderer: &mut lumit_render::headless::HeadlessRenderer,
     disk: &lumit_render::diskio::DiskIo,
     disk_wanted: &mut std::collections::HashMap<u128, DiskWant>,
     key: u128,
-    provenance: lumit_render::FrameProvenance,
+    provenance: lumit_render::headless::FrameProvenance,
 ) -> bool {
     let bgra = zero_copy_wants_bgra();
     if renderer.has_frame_texture(key, bgra) {
@@ -1183,7 +1183,7 @@ fn line_up_frame(
                 return false;
             }
             return renderer
-                .upload_frame_texture(lumit_render::Promotion {
+                .upload_frame_texture(lumit_render::headless::Promotion {
                     key,
                     bgra,
                     width: held.width,
@@ -1225,7 +1225,7 @@ fn line_up_frame(
 /// lost half of what they displaced, and those were composited again the next
 /// time round. Work that is ahead of the picture waits a turn instead.
 #[frb(ignore)]
-fn card_backed_up(renderer: &lumit_render::HeadlessRenderer) -> bool {
+fn card_backed_up(renderer: &lumit_render::headless::HeadlessRenderer) -> bool {
     let (used, budget, entries) = renderer.frame_texture_stats();
     let one = used.checked_div(entries).unwrap_or(0);
     used + one > budget && renderer.demotions_saturated()
@@ -1234,7 +1234,7 @@ fn card_backed_up(renderer: &lumit_render::HeadlessRenderer) -> bool {
 /// Whether any tier holds the frame named `key`: the card, memory or disk.
 #[frb(ignore)]
 fn held_in_a_tier(
-    renderer: &lumit_render::HeadlessRenderer,
+    renderer: &lumit_render::headless::HeadlessRenderer,
     disk: &lumit_render::diskio::DiskIo,
     key: u128,
     bgra: bool,
@@ -1264,7 +1264,7 @@ fn wants_disk_lead(on_card: bool, in_memory: bool, on_disk: bool, already_asked:
 /// The idle fill and the display path must derive this the same way or the
 /// fill banks frames the scrub cannot find, so they both come here.
 #[frb(ignore)]
-fn still_quality(scale: f32) -> lumit_render::Quality {
+fn still_quality(scale: f32) -> lumit_render::plan::Quality {
     quality_for(scale)
 }
 
@@ -1275,7 +1275,11 @@ fn still_quality(scale: f32) -> lumit_render::Quality {
 /// where the cost it explains is measured — and so the distinction from
 /// [`still_quality`] can be tested without a global.
 #[frb(ignore)]
-fn playback_quality(scale: f32, mode: BridgePlaybackMode, tier: u32) -> lumit_render::Quality {
+fn playback_quality(
+    scale: f32,
+    mode: BridgePlaybackMode,
+    tier: u32,
+) -> lumit_render::plan::Quality {
     let effective = if matches!(mode, BridgePlaybackMode::Adaptive) {
         scale * crate::realtime::tier_scale(tier)
     } else {
@@ -1311,10 +1315,10 @@ fn prepare_frame(
     document: &std::sync::Arc<lumit_core::Document>,
     comp: Uuid,
     frame: u64,
-    quality: lumit_render::Quality,
+    quality: lumit_render::plan::Quality,
     bgra: bool,
     cacheable: bool,
-) -> Result<lumit_render::PreparedFrame, String> {
+) -> Result<lumit_render::headless::PreparedFrame, String> {
     let name = cacheable
         .then(|| state.renderer.frame_key(document, comp, frame, quality))
         .flatten();
@@ -1325,10 +1329,10 @@ fn prepare_frame(
     // wait for a picture the bar already shows as held.
     let measuring = state.renderer.measuring();
     if let Some(key) = name.filter(|key| !state.renderer.has_frame_texture(*key, bgra)) {
-        let provenance = lumit_render::FrameProvenance {
+        let provenance = lumit_render::headless::FrameProvenance {
             comp,
             frame,
-            scale_q: lumit_render::preview_scale_q(quality),
+            scale_q: lumit_render::headless::preview_scale_q(quality),
             quality,
         };
         match crate::framecache::held(key) {
@@ -1339,7 +1343,7 @@ fn prepare_frame(
                 if let Some(prepared) =
                     state
                         .renderer
-                        .upload_frame_texture(lumit_render::Promotion {
+                        .upload_frame_texture(lumit_render::headless::Promotion {
                             key,
                             bgra,
                             width: held.width,
@@ -1401,7 +1405,7 @@ fn prepare_frame(
             &mut state.bar_dirty,
             comp,
             frame,
-            lumit_render::preview_scale_q(quality),
+            lumit_render::headless::preview_scale_q(quality),
         );
     }
     prepared
@@ -1468,7 +1472,7 @@ fn measure_frame(
     document: &std::sync::Arc<lumit_core::Document>,
     comp: Uuid,
     frame: u64,
-    quality: lumit_render::Quality,
+    quality: lumit_render::plan::Quality,
 ) {
     renderer.measure_frames(true);
     // The result is the numbers, which the profile sink has already carried
@@ -1752,10 +1756,10 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 if !room {
                     continue;
                 }
-                let provenance = lumit_render::FrameProvenance {
+                let provenance = lumit_render::headless::FrameProvenance {
                     comp: comp_ref.id,
                     frame,
-                    scale_q: lumit_render::preview_scale_q(quality),
+                    scale_q: lumit_render::headless::preview_scale_q(quality),
                     quality,
                 };
                 let uploaded = line_up_frame(
@@ -1993,7 +1997,7 @@ struct Playback {
     /// first present of a run; adaptive mode paces on the clock instead.
     next_present_due: Option<std::time::Instant>,
     /// Frames rendered ahead of the clock, oldest first, waiting to be shown.
-    ring: std::collections::VecDeque<(u64, lumit_render::PreparedFrame)>,
+    ring: std::collections::VecDeque<(u64, lumit_render::headless::PreparedFrame)>,
     /// The document revision the ring and the sound were made from. An edit
     /// moves the store's past it, which is how the run hears about one.
     revision: u64,
@@ -2980,7 +2984,7 @@ fn build_viewer_renderer(
     let progress_stream = stream.clone();
     let progress_view = std::sync::Arc::clone(view);
     renderer.set_progress_sink(Some(std::sync::Arc::new(
-        move |p: lumit_render::FrameProgress| {
+        move |p: lumit_render::profile::FrameProgress| {
             _ = progress_stream.add(WorkerResponse::RenderProgress(
                 crate::api::state::BridgeRenderProgress {
                     frame: p.frame,
@@ -2998,7 +3002,7 @@ fn build_viewer_renderer(
     let profile_stream = stream.clone();
     let profile_view = std::sync::Arc::clone(view);
     renderer.set_profile_sink(Some(std::sync::Arc::new(
-        move |p: lumit_render::FrameProfile| {
+        move |p: lumit_render::profile::FrameProfile| {
             // One line per switching on, never per frame — see
             // `profiling::announce_first`.
             crate::profiling::announce_first(p.frame, p.layers.len(), p.total_ms);
@@ -3117,7 +3121,7 @@ fn worker_loop(
         scope_waiting: None,
         viewed: None,
         prioritised: false,
-        prefetcher: lumit_render::Prefetcher::default(),
+        prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
@@ -3656,10 +3660,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     // turn or two of the loop, thus a frame asked for when it
                     // is shown always comes too late and is composited again.
                     if let Some(key) = name {
-                        let provenance = lumit_render::FrameProvenance {
+                        let provenance = lumit_render::headless::FrameProvenance {
                             comp: comp_id,
                             frame: future,
-                            scale_q: lumit_render::preview_scale_q(quality),
+                            scale_q: lumit_render::headless::preview_scale_q(quality),
                             quality,
                         };
                         let uploaded = line_up_frame(
@@ -3708,10 +3712,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                             },
                         );
                         if let Some(key) = name {
-                            let provenance = lumit_render::FrameProvenance {
+                            let provenance = lumit_render::headless::FrameProvenance {
                                 comp: comp_id,
                                 frame: early,
-                                scale_q: lumit_render::preview_scale_q(quality),
+                                scale_q: lumit_render::headless::preview_scale_q(quality),
                                 quality,
                             };
                             line_up_frame(
@@ -3854,7 +3858,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
 fn present_ring_frame(
     renderer: &mut HeadlessRenderer,
     frame: u64,
-    prepared: &lumit_render::PreparedFrame,
+    prepared: &lumit_render::headless::PreparedFrame,
     stream: &mut WorkerResponseStream,
     view: u32,
 ) {
@@ -4019,10 +4023,10 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
             state.disk_wanted.insert(
                 key,
                 DiskWant {
-                    provenance: lumit_render::FrameProvenance {
+                    provenance: lumit_render::headless::FrameProvenance {
                         comp: comp_id,
                         frame,
-                        scale_q: lumit_render::preview_scale_q(quality),
+                        scale_q: lumit_render::headless::preview_scale_q(quality),
                         quality,
                     },
                     asked: std::time::Instant::now(),
@@ -4331,16 +4335,19 @@ fn drain_to_newest<T>(
 /// strings because that is how every other reference does — the frontend
 /// matches them against the ids its read model already holds.
 #[frb(ignore)]
-fn profile_of(p: &lumit_render::FrameProfile, view: u32) -> crate::api::state::BridgeFrameProfile {
-    let stage = |s: lumit_render::RenderStage| f64::from(p.stage_ms[s.code() as usize]);
+fn profile_of(
+    p: &lumit_render::profile::FrameProfile,
+    view: u32,
+) -> crate::api::state::BridgeFrameProfile {
+    let stage = |s: lumit_render::profile::RenderStage| f64::from(p.stage_ms[s.code() as usize]);
     crate::api::state::BridgeFrameProfile {
         frame: p.frame,
         total_ms: f64::from(p.total_ms),
-        plan_ms: stage(lumit_render::RenderStage::Planning),
-        decode_ms: stage(lumit_render::RenderStage::Decoding),
-        build_ms: stage(lumit_render::RenderStage::Building),
-        composite_ms: stage(lumit_render::RenderStage::Compositing),
-        present_ms: stage(lumit_render::RenderStage::Presenting),
+        plan_ms: stage(lumit_render::profile::RenderStage::Planning),
+        decode_ms: stage(lumit_render::profile::RenderStage::Decoding),
+        build_ms: stage(lumit_render::profile::RenderStage::Building),
+        composite_ms: stage(lumit_render::profile::RenderStage::Compositing),
+        present_ms: stage(lumit_render::profile::RenderStage::Presenting),
         layers: p
             .layers
             .iter()
@@ -4390,7 +4397,7 @@ fn watched<R>(
     _ = stream.add(WorkerResponse::RenderProgress(
         crate::api::state::BridgeRenderProgress {
             frame,
-            stage: lumit_render::RenderStage::Presenting.code(),
+            stage: lumit_render::profile::RenderStage::Presenting.code(),
             fraction: 1.0,
             done: true,
             view: state.view_id(),
@@ -5022,7 +5029,7 @@ fn trace_scope(
             }
             (width, height, bytes)
         });
-    let still_current = |key: u128, quality: lumit_render::Quality| {
+    let still_current = |key: u128, quality: lumit_render::plan::Quality| {
         state
             .renderer
             .frame_key_presynced(&document, req.comp.id, req.frame, quality)
@@ -5041,10 +5048,10 @@ fn trace_scope(
             let key = state
                 .renderer
                 .frame_key(&document, req.comp.id, req.frame, quality);
-            let provenance = lumit_render::FrameProvenance {
+            let provenance = lumit_render::headless::FrameProvenance {
                 comp: req.comp.id,
                 frame: req.frame,
-                scale_q: lumit_render::preview_scale_q(quality),
+                scale_q: lumit_render::headless::preview_scale_q(quality),
                 quality,
             };
             let made = match key.and_then(crate::framecache::get) {
@@ -5182,7 +5189,7 @@ fn sample_pixels(
             // after the cut. Stale entries are passed over here for the same
             // reason as in `trace_scope`: a dropper reading the picture
             // frame 12 used to show is a wrong number, not a stale one.
-            let still_current = |key: u128, quality: lumit_render::Quality| {
+            let still_current = |key: u128, quality: lumit_render::plan::Quality| {
                 state
                     .renderer
                     .frame_key_presynced(&document, req.comp.id, req.frame, quality)
@@ -5219,10 +5226,10 @@ fn sample_pixels(
                     // back to the previous lens *during* the render, which
                     // only the render can report — hence the count read
                     // either side of it.
-                    let provenance = lumit_render::FrameProvenance {
+                    let provenance = lumit_render::headless::FrameProvenance {
                         comp: req.comp.id,
                         frame: req.frame,
-                        scale_q: lumit_render::preview_scale_q(quality),
+                        scale_q: lumit_render::headless::preview_scale_q(quality),
                         quality,
                     };
                     let made = match name.and_then(crate::framecache::get) {
@@ -5456,7 +5463,7 @@ fn stand_in(
     scale: f32,
     document: &std::sync::Arc<lumit_core::Document>,
     bgra: bool,
-) -> Option<lumit_render::PreparedFrame> {
+) -> Option<lumit_render::headless::PreparedFrame> {
     let view = state.view_id();
     let showing = state
         .stand_ins
@@ -5498,7 +5505,11 @@ fn stand_in(
     all(target_os = "linux", feature = "shared-texture-linux"),
     all(target_os = "macos", feature = "shared-texture-macos")
 ))]
-fn remember_shown(state: &mut WorkerState, comp: Uuid, prepared: &lumit_render::PreparedFrame) {
+fn remember_shown(
+    state: &mut WorkerState,
+    comp: Uuid,
+    prepared: &lumit_render::headless::PreparedFrame,
+) {
     let view = state.view_id();
     state.stand_ins.retain(|(v, c, _)| (*v, *c) != (view, comp));
     state.stand_ins.push((view, comp, prepared.clone()));
@@ -5566,7 +5577,7 @@ fn publish_zero_copy(
 fn send_dmabuf(
     state: &mut WorkerState,
     frame: u64,
-    prepared: &lumit_render::PreparedFrame,
+    prepared: &lumit_render::headless::PreparedFrame,
     stream: &mut WorkerResponseStream,
 ) -> bool {
     let shared = match state
@@ -5669,7 +5680,7 @@ fn publish_zero_copy(
 fn send_shared(
     state: &mut WorkerState,
     frame: u64,
-    prepared: &lumit_render::PreparedFrame,
+    prepared: &lumit_render::headless::PreparedFrame,
     stream: &mut WorkerResponseStream,
 ) -> bool {
     let shared = match state.renderer.present_prepared(prepared, state.view_id()) {
@@ -6202,7 +6213,7 @@ mod tests {
             scope_waiting: None,
             viewed: None,
             prioritised: false,
-            prefetcher: lumit_render::Prefetcher::default(),
+            prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),

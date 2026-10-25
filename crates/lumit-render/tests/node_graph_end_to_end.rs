@@ -241,11 +241,11 @@ fn key_of(doc: &Arc<Document>, comp: Uuid) -> lumit_eval::FrameKey {
 
 /// Half preview resolution: the render scale the Viewer's Auto setting reaches,
 /// which is the one `realise_graph` carries through its Read placements.
-fn half() -> lumit_render::Quality {
-    lumit_render::Quality {
+fn half() -> lumit_render::plan::Quality {
+    lumit_render::plan::Quality {
         auto_res: true,
         display_scale: 0.5,
-        ..lumit_render::Quality::default()
+        ..lumit_render::plan::Quality::default()
     }
 }
 
@@ -977,7 +977,7 @@ fn plate_alone() -> (Arc<Document>, Uuid) {
 /// The middle pixel in scene-linear floats, premultiplied as the composite is.
 fn linear_at(r: &mut HeadlessRenderer, (doc, comp): (Arc<Document>, Uuid)) -> [f32; 4] {
     let (px, w, _) = r
-        .render_preview_linear(&doc, comp, 0, lumit_render::Quality::default())
+        .render_preview_linear(&doc, comp, 0, lumit_render::plan::Quality::default())
         .unwrap();
     let d = ((32 * w + 32) * 4) as usize;
     [px[d], px[d + 1], px[d + 2], px[d + 3]]

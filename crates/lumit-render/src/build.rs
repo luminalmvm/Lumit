@@ -7321,7 +7321,7 @@ mod render_below_at_tests {
     // A clip that fills the frame, and the item and probe the planner reads
     // it by: 10 fps, the rate of the comps here, so a comp frame is a source
     // frame.
-    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::SourceProbe>) {
+    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::source::SourceProbe>) {
         use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
@@ -7342,7 +7342,7 @@ mod render_below_at_tests {
         let mut l = text_layer(0.0);
         l.kind = LayerKind::Footage { item };
         l.transform.position_y = Property::fixed(0.0);
-        let probe = crate::SourceProbe::Video {
+        let probe = crate::source::SourceProbe::Video {
             fps: 10.0,
             width: 320,
             height: 180,
@@ -7526,8 +7526,13 @@ mod render_below_at_tests {
 
             // The plan fetches the clip at both of the plugin's neighbours,
             // each the one real frame it shows then.
-            let jobs =
-                crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+            let jobs = crate::plan::plan_comp_frame(
+                &doc,
+                &outer,
+                0.5,
+                crate::plan::Quality::default(),
+                &probes,
+            );
             let job = jobs.iter().find(|j| j.layer == clip_id).expect("planned");
             assert_eq!(job.source_frame, 5, "{what}");
             assert_eq!(
@@ -7580,7 +7585,13 @@ mod render_below_at_tests {
         let mut direct = sequence.clone();
         direct.effects = vec![previous_frame_effect()];
         let comp = comp_with(10, vec![direct]);
-        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &comp,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let job = jobs.first().expect("planned");
         assert_eq!(job.temporal, vec![(1, 6)]);
         assert!(
@@ -7615,7 +7626,13 @@ mod render_below_at_tests {
         let nested = comp_with(10, vec![alone]);
         let outer = precomp(nested.id, vec![previous_frame_effect()]);
         doc.items.push(ProjectItem::Composition(nested));
-        let jobs = crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &outer,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let lp = decoded(jobs.first().expect("planned"));
         let pixels: HashMap<Uuid, &CompLayerPixels> = [(alone_id, &lp)].into_iter().collect();
         let mut v = vec![outer.id];
@@ -7655,7 +7672,8 @@ mod render_below_at_tests {
         next.id = Uuid::now_v7();
         next.in_point = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
         let cut = comp_with(10, vec![adjust.clone(), next.clone(), footage.clone()]);
-        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let jobs =
+            crate::plan::plan_comp_frame(&doc, &cut, 0.5, crate::plan::Quality::default(), &probes);
         assert!(
             jobs.iter().any(|j| j.layer == next.id),
             "the shot after the cut is planned for the neighbour it is in"
@@ -7680,7 +7698,8 @@ mod render_below_at_tests {
         };
         let gap_id = gap.id;
         let cut = comp_with(10, vec![adjust.clone(), gap]);
-        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let jobs =
+            crate::plan::plan_comp_frame(&doc, &cut, 0.5, crate::plan::Quality::default(), &probes);
         let lp = decoded(jobs.first().expect("the clip after the gap is planned"));
         let pixels: HashMap<Uuid, &CompLayerPixels> = [(gap_id, &lp)].into_iter().collect();
         let mut v = vec![cut.id];
@@ -7703,7 +7722,13 @@ mod render_below_at_tests {
         );
         let comp = comp_with(10, vec![adjust, footage]);
 
-        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &comp,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let job = jobs
             .iter()
             .find(|j| j.layer == footage_id)
@@ -7780,7 +7805,7 @@ mod render_below_at_tests {
                 &doc,
                 comp,
                 0.5,
-                crate::Quality::default(),
+                crate::plan::Quality::default(),
                 &probes,
                 Some(&|_, _, _| held),
             )

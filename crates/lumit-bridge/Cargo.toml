@@ -23,9 +23,8 @@ crate-type = ["cdylib", "staticlib"]
 # that cannot draw has no use anyway; this was `render = default` in all but
 # name, and a "feature" nothing could turn off was a lie in the manifest.
 #
-# The `media` feature (default on) genuinely is optional: pulling lumit-media
-# means linking FFmpeg, and building without it is a real configuration. Footage
-# then does not probe and thumbnails are absent.
+# The `media` feature (default on) turns on footage probing and thumbnails.
+# Building without it still works, footage just doesn't probe.
 [features]
 # Zero-copy is the ONLY Viewer transport: the read-back path that sent
 # every pixel across the FFI boundary is deleted, so all three zero-copy features
@@ -39,7 +38,7 @@ default = [
     "shared-texture-linux",
     "shared-texture-macos",
 ]
-media = ["dep:lumit-media"]
+media = []
 # The Windows zero-copy Viewer path: a shared D3D12 texture the Flutter
 # runner imports directly. Forwards to lumit-render's own feature, which pins
 # the D3D12 backend and pulls the shared-texture GPU code.
@@ -81,7 +80,9 @@ lumit-extensions = { path = "../lumit-extensions" }
 # tier back (see src/realtime.rs). An engine crate, so the docs/05 layering
 # (engine crates never depend on the UI) is unbroken.
 lumit-eval = { path = "../lumit-eval" }
-lumit-media = { path = "../lumit-media", optional = true }
+# Always built, as lumit-render already links it. The `media` feature only
+# turns the bridge's own probing and thumbnails on.
+lumit-media = { path = "../lumit-media" }
 # The OFX host (docs/12). The bridge is the composition root for plugins: it is
 # the one place that knows the user's preferences, the effect catalogue and the
 # render's pass table at once, which is what a scan has to reach.
@@ -97,6 +98,10 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+# The device the renderer opened, and what it says about the card.
+lumit-gpu = { path = "../lumit-gpu" }
+# Where a project's parked frames may sit.
+lumit-cache = { path = "../lumit-cache" }
 # Only to name `SolveError` when an analysis is refused, so the panel's reason
 # is a typed variant rather than a scraped English sentence. Already in
 # the build graph through lumit-render.

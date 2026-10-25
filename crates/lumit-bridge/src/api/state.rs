@@ -403,7 +403,7 @@ pub struct BridgeRenderProgress {
     /// has moved on can be recognised as stale rather than drawn.
     pub frame: u64,
     /// The stage's wire code — 0 planning, 1 decoding, 2 building, 3
-    /// compositing, 4 presenting ([`lumit_render::RenderStage::code`]).
+    /// compositing, 4 presenting ([`lumit_render::profile::RenderStage::code`]).
     pub stage: u32,
     /// How much of the whole frame is done, 0..=1. An estimate built from
     /// fixed stage weights, which is what a progress bar needs and all it can

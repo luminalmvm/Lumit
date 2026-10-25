@@ -1447,7 +1447,7 @@ impl ProjectReference {
         // The adapter's own answer where one has been opened, and the
         // project's setting until then — never a lock on the renderer behind a
         // panel's read.
-        Ok(lumit_render::adapter_sample_count(asked).unwrap_or(asked))
+        Ok(lumit_gpu::adapter_sample_count(asked).unwrap_or(asked))
     }
 
     /// Set how hard the renderer works at the edges of transformed layers.
@@ -1491,7 +1491,7 @@ impl ProjectReference {
     #[frb(sync)]
     pub fn colour_depth_in_use(&self) -> Result<u32, BridgeError> {
         let asked = self.colour_depth()?;
-        Ok(lumit_render::adapter_colour_depth(asked).unwrap_or(asked))
+        Ok(lumit_gpu::adapter_colour_depth(asked).unwrap_or(asked))
     }
 
     /// Set how many bits a channel the compositor works in.

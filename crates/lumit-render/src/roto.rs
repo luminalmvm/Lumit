@@ -63,10 +63,7 @@ use crate::sidecar;
 // What a propagation is asked for
 // ---------------------------------------------------------------------------
 
-/// Everything a propagation reads, shared with the planes tier since both read
-/// a clip the same way ([`crate::frames`]). Named from here so nothing that
-/// spoke of a roto frame before has to learn a second name for it.
-pub use crate::frames::RotoFrames;
+use crate::frames::RotoFrames;
 
 /// What names one propagation's file: the media's own content, and everything
 /// [`lumit_core::roto::key_hash`] covers (the tier version, the settings, the

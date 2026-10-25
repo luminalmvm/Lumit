@@ -1691,9 +1691,9 @@ mod tests {
             let outer = comp(vec![matte_layer, consumer]);
             let outer_id = outer.id;
             doc.items.push(ProjectItem::Composition(outer));
-            let probes: HashMap<Uuid, crate::SourceProbe> = [(
+            let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
                 item,
-                crate::SourceProbe::Video {
+                crate::source::SourceProbe::Video {
                     fps: 60.0,
                     width: 64,
                     height: 64,
@@ -1832,9 +1832,9 @@ mod tests {
         let outer = comp(vec![placed]);
         let outer_id = outer.id;
         doc.items.push(ProjectItem::Composition(outer));
-        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+        let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
             item,
-            crate::SourceProbe::Video {
+            crate::source::SourceProbe::Video {
                 fps: 60.0,
                 width: 64,
                 height: 64,
@@ -1972,16 +1972,17 @@ mod tests {
             motion_blur: lumit_core::model::MotionBlur::default(),
             extra: serde_json::Map::new(),
         };
-        let probe = crate::SourceProbe::Video {
+        let probe = crate::source::SourceProbe::Video {
             fps: 60.0,
             width: 64,
             height: 64,
             frames: 600,
             audio: false,
         };
-        let probes: HashMap<Uuid, crate::SourceProbe> = [(above_item, probe), (below_item, probe)]
-            .into_iter()
-            .collect();
+        let probes: HashMap<Uuid, crate::source::SourceProbe> =
+            [(above_item, probe), (below_item, probe)]
+                .into_iter()
+                .collect();
         let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
         let job_for = |id: Uuid| jobs.iter().find(|j| j.layer == id).expect("planned");
 
@@ -2142,9 +2143,9 @@ mod tests {
             source_layer: None,
             interpretation: Default::default(),
         }));
-        let probes: HashMap<Uuid, crate::SourceProbe> = [(
+        let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
             item,
-            crate::SourceProbe::Video {
+            crate::source::SourceProbe::Video {
                 fps: 60.0,
                 width: 64,
                 height: 64,

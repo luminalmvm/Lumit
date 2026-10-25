@@ -11,7 +11,6 @@
 use lumit_audio::mix::MixPlan;
 use lumit_audio::stream::Source;
 use lumit_core::model::{Document, LayerKind, ProjectItem};
-pub use lumit_core::pixels::{px_tile, solid_rgba, srgb_decode, srgb_encode};
 use lumit_core::retime::Interpolation;
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -333,14 +333,20 @@ impl LayerReference {
         if lumit_ml::synthesis::installed_identity().is_none() {
             return BridgeFlowEngineState::PackMissing;
         }
-        match lumit_render::synthesis_refusal(self.layer_id) {
+        match lumit_render::decode::synthesis_refusal(self.layer_id) {
             None => BridgeFlowEngineState::Ready,
-            Some(lumit_render::SynthesisRefusal::RuntimeMissing) => {
+            Some(lumit_render::decode::SynthesisRefusal::RuntimeMissing) => {
                 BridgeFlowEngineState::RuntimeMissing
             }
-            Some(lumit_render::SynthesisRefusal::PackMissing) => BridgeFlowEngineState::PackMissing,
-            Some(lumit_render::SynthesisRefusal::FloatSource) => BridgeFlowEngineState::FloatSource,
-            Some(lumit_render::SynthesisRefusal::Failed(_)) => BridgeFlowEngineState::Failed,
+            Some(lumit_render::decode::SynthesisRefusal::PackMissing) => {
+                BridgeFlowEngineState::PackMissing
+            }
+            Some(lumit_render::decode::SynthesisRefusal::FloatSource) => {
+                BridgeFlowEngineState::FloatSource
+            }
+            Some(lumit_render::decode::SynthesisRefusal::Failed(_)) => {
+                BridgeFlowEngineState::Failed
+            }
         }
     }
 }

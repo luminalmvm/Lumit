@@ -2661,7 +2661,7 @@ fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option
         }
     }
     let answer: &'static Option<String> = Box::leak(Box::new(
-        lumit_render::validate_shader(&program.assembled)
+        lumit_gpu::fx::validate(&program.assembled)
             .err()
             .map(|message| program.remap_error(&message)),
     ));

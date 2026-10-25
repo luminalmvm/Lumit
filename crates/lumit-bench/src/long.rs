@@ -16,7 +16,7 @@
 //!   small loop in the same order the worker's takes: file what the read-ahead
 //!   threads have decoded, post the coming frames' decodes and the files of
 //!   the clips about to start, render. The threads themselves are the
-//!   application's own ([`lumit_render::Prefetcher`]).
+//!   application's own ([`lumit_render::prefetch::Prefetcher`]).
 //! - **The read model** the interface is sent after an edit is built in
 //!   `lumit-bridge` too, which is a C library and cannot be linked from here.
 //!   B24 makes the engine reads that builder makes for every clip of every
@@ -33,7 +33,7 @@ use lumit_core::{DocumentStore, Op};
 use lumit_project::JournalFile;
 use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
-use lumit_render::Prefetcher;
+use lumit_render::prefetch::Prefetcher;
 use uuid::Uuid;
 
 use crate::comp::rat;

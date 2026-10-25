@@ -8,7 +8,7 @@
 
 use lumit_core::model::{Composition, Document, LinearColour, ProjectItem};
 use lumit_core::time::{Duration, FrameRate, Rational};
-use lumit_render::{HeadlessRenderer, Quality};
+use lumit_render::{headless::HeadlessRenderer, plan::Quality};
 use std::time::Instant;
 use uuid::Uuid;
 

@@ -11,7 +11,7 @@ use lumit_core::model::{
     Switches, TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-use lumit_render::{HeadlessRenderer, Quality};
+use lumit_render::{headless::HeadlessRenderer, plan::Quality};
 use std::time::Instant;
 use uuid::Uuid;
 

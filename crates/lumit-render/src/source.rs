@@ -219,7 +219,7 @@ pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interp
     }
 }
 
-pub use lumit_media::MediaSource;
+use lumit_media::MediaSource;
 
 /// What an analysis of this item reads and what its answers are filed under:
 /// the file as the item interprets it, and the file's fingerprint, marked with
