@@ -367,7 +367,7 @@ pub(crate) struct Online {
     /// Notes this copy's person wrote that the server had not been sent
     /// when this was written. They are sent when it is found.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) notes: Vec<crate::Note>,
+    pub(crate) notes: Vec<crate::activity::Note>,
 }
 
 /// Whether this Lumit reads what is kept under `finding`. A guest's of a

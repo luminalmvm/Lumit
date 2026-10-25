@@ -23,24 +23,20 @@
 //! moment one for each address it tries its host at. A member of a project
 //! kept online has a reader and a writer too.
 
-mod activity;
-mod bulk;
-mod guest;
-mod host;
-mod invite;
-mod kept;
+pub mod activity;
+pub mod bulk;
+pub mod guest;
+pub mod host;
+pub mod invite;
+pub mod kept;
 mod local;
 pub mod online;
 mod reach;
 mod wire;
 
-pub use activity::{Note, Sitting, NOTE_LENGTH};
-pub use bulk::{Footage, Held, Limits, News, Wanted};
-pub use guest::{join, resume, Guest, Joining, Resuming};
-pub use host::{host, Host};
-pub use invite::{key_from, key_text, Invite, Lock, LINK, LINK_SCHEME, MAX_ADDRESSES};
-pub use kept::{before_returns, forget, forget_before_return, BeforeReturn};
-pub use lumit_core::shared::Conflict;
+use bulk::{Footage, Held, Limits, Wanted};
+use guest::Guest;
+use host::Host;
 
 use lumit_core::CompTime;
 use serde::{Deserialize, Serialize};
@@ -531,6 +527,12 @@ impl Sharing {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::bulk::News;
+    use super::guest::join;
+    use super::guest::resume;
+    use super::host::host;
+    use super::invite::Invite;
+    use super::invite::Lock;
     use super::*;
     use lumit_core::model::{LinearColour, ProjectItem, SolidDef};
     use lumit_core::{Document, DocumentStore, Op};
@@ -713,7 +715,7 @@ mod tests {
             heard.lock().contains(&Event::Away)
         });
         let orphaned = add_solid(&joined, "made with no host");
-        let again = crate::host(
+        let again = crate::host::host(
             hosted.clone(),
             "Host",
             LOOPBACK,
@@ -801,7 +803,7 @@ mod tests {
 
         // The host opens the file it saved and shares it again.
         let hosted = Arc::new(DocumentStore::new(file));
-        let again = crate::host(
+        let again = crate::host::host(
             hosted.clone(),
             "Host",
             LOOPBACK,
@@ -858,7 +860,7 @@ mod tests {
         drop(guest);
         let afresh = Arc::new(DocumentStore::new(Document::clone(&hosted.snapshot())));
         let host =
-            crate::host(afresh, "Host", LOOPBACK, 0, Some(key), None, None, quiet()).unwrap();
+            crate::host::host(afresh, "Host", LOOPBACK, 0, Some(key), None, None, quiet()).unwrap();
         assert_eq!(host.restored(), 0);
     }
 

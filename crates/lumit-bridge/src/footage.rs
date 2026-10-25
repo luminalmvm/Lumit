@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 use lumit_core::model::{FootageItem, ProjectItem};
 use lumit_core::{Document, DocumentStore};
 use lumit_render::standin::Smaller;
-use lumit_share::{Footage, Held, Limits, News, Wanted};
+use lumit_share::{bulk::Footage, bulk::Held, bulk::Limits, bulk::News, bulk::Wanted};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -1408,7 +1408,7 @@ mod tests {
         // sharing, and a folder of its own for what it is sent.
         let quiet: lumit_share::Events = Arc::new(|_| {});
         let loopback = IpAddr::V4(Ipv4Addr::LOCALHOST);
-        let host = lumit_share::host(
+        let host = lumit_share::host::host(
             hosted.clone(),
             "Host",
             loopback,
@@ -1420,7 +1420,7 @@ mod tests {
         )
         .unwrap();
         let (document, joining) =
-            lumit_share::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
+            lumit_share::guest::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
         let joined = Arc::new(DocumentStore::new(document));
         let guest = joining.start(joined.clone(), quiet).unwrap();
         let (host_project, guest_project) = (Uuid::now_v7(), Uuid::now_v7());
@@ -1561,7 +1561,7 @@ mod tests {
             })
         };
         let events = notes_for(projects.0);
-        let host = lumit_share::host(
+        let host = lumit_share::host::host(
             hosted.clone(),
             "Host",
             loopback,
@@ -1573,7 +1573,7 @@ mod tests {
         )
         .unwrap();
         let (document, joining) =
-            lumit_share::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
+            lumit_share::guest::join(host.invite("127.0.0.1"), "Guest", None).unwrap();
         let joined = Arc::new(DocumentStore::new(document));
         let guest = joining
             .start(joined.clone(), notes_for(projects.1))

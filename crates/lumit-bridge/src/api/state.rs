@@ -970,7 +970,7 @@ impl LumitBridgeState {
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
         let copy = doc.id;
         let ours = crate::api::share::copy_is_at(copy, &path);
-        let resumed = ours.then(|| lumit_share::resume(&mut doc, beside));
+        let resumed = ours.then(|| lumit_share::guest::resume(&mut doc, beside));
         let (mut doc, resuming) = match resumed.flatten() {
             Some((kept, resuming)) => (kept, Some(resuming)),
             None => (doc, None),

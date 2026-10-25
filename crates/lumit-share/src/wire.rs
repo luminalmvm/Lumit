@@ -1,7 +1,7 @@
 //! What crosses between a host and a guest, and the encrypted channel it
 //! crosses in. Used from the reader and writer threads.
 
-use crate::{Held, Person, Presence, Refusal, ShareError};
+use crate::{bulk::Held, Person, Presence, Refusal, ShareError};
 use lumit_core::{Document, Op};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
