@@ -535,13 +535,23 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
         if (clip.id.toString() != picked.clip) continue;
-        track.entry.layer.deleteClip(clip: clip.id);
-        setState(() => _selectedClip = null);
-        _afterWrite();
+        _deleteClip(track, clip);
         return true;
       }
     }
     return false;
+  }
+
+  /// A clip deleted, and its row with it when it was the last one there: an
+  /// empty row is a silent bar with nothing on it to take hold of.
+  void _deleteClip(AudioTrackRow track, BridgeClip clip) {
+    if (track.entry.info.clips.length == 1) {
+      track.entry.layer.delete();
+    } else {
+      track.entry.layer.deleteClip(clip: clip.id);
+    }
+    setState(() => _selectedClip = null);
+    _afterWrite();
   }
 
   /// The channels the picked keyframes sit on, resolved afresh against the read
@@ -2107,9 +2117,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             close(null);
             // A gap, not a closed row: what follows keeps the beat it was cut
             // to.
-            track.entry.layer.deleteClip(clip: clip.id);
-            setState(() => _selectedClip = null);
-            _afterWrite();
+            _deleteClip(track, clip);
           },
           child: Text(l10n.clipDelete),
         ),

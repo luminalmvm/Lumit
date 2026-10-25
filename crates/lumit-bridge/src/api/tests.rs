@@ -4546,20 +4546,23 @@ fn a_dropped_clip_overlaps_or_overwrites() {
 }
 
 /// A clip moved onto another row is one undo step across two of them, and a
-/// move with no target makes a row of its own directly below.
+/// move with no target makes a row of its own. A row left empty goes, since
+/// an empty row is a silent bar nothing can take hold of.
 #[test]
 fn a_clip_moves_between_rows_in_one_step() {
     use crate::api::layer::BridgeLayerKind;
     let (project, comp, layer, footage) = audio_row();
     let other = comp.add_sequence_layer(None).expect("a second row");
     let clip = layer.get_clips().expect("clips").remove(0);
+    let rows = comp.get_layers().expect("layers").len();
 
     layer
         .move_clip(clip.id, Some(other), clip.start_frame + 10, false)
         .expect("moved");
-    assert!(
-        layer.get_clips().expect("clips").is_empty(),
-        "off the row it came from"
+    assert_eq!(
+        comp.get_layers().expect("layers").len(),
+        rows - 1,
+        "the emptied row is gone"
     );
     let landed = other.get_clips().expect("clips");
     assert_eq!(landed.len(), 1);
@@ -4573,13 +4576,13 @@ fn a_clip_moves_between_rows_in_one_step() {
     );
     assert!(other.get_clips().expect("clips").is_empty());
 
-    // No target: a new audio-only Sequence layer directly below the source.
-    let before = comp.get_layers().expect("layers").len();
+    // No target: a new audio-only Sequence layer, in the place of the row it
+    // emptied.
     layer
         .move_clip(clip.id, None, clip.start_frame, false)
         .expect("moved to a new row");
     let layers = comp.get_layers().expect("layers");
-    assert_eq!(layers.len(), before + 1);
+    assert_eq!(layers.len(), rows);
     let made = layers
         .iter()
         .find(|l| !l.equals(&layer) && l.get_clips().is_ok_and(|c| c.len() == 1))

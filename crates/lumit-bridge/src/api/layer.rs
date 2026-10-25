@@ -4832,7 +4832,17 @@ impl LayerReference {
         let comp = self.composition()?;
         let (mut clips, index) = self.clips_and_index(clip)?;
         let moved = clips.remove(index);
-        let mut ops = self.clip_ops(clips, layer.start_offset)?;
+        // A row left with no clips goes, rather than staying as a silent bar
+        // with nothing on it to take hold of.
+        let emptied = clips.is_empty();
+        let mut ops = if emptied {
+            vec![lumit_core::Op::RemoveLayer {
+                comp: self.comp_id,
+                layer: self.layer_id,
+            }]
+        } else {
+            self.clip_ops(clips, layer.start_offset)?
+        };
 
         match target {
             Some(target) => {
@@ -4880,8 +4890,9 @@ impl LayerReference {
                 crate::edits::solo_on_arrival(&mut row, comp.layers.iter());
                 ops.push(lumit_core::Op::AddLayer {
                     comp: self.comp_id,
-                    // Directly below the row it came off, where the eye looks.
-                    index: index + 1,
+                    // Directly below the row it came off, where the eye looks,
+                    // or in its place when that row has gone.
+                    index: if emptied { index } else { index + 1 },
                     layer: Box::new(row),
                 });
             }
