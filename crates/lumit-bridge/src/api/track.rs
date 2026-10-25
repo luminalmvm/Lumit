@@ -547,7 +547,7 @@ fn snapshot(
 pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
-) -> Result<(lumit_media::MediaSource, Fingerprint), BridgeError> {
+) -> Result<(lumit_media::sequence::MediaSource, Fingerprint), BridgeError> {
     media_source_in(layer.project_id, media)
 }
 
@@ -556,7 +556,7 @@ pub(crate) fn media_source(
 pub(crate) fn media_source_in(
     project: Uuid,
     media: Uuid,
-) -> Result<(lumit_media::MediaSource, Fingerprint), BridgeError> {
+) -> Result<(lumit_media::sequence::MediaSource, Fingerprint), BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
     let project = projects
         .get(&project)

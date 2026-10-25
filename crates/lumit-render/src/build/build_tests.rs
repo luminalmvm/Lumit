@@ -79,7 +79,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         width: 480,
         height: 270,
         rgba: vec![0u8; 480 * 270 * 4].into(),
-        format: lumit_media::PixelFormat::Srgb8,
+        format: lumit_media::decode::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
@@ -375,7 +375,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         width: 1920,
         height: 1080,
         rgba: vec![0u8; 16].into(),
-        format: lumit_media::PixelFormat::Srgb8,
+        format: lumit_media::decode::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
@@ -933,7 +933,7 @@ fn a_float_plate_reaches_the_draw_list_still_float() {
     assert_eq!(draws.len(), 1);
     match &draws[0].source {
         DrawSource::Pixels { format, rgba, .. } => {
-            assert_eq!(*format, lumit_media::PixelFormat::LinearF32);
+            assert_eq!(*format, lumit_media::decode::PixelFormat::LinearF32);
             // Eight bytes a pixel, and the value untouched on the way through.
             assert_eq!(rgba.len(), 4 * 4 * 16);
             assert_eq!(float_px(rgba, 0)[0], 4.0);
@@ -1018,7 +1018,7 @@ fn float_layer_comp(
         width: 4,
         height: 4,
         rgba: rgba.into(),
-        format: lumit_media::PixelFormat::LinearF32,
+        format: lumit_media::decode::PixelFormat::LinearF32,
         natural_w: 4,
         natural_h: 4,
         temporal: Vec::new(),

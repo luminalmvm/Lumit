@@ -198,7 +198,7 @@ fn media_source(
     doc: &Document,
     item: Uuid,
     media: &lumit_core::model::MediaRef,
-) -> lumit_media::MediaSource {
+) -> lumit_media::sequence::MediaSource {
     let footage = match doc.item(item) {
         Some(lumit_core::model::ProjectItem::Footage(f)) => Some(f),
         _ => None,
@@ -211,7 +211,7 @@ fn media_source(
         ),
         _ => (None, None, None),
     };
-    lumit_media::MediaSource {
+    lumit_media::sequence::MediaSource {
         path: PathBuf::from(&media.absolute_path),
         sequence_fps,
         source_layer,

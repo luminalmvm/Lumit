@@ -424,7 +424,7 @@ pub fn set_f32_px(buf: &mut [u8], n: usize, v: [f32; 4]) {
 }
 
 /// [`blend_rgba`] for the float frames a float source decodes to
-/// (`lumit_media::PixelFormat::LinearF32`).
+/// (`lumit_media::decode::PixelFormat::LinearF32`).
 ///
 /// The same crossfade, done on the numbers rather than on bytes. Blending
 /// floats *as* bytes would not dim a highlight, it would shred it: the four
@@ -509,7 +509,7 @@ pub fn dissolve_rgba(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
     }
 }
 
-/// [`dissolve_rgba`] for float frames (`lumit_media::PixelFormat::LinearF32`),
+/// [`dissolve_rgba`] for float frames (`lumit_media::decode::PixelFormat::LinearF32`),
 /// which are linear already, with no clamp at the top for [`blend_f32`]'s
 /// reasons.
 pub fn dissolve_f32(top: &mut [u8], under: Option<&[u8]>, gain: f64) {

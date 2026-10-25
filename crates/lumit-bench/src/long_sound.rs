@@ -249,7 +249,7 @@ impl SoundHarness {
             // Left over from a run that was stopped: it has to be cold.
             let _ = std::fs::remove_dir_all(&cache);
             let t = Instant::now();
-            let sound = lumit_media::SoundSource::file(&self.file);
+            let sound = lumit_media::audio::SoundSource::file(&self.file);
             let pyramid = lumit_audio::peaks::load_or_build(&sound, RATE, Some(&cache));
             best = best.min(elapsed_ms(t));
             let _ = std::fs::remove_dir_all(&cache);

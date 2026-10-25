@@ -647,7 +647,7 @@ impl lumit_cache::ByteSized for FrameTexture {
 /// under [`HeadlessRenderer::preload_decoded`] makes that render a cache hit.
 pub struct PrefetchWant {
     pub item: Uuid,
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
 }
@@ -3821,7 +3821,7 @@ impl AudioJobsBuilder {
         item: Uuid,
         path: PathBuf,
         chosen: &lumit_core::model::AudioStreams,
-    ) -> Option<lumit_media::SoundSource> {
+    ) -> Option<lumit_media::audio::SoundSource> {
         let count = self.item_audio_streams(item, &path);
         let there: Vec<u32> = chosen
             .places()
@@ -3829,7 +3829,7 @@ impl AudioJobsBuilder {
             .copied()
             .filter(|place| *place < count)
             .collect();
-        (!there.is_empty()).then(|| lumit_media::SoundSource::streams_of(path, &there))
+        (!there.is_empty()).then(|| lumit_media::audio::SoundSource::streams_of(path, &there))
     }
 
     /// Whether footage `item` at `path` carries an audio stream at all.
@@ -3924,8 +3924,8 @@ pub(crate) fn media_path(m: &lumit_core::model::MediaRef) -> PathBuf {
 
 /// [`footage_path`] together with what the item says it is: one file, or the
 /// numbered run of stills that file belongs to.
-fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
-    lumit_media::MediaSource {
+fn footage_source(f: &FootageItem) -> lumit_media::sequence::MediaSource {
+    lumit_media::sequence::MediaSource {
         path: footage_path(f),
         sequence_fps: f.sequence_fps(),
         source_layer: f.source_layer,
@@ -3960,7 +3960,7 @@ pub fn source_frames_used(
     let Some(comp) = doc.comp(comp_id) else {
         return used;
     };
-    let mut probes: HashMap<Uuid, (lumit_media::MediaSource, Probe)> = HashMap::new();
+    let mut probes: HashMap<Uuid, (lumit_media::sequence::MediaSource, Probe)> = HashMap::new();
     for id in lumit_core::model::comp_footage_items(doc, comp) {
         if let Some(ProjectItem::Footage(f)) = doc.item(id) {
             let src = footage_source(f);
@@ -3970,7 +3970,7 @@ pub fn source_frames_used(
     }
     // The originals as probed above, and no proxies, which is what this walk
     // has always planned against.
-    struct Originals<'a>(&'a HashMap<Uuid, (lumit_media::MediaSource, Probe)>);
+    struct Originals<'a>(&'a HashMap<Uuid, (lumit_media::sequence::MediaSource, Probe)>);
     impl SourceProbes for Originals<'_> {
         fn probe(&self, item: Uuid) -> SourceProbe {
             seen(self.0.get(&item).map(|(_, p)| p))
@@ -4039,7 +4039,7 @@ pub fn source_frames_used(
 /// no slate, no picture at all, since flagging a valid audio-only source as
 /// "missing" would be actively wrong. A clean video caches its exact rate and
 /// frame count, warming the on-disk frame index so the decoder open reuses it.
-fn probe_item(src: &lumit_media::MediaSource) -> Probe {
+fn probe_item(src: &lumit_media::sequence::MediaSource) -> Probe {
     if !src.on_disk().is_file() {
         return Probe::Slate;
     }
@@ -4065,12 +4065,12 @@ fn probe_item(src: &lumit_media::MediaSource) -> Probe {
 struct Probes {
     /// Probe results by footage id, kept beside the source they were read
     /// from, so a relink or a run of stills read at a new rate probes again.
-    originals: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
+    originals: HashMap<Uuid, (lumit_media::sequence::MediaSource, Probe)>,
     /// The same, for each item's **proxy** file, kept beside its source rather
     /// than under the id alone, so attaching a different proxy (or the one
     /// MAKE-PROXY has just written) probes again instead of answering about a
     /// file that is no longer the one referenced.
-    proxies: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
+    proxies: HashMap<Uuid, (lumit_media::sequence::MediaSource, Probe)>,
 }
 
 /// A thread that probes files a little before playback reaches them
@@ -4079,8 +4079,8 @@ struct Probes {
 /// Nothing waits on it. An answer that is not back when a frame asks is
 /// simply made on the spot ([`ProbeView`]), and the two are the same answer.
 struct ProbeAhead {
-    tx: std::sync::mpsc::SyncSender<(Uuid, lumit_media::MediaSource)>,
-    rx: std::sync::mpsc::Receiver<(Uuid, lumit_media::MediaSource, Probe)>,
+    tx: std::sync::mpsc::SyncSender<(Uuid, lumit_media::sequence::MediaSource)>,
+    rx: std::sync::mpsc::Receiver<(Uuid, lumit_media::sequence::MediaSource, Probe)>,
     /// What has been sent and not yet answered, so a file is sent once.
     /// Emptied when it grows: an item deleted while its answer was pending
     /// never comes off it, and the worst a second probe does is cost time.
@@ -4094,8 +4094,9 @@ impl ProbeAhead {
     const WAITING: usize = 32;
 
     fn start() -> Self {
-        let (tx, jobs) =
-            std::sync::mpsc::sync_channel::<(Uuid, lumit_media::MediaSource)>(Self::WAITING);
+        let (tx, jobs) = std::sync::mpsc::sync_channel::<(Uuid, lumit_media::sequence::MediaSource)>(
+            Self::WAITING,
+        );
         let (done, rx) = std::sync::mpsc::sync_channel(Self::WAITING);
         // A thread that will not start leaves every job unanswered, and
         // every file is then probed when its frame asks, as before.
@@ -4192,11 +4193,11 @@ impl SourceProbes for ProbeView<'_> {
         // A proxy is one file, never a numbered run: it stands in for the
         // whole of the original, however many files that was. It is a copy of
         // the same frames, so it is read the way its original is.
-        let src = lumit_media::MediaSource {
+        let src = lumit_media::sequence::MediaSource {
             path: media_path(proxy),
             interpret: match self.doc.item(item) {
                 Some(ProjectItem::Footage(f)) => crate::source::interpretation(f),
-                _ => lumit_media::Interpretation::default(),
+                _ => lumit_media::interpret::Interpretation::default(),
             },
             ..Default::default()
         }
@@ -5188,7 +5189,10 @@ mod tests {
         push_layer(&mut doc, sized, LayerKind::Footage { item: audio_id });
         r.probes.borrow_mut().originals.insert(
             audio_id,
-            (lumit_media::MediaSource::file("audio.wav"), Probe::NoVideo),
+            (
+                lumit_media::sequence::MediaSource::file("audio.wav"),
+                Probe::NoVideo,
+            ),
         );
         let missing_id = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: missing_id });

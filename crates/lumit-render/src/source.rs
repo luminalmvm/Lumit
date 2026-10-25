@@ -166,7 +166,9 @@ pub fn effective_media<'a>(
 /// project, so the ones that size a frame or a clip are held to what real
 /// footage could want and anything outside that reads as the file's own.
 #[must_use]
-pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interpretation {
+pub fn interpretation(
+    f: &lumit_core::model::FootageItem,
+) -> lumit_media::interpret::Interpretation {
     use lumit_core::interpretation::{AlphaMode, FieldOrder, LinearLight, Pulldown};
     /// After Effects' own ceiling, and far past any use of it.
     const MOST_LOOPS: u32 = 9999;
@@ -174,11 +176,13 @@ pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interp
     let within = |n: u32, d: u32, lo: f64, hi: f64| {
         d > 0 && (lo..=hi).contains(&(f64::from(n) / f64::from(d)))
     };
-    lumit_media::Interpretation {
+    lumit_media::interpret::Interpretation {
         alpha: match it.alpha {
-            AlphaMode::Straight => lumit_media::Alpha::Straight,
-            AlphaMode::Ignore => lumit_media::Alpha::Ignore,
-            AlphaMode::Premultiplied { matte } => lumit_media::Alpha::Premultiplied(matte),
+            AlphaMode::Straight => lumit_media::interpret::Alpha::Straight,
+            AlphaMode::Ignore => lumit_media::interpret::Alpha::Ignore,
+            AlphaMode::Premultiplied { matte } => {
+                lumit_media::interpret::Alpha::Premultiplied(matte)
+            }
         },
         invert_alpha: it.invert_alpha,
         // A run of stills has no rate of its own to conform, only the one the
@@ -189,15 +193,15 @@ pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interp
             .map(|r| (r.num(), r.den()))
             .filter(|(n, d)| within(*n, *d, 0.01, 999.0)),
         fields: match it.fields {
-            FieldOrder::Off => lumit_media::Fields::Off,
-            FieldOrder::Upper => lumit_media::Fields::Upper,
-            FieldOrder::Lower => lumit_media::Fields::Lower,
+            FieldOrder::Off => lumit_media::interpret::Fields::Off,
+            FieldOrder::Upper => lumit_media::interpret::Fields::Upper,
+            FieldOrder::Lower => lumit_media::interpret::Fields::Lower,
         },
         preserve_edges: it.preserve_edges,
         pulldown: match it.pulldown {
-            Pulldown::Off => lumit_media::Pulldown::Off,
-            Pulldown::ThreeTwo { phase } => lumit_media::Pulldown::ThreeTwo(phase % 5),
-            Pulldown::Advanced { phase } => lumit_media::Pulldown::Advanced(phase % 5),
+            Pulldown::Off => lumit_media::interpret::Pulldown::Off,
+            Pulldown::ThreeTwo { phase } => lumit_media::interpret::Pulldown::ThreeTwo(phase % 5),
+            Pulldown::Advanced { phase } => lumit_media::interpret::Pulldown::Advanced(phase % 5),
         },
         pixel_aspect: it
             .pixel_aspect
@@ -219,7 +223,7 @@ pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interp
     }
 }
 
-use lumit_media::MediaSource;
+use lumit_media::sequence::MediaSource;
 
 /// What an analysis of this item reads and what its answers are filed under:
 /// the file as the item interprets it, and the file's fingerprint, marked with
@@ -234,7 +238,7 @@ pub fn analysed(
     let interpret = interpretation(f);
     // The rate only re-times the same pictures in the same order, so an
     // analysis made before it was set still stands.
-    let pictures = lumit_media::Interpretation {
+    let pictures = lumit_media::interpret::Interpretation {
         conform_fps: None,
         ..interpret
     };
@@ -262,7 +266,9 @@ pub fn analysed(
 ///
 /// Decodes up to three frames, so it is for a worker thread.
 #[must_use]
-pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha> {
+pub fn guess_alpha(
+    src: &lumit_media::sequence::MediaSource,
+) -> Option<lumit_media::interpret::Alpha> {
     use lumit_media::interpret::guess_alpha;
     let raw = src.raw();
     if let Some(frame) = lumit_media::read_own(&raw, 0, None) {
@@ -270,7 +276,7 @@ pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha>
     }
     let index = crate::media_index::load_or_build_index(&raw).ok()?;
     let frames = index.frame_count();
-    let mut decoder = lumit_media::VideoDecoder::open(&raw, index).ok()?;
+    let mut decoder = lumit_media::decode::VideoDecoder::open(&raw, index).ok()?;
     // The middle first: a clip often opens and closes on nothing at all.
     let mut tried = Vec::new();
     for n in [frames / 2, 0, frames.saturating_sub(1)] {
@@ -291,16 +297,18 @@ pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha>
 ///
 /// Decodes up to thirty full frames, so it is for a worker thread.
 #[must_use]
-pub fn guess_pulldown(src: &lumit_media::MediaSource) -> lumit_media::Pulldown {
+pub fn guess_pulldown(
+    src: &lumit_media::sequence::MediaSource,
+) -> lumit_media::interpret::Pulldown {
     use lumit_media::interpret::{comb_score, guess_pulldown};
     const RUN: usize = 15;
     let raw = src.raw();
     let Ok(index) = crate::media_index::load_or_build_index(&raw) else {
-        return lumit_media::Pulldown::Off;
+        return lumit_media::interpret::Pulldown::Off;
     };
     let frames = index.frame_count();
-    let Ok(mut decoder) = lumit_media::VideoDecoder::open(&raw, index) else {
-        return lumit_media::Pulldown::Off;
+    let Ok(mut decoder) = lumit_media::decode::VideoDecoder::open(&raw, index) else {
+        return lumit_media::interpret::Pulldown::Off;
     };
     let mut starts = vec![0];
     if frames / 2 >= RUN {
@@ -312,11 +320,11 @@ pub fn guess_pulldown(src: &lumit_media::MediaSource) -> lumit_media::Pulldown {
             .map(|frame| comb_score(&frame))
             .collect();
         let guess = guess_pulldown(&scores, start);
-        if guess != lumit_media::Pulldown::Off {
+        if guess != lumit_media::interpret::Pulldown::Off {
             return guess;
         }
     }
-    lumit_media::Pulldown::Off
+    lumit_media::interpret::Pulldown::Off
 }
 
 /// Whether a proxy's own probe agrees with the original's about *what footage

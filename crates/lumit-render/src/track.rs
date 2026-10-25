@@ -2001,11 +2001,11 @@ pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
 #[must_use]
 pub fn job_for(
     layer: &Layer,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let LayerKind::Footage { item } = layer.kind else {
         return None;
     };
@@ -2088,11 +2088,11 @@ pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
 #[must_use]
 pub fn planar_job_for(
     layer: &Layer,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let LayerKind::Footage { .. } = layer.kind else {
         return None;
     };
@@ -2180,11 +2180,11 @@ pub fn track_points_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstan
 pub fn points_job_for(
     layer: &Layer,
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let analysis = Analysis::of(fx, layer)?;
     Some(Job {
         media: fx.id,
@@ -2261,7 +2261,7 @@ pub fn job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Opt
 /// [`LumaFrames`] over a media file, through the same frame index and decoder
 /// every other consumer opens (docs/impl/media-io.md §2).
 pub struct MediaLuma {
-    decoder: lumit_media::VideoDecoder,
+    decoder: lumit_media::decode::VideoDecoder,
     frames: usize,
     width: u32,
     height: u32,
@@ -2272,11 +2272,11 @@ impl MediaLuma {
     /// Open `path` for tracking. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the analysis thread.
     #[must_use]
-    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
+    pub fn open(path: &lumit_media::sequence::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
-        let decoder = lumit_media::VideoDecoder::open(path, index).ok()?;
+        let decoder = lumit_media::decode::VideoDecoder::open(path, index).ok()?;
         Some(MediaLuma {
             decoder,
             frames,

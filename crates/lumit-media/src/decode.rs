@@ -731,7 +731,7 @@ fn scaled_size(
     target_width: Option<u32>,
     pixel_aspect: Option<(u32, u32)>,
 ) -> (i32, i32) {
-    let it = crate::Interpretation {
+    let it = crate::interpret::Interpretation {
         pixel_aspect,
         ..Default::default()
     };
@@ -1052,7 +1052,7 @@ mod tests {
     /// the clip shows the wrong moment.
     #[test]
     fn an_interpreted_source_is_read_in_interpreted_frames() {
-        use crate::{Fields, Interpretation, MediaSource};
+        use crate::{interpret::Fields, interpret::Interpretation, sequence::MediaSource};
         let dir = tempfile::tempdir().unwrap();
         let Some(file) = fixture(dir.path()) else {
             eprintln!("skipping: no ffmpeg CLI available");
@@ -1135,7 +1135,10 @@ mod tests {
     fn real_interlaced_and_telecined_video_comes_apart_into_its_frames() {
         use crate::index::tests_support::ffmpeg_bin;
         use crate::interpret::{comb_score, guess_pulldown};
-        use crate::{Fields, Interpretation, MediaSource, Pulldown};
+        use crate::{
+            interpret::Fields, interpret::Interpretation, interpret::Pulldown,
+            sequence::MediaSource,
+        };
         let dir = tempfile::tempdir().unwrap();
         let Some(bin) = ffmpeg_bin() else {
             eprintln!("skipping: no ffmpeg CLI available");

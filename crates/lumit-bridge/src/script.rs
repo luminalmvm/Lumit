@@ -307,7 +307,7 @@ pub(crate) fn unreadable(path: &Path) -> ScriptError {
 pub(crate) fn footage_source(
     state: &crate::api::state::LumitBridgeState,
     item: Uuid,
-) -> Option<lumit_media::MediaSource> {
+) -> Option<lumit_media::sequence::MediaSource> {
     match state.store.snapshot().item(item) {
         Some(lumit_core::model::ProjectItem::Footage(f)) => {
             crate::api::footage::FootageReference::resolve_source(state, f)
@@ -319,7 +319,9 @@ pub(crate) fn footage_source(
 /// What a script's `item.list` says of the footage `source` reads, as the
 /// project panel reads it.
 #[cfg(feature = "media")]
-pub(crate) fn footage_info(source: lumit_media::MediaSource) -> Option<lumit_script::FootageInfo> {
+pub(crate) fn footage_info(
+    source: lumit_media::sequence::MediaSource,
+) -> Option<lumit_script::FootageInfo> {
     use lumit_core::time::{Duration, FrameRate, Rational};
     let info = crate::probe::held_or_probed(source)?;
     let video = info.video.as_ref();

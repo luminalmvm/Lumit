@@ -285,7 +285,7 @@ impl FootageItem {
     ///
     /// The exact pair, never `fps()`: a rate that goes through a float does not
     /// come back (docs/14 §2). This is what everything that opens media builds
-    /// its `lumit_media::MediaSource` from — the engine crates cannot see
+    /// its `lumit_media::sequence::MediaSource` from — the engine crates cannot see
     /// `lumit-media`, so the pair is what crosses.
     #[must_use]
     pub fn sequence_fps(&self) -> Option<(u32, u32)> {

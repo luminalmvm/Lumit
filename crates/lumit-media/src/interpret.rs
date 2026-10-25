@@ -10,10 +10,10 @@
 //!
 //! Everything here is arithmetic on frame numbers and on decoded pixels, and
 //! opens no file. The probe, the frame index and the decoder apply it, so
-//! whatever asks them about an interpreted [`crate::MediaSource`] is answered
+//! whatever asks them about an interpreted [`crate::sequence::MediaSource`] is answered
 //! in interpreted frames. Runs on decode threads.
 
-use crate::{DecodedFrame, PixelFormat};
+use crate::{decode::DecodedFrame, decode::PixelFormat};
 
 /// What a file's alpha channel means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

@@ -38,7 +38,13 @@ use uuid::Uuid;
 /// One layer's own picture: the bytes, the decoded size, the native source
 /// size, and how wide the bytes' samples are. Everything but a float footage
 /// source is `Srgb8`, which is what it has always been.
-pub type LayerPixels = (Arc<Vec<u8>>, u32, u32, (f32, f32), lumit_media::PixelFormat);
+pub type LayerPixels = (
+    Arc<Vec<u8>>,
+    u32,
+    u32,
+    (f32, f32),
+    lumit_media::decode::PixelFormat,
+);
 
 /// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
@@ -101,10 +107,10 @@ fn warp_puppet(
     // The reference frame is read for its alpha alone, at whichever width it
     // arrived at — the bitmap that comes out is a silhouette either way.
     let alpha = match rfmt {
-        lumit_media::PixelFormat::LinearF32 => {
+        lumit_media::decode::PixelFormat::LinearF32 => {
             lumit_core::puppet::alpha_at_natural_f32(&reference, rw, rh, nw, nh)
         }
-        lumit_media::PixelFormat::Srgb8 => {
+        lumit_media::decode::PixelFormat::Srgb8 => {
             lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh)
         }
     };
@@ -137,8 +143,8 @@ fn warp_puppet(
         },
     );
     let warp = match pixels.4 {
-        lumit_media::PixelFormat::LinearF32 => lumit_core::puppet::apply_puppet_f32,
-        lumit_media::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
+        lumit_media::decode::PixelFormat::LinearF32 => lumit_core::puppet::apply_puppet_f32,
+        lumit_media::decode::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
     };
     warp(
         Arc::make_mut(&mut pixels.0).as_mut_slice(),
@@ -1709,8 +1715,8 @@ fn comp_walk(
         let format = match &layer.kind {
             LayerKind::Footage { .. } | LayerKind::Sequence { .. } => pixels_by_layer
                 .get(&layer.id)
-                .map_or(lumit_media::PixelFormat::Srgb8, |lp| lp.format),
-            _ => lumit_media::PixelFormat::Srgb8,
+                .map_or(lumit_media::decode::PixelFormat::Srgb8, |lp| lp.format),
+            _ => lumit_media::decode::PixelFormat::Srgb8,
         };
         raw.map(|(mut rgba, w, h, natural)| {
             // Nothing to stamp in is the ordinary layer, and it keeps the
@@ -1727,8 +1733,10 @@ fn comp_walk(
                 // Both stages come in a width to match the plate, so a float
                 // layer stays float through either of them.
                 let strokes = match format {
-                    lumit_media::PixelFormat::LinearF32 => lumit_core::paint::apply_strokes_f32,
-                    lumit_media::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
+                    lumit_media::decode::PixelFormat::LinearF32 => {
+                        lumit_core::paint::apply_strokes_f32
+                    }
+                    lumit_media::decode::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
                 };
                 strokes(
                     rgba,
@@ -1745,8 +1753,10 @@ fn comp_walk(
                 // colour exactly as it arrived — a masked OpenEXR is still an
                 // OpenEXR.
                 let gate = match format {
-                    lumit_media::PixelFormat::LinearF32 => lumit_core::mask::apply_masks_f32,
-                    lumit_media::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
+                    lumit_media::decode::PixelFormat::LinearF32 => {
+                        lumit_core::mask::apply_masks_f32
+                    }
+                    lumit_media::decode::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
                 };
                 gate(
                     rgba,
@@ -1941,7 +1951,7 @@ fn comp_walk(
             tex_w: nested.width,
             tex_h: nested.height,
             // A comp is realised on the card; there are no source bytes here.
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             fx: Default::default(),
             colour_tables: Vec::new(),
             // A comp reference runs no stack of its own here: its layers were
@@ -3267,7 +3277,7 @@ fn comp_walk(
                     (n.width as f32, n.height as f32),
                     // A comp is realised on the card; there are no source
                     // bytes here.
-                    lumit_media::PixelFormat::Srgb8,
+                    lumit_media::decode::PixelFormat::Srgb8,
                 )
             } else if mr.source.applies_masks() {
                 pixels_for(src)?
@@ -7362,7 +7372,7 @@ mod render_below_at_tests {
             width: 8,
             height: 8,
             rgba: [rgb[0], rgb[1], rgb[2], 255].repeat(64).into(),
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             natural_w: 320,
             natural_h: 180,
             temporal: Vec::new(),

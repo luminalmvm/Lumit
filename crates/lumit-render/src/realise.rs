@@ -283,22 +283,22 @@ impl Realiser<'_> {
         rgba: &[u8],
         w: u32,
         h: u32,
-        format: lumit_media::PixelFormat,
+        format: lumit_media::decode::PixelFormat,
         colour_space: &Option<String>,
     ) -> wgpu::Texture {
         let ocio = self.input_transform(colour_space);
         match (format, ocio) {
-            (lumit_media::PixelFormat::LinearF32, None) => {
+            (lumit_media::decode::PixelFormat::LinearF32, None) => {
                 self.engine.upload_float_frame(&self.ctx, rgba, w, h)
             }
-            (lumit_media::PixelFormat::LinearF32, ocio) => {
+            (lumit_media::decode::PixelFormat::LinearF32, ocio) => {
                 let src = self.engine.upload_float_frame(&self.ctx, rgba, w, h);
                 // Into the source's own format, not the narrower working one:
                 // the transform must not be where the precision goes.
                 let format = src.format();
                 self.engine.linearise_into(&self.ctx, &src, ocio, format)
             }
-            (lumit_media::PixelFormat::Srgb8, ocio) => {
+            (lumit_media::decode::PixelFormat::Srgb8, ocio) => {
                 let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
                 self.engine.linearise_through(&self.ctx, &src, ocio)
             }
@@ -2061,7 +2061,7 @@ impl Realiser<'_> {
                     format,
                     colour_space,
                 } if straight_to_composite(l, camera)
-                    && matches!(format, lumit_media::PixelFormat::Srgb8)
+                    && matches!(format, lumit_media::decode::PixelFormat::Srgb8)
                     && self.input_transform(colour_space).is_none() =>
                 {
                     // Nothing between here and the composite draw, so the
@@ -2812,7 +2812,7 @@ mod tests {
                 rgba: rgba.clone(),
                 tex_w: W,
                 tex_h: H,
-                format: lumit_media::PixelFormat::Srgb8,
+                format: lumit_media::decode::PixelFormat::Srgb8,
                 colour_space: None,
             },
             natural_size: (W as f32, H as f32),

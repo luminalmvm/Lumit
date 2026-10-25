@@ -427,7 +427,7 @@ pub fn apply_strokes(
 }
 
 /// [`apply_strokes`] for the scene-linear float frames a float source decodes
-/// to (`lumit_media::PixelFormat::LinearF32`), sixteen bytes a pixel.
+/// to (`lumit_media::decode::PixelFormat::LinearF32`), sixteen bytes a pixel.
 ///
 /// Where a stroke lands is geometry and does not care how wide a sample is, so
 /// the coverage pass below is the same one the byte path runs. Only the laying

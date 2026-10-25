@@ -213,7 +213,7 @@ fn find_brokers() {
             lumit_aplug::ipc::broker::broker_exe_name(),
         ),
         #[cfg(feature = "media")]
-        (lumit_media::ai::BROKER_EXE_ENV, media),
+        (lumit_media::ai::helper::BROKER_EXE_ENV, media),
     ];
     for (variable, name) in brokers {
         if std::env::var_os(variable).is_some() || dir.join(name).is_file() {

@@ -2669,7 +2669,7 @@ mod tests {
         }
         enc.finish().unwrap();
 
-        let input = crate::probe::open_input(&crate::MediaSource::file(&path)).unwrap();
+        let input = crate::probe::open_input(&crate::sequence::MediaSource::file(&path)).unwrap();
         let dict = input.metadata().expect("the file carries metadata");
         let got = |key: &str| {
             dict.get(&CString::new(key).unwrap(), None, 0)

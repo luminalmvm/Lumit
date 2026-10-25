@@ -47,7 +47,7 @@ impl ExportHandle {
 pub struct ItemInfo {
     /// Where the pixels come from: one file, or the numbered run of stills the
     /// item names one file of.
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub fps: f64,
     pub frames: usize,
     /// The file could not be found (docs/07 §3.3): render the test-bar slate
@@ -88,7 +88,7 @@ pub struct AudioJob {
     /// The file the sound is read from, and which of its audio streams: the
     /// first for nearly every layer, another or several mixed for a layer or
     /// clip that has chosen (`lumit_core::model::AudioStreams`).
-    pub sound: lumit_media::SoundSource,
+    pub sound: lumit_media::audio::SoundSource,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
@@ -2722,7 +2722,7 @@ pub fn mixdown_counting(
 
 /// As [`mixdown`], but over buffers already in memory.
 pub fn mixdown_prepared(
-    decoded: &[(std::sync::Arc<lumit_media::AudioBuffer>, AudioJob)],
+    decoded: &[(std::sync::Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
     rate: u32,
     duration_s: f64,
     master_gain: f32,
@@ -3073,7 +3073,10 @@ pub fn live_plan(
                 if let RunOf::Bus(samples) = run.of {
                     let frames = samples.len() / 2;
                     clips.push(lumit_audio::mix::PlacedClip {
-                        source: Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
+                            rate,
+                            samples,
+                        })),
                         start_frame: run.start_frame,
                         src_start: 0,
                         len: frames,
@@ -3119,7 +3122,7 @@ pub fn live_plan(
                     let (samples, latency) = job_bake(job, &dry, at, rate, false)
                         .or_else(|| job.retime.is_some().then_some((dry, 0)))?;
                     Some((
-                        Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        Source::whole(Arc::new(lumit_media::audio::AudioBuffer { rate, samples })),
                         latency,
                     ))
                 }),
@@ -3315,7 +3318,7 @@ fn run(
                 None => (None, None),
             };
             opened.store(true, Ordering::Relaxed);
-            let encoder = lumit_media::Encoder::open(
+            let encoder = lumit_media::encode::Encoder::open(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
                     codec,
@@ -3682,7 +3685,7 @@ fn run_audio_only(
 ) -> Result<(), String> {
     let rate = spec.audio_rate;
     let chans = usize::from(spec.audio_layout.channels());
-    let mut encoder = lumit_media::Encoder::open(
+    let mut encoder = lumit_media::encode::Encoder::open(
         out_path,
         None,
         Some(&lumit_media::encode::AudioSettings {
@@ -3741,7 +3744,7 @@ enum Rendered {
 
 enum Sink {
     Video {
-        encoder: lumit_media::Encoder,
+        encoder: lumit_media::encode::Encoder,
         size: (u32, u32),
     },
     Images {
@@ -3847,7 +3850,7 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    source: lumit_media::MediaSource {
+                    source: lumit_media::sequence::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
                         source_layer: f.source_layer,
@@ -3868,7 +3871,7 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    source: lumit_media::MediaSource {
+                    source: lumit_media::sequence::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
                         source_layer: f.source_layer,
@@ -4078,7 +4081,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 10.0,
             offset_s,
@@ -4278,7 +4281,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -4317,7 +4320,7 @@ mod tests {
         );
         let plan = lumit_audio::mix::MixPlan {
             clips: vec![lumit_audio::mix::PlacedClip {
-                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                     rate,
                     samples: samples.clone(),
                 })),
@@ -5533,7 +5536,7 @@ mod tests {
             item: Uuid::nil(),
             layer: Uuid::nil(),
             clip: None,
-            sound: lumit_media::SoundSource::file(PathBuf::new()),
+            sound: lumit_media::audio::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -5631,7 +5634,7 @@ mod tests {
         let rate = 48_000u32;
         let frames = rate as usize / 4;
         let ceiling = 10f32.powf(-6.0 / 20.0);
-        let tone = Arc::new(lumit_media::AudioBuffer {
+        let tone = Arc::new(lumit_media::audio::AudioBuffer {
             rate,
             samples: (0..frames)
                 .flat_map(|n| {

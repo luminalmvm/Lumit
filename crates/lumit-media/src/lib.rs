@@ -29,13 +29,8 @@ const _: () = assert!(
      See \"Building from source\" in README.md."
 );
 
-pub use audio::{AudioBuffer, SoundSource};
-pub use decode::{set_hardware_decode, DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
-pub use encode::Encoder;
-pub use index::{FrameIndex, IndexEntry};
-pub use interpret::{Alpha, Fields, Interpretation, Pulldown};
-pub use probe::{AudioInfo, FileFacts, MediaProbe, VideoInfo};
-pub use sequence::{MediaSource, Run};
+use decode::DecodedFrame;
+use sequence::MediaSource;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {

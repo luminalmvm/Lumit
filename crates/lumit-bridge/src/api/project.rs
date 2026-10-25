@@ -826,7 +826,7 @@ impl ProjectReference {
         // Outside the lock, and after the item exists: start reading the file
         // now so the first question about it is a look-up.
         #[cfg(feature = "media")]
-        crate::probe::request(lumit_media::MediaSource {
+        crate::probe::request(lumit_media::sequence::MediaSource {
             path: file,
             sequence_fps: run.then(|| {
                 let r = lumit_core::model::SequenceRef::default().frame_rate;

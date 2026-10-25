@@ -93,7 +93,7 @@ class BridgeMediaInfo {
   /// Whether the picture is a **still** rather than something that runs.
   /// A still probes with a video stream too — one frame of it — so
   /// the question is whether the stream lasts, and the engine
-  /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
+  /// ([`lumit_media::probe::MediaProbe::runs_as_video`]) is the one place it is
   /// asked, so the panel cannot call a file a still while the Timeline cuts
   /// it as a clip.
   ///

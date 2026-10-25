@@ -40,7 +40,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use lumit_audio::beat::BandAnalysis;
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
-use lumit_media::{AudioBuffer, SoundSource};
+use lumit_media::{audio::AudioBuffer, audio::SoundSource};
 use uuid::Uuid;
 
 /// The rate the tap decodes at, in hertz.
@@ -373,7 +373,10 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             return None;
         }
         let jobs = self.jobs();
-        let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
+        let decoded: Vec<(
+            Arc<lumit_media::audio::AudioBuffer>,
+            &crate::export::AudioJob,
+        )> = jobs
             .iter()
             // ponytail: a driver doesn't hear a retimed layer yet. Read it
             // through its map, as the mix does, if one needs to.

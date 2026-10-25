@@ -106,7 +106,7 @@ pub fn set_full_res_drag_previews(full_res: bool) {
 #[frb(sync)]
 pub fn set_hardware_decode(on: bool) {
     #[cfg(feature = "media")]
-    lumit_media::set_hardware_decode(on);
+    lumit_media::decode::set_hardware_decode(on);
     #[cfg(not(feature = "media"))]
     let _ = on;
 }

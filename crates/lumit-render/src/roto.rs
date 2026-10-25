@@ -1505,7 +1505,7 @@ fn record_of(frame: i64, chain: [u8; 32], plane: &[u8], width: u32, height: u32)
 /// The real frames, through the same frame index and decoder every other
 /// consumer opens (docs/impl/media-io.md §2).
 pub struct MediaRgba {
-    decoder: lumit_media::VideoDecoder,
+    decoder: lumit_media::decode::VideoDecoder,
     frames: usize,
     width: u32,
     height: u32,
@@ -1516,11 +1516,11 @@ impl MediaRgba {
     /// Open `path` for propagation. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the propagation thread.
     #[must_use]
-    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
+    pub fn open(path: &lumit_media::sequence::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
-        let decoder = lumit_media::VideoDecoder::open(path, index).ok()?;
+        let decoder = lumit_media::decode::VideoDecoder::open(path, index).ok()?;
         Some(MediaRgba {
             decoder,
             frames,
@@ -1549,11 +1549,11 @@ impl RotoFrames for MediaRgba {
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     propagate: bool,
 ) -> Option<RotoJob> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let block = fx.roto.clone().unwrap_or_default();
     let mut settings = RotoSettings::of(fx);
     // Which pack would seed this run, taken here rather than in the document,

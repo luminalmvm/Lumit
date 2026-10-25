@@ -5915,7 +5915,8 @@ impl LayerReference {
                 return Ok(BridgeAudioPeaks::empty());
             };
             // The streams this layer sounds are the ones its wave is of.
-            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, layer.audio_streams.places());
             let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
@@ -6014,7 +6015,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, layer.audio_streams.places());
             let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
@@ -6104,7 +6106,8 @@ impl LayerReference {
                 return Ok(BridgeAudioPeaks::empty());
             };
             // The streams this clip sounds are the ones its wave is of.
-            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, clip.audio_streams.places());
             let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
@@ -6201,7 +6204,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, clip.audio_streams.places());
             let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };

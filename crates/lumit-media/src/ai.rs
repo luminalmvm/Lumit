@@ -48,8 +48,7 @@ use crate::decode::{DecodedFrame, PixelFormat};
 use crate::probe::{MediaProbe, VideoInfo};
 use crate::MediaError;
 
-mod helper;
-pub use helper::{serve, BROKER_EXE_ENV};
+pub mod helper;
 
 /// What one read may spend: a picture's worth of bytes, and more layers than
 /// anybody draws on.
@@ -746,7 +745,7 @@ mod tests {
         assert_eq!(index.frame_count(), 1);
 
         assert_eq!(open(&path).unwrap().layers.len(), 3);
-        let frame = crate::read_own(&crate::MediaSource::file(&path), 0, None).unwrap();
+        let frame = crate::read_own(&crate::sequence::MediaSource::file(&path), 0, None).unwrap();
         assert_eq!(frame.unwrap().rgba.len(), 8 * 6 * 4);
     }
 }

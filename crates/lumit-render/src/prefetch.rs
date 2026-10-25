@@ -51,12 +51,12 @@ pub struct Prefetched {
     pub item: Uuid,
     /// The file it was read from and how, so a frame that lands after the
     /// item was pointed elsewhere or interpreted afresh is not filed.
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
     /// The decode itself, handed on whole, so a float frame is filed as what
     /// it is rather than read as bytes.
-    pub decoded: lumit_media::DecodedFrame,
+    pub decoded: lumit_media::decode::DecodedFrame,
 }
 
 /// One file being read ahead: the way to its thread, and when it is next
@@ -205,7 +205,7 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
     // The file this stream is reading. An item whose file has changed, as
     // one relinked or one whose stand-in gave way to the original has, is
     // opened again rather than read on from the old file.
-    let mut source: Option<lumit_media::MediaSource> = None;
+    let mut source: Option<lumit_media::sequence::MediaSource> = None;
     while let Ok(frame) = jobs.recv() {
         for want in frame {
             if source.as_ref() != Some(&want.source) {
@@ -256,7 +256,7 @@ mod tests {
     fn want(item: Uuid) -> PrefetchWant {
         PrefetchWant {
             item,
-            source: lumit_media::MediaSource::file("not-on-disk.mp4"),
+            source: lumit_media::sequence::MediaSource::file("not-on-disk.mp4"),
             frame: 0,
             target_width: None,
         }

@@ -1431,11 +1431,11 @@ pub fn analyse(
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<PlaneJob> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let settings = PlaneSettings::of(fx)?;
     Some(PlaneJob {
         instance: fx.id,

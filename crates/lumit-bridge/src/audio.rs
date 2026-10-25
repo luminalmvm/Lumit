@@ -135,7 +135,7 @@ struct AudioState {
     /// What the preview in the engine reads, where one is: the file and the
     /// streams of it. A press that asks for other streams of the same file
     /// is another preview, not a seek in this one.
-    loaded_preview: Option<lumit_media::SoundSource>,
+    loaded_preview: Option<lumit_media::audio::SoundSource>,
     /// The comp waiting for the worker, with the document to build it from —
     /// the snapshot is captured at request time so a later edit cannot change
     /// what a queued prepare is about to mix.
@@ -337,7 +337,7 @@ fn hash_animation(
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn build_plan(
     jobs: &[AudioJob],
-    decoded: &HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
+    decoded: &HashMap<Uuid, Arc<lumit_media::audio::AudioBuffer>>,
     rate: u32,
     duration_s: f64,
     master_db: f64,
@@ -726,7 +726,7 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
 ///
 /// Returns at once: the file is opened on its own thread, so a slow disk does
 /// not hold the press.
-pub(crate) fn preview(item: Uuid, sound: lumit_media::SoundSource, start_s: f64) {
+pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_s: f64) {
     // `max` answers zero for a start that is not a number.
     let start_s = start_s.max(0.0);
     {
@@ -1108,7 +1108,7 @@ mod tests {
             item,
             layer: item, // one job, one strip: the test's own layer identity
             clip: None,
-            sound: lumit_media::SoundSource::file(path),
+            sound: lumit_media::audio::SoundSource::file(path),
             in_s,
             out_s,
             offset_s,
@@ -1176,7 +1176,7 @@ mod tests {
         let mut decoded = HashMap::new();
         decoded.insert(
             placed.item,
-            Arc::new(lumit_media::AudioBuffer {
+            Arc::new(lumit_media::audio::AudioBuffer {
                 rate,
                 samples: vec![0.25; 4 * rate as usize * 2], // 4 s of quiet tone
             }),
@@ -1247,7 +1247,7 @@ mod tests {
         for j in [&a, &b] {
             decoded.insert(
                 j.item,
-                Arc::new(lumit_media::AudioBuffer {
+                Arc::new(lumit_media::audio::AudioBuffer {
                     rate,
                     // Half scale: two of them reach full scale summed.
                     samples: vec![0.5; rate as usize * 2],
@@ -1281,7 +1281,7 @@ mod tests {
     fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
         let rate = 48_000u32;
         let tone = || {
-            Arc::new(lumit_media::AudioBuffer {
+            Arc::new(lumit_media::audio::AudioBuffer {
                 rate,
                 samples: vec![0.25; rate as usize * 2],
             })
@@ -1507,8 +1507,8 @@ mod tests {
         })
     }
 
-    fn tone(rate: u32, seconds: f64, value: f32) -> Arc<lumit_media::AudioBuffer> {
-        Arc::new(lumit_media::AudioBuffer {
+    fn tone(rate: u32, seconds: f64, value: f32) -> Arc<lumit_media::audio::AudioBuffer> {
+        Arc::new(lumit_media::audio::AudioBuffer {
             rate,
             samples: vec![value; (f64::from(rate) * seconds) as usize * 2],
         })

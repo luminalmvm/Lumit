@@ -1013,7 +1013,7 @@ pub fn apply_masks(
 }
 
 /// [`apply_masks`] for the float frames a float source decodes to
-/// (`lumit_media::PixelFormat::LinearF32`): sixteen bytes a pixel, the alpha in
+/// (`lumit_media::decode::PixelFormat::LinearF32`): sixteen bytes a pixel, the alpha in
 /// the last four.
 ///
 /// A mask gates coverage and nothing else, so this is the same one line of
