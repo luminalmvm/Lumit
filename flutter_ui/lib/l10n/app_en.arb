@@ -11255,28 +11255,6 @@
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
-  "aeSummary": "{imported} items imported · {adjusted} adjusted · {placeholders} placeholders · {skipped} skipped",
-  "@aeSummary": {
-    "description": "Summary line at the top of the import report window. Four counts of what the import did, separated by middle dots.",
-    "placeholders": {
-      "imported": {
-        "type": "int"
-      },
-      "adjusted": {
-        "type": "int"
-      },
-      "placeholders": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
-      }
-    }
-  },
-  "aeFilterAll": "All",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeOutcomeImported": "Imported",
   "@aeOutcomeImported": {
     "description": "Import report window — an outcome grade: this came across whole."
@@ -11293,13 +11271,18 @@
   "@aeOutcomeSkipped": {
     "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
   },
+  "aeCameAcross": "{count, plural, =1{1 item came across} other{{count} items came across}}",
+  "@aeCameAcross": {
+    "description": "The line under the import report's title: how many items came across from After Effects. What was changed or left out is listed below it, under headings.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "aeNothingToReport": "Everything came across untouched",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
-  },
-  "aeNoneOfThatKind": "Nothing of that kind",
-  "@aeNoneOfThatKind": {
-    "description": "Import report window — shown in place of the list when the chosen outcome filter matches no row."
   },
   "aeItemUnreadable": "the item could not be read and was skipped",
   "@aeItemUnreadable": {
@@ -11566,7 +11549,7 @@
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
   },
-  "aeExpressionCarried": "the expression imported as source text and drives the property",
+  "aeExpressionCarried": "the expression came across and runs here",
   "@aeExpressionCarried": {
     "description": "Import report row reason, lower case. An expression is a small script that computes a property's value."
   },

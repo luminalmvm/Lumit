@@ -57,6 +57,9 @@ impl ItemPath {
     /// The same path, narrowed to one property of the layer.
     #[must_use]
     pub fn property(&self, name: &str) -> Self {
+        // A property nobody renamed has only its match name to go by, and
+        // the report reads better without After Effects' own prefix on it.
+        let name = name.strip_prefix("ADBE ").unwrap_or(name);
         Self {
             comp: self.comp.clone(),
             layer: self.layer.clone(),
@@ -479,10 +482,7 @@ impl std::fmt::Display for Reason {
                 "the motion path's spatial tangents are not carried — each axis animates on its own"
             ),
             Self::ExpressionCarried => {
-                write!(
-                    f,
-                    "the expression imported as source text and drives the property"
-                )
+                write!(f, "the expression came across and runs here")
             }
             Self::ExpressionDisabledCarried => {
                 write!(

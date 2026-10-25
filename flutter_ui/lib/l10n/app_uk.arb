@@ -13,10 +13,6 @@
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."
   },
-  "aeFilterAll": "Усі",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeOutcomeAdjusted": "Скориговано",
   "@aeOutcomeAdjusted": {
     "description": "Import report window — an outcome grade: mapped, with a difference the row explains."

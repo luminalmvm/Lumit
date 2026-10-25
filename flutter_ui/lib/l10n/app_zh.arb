@@ -228,10 +228,6 @@
       }
     }
   },
-  "aeFilterAll": "全部",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeFlowEngineDiffers": "Pixel Motion 已导入为 Flow 插值 — 光流引擎不同，因此中间帧会有差异",
   "@aeFlowEngineDiffers": {
     "description": "Import report row reason, lower case. Pixel Motion is an After Effects feature name; leave it as written."
@@ -342,10 +338,6 @@
   "@aeNestedPreserveResolution": {
     "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
   },
-  "aeNoneOfThatKind": "没有此类内容",
-  "@aeNoneOfThatKind": {
-    "description": "Import report window — shown in place of the list when the chosen outcome filter matches no row."
-  },
   "aeNothingToReport": "所有内容都原样导入",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
@@ -437,24 +429,6 @@
     "placeholders": {
       "percent": {
         "type": "String"
-      }
-    }
-  },
-  "aeSummary": "已导入 {imported} 项 · 已调整 {adjusted} 项 · 占位符 {placeholders} 项 · 已跳过 {skipped} 项",
-  "@aeSummary": {
-    "description": "Summary line at the top of the import report window. Four counts of what the import did, separated by middle dots.",
-    "placeholders": {
-      "imported": {
-        "type": "int"
-      },
-      "adjusted": {
-        "type": "int"
-      },
-      "placeholders": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
       }
     }
   },

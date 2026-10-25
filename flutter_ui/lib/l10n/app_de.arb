@@ -228,10 +228,6 @@
       }
     }
   },
-  "aeFilterAll": "Alle",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeFlowEngineDiffers": "Pixel Motion als Flow-Interpolation importiert — eine andere Flow-Engine, daher unterscheiden sich die Zwischenbilder",
   "@aeFlowEngineDiffers": {
     "description": "Import report row reason, lower case. Pixel Motion is an After Effects feature name; leave it as written."
@@ -342,10 +338,6 @@
   "@aeNestedPreserveResolution": {
     "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
   },
-  "aeNoneOfThatKind": "Nichts dieser Art",
-  "@aeNoneOfThatKind": {
-    "description": "Import report window — shown in place of the list when the chosen outcome filter matches no row."
-  },
   "aeNothingToReport": "Alles ist unverändert angekommen",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
@@ -437,24 +429,6 @@
     "placeholders": {
       "percent": {
         "type": "String"
-      }
-    }
-  },
-  "aeSummary": "{imported} Elemente importiert · {adjusted} angepasst · {placeholders} Platzhalter · {skipped} übersprungen",
-  "@aeSummary": {
-    "description": "Summary line at the top of the import report window. Four counts of what the import did, separated by middle dots.",
-    "placeholders": {
-      "imported": {
-        "type": "int"
-      },
-      "adjusted": {
-        "type": "int"
-      },
-      "placeholders": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
       }
     }
   },

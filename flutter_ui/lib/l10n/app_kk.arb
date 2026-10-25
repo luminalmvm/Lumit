@@ -13,10 +13,6 @@
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."
   },
-  "aeFilterAll": "Барлығы",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "animated": "анимацияланған",
   "@animated": {
     "description": "Shown in place of a number when the value is animated rather than fixed. Lower case on purpose — it sits where a value would."
