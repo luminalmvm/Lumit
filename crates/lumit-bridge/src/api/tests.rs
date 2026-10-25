@@ -3175,15 +3175,15 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
             corner(x, y + side),
         ],
         closed: true,
-        fill: Some(crate::api::assets::BridgeColourRgba {
-            r: 1.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0,
+        fill: Some(crate::api::effect::BridgeColour {
+            r: BridgeScalar::Static(1.0),
+            g: BridgeScalar::Static(0.0),
+            b: BridgeScalar::Static(0.0),
+            a: BridgeScalar::Static(1.0),
         }),
         stroke: None,
-        stroke_width: 0.0,
-        opacity: 100.0,
+        stroke_width: BridgeScalar::Static(0.0),
+        opacity: BridgeScalar::Static(100.0),
         trim_start: BridgeScalar::Static(0.0),
         trim_end: BridgeScalar::Static(100.0),
         trim_offset: BridgeScalar::Static(0.0),
@@ -3416,13 +3416,13 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
         .expect("key");
 
     let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].opacity = 40.0;
+    contents[0].opacity = BridgeScalar::Static(40.0);
     shape
         .set_shape_contents(contents.clone(), None)
         .expect("set");
 
     let after = &shape.get_shape_contents().expect("contents")[0];
-    assert_eq!(after.opacity, 40.0);
+    assert_eq!(after.opacity, BridgeScalar::Static(40.0));
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
 
     shape

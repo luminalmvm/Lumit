@@ -1229,6 +1229,6 @@ mod tests {
         let items = crate::shape_items(&b, None, 0.0);
         assert!(items
             .iter()
-            .all(|i| i.stroke.is_some() && i.stroke_width == 3.0));
+            .all(|i| i.stroke.is_some() && i.stroke_width.value_at(0.0) == 3.0));
     }
 }

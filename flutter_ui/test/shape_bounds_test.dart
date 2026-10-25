@@ -9,7 +9,6 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
@@ -33,11 +32,20 @@ void main() {
         name: 'Rectangle',
         vertices: vertices,
         closed: true,
-        fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
-        stroke:
-            stroked ? const BridgeColourRgba(r: 0, g: 0, b: 0, a: 1) : null,
-        strokeWidth: strokeWidth,
-        opacity: 100,
+        fill: const BridgeColour(
+            r: BridgeScalar.static_(1),
+            g: BridgeScalar.static_(1),
+            b: BridgeScalar.static_(1),
+            a: BridgeScalar.static_(1)),
+        stroke: stroked
+            ? const BridgeColour(
+                r: BridgeScalar.static_(0),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1))
+            : null,
+        strokeWidth: BridgeScalar.static_(strokeWidth),
+        opacity: const BridgeScalar.static_(100),
         trimStart: const BridgeScalar.static_(0),
         trimEnd: const BridgeScalar.static_(100),
         trimOffset: const BridgeScalar.static_(0),

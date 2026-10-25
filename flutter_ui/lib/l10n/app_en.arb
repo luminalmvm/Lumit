@@ -9682,6 +9682,18 @@
   "@shapeFill": {
     "description": "Timeline row under a shape layer's art: the colour inside its path."
   },
+  "shapeStroke": "Stroke",
+  "@shapeStroke": {
+    "description": "Timeline row under a shape layer's art: the colour of its outline."
+  },
+  "shapeStrokeWidth": "Stroke width",
+  "@shapeStrokeWidth": {
+    "description": "Timeline row under a shape layer's art: how wide its outline is, in pixels."
+  },
+  "shapeOpacity": "Opacity",
+  "@shapeOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the whole piece of art is."
+  },
   "shapeGradient": "Gradient",
   "@shapeGradient": {
     "description": "Timeline row under a shape layer's art: whether its fill is a flat colour or a ramp, and which kind of ramp."

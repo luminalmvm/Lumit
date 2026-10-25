@@ -1976,16 +1976,16 @@ class BridgeShapeItem {
   final List<BridgeVertex> vertices;
   final bool closed;
 
-  /// The colour inside the path. `None` draws no fill.
-  final BridgeColourRgba? fill;
+  /// The colour inside the path, each channel keyable. `None` draws no fill.
+  final BridgeColour? fill;
 
   /// The outline's colour, and its width in layer pixels. `None` draws no
   /// outline; a width of zero draws none either.
-  final BridgeColourRgba? stroke;
-  final double strokeWidth;
+  final BridgeColour? stroke;
+  final BridgeScalar strokeWidth;
 
   /// 0..100.
-  final double opacity;
+  final BridgeScalar opacity;
 
   /// **Trim paths**: where along the path's own length the art begins
   /// and ends, as a per cent, and how far the pair is slid along it in

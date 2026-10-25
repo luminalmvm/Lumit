@@ -52,19 +52,19 @@ pub struct ShapeItem {
     pub id: Uuid,
     pub name: String,
     pub path: BezierPath,
-    /// The colour inside the path. `None` draws no fill, which is how an
-    /// outline-only shape is made.
-    #[serde(default)]
-    pub fill: Option<LinearColour>,
+    /// The colour inside the path, a property per channel so it keys. `None`
+    /// draws no fill, which is how an outline-only shape is made.
+    #[serde(default, with = "colour::keyed")]
+    pub fill: Option<[Property; 4]>,
     /// The colour of the outline, and how wide it is in layer pixels. `None`
     /// draws no stroke.
-    #[serde(default)]
-    pub stroke: Option<LinearColour>,
-    #[serde(default)]
-    pub stroke_width: f64,
+    #[serde(default, with = "colour::keyed")]
+    pub stroke: Option<[Property; 4]>,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub stroke_width: Property,
     /// 0..100, like every other opacity in the document.
-    #[serde(default = "full_opacity")]
-    pub opacity: f64,
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub opacity: Property,
     /// **Trim paths**: where along the path the art begins and ends, as
     /// a per cent of the path's own **arc length**, and how far the pair is slid
     /// along it in degrees (360 is once round).
@@ -315,10 +315,6 @@ pub struct ShapeItem {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-fn full_opacity() -> f64 {
-    100.0
-}
-
 /// A twist: the path turned about a line through `centre`, pointing
 /// `axis` degrees round from the x axis, and flattened back onto the
 /// layer as if seen side-on.
@@ -540,10 +536,10 @@ impl ShapeItem {
             id: Uuid::now_v7(),
             name: name.into(),
             path,
-            fill: Some(fill),
+            fill: Some(colour::still(fill)),
             stroke: None,
-            stroke_width: 0.0,
-            opacity: 100.0,
+            stroke_width: Property::zero(),
+            opacity: crate::paint::full(),
             trim_start: Property::zero(),
             trim_end: crate::paint::full(),
             trim_offset: Property::zero(),
@@ -711,7 +707,7 @@ impl ShapeItem {
         if self.gradient == 0 {
             return None;
         }
-        let from = self.fill?;
+        let from = colour::at(self.fill.as_ref()?, t);
         let to = self
             .gradient_colour
             .unwrap_or(crate::model::LinearColour::BLACK);
@@ -902,7 +898,7 @@ impl ShapeItem {
         // copy's outline fit too: the copy's transform grows the margin with
         // the art.
         let half = if self.stroke.is_some() {
-            self.stroke_width.max(0.0) / 2.0
+            self.stroke_width.value_at(t).max(0.0) / 2.0
         } else {
             0.0
         };
@@ -1222,7 +1218,7 @@ impl<'a> Art<'a> {
     /// its dashes grow with.
     fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Pressed> {
         let item = self.item;
-        let outlined = item.stroke.is_some() && item.stroke_width > 0.0;
+        let outlined = item.stroke.is_some() && item.stroke_width.value_at(t) > 0.0;
         // Dashes cut the outline into pieces, each of which is a brush run
         // of its own. A solid outline is one piece, which is the
         // same single run it always was. An item with no outline has no
@@ -1385,7 +1381,7 @@ pub fn rasterise_contents(
         let Some(item) = contents.get(run.start) else {
             continue;
         };
-        let opacity = (item.opacity.clamp(0.0, 100.0) / 100.0) as f32;
+        let opacity = (item.opacity.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
         if opacity <= 0.0 {
             continue;
         }
@@ -1410,7 +1406,7 @@ pub fn rasterise_contents(
             let to_box = copy.then(&Affine::translation(-min_x, -min_y));
             let placed = art.placed(&to_box);
 
-            if let Some(fill) = item.fill {
+            if let Some(fill) = item.fill.as_ref().map(|c| colour::at(c, t)) {
                 // All the contours at once, so a boolean's hole is a hole: the
                 // crossings have to be counted across the whole shape, not one
                 // ring at a time.
@@ -1444,7 +1440,10 @@ pub fn rasterise_contents(
                 }
             }
 
-            if let (Some(stroke), true) = (item.stroke, item.stroke_width > 0.0) {
+            let width = item.stroke_width.value_at(t);
+            if let (Some(stroke), true) =
+                (item.stroke.as_ref().map(|c| colour::at(c, t)), width > 0.0)
+            {
                 // A stroke is a brush run along the path, which is exactly what the
                 // paint rasteriser already does — one widened-path implementation
                 // for both, rather than two that can disagree.
@@ -1468,7 +1467,7 @@ pub fn rasterise_contents(
                         // along the line by a taper where it has one.
                         pressures,
                         colour: stroke,
-                        width: item.stroke_width * copy.scale(),
+                        width: width * copy.scale(),
                         // A vector outline has a hard edge; the rasteriser keeps
                         // half a pixel of falloff whatever this says, which is the
                         // anti-aliasing rather than a soft brush.
@@ -1480,7 +1479,7 @@ pub fn rasterise_contents(
                         // repeater's ramp — the same number the fill above
                         // multiplied its coverage by, in the per cent the brush
                         // reads it in.
-                        opacity: item.opacity * ramp,
+                        opacity: item.opacity.value_at(t) * ramp,
                         // A vector outline is drawn whole; a shape item's own trim
                         // paths are a shape-layer feature, not the brush's,
                         // so the whole path every time and no clock to read.
@@ -2331,6 +2330,7 @@ fn transform_path(path: &BezierPath, m: &Affine) -> BezierPath {
     }
 }
 
+pub mod colour;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;

@@ -54,8 +54,8 @@ fn a_filled_shape_draws_its_colour_inside_and_nothing_outside() {
 #[test]
 fn a_fill_and_a_stroke_are_both_drawn_and_the_stroke_is_on_top() {
     let mut it = item(square(4.0, 4.0, 12.0));
-    it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-    it.stroke_width = 3.0;
+    it.stroke = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
+    it.stroke_width = Property::fixed(3.0);
     let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
 
     assert_eq!(rgb_at(&rgba, 20, 10, 10), [255, 0, 0], "the fill inside");
@@ -70,7 +70,7 @@ fn a_fill_and_a_stroke_are_both_drawn_and_the_stroke_is_on_top() {
 fn items_are_drawn_in_order() {
     let under = item(square(0.0, 0.0, 20.0));
     let mut over = item(square(0.0, 0.0, 20.0));
-    over.fill = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+    over.fill = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     let rgba = rasterise_contents(&[under, over], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
     assert_eq!(
         rgb_at(&rgba, 20, 10, 10),
@@ -151,6 +151,55 @@ fn a_keyed_trim_is_read_on_the_layers_clock() {
 }
 
 #[test]
+fn paint_from_an_older_file_loads_unchanged_and_a_keyed_fill_moves() {
+    let mut it = item(square(0.0, 0.0, 20.0));
+    it.stroke = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
+    it.stroke_width = Property::fixed(3.0);
+    it.opacity = Property::fixed(50.0);
+    // A still colour, width and opacity are written as the plain numbers
+    // they always were, so a file from before reads back the same.
+    let written = serde_json::to_value(&it).expect("writes");
+    assert_eq!(written["fill"], serde_json::json!([1.0, 0.0, 0.0, 1.0]));
+    assert_eq!(written["stroke_width"], serde_json::json!(3.0));
+    assert_eq!(written["opacity"], serde_json::json!(50.0));
+    let read: ShapeItem = serde_json::from_value(written).expect("reads");
+    assert_eq!(read, it);
+
+    let key = |secs: i64, value: f64| crate::anim::Keyframe {
+        time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+        value,
+        interp_in: crate::anim::SideInterp::Linear,
+        interp_out: crate::anim::SideInterp::Linear,
+    };
+    let mut keyed = item(square(0.0, 0.0, 20.0));
+    if let Some(fill) = keyed.fill.as_mut() {
+        fill[0].animation = crate::anim::Animation::Keyframed(vec![key(0, 1.0), key(1, 0.0)]);
+        fill[2].animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 1.0)]);
+    }
+    let keyed: ShapeItem =
+        serde_json::from_value(serde_json::to_value(&keyed).expect("writes")).expect("reads");
+    let at = |t: f64| {
+        rgb_at(
+            &rasterise_contents(
+                std::slice::from_ref(&keyed),
+                20,
+                20,
+                0.0,
+                0.0,
+                20.0,
+                20.0,
+                t,
+            ),
+            20,
+            10,
+            10,
+        )
+    };
+    assert_eq!(at(0.0), [255, 0, 0], "red to start");
+    assert_eq!(at(1.0), [0, 0, 255], "and blue a second in");
+}
+
+#[test]
 fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
     // A straight line 100 long: 10 on, 10 off gives five dashes of ten.
     let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (100.0, 0.0)];
@@ -198,8 +247,8 @@ fn a_tapered_stroke_narrows_to_a_point_and_its_dashes_follow() {
         closed: false,
     });
     it.fill = None;
-    it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-    it.stroke_width = 12.0;
+    it.stroke = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
+    it.stroke_width = Property::fixed(12.0);
     it.taper = Some(Taper {
         start: Property::fixed(100.0),
         end: Property::fixed(100.0),
@@ -232,7 +281,7 @@ fn a_tapered_stroke_narrows_to_a_point_and_its_dashes_follow() {
 #[test]
 fn a_linear_gradient_ramps_across_the_fill() {
     let mut it = item(square(0.0, 0.0, 20.0));
-    it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+    it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
     it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
     it.gradient_start_x = Property::fixed(0.0);
@@ -267,7 +316,7 @@ fn a_linear_gradient_ramps_across_the_fill() {
 #[test]
 fn a_radial_gradient_ramps_out_from_its_start() {
     let mut it = item(square(0.0, 0.0, 20.0));
-    it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+    it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 2;
     it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
     it.gradient_start_x = Property::fixed(10.0);
@@ -292,7 +341,7 @@ fn a_radial_gradient_ramps_out_from_its_start() {
 #[test]
 fn a_gradient_end_fades_to_clear() {
     let mut it = item(square(0.0, 0.0, 20.0));
-    it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+    it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
     it.gradient_colour = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
     it.gradient_start_x = Property::fixed(0.0);
@@ -319,7 +368,7 @@ fn a_gradient_end_fades_to_clear() {
 #[test]
 fn a_gradient_passes_through_the_stops_between_its_ends() {
     let mut it = item(square(0.0, 0.0, 20.0));
-    it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+    it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
     it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
     it.gradient_start_x = Property::fixed(0.0);
@@ -419,7 +468,7 @@ fn the_copy_count_is_held_at_the_ceiling_and_never_fractional() {
 fn combined(kind: u32) -> (u8, u8, u8) {
     let mut b = item(square(10.0, 10.0, 20.0));
     b.combine = kind;
-    b.fill = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+    b.fill = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
     let contents = vec![item(square(0.0, 0.0, 20.0)), b];
     let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
     (
@@ -754,8 +803,8 @@ fn a_taper_never_crosses_its_ends_and_runs_per_path_or_along_the_whole_shape() {
     // one taper runs along both.
     let lines = |scope: u32| {
         let mut a = item(square(0.0, 0.0, 20.0));
-        a.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        a.stroke_width = 4.0;
+        a.stroke = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
+        a.stroke_width = Property::fixed(4.0);
         a.taper = Some(taper(50.0, 50.0, scope));
         let mut b = item(square(40.0, 0.0, 20.0));
         b.combine = 1;

@@ -184,14 +184,14 @@ pub struct BridgeShapeItem {
     pub name: String,
     pub vertices: Vec<BridgeVertex>,
     pub closed: bool,
-    /// The colour inside the path. `None` draws no fill.
-    pub fill: Option<crate::api::assets::BridgeColourRgba>,
+    /// The colour inside the path, each channel keyable. `None` draws no fill.
+    pub fill: Option<crate::api::effect::BridgeColour>,
     /// The outline's colour, and its width in layer pixels. `None` draws no
     /// outline; a width of zero draws none either.
-    pub stroke: Option<crate::api::assets::BridgeColourRgba>,
-    pub stroke_width: f64,
+    pub stroke: Option<crate::api::effect::BridgeColour>,
+    pub stroke_width: BridgeScalar,
     /// 0..100.
-    pub opacity: f64,
+    pub opacity: BridgeScalar,
     /// **Trim paths**: where along the path's own length the art begins
     /// and ends, as a per cent, and how far the pair is slid along it in
     /// degrees. Animatable on the layer's own clock, exactly as a
@@ -320,10 +320,10 @@ impl BridgeShapeItem {
             name: item.name.clone(),
             vertices: item.path.vertices.iter().map(BridgeVertex::read).collect(),
             closed: item.path.closed,
-            fill: item.fill.map(crate::api::assets::colour_of),
-            stroke: item.stroke.map(crate::api::assets::colour_of),
-            stroke_width: item.stroke_width,
-            opacity: item.opacity,
+            fill: crate::shape_paint::read(item.fill.as_ref(), offset),
+            stroke: crate::shape_paint::read(item.stroke.as_ref(), offset),
+            stroke_width: BridgeScalar::read_at(&item.stroke_width, offset),
+            opacity: BridgeScalar::read_at(&item.opacity, offset),
             trim_start: BridgeScalar::read_at(&item.trim_start, offset),
             trim_end: BridgeScalar::read_at(&item.trim_end, offset),
             trim_offset: BridgeScalar::read_at(&item.trim_offset, offset),
@@ -423,10 +423,10 @@ impl BridgeShapeItem {
                 vertices: self.vertices.iter().map(BridgeVertex::write).collect(),
                 closed: self.closed,
             },
-            fill: self.fill.map(crate::api::assets::linear_of),
-            stroke: self.stroke.map(crate::api::assets::linear_of),
-            stroke_width: self.stroke_width.clamp(0.0, 10_000.0),
-            opacity: self.opacity.clamp(0.0, 100.0),
+            fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
+            stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
+            stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,
+            opacity: clamped_property(&self.opacity, offset, 0.0, 100.0)?,
             // Per cent of the path's own length, so anything outside 0..100 is
             // a number that could only ever draw wrongly — clamped here, every
             // key of it, exactly as a stroke's trim is. The offset is

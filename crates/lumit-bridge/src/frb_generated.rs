@@ -28314,11 +28314,10 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_vertices = <Vec<crate::api::layer::BridgeVertex>>::sse_decode(deserializer);
         let mut var_closed = <bool>::sse_decode(deserializer);
-        let mut var_fill = <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
-        let mut var_stroke =
-            <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
-        let mut var_strokeWidth = <f64>::sse_decode(deserializer);
-        let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_fill = <Option<crate::api::effect::BridgeColour>>::sse_decode(deserializer);
+        let mut var_stroke = <Option<crate::api::effect::BridgeColour>>::sse_decode(deserializer);
+        let mut var_strokeWidth = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trimStart = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trimEnd = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -31696,6 +31695,17 @@ impl SseDecode for Option<crate::api::layer::BridgeClipFade> {
             return Some(<crate::api::layer::BridgeClipFade>::sse_decode(
                 deserializer,
             ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::effect::BridgeColour> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::effect::BridgeColour>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -45576,10 +45586,10 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <String>::sse_encode(self.name, serializer);
         <Vec<crate::api::layer::BridgeVertex>>::sse_encode(self.vertices, serializer);
         <bool>::sse_encode(self.closed, serializer);
-        <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(self.fill, serializer);
-        <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(self.stroke, serializer);
-        <f64>::sse_encode(self.stroke_width, serializer);
-        <f64>::sse_encode(self.opacity, serializer);
+        <Option<crate::api::effect::BridgeColour>>::sse_encode(self.fill, serializer);
+        <Option<crate::api::effect::BridgeColour>>::sse_encode(self.stroke, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.stroke_width, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_start, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_end, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
@@ -48143,6 +48153,16 @@ impl SseEncode for Option<crate::api::layer::BridgeClipFade> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::layer::BridgeClipFade>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::effect::BridgeColour> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::effect::BridgeColour>::sse_encode(value, serializer);
         }
     }
 }

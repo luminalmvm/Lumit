@@ -204,8 +204,8 @@ pub fn shape_items(
                 item.fill = None;
             }
             if style.stroke_on && style.stroke_width > 0.0 {
-                item.stroke = Some(style.stroke);
-                item.stroke_width = style.stroke_width;
+                item.stroke = Some(lumit_core::shape::colour::still(style.stroke));
+                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width);
             }
             item.combine = u32::from(i > 0) * 4;
             items.push(item);

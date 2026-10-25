@@ -1867,6 +1867,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeClipFade? dco_decode_opt_box_autoadd_bridge_clip_fade(dynamic raw);
 
   @protected
+  BridgeColour? dco_decode_opt_box_autoadd_bridge_colour(dynamic raw);
+
+  @protected
   BridgeColourRgba? dco_decode_opt_box_autoadd_bridge_colour_rgba(dynamic raw);
 
   @protected
@@ -4219,6 +4222,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeClipFade? sse_decode_opt_box_autoadd_bridge_clip_fade(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeColour? sse_decode_opt_box_autoadd_bridge_colour(
       SseDeserializer deserializer);
 
   @protected
@@ -6752,6 +6759,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_clip_fade(
       BridgeClipFade? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_colour(
+      BridgeColour? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_colour_rgba(
