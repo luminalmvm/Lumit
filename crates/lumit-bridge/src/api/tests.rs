@@ -3378,6 +3378,19 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
         Ok(true)
     ));
 
+    // A shorter list is a delete, which is what the Delete key sends.
+    let first = shape.get_shape_contents().expect("contents")[0].path_keys[0];
+    assert!(matches!(
+        shape.set_shape_path_keys(id, vec![first]),
+        Ok(true)
+    ));
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0]
+            .path_keys
+            .len(),
+        1
+    );
+
     // The stopwatch off keeps the shape the playhead is over. At the first key
     // that is the shape as drawn — which is the proof the drag touched only the
     // key it was on.

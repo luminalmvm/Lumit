@@ -554,7 +554,7 @@ pub fn resample(path: &BezierPath, target: usize) -> BezierPath {
 /// ratio so reduced-resolution decodes mask correctly. Even-odd fill,
 /// fractional-span horizontal AA, two vertical subsamples.
 pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8> {
-    rasterise_paths(std::slice::from_ref(path), w, h, sx, sy)
+    rasterise_paths(std::slice::from_ref(path), w, h, sx, sy, false)
 }
 
 /// [`rasterise`], but for **several closed contours filled as one shape**.
@@ -568,7 +568,18 @@ pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8>
 /// in and out down every scanline, whichever ring they came from.
 ///
 /// One contour hands back byte for byte what [`rasterise`] always did.
-pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8> {
+///
+/// `nonzero` fills by winding instead, as After Effects fills a shape layer:
+/// a path that crosses itself stays filled where it crosses rather than
+/// going hollow there.
+pub fn rasterise_paths(
+    paths: &[BezierPath],
+    w: u32,
+    h: u32,
+    sx: f64,
+    sy: f64,
+    nonzero: bool,
+) -> Vec<u8> {
     let mut coverage = vec![0u8; (w * h) as usize];
 
     // Flatten cubics to polyline edges (fixed subdivision — paths are UI-drawn
@@ -626,7 +637,7 @@ pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -
     let mut active: Vec<usize> = Vec::new();
 
     // Scanline with two vertical subsamples per row.
-    let mut xs: Vec<f64> = Vec::with_capacity(16);
+    let mut xs: Vec<(f64, i32)> = Vec::with_capacity(16);
     let mut row_cov = vec![0.0f32; w as usize];
     for row in 0..h {
         let mut touched = false;
@@ -640,15 +651,25 @@ pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -
             xs.clear();
             for &i in &active {
                 let [(x0, y0), (x1, y1)] = edges[i];
-                xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+                let up = if y1 > y0 { 1 } else { -1 };
+                xs.push((x0 + (y - y0) / (y1 - y0) * (x1 - x0), up));
             }
             if xs.is_empty() {
                 continue;
             }
             touched = true;
-            xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            for pair in xs.chunks_exact(2) {
-                let (start, end) = (pair[0].max(0.0), pair[1].min(f64::from(w)));
+            xs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            let mut winding = 0;
+            for (k, pair) in xs.windows(2).enumerate() {
+                // Even-odd fills from every odd crossing to the next. Non-zero
+                // fills wherever the path has gone round more one way than the
+                // other.
+                winding += pair[0].1;
+                let inside = if nonzero { winding != 0 } else { k % 2 == 0 };
+                if !inside {
+                    continue;
+                }
+                let (start, end) = (pair[0].0.max(0.0), pair[1].0.min(f64::from(w)));
                 if end <= start {
                     continue;
                 }

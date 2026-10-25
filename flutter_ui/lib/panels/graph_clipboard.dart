@@ -636,7 +636,7 @@ class _Paste {
   void put(GraphChannel channel, int i, {bool fresh = false}) {
     // A shape is not a number, so it only goes onto another shape.
     final clip = clips?[i];
-    if (channel.isMaskPath || (clip?.source.isMaskPath ?? false)) {
+    if (channel.isPath || (clip?.source.isPath ?? false)) {
       if (channel.isMaskPath && clip != null && clip.source.isMaskPath) {
         putPath(channel.entry.layer, channel.path, channel.mask!.id,
             channel.keys, i);

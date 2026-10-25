@@ -44,6 +44,9 @@ class ShapeItemRow extends StatelessWidget {
   final bool open;
   final VoidCallback? onToggle;
 
+  /// A tap on the name: the item picked, so the Viewer shows its points.
+  final VoidCallback? onLabelTap;
+
   const ShapeItemRow({super.key, 
     required this.layer,
     required this.item,
@@ -52,6 +55,7 @@ class ShapeItemRow extends StatelessWidget {
     required this.comp,
     this.open = false,
     this.onToggle,
+    this.onLabelTap,
   });
 
   static BridgeShapeItem _with(BridgeShapeItem i,
@@ -174,6 +178,7 @@ class ShapeItemRow extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       renameRequest: ui.renameItemRequest,
+      onLabelTap: onLabelTap,
       opacity: item.opacity,
       valueColumn: valueColumn,
       // Show the opacity the drag is passing through without writing it,

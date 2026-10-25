@@ -1126,14 +1126,10 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
         let Some(clip) = polygon(item, t) else {
             continue;
         };
-        // **Even-odd**, because that is the one rule this crate's rasteriser
-        // fills by, for masks and shapes alike. Reading the input the same way
-        // the picture already reads it is what makes combining honest: a
-        // pentagram drawn in one stroke has a hollow middle before the union
-        // and a hollow middle after it. After Effects would fill that middle
-        // (its default is non-zero), and the day a fill rule becomes a choice
-        // this is the line that reads it.
-        let shapes = acc.overlay(&vec![clip], rule, FillRule::EvenOdd);
+        // **Non-zero**, the rule a shape's fill is drawn by, so a combine reads
+        // each path the way the picture already shows it: a pentagram drawn
+        // in one stroke has a filled middle before the union and after it.
+        let shapes = acc.overlay(&vec![clip], rule, FillRule::NonZero);
         acc = shapes.into_iter().flatten().collect();
         if acc.is_empty() {
             return Vec::new();
@@ -1416,9 +1412,9 @@ pub fn rasterise_contents(
 
             if let Some(fill) = item.fill {
                 // All the contours at once, so a boolean's hole is a hole: the
-                // even-odd crossings have to be counted across the whole shape,
-                // not one ring at a time.
-                let coverage = crate::mask::rasterise_paths(&placed, w, h, sx, sy);
+                // crossings have to be counted across the whole shape, not one
+                // ring at a time.
+                let coverage = crate::mask::rasterise_paths(&placed, w, h, sx, sy, true);
                 // A gradient fill is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.
@@ -2793,6 +2789,28 @@ mod tests {
         for (x, y) in [(5, 5), (25, 25), (5, 25), (25, 5)] {
             assert_eq!(alpha_at(&rgba, 30, x, y), 255, "the ring at {x},{y}");
         }
+    }
+
+    #[test]
+    fn a_path_that_crosses_itself_stays_filled_where_it_crosses() {
+        // A star drawn in one stroke goes round its middle twice. Even-odd
+        // left that middle hollow, After Effects fills it.
+        let vertices = (0..5)
+            .map(|i| {
+                let a = (f64::from(i) * 144.0 - 90.0).to_radians();
+                Vertex {
+                    pos: (15.0 + 14.0 * a.cos(), 15.0 + 14.0 * a.sin()),
+                    tan_in: (0.0, 0.0),
+                    tan_out: (0.0, 0.0),
+                }
+            })
+            .collect();
+        let star = BezierPath {
+            vertices,
+            closed: true,
+        };
+        let rgba = rasterise_contents(&[item(star)], 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
+        assert_eq!(alpha_at(&rgba, 30, 15, 15), 255, "the middle is filled");
     }
 
     #[test]
