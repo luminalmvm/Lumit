@@ -23,11 +23,8 @@ use crate::capture::Property;
 use crate::report::{ItemPath, Outcome, Reason};
 
 use super::props::{child, display_name, from_node, match_name_of, starting_value};
+use super::shape_paths::{ellipse, rect, star, Bake, Op};
 use super::{linear_colour, Conv};
-
-/// The share of a quarter circle's radius its bezier handles reach, so four
-/// arcs make a circle.
-const KAPPA: f64 = 0.552_284_749_8;
 
 /// A shape layer's contents, ready to draw.
 pub(super) fn contents(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Vec<ShapeItem> {
@@ -102,6 +99,12 @@ struct Drawn {
     make: Make,
     chain: Vec<Xf>,
     trim: Option<[LumProperty; 3]>,
+    /// Operators worked into the points, each after this many of the
+    /// innermost group transforms, which is the space it was in.
+    bakes: Vec<(usize, Bake)>,
+    merge: Option<u32>,
+    offset: Option<LumProperty>,
+    wiggle: Option<lumit_core::shape::Deform>,
 }
 
 /// What makes a path.
@@ -124,15 +127,15 @@ enum Make {
 }
 
 #[derive(Clone)]
-struct Star {
-    polygon: bool,
-    points: LumProperty,
-    at: [LumProperty; 2],
-    rotation: LumProperty,
-    inner: LumProperty,
-    outer: LumProperty,
-    inner_round: LumProperty,
-    outer_round: LumProperty,
+pub(super) struct Star {
+    pub(super) polygon: bool,
+    pub(super) points: LumProperty,
+    pub(super) at: [LumProperty; 2],
+    pub(super) rotation: LumProperty,
+    pub(super) inner: LumProperty,
+    pub(super) outer: LumProperty,
+    pub(super) inner_round: LumProperty,
+    pub(super) outer_round: LumProperty,
 }
 
 /// What one group hands its parent: the paths it made, for a paint further
@@ -269,7 +272,29 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
             | "ADBE Vector Materials Group"
             | "ADBE Vector Transform Group" => None,
             _ => {
-                not_carried(conv, &here, &name);
+                match super::shape_paths::read(conv, &here, node) {
+                    Some(op) => {
+                        if matches!(op, Op::Wiggle(_) | Op::Offset(_, false)) {
+                            conv.report.row(
+                                here.clone(),
+                                Outcome::Adjusted,
+                                Reason::ShapeOperatorApproximated {
+                                    name: kind_name(node, &name),
+                                },
+                            );
+                        }
+                        for (_, d) in drawn.iter_mut() {
+                            let depth = d.chain.len().saturating_sub(chain.len());
+                            match &op {
+                                Op::Bake(bake) => d.bakes.push((depth, bake.clone())),
+                                Op::Merge(mode) => d.merge = Some(*mode),
+                                Op::Offset(amount, _) => d.offset = Some(amount.clone()),
+                                Op::Wiggle(deform) => d.wiggle = Some(deform.clone()),
+                            }
+                        }
+                    }
+                    None => not_carried(conv, &here, &kind_name(node, &name)),
+                }
                 None
             }
         };
@@ -281,6 +306,10 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
                     make,
                     chain: chain.to_vec(),
                     trim: None,
+                    bakes: Vec::new(),
+                    merge: None,
+                    offset: None,
+                    wiggle: None,
                 },
             ));
         }
@@ -312,11 +341,20 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
         if moving.iter().any(|name| keyed(props, name)) {
             kept_still(conv, &here);
         }
+        let mut merged = Vec::new();
         for (_, d) in drawn.iter().filter(|(above, _)| *above < at) {
-            if let Some(item) = paint(conv, node, d) {
-                items.push((at, item));
+            match (paint(conv, node, d), d.merge) {
+                (Some(item), None) => items.push((at, item)),
+                (Some(mut item), Some(mode)) => {
+                    item.combine = if merged.is_empty() { 0 } else { mode };
+                    merged.push(item);
+                }
+                (None, _) => {}
             }
         }
+        // Pushed backwards, as the whole list is turned round at the end and a
+        // run of combined items has to start with the topmost.
+        items.extend(merged.into_iter().rev().map(|item| (at, item)));
     }
     for (at, node) in repeaters {
         let here = path.property(display_name(node, match_name_of(node)));
@@ -407,6 +445,10 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeIte
         item.gradient_end_x = LumProperty::fixed(end.0);
         item.gradient_end_y = LumProperty::fixed(end.1);
     }
+    if let Some(amount) = drawn.offset.clone() {
+        item.offset_amount = amount;
+    }
+    item.deform = drawn.wiggle.clone();
     if let Some([start, end, offset]) = drawn.trim.clone() {
         item.trim_start = start;
         item.trim_end = end;
@@ -505,15 +547,13 @@ fn moving(drawn: &Drawn) -> Option<(Rational, Rational)> {
             &star.inner_round,
             &star.outer_round,
         ])),
-        Make::Path { keys, .. } => {
-            if let (Some(a), Some(b)) = (keys.first(), keys.last()) {
-                props.clear();
-                let span = (a.time, b.time);
-                return widen(Some(span), &drawn.chain);
-            }
-        }
+        Make::Path { .. } => {}
     }
-    let mut span = None;
+    let mut span = match &drawn.make {
+        Make::Path { keys, .. } => keys.first().zip(keys.last()).map(|(a, b)| (a.time, b.time)),
+        _ => None,
+    };
+    props.extend(drawn.bakes.iter().flat_map(|(_, bake)| bake.props()));
     for p in props {
         span = join(span, key_span(p));
     }
@@ -570,14 +610,32 @@ fn shape_at(drawn: &Drawn, t: f64) -> BezierPath {
             }
         }
     };
+    // Out through each group in turn, innermost first, with the operators
+    // that sit in a group worked in before its transform carries the path on.
+    let mut path = local;
+    for depth in 0..=drawn.chain.len() {
+        for (at, bake) in &drawn.bakes {
+            if *at == depth {
+                path = bake.apply(path, t);
+            }
+        }
+        if let Some(group) = drawn.chain.get(depth) {
+            path = carry(std::slice::from_ref(group), &path, t);
+        }
+    }
+    path
+}
+
+/// A path carried out through the groups in `chain`.
+fn carry(chain: &[Xf], path: &BezierPath, t: f64) -> BezierPath {
     BezierPath {
-        vertices: local
+        vertices: path
             .vertices
             .iter()
             .map(|vertex| {
-                let pos = place(&drawn.chain, [vertex.pos.0, vertex.pos.1], t);
+                let pos = place(chain, [vertex.pos.0, vertex.pos.1], t);
                 let turn = |d: (f64, f64)| {
-                    let to = place(&drawn.chain, [vertex.pos.0 + d.0, vertex.pos.1 + d.1], t);
+                    let to = place(chain, [vertex.pos.0 + d.0, vertex.pos.1 + d.1], t);
                     (to.0 - pos.0, to.1 - pos.1)
                 };
                 Vertex {
@@ -587,7 +645,7 @@ fn shape_at(drawn: &Drawn, t: f64) -> BezierPath {
                 }
             })
             .collect(),
-        closed: local.closed,
+        closed: path.closed,
     }
 }
 
@@ -614,103 +672,6 @@ fn chain_scale(chain: &[Xf]) -> f64 {
         .iter()
         .map(|g| (g.scale[0].value_at(0.0) + g.scale[1].value_at(0.0)).abs() / 200.0)
         .product()
-}
-
-fn rect(w: f64, h: f64, cx: f64, cy: f64, round: f64) -> BezierPath {
-    let (l, t, r, b) = (cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0);
-    let round = round.clamp(0.0, w.abs().min(h.abs()) / 2.0);
-    let point = |x: f64, y: f64, tan_in: (f64, f64), tan_out: (f64, f64)| Vertex {
-        pos: (x, y),
-        tan_in,
-        tan_out,
-    };
-    let vertices = if round <= 0.0 {
-        vec![
-            point(r, t, (0.0, 0.0), (0.0, 0.0)),
-            point(r, b, (0.0, 0.0), (0.0, 0.0)),
-            point(l, b, (0.0, 0.0), (0.0, 0.0)),
-            point(l, t, (0.0, 0.0), (0.0, 0.0)),
-        ]
-    } else {
-        let k = round * KAPPA;
-        vec![
-            point(r - round, t, (0.0, 0.0), (k, 0.0)),
-            point(r, t + round, (0.0, -k), (0.0, 0.0)),
-            point(r, b - round, (0.0, 0.0), (0.0, k)),
-            point(r - round, b, (k, 0.0), (0.0, 0.0)),
-            point(l + round, b, (0.0, 0.0), (-k, 0.0)),
-            point(l, b - round, (0.0, k), (0.0, 0.0)),
-            point(l, t + round, (0.0, 0.0), (0.0, -k)),
-            point(l + round, t, (-k, 0.0), (0.0, 0.0)),
-        ]
-    };
-    BezierPath {
-        vertices,
-        closed: true,
-    }
-}
-
-fn ellipse(w: f64, h: f64, cx: f64, cy: f64) -> BezierPath {
-    let (rx, ry) = (w / 2.0, h / 2.0);
-    let (kx, ky) = (rx * KAPPA, ry * KAPPA);
-    BezierPath {
-        vertices: vec![
-            Vertex {
-                pos: (cx, cy - ry),
-                tan_in: (-kx, 0.0),
-                tan_out: (kx, 0.0),
-            },
-            Vertex {
-                pos: (cx + rx, cy),
-                tan_in: (0.0, -ky),
-                tan_out: (0.0, ky),
-            },
-            Vertex {
-                pos: (cx, cy + ry),
-                tan_in: (kx, 0.0),
-                tan_out: (-kx, 0.0),
-            },
-            Vertex {
-                pos: (cx - rx, cy),
-                tan_in: (0.0, ky),
-                tan_out: (0.0, -ky),
-            },
-        ],
-        closed: true,
-    }
-}
-
-/// A star or a polygon, pointing up, its corners rounded the way After
-/// Effects rounds them.
-fn star(s: &Star, t: f64) -> BezierPath {
-    let points = s.points.value_at(t).floor().clamp(3.0, 1000.0);
-    let corners = if s.polygon { points } else { points * 2.0 };
-    let step = std::f64::consts::TAU / corners;
-    let (cx, cy) = (s.at[0].value_at(t), s.at[1].value_at(t));
-    let mut angle = -std::f64::consts::FRAC_PI_2 + s.rotation.value_at(t).to_radians();
-    let mut vertices = Vec::new();
-    for i in 0..corners as usize {
-        let outer = s.polygon || i % 2 == 0;
-        let (radius, round) = if outer {
-            (s.outer.value_at(t), s.outer_round.value_at(t) / 100.0)
-        } else {
-            (s.inner.value_at(t), s.inner_round.value_at(t) / 100.0)
-        };
-        let (sin, cos) = angle.sin_cos();
-        let reach = std::f64::consts::TAU * radius / (corners * 4.0) * round;
-        // Along the edge, at right angles to the spoke.
-        let (ox, oy) = (-sin, cos);
-        vertices.push(Vertex {
-            pos: (cx + radius * cos, cy + radius * sin),
-            tan_in: (-ox * reach, -oy * reach),
-            tan_out: (ox * reach, oy * reach),
-        });
-        angle += step;
-    }
-    BezierPath {
-        vertices,
-        closed: true,
-    }
 }
 
 fn xf(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Xf {
@@ -778,6 +739,19 @@ fn point_of(props: &[Property], name: &str) -> Option<[f64; 2]> {
         super::props::axis_of(value, 0)?,
         super::props::axis_of(value, 1)?,
     ])
+}
+
+/// What After Effects calls an operator, whatever this one was renamed, so
+/// the rows about one kind read alike.
+fn kind_name(node: &Property, fallback: &str) -> String {
+    match match_name_of(node) {
+        "ADBE Vector Filter - Twist" => "Twist",
+        "ADBE Vector Filter - Wiggler" => "Wiggle Transform",
+        "ADBE Vector Filter - Roughen" => "Wiggle Paths",
+        "ADBE Vector Filter - Offset" => "Offset Paths",
+        _ => fallback,
+    }
+    .to_string()
 }
 
 fn not_carried(conv: &mut Conv<'_>, path: &ItemPath, name: &str) {

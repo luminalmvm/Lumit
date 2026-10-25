@@ -81,3 +81,34 @@ fn text_layers_keep_their_words_and_how_they_are_set() {
     assert!(document.style.stroke_on);
     assert_eq!(document.style.stroke_width, 4.0);
 }
+
+#[test]
+fn gradients_and_merged_paths_come_across() {
+    let doc = imported();
+    let LayerKind::Shape { contents } = &layer(&doc, "Mix").kind else {
+        panic!("a shape layer");
+    };
+
+    // Red, a half clear green half way, blue.
+    let ramp = contents
+        .iter()
+        .find(|item| item.gradient == 1)
+        .expect("the gradient");
+    let red = ramp.fill.expect("a start").0;
+    let blue = ramp.gradient_colour.expect("an end").0;
+    assert!(red[0] > 0.9 && red[2] < 0.1, "{red:?}");
+    assert!(blue[2] > 0.9 && blue[0] < 0.1, "{blue:?}");
+    assert_eq!(ramp.gradient_stops.len(), 1);
+    assert_eq!(ramp.gradient_stops[0].position.value_at(0.0), 50.0);
+    assert_eq!(ramp.gradient_stops[0].opacity.value_at(0.0), 50.0);
+
+    // Merge Paths' subtract: the second square cut out of the first.
+    let LayerKind::Shape { contents } = &layer(&doc, "Ops").kind else {
+        panic!("a shape layer");
+    };
+    let combined: Vec<u32> = contents.iter().map(|item| item.combine).collect();
+    assert!(
+        combined.windows(2).any(|pair| pair == [0, 2]),
+        "{combined:?}"
+    );
+}

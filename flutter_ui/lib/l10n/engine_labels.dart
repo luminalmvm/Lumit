@@ -1665,6 +1665,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeBlendModeClassic(a('ae_mode'));
     case 'shape_operator_not_carried':
       return l10n.aeShapeOperatorNotCarried(a('name'));
+    case 'shape_operator_approximated':
+      return l10n.aeShapeOperatorApproximated(a('name'));
     case 'shape_paint_kept_still':
       return l10n.aeShapePaintKeptStill;
     case 'shape_gradient_colours_default':

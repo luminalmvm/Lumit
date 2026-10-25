@@ -11520,6 +11520,15 @@
       }
     }
   },
+  "aeShapeOperatorApproximated": "{name} is drawn with the nearest Lumit modifier, so it looks a little different",
+  "@aeShapeOperatorApproximated": {
+    "description": "Import report row reason, lower case. A shape layer operator such as Wiggle Paths that Lumit draws with its own nearest modifier. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "aeShapePaintKeptStill": "the paint's animation is not carried — it keeps the value it starts on",
   "@aeShapePaintKeptStill": {
     "description": "Import report row reason, lower case. A shape's fill or stroke colour, opacity or width was animated, and Lumit keeps these still."

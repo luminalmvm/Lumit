@@ -189,6 +189,9 @@ pub enum Reason {
     /// A shape operator Lumit has no place for, such as Merge Paths or Zig
     /// Zag. The shape draws without it.
     ShapeOperatorNotCarried { name: String },
+    /// A shape operator drawn with the nearest Lumit modifier: Wiggle Paths
+    /// with Deform, and Offset Paths with its corners rounded and no copies.
+    ShapeOperatorApproximated { name: String },
     /// A fill's or stroke's colour, opacity or width, or a group's opacity, is
     /// keyed. Lumit keeps these still, so it imports as it starts.
     ShapePaintKeptStill,
@@ -431,6 +434,10 @@ impl std::fmt::Display for Reason {
             Self::ShapeOperatorNotCarried { name } => {
                 write!(f, "{name} has no equivalent — the shape draws without it")
             }
+            Self::ShapeOperatorApproximated { name } => write!(
+                f,
+                "{name} is drawn with the nearest Lumit modifier, so it looks a little different"
+            ),
             Self::ShapePaintKeptStill => write!(
                 f,
                 "the paint's animation is not carried — it keeps the value it starts on"

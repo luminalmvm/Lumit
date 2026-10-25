@@ -39,6 +39,7 @@ mod fx_distort;
 mod layers;
 mod masks;
 mod props;
+mod shape_paths;
 mod shapes;
 mod styles;
 mod table;
