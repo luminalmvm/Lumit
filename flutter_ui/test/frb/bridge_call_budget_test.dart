@@ -37,7 +37,6 @@ import 'package:lumit_flutter/state/dock.dart' show Panel;
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -1718,10 +1717,14 @@ void main() {
                   x: 400, y: 400, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
             ],
             closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1)),
             stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: const BridgeScalar.static_(100),
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),

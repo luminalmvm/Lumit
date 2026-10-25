@@ -25767,10 +25767,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       name: dco_decode_String(arr[1]),
       vertices: dco_decode_list_bridge_vertex(arr[2]),
       closed: dco_decode_bool(arr[3]),
-      fill: dco_decode_opt_box_autoadd_bridge_colour_rgba(arr[4]),
-      stroke: dco_decode_opt_box_autoadd_bridge_colour_rgba(arr[5]),
-      strokeWidth: dco_decode_f_64(arr[6]),
-      opacity: dco_decode_f_64(arr[7]),
+      fill: dco_decode_opt_box_autoadd_bridge_colour(arr[4]),
+      stroke: dco_decode_opt_box_autoadd_bridge_colour(arr[5]),
+      strokeWidth: dco_decode_bridge_scalar(arr[6]),
+      opacity: dco_decode_bridge_scalar(arr[7]),
       trimStart: dco_decode_bridge_scalar(arr[8]),
       trimEnd: dco_decode_bridge_scalar(arr[9]),
       trimOffset: dco_decode_bridge_scalar(arr[10]),
@@ -27783,6 +27783,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeClipFade? dco_decode_opt_box_autoadd_bridge_clip_fade(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_bridge_clip_fade(raw);
+  }
+
+  @protected
+  BridgeColour? dco_decode_opt_box_autoadd_bridge_colour(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bridge_colour(raw);
   }
 
   @protected
@@ -32919,11 +32925,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_name = sse_decode_String(deserializer);
     var var_vertices = sse_decode_list_bridge_vertex(deserializer);
     var var_closed = sse_decode_bool(deserializer);
-    var var_fill = sse_decode_opt_box_autoadd_bridge_colour_rgba(deserializer);
-    var var_stroke =
-        sse_decode_opt_box_autoadd_bridge_colour_rgba(deserializer);
-    var var_strokeWidth = sse_decode_f_64(deserializer);
-    var var_opacity = sse_decode_f_64(deserializer);
+    var var_fill = sse_decode_opt_box_autoadd_bridge_colour(deserializer);
+    var var_stroke = sse_decode_opt_box_autoadd_bridge_colour(deserializer);
+    var var_strokeWidth = sse_decode_bridge_scalar(deserializer);
+    var var_opacity = sse_decode_bridge_scalar(deserializer);
     var var_trimStart = sse_decode_bridge_scalar(deserializer);
     var var_trimEnd = sse_decode_bridge_scalar(deserializer);
     var var_trimOffset = sse_decode_bridge_scalar(deserializer);
@@ -35825,6 +35830,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_bridge_clip_fade(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  BridgeColour? sse_decode_opt_box_autoadd_bridge_colour(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_colour(deserializer));
     } else {
       return null;
     }
@@ -40425,10 +40442,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_String(self.name, serializer);
     sse_encode_list_bridge_vertex(self.vertices, serializer);
     sse_encode_bool(self.closed, serializer);
-    sse_encode_opt_box_autoadd_bridge_colour_rgba(self.fill, serializer);
-    sse_encode_opt_box_autoadd_bridge_colour_rgba(self.stroke, serializer);
-    sse_encode_f_64(self.strokeWidth, serializer);
-    sse_encode_f_64(self.opacity, serializer);
+    sse_encode_opt_box_autoadd_bridge_colour(self.fill, serializer);
+    sse_encode_opt_box_autoadd_bridge_colour(self.stroke, serializer);
+    sse_encode_bridge_scalar(self.strokeWidth, serializer);
+    sse_encode_bridge_scalar(self.opacity, serializer);
     sse_encode_bridge_scalar(self.trimStart, serializer);
     sse_encode_bridge_scalar(self.trimEnd, serializer);
     sse_encode_bridge_scalar(self.trimOffset, serializer);
@@ -42678,6 +42695,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_clip_fade(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_colour(
+      BridgeColour? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_colour(self, serializer);
     }
   }
 

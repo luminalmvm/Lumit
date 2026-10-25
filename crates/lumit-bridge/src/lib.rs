@@ -107,6 +107,7 @@ mod realtime;
 mod render;
 mod scratch;
 mod script;
+mod shape_paint;
 mod streams;
 
 pub mod api;

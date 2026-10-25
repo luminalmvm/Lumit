@@ -260,7 +260,58 @@ enum ShapeValue {
   repeatScale,
   repeatStartOpacity,
   repeatEndOpacity,
+
+  /// The paint, keyed like the rest. A colour row keys its three channels
+  /// together, and the row's `stop` names one channel where a single number
+  /// is meant: the graph's curves and a lane drag's writes.
+  fillColour,
+  strokeColour,
+  strokeWidth,
+  opacity,
 }
+
+/// Which of a shape item's values are its colours, three numbers under one
+/// stopwatch.
+bool isColourValue(ShapeValue value) =>
+    value == ShapeValue.fillColour || value == ShapeValue.strokeColour;
+
+/// Which of a shape item's values are its paint, given rows of their own
+/// before the numbers that change the path.
+bool isPaintValue(ShapeValue value) => switch (value) {
+      ShapeValue.fillColour ||
+      ShapeValue.strokeColour ||
+      ShapeValue.strokeWidth ||
+      ShapeValue.opacity =>
+        true,
+      _ => false,
+    };
+
+/// One channel of [colour], 0 to 3 for red, green, blue and alpha.
+BridgeScalar colourChannel(BridgeColour colour, int channel) =>
+    switch (channel) {
+      1 => colour.g,
+      2 => colour.b,
+      3 => colour.a,
+      _ => colour.r,
+    };
+
+/// [colour] with one channel replaced.
+BridgeColour colourWithChannel(
+        BridgeColour colour, int channel, BridgeScalar to) =>
+    BridgeColour(
+      r: channel == 0 ? to : colour.r,
+      g: channel == 1 ? to : colour.g,
+      b: channel == 2 ? to : colour.b,
+      a: channel == 3 ? to : colour.a,
+    );
+
+/// A colour that does not move, as the engine stores one.
+BridgeColour stillColour(BridgeColourRgba c) => BridgeColour(
+      r: BridgeScalar.static_(c.r),
+      g: BridgeScalar.static_(c.g),
+      b: BridgeScalar.static_(c.b),
+      a: BridgeScalar.static_(c.a),
+    );
 
 /// The operations a shape item can be given from its menu. Each is absent
 /// until it is added, and its rows with it.
@@ -361,7 +412,11 @@ bool isRepeatStepValue(ShapeValue value) =>
       ShapeValue.dash ||
       ShapeValue.gap ||
       ShapeValue.dashOffset ||
-      ShapeValue.repeatCopies =>
+      ShapeValue.repeatCopies ||
+      ShapeValue.fillColour ||
+      ShapeValue.strokeColour ||
+      ShapeValue.strokeWidth ||
+      ShapeValue.opacity =>
         false,
       _ => true,
     };
@@ -384,10 +439,6 @@ enum ShapePaint {
   /// or exclude. First, because it decides what the rest of the rows
   /// are painting.
   combine,
-
-  /// The colour inside the path — and, where there is a ramp, the colour the
-  /// ramp starts at.
-  fill,
 
   /// Flat, linear or radial.
   gradient,
@@ -417,7 +468,6 @@ final class FoldShapePaintRow extends LayerFoldRow {
 /// What a shape item's paint row is called.
 String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.combine => l10n.shapeCombine,
-      ShapePaint.fill => l10n.shapeFill,
       ShapePaint.gradient => l10n.shapeGradient,
       ShapePaint.gradientColour => l10n.shapeGradientColour,
       ShapePaint.gradientStops => l10n.shapeGradientStops,
@@ -1204,6 +1254,10 @@ BridgeStroke strokeWithScalar(
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.path => l10n.shapePath,
+      ShapeValue.fillColour => l10n.shapeFill,
+      ShapeValue.strokeColour => l10n.shapeStroke,
+      ShapeValue.strokeWidth => l10n.shapeStrokeWidth,
+      ShapeValue.opacity => l10n.shapeOpacity,
       ShapeValue.gradientStopPosition =>
         l10n.shapeGradientStopPositionRow(stop + 1),
       ShapeValue.gradientStopOpacity =>
@@ -1313,6 +1367,18 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.repeatScale => item.repeatScale,
       ShapeValue.repeatStartOpacity => item.repeatStartOpacity,
       ShapeValue.repeatEndOpacity => item.repeatEndOpacity,
+      // A colour's row reads as its red, the channel a lane shows the keys
+      // of; `stop` names the others.
+      ShapeValue.fillColour => switch (item.fill) {
+          final c? => colourChannel(c, stop),
+          null => _none,
+        },
+      ShapeValue.strokeColour => switch (item.stroke) {
+          final c? => colourChannel(c, stop),
+          null => _none,
+        },
+      ShapeValue.strokeWidth => item.strokeWidth,
+      ShapeValue.opacity => item.opacity,
     };
 
 /// [item] with whatever is named replaced and everything else carried over.
@@ -1325,10 +1391,10 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeItem item, {
   String? name,
   List<BridgeVertex>? vertices,
-  double? opacity,
   ShapeValue? value,
   BridgeScalar? to,
-  BridgeColourRgba? fill,
+  BridgeColour? fill,
+  BridgeColour? stroke,
   int? gradient,
   BridgeColourRgba? gradientColour,
   BridgeScalar? gradientStartX,
@@ -1358,10 +1424,20 @@ BridgeShapeItem shapeItemWith(
     name: name ?? item.name,
     vertices: vertices ?? item.vertices,
     closed: item.closed,
-    fill: fill ?? item.fill,
-    stroke: item.stroke,
-    strokeWidth: item.strokeWidth,
-    opacity: opacity ?? item.opacity,
+    fill: fill ??
+        switch (item.fill) {
+          final c? when value == ShapeValue.fillColour =>
+            colourWithChannel(c, stop, to!),
+          final c => c,
+        },
+    stroke: stroke ??
+        switch (item.stroke) {
+          final c? when value == ShapeValue.strokeColour =>
+            colourWithChannel(c, stop, to!),
+          final c => c,
+        },
+    strokeWidth: at(ShapeValue.strokeWidth, item.strokeWidth),
+    opacity: at(ShapeValue.opacity, item.opacity),
     gradient: gradient ?? item.gradient,
     gradientColour: gradientColour ?? item.gradientColour,
     gradientStartX:
@@ -1691,18 +1767,20 @@ bool moveLaneKeys({
         if (next == null) return false;
         return entry.layer.setShapePathKeys(id: item.id, keys: next);
       }
-      final shapeScalar = shapeScalarOf(item, value, stop: stop);
-      if (shapeScalar is! BridgeScalar_Keyframed) return false;
-      final shapeNext = moved(shapeScalar.field0);
-      if (shapeNext == null) return false;
+      var written = item;
+      for (final channel in isColourValue(value) ? const [0, 1, 2] : [stop]) {
+        final shapeScalar = shapeScalarOf(item, value, stop: channel);
+        if (shapeScalar is! BridgeScalar_Keyframed) return false;
+        final shapeNext = moved(shapeScalar.field0);
+        if (shapeNext == null) return false;
+        written = shapeWithScalar(
+            written, value, BridgeScalar.keyframed(shapeNext),
+            stop: channel);
+      }
       entry.layer.setShapeContents(
         contents: [
           for (final other in entry.layer.getShapeContents())
-            if (other.id == item.id)
-              shapeWithScalar(other, value, BridgeScalar.keyframed(shapeNext),
-                  stop: stop)
-            else
-              other,
+            if (other.id == item.id) written else other,
         ],
         at: null,
       );
@@ -2185,7 +2263,7 @@ List<LayerFoldRow> layerFoldRows({
         // is what the rest of the rows modify. A shape with no fill
         // has no colour to show and nothing to ramp.
         if (item.fill != null) {
-          rows.add(FoldShapePaintRow(item, ShapePaint.fill, depth: 3));
+          rows.add(FoldShapeValueRow(item, ShapeValue.fillColour, depth: 3));
           rows.add(FoldShapePaintRow(item, ShapePaint.gradient, depth: 3));
           if (item.gradient != 0) {
             rows.add(
@@ -2194,10 +2272,16 @@ List<LayerFoldRow> layerFoldRows({
                 FoldShapePaintRow(item, ShapePaint.gradientStops, depth: 3));
           }
         }
+        if (item.stroke != null) {
+          rows.add(FoldShapeValueRow(item, ShapeValue.strokeColour, depth: 3));
+          rows.add(FoldShapeValueRow(item, ShapeValue.strokeWidth, depth: 3));
+        }
+        rows.add(FoldShapeValueRow(item, ShapeValue.opacity, depth: 3));
         // Its numbers sit under it, the way a stroke's trim sits under the
         // stroke, and in the order they read: where the art
         // begins, where it ends, and how far the pair is slid along.
         for (final value in ShapeValue.values) {
+          if (isPaintValue(value)) continue;
           // The dashes' rows belong to the outline, so they appear only where
           // there is one to dash — three dead rows on a fill-only shape would
           // be three promises the item cannot keep.

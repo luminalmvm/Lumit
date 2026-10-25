@@ -29,8 +29,9 @@ import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 
 /// One piece of a shape layer's art in the Timeline, on the shared
-/// [ItemOpacityRow]. The engine takes the whole contents list, so every
-/// edit — and the drag's preview — is "the list, with this item changed".
+/// [ItemOpacityRow] with no opacity of its own: a shape's opacity keys, so it
+/// is a row under the item. The engine takes the whole contents list, so every
+/// edit is "the list, with this item changed".
 class ShapeItemRow extends StatelessWidget {
   final LayerReference layer;
   final BridgeShapeItem item;
@@ -58,14 +59,9 @@ class ShapeItemRow extends StatelessWidget {
     this.onLabelTap,
   });
 
-  static BridgeShapeItem _with(BridgeShapeItem i,
-          {String? name, double? opacity}) =>
-      shapeItemWith(i, name: name, opacity: opacity);
-
   /// Write the contents back with this item changed, or dropped.
   void _write(
       {String? name,
-      double? opacity,
       bool delete = false,
       BridgeShapeItem Function(BridgeShapeItem)? change}) {
     try {
@@ -74,7 +70,7 @@ class ShapeItemRow extends StatelessWidget {
           if (other.id != item.id)
             other
           else if (!delete)
-            change?.call(other) ?? _with(other, name: name, opacity: opacity),
+            change?.call(other) ?? shapeItemWith(other, name: name),
       ]);
       onChanged();
     } catch (_) {
@@ -179,26 +175,8 @@ class ShapeItemRow extends StatelessWidget {
       onToggle: onToggle,
       renameRequest: ui.renameItemRequest,
       onLabelTap: onLabelTap,
-      opacity: item.opacity,
+      opacity: null,
       valueColumn: valueColumn,
-      // Show the opacity the drag is passing through without writing it,
-      // exactly as the stroke row does.
-      onPreview: (opacity) {
-        try {
-          comp.renderFrameWithShapePreview(
-            frame: BigInt.from(ui.playheadFrame.value),
-            scale: ui.viewerScale,
-            layer: layer,
-            contents: [
-              for (final i in layer.getShapeContents())
-                if (i.id == item.id) _with(i, opacity: opacity) else i,
-            ],
-          );
-        } catch (_) {
-          // A preview is a courtesy; the drag carries on without it.
-        }
-      },
-      onCommit: (opacity) => _write(opacity: opacity),
       onRename: (name) => _write(name: name),
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
@@ -667,8 +645,66 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   BridgeScalar get _scalar =>
       shapeScalarOf(widget.item, widget.value, stop: widget.stop);
 
+  bool get _isColour => isColourValue(widget.value);
+
+  BridgeColour? get _colour => widget.value == ShapeValue.fillColour
+      ? widget.item.fill
+      : widget.item.stroke;
+
+  /// What the stopwatch keys: a colour's red, green and blue together, the
+  /// one number otherwise.
+  List<BridgeScalar> get _scalars => switch (_colour) {
+        final c? when _isColour => [c.r, c.g, c.b],
+        _ => [_scalar],
+      };
+
+  /// [i] with the row's values replaced by [to], in [_scalars]' order.
+  BridgeShapeItem _with(BridgeShapeItem i, List<BridgeScalar> to) {
+    if (!_isColour) {
+      return shapeWithScalar(i, widget.value, to.first, stop: widget.stop);
+    }
+    final was = widget.value == ShapeValue.fillColour ? i.fill : i.stroke;
+    if (was == null || to.length < 3) return i;
+    final c = BridgeColour(r: to[0], g: to[1], b: to[2], a: was.a);
+    return widget.value == ShapeValue.fillColour
+        ? shapeItemWith(i, fill: c)
+        : shapeItemWith(i, stroke: c);
+  }
+
   String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}'
       '${isGradientStopValue(widget.value) ? '-${widget.stop}' : ''}';
+
+  /// The colour as it reads under the playhead. Picking one writes each keyed
+  /// channel a key there and sets a still one, as an effect's colour does.
+  Widget _swatch(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final rgb = _scalars;
+    Widget swatch() {
+      final frame = ui.playheadFrame.value;
+      double now(BridgeScalar s) =>
+          sampledScalar(s, timeOfFrame(widget.comp, frame));
+      int byte(BridgeScalar s) => (now(s).clamp(0.0, 1.0) * 255).round();
+      return ColourSwatchButton(
+        key: ValueKey<String>(_rowKey),
+        colour: documentColour(byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), 255),
+        // A shape's colours are scene-linear, so the picker counts in 0—1
+        // rather than in bytes.
+        scale: ColourScale.unit,
+        onPicked: (p) => _writeAll([
+          for (final (channel, v) in [p.r, p.g, p.b].indexed)
+            rgb[channel] is BridgeScalar_Static
+                ? BridgeScalar.static_(v)
+                : scalarWithValueAt(rgb[channel], v, widget.comp, frame),
+        ]),
+      );
+    }
+
+    if (rgb.every((s) => s is BridgeScalar_Static)) return swatch();
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, _, __) => swatch(),
+    );
+  }
 
   /// The trim's two ends are a per cent of the path's own length; its offset is
   /// degrees, because degrees go round; the dashes are lengths in layer pixels.
@@ -677,7 +713,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   (double, double, String) get _units => switch (widget.value) {
         // The shape has no number to drag, so no range and no unit: its row is
         // the stopwatch and its diamonds.
-        ShapeValue.path => (0, 0, ''),
+        ShapeValue.path ||
+        ShapeValue.fillColour ||
+        ShapeValue.strokeColour =>
+          (0, 0, ''),
+        ShapeValue.strokeWidth => (0, 1000, ' px'),
+        ShapeValue.opacity => (0, 100, '%'),
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),
         // Where the ramp starts and ends, in the art's own coordinates.
@@ -746,7 +787,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 
   /// Show the value the drag is passing through without writing it.
-  void _preview(BridgeScalar v) {
+  void _preview(BridgeScalar v) => _previewAll([v]);
+
+  void _previewAll(List<BridgeScalar> v) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _throttle.request(() {
       try {
@@ -756,10 +799,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           layer: widget.layer,
           contents: [
             for (final i in widget.layer.getShapeContents())
-              if (i.id == widget.item.id)
-                shapeWithScalar(i, widget.value, v, stop: widget.stop)
-              else
-                i,
+              if (i.id == widget.item.id) _with(i, v) else i,
           ],
         );
       } catch (_) {
@@ -768,16 +808,16 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     });
   }
 
-  void _write(BridgeScalar v) {
+  void _write(BridgeScalar v) => _writeAll([v]);
+
+  void _writeAll(List<BridgeScalar> v) {
+    _throttle.cancel();
     setState(() => _staged = null);
     try {
       widget.layer.setShapeContents(
         contents: [
           for (final i in widget.layer.getShapeContents())
-            if (i.id == widget.item.id)
-              shapeWithScalar(i, widget.value, v, stop: widget.stop)
-            else
-              i,
+            if (i.id == widget.item.id) _with(i, v) else i,
         ],
         // Not a shape edit: a keyed path is carried through untouched.
         at: null,
@@ -809,8 +849,8 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           )
         else
           KeyframeControlsFrb(
-            scalars: [_scalar],
-            onWrite: (s) => _write(s.first),
+            scalars: _scalars,
+            onWrite: _writeAll,
             comp: widget.comp,
             onSeek: widget.onSeek,
             rowKey: _rowKey,
@@ -830,7 +870,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             // drawing tools are where it is edited.
             child: _isPath
                 ? const SizedBox.shrink()
-                : SizedBox(width: 72, child: _field()),
+                : _isColour
+                    ? _swatch(context)
+                    : SizedBox(width: 72, child: _field()),
           ),
         ),
         SizedBox(width: widget.valueColumn.rightInset),
@@ -907,10 +949,10 @@ class _RampChip extends StatelessWidget {
   }
 }
 
-/// A shape item's fill colour, its gradient choice, or the gradient's second
-/// colour. None of the three is a number, so this row carries a swatch
-/// or a dropdown where the others carry a value field — and no stopwatch,
-/// because none of them keys.
+/// A shape item's gradient choice or the gradient's second colour, and the
+/// other choices an item has. None of them is a number, so this row carries a
+/// swatch or a dropdown where the others carry a value field, and no
+/// stopwatch, because none of them keys.
 class ShapePaintRow extends StatelessWidget {
   final LayerReference layer;
   final BridgeShapeItem item;
@@ -995,7 +1037,11 @@ class ShapePaintRow extends StatelessWidget {
   /// The gradient as its editor holds it, each stop named by where it is in
   /// the item's list.
   GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
-        startColour: i.fill ?? _defaultEnd,
+        startColour: switch (i.fill) {
+          final c? => BridgeColourRgba(
+              r: _now(c.r, ui), g: _now(c.g, ui), b: _now(c.b, ui), a: _now(c.a, ui)),
+          null => _defaultEnd,
+        },
         startOpacity: _now(i.gradientStartOpacity, ui),
         endColour: i.gradientColour ?? _defaultEnd,
         endOpacity: _now(i.gradientEndOpacity, ui),
@@ -1026,7 +1072,14 @@ class ShapePaintRow extends StatelessWidget {
           LumitUiState ui, Map<int, BridgeGradientStop> known) =>
       shapeItemWith(
         i,
-        fill: ramp.startColour,
+        fill: switch (i.fill) {
+          final c? => BridgeColour(
+              r: _held(c.r, ramp.startColour.r, ui),
+              g: _held(c.g, ramp.startColour.g, ui),
+              b: _held(c.b, ramp.startColour.b, ui),
+              a: c.a),
+          null => stillColour(ramp.startColour),
+        },
         gradientColour: ramp.endColour,
         gradientStartOpacity:
             _held(i.gradientStartOpacity, ramp.startOpacity, ui),
@@ -1057,7 +1110,9 @@ class ShapePaintRow extends StatelessWidget {
           ramp: _rampOf(item, ui),
           onOpen: (at) => _editStops(context, at),
         );
+    final fill = item.fill;
     final still = [
+      if (fill != null) ...[fill.r, fill.g, fill.b],
       item.gradientStartOpacity,
       item.gradientEndOpacity,
       for (final s in item.gradientStops) ...[s.position, s.opacity],
@@ -1168,15 +1223,6 @@ class ShapePaintRow extends StatelessWidget {
                     },
                     onChanged: (k) => _write((i) => _aimed(i, k)),
                   ),
-                ),
-              ShapePaint.fill => ColourSwatchButton(
-                  key: ValueKey<String>(key),
-                  colour: _shown(item.fill ?? _defaultEnd),
-                  // A shape's colours are scene-linear, so the picker counts
-                  // in 0—1 rather than in bytes.
-                  scale: ColourScale.unit,
-                  onPicked: (p) => _write((i) =>
-                      shapeItemWith(i, fill: _picked(p, i.fill?.a ?? 1))),
                 ),
               ShapePaint.gradientColour => ColourSwatchButton(
                   key: ValueKey<String>(key),

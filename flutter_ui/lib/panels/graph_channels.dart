@@ -436,6 +436,25 @@ List<GraphChannel> graphChannels({
       for (final item in entry.info.shapeContents) {
         if (item.id.toString() != rest.substring(0, slash)) continue;
         if (value == ShapeValue.path && item.pathKeys.isEmpty) break;
+        // A colour is three curves under the row's one stopwatch, one for
+        // each channel, the way a position is one for each axis.
+        if (isColourValue(value)) {
+          for (final (channel, letter) in const ['R', 'G', 'B'].indexed) {
+            out.add(GraphChannel(
+              path: path,
+              id: '$path#$channel',
+              label: '${entry.info.name} · ${item.name} · '
+                  '${shapeValueLabel(value)} $letter',
+              colourIndex: out.length,
+              scalar: shapeScalarOf(item, value, stop: channel),
+              entry: entry,
+              shape: item,
+              shapeValue: value,
+              shapeStop: channel,
+            ));
+          }
+          break;
+        }
         out.add(GraphChannel(
           path: path,
           id: path,

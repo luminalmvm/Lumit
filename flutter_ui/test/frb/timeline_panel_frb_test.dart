@@ -646,10 +646,14 @@ void main() {
               corner(0, 40),
             ],
             closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1)),
             stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: const BridgeScalar.static_(100),
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
@@ -691,16 +695,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Rectangle'), findsWidgets);
 
-      // The row's opacity writes through to the document.
       final item = layer.getShapeContents().single;
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-shape-opacity-${item.id}')));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-          find.byKey(ValueKey<String>('tl-shape-opacity-${item.id}')), '30');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(layer.getShapeContents().single.opacity, 30);
 
       // The trim's three rows sit under the item, shut until its own twirl
       // opens it, and each writes through.
@@ -711,6 +706,17 @@ void main() {
       expect(find.text('Trim start'), findsOneWidget);
       expect(find.text('Trim end'), findsOneWidget);
       expect(find.text('Trim offset'), findsOneWidget);
+
+      // The opacity is a row under the item too, and writes through.
+      final opacity =
+          find.byKey(ValueKey<String>('tl-shape-opacity-${item.id}'));
+      await tester.tap(opacity);
+      await tester.pumpAndSettle();
+      await tester.enterText(opacity, '30');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.opacity,
+          const BridgeScalar.static_(30));
       final field = find.byKey(ValueKey<String>('tl-shape-trimEnd-${item.id}'));
       await tester.tap(field);
       await tester.pumpAndSettle();

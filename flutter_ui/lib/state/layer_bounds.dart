@@ -117,7 +117,8 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
   for (final item in contents) {
     // Half the outline sits outside the path, and an outline pushed *out* of
     // it sits further out still. Pulled in it never needs more room.
-    final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
+    final half =
+        (item.stroke != null ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
         math.max(0.0, evaluateScalar(item.offsetAmount, t));
     final own = _boxOf(_controlPoints(item));
     if (own == null) continue;

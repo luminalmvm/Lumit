@@ -29,6 +29,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show stillColour;
 import 'viewer_gizmo.dart';
 import 'viewer_tool_cursor.dart';
 import '../widgets/escape_ladder.dart';
@@ -426,10 +427,11 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             // Always closed: a shape tool draws a closed figure, and the Pen
             // commits only when its path has come back to its first point.
             closed: true,
-            fill: tools.fillRgba,
-            stroke: tools.strokeWidth > 0 ? tools.strokeRgba : null,
-            strokeWidth: tools.strokeWidth,
-            opacity: 100,
+            fill: stillColour(tools.fillRgba),
+            stroke:
+                tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
+            strokeWidth: BridgeScalar.static_(tools.strokeWidth),
+            opacity: const BridgeScalar.static_(100),
             // Whole, until somebody trims it.
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),

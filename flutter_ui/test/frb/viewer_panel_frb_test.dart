@@ -34,7 +34,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart' show CameraPose;
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
@@ -1420,10 +1419,14 @@ void main() {
                   x: 400, y: 400, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
             ],
             closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1)),
             stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: const BridgeScalar.static_(100),
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
