@@ -36,7 +36,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/src/rust/api/project.dart' show ProjectReference;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart' show iconSize;
@@ -242,10 +241,6 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   /// The value under the pointer mid-drag; null when nothing is in flight.
   double? _staged;
 
-  /// The project while a drag holds an undo group open, so the key planted as
-  /// it starts and the value written on release are one undo step.
-  ProjectReference? _group;
-
   /// Whether this drag planted the key it is editing. That makes it the
   /// ordinary edit throughout, as the plant has shifted the picked keys along.
   bool _planted = false;
@@ -253,25 +248,13 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   void _ordinary(VoidCallback edit) =>
       _planted ? runZoned(edit, zoneValues: {_picked: null}) : edit();
 
-  void _closeGroup() {
-    _group?.endUndoGroup();
-    _group = null;
-  }
-
   void _commit(num value) {
     setState(() => _staged = null);
     try {
       _ordinary(() => widget.onCommit(value.toDouble()));
     } finally {
       _planted = false;
-      _closeGroup();
     }
-  }
-
-  @override
-  void dispose() {
-    _closeGroup();
-    super.dispose();
   }
 
   @override
@@ -291,8 +274,6 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
         onChanged: _commit,
         onChangeStart: () {
           setState(() => _staged = widget.value);
-          _group = Provider.of<LumitState>(context, listen: false).project
-            ?..beginUndoGroup();
           _planted = widget.onStart?.call() ?? false;
         },
         // A tick moves the number on screen, and shows it if the caller can.
@@ -304,7 +285,6 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
         onDragCancel: () {
           setState(() => _staged = null);
           _planted = false;
-          _closeGroup();
         },
       );
 }
