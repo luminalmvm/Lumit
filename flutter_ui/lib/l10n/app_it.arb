@@ -379,6 +379,10 @@
   "@applyInterpretation": {
     "description": "Project panel, a footage item's right-click menu: read every selected item the way the remembered one is."
   },
+  "armRazor": "Attiva la lametta",
+  "@armRazor": {
+    "description": "Menu item: pick up the blade that cuts a layer where you click."
+  },
   "audioChainNotBuilt": "Impossibile creare la catena audio su questo livello.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
@@ -1293,15 +1297,15 @@
   "@blendVividLight": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
-  "bootLoadingAudioPlugins": "Caricamento dei plugin audio",
+  "bootLoadingAudioPlugins": "Sto caricando i plugin audio…",
   "@bootLoadingAudioPlugins": {
     "description": "Step on the start-up splash, left of the progress bar, while the CLAP and VST3 audio plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
   },
-  "bootLoadingExtensions": "Caricamento delle estensioni",
+  "bootLoadingExtensions": "Sto caricando le estensioni…",
   "@bootLoadingExtensions": {
     "description": "Step on the start-up splash, left of the progress bar, while the effects that installed extensions add are read in."
   },
-  "bootLoadingPlugins": "Caricamento dei plugin",
+  "bootLoadingPlugins": "Sto caricando i plugin…",
   "@bootLoadingPlugins": {
     "description": "Step on the start-up splash, left of the progress bar, while the OFX effect plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
   },
@@ -1325,7 +1329,7 @@
   "@bringUnreadable": {
     "description": "Bottom-strip warning when a composition was to be brought in from a version in the project's history, or from another Lumit project file, and the file is not a project this Lumit can read."
   },
-  "brushShapeRound": "Rotondo",
+  "brushShapeRound": "Circolare",
   "@brushShapeRound": {
     "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
   },
@@ -1575,6 +1579,10 @@
   "@closePanel": {
     "description": "The right-click menu on a panel's tab: the row that takes the panel out of the arrangement. The same thing as un-ticking the panel in the Window menu."
   },
+  "colourOutsideRange": "Fuori dall'intervallo 0–1: il campione di colore e il codice esadecimale vengono troncati",
+  "@colourOutsideRange": {
+    "description": "Note in the colour picker when a value is brighter or darker than a screen can show."
+  },
   "colourSpace": "Spazio colore",
   "@colourSpace": {
     "description": "The Project panel's item menu: a submenu on a footage row, for saying which colour space that footage arrived in."
@@ -1587,7 +1595,7 @@
   "@colourSpaceFromFile": {
     "description": "A row in the Project panel's Colour space submenu: leave the footage to be interpreted the built-in way, from what the file itself states. The choice every clip starts on."
   },
-  "columnBlend": "Fusione",
+  "columnBlend": "Modalità",
   "@columnBlend": {
     "description": "Timeline column heading."
   },
@@ -1595,7 +1603,11 @@
   "@columnCompose": {
     "description": "Timeline column-cluster name, seen on the floating tag while the MATTE / BLEND pair of column headings is dragged to a new place in the outline. Not a heading itself: the two headings above the cells keep their own words."
   },
-  "columnLayer": "Livello",
+  "columnLane": "Visualizzazione",
+  "@columnLane": {
+    "description": "Column header in the Audio timeline panel over the chip that picks what each track's lane draws (Wave or Spectral). One word, sentence case; the panel draws it in capitals."
+  },
+  "columnLayer": "Livelli",
   "@columnLayer": {
     "description": "Timeline column heading, over the layer names."
   },
@@ -1603,7 +1615,7 @@
   "@columnMatte": {
     "description": "Timeline column heading."
   },
-  "columnModes": "Modalità",
+  "columnModes": "Proprietà",
   "@columnModes": {
     "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
   },
@@ -1611,11 +1623,15 @@
   "@columnNumber": {
     "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
   },
-  "columnParent": "Principale",
+  "columnParent": "Parentela",
   "@columnParent": {
     "description": "Timeline column heading."
   },
-  "columnTrack": "Traccia",
+  "columnSwitches": "Interruttori",
+  "@columnSwitches": {
+    "description": "Timeline column heading, over the per-layer visibility, audio, solo and lock switches. Also the label of that column's show/hide toggle in the Timeline's bottom bar."
+  },
+  "columnTrack": "Traccia audio",
   "@columnTrack": {
     "description": "Column header in the Audio timeline panel over the track names. The Audio timeline is the one place a row is called a track. One word, sentence case; the panel draws it in capitals."
   },
@@ -1678,6 +1694,10 @@
   "copyEffect": "Copia l'effetto",
   "@copyEffect": {
     "description": "Context-menu item on an effect heading: put the effect on the clipboard."
+  },
+  "copySequenceShape": "Copia la curva di velocità della sequenza",
+  "@copySequenceShape": {
+    "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
   "couldNotAddShapeLayer": "Impossibile aggiungere un livello forma",
   "@couldNotAddShapeLayer": {
@@ -3253,7 +3273,7 @@
   "@fadeShapeLinear": {
     "description": "Audio panel fade rows: the straight-line fade shape chip. An abbreviation of linear; keep it about three letters."
   },
-  "faultPanelTitle": "Impossibile disegnare questo pannello",
+  "faultPanelTitle": "Impossibile visualizzare questo pannello",
   "@faultPanelTitle": {
     "description": "Heading of the box that replaces a panel whose contents failed to draw. The line under it is the fault's own words, which are not translated."
   },
@@ -3498,6 +3518,10 @@
   "foldMasks": "Maschere",
   "@foldMasks": {
     "description": "Heading in a layer's fold-out, over its masks."
+  },
+  "foldPuppet": "Marionetta",
+  "@foldPuppet": {
+    "description": "Heading in a layer's fold-out, over its puppet pins."
   },
   "foldStyles": "Stili",
   "@foldStyles": {
@@ -3939,7 +3963,7 @@
   "@fxBevelAndEmboss": {
     "description": "Name of the Bevel and emboss layer style, shown on its card and its Timeline row."
   },
-  "fxBevelStyle": "Stile smusso",
+  "fxBevelStyle": "Smusso ed effetto rilievo",
   "@fxBevelStyle": {
     "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
   },
@@ -4015,7 +4039,7 @@
   "@fxBottomRight": {
     "description": "Effect controls — a Pin to option on Transform points: the bottom right corner of the composition."
   },
-  "fxBottomToTop": "Dal basso verso l'alto",
+  "fxBottomToTop": "Da sotto a sopra",
   "@fxBottomToTop": {
     "description": "Effect controls — a Flip order option on Card wipe."
   },
@@ -4027,6 +4051,10 @@
   "@fxBounciness": {
     "description": "Effect controls — a control on Particulate: how much of its speed a particle keeps as it bounces off a shape, as a percentage."
   },
+  "fxBoundary": "Contorno",
+  "@fxBoundary": {
+    "description": "Effect controls — a View option on Roto brush: keep the picture and draw the matte's edge over it."
+  },
   "fxBounds": "Limiti",
   "@fxBounds": {
     "description": "Effect controls — a control on Relax points: whether the points may drift anywhere or are held in the box they started in."
@@ -4035,13 +4063,17 @@
   "@fxBrightness": {
     "description": "Effect controls — the name of an effect, and its own first control."
   },
-  "fxBrushHardness": "Durezza pennello",
+  "fxBrushHardness": "Durezza del pennello",
   "@fxBrushHardness": {
     "description": "Effect controls — a control on Stroke: how crisp the brush’s edge is."
   },
-  "fxBrushSize": "Dimensione pennello",
+  "fxBrushSize": "Grandezza del pennello",
   "@fxBrushSize": {
     "description": "Effect controls — a control on Stroke: how wide the brush is."
+  },
+  "fxBulge": "Rigonfiamento",
+  "@fxBulge": {
+    "description": "Effect controls — a control on Spherize."
   },
   "fxBurstInterval": "Intervallo raffiche",
   "@fxBurstInterval": {
@@ -4051,9 +4083,17 @@
   "@fxBursts": {
     "description": "Effect controls — a group heading on Particulate, over the controls for extra particles that burst out beside the steady flow."
   },
+  "fxCameraTrack": "Tracciamento della camera",
+  "@fxCameraTrack": {
+    "description": "Effect name in the Add effect menu — solves the camera motion of a tracked shot."
+  },
   "fxCancel": "Annulla",
   "@fxCancel": {
     "description": "Effect controls — the button that stops a running camera solve on Camera track."
+  },
+  "fxCardWipe": "Comparsa a carte",
+  "@fxCardWipe": {
+    "description": "Effect name in the Add effect menu — turns the frame away as a grid of cards."
   },
   "fxCellHeight": "Altezza cella",
   "@fxCellHeight": {
@@ -4107,13 +4147,17 @@
   "@fxChecker": {
     "description": "Effect controls — a Pattern option on Vary points and Pick points: a chequerboard of alternate squares."
   },
-  "fxChiselHard": "Scolpisci duro",
+  "fxChiselHard": "Scalpello duro",
   "@fxChiselHard": {
     "description": "Option of a Bevel and emboss layer style's Technique: a hard-chiselled edge profile."
   },
-  "fxChiselSoft": "Scolpisci morbido",
+  "fxChiselSoft": "Scalpello morbido",
   "@fxChiselSoft": {
     "description": "Option of a Bevel and emboss layer style's Technique: a soft-chiselled edge profile."
+  },
+  "fxChoke": "Contrai",
+  "@fxChoke": {
+    "description": "An Inner shadow or Inner glow layer style's Choke parameter: how far the softened edge is pulled back in, per cent."
   },
   "fxChorus": "Chorus",
   "@fxChorus": {
@@ -4251,9 +4295,13 @@
   "@fxComplexity": {
     "description": "Effect controls — a control on Fractal noise."
   },
-  "fxComposite": "Composito",
+  "fxComposite": "Risultato composito",
   "@fxComposite": {
     "description": "Effect controls - an option on Remove background's View row: the layer with its background cut away."
+  },
+  "fxCompositeOnOriginal": "Sovrapponi all’originale",
+  "@fxCompositeOnOriginal": {
+    "description": "Effect controls — a switch on Beam, Lightning, Radio waves and Vegas: keep the layer under what is drawn, or draw on nothing."
   },
   "fxCompositing": "Compositing",
   "@fxCompositing": {
@@ -4272,7 +4320,15 @@
   "@fxCompressor": {
     "description": "Effect controls: the name of an audio effect, which turns down whatever is louder than a threshold."
   },
-  "fxConnections": "Connessioni",
+  "fxConductivityState": "Stato di conduttività",
+  "@fxConductivityState": {
+    "description": "Effect controls — a control on Lightning: the bolt's shape, animated to make it writhe."
+  },
+  "fxConnectPoints": "Connetti i punti",
+  "@fxConnectPoints": {
+    "description": "Effect controls — the name of the Connect points effect, which draws a line between every pair of points in a points stream that are near enough to each other."
+  },
+  "fxConnections": "Collegamenti",
   "@fxConnections": {
     "description": "Effect controls — a group heading on Connect points, over the controls that decide which pairs of points are joined by a line."
   },
@@ -4324,13 +4380,17 @@
   "@fxCoolingFilterLbb": {
     "description": "Effect controls — a Filter option on Photo filter. LBB is a photographic filter designation and is not translated."
   },
-  "fxCoreColour": "Colore nucleo",
+  "fxCoreColour": "Colore del nucleo",
   "@fxCoreColour": {
     "description": "Effect controls — a control on Lightning: the filament's colour."
   },
-  "fxCoreRadius": "Raggio nucleo",
+  "fxCoreRadius": "Raggio del nucleo",
   "@fxCoreRadius": {
     "description": "Effect controls — a control on Lightning: how thick the bright filament is."
+  },
+  "fxCornerPin": "Fissa agli angoli",
+  "@fxCornerPin": {
+    "description": "Effect name in the Add effect menu — the picture pulled onto four points."
   },
   "fxCornerRadius": "Raggio angoli",
   "@fxCornerRadius": {
@@ -4343,6 +4403,14 @@
   "fxCount": "Conteggio",
   "@fxCount": {
     "description": "Graph panel — an output socket on the Points sample driver: how many particles are alive this frame."
+  },
+  "fxCreateCornerPin": "Crea l'effetto fissa agli angoli",
+  "@fxCreateCornerPin": {
+    "description": "Effect controls — a button on Planar track: puts a Corner pin effect on the chosen layer, keyframed to the tracked surface."
+  },
+  "fxCreateTransformKeys": "Crea fotogrammi chiave per la trasformazione",
+  "@fxCreateTransformKeys": {
+    "description": "Effect controls — a button on Planar track: keyframes the chosen layer's own Position, and optionally Rotation and Scale, to the movement the track measured."
   },
   "fxCurve": "Curva",
   "@fxCurve": {
@@ -4548,7 +4616,7 @@
   "@fxDots": {
     "description": "Effect controls — a Style option on Trail: the tail is drawn as one dab per remembered place, rather than as a joined-up ribbon."
   },
-  "fxDown": "Giù",
+  "fxDown": "Verso il basso",
   "@fxDown": {
     "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
   },
@@ -4876,6 +4944,14 @@
   "@fxFlash": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxFlowResolution": "Risoluzione del movimento",
+  "@fxFlowResolution": {
+    "description": "Effect controls — a control on Roto brush: the resolution the propagation's optical flow is measured at."
+  },
+  "fxFlowSmoothness": "Fluidità del movimento",
+  "@fxFlowSmoothness": {
+    "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
+  },
   "fxFocusDistance": "Distanza di messa a fuoco",
   "@fxFocusDistance": {
     "description": "Effect controls — a control on Depth of field."
@@ -5024,11 +5100,11 @@
   "@fxGlowSize": {
     "description": "Effect controls — a control on Sprite flare. How wide the soft glow on the light itself spreads, in pixels."
   },
-  "fxGradientOverlay": "Sovrapposizione sfumatura",
+  "fxGradientOverlay": "Sovrapposizione della sfumatura",
   "@fxGradientOverlay": {
     "description": "Name of the Gradient overlay layer style: a two-colour ramp across the layer."
   },
-  "fxGradientType": "Tipo di sfumatura",
+  "fxGradientType": "Tipologia di sfumatura",
   "@fxGradientType": {
     "description": "A Gradient overlay layer style's Gradient type parameter: linear or radial."
   },
@@ -5112,6 +5188,14 @@
   "@fxHighlightBoost": {
     "description": "Effect controls — a control on Depth of field pro that brightens what is above the highlight threshold before it is blurred."
   },
+  "fxHighlightColour": "Colore delle luci",
+  "@fxHighlightColour": {
+    "description": "A Bevel and emboss layer style's Highlight colour: the colour of the lit face."
+  },
+  "fxHighlightOpacity": "Opacità delle luci",
+  "@fxHighlightOpacity": {
+    "description": "A Bevel and emboss layer style's Highlight opacity: how strong the lit face is, per cent."
+  },
   "fxHighlightTonalWidth": "Ampiezza tonale luci",
   "@fxHighlightTonalWidth": {
     "description": "Effect controls — a control on Shadow highlight."
@@ -5192,7 +5276,7 @@
   "@fxInitialSpeed": {
     "description": "Effect controls — a control on Particulate: how fast a particle is travelling the moment it is born."
   },
-  "fxInnerBevel": "Smusso interno",
+  "fxInnerBevel": "Smussatura interna",
   "@fxInnerBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits inside the shape's edge."
   },
@@ -5776,7 +5860,7 @@
   "@fxOrigin": {
     "description": "Effect controls — a Place option on Text to points: the point sits where its character, word or line starts on the baseline."
   },
-  "fxOuterBevel": "Smusso esterno",
+  "fxOuterBevel": "Smussatura esterna",
   "@fxOuterBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits outside the shape's edge."
   },
@@ -11081,7 +11165,7 @@
       }
     }
   },
-  "projectOpenElsewhere": "Questo progetto è già aperto in un'altra finestra di Lumit",
+  "projectOpenElsewhere": "Il progetto è già aperto in un'altra finestra di Lumit",
   "@projectOpenElsewhere": {
     "description": "Bottom-strip notice when a project was not opened because another running copy of Lumit has it open, and that window could not be brought forward. Not an error: the project is safe where it is."
   },
@@ -13098,11 +13182,11 @@
   "@settingsOpenMediaDecoders": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsOwnTitleBar": "Barra del titolo di Lumit",
+  "settingsOwnTitleBar": "Barra dei titoli originale di Lumit",
   "@settingsOwnTitleBar": {
     "description": "Settings window, Linux only: the switch that replaces the system's title bar with Lumit's menu bar carrying the minimise, maximise and close buttons."
   },
-  "settingsOwnTitleBarNote": "Dal prossimo avvio.",
+  "settingsOwnTitleBarNote": "Dal prossimo avvio",
   "@settingsOwnTitleBarNote": {
     "description": "Settings window, Linux only: the line under the title bar switch saying a change shows once Lumit is opened again."
   },
@@ -18033,15 +18117,15 @@
   "@welcomeWhatsNew": {
     "description": "Welcome screen: the outlined button at the bottom right that opens the release notes page in the machine's own browser."
   },
-  "windowMaximise": "Ingrandisci",
+  "windowMaximise": "Massimizza",
   "@windowMaximise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that makes the window fill the screen. Use the operating system's own word for it."
   },
-  "windowMinimise": "Riduci a icona",
+  "windowMinimise": "Minimizza",
   "@windowMinimise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."
   },
-  "windowRestore": "Ripristina",
+  "windowRestore": "Ripristina dimensioni",
   "@windowRestore": {
     "description": "Screen reader name of the same button once the window fills the screen: it puts the window back to the size it was. Use the operating system's own word for it."
   },
