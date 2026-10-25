@@ -60,8 +60,18 @@ pub enum Cmd {
     /// Set the byte cap (Settings → Performance). Remembered so it also
     /// applies to the cache opened on the next `SetRoot`.
     SetCap(u64),
+    /// The most this project may hold for the drive's sake, so parking never
+    /// fills it. Remembered across `SetRoot` like the cap.
+    SetRoom(u64),
     /// Delete every parked frame (Settings → Clear cache).
     Clear,
+}
+
+/// What the open project may hold: the cap less what the other projects beside
+/// it still hold, never under a quarter of the cap, and never more than the
+/// drive has room for.
+fn own_cap(cap: u64, others: u64, room: u64) -> u64 {
+    cap.saturating_sub(others).max(cap / 4).min(room)
 }
 
 /// One frame read back off disk, in the channel order that was asked for.
@@ -253,6 +263,11 @@ pub fn spawn() -> DiskIo {
             // The desired cap, so it survives project switches (a fresh
             // cache is opened per `SetRoot`) rather than resetting.
             let mut cap = DEFAULT_CAP_BYTES;
+            let mut room = u64::MAX;
+            // What the other projects beside the open one still hold, which
+            // the cap is shared with, and the folder they are measured from.
+            let mut others = 0u64;
+            let mut open_root: Option<PathBuf> = None;
             // Everything that has arrived and not been dealt with, oldest first.
             let mut waiting: std::collections::VecDeque<Cmd> = Default::default();
             loop {
@@ -292,17 +307,33 @@ pub fn spawn() -> DiskIo {
                         if let Some(c) = &mut cache {
                             c.flush_index();
                         }
-                        cache = root.map(|r| lumit_cache::disk::DiskCache::open(r, cap));
+                        open_root.clone_from(&root);
+                        cache = root.map(|r| {
+                            let mut c = lumit_cache::disk::DiskCache::open(r.clone(), cap);
+                            others = lumit_cache::disk::make_room_beside(&r, c.used_bytes(), cap);
+                            c.set_cap(own_cap(cap, others, room));
+                            c
+                        });
                         let hashes = cache.as_ref().map(|c| c.known_hashes()).unwrap_or_default();
                         if let Ok(mut k) = known_worker.lock() {
                             k.clear();
                             k.extend(hashes);
                         }
                     }
-                    Cmd::SetCap(bytes) => {
-                        cap = bytes;
+                    Cmd::SetCap(_) | Cmd::SetRoom(_) => {
+                        let new_cap = matches!(cmd, Cmd::SetCap(_));
+                        match cmd {
+                            Cmd::SetCap(bytes) => cap = bytes,
+                            Cmd::SetRoom(bytes) => room = bytes,
+                            _ => {}
+                        }
                         if let Some(c) = &mut cache {
-                            c.set_cap(bytes);
+                            // A new cap can mean another project has to go.
+                            if let (true, Some(r)) = (new_cap, &open_root) {
+                                others =
+                                    lumit_cache::disk::make_room_beside(r, c.used_bytes(), cap);
+                            }
+                            c.set_cap(own_cap(cap, others, room));
                             // Lowering the cap evicts, so the mirror has to
                             // follow or the bar promises what was just deleted.
                             if let Ok(mut k) = known_worker.lock() {

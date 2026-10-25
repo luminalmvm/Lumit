@@ -142,7 +142,13 @@ features = [
     # `timeBeginPeriod`, so the worker's present-pacing sleeps are 1 ms-grained
     # rather than the ~15.6 ms default tick (see `raise_timer_resolution`).
     "Win32_Media",
+    # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
+    "Win32_Storage_FileSystem",
 ]
+
+# `statvfs`, for the same free-space question on macOS and Linux.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

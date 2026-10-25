@@ -128,6 +128,10 @@ pub struct WorkerState {
     /// location epoch last opened — all arriving as atomics from the settings
     /// ops (see [`crate::framecache::disk`]).
     applied_disk_budget: u64,
+    /// The room on the drive last sent down, and when the drive was last asked
+    /// ([`crate::framecache::disk::room`]).
+    applied_disk_room: u64,
+    disk_room_asked: std::time::Instant,
     seen_disk_clears: u64,
     seen_disk_location: (u64, Option<std::path::PathBuf>),
     /// The VRAM budget last applied and the clear-request count last honoured
@@ -360,6 +364,9 @@ fn worth_building_for(project: &ProjectReference) -> bool {
     project.state().is_ok()
 }
 
+/// How often the drive the disk cache is on is asked for its free space.
+const DISK_ROOM_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// How often the cache bar's strip may be recomputed. Building it names every
 /// frame of the composition, which is a hash apiece — cheap per frame, worth
 /// bounding across a long one. A tenth of a second is far finer than the eye
@@ -527,6 +534,24 @@ fn sync_disk(state: &mut WorkerState) {
             .disk
             .tx
             .send(lumit_render::diskio::Cmd::SetCap(budget));
+    }
+    // The drive is asked now and then rather than every turn, and the answer
+    // only sent on when it has moved by more than a frame or two.
+    if state.disk_room_asked.elapsed() >= DISK_ROOM_EVERY {
+        state.disk_room_asked = std::time::Instant::now();
+        let room = root.as_deref().map_or(u64::MAX, |r| {
+            crate::framecache::disk::room(
+                r,
+                state
+                    .disk
+                    .used_bytes
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            )
+        });
+        if room.abs_diff(state.applied_disk_room) > 256 << 20 {
+            state.applied_disk_room = room;
+            _ = state.disk.tx.send(lumit_render::diskio::Cmd::SetRoom(room));
+        }
     }
     let clears = crate::framecache::disk::clears();
     if clears != state.seen_disk_clears {
@@ -3142,6 +3167,8 @@ fn worker_loop(
         // settings hold and opens the folder for the project that is loaded —
         // see the note on `applied_vram_budget` below.
         applied_disk_budget: 0,
+        applied_disk_room: u64::MAX,
+        disk_room_asked: std::time::Instant::now() - DISK_ROOM_EVERY,
         seen_disk_clears: crate::framecache::disk::clears(),
         seen_disk_location: (u64::MAX, None),
         // NOT the wish's current value. A fresh renderer's cache holds the
@@ -6228,6 +6255,8 @@ mod tests {
             disk_wanted: std::collections::HashMap::new(),
             names: crate::names::NameCache::default(),
             applied_disk_budget: 0,
+            applied_disk_room: u64::MAX,
+            disk_room_asked: std::time::Instant::now() - super::DISK_ROOM_EVERY,
             seen_disk_clears: crate::framecache::disk::clears(),
             seen_disk_location: (u64::MAX, None),
             applied_vram_budget: 0,
