@@ -18044,6 +18044,24 @@
   "@proPreviewNote": {
     "description": "Line in the Lumit Pro window while Pro is free for everyone, before it goes on sale."
   },
+  "proRenewsMonthly": "Renews at {price} a month until you cancel.",
+  "@proRenewsMonthly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the monthly plan is picked. {price} is the written price, such as £5.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "proRenewsYearly": "Renews at {price} a year until you cancel.",
+  "@proRenewsYearly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the yearly plan is picked. {price} is the written price, such as £50.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
   "proRenews": "Renews on {date}.",
   "@proRenews": {
     "description": "Line in the Lumit Pro window and Settings. {date} is a written date.",
