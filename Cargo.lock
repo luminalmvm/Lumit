@@ -2056,6 +2056,7 @@ dependencies = [
  "lumit-audio",
  "lumit-core",
  "lumit-gpu",
+ "lumit-media",
  "lumit-project",
  "lumit-render",
  "serde",

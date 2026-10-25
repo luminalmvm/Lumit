@@ -30,7 +30,7 @@
 
 use lumit_media::audio::SoundReader;
 use lumit_media::AudioBuffer;
-pub use lumit_media::SoundSource;
+use lumit_media::SoundSource;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::path::Path;
