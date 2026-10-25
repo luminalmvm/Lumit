@@ -637,7 +637,10 @@ class ReviewStill extends StatelessWidget {
 /// A link's address, with the way to copy it and the way to open it.
 class ReviewAddress extends StatefulWidget {
   final Review review;
-  const ReviewAddress({super.key, required this.review});
+
+  /// Pick a friend to send it to, from a menu under [button].
+  final void Function(BuildContext button)? onSendToFriend;
+  const ReviewAddress({super.key, required this.review, this.onSendToFriend});
 
   @override
   State<ReviewAddress> createState() => _ReviewAddressState();
@@ -699,6 +702,10 @@ class _ReviewAddressState extends State<ReviewAddress> {
             'open',
             () => unawaited(openExternalLink(widget.review.ownerUrl)),
             Text(l10n.reviewOpen)),
+        if (widget.onSendToFriend case final send?)
+          Builder(
+              builder: (button) => action('send-friend', () => send(button),
+                  Text(l10n.reviewSendToFriend))),
       ],
     );
   }

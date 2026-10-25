@@ -3256,10 +3256,6 @@
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Відкривати вікно спільного проєкту, бачити, хто в ньому, і читати посилання-запрошення",
-  "@extensionCanShare": {
-    "description": "One line of the It can list in the extension install question."
-  },
   "extensionCannot": "Воно не може",
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
@@ -10201,10 +10197,6 @@
   "@menuShareViewOptions": {
     "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
   },
-  "menuSharedProject": "Спільний проєкт…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
-  },
   "menuShowGrid": "Показати сітку",
   "@menuShowGrid": {
     "description": "Menu item."
@@ -15434,10 +15426,6 @@
         "type": "int"
       }
     }
-  },
-  "shareTitle": "Спільний проєкт",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUnreachable": "Ніхто не відповів. Перевірте запрошення і чи організатор досі ділиться проєктом.",
   "@shareUnreachable": {

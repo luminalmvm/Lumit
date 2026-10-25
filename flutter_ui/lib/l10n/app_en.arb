@@ -16238,15 +16238,15 @@
   "@shareUnsafe": {
     "description": "Shown when a shared project is refused because the document the host sent breaks a safety limit, such as a composition far larger than Lumit composes."
   },
-  "menuSharedProject": "Shared project…",
+  "menuSharedProject": "Multi-edit…",
   "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
+    "description": "Row in the File menu and in the command palette. Opens the Multi-edit window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "shareStop": "Stop sharing",
   "@shareStop": {
     "description": "Button in the Shared project window for the host: the person sharing the project from their computer. It ends sharing for everyone, and each person keeps their own copy."
   },
-  "shareTitle": "Shared project",
+  "shareTitle": "Multi-edit",
   "@shareTitle": {
     "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
@@ -16640,6 +16640,47 @@
   "shareCopyLink": "Copy link",
   "@shareCopyLink": {
     "description": "Button in the Shared project window. Puts the invite link on the clipboard without showing it."
+  },
+  "shareSendToFriend": "Send to a friend",
+  "@shareSendToFriend": {
+    "description": "Button beside Copy link in the Multi-edit window, while this computer shares a project. Opens a menu of the account's friends; picking one sends them the invite, sealed so that only their computers can open it."
+  },
+  "shareInviteSent": "Invite sent to {name}",
+  "@shareInviteSent": {
+    "description": "Status line notice after sending a multi-edit invite to a friend. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareInviteNoComputer": "{name} has no computer signed in to Lumit yet",
+  "@shareInviteNoComputer": {
+    "description": "Status line notice when a friend has no computer signed in to Lumit, so a multi-edit invite can't be sent to them. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareInviteFailed": "Couldn’t send the invite",
+  "@shareInviteFailed": {
+    "description": "Status line notice when sending a multi-edit invite to a friend failed, for example offline."
+  },
+  "shareFriendInviteFrom": "From {name}",
+  "@shareFriendInviteFrom": {
+    "description": "Row label on the Join page of the Multi-edit window, for an invite a friend sent. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareFriendInviteLook": "{project}, to look at",
+  "@shareFriendInviteLook": {
+    "description": "On the Join page of the Multi-edit window: a friend's invite that can only look at the project, not change it. {project} is the project's name.",
+    "placeholders": { "project": { "type": "String" } }
+  },
+  "shareFriendInviteDecline": "Turn down",
+  "@shareFriendInviteDecline": {
+    "description": "Button beside a friend's invite on the Join page of the Multi-edit window. Removes the invite from every computer of the account."
+  },
+  "friendInviteNotice": "{name} invited you to multi-edit {project}",
+  "@friendInviteNotice": {
+    "description": "Status line notice when a friend's multi-edit invite arrives. {name} is the friend, {project} the project's name.",
+    "placeholders": { "name": { "type": "String" }, "project": { "type": "String" } }
+  },
+  "friendInviteOpen": "Open",
+  "@friendInviteOpen": {
+    "description": "Action on the status line notice for a friend's multi-edit invite. Opens the Multi-edit window, where the invite is joined."
   },
   "shareLinkCopied": "Invite link copied",
   "@shareLinkCopied": {
@@ -17167,7 +17208,7 @@
   "@extensionCanImport": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Open the Shared project window, see who's in a shared project, and read its invite link",
+  "extensionCanShare": "Open the Multi-edit window, see who's in a shared project, and read its invite link",
   "@extensionCanShare": {
     "description": "One line of the It can list in the extension install question."
   },
@@ -18526,6 +18567,104 @@
   "@accountRenameTitle": {
     "description": "Title of the small window that asks for the name other people see on previews and replies."
   },
+  "settingsAccountUsername": "Username",
+  "@settingsAccountUsername": {
+    "description": "Row label on the Account page of Settings: the unique name friends find this account by."
+  },
+  "settingsAccountUsernameNone": "None",
+  "@settingsAccountUsernameNone": {
+    "description": "Account page of Settings: the value of the Username row while the account has not chosen one."
+  },
+  "accountUsernameChoose": "Choose…",
+  "@accountUsernameChoose": {
+    "description": "Button beside the Username row in Settings while there is no username. Opens a small window that asks for one."
+  },
+  "accountUsernameChange": "Change…",
+  "@accountUsernameChange": {
+    "description": "Button beside the Username row in Settings. Opens a small window that asks for a new username."
+  },
+  "accountUsernameTitle": "Choose a username",
+  "@accountUsernameTitle": {
+    "description": "Title of the small window that asks for the username friends find this account by."
+  },
+  "accountUsernameHint": "username",
+  "@accountUsernameHint": {
+    "description": "Placeholder of the username field. Lower case because usernames are."
+  },
+  "accountUsernameBad": "Use 3 to 20 letters, numbers, _ or .",
+  "@accountUsernameBad": {
+    "description": "Notice when a username is refused: it may only hold a to z, 0 to 9, underscore and full stop, 3 to 20 of them, and may not start or end with a full stop."
+  },
+  "accountUsernameTaken": "That username is taken.",
+  "@accountUsernameTaken": {
+    "description": "Notice when somebody else already has the username asked for."
+  },
+  "settingsFriends": "Friends",
+  "@settingsFriends": {
+    "description": "Group heading on the Account page of Settings, and a row in the profile card that opens it. Friends are other Lumit accounts, found by username, that previews can be sent to."
+  },
+  "friendsAccept": "Accept",
+  "@friendsAccept": {
+    "description": "Button beside somebody who asked to be friends."
+  },
+  "friendsDecline": "Decline",
+  "@friendsDecline": {
+    "description": "Button beside somebody who asked to be friends: turn them down. They are not told."
+  },
+  "friendsAsked": "Asked",
+  "@friendsAsked": {
+    "description": "Quiet word beside somebody this account asked to be friends, while they have not answered."
+  },
+  "friendsTakeBack": "Cancel",
+  "@friendsTakeBack": {
+    "description": "Button beside somebody this account asked to be friends: take the ask back."
+  },
+  "friendsRemove": "Remove",
+  "@friendsRemove": {
+    "description": "Button beside a friend: stop being friends."
+  },
+  "friendsRemoveAsk": "Remove {name} from your friends?",
+  "@friendsRemoveAsk": {
+    "description": "Question before a friend is removed. {name} is the name they show.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "friendsCount": "Friends · {count}",
+  "@friendsCount": {
+    "description": "Friends group of Settings: the bar the account's friends are folded under, with how many there are. A press opens or shuts it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "friendsAdd": "Add friend",
+  "@friendsAdd": {
+    "description": "Row label in the Friends group of Settings, beside the field a friend's username is typed in."
+  },
+  "friendsAddButton": "Add",
+  "@friendsAddButton": {
+    "description": "Button beside the username field in the Friends group of Settings. It asks that person to be friends."
+  },
+  "friendsNeedUsername": "Choose a username first.",
+  "@friendsNeedUsername": {
+    "description": "Shown where friends are listed, and in the Previews window, while the account has no username. Friends find each other by username."
+  },
+  "friendsNotFound": "No one has that username.",
+  "@friendsNotFound": {
+    "description": "Notice when a friend is asked for by a username nobody has."
+  },
+  "friendsNotYourself": "That's your own username.",
+  "@friendsNotYourself": {
+    "description": "Notice when somebody asks to be friends with themselves."
+  },
+  "friendsNotFriends": "You're not friends yet.",
+  "@friendsNotFriends": {
+    "description": "Notice when a preview is sent to somebody who has not accepted being friends."
+  },
   "settingsAccountDelete": "Delete account…",
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
@@ -18598,13 +18737,22 @@
   "@menuLumitPro": {
     "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
   },
-  "menuReviewLinks": "Previews…",
+  "menuReviewLinks": "Share preview…",
   "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
+    "description": "File menu row that opens the Previews window, where previews are sent and their comments read. A preview is an address where people watch an export in a browser and comment on it. Sending one needs Lumit Pro."
   },
-  "menuSendForReview": "Share a preview…",
+  "menuSendForReview": "Send as a preview…",
   "@menuSendForReview": {
     "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
+  },
+  "menuNeedsPro": "{label} (Pro)",
+  "@menuNeedsPro": {
+    "description": "A row of the menu bar macOS draws, for something that needs Lumit Pro, to an account without it. {label} is the row's own name, such as Share preview…. Pro is short for Lumit Pro and is not translated.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
   },
   "reviewTitle": "Previews",
   "@reviewTitle": {
@@ -19278,6 +19426,23 @@
   "reviewCopyLink": "Copy link",
   "@reviewCopyLink": {
     "description": "Previews window: row in a link's menu. It copies the link's address."
+  },
+  "reviewSendToFriend": "Send to a friend",
+  "@reviewSendToFriend": {
+    "description": "Previews window: a button beside a link's address and a row in its menu. It lists the account's friends; picking one puts the preview in their Shared with you list."
+  },
+  "reviewNoFriends": "No friends yet",
+  "@reviewNoFriends": {
+    "description": "Previews window: the quiet line in the list of friends to send a preview to, when there are none."
+  },
+  "reviewSentToFriend": "Sent to {name}",
+  "@reviewSentToFriend": {
+    "description": "Notice once a preview has been sent to a friend. {name} is the name they show.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "reviewOpenInBrowser": "Open in browser",
   "@reviewOpenInBrowser": {

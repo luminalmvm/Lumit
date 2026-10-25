@@ -3105,10 +3105,6 @@
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Aprire la finestra Progetto condiviso, vedere chi partecipa a un progetto condiviso e leggerne il link di invito",
-  "@extensionCanShare": {
-    "description": "One line of the It can list in the extension install question."
-  },
   "extensionCannot": "Non può",
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
@@ -9731,10 +9727,6 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuReviewLinks": "Anteprime…",
-  "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
-  },
   "menuRowTicked": "Selezionato",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
@@ -9766,10 +9758,6 @@
   "menuSelectAll": "Seleziona tutto",
   "@menuSelectAll": {
     "description": "Menu item."
-  },
-  "menuSendForReview": "Condividi un'anteprima…",
-  "@menuSendForReview": {
-    "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
   },
   "menuSeparateAxesOf": "Separa gli assi di {property}",
   "@menuSeparateAxesOf": {
@@ -9804,10 +9792,6 @@
   "menuShareViewOptions": "Condividi le opzioni di visualizzazione tra le viste",
   "@menuShareViewOptions": {
     "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
-  },
-  "menuSharedProject": "Progetto condiviso…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "menuShowGrid": "Mostra griglia",
   "@menuShowGrid": {
@@ -15079,10 +15063,6 @@
         "type": "int"
       }
     }
-  },
-  "shareTitle": "Progetto condiviso",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUnreachable": "Nessuna risposta. Controlla l'invito e che l'host stia ancora condividendo.",
   "@shareUnreachable": {
