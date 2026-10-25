@@ -159,7 +159,7 @@ pub fn default_paragraph_style() -> BridgeParagraphStyle {
 /// since the first call asks the system for its fonts.
 #[must_use]
 pub fn text_font_families() -> Vec<String> {
-    lumit_text::families()
+    lumit_text::fonts::families()
 }
 
 /// The faces of one family, such as Regular, Bold and Bold Italic. Empty when
@@ -167,7 +167,7 @@ pub fn text_font_families() -> Vec<String> {
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn text_font_faces(family: String) -> Vec<String> {
-    lumit_text::faces(&family)
+    lumit_text::fonts::faces(&family)
 }
 
 /// What a range selector counts.
