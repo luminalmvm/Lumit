@@ -185,20 +185,18 @@ pub trait SourceStamper {
         None
     }
 
-    /// What a Roto brush whose seed row asks for a segmentation model is cut
-    /// by on this machine, and what its run holds at `frame`
-    /// (docs/impl/addons.md §6.2, §7).
+    /// What a Roto brush's run holds at `frame` on this machine, and where
+    /// `segments` says its seed row asks for a segmentation model, which pack
+    /// read the base frame (docs/impl/addons.md §6.2, §7).
     ///
-    /// The planes tier's reason again, one tier along. The pack that read the
-    /// base frame is a fact about the machine, so replacing it would otherwise
-    /// leave every frame already banked with the old matte in it named exactly
-    /// as before, and served forever; and the propagation landing changes the
-    /// picture without touching a row of the document.
+    /// The planes tier's reason again, one tier along. A propagation landing
+    /// changes the picture without touching a row of the document, so without
+    /// the run every frame banked before it would be served with no matte. The
+    /// pack is a fact about the machine, so replacing it would otherwise leave
+    /// every frame banked with the old matte in it named as before.
     ///
-    /// Asked only of a brush whose row says Segment, so a brush seeded by its
-    /// scribbles is named exactly as it was before this existed. The default
-    /// answers `None`, for a host with no such tier at all.
-    fn roto_identity(&self, _instance: Uuid, _frame: i64) -> Option<[u8; 32]> {
+    /// The default answers `None`, for a host with no such tier at all.
+    fn roto_identity(&self, _instance: Uuid, _frame: i64, _segments: bool) -> Option<[u8; 32]> {
         None
     }
 }
@@ -2534,11 +2532,10 @@ fn flow_effective_at<'a>(
 /// Emits nothing for a layer with no stroked Roto brush on it, which is every
 /// layer of every project written before this existed.
 ///
-/// A brush whose seed row says **Segment** is cut by something the document
-/// does not contain, so it carries one more term, from the host: which pack
-/// read the base frame, and what the run holds at this frame
-/// (docs/impl/addons.md §7). Asked of that brush alone, so no project seeded
-/// by its scribbles renames a single cached frame.
+/// Every brush carries one more term, from the host: what the run holds at
+/// this frame, since a propagation landing changes the picture and no row of
+/// the document. A brush whose seed row says **Segment** also carries which
+/// pack read the base frame (docs/impl/addons.md §7).
 fn feed_roto(
     h: &mut blake3::Hasher,
     layer: &lumit_core::model::Layer,
@@ -2565,10 +2562,9 @@ fn feed_brush(
     if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
         h.update(b"roto/");
         h.update(&chain);
-        if lumit_core::roto::RotoSettings::of(fx).segments() {
-            if let Some(identity) = stamper.roto_identity(fx.id, frame) {
-                h.update(&identity);
-            }
+        let segments = lumit_core::roto::RotoSettings::of(fx).segments();
+        if let Some(identity) = stamper.roto_identity(fx.id, frame, segments) {
+            h.update(&identity);
         }
     }
 }
