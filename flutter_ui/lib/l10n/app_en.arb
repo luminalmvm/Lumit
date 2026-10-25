@@ -5195,10 +5195,6 @@
       }
     }
   },
-  "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
-  "@settingsHelpProjectTemplate": {
-    "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
-  },
   "templateNotOpened": "The project template would not open, so the new project is empty",
   "@templateNotOpened": {
     "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
@@ -7592,10 +7588,6 @@
   "settingsGraphRoom": "Node graph overscan",
   "@settingsGraphRoom": {
     "description": "Project settings: the name of the row choosing how far past the composition's frame a node graph box keeps its picture, so a later box can bring it back."
-  },
-  "settingsGraphRoomHint": "How far past the frame each box keeps its picture. More uses more memory.",
-  "@settingsGraphRoomHint": {
-    "description": "Project settings: the line under Node graph overscan."
   },
   "graphRoomOne": "One frame",
   "@graphRoomOne": {
@@ -11822,10 +11814,6 @@
   "@settingsAppliesOnRelease": {
     "description": "Settings window, Appearance: a note beside the interface scale slider saying the new scale is taken when the handle is let go. Lower case on purpose — it is an aside, not a label."
   },
-  "settingsChangesApplyImmediately": "Changes apply immediately",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
-  },
   "settingsGroupKeymap": "Keymap",
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
@@ -11850,7 +11838,7 @@
   "@settingsAudioSystemDefault": {
     "description": "Settings window, Audio: the first entry in the output device list — follow whatever the operating system is set to, rather than pinning one device."
   },
-  "settingsAudioDeviceMissing": "That device is not connected — playing through the system default until it is back.",
+  "settingsAudioDeviceMissing": "Not connected. Playing through the system default.",
   "@settingsAudioDeviceMissing": {
     "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },

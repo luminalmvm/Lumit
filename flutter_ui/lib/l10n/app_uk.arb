@@ -4139,10 +4139,6 @@
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
   },
-  "settingsChangesApplyImmediately": "Зміни застосовуються одразу",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
-  },
   "settingsColourScheme": "Колірна схема",
   "@settingsColourScheme": {
     "description": "Settings window: the name of one setting."

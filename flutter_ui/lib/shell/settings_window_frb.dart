@@ -685,13 +685,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
-            Text(
-              l10n.settingsChangesApplyImmediately,
-              // A kicker's face at a kicker's size, but neither shouted nor
-              // tracked as wide: the drawing sets this line in sentence case at
-              // half the tracking, because it is a sentence and not a label.
-              style: t.kicker.copyWith(letterSpacing: 0.54),
-            ),
             const Spacer(),
             SizedBox(
               height: settingsFooterButton,
@@ -1093,9 +1086,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ],
                 ],
               ),
-              description: ui.workspace.projectTemplate.isEmpty
-                  ? l10n.settingsHelpProjectTemplate
-                  : ui.workspace.projectTemplate,
+              description: ui.workspace.projectTemplate,
             ),
             // Converted once into the preset library, so the Effects &
             // presets panel lists them beside Lumit's own.

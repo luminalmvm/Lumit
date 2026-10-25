@@ -227,7 +227,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
         settingsRow(
           t,
           l10n.settingsGraphRoom,
-          l10n.settingsGraphRoomHint,
+          '',
           SizedBox(
             width: 130,
             child: BareDropdown<int>(

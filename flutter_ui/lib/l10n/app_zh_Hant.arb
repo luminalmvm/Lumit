@@ -6881,10 +6881,6 @@
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
   },
-  "settingsChangesApplyImmediately": "更改會立即生效",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
-  },
   "settingsChromeLabels": "介面標籤",
   "@settingsChromeLabels": {
     "description": "Settings row title, on the Appearance page's Interface section. Chooses whether buttons, tabs and toggles show their word or the icon that stands for it."
