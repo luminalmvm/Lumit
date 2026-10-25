@@ -502,7 +502,7 @@ fn read_shape(
             omks.children()
                 .ok()
                 .filter(|chunk| chunk.is_list(b"shap"))
-                .map(|shap| read_path(&shap, ctx))
+                .map(|shap| read_path(&shap, ctx, match_name == "ADBE Mask Shape"))
                 .collect()
         })
         .unwrap_or_default();
@@ -534,7 +534,7 @@ fn read_shape(
 /// the *in* tangent of the next vertex — and each point is a fraction of the
 /// bounding box. A mask's box is itself a fraction of the layer, so its points
 /// are scaled twice; a shape layer's box is already in pixels.
-fn read_path(shap: &Chunk<'_>, ctx: Ctx<'_>) -> serde_json::Value {
+fn read_path(shap: &Chunk<'_>, ctx: Ctx<'_>, mask: bool) -> serde_json::Value {
     let inside: Vec<Chunk<'_>> = shap.children().ok().collect();
     let Some(header) = inside.iter().find(|chunk| chunk.id == *b"shph") else {
         return json!({ "vertices": [], "in_tangents": [], "out_tangents": [], "closed": false });
@@ -561,8 +561,13 @@ fn read_path(shap: &Chunk<'_>, ctx: Ctx<'_>) -> serde_json::Value {
         .unwrap_or_default();
 
     // Mask space is the layer's, not the comp's — a mask on a layer smaller
-    // than its comp reads at the wrong scale otherwise.
-    let (width, height) = if ctx.has_source { ctx.layer } else { ctx.comp };
+    // than its comp reads at the wrong scale otherwise. A shape layer's box is
+    // already in pixels.
+    let (width, height) = match (mask, ctx.has_source) {
+        (false, _) => (1.0, 1.0),
+        (true, true) => ctx.layer,
+        (true, false) => ctx.comp,
+    };
     let at = |index: usize| {
         let (x, y) = points
             .get(index % points.len().max(1))
