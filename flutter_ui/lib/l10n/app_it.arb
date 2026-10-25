@@ -1,9 +1,5 @@
 {
   "@@locale": "it",
-  "aboutBlurb": "Un programma per motion graphics e compositing. Software libero rilasciato sotto la GNU General Public Licence, versione 3.",
-  "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
-  },
   "addAtPlayhead": "Aggiungilo al cursore di riproduzione",
   "@addAtPlayhead": {
     "description": "Button that puts a marker where the playhead is."

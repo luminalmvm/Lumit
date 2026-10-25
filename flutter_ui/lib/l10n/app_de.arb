@@ -1,10 +1,6 @@
 {
   "@@locale": "de",
   "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): under five words, two where two will do.",
-  "aboutBlurb": "Ein Editor für Motion Graphics und Compositing. Freie Software unter der GNU General Public Licence, Version 3.",
-  "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
-  },
   "addAtPlayhead": "Am Abspielkopf hinzufügen",
   "@addAtPlayhead": {
     "description": "Button that puts a marker where the playhead is."
@@ -388,10 +384,6 @@
       }
     }
   },
-  "aePointOfInterestNotCarried": "eine Zwei-Knoten-Kamera zielt auf ihren Interessenpunkt — die Kamera in Lumit zielt über ihre eigene Drehung, daher wird der Interessenpunkt nicht übernommen",
-  "@aePointOfInterestNotCarried": {
-    "description": "Import report row reason, lower case. After Effects' two-node camera is aimed by a point of interest Lumit has no equivalent for."
-  },
   "aePreserveTransparencyNotSupported": "„Zugrunde liegende Transparenz erhalten“ hat noch keine Entsprechung — nicht angewendet",
   "@aePreserveTransparencyNotSupported": {
     "description": "Import report row reason, lower case. Names an After Effects layer switch Lumit does not have."
@@ -461,10 +453,6 @@
         "type": "int"
       }
     }
-  },
-  "aeTextStylingNotMapped": "Wörter, Größe und Füllfarbe wurden importiert, der Rest der Formatierung nicht",
-  "@aeTextStylingNotMapped": {
-    "description": "Import report row reason, lower case. A text layer arrives readable but not fully styled."
   },
   "animated": "animiert",
   "@animated": {
@@ -776,14 +764,6 @@
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
-  "cornersRound": "Abgerundet",
-  "@cornersRound": {
-    "description": "Settings window: the rounded choice for the Corners setting."
-  },
-  "cornersSharp": "Eckig",
-  "@cornersSharp": {
-    "description": "Settings window: the square-cornered choice for the Corners setting."
-  },
   "couldNotAddShapeLayer": "Formebene konnte nicht hinzugefügt werden",
   "@couldNotAddShapeLayer": {
     "description": "Notice when making a shape layer failed."
@@ -964,10 +944,6 @@
   "@easeStaggerTopDown": {
     "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
   },
-  "easingAnticipate": "Anticipate",
-  "@easingAnticipate": {
-    "description": "Easing preset: the move pulls back a little before it sets off."
-  },
   "easingHeavy": "Heavy ease",
   "@easingHeavy": {
     "description": "Easing preset: slow at both ends, more strongly than Easy ease."
@@ -975,10 +951,6 @@
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
-  },
-  "easingOvershoot": "Überschwingen",
-  "@easingOvershoot": {
-    "description": "Easing preset: the move goes past its end and settles back."
   },
   "easingSaveEllipsis": "Speichern…",
   "@easingSaveEllipsis": {
@@ -1107,10 +1079,6 @@
   "exportChannelsRgbAlpha": "RGB + Alpha",
   "@exportChannelsRgbAlpha": {
     "description": "Export dialog, Channels list: colour and coverage, for a file that will be layered over something else. RGB stays as it is."
-  },
-  "exportColourConfigUntagged": "Eine über die Farbkonfiguration geschriebene Datei bleibt ohne Kennzeichnung, statt falsch gekennzeichnet zu werden.",
-  "@exportColourConfigUntagged": {
-    "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   },
   "exportColourDepth": "Farbtiefe",
   "@exportColourDepth": {
@@ -1639,10 +1607,6 @@
   "@fileTypeKeymap": {
     "description": "A file type in the system's file dialogues: an exported set of shortcuts."
   },
-  "fileTypeNodeGroup": "Lumit-Knotengruppe",
-  "@fileTypeNodeGroup": {
-    "description": "A file type in the system's file dialogues: a saved .lumgrp set of Graph panel boxes and the wires between them."
-  },
   "fileTypeOcioConfig": "OpenColorIO-Konfiguration",
   "@fileTypeOcioConfig": {
     "description": "The file-picker filter shown when choosing the project's colour configuration in Project settings. OpenColorIO is the name of the industry standard and is never translated."
@@ -1675,21 +1639,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage kommt als Ebene an, und der Retime-Graph zeigt, welcher Moment der Quelle zu sehen ist.",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunBlurb": "Lumit kann von Anfang an so aussehen wie der Editor, den Sie schon kennen. Beide Antworten lassen sich später in den Einstellungen ändern.",
-  "@firstRunBlurb": {
-    "description": "The sentence under the first-run question."
-  },
   "firstRunTitle": "How do you edit?",
   "@firstRunTitle": {
     "description": "Title of the one screen shown the first time Lumit opens."
-  },
-  "firstRunVegas": "Video kommt als Sequenzebene an, die Sie in Clips schneiden können, und der Retime-Graph zeigt die Abspielgeschwindigkeit, die Sie nach oben ziehen, um eine Rampe zu erzeugen, und unter null, um rückwärts abzuspielen.",
-  "@firstRunVegas": {
-    "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
   },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
@@ -2719,10 +2671,6 @@
   "fxFarBlur": "Ferne Unschärfe",
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
-  },
-  "fxFastMotionBlur": "Schnelle Bewegungsunschärfe",
-  "@fxFastMotionBlur": {
-    "description": "Effect controls — a control on Posterize time."
   },
   "fxFeather": "Weiche Kante",
   "@fxFeather": {
@@ -4648,10 +4596,6 @@
   "@graphTypeGeometry": {
     "description": "Graph panel legend: the two kinds of geometry a teal wire carries, an outline and a stream of points. Lower case, joined by a middle dot."
   },
-  "graphTypeImage": "Bild · Matte",
-  "@graphTypeImage": {
-    "description": "Graph panel legend: the two kinds of picture a blue wire carries, an image and a matte. Lower case, joined by a middle dot."
-  },
   "graphTypeNumber": "Zahl",
   "@graphTypeNumber": {
     "description": "Graph panel legend: what an amber wire carries. Lower case."
@@ -5149,10 +5093,6 @@
   "keymapPressAShortcut": "Tastenkürzel drücken…",
   "@keymapPressAShortcut": {
     "description": "Shown in a keymap row while it is waiting for the user to press keys."
-  },
-  "keysPasteAtPlayhead": "Am Abspielkopf einfügen",
-  "@keysPasteAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
   },
   "languageFollowSystem": "Wie auf diesem Rechner",
   "@languageFollowSystem": {
@@ -5835,10 +5775,6 @@
       }
     }
   },
-  "nodeNoSelection": "Wählen Sie einen Knoten im Graph-Bedienfeld.",
-  "@nodeNoSelection": {
-    "description": "Empty-state line in the Node panel when no box has been picked on the graph canvas, so there are no parameters to list."
-  },
   "none": "Ohne",
   "@none": {
     "description": "The empty choice in a picker — no layer, no matte, nothing selected."
@@ -6147,36 +6083,11 @@
   "@pasteSequenceShape": {
     "description": "Context-menu item: apply a copied speed curve."
   },
-  "planarPartial": "{frames} von {total} Frames verfolgt — die Oberfläche ließ sich nicht weiter verfolgen",
-  "@planarPartial": {
-    "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the surface and the rest of the clip does not. Both numbers are frame counts.",
-    "placeholders": {
-      "frames": {
-        "type": "int"
-      },
-      "total": {
-        "type": "int"
-      }
-    }
-  },
   "planarReanchored": "{count, plural, =1{Einmal neu verankert, daher kann das Ende leicht driften} other{{count}-mal neu verankert, daher kann das Ende leicht driften}}",
   "@planarReanchored": {
     "description": "Planar track status line, under the main one, when the measurement had to be re-anchored because the reference frame's features ran out. Each re-anchor adds a little accumulated error towards the end of the shot.",
     "placeholders": {
       "count": {
-        "type": "int"
-      }
-    }
-  },
-  "planarSolvingSurface": "Die Oberfläche wird berechnet",
-  "@planarSolvingSurface": {
-    "description": "Planar track status line in Effect controls: the frames are in and the surface's four corners are being computed."
-  },
-  "planarTracked": "Oberfläche über {frames} Frames verfolgt",
-  "@planarTracked": {
-    "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
-    "placeholders": {
-      "frames": {
         "type": "int"
       }
     }
@@ -6274,15 +6185,6 @@
         "type": "String"
       },
       "displays": {
-        "type": "String"
-      }
-    }
-  },
-  "projectColourNotInForce": "Nicht in Kraft: {reason}. Stattdessen wird die eingebaute Farbverarbeitung verwendet.",
-  "@projectColourNotInForce": {
-    "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
-    "placeholders": {
-      "reason": {
         "type": "String"
       }
     }
@@ -6410,10 +6312,6 @@
   "ramTier": "RAM",
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
-  },
-  "recoveryQuestion": "Lumit ist offenbar mit ungespeicherten Änderungen abgestürzt. Möchten Sie sie wiederherstellen?",
-  "@recoveryQuestion": {
-    "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
   "recoveryRestoreAll": "Alle Änderungen wiederherstellen",
   "@recoveryRestoreAll": {
@@ -6621,10 +6519,6 @@
   "settingsAudioDevice": "Ausgabegerät",
   "@settingsAudioDevice": {
     "description": "Settings window, Audio: the name of the row whose dropdown chooses which speakers or headphones Lumit plays through."
-  },
-  "settingsAudioDeviceMissing": "Dieses Gerät ist nicht angeschlossen — bis es zurück ist, wird über den Systemstandard abgespielt.",
-  "@settingsAudioDeviceMissing": {
-    "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },
   "settingsAudioNoDevice": "Dieser Rechner hat keine Audioausgabe.",
   "@settingsAudioNoDevice": {
@@ -7575,10 +7469,6 @@
   "@tipCollapseTransformations": {
     "description": "Tooltip on the Flow switch. One or two words."
   },
-  "tipCopyKeys": "Keyframes kopieren",
-  "@tipCopyKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
-  },
   "tipCurveGraphSize": "Graphgröße",
   "@tipCurveGraphSize": {
     "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. One or two words."
@@ -7620,11 +7510,6 @@
   "tipFavourite": "Favorit",
   "@tipFavourite": {
     "description": "Hover text on the star beside an effect or preset that is not starred yet. Pressing it puts the row under the Favourites heading."
-  },
-  "tipFilterByLabel": "Diese Farbe",
-  "@tipFilterByLabel": {
-    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
-    "type": "text"
   },
   "tipFlowOff": "Flow aus",
   "@tipFlowOff": {
@@ -7687,14 +7572,6 @@
   "@tipMaskMode": {
     "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
   },
-  "tipMasterMotionBlurOff": "Unschärfe aus",
-  "@tipMasterMotionBlurOff": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is off. One or two words."
-  },
-  "tipMasterMotionBlurOn": "Unschärfe an",
-  "@tipMasterMotionBlurOn": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
-  },
   "tipMatte": "Matte",
   "@tipMatte": {
     "description": "Tooltip on the matte cell. One or two words."
@@ -7722,10 +7599,6 @@
   "tipParent": "Übergeordnet",
   "@tipParent": {
     "description": "Tooltip on the parent cell. One or two words."
-  },
-  "tipPasteKeysAtPlayhead": "Keyframes einfügen",
-  "@tipPasteKeysAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
   },
   "tipPickFocalPoint": "Fokuspunkt",
   "@tipPickFocalPoint": {
@@ -7792,10 +7665,6 @@
   "tipResetQualityTier": "Qualität zurücksetzen",
   "@tipResetQualityTier": {
     "description": "Tooltip on the button that restarts the quality controller. One or two words."
-  },
-  "tipReverseKeys": "Keyframes umkehren",
-  "@tipReverseKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
   },
   "tipSampleFromViewer": "Farbe aufnehmen",
   "@tipSampleFromViewer": {
@@ -8481,10 +8350,6 @@
   "@transportSharedTexture": {
     "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
-  "typeVerticalNotBuilt": "Vertikaler Text ist noch nicht umgesetzt — die Engine setzt eine waagerechte Zeile",
-  "@typeVerticalNotBuilt": {
-    "description": "Notice when the vertical type tool is used."
-  },
   "unitDegrees": "Grad",
   "@unitDegrees": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
@@ -8673,18 +8538,6 @@
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
-  "updateOfferBody": "{name} ist {size} groß. Lumit lädt es jetzt herunter und installiert es beim Neustart, sodass Sie in der Zwischenzeit weiterarbeiten können.",
-  "@updateOfferBody": {
-    "description": "Body of the dialogue offering a new version: what the download costs and that work can continue. {name} is the installer's file name, {size} an amount such as 240 MB.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
   "updateOfferTitle": "Auf Lumit {version} aktualisieren?",
   "@updateOfferTitle": {
     "description": "Title of the dialogue offering a new version.",
@@ -8721,24 +8574,6 @@
   "updateReadyFlatpak": "Lumit installs its own updates everywhere except here: a Flatpak is updated by Flatpak. The bundle is downloaded — install it with\n\n    flatpak install --user lumit-{version}-linux-x64.flatpak",
   "@updateReadyFlatpak": {
     "description": "Update dialogue inside a Flatpak sandbox. The command on the last line is typed into a terminal and must be left exactly as it is.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "updateReadyInPlace": "Lumit {version} ist bereit. Ein Neustart setzt es an seinen Platz und öffnet es — kein Installationsprogramm, und nichts zu beantworten.",
-  "@updateReadyInPlace": {
-    "description": "Update dialogue, for installs Lumit can replace by itself.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "updateReadyInstaller": "Lumit {version} ist heruntergeladen. Es installiert sich, während Lumit geschlossen ist, sodass das Update beim nächsten Öffnen abgeschlossen ist.",
-  "@updateReadyInstaller": {
-    "description": "Update dialogue, for installs that need the setup program to run.",
     "placeholders": {
       "version": {
         "type": "String"
@@ -8881,60 +8716,6 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
-  "viewerReadout": "{comp} · {time} · {source} → {preview} · {zoom}",
-  "@viewerReadout": {
-    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, the time shown, the composition's own pixel size, the pixel size the preview was actually made at, and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
-    "placeholders": {
-      "comp": {
-        "type": "String"
-      },
-      "time": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      },
-      "preview": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
-  "viewerReadoutNoComp": "{time} · {source} · {zoom}",
-  "@viewerReadoutNoComp": {
-    "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
-    "placeholders": {
-      "time": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
-  "viewerReadoutNoPreview": "{comp} · {time} · {source} · {zoom}",
-  "@viewerReadoutNoPreview": {
-    "description": "The Viewer bar's reading, second form, used when the bar is too narrow for the full one: the same line with the arrow and the preview's own pixel size dropped. Which composition is on screen, the time shown, the composition's pixel size, and the magnification. Every part is a number or a name, so only the separators are translatable.",
-    "placeholders": {
-      "comp": {
-        "type": "String"
-      },
-      "time": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
   "volume": "Lautstärke",
   "@volume": {
     "description": "Row label: how loud a layer's sound is."
@@ -9055,15 +8836,6 @@
   "workspaceFileUnwritable": "Diese Datei konnte nicht geschrieben werden.",
   "@workspaceFileUnwritable": {
     "description": "Status-line notice when exporting a workspace failed to write the chosen file."
-  },
-  "workspaceImported": "{name} importiert und ausgewählt.",
-  "@workspaceImported": {
-    "description": "Status-line notice after reading a workspace file in. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "workspaceNodes": "Knoten",
   "@workspaceNodes": {

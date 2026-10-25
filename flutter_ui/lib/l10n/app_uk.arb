@@ -244,14 +244,6 @@
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
-  "cornersRound": "Округлі",
-  "@cornersRound": {
-    "description": "Settings window: the rounded choice for the Corners setting."
-  },
-  "cornersSharp": "Гострі",
-  "@cornersSharp": {
-    "description": "Settings window: the square-cornered choice for the Corners setting."
-  },
   "couldNotAddShapeLayer": "Could not add a shape layer",
   "@couldNotAddShapeLayer": {
     "description": "Notice when making a shape layer failed."
@@ -387,10 +379,6 @@
   "@easeHold": {
     "description": "Keyframe easing: no change at all until the next key."
   },
-  "easingAnticipate": "Anticipate",
-  "@easingAnticipate": {
-    "description": "Easing preset: the move pulls back a little before it sets off."
-  },
   "easingHeavy": "Heavy ease",
   "@easingHeavy": {
     "description": "Easing preset: slow at both ends, more strongly than Easy ease."
@@ -398,10 +386,6 @@
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
-  },
-  "easingOvershoot": "Overshoot",
-  "@easingOvershoot": {
-    "description": "Easing preset: the move goes past its end and settles back."
   },
   "easingSlowFinish": "Slow finish",
   "@easingSlowFinish": {
@@ -780,14 +764,6 @@
   "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows which moment of the source is on screen.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunBlurb": "Lumit can start out shaped like the editor you already know. Either answer can be changed later in Settings.",
-  "@firstRunBlurb": {
-    "description": "The sentence under the first-run question."
-  },
-  "firstRunTitle": "Як ви монтуєте?",
-  "@firstRunTitle": {
-    "description": "Title of the one screen shown the first time Lumit opens."
   },
   "firstRunVegas": "Video arrives as a Sequence layer you can cut into clips, and the Retime graph shows playback speed you drag up to ramp and below zero to reverse.",
   "@firstRunVegas": {
@@ -1413,10 +1389,6 @@
   "fxFarBlur": "Far blur",
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
-  },
-  "fxFastMotionBlur": "Fast motion blur",
-  "@fxFastMotionBlur": {
-    "description": "Effect controls — a control on Posterize time."
   },
   "fxFieldOfView": "Поле зору",
   "@fxFieldOfView": {
@@ -3915,10 +3887,6 @@
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
-  "recoveryQuestion": "Схоже, Lumit завершив роботу аварійно з незбереженими змінами. Відновити їх?",
-  "@recoveryQuestion": {
-    "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
-  },
   "recoveryRestoreAll": "Відновити все",
   "@recoveryRestoreAll": {
     "description": "Recovery dialogue: the filled button at the far right of the footer. Replays the journal of edits onto the saved file, recovering everything. Three words at most — three buttons share one row."
@@ -4749,11 +4717,6 @@
   "tipExportColourSpaceUnavailable": "Недоступно",
   "@tipExportColourSpaceUnavailable": {
     "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
-  },
-  "tipFilterByLabel": "Цей колір",
-  "@tipFilterByLabel": {
-    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
-    "type": "text"
   },
   "tipFrameNumber": "Номер кадру",
   "@tipFrameNumber": {

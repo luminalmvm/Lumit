@@ -1,10 +1,6 @@
 {
   "@@locale": "zh_Hant",
   "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): under five words, two where two will do.",
-  "aboutBlurb": "一個動態圖形設計與合成編輯器。V3通用公共許可協議下的免費剪輯軟體",
-  "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
-  },
   "addAtPlayhead": "當前時間指示器",
   "@addAtPlayhead": {
     "description": "Button that puts a marker where the playhead is."
@@ -388,10 +384,6 @@
       }
     }
   },
-  "aePointOfInterestNotCarried": "雙節點攝影機指向它的目標點 — Lumit 的攝影機依靠自身旋轉來對準，因此目標點未被帶入",
-  "@aePointOfInterestNotCarried": {
-    "description": "Import report row reason, lower case. After Effects' two-node camera is aimed by a point of interest Lumit has no equivalent for."
-  },
   "aePreserveTransparencyNotSupported": "保留下層透明度暫無對應項 — 未套用",
   "@aePreserveTransparencyNotSupported": {
     "description": "Import report row reason, lower case. Names an After Effects layer switch Lumit does not have."
@@ -461,10 +453,6 @@
         "type": "int"
       }
     }
-  },
-  "aeTextStylingNotMapped": "文字內容、大小和填充顏色已匯入；其餘樣式未匯入",
-  "@aeTextStylingNotMapped": {
-    "description": "Import report row reason, lower case. A text layer arrives readable but not fully styled."
   },
   "animated": "已動畫",
   "@animated": {
@@ -778,14 +766,6 @@
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
-  "cornersRound": "圓角",
-  "@cornersRound": {
-    "description": "Settings window: the rounded choice for the Corners setting."
-  },
-  "cornersSharp": "直角",
-  "@cornersSharp": {
-    "description": "Settings window: the square-cornered choice for the Corners setting."
-  },
   "couldNotAddShapeLayer": "無法新增形狀圖層",
   "@couldNotAddShapeLayer": {
     "description": "Notice when making a shape layer failed."
@@ -970,10 +950,6 @@
   "@easeStaggerTopDown": {
     "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
   },
-  "easingAnticipate": "Anticipate",
-  "@easingAnticipate": {
-    "description": "Easing preset: the move pulls back a little before it sets off."
-  },
   "easingHeavy": "強緩動",
   "@easingHeavy": {
     "description": "Easing preset: slow at both ends, more strongly than Easy ease."
@@ -985,10 +961,6 @@
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
-  },
-  "easingOvershoot": "過衝",
-  "@easingOvershoot": {
-    "description": "Easing preset: the move goes past its end and settles back."
   },
   "easingSaveEllipsis": "儲存…",
   "@easingSaveEllipsis": {
@@ -1121,10 +1093,6 @@
   "exportChannelsRgb": "RGB",
   "@exportChannelsRgb": {
     "description": "Export dialog, Channels list: colour only. RGB stays as it is."
-  },
-  "exportColourConfigUntagged": "通過色彩配置寫出的檔案寧可不加標記，也不會加錯標記。",
-  "@exportColourConfigUntagged": {
-    "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   },
   "exportColourDepth": "顏色深度",
   "@exportColourDepth": {
@@ -1644,10 +1612,6 @@
   "@fileTypeKeymap": {
     "description": "A file type in the system's file dialogues: an exported set of shortcuts."
   },
-  "fileTypeNodeGroup": "Lumit 節點組",
-  "@fileTypeNodeGroup": {
-    "description": "A file type in the system's file dialogues: a saved .lumgrp set of Graph panel boxes and the wires between them."
-  },
   "fileTypeOcioConfig": "OpenColorIO 配置",
   "@fileTypeOcioConfig": {
     "description": "The file-picker filter shown when choosing the project's colour configuration in Project settings. OpenColorIO is the name of the industry standard and is never translated."
@@ -1683,18 +1647,6 @@
   "firstMask": "第一個遮色片",
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
-  },
-  "firstRunAfterEffects": "素材以圖層的形式加入，Retime 圖表顯示螢幕上正在播放源素材的哪一刻。",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunBlurb": "Lumit 可以一開始就是你已經熟悉的那個編輯器的樣子。兩個答案稍後都可以在設定中更改。",
-  "@firstRunBlurb": {
-    "description": "The sentence under the first-run question."
-  },
-  "firstRunTitle": "你習慣怎樣剪輯？",
-  "@firstRunTitle": {
-    "description": "Title of the one screen shown the first time Lumit opens."
   },
   "firstRunVegas": "Video arrives as a Sequence layer you can cut into clips, and the Retime graph shows playback speed you drag up to ramp and below zero to reverse.",
   "@firstRunVegas": {
@@ -2740,10 +2692,6 @@
   "fxFarBlur": "遠景模糊",
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
-  },
-  "fxFastMotionBlur": "快速運動模糊",
-  "@fxFastMotionBlur": {
-    "description": "Effect controls — a control on Posterize time."
   },
   "fxFeather": "羽化",
   "@fxFeather": {
@@ -4817,10 +4765,6 @@
   "@graphTypeGeometry": {
     "description": "Graph panel legend: the two kinds of geometry a teal wire carries, an outline and a stream of points. Lower case, joined by a middle dot."
   },
-  "graphTypeImage": "圖像 · 遮罩",
-  "@graphTypeImage": {
-    "description": "Graph panel legend: the two kinds of picture a blue wire carries, an image and a matte. Lower case, joined by a middle dot."
-  },
   "graphTypeNumber": "數字",
   "@graphTypeNumber": {
     "description": "Graph panel legend: what an amber wire carries. Lower case."
@@ -5322,10 +5266,6 @@
   "keysEase": "緩動",
   "@keysEase": {
     "description": "Timeline, Keys mode bottom bar: the word that opens the Ease popover on the selected keyframes. Drawn in capitals, beside Linear, Hold and Bezier."
-  },
-  "keysPasteAtPlayhead": "貼上到時間指示器",
-  "@keysPasteAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
   },
   "label": "標籤",
   "@label": {
@@ -6033,10 +5973,6 @@
       }
     }
   },
-  "nodeNoSelection": "請在節點圖面板中選擇一個節點。",
-  "@nodeNoSelection": {
-    "description": "Empty-state line in the Node panel when no box has been picked on the graph canvas, so there are no parameters to list."
-  },
   "none": "無",
   "@none": {
     "description": "The empty choice in a picker — no layer, no matte, nothing selected."
@@ -6345,36 +6281,11 @@
   "@pasteSequenceShape": {
     "description": "Context-menu item: apply a copied speed curve."
   },
-  "planarPartial": "已跟蹤 {frames} 影格，共 {total} 影格 — 無法繼續跟蹤該平面",
-  "@planarPartial": {
-    "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the surface and the rest of the clip does not. Both numbers are frame counts.",
-    "placeholders": {
-      "frames": {
-        "type": "int"
-      },
-      "total": {
-        "type": "int"
-      }
-    }
-  },
   "planarReanchored": "{count, plural, =1{已重新錨定一次，因此末段可能略有漂移} other{已重新錨定 {count} 次，因此末段可能略有漂移}}",
   "@planarReanchored": {
     "description": "Planar track status line, under the main one, when the measurement had to be re-anchored because the reference frame's features ran out. Each re-anchor adds a little accumulated error towards the end of the shot.",
     "placeholders": {
       "count": {
-        "type": "int"
-      }
-    }
-  },
-  "planarSolvingSurface": "正在計算平面",
-  "@planarSolvingSurface": {
-    "description": "Planar track status line in Effect controls: the frames are in and the surface's four corners are being computed."
-  },
-  "planarTracked": "已跟蹤 {frames} 影格的平面",
-  "@planarTracked": {
-    "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
-    "placeholders": {
-      "frames": {
         "type": "int"
       }
     }
@@ -6472,15 +6383,6 @@
         "type": "String"
       },
       "displays": {
-        "type": "String"
-      }
-    }
-  },
-  "projectColourNotInForce": "未生效：{reason}。正在改用內置的顏色處理。",
-  "@projectColourNotInForce": {
-    "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
-    "placeholders": {
-      "reason": {
         "type": "String"
       }
     }
@@ -6608,10 +6510,6 @@
   "ramTier": "RAM",
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
-  },
-  "recoveryQuestion": "看起來 Lumit 在有未儲存的更改時崩潰了，要恢復這些更改嗎？",
-  "@recoveryQuestion": {
-    "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
   "recoveryRestoreAll": "恢復全部更改",
   "@recoveryRestoreAll": {
@@ -6823,10 +6721,6 @@
   "settingsAudioDevice": "輸出裝置",
   "@settingsAudioDevice": {
     "description": "Settings window, Audio: the name of the row whose dropdown chooses which speakers or headphones Lumit plays through."
-  },
-  "settingsAudioDeviceMissing": "該裝置未連接 — 在它恢復之前將通過系統預設裝置播放。",
-  "@settingsAudioDeviceMissing": {
-    "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },
   "settingsAudioNoDevice": "本機沒有音訊輸出。",
   "@settingsAudioNoDevice": {
@@ -7620,14 +7514,6 @@
       }
     }
   },
-  "themeFileNoColours": "該主題檔案不包含任何顏色。",
-  "@themeFileNoColours": {
-    "description": "Refusal when a theme file has a name but nothing to draw with."
-  },
-  "themeFileNoName": "該主題檔案沒有名稱，因此無法選擇。",
-  "@themeFileNoName": {
-    "description": "Refusal when a theme file is valid but unnamed."
-  },
   "themeFileNotATheme": "該檔案不是 Lumit 主題。",
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
@@ -7773,10 +7659,6 @@
   "@tipCollapseTransformations": {
     "description": "Tooltip on the Flow switch. One or two words."
   },
-  "tipCopyKeys": "複製關鍵影格",
-  "@tipCopyKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
-  },
   "tipCurveGraphSize": "圖表大小",
   "@tipCurveGraphSize": {
     "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. One or two words."
@@ -7820,11 +7702,6 @@
   "tipFavourite": "收藏",
   "@tipFavourite": {
     "description": "Hover text on the star beside an effect or preset that is not starred yet. Pressing it puts the row under the Favourites heading."
-  },
-  "tipFilterByLabel": "此顏色",
-  "@tipFilterByLabel": {
-    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
-    "type": "text"
   },
   "tipFlowOff": "Flow 已關閉",
   "@tipFlowOff": {
@@ -7895,14 +7772,6 @@
   "@tipMaskMode": {
     "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
   },
-  "tipMasterMotionBlurOff": "模糊已關閉",
-  "@tipMasterMotionBlurOff": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is off. One or two words."
-  },
-  "tipMasterMotionBlurOn": "模糊已開啟",
-  "@tipMasterMotionBlurOn": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
-  },
   "tipMatte": "遮罩",
   "@tipMatte": {
     "description": "Tooltip on the matte cell. One or two words."
@@ -7930,10 +7799,6 @@
   "tipParent": "父級",
   "@tipParent": {
     "description": "Tooltip on the parent cell. One or two words."
-  },
-  "tipPasteKeysAtPlayhead": "貼上關鍵影格",
-  "@tipPasteKeysAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
   },
   "tipPickFocalPoint": "對焦點",
   "@tipPickFocalPoint": {
@@ -8004,10 +7869,6 @@
   "tipResetQualityTier": "重置品質",
   "@tipResetQualityTier": {
     "description": "Tooltip on the button that restarts the quality controller. One or two words."
-  },
-  "tipReverseKeys": "反轉關鍵影格",
-  "@tipReverseKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
   },
   "tipSampleFromViewer": "吸取顏色",
   "@tipSampleFromViewer": {
@@ -8710,10 +8571,6 @@
   "@transportSharedTexture": {
     "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
-  "typeVerticalNotBuilt": "直排文字尚未實現 — 引擎只會排出一行橫排文字",
-  "@typeVerticalNotBuilt": {
-    "description": "Notice when the vertical type tool is used."
-  },
   "unitDegrees": "度",
   "@unitDegrees": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
@@ -8892,18 +8749,6 @@
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
-  "updateOfferBody": "{name} 大小為 {size}。Lumit 現在下載它，並在你重新啟動時安裝，因此期間可以繼續工作。",
-  "@updateOfferBody": {
-    "description": "Body of the dialogue offering a new version: what the download costs and that work can continue. {name} is the installer's file name, {size} an amount such as 240 MB.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
   "updateOfferTitle": "更新到 Lumit {version}？",
   "@updateOfferTitle": {
     "description": "Title of the dialogue offering a new version.",
@@ -8940,24 +8785,6 @@
   "updateReadyFlatpak": "Lumit installs its own updates everywhere except here: a Flatpak is updated by Flatpak. The bundle is downloaded — install it with\n\n    flatpak install --user lumit-{version}-linux-x64.flatpak",
   "@updateReadyFlatpak": {
     "description": "Update dialogue inside a Flatpak sandbox. The command on the last line is typed into a terminal and must be left exactly as it is.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "updateReadyInPlace": "Lumit {version} 已就緒。重新啟動即可完成替換並開啟它 — 無需安裝程式，也無需回答任何問題。",
-  "@updateReadyInPlace": {
-    "description": "Update dialogue, for installs Lumit can replace by itself.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
-  "updateReadyInstaller": "Lumit {version} 已下載。它會在 Lumit 關閉時安裝，因此下次開啟時更新即已完成。",
-  "@updateReadyInstaller": {
-    "description": "Update dialogue, for installs that need the setup program to run.",
     "placeholders": {
       "version": {
         "type": "String"
@@ -9209,15 +9036,6 @@
   "workspaceFileUnwritable": "無法寫入該檔案。",
   "@workspaceFileUnwritable": {
     "description": "Status-line notice when exporting a workspace failed to write the chosen file."
-  },
-  "workspaceImported": "已匯入並選用 {name}。",
-  "@workspaceImported": {
-    "description": "Status-line notice after reading a workspace file in. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "workspaceNameTaken": "已有工作區名為 {wanted}，因此這個改名為 {name}。",
   "@workspaceNameTaken": {
