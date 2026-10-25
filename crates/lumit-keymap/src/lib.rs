@@ -229,6 +229,7 @@ impl ActionId {
             "layer.shift.earlier10" => "Move the layer ten frames earlier",
             "layer.shift.later10" => "Move the layer ten frames later",
             "layer.centre" => "Centre the layer in the composition",
+            "layer.centre.anchor" => "Centre the anchor point in the layer",
             "mask.feather" => "Set the mask's feather",
             "mask.invert" => "Invert the mask",
             "timeline.zoom.in" => "Zoom in",
@@ -980,6 +981,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Alt+Shift+PageUp", "layer.shift.earlier10"),
         row(Global, "Alt+Shift+PageDown", "layer.shift.later10"),
         row(Global, "Mod+Home", "layer.centre"),
+        row(Global, "Mod+Alt+Home", "layer.centre.anchor"),
         // The mask whose row is picked in the Timeline.
         row(Global, "Mod+Shift+F", "mask.feather"),
         row(Global, "Mod+Shift+I", "mask.invert"),
