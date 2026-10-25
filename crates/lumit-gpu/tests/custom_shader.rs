@@ -9,7 +9,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::fx::shader;
-use lumit_gpu::fx::{readback_linear_f32, upload_linear_f32, validate};
+use lumit_gpu::fx::{
+    common::readback_linear_f32, common::upload_linear_f32, custom_shader::validate,
+};
 
 /// A shader with one of everything the host hands in, so a change to the
 /// prologue that broke any binding fails here rather than on somebody's machine.

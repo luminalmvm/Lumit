@@ -80,7 +80,7 @@ pub const CAP_HARD: i64 = 1_000_000;
 ///
 /// This is that "somewhere else", as one 3×4 table of numbers. It is worked out
 /// once a frame by the renderer, from the very matrices the compositor places
-/// layers with — `lumit_gpu::camera_matrix` and `lumit_gpu::place_matrix` — so
+/// layers with — `lumit_gpu::composite::camera_matrix` and `lumit_gpu::composite::place_matrix` — so
 /// there is no second camera in this engine and nothing here to re-derive. What
 /// arrives is the composition of the two, restricted back onto the layer's own
 /// plane: `m · (x, y, z, 1)` gives `(X, Y, W)`, the particle lands at

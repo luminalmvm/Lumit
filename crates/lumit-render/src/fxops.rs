@@ -207,7 +207,7 @@ impl LutCache {
             return None;
         };
         let loaded = LoadedLut {
-            texture: lumit_gpu::fx::upload_lut_3d(ctx, l.size as u32, &l.data),
+            texture: lumit_gpu::fx::common::upload_lut_3d(ctx, l.size as u32, &l.data),
             size: l.size as u32,
             path: path.to_owned(),
             mtime,
@@ -568,7 +568,10 @@ pub enum LayerInput {
     /// Distance in metres rather than a picture: a 3D precomp's Scene depth
     /// or a Depth wire. With the precomp's 3D layers when rays are to meet
     /// them.
-    Depth(Tex, Option<std::sync::Arc<lumit_gpu::fx::SceneLayers>>),
+    Depth(
+        Tex,
+        Option<std::sync::Arc<lumit_gpu::fx::lens_blur::SceneLayers>>,
+    ),
     /// One op's whole list of layers, for an effect with more than one layer
     /// row. Each entry has the layer's own size beside it, px at composition
     /// size, where it is another layer's picture.
@@ -619,7 +622,7 @@ pub struct LayerPicture {
     /// Metres rather than a picture.
     pub depth: bool,
     /// The 3D precomp's own layers, for rays to meet.
-    pub scene: Option<std::sync::Arc<lumit_gpu::fx::SceneLayers>>,
+    pub scene: Option<std::sync::Arc<lumit_gpu::fx::lens_blur::SceneLayers>>,
 }
 
 /// Render one referenced layer alone into the depth input a depth-of-field
@@ -643,7 +646,7 @@ pub struct LayerPicture {
 /// way, as the matte path does, and this helper owns only the resample so it
 /// never drifts.
 pub fn render_layer_input(
-    compositor: &lumit_gpu::Compositor,
+    compositor: &lumit_gpu::composite::Compositor,
     ctx: &GpuContext,
     w: u32,
     h: u32,
@@ -656,7 +659,7 @@ pub fn render_layer_input(
         w,
         h,
         [0.0, 0.0, 0.0, 0.0],
-        &[lumit_gpu::CompositeLayer {
+        &[lumit_gpu::composite::CompositeLayer {
             texture: linear,
             size: (src_w.max(1.0), src_h.max(1.0)),
             position: (0.0, 0.0),
@@ -670,7 +673,7 @@ pub fn render_layer_input(
             // Full opacity: a depth pass is read as a scalar, never dimmed.
             opacity: 100.0,
             matte: None,
-            blend: lumit_gpu::Blend::Normal,
+            blend: lumit_gpu::composite::Blend::Normal,
             z: 0.0,
             rotation_x_deg: 0.0,
             rotation_y_deg: 0.0,
@@ -689,7 +692,7 @@ pub fn render_layer_input(
 /// does not reach, the map reads `place.ground`.
 #[allow(clippy::too_many_arguments)]
 pub fn place_layer_input(
-    compositor: &lumit_gpu::Compositor,
+    compositor: &lumit_gpu::composite::Compositor,
     ctx: &GpuContext,
     w: u32,
     h: u32,
@@ -702,7 +705,7 @@ pub fn place_layer_input(
     let (ow, oh) = (of.0.max(1.0), of.1.max(1.0));
     // The consuming layer's pixels onto its raster, which is smaller under a
     // reduced-resolution preview.
-    let raster = lumit_gpu::place_matrix(
+    let raster = lumit_gpu::composite::place_matrix(
         (0.0, 0.0),
         (0.0, 0.0),
         (w as f32 / ow * 100.0, h as f32 / oh * 100.0),
@@ -712,7 +715,7 @@ pub fn place_layer_input(
         0.0,
     );
     let onto = place.placed.unwrap_or_else(|| {
-        lumit_gpu::place_matrix(
+        lumit_gpu::composite::place_matrix(
             ((ow - sw) * 0.5, (oh - sh) * 0.5),
             (0.0, 0.0),
             (100.0, 100.0),
@@ -727,7 +730,7 @@ pub fn place_layer_input(
         w,
         h,
         place.ground,
-        &[lumit_gpu::CompositeLayer {
+        &[lumit_gpu::composite::CompositeLayer {
             texture: linear,
             size: (sw, sh),
             position: (0.0, 0.0),
@@ -737,13 +740,13 @@ pub fn place_layer_input(
             // Full opacity: a map is read as numbers, never dimmed.
             opacity: 100.0,
             matte: None,
-            blend: lumit_gpu::Blend::Normal,
+            blend: lumit_gpu::composite::Blend::Normal,
             z: 0.0,
             rotation_x_deg: 0.0,
             rotation_y_deg: 0.0,
             three_d: false,
             layer_mask: None,
-            pre: Some(lumit_gpu::concat_place(raster, onto)),
+            pre: Some(lumit_gpu::composite::concat_place(raster, onto)),
         }],
         None,
     )
@@ -1593,7 +1596,7 @@ pub fn run_ops(
                     w,
                     h,
                     None,
-                    &lumit_gpu::fx::SetMatteOp {
+                    &lumit_gpu::fx::utility::SetMatteOp {
                         channel: 0,
                         combine: false,
                         invert,
@@ -1607,7 +1610,7 @@ pub fn run_ops(
                     w,
                     h,
                     Some(&plane),
-                    &lumit_gpu::fx::SetMatteOp {
+                    &lumit_gpu::fx::utility::SetMatteOp {
                         channel: 0,
                         // Intersect with the layer's own alpha rather than
                         // replace it: a matte says which of *this* picture
@@ -1678,7 +1681,7 @@ pub fn run_ops(
                             w,
                             h,
                             Some(&plane),
-                            &lumit_gpu::fx::SetMatteOp {
+                            &lumit_gpu::fx::utility::SetMatteOp {
                                 channel: 0,
                                 // Intersect with the layer's own alpha rather
                                 // than replace it: a matte says which of *this*
@@ -2122,7 +2125,7 @@ mod tests {
                 _ => (i % 13) as f32 / 13.0,
             })
             .collect();
-        lumit_gpu::fx::upload_linear_f32(ctx, &px, W, H)
+        lumit_gpu::fx::common::upload_linear_f32(ctx, &px, W, H)
     }
 
     /// `run_ops` with every side list empty, through `cache` under `key`.
@@ -2153,7 +2156,7 @@ mod tests {
             None,
             Some((cache, key)),
         );
-        lumit_gpu::fx::readback_linear_f32(ctx, &out, W, H).expect("readback")
+        lumit_gpu::fx::common::readback_linear_f32(ctx, &out, W, H).expect("readback")
     }
 
     fn warm_cache() -> std::cell::RefCell<FxCache> {
@@ -2306,7 +2309,8 @@ mod tests {
         };
         let fx = ctx.fx();
         let src = source(&ctx);
-        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &src, W, H).expect("readback");
+        let before =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &src, W, H).expect("readback");
 
         // Room for exactly one output, so making room is forced on the
         // second op.
@@ -2365,7 +2369,7 @@ mod tests {
         ctx.end_frame();
 
         assert_ne!(out, src, "the walk made a new picture for its output");
-        let after = lumit_gpu::fx::readback_linear_f32(&ctx, &src, W, H).expect("readback");
+        let after = lumit_gpu::fx::common::readback_linear_f32(&ctx, &src, W, H).expect("readback");
         assert_eq!(
             before, after,
             "the layer's source was handed to the pool and drawn over"
@@ -2402,7 +2406,8 @@ mod tests {
         };
         let fx = ctx.fx();
         let plain = run(fx, &ctx, &shader_stack(""), &warm_cache(), 7);
-        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("read");
+        let before =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("read");
         assert_eq!(
             plain, before,
             "an instance with no program renders its input unchanged"
@@ -2659,7 +2664,7 @@ mod tests {
             None,
             None,
         );
-        lumit_gpu::fx::readback_linear_f32(ctx, &out, W, H).expect("readback")
+        lumit_gpu::fx::common::readback_linear_f32(ctx, &out, W, H).expect("readback")
     }
 
     /// Three effects on one layer make two work textures, not three: the third

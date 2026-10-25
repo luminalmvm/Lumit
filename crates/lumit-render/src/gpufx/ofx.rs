@@ -155,7 +155,7 @@ impl GpuEffect for CpuPass {
         // A read-back that fails is a passthrough, never a fault
         // (14-ENGINEERING-RULES §4): the picture the chain is carrying is
         // already the right answer for "this op did nothing".
-        let Ok(mut rgba) = lumit_gpu::fx::readback_linear_f32(ctx, tex, w, h) else {
+        let Ok(mut rgba) = lumit_gpu::fx::common::readback_linear_f32(ctx, tex, w, h) else {
             note(
                 instance,
                 Some("the frame could not be read back".to_owned()),
@@ -171,7 +171,8 @@ impl GpuEffect for CpuPass {
             .iter()
             .filter(|(_, neighbour)| neighbour.width() == w && neighbour.height() == h)
             .filter_map(|(offset, neighbour)| {
-                let pixels = lumit_gpu::fx::readback_linear_f32(ctx, neighbour, w, h).ok()?;
+                let pixels =
+                    lumit_gpu::fx::common::readback_linear_f32(ctx, neighbour, w, h).ok()?;
                 Some((*offset, pixels))
             })
             .collect();
@@ -180,7 +181,7 @@ impl GpuEffect for CpuPass {
             .map(|(offset, pixels)| (*offset, pixels.as_slice()))
             .collect();
         apply_and_note(self.0, instance, lt, &mut rgba, w, h, p, &borrowed);
-        lumit_gpu::fx::upload_linear_f32(ctx, &rgba, w, h)
+        lumit_gpu::fx::common::upload_linear_f32(ctx, &rgba, w, h)
     }
 }
 

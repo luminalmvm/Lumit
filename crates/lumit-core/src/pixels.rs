@@ -468,7 +468,7 @@ fn srgb_tables() -> &'static ([f32; 256], [u8; 4096]) {
 ///
 /// The crossfade is made on premultiplied values in linear light, the sum the
 /// compositor makes when a composition is one of the two clips
-/// (`lumit_gpu::Blend::Plus`), so a dissolve looks the same whichever way a
+/// (`lumit_gpu::composite::Blend::Plus`), so a dissolve looks the same whichever way a
 /// clip reaches the picture. Premultiplied, so a clip with transparency goes
 /// out as the other comes in and does not sit whole under it. A pair of
 /// opaque pixels takes the short road, which is every pixel of ordinary

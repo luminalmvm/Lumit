@@ -3,7 +3,7 @@
 
 use crate::GpuContext;
 
-use super::{work_texture, BlurOp, FxEngine};
+use super::{blur::BlurOp, work_texture, FxEngine};
 
 /// One resolved matte key (docs/08 §3.21): a Keylight-style
 /// colour-difference keyer on straight (unpremultiplied) colour. Mirrors
@@ -453,7 +453,7 @@ impl FxEngine {
             w,
             h,
             matte,
-            &super::BlurOp {
+            &super::blur::BlurOp {
                 radius_px: op.border_px,
                 // Transparent: the shape's own edge is what is being measured,
                 // and repeating the border pixel outward would put a phantom

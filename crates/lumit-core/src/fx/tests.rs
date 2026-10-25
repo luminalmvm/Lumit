@@ -9896,7 +9896,7 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
 fn head_on_camera(centre: [f32; 2], zoom: f32) -> points::Projection {
     // x' = cx + (x − cx)·zoom/(zoom + z), which as a 3×4 is:
     //   X = x + cx·z/zoom      Y = y + cy·z/zoom      W = 1 + z/zoom
-    // — the same column `lumit_gpu::camera_matrix` writes its perspective into.
+    // — the same column `lumit_gpu::composite::camera_matrix` writes its perspective into.
     points::Projection {
         m: [
             [1.0, 0.0, centre[0] / zoom, 0.0],

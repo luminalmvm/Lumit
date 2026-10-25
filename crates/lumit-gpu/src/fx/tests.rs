@@ -1,3 +1,14 @@
+use super::blur::*;
+use super::colour::*;
+use super::common::*;
+use super::distort::*;
+use super::generate::*;
+use super::lens_blur::*;
+use super::lens_flare::*;
+use super::split::*;
+use super::stylise::*;
+use super::temporal::*;
+use super::utility::*;
 use super::*;
 
 /// The §1.6 oracle corpus: a diagonal gradient, a hard alpha edge down
@@ -3314,7 +3325,7 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     // oracle would tile the frame differently and every case below would fail
     // for an obscure reason. Say so plainly instead.
     assert_eq!(
-        crate::fx::MB_TILE,
+        crate::fx::temporal::MB_TILE,
         lumit_core::fx::cpu::MB_TILE,
         "the tile side must match the oracle's"
     );
@@ -3878,10 +3889,10 @@ fn wgsl_lut_matches_the_cpu_oracle() {
 ///
 /// The two sides are built from **one** value rather than from two parallel
 /// argument lists: `lumit_core::fx::cpu::DofParams` is the oracle's input and
-/// `lumit_gpu::fx::DofOp` the kernel's, field for field, so a field added to one
+/// `lumit_gpu::fx::dof::DofOp` the kernel's, field for field, so a field added to one
 /// and forgotten on the other stops compiling instead of quietly diverging.
-fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::DofOp {
-    crate::fx::DofOp {
+fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::dof::DofOp {
+    crate::fx::dof::DofOp {
         focus: p.focus,
         range: p.range,
         near_aperture: p.near_aperture,
@@ -4255,7 +4266,7 @@ fn wgsl_dof_matches_the_cpu_oracle() {
 /// declared twice; this is what stops the two drifting.
 #[test]
 fn max_blades_matches_the_core_constant() {
-    assert_eq!(crate::fx::MAX_BLADES, lumit_core::fx::MAX_BLADES);
+    assert_eq!(crate::fx::dof::MAX_BLADES, lumit_core::fx::MAX_BLADES);
 }
 
 // ---------------------------------------------------------------------------
@@ -4784,7 +4795,7 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -4918,7 +4929,8 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     // accident.
     fx.set_deferred_flare_bakes(false);
     let op_a = flare_op(&first, w, h);
-    let bake_a = std::sync::Arc::new(move || flare_bake_data(&first)) as crate::fx::FlareBake;
+    let bake_a =
+        std::sync::Arc::new(move || flare_bake_data(&first)) as crate::fx::lens_flare::FlareBake;
     drop(fx.lens_flare(
         &ctx,
         &tex,
@@ -4943,7 +4955,8 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     // Now defer, and ask for a lens nothing holds.
     fx.set_deferred_flare_bakes(true);
     let op_b = flare_op(&second, w, h);
-    let bake_b = std::sync::Arc::new(move || flare_bake_data(&second)) as crate::fx::FlareBake;
+    let bake_b =
+        std::sync::Arc::new(move || flare_bake_data(&second)) as crate::fx::lens_flare::FlareBake;
     drop(fx.lens_flare(
         &ctx,
         &tex,
@@ -5058,7 +5071,8 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let gpu = fx.lens_flare_trace_debug(
                 &ctx,
                 &op,
-                &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+                &(std::sync::Arc::new(move || flare_bake_data(&p))
+                    as crate::fx::lens_flare::FlareBake),
                 combo_limit,
                 w,
                 h,
@@ -5308,7 +5322,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         streak_angle_deg: 12.0,
         mix: 1.0,
     };
-    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::SpriteFlareOp {
+    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::blur::SpriteFlareOp {
         light: p.light,
         intensity: p.intensity,
         tint: p.tint,
@@ -5426,7 +5440,7 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
             w,
             h,
             &bg_tex,
-            &crate::fx::LightWrapOp {
+            &crate::fx::blur::LightWrapOp {
                 width_px: width,
                 intensity,
                 mix,
@@ -5466,7 +5480,7 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
             w,
             h,
             &bg_tex,
-            &crate::fx::LightWrapOp {
+            &crate::fx::blur::LightWrapOp {
                 width_px: width,
                 intensity,
                 mix,
@@ -5579,7 +5593,8 @@ fn the_flare_renders_the_same_frame_every_time() {
                 h,
                 &op,
                 None,
-                &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+                &(std::sync::Arc::new(move || flare_bake_data(&p))
+                    as crate::fx::lens_flare::FlareBake),
                 &flare_probe(&p, w, h),
             );
             runs.push(readback_linear_f32(&ctx, &out, w, h).unwrap());
@@ -5610,7 +5625,7 @@ fn the_flare_renders_the_same_frame_every_time() {
     // stage downstream reads these ray landings.
     let p = base;
     let op = flare_op(&p, w, h);
-    let bake = std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake;
+    let bake = std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake;
     let first = fx.lens_flare_trace_debug(&ctx, &op, &bake, 8, w, h);
     assert!(!first.is_empty(), "the trace oracle hook rendered no rays");
     for i in 1..3 {
@@ -5655,7 +5670,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -5699,7 +5714,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
@@ -5722,7 +5737,8 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
             h,
             &nop,
             None,
-            &(std::sync::Arc::new(move || flare_bake_data(&neutral)) as crate::fx::FlareBake),
+            &(std::sync::Arc::new(move || flare_bake_data(&neutral))
+                as crate::fx::lens_flare::FlareBake),
             &flare_probe(&neutral, w, h),
         );
         let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
@@ -5758,7 +5774,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &flare_op(&area, w, h),
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&area)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&area)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&area, w, h),
     );
     let a_gpu = readback_linear_f32(&ctx, &a_out, w, h).unwrap();
@@ -5860,7 +5876,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &op,
         Some(&matte_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -5894,7 +5910,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
@@ -5937,7 +5953,8 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &flare_op(&tinted, w, h),
         Some(&matte_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&tinted)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&tinted))
+            as crate::fx::lens_flare::FlareBake),
         &flare_probe(&tinted, w, h),
     );
     let t_gpu = readback_linear_f32(&ctx, &t_out, w, h).unwrap();
@@ -5971,7 +5988,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &inverted_op,
         Some(&complement_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let i_gpu = readback_linear_f32(&ctx, &i_out, w, h).unwrap();
@@ -6062,14 +6079,14 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::lighting::shade(&mut cpu, w, h, &surface, &lights);
 
-        let op = crate::fx::LightingOp {
+        let op = crate::fx::lighting::LightingOp {
             origin: surface.origin,
             du: surface.du,
             dv: surface.dv,
             normal: surface.normal,
             lights: lights
                 .iter()
-                .map(|l| crate::fx::LightingLight {
+                .map(|l| crate::fx::lighting::LightingLight {
                     corners: l.corners,
                     colour: l.colour,
                     falloff_px: l.falloff_px,

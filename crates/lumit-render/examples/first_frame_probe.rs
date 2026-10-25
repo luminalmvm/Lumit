@@ -55,7 +55,7 @@ fn main() {
     println!("{:44} {:8.1} ms", "ColourEngine::new", ms(t));
 
     let t = Instant::now();
-    let _compositor = lumit_gpu::Compositor::new(&gpu);
+    let _compositor = lumit_gpu::composite::Compositor::new(&gpu);
     println!("{:44} {:8.1} ms", "Compositor::new", ms(t));
 
     let t = Instant::now();

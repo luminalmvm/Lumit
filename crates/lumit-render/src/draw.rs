@@ -478,7 +478,7 @@ pub struct TemporalBelow {
 /// blur adjustment (docs/08 §3.26; docs/impl/temporal-rerender.md §3): one draw
 /// list + camera per shutter sample. `Realiser::realise` renders each, averages
 /// the N finished composites with the hardware additive-at-1/N pass
-/// ([`lumit_gpu::Compositor::accumulate`]), then blends that average against the
+/// ([`lumit_gpu::composite::Compositor::accumulate`]), then blends that average against the
 /// plain frame-time below-composite by `mix`, and the result stands in for the
 /// below-composite the adjustment's own effects and coverage blend see — the
 /// same `render_below_at` (via `below_draws_at`) export drives, so preview equals
@@ -530,13 +530,13 @@ pub struct CompLayerDraw {
     pub rotation_y_deg: f32,
     pub three_d: bool,
     pub matte: Option<MatteDraw>,
-    pub blend: lumit_gpu::Blend,
+    pub blend: lumit_gpu::composite::Blend,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for
     /// GPU-sourced layers — Precomps, whose pixels never exist CPU-side.
     pub mask_cov: Option<(Vec<u8>, u32, u32)>,
     /// Parent placement for layers spliced out of a collapsed Precomp
     /// (docs/06 §1.4): multiplied in front of this draw's own placement so
-    /// content is resampled once, never twice. From lumit_gpu::place_matrix.
+    /// content is resampled once, never twice. From lumit_gpu::composite::place_matrix.
     pub pre: Option<[[f32; 4]; 4]>,
     /// The layer's live effect stack, resolved to plain numbers at this
     /// frame (docs/08; radius already in texture pixels). Applied to the
@@ -693,13 +693,13 @@ pub struct CompLayerDraw {
     /// which case the compositor draws the layer's SAME texture at each of
     /// these and averages them into one smeared layer; the single-placement
     /// fields above stay the frame-time (k=0-ish) representative placement.
-    pub mb: Vec<lumit_gpu::MbSample>,
+    pub mb: Vec<lumit_gpu::composite::MbSample>,
     /// The comp's Light layers that shade this one (docs/06), already
     /// reduced to comp-pixel rectangles. Empty unless the comp holds lights
     /// and this layer's Accepts lights switch is on — and empty means the
     /// lighting pass never runs, which is how a comp without lights renders
     /// byte-for-byte as it did before lighting existed.
-    pub lights: Vec<lumit_gpu::fx::LightingLight>,
+    pub lights: Vec<lumit_gpu::fx::lighting::LightingLight>,
     /// The below-stack re-rendered at a held time for a temporal adjustment
     /// (Posterize Time, docs/08 §3.25). Some only on an adjustment
     /// [`DrawSource::Adjust`] draw whose stack holds a Posterize Time effect

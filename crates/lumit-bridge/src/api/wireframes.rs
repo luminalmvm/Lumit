@@ -207,7 +207,7 @@ impl CompositionReference {
                             .map_or((w, h), |m| (f64::from(m.width), f64::from(m.height))),
                         _ => (w, h),
                     };
-                    let own = lumit_gpu::place_matrix(
+                    let own = lumit_gpu::composite::place_matrix(
                         (
                             tr.position_x.value_at(lt) as f32,
                             tr.position_y.value_at(lt) as f32,

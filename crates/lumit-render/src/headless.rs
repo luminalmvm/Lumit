@@ -34,7 +34,7 @@ use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectIt
 // target so the composite and the final blit can never disagree about what
 // "half size" is (it moved into lumit-gpu when the composite itself started
 // running at the preview scale; the rounding is unchanged).
-use lumit_gpu::scaled_size;
+use lumit_gpu::composite::scaled_size;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -46,7 +46,7 @@ use uuid::Uuid;
 /// afterwards, so a failed frame never discards the compiled pipelines.
 struct Parts {
     colour: lumit_gpu::ColourEngine,
-    compositor: lumit_gpu::Compositor,
+    compositor: lumit_gpu::composite::Compositor,
     /// One effect engine per **working format** (docs/06 §3.4), built on first
     /// use and kept.
     ///
@@ -699,7 +699,7 @@ impl HeadlessRenderer {
     pub fn new() -> Result<Self, String> {
         let gpu = lumit_gpu::GpuContext::headless().map_err(|e| e.to_string())?;
         let colour = lumit_gpu::ColourEngine::new(&gpu);
-        let compositor = lumit_gpu::Compositor::new(&gpu);
+        let compositor = lumit_gpu::composite::Compositor::new(&gpu);
         let fx = lumit_gpu::fx::FxEngine::new(&gpu);
         let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         Ok(Self::from_engines(gpu, colour, compositor, fx, scope))
@@ -751,7 +751,7 @@ impl HeadlessRenderer {
     fn from_engines(
         gpu: lumit_gpu::GpuContext,
         colour: lumit_gpu::ColourEngine,
-        compositor: lumit_gpu::Compositor,
+        compositor: lumit_gpu::composite::Compositor,
         fx: lumit_gpu::fx::FxEngine,
         scope: lumit_gpu::scope::ScopeEngine,
     ) -> Self {
@@ -1092,14 +1092,14 @@ impl HeadlessRenderer {
 
     /// The region in comp pixels for a `w`×`h` composition, rounded out to
     /// whole pixels so the window never lands on a fraction of one.
-    fn region_px(&self, w: u32, h: u32) -> Option<lumit_gpu::Region> {
+    fn region_px(&self, w: u32, h: u32) -> Option<lumit_gpu::composite::Region> {
         let r = self.region?;
         let (fw, fh) = (w as f32, h as f32);
         let x = (r[0] * fw).floor().clamp(0.0, fw - 1.0);
         let y = (r[1] * fh).floor().clamp(0.0, fh - 1.0);
         let rw = (r[2] * fw).ceil().clamp(1.0, fw) - x;
         let rh = (r[3] * fh).ceil().clamp(1.0, fh) - y;
-        (rw >= 1.0 && rh >= 1.0).then_some(lumit_gpu::Region { x, y, w: rw, h: rh })
+        (rw >= 1.0 && rh >= 1.0).then_some(lumit_gpu::composite::Region { x, y, w: rw, h: rh })
     }
 
     /// A content name with the Viewer's own way of looking folded in.
@@ -1759,7 +1759,7 @@ impl HeadlessRenderer {
     }
 
     /// Keep the multisample attachment from frame to frame
-    /// ([`lumit_gpu::Compositor::keep_attachment`]). Set on the renderer an
+    /// ([`lumit_gpu::composite::Compositor::keep_attachment`]). Set on the renderer an
     /// export writes through, which draws every frame at one size.
     pub fn keep_attachments(&mut self) {
         if let Some(parts) = &self.parts {
@@ -4248,7 +4248,7 @@ fn seen(probe: Option<&Probe>) -> SourceProbe {
 fn crop_texture(
     ctx: &lumit_gpu::GpuContext,
     src: &wgpu::Texture,
-    region: lumit_gpu::Region,
+    region: lumit_gpu::composite::Region,
     scale: f32,
     comp: (u32, u32),
 ) -> wgpu::Texture {

@@ -1207,7 +1207,7 @@ impl FxEngine {
             w,
             h,
             None,
-            &super::BlurOp {
+            &super::blur::BlurOp {
                 radius_px: op.radius_px,
                 // Repeat: the frame's own border must not read as a dark
                 // neighbourhood and lift the picture's edges.

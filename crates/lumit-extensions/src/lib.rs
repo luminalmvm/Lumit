@@ -775,7 +775,7 @@ mod tests {
             let passes: Vec<&str> = effect.passes.iter().map(|p| p.name.as_str()).collect();
             let program = lumit_core::fx::shader::build_passes(&effect.shader, &passes).unwrap();
             for (_, text) in &program.passes {
-                if let Err(why) = lumit_gpu::fx::validate(text) {
+                if let Err(why) = lumit_gpu::fx::custom_shader::validate(text) {
                     panic!("{}", program.remap_error(&why));
                 }
             }

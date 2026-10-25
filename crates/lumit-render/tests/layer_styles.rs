@@ -372,7 +372,7 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
         );
         assert_eq!(ops.len(), 1, "{name} resolved to no op");
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = lumit_render::fxops::run_ops(
             fx,
             &ctx,
@@ -396,7 +396,7 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
         // An outer style is given room round the picture to fall into, which
         // the reference's one buffer cannot hold, so it is cut back off first.
         let out = lumit_gpu::fx::fit_centred(&ctx, out, w, h);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
         let mut cpu = source.clone();
         lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
 

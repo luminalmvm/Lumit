@@ -512,7 +512,7 @@ pub mod particulate {
             Schedule::scan(dt, (t / dt).floor() as i64, read.window_frames(dt), &|_| {
                 rate
             });
-        schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+        schedule.trim_to_newest(lumit_gpu::fx::particulate::MAX_CANDIDATES);
         // **Flat, deliberately**: B12–B14 are the budgets docs/13 §2
         // states and the baselines checked in beside them, so the fixture has
         // to keep measuring the same work. The third axis costs one dot product
@@ -526,7 +526,8 @@ pub mod particulate {
             ..Default::default()
         };
 
-        let tex = lumit_gpu::fx::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let run = || {
             lumit_render::fxops::run_ops(
                 fx,

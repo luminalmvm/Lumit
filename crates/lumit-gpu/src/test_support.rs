@@ -27,7 +27,7 @@
 
 use crate::fx::FxEngine;
 use crate::scope::ScopeEngine;
-use crate::{ColourEngine, Compositor, GpuContext, SharedGpu};
+use crate::{composite::Compositor, ColourEngine, GpuContext, SharedGpu};
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::ThreadId;

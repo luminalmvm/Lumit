@@ -2339,6 +2339,7 @@ dependencies = [
  "bincode",
  "blake3",
  "bytemuck",
+ "glam",
  "half",
  "lumit-audio",
  "lumit-budget",

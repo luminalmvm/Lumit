@@ -607,11 +607,11 @@ impl FxEngine {
         let blend_mix = pipeline_on(&adjust_pl, &blend_mix_mod, "fx-blend-mix", "blend_mix");
         let lut = pipeline_on(&lut_pl, &lut_mod, "fx-lut", "lut_apply");
         let ocio = pipeline_on(&ocio_pl, &ocio_mod, "fx-ocio", "ocio_effect");
-        let lens_flare = super::LazyFlare::spawn(ctx);
+        let lens_flare = super::lens_flare::LazyFlare::spawn(ctx);
         // Particulate (docs/08 §3.86): four compute passes and one instanced
         // draw off one module, so the closed forms and the quad that shows them
         // are read from one file (docs/impl/particulate.md §6).
-        let particulate = super::ParticulatePipelines::new(
+        let particulate = super::particulate::ParticulatePipelines::new(
             ctx,
             &module(
                 &format!(

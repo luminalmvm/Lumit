@@ -274,7 +274,10 @@ fn render_the_before_and_after_pictures() {
 #[ignore = "a measurement, not a gate: prints times, asserts nothing"]
 fn flow_and_blur_frame_cost() {
     use lumit_core::retime::VectorDetail;
-    use lumit_gpu::fx::{readback_linear_f32, upload_flow_field, upload_linear_f32, MotionBlurOp};
+    use lumit_gpu::fx::{
+        common::readback_linear_f32, common::upload_flow_field, common::upload_linear_f32,
+        temporal::MotionBlurOp,
+    };
     use std::time::Instant;
 
     let Ok(clips) = std::env::var("LUMIT_BLUR_PROOF_CLIPS") else {

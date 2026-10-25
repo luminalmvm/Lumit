@@ -3809,12 +3809,8 @@ pub fn mask_rgba(coverage: &[u8]) -> Vec<u8> {
 
 /// CameraPose (core model) -> GPU camera matrix: the single conversion both
 /// the preview and the export path share, so they cannot disagree.
-pub fn camera_mat(
-    comp_w: u32,
-    comp_h: u32,
-    pose: lumit_core::model::CameraPose,
-) -> lumit_gpu::Mat4 {
-    lumit_gpu::camera_matrix(
+pub fn camera_mat(comp_w: u32, comp_h: u32, pose: lumit_core::model::CameraPose) -> glam::Mat4 {
+    lumit_gpu::composite::camera_matrix(
         comp_w as f32,
         comp_h as f32,
         pose.zoom as f32,

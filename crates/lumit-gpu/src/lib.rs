@@ -2753,7 +2753,7 @@ impl ColourEngine {
         for r in 0..size.height {
             let start = (r * padded) as usize;
             for texel in data[start..start + row as usize].chunks_exact(2) {
-                let v = crate::fx::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
+                let v = crate::fx::common::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
                 out.push((v.clamp(0.0, 1.0) * 65_535.0).round() as u16);
             }
         }
@@ -2842,7 +2842,7 @@ impl ColourEngine {
                 8 => out.extend(
                     row_bytes
                         .chunks_exact(2)
-                        .map(|b| crate::fx::f16_to_f32(u16::from_le_bytes([b[0], b[1]]))),
+                        .map(|b| crate::fx::common::f16_to_f32(u16::from_le_bytes([b[0], b[1]]))),
                 ),
                 _ => out.extend(row_bytes.iter().map(|b| f32::from(*b) / 255.0)),
             }
@@ -3320,7 +3320,7 @@ mod tests {
             let v = i as f32 / ((w * h - 1) as f32);
             linear.extend_from_slice(&[v, v, v, 1.0]);
         }
-        let src = crate::fx::upload_linear_f32(&ctx, &linear, w, h);
+        let src = crate::fx::common::upload_linear_f32(&ctx, &linear, w, h);
 
         let deep = engine.readback16(
             &ctx,
@@ -3412,8 +3412,4 @@ pub mod shared_metal;
 // through the `test-fixtures` feature, by a downstream crate's.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support;
-pub use composite::{
-    camera_frame, camera_matrix, concat_place, invert_place, place_matrix, scaled_size,
-    unplace_matrix, Blend, CompositeLayer, Compositor, MatteInput, MbSample, Region,
-};
-pub use glam::Mat4;
+use composite::Compositor;

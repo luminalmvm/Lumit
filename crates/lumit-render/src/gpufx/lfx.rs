@@ -86,7 +86,7 @@ fn compiled(key: u64, program: &lumit_core::fx::shader::ShaderProgram) -> Option
     let why = program
         .passes
         .iter()
-        .find_map(|(_, text)| lumit_gpu::fx::validate(text).err())
+        .find_map(|(_, text)| lumit_gpu::fx::custom_shader::validate(text).err())
         .map(|message| program.remap_error(&message));
     if let Ok(mut seen) = SEEN.lock() {
         seen.push((key, why.clone()));
@@ -299,7 +299,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
-            lumit_gpu::fx::upload_linear_f32(&ctx, &src, W, H),
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &src, W, H),
             W,
             H,
             &ops,
@@ -316,7 +316,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             None,
             None,
         );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, W, H).expect("readback");
+        let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, W, H).expect("readback");
 
         // The half-size pass: 4 by 4, each texel its own uv and the input's
         // blue there.

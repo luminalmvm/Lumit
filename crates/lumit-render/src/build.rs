@@ -189,9 +189,9 @@ fn preview_puppet(pixels: &LayerPixels, layer: Uuid, density: f64, expansion: f6
 /// that composites (they must never disagree). Every mode maps to its
 /// like-named GPU variant (T24).
 #[must_use]
-pub fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::Blend {
+pub fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::composite::Blend {
     use lumit_core::model::BlendMode as M;
-    use lumit_gpu::Blend as G;
+    use lumit_gpu::composite::Blend as G;
     match b {
         M::Normal => G::Normal,
         M::Add => G::Add,
@@ -301,7 +301,7 @@ pub fn parent_world_placement(
         };
         let p = own_placement(a, t_comp, &context);
         world = Some(match world {
-            Some(w) => lumit_gpu::concat_place(w, p),
+            Some(w) => lumit_gpu::composite::concat_place(w, p),
             None => p,
         });
     }
@@ -318,7 +318,7 @@ fn world_placement(
 ) -> [[f32; 4]; 4] {
     let own = own_placement(layer, t_comp, &context);
     match parent_world_placement(comp, layer, t_comp, context) {
-        Some(pre) => lumit_gpu::concat_place(pre, own),
+        Some(pre) => lumit_gpu::composite::concat_place(pre, own),
         None => own,
     }
 }
@@ -354,7 +354,7 @@ fn own_placement(
             p.value_at_with_context(lt, context.clone()) as f32
         }
     };
-    lumit_gpu::place_matrix(
+    lumit_gpu::composite::place_matrix(
         (
             tr.position_x.value_at_with_context(lt, context.clone()) as f32,
             tr.position_y.value_at_with_context(lt, context.clone()) as f32,
@@ -409,29 +409,29 @@ pub fn reparented(
     ) {
         return Vec::new();
     }
-    let identity = lumit_gpu::Mat4::IDENTITY.to_cols_array_2d();
+    let identity = glam::Mat4::IDENTITY.to_cols_array_2d();
     let was = parent_world_placement(comp, layer, t_comp, context.clone()).unwrap_or(identity);
     let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
         Some(parent) => {
             let own = own_placement(parent, t_comp, &context);
             match parent_world_placement(comp, parent, t_comp, context.clone()) {
-                Some(world) => lumit_gpu::concat_place(world, own),
+                Some(world) => lumit_gpu::composite::concat_place(world, own),
                 None => own,
             }
         }
         None => identity,
     };
-    let Some(out) = lumit_gpu::invert_place(now).filter(|_| was != now) else {
+    let Some(out) = lumit_gpu::composite::invert_place(now).filter(|_| was != now) else {
         return Vec::new();
     };
     // Out of the old parent's space and into the new one's.
-    let carry = lumit_gpu::concat_place(out, was);
+    let carry = lumit_gpu::composite::concat_place(out, was);
 
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let tr = &layer.transform;
     let at = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
-    let to = lumit_gpu::unplace_matrix(
-        lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context)),
+    let to = lumit_gpu::composite::unplace_matrix(
+        lumit_gpu::composite::concat_place(carry, own_placement(layer, t_comp, &context)),
         (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32),
     );
     // A flip can be written two ways: one axis negative, or the other one
@@ -536,7 +536,7 @@ pub fn parent_ops(
 ///
 /// This works that "somewhere else" out once a frame, as one 3×4 table.
 /// **Nothing here derives a camera**: it is the compositor's own
-/// [`lumit_gpu::camera_matrix`] and [`lumit_gpu::place_matrix`], multiplied
+/// [`lumit_gpu::composite::camera_matrix`] and [`lumit_gpu::composite::place_matrix`], multiplied
 /// together and then restricted back onto the layer's plane — the plane's own
 /// map `H` (the full product with `z` struck out) inverted and put in front, so
 /// that a particle at `z = 0` comes back to exactly where it started and one
@@ -560,7 +560,7 @@ pub fn points_projection(
     let pose = crate::track::camera_pose(doc, comp, t_comp)?;
     let cam = crate::export::camera_mat(comp.width, comp.height, pose);
     let tr = &layer.transform;
-    let place = lumit_gpu::place_matrix(
+    let place = lumit_gpu::composite::place_matrix(
         (
             tr.position_x.value_at_with_context(lt, context.clone()) as f32,
             tr.position_y.value_at_with_context(lt, context.clone()) as f32,
@@ -580,10 +580,10 @@ pub fn points_projection(
     );
     // Parenting composes exactly as the compositor composes it: `pre × own`.
     let place = match parent_world_placement(comp, layer, t_comp, context) {
-        Some(pre) => lumit_gpu::concat_place(pre, place),
+        Some(pre) => lumit_gpu::composite::concat_place(pre, place),
         None => place,
     };
-    let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+    let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
     // Rows 0, 1 and 3 of the product — x, y and the homogeneous divide; the z
     // output is flattened by the perspective matrix and never read.
     let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
@@ -1036,7 +1036,7 @@ pub fn motion_blur_samples(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
     context: Arc<ExpressionContext>,
-) -> Vec<lumit_gpu::MbSample> {
+) -> Vec<lumit_gpu::composite::MbSample> {
     if !layer.switches.motion_blur {
         return Vec::new();
     }
@@ -1059,7 +1059,7 @@ pub fn motion_blur_samples(
                 comp_time: t_comp + off * dt,
                 ..(*context).clone()
             });
-            lumit_gpu::MbSample {
+            lumit_gpu::composite::MbSample {
                 position: (
                     tr.position_x.value_at_with_context(lt, context.clone()) as f32,
                     tr.position_y.value_at_with_context(lt, context.clone()) as f32,
@@ -1101,7 +1101,7 @@ pub fn shading_lights(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
     t_comp: f64,
-) -> Vec<lumit_gpu::fx::LightingLight> {
+) -> Vec<lumit_gpu::fx::lighting::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
     if !layer.switches.accepts_lights
@@ -1116,7 +1116,7 @@ pub fn shading_lights(
     if lights.is_empty() {
         return Vec::new();
     }
-    if lights.len() > lumit_gpu::fx::MAX_LIT_LIGHTS {
+    if lights.len() > lumit_gpu::fx::lighting::MAX_LIT_LIGHTS {
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         let (lx, ly) = (
             layer.transform.position_x.value_at(lt),
@@ -1133,7 +1133,7 @@ pub fn shading_lights(
             })
             .collect();
         keyed.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        keyed.truncate(lumit_gpu::fx::MAX_LIT_LIGHTS);
+        keyed.truncate(lumit_gpu::fx::lighting::MAX_LIT_LIGHTS);
         keyed.sort_by_key(|&(_, i)| i);
         lights = keyed.iter().map(|&(_, i)| lights[i]).collect();
     }
@@ -1143,7 +1143,7 @@ pub fn shading_lights(
         .map(|l| {
             // The same placement maths a layer gets, so a light and a layer
             // that share a transform occupy the same place in space.
-            let place = lumit_gpu::place_matrix(
+            let place = lumit_gpu::composite::place_matrix(
                 (l.position.0 as f32, l.position.1 as f32),
                 (0.0, 0.0),
                 (100.0, 100.0),
@@ -1154,7 +1154,7 @@ pub fn shading_lights(
             );
             let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
             let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
-            lumit_gpu::fx::LightingLight {
+            lumit_gpu::fx::lighting::LightingLight {
                 corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
                 colour: l.colour,
                 falloff_px: l.falloff_px as f32,
@@ -2299,12 +2299,12 @@ fn comp_walk(
                 Some(match owner {
                     // A layer scaled to nothing shows nothing, so any answer
                     // will do.
-                    Some(owner) => {
-                        lumit_gpu::invert_place(world_placement(comp, owner, t_comp, context))
-                            .map_or(to_comp, |from_comp| {
-                                lumit_gpu::concat_place(from_comp, to_comp)
-                            })
-                    }
+                    Some(owner) => lumit_gpu::composite::invert_place(world_placement(
+                        comp, owner, t_comp, context,
+                    ))
+                    .map_or(to_comp, |from_comp| {
+                        lumit_gpu::composite::concat_place(from_comp, to_comp)
+                    }),
                     None => to_comp,
                 })
             }
@@ -2973,7 +2973,7 @@ fn comp_walk(
                     &mut schedule,
                     &row_at,
                 );
-                schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+                schedule.trim_to_newest(lumit_gpu::fx::particulate::MAX_CANDIDATES);
                 lumit_core::fx::points::PointsSchedule {
                     schedule,
                     t,
@@ -3119,7 +3119,7 @@ fn comp_walk(
                 rotation_y_deg: 0.0,
                 three_d: false,
                 matte: None,
-                blend: lumit_gpu::Blend::Normal,
+                blend: lumit_gpu::composite::Blend::Normal,
                 mask_cov: None,
                 pre: None,
                 fx,
@@ -3521,8 +3521,8 @@ fn comp_walk(
                             height: natural.1 as u32,
                             background: [0.0, 0.0, 0.0, 0.0],
                             draws: vec![
-                                part(going, away, lumit_gpu::Blend::Normal),
-                                part(coming, here, lumit_gpu::Blend::Plus),
+                                part(going, away, lumit_gpu::composite::Blend::Normal),
+                                part(coming, here, lumit_gpu::composite::Blend::Plus),
                             ],
                             camera: None,
                             // A mix has no name of its own. Each comp
@@ -3588,14 +3588,14 @@ fn comp_walk(
 
                     let parent = match parent_world_placement(comp, layer, t_comp, context.clone())
                     {
-                        Some(pw) => lumit_gpu::concat_place(pw, own),
+                        Some(pw) => lumit_gpu::composite::concat_place(pw, own),
                         None => own,
                     };
                     for d in &mut spliced_in {
                         d.pre = Some(match d.pre {
                             // A collapsed chain: this parent wraps the child's
                             // own parent placement.
-                            Some(p) => lumit_gpu::concat_place(parent, p),
+                            Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
                         // Per-layer motion blur on an inner layer of a collapsed
@@ -3873,7 +3873,7 @@ fn comp_walk(
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
-                    blend: lumit_gpu::Blend::Normal,
+                    blend: lumit_gpu::composite::Blend::Normal,
                     mask_cov: (!layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
                         // natural), same as the property panel treats them.
@@ -4448,7 +4448,7 @@ fn graph_comp_draw(
         rotation_y_deg: 0.0,
         three_d: false,
         matte: None,
-        blend: lumit_gpu::Blend::Normal,
+        blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
         fx: Default::default(),
@@ -5360,7 +5360,7 @@ fn read_draw(
         rotation_y_deg: 0.0,
         three_d: false,
         matte: None,
-        blend: lumit_gpu::Blend::Normal,
+        blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
         fx: Default::default(),
@@ -6087,7 +6087,7 @@ mod parent_placement_tests {
 
     fn place_of(l: &Layer) -> [[f32; 4]; 4] {
         let tr = &l.transform;
-        lumit_gpu::place_matrix(
+        lumit_gpu::composite::place_matrix(
             (
                 tr.position_x.value_at(0.0) as f32,
                 tr.position_y.value_at(0.0) as f32,
@@ -6138,7 +6138,7 @@ mod parent_placement_tests {
         let world =
             parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()))
                 .unwrap();
-        let expected = lumit_gpu::concat_place(place_of(&gp), place_of(&parent));
+        let expected = lumit_gpu::composite::concat_place(place_of(&gp), place_of(&parent));
         assert_eq!(world, expected);
         // A 2D grandparent's hidden z and tilt leave the chain as it was.
         let mut tilted = gp.clone();
@@ -6155,7 +6155,7 @@ mod parent_placement_tests {
         let world = |c: &Composition, l: &Layer| {
             let own = own_placement(l, 0.0, &ctx());
             match parent_world_placement(c, l, 0.0, ctx()) {
-                Some(pre) => lumit_gpu::concat_place(pre, own),
+                Some(pre) => lumit_gpu::composite::concat_place(pre, own),
                 None => own,
             }
         };
@@ -6213,8 +6213,8 @@ mod points_projection_tests {
     /// One camera and one placement, and the full comp-space projection of a
     /// point in the layer's own pixels — the compositor's own arithmetic,
     /// written here as the thing the restriction is measured against.
-    fn seen_by_the_compositor(cam: lumit_gpu::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
-        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+    fn seen_by_the_compositor(cam: glam::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
+        let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
         let at = |r: usize| a[0][r] * p[0] + a[1][r] * p[1] + a[2][r] * p[2] + a[3][r];
         let w = at(3);
         [at(0) / w, at(1) / w]
@@ -6230,14 +6230,14 @@ mod points_projection_tests {
     /// checked is the restriction and its inverse, not a second camera.
     #[test]
     fn a_projected_particle_lands_where_the_camera_would_have_put_it() {
-        let cam = lumit_gpu::camera_matrix(
+        let cam = lumit_gpu::composite::camera_matrix(
             1920.0,
             1080.0,
             900.0,
             (860.0, 600.0, -900.0),
             (8.0, -20.0, 5.0),
         );
-        let place = lumit_gpu::place_matrix(
+        let place = lumit_gpu::composite::place_matrix(
             (960.0, 540.0),
             (400.0, 300.0),
             (120.0, 80.0),
@@ -6247,7 +6247,7 @@ mod points_projection_tests {
             -40.0,
         );
         // The restriction, built the way `points_projection` builds it.
-        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+        let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
         let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
         let (rx, ry, rw) = (row(0), row(1), row(3));
         let h = [
@@ -6709,7 +6709,7 @@ mod render_below_at_tests {
         let full_px = bytes(&full);
 
         // A window over the busiest quarter of the frame.
-        let region = lumit_gpu::Region {
+        let region = lumit_gpu::composite::Region {
             x: 64.0,
             y: 32.0,
             w: 160.0,

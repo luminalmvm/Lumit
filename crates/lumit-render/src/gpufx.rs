@@ -574,7 +574,7 @@ impl GpuEffect for Blur {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::BlurOp {
+            &lumit_gpu::fx::blur::BlurOp {
                 radius_px,
                 edge,
                 mix,
@@ -610,7 +610,7 @@ impl GpuEffect for DirectionalBlur {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::DirBlurOp {
+            &lumit_gpu::fx::blur::DirBlurOp {
                 dx,
                 dy,
                 length_px,
@@ -645,7 +645,7 @@ impl GpuEffect for RadialBlur {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::RadialBlurOp {
+            &lumit_gpu::fx::blur::RadialBlurOp {
                 centre_px,
                 amount_px,
                 taps: lumit_core::fx::cpu::radial_blur_taps(amount_px),
@@ -680,7 +680,7 @@ impl GpuEffect for Sharpen {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::SharpenOp {
+            &lumit_gpu::fx::blur::SharpenOp {
                 amount,
                 radius_px,
                 threshold,
@@ -713,7 +713,7 @@ impl GpuEffect for SharpenSimple {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::SharpenSimpleOp {
+            &lumit_gpu::fx::blur::SharpenSimpleOp {
                 amount,
                 radius,
                 mix,
@@ -743,7 +743,7 @@ impl GpuEffect for SpriteFlare {
             tex,
             w,
             h,
-            &lumit_gpu::fx::SpriteFlareOp {
+            &lumit_gpu::fx::blur::SpriteFlareOp {
                 light: s.light,
                 intensity: s.intensity,
                 tint: s.tint,
@@ -930,7 +930,7 @@ impl GpuEffect for LightWrap {
                 w,
                 h,
                 background,
-                &lumit_gpu::fx::LightWrapOp {
+                &lumit_gpu::fx::blur::LightWrapOp {
                     width_px,
                     intensity,
                     mix,
@@ -975,7 +975,7 @@ impl GpuEffect for RgbSplit {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::RgbSplitOp {
+                    &lumit_gpu::fx::split::RgbSplitOp {
                         dx,
                         dy,
                         scale,
@@ -999,7 +999,7 @@ impl GpuEffect for RgbSplit {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::SpectralSplitOp {
+                    &lumit_gpu::fx::split::SpectralSplitOp {
                         dx,
                         dy,
                         amount_px,
@@ -1040,7 +1040,7 @@ impl GpuEffect for ChromaticAberration {
                 w,
                 h,
                 aux.matte(),
-                &lumit_gpu::fx::ChromaticAberrationOp {
+                &lumit_gpu::fx::split::ChromaticAberrationOp {
                     amount_px,
                     tints,
                     mix,
@@ -1062,7 +1062,7 @@ impl GpuEffect for ChromaticAberration {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::SpectralSplitOp {
+                    &lumit_gpu::fx::split::SpectralSplitOp {
                         dx,
                         dy,
                         amount_px,
@@ -1099,7 +1099,7 @@ impl GpuEffect for ColourBalance {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ColourBalanceOp {
+            &lumit_gpu::fx::colour::ColourBalanceOp {
                 lift,
                 gamma,
                 gain,
@@ -1131,7 +1131,7 @@ impl GpuEffect for Saturation {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::SaturationOp { saturation, mix },
+            &lumit_gpu::fx::colour::SaturationOp { saturation, mix },
         )
     }
 }
@@ -1158,7 +1158,7 @@ impl GpuEffect for Vibrancy {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::VibrancyOp { amount, mix },
+            &lumit_gpu::fx::colour::VibrancyOp { amount, mix },
         )
     }
 }
@@ -1188,7 +1188,7 @@ impl GpuEffect for Flash {
             tex,
             w,
             h,
-            &lumit_gpu::fx::FlashOp {
+            &lumit_gpu::fx::colour::FlashOp {
                 strength,
                 colour,
                 mix,
@@ -1219,7 +1219,7 @@ impl GpuEffect for Vignette {
             tex,
             w,
             h,
-            &lumit_gpu::fx::VignetteOp {
+            &lumit_gpu::fx::stylise::VignetteOp {
                 amount,
                 radius,
                 softness,
@@ -1254,7 +1254,7 @@ impl GpuEffect for Exposure {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ExposureOp {
+            &lumit_gpu::fx::colour::ExposureOp {
                 stops: e.stops,
                 factor,
                 mix,
@@ -1286,7 +1286,7 @@ impl GpuEffect for HueShift {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::HueShiftOp {
+            &lumit_gpu::fx::colour::HueShiftOp {
                 angle_rad: e.angle.to_radians(),
                 preserve: e.preserve_luminance,
                 m,
@@ -1312,7 +1312,13 @@ impl GpuEffect for Contrast {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (k, mix) = effects::contrast::Contrast::read(p).packed();
-        fx.contrast(ctx, tex, w, h, &lumit_gpu::fx::ContrastOp { k, mix })
+        fx.contrast(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::colour::ContrastOp { k, mix },
+        )
     }
 }
 
@@ -1338,7 +1344,7 @@ impl GpuEffect for Gamma {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::GammaOp { gamma, mix },
+            &lumit_gpu::fx::colour::GammaOp { gamma, mix },
         )
     }
 }
@@ -1359,7 +1365,13 @@ impl GpuEffect for Fill {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (colour, mix) = effects::fill::Fill::read(p).packed();
-        fx.fill(ctx, tex, w, h, &lumit_gpu::fx::FillOp { colour, mix })
+        fx.fill(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::generate::FillOp { colour, mix },
+        )
     }
 }
 
@@ -1384,7 +1396,7 @@ impl GpuEffect for Gradient {
             tex,
             w,
             h,
-            &lumit_gpu::fx::GradientOp {
+            &lumit_gpu::fx::generate::GradientOp {
                 radial: g.radial,
                 start: g.start,
                 axis: g.axis,
@@ -1424,7 +1436,7 @@ impl GpuEffect for Noise {
             tex,
             w,
             h,
-            &lumit_gpu::fx::NoiseOp {
+            &lumit_gpu::fx::generate::NoiseOp {
                 amount,
                 gaussian,
                 colour_noise,
@@ -1457,7 +1469,7 @@ impl GpuEffect for FractalNoise {
             tex,
             w,
             h,
-            &lumit_gpu::fx::FractalNoiseOp {
+            &lumit_gpu::fx::generate::FractalNoiseOp {
                 seed: f.field.seed,
                 octaves: f.field.octaves,
                 gain: f.field.gain,
@@ -1503,7 +1515,7 @@ impl GpuEffect for TurbulentDisplace {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::TurbulentDisplaceOp {
+            &lumit_gpu::fx::distort::TurbulentDisplaceOp {
                 seed_x: t.field.seed,
                 seed_y: t.seed_y,
                 octaves: t.field.octaves,
@@ -1546,7 +1558,7 @@ impl GpuEffect for Tile {
             tex,
             w,
             h,
-            &lumit_gpu::fx::TileOp {
+            &lumit_gpu::fx::distort::TileOp {
                 centre: t.centre,
                 tile_frac: t.tile_frac,
                 output_frac: t.output_frac,
@@ -1625,7 +1637,7 @@ impl GpuEffect for LensDistort {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::LensDistortOp {
+            &lumit_gpu::fx::distort::LensDistortOp {
                 active: l.active,
                 tan_half_fov: l.tan_half_fov,
                 reverse: l.reverse,
@@ -1661,7 +1673,7 @@ impl GpuEffect for CornerPin {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::CornerPinOp {
+            &lumit_gpu::fx::distort::CornerPinOp {
                 inv: c.inv,
                 active: c.active,
                 edge: c.edge,
@@ -1697,7 +1709,7 @@ impl GpuEffect for DisplacementMap {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::DisplacementMapOp {
+            &lumit_gpu::fx::distort::DisplacementMapOp {
                 channels: d.channels,
                 amount: d.amount,
                 edge: d.edge,
@@ -1750,7 +1762,7 @@ impl GpuEffect for Twirl {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::TwirlOp {
+            &lumit_gpu::fx::distort::TwirlOp {
                 centre: t.centre,
                 radius: t.radius,
                 inv_radius: t.inv_radius,
@@ -1783,7 +1795,7 @@ impl GpuEffect for Spherize {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::SpherizeOp {
+            &lumit_gpu::fx::distort::SpherizeOp {
                 centre: s.centre,
                 radius: s.radius,
                 inv_radius: s.inv_radius,
@@ -1816,7 +1828,7 @@ impl GpuEffect for Ripple {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::RippleOp {
+            &lumit_gpu::fx::distort::RippleOp {
                 centre: r.centre,
                 radius: r.radius,
                 inv_radius: r.inv_radius,
@@ -1852,7 +1864,7 @@ impl GpuEffect for WaveWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::WaveWarpOp {
+            &lumit_gpu::fx::distort::WaveWarpOp {
                 dir: v.dir,
                 perp: v.perp,
                 height: v.height,
@@ -1889,7 +1901,7 @@ impl GpuEffect for BezierWarp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::BezierWarpOp {
+            &lumit_gpu::fx::distort::BezierWarpOp {
                 pts: b.pts,
                 steps: b.steps,
                 mix: b.mix,
@@ -1920,7 +1932,7 @@ impl GpuEffect for Warp {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::WarpOp {
+            &lumit_gpu::fx::distort::WarpOp {
                 style: a.style,
                 bend: a.bend,
                 h_distort: a.h_distort,
@@ -1959,7 +1971,7 @@ impl GpuEffect for RoughenEdges {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::RoughenEdgesOp {
+            &lumit_gpu::fx::stylise::RoughenEdgesOp {
                 seed: r.field.seed,
                 octaves: r.field.octaves,
                 gain: r.field.gain,
@@ -2003,7 +2015,7 @@ impl GpuEffect for Curves {
             tex,
             w,
             h,
-            &lumit_gpu::fx::CurvesOp {
+            &lumit_gpu::fx::colour::CurvesOp {
                 t: c.t,
                 neutral: c.neutral,
                 mix: c.mix,
@@ -2028,7 +2040,7 @@ impl GpuEffect for Levels {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (r, mix) = effects::levels::Levels::read(p).packed();
-        fx.levels(ctx, tex, w, h, &lumit_gpu::fx::LevelsOp { r, mix })
+        fx.levels(ctx, tex, w, h, &lumit_gpu::fx::colour::LevelsOp { r, mix })
     }
 }
 
@@ -2054,7 +2066,7 @@ impl GpuEffect for Brightness {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::BrightnessOp { b, k, mix },
+            &lumit_gpu::fx::colour::BrightnessOp { b, k, mix },
         )
     }
 }
@@ -2081,7 +2093,7 @@ impl GpuEffect for HueSaturation {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::HueSaturationOp { bands, mix },
+            &lumit_gpu::fx::colour::HueSaturationOp { bands, mix },
         )
     }
 }
@@ -2108,7 +2120,7 @@ impl GpuEffect for Posterize {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::PosterizeOp { n, mix },
+            &lumit_gpu::fx::colour::PosterizeOp { n, mix },
         )
     }
 }
@@ -2135,7 +2147,7 @@ impl GpuEffect for Threshold {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ThresholdOp {
+            &lumit_gpu::fx::colour::ThresholdOp {
                 level,
                 half_width,
                 mix,
@@ -2165,7 +2177,7 @@ impl GpuEffect for Tritone {
             tex,
             w,
             h,
-            &lumit_gpu::fx::TritoneOp {
+            &lumit_gpu::fx::colour::TritoneOp {
                 shadows: t.shadows,
                 midtones: t.midtones,
                 highlights: t.highlights,
@@ -2197,7 +2209,7 @@ impl GpuEffect for PhotoFilter {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::PhotoFilterOp {
+            &lumit_gpu::fx::colour::PhotoFilterOp {
                 filter: f.filter,
                 density: f.density,
                 preserve: f.preserve,
@@ -2228,7 +2240,7 @@ impl GpuEffect for BlackAndWhite {
             tex,
             w,
             h,
-            &lumit_gpu::fx::BlackAndWhiteOp {
+            &lumit_gpu::fx::colour::BlackAndWhiteOp {
                 weights: b.weights,
                 tint: b.tint,
                 tint_on: b.tint_on,
@@ -2265,7 +2277,7 @@ impl GpuEffect for ShadowHighlight {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ShadowHighlightOp {
+            &lumit_gpu::fx::colour::ShadowHighlightOp {
                 shadow: s.shadow,
                 highlight: s.highlight,
                 shadow_width: s.shadow_width,
@@ -2302,7 +2314,7 @@ impl GpuEffect for Temperature {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::TemperatureOp {
+            &lumit_gpu::fx::colour::TemperatureOp {
                 t: e.t(),
                 gain_r,
                 gain_b,
@@ -2530,7 +2542,7 @@ impl GpuEffect for Dof {
             w,
             h,
             depth,
-            &lumit_gpu::fx::DofOp {
+            &lumit_gpu::fx::dof::DofOp {
                 focus: d.focus,
                 range: d.range,
                 near_aperture: d.near_aperture,
@@ -2597,7 +2609,7 @@ impl GpuEffect for DofPro {
             w,
             h,
             depth,
-            &lumit_gpu::fx::LensBlurOp {
+            &lumit_gpu::fx::lens_blur::LensBlurOp {
                 bake_key: lens_blur::bake_key(&optics, custom.map(|(hash, _)| *hash)),
                 depth_bound: depth.is_some(),
                 depth_metres: picture.is_some_and(|p| p.depth),
@@ -2628,7 +2640,7 @@ impl GpuEffect for DofPro {
             },
             &move || {
                 let b = lens_blur::bake(&optics, text.as_deref())?;
-                Some(lumit_gpu::fx::LensBlurBakeData {
+                Some(lumit_gpu::fx::lens_blur::LensBlurBakeData {
                     kernels: b.kernels,
                     span_mm: b.span_mm,
                     dz_max_mm: b.dz_max_mm,
@@ -2642,7 +2654,7 @@ impl GpuEffect for DofPro {
             },
             &move || {
                 let r = lens_blur::ray_lens(&optics, ray_text.as_deref())?;
-                Some(lumit_gpu::fx::RayLensData {
+                Some(lumit_gpu::fx::lens_blur::RayLensData {
                     surfaces: r.surfaces,
                     stop_r: r.stop_r,
                     sensor_z: r.sensor_z,
@@ -2682,7 +2694,7 @@ impl GpuEffect for LensDirt {
             tex,
             w,
             h,
-            &lumit_gpu::fx::LensDirtOp {
+            &lumit_gpu::fx::lens_dirt::LensDirtOp {
                 seed: e.seed,
                 intensity: e.intensity.max(0.0),
                 defocus: e.defocus(),
@@ -2735,7 +2747,7 @@ impl GpuEffect for ChannelBlur {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ChannelBlurOp { radii, edge, mix },
+            &lumit_gpu::fx::blur::ChannelBlurOp { radii, edge, mix },
         )
     }
 }
@@ -2762,7 +2774,7 @@ impl GpuEffect for DropShadow {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::DropShadowOp {
+            &lumit_gpu::fx::blur::DropShadowOp {
                 colour: d.colour,
                 opacity: d.opacity,
                 offset: d.offset,
@@ -2807,7 +2819,7 @@ impl GpuEffect for StyleDropShadow {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::DropShadowOp {
+            &lumit_gpu::fx::blur::DropShadowOp {
                 colour: d.colour,
                 opacity: d.opacity,
                 offset: d.offset,
@@ -2855,7 +2867,7 @@ macro_rules! drop_shadow_core_style {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::DropShadowOp {
+                    &lumit_gpu::fx::blur::DropShadowOp {
                         colour: d.colour,
                         opacity: d.opacity,
                         offset: d.offset,
@@ -2910,7 +2922,7 @@ impl GpuEffect for StyleGradientOverlay {
             tex,
             w,
             h,
-            &lumit_gpu::fx::GradientOp {
+            &lumit_gpu::fx::generate::GradientOp {
                 radial: d.radial,
                 start: d.start,
                 axis: d.axis,
@@ -2951,7 +2963,7 @@ impl GpuEffect for StyleStroke {
             tex,
             w,
             h,
-            &lumit_gpu::fx::StrokeOp {
+            &lumit_gpu::fx::stylise::StrokeOp {
                 colour: d.colour,
                 opacity: d.opacity,
                 grow_px: d.grow_px,
@@ -2984,7 +2996,13 @@ impl GpuEffect for StyleColourOverlay {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (colour, mix) = lumit_core::fx::styles::defs::ColourOverlay::read(p).packed();
-        fx.fill(ctx, tex, w, h, &lumit_gpu::fx::FillOp { colour, mix })
+        fx.fill(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::generate::FillOp { colour, mix },
+        )
     }
 }
 
@@ -3015,7 +3033,7 @@ impl GpuEffect for SetMatte {
             w,
             h,
             aux.layer_input(),
-            &lumit_gpu::fx::SetMatteOp {
+            &lumit_gpu::fx::utility::SetMatteOp {
                 channel,
                 combine,
                 invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
@@ -3052,7 +3070,7 @@ impl GpuEffect for SetChannels {
             w,
             h,
             aux.layer_input(),
-            &lumit_gpu::fx::SetChannelsOp { picks, mix },
+            &lumit_gpu::fx::utility::SetChannelsOp { picks, mix },
         )
     }
 }
@@ -3079,7 +3097,7 @@ impl GpuEffect for LinearWipe {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::LinearWipeOp {
+            &lumit_gpu::fx::utility::LinearWipeOp {
                 centre: l.centre,
                 normal: l.normal,
                 completion: l.completion,
@@ -3112,7 +3130,7 @@ impl GpuEffect for RadialWipe {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::RadialWipeOp {
+            &lumit_gpu::fx::utility::RadialWipeOp {
                 centre: r.centre,
                 start: r.start,
                 dir: r.dir,
@@ -3146,7 +3164,7 @@ impl GpuEffect for VenetianBlinds {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::VenetianBlindsOp {
+            &lumit_gpu::fx::utility::VenetianBlindsOp {
                 normal: v.normal,
                 period: v.period,
                 completion: v.completion,
@@ -3179,7 +3197,7 @@ impl GpuEffect for IrisWipe {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::IrisWipeOp {
+            &lumit_gpu::fx::utility::IrisWipeOp {
                 centre: i.centre,
                 vertex: i.vertex,
                 normal: i.normal,
@@ -3215,7 +3233,7 @@ impl GpuEffect for CardWipe {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::CardWipeOp {
+            &lumit_gpu::fx::utility::CardWipeOp {
                 grid: c.grid,
                 completion: c.completion,
                 inv_width: c.inv_width,
@@ -3263,7 +3281,7 @@ impl GpuEffect for Transform {
             w,
             h,
             None,
-            &lumit_gpu::fx::TransformOp {
+            &lumit_gpu::fx::stylise::TransformOp {
                 m,
                 off,
                 opacity,
@@ -3327,7 +3345,7 @@ impl GpuEffect for Shake {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::TransformOp {
+                    &lumit_gpu::fx::stylise::TransformOp {
                         m,
                         off,
                         opacity,
@@ -3342,10 +3360,10 @@ impl GpuEffect for Shake {
                 edge,
                 mix,
             } => {
-                let mut taps = [lumit_gpu::fx::ShakeMbTap {
+                let mut taps = [lumit_gpu::fx::stylise::ShakeMbTap {
                     m: [1.0, 0.0, 0.0, 1.0],
                     off: [0.0, 0.0],
-                }; lumit_gpu::fx::SHAKE_MB_SAMPLES];
+                }; lumit_gpu::fx::stylise::SHAKE_MB_SAMPLES];
                 for (t, s) in taps.iter_mut().zip(samples.iter()) {
                     let (anchor, position, scale, rot) =
                         lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
@@ -3357,7 +3375,7 @@ impl GpuEffect for Shake {
                         lumit_core::fx::NO_SKEW,
                         1.0,
                     );
-                    *t = lumit_gpu::fx::ShakeMbTap { m, off };
+                    *t = lumit_gpu::fx::stylise::ShakeMbTap { m, off };
                 }
                 fx.shake_mb(
                     ctx,
@@ -3365,7 +3383,7 @@ impl GpuEffect for Shake {
                     w,
                     h,
                     aux.matte(),
-                    &lumit_gpu::fx::ShakeMbOp {
+                    &lumit_gpu::fx::stylise::ShakeMbOp {
                         taps,
                         count: count as u32,
                         edge,
@@ -3406,7 +3424,7 @@ impl GpuEffect for Glow {
             if halo.fringe_wavelength {
                 let (basis, count) =
                     lumit_core::fx::spectral_basis_uniform(halo.fringe_samples, halo.fringe_tints);
-                lumit_gpu::fx::GlowFringe::Spectral(lumit_gpu::fx::SpectralSplitOp {
+                lumit_gpu::fx::blur::GlowFringe::Spectral(lumit_gpu::fx::split::SpectralSplitOp {
                     dx,
                     dy,
                     amount_px: halo.chromatic_px,
@@ -3416,7 +3434,7 @@ impl GpuEffect for Glow {
                     mix: 1.0,
                 })
             } else {
-                lumit_gpu::fx::GlowFringe::Classic(lumit_gpu::fx::RgbSplitOp {
+                lumit_gpu::fx::blur::GlowFringe::Classic(lumit_gpu::fx::split::RgbSplitOp {
                     dx,
                     dy,
                     scale: lumit_core::fx::cpu::HALO_FRINGE_SCALE,
@@ -3431,7 +3449,7 @@ impl GpuEffect for Glow {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::GlowOp {
+            &lumit_gpu::fx::blur::GlowOp {
                 shape: glow_shape(halo.radius_px, halo.falloff, w, h),
                 fringe,
                 threshold,
@@ -3447,9 +3465,9 @@ impl GpuEffect for Glow {
 /// A glow's halo in the shape the GPU takes it. The GPU crate doesn't see
 /// `lumit-core`, so the numbers are worked out here, once, from the same
 /// functions the CPU reference reads.
-fn glow_shape(radius_px: f32, falloff: f32, w: u32, h: u32) -> lumit_gpu::fx::GlowShape {
+fn glow_shape(radius_px: f32, falloff: f32, w: u32, h: u32) -> lumit_gpu::fx::blur::GlowShape {
     use lumit_core::fx::cpu::{glow_gaussian_plan, glow_grid, glow_octaves, GLOW_REACH};
-    use lumit_gpu::fx::{GlowGaussianOp, GlowOctaveOp, GlowShape};
+    use lumit_gpu::fx::{blur::GlowGaussianOp, blur::GlowOctaveOp, blur::GlowShape};
     if falloff > 0.0 {
         GlowShape::Exponential(
             glow_octaves(radius_px, falloff, w, h).map(|o| GlowOctaveOp {
@@ -3508,7 +3526,7 @@ impl GpuEffect for BlockGlitch {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::BlockGlitchOp {
+            &lumit_gpu::fx::stylise::BlockGlitchOp {
                 intensity,
                 seed,
                 tick,
@@ -3550,7 +3568,7 @@ impl GpuEffect for Scanlines {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::ScanlinesOp {
+            &lumit_gpu::fx::stylise::ScanlinesOp {
                 intensity,
                 period_px,
                 roll_px,
@@ -3601,7 +3619,7 @@ impl GpuEffect for Datamosh {
             flow,
             w,
             h,
-            &lumit_gpu::fx::DatamoshOp {
+            &lumit_gpu::fx::temporal::DatamoshOp {
                 // The blend maths take a single fraction; Mix folds into
                 // Intensity here rather than adding a second uniform, since
                 // mixing the same two inputs twice collapses to one mix by the
@@ -3649,7 +3667,7 @@ impl GpuEffect for Echo {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::EchoOp { weights, mode, mix },
+            &lumit_gpu::fx::temporal::EchoOp { weights, mode, mix },
         )
     }
 }
@@ -3696,7 +3714,7 @@ impl GpuEffect for MotionBlur {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::MotionBlurOp {
+            &lumit_gpu::fx::temporal::MotionBlurOp {
                 shutter_frac,
                 samples,
                 mix,
@@ -3712,8 +3730,8 @@ impl GpuEffect for MotionBlur {
 /// the geometry — the same function the oracle calls — and this only re-labels
 /// the fields for the GPU crate, exactly as `path_draw_op` does for the three
 /// line-drawing effects.
-fn mask_fill_op(built: &lumit_core::fx::cpu::MaskFillParams) -> lumit_gpu::fx::MaskFillOp {
-    lumit_gpu::fx::MaskFillOp {
+fn mask_fill_op(built: &lumit_core::fx::cpu::MaskFillParams) -> lumit_gpu::fx::stylise::MaskFillOp {
+    lumit_gpu::fx::stylise::MaskFillOp {
         segments: built.segments,
         count: built.count,
         ramp: built.ramp,
@@ -3751,7 +3769,7 @@ impl GpuEffect for MatteKey {
             tex,
             w,
             h,
-            &lumit_gpu::fx::MatteKeyOp {
+            &lumit_gpu::fx::stylise::MatteKeyOp {
                 view: k.view,
                 key: k.key,
                 gain: k.gain,
@@ -3793,7 +3811,7 @@ impl GpuEffect for Invert {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let mix = effects::invert::Invert::read(p).packed();
-        fx.invert(ctx, tex, w, h, &lumit_gpu::fx::InvertOp { mix })
+        fx.invert(ctx, tex, w, h, &lumit_gpu::fx::colour::InvertOp { mix })
     }
 }
 
@@ -3813,7 +3831,13 @@ impl GpuEffect for Tint {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (black, white, mix) = effects::tint::Tint::read(p).packed();
-        fx.tint(ctx, tex, w, h, &lumit_gpu::fx::TintOp { black, white, mix })
+        fx.tint(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::colour::TintOp { black, white, mix },
+        )
     }
 }
 
@@ -3874,17 +3898,18 @@ impl GpuEffect for LensFlare {
         // The traced bands with their eight radiometric sub-samples,
         // Ghost intensity folded into every sub-weight — the bake's
         // auto-exposure gain joins it GPU-side.
-        let bands: Vec<lumit_gpu::fx::FlareBand> = lf::spectral_bands(lambda_count, p.dispersion)
-            .into_iter()
-            .map(|b| lumit_gpu::fx::FlareBand {
-                traced_nm: b.traced_nm,
-                sub_idx: b.sub_idx,
-                sub_rgb: b
-                    .sub_rgb
-                    .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
-            })
-            .collect();
-        let op = lumit_gpu::fx::LensFlareOp {
+        let bands: Vec<lumit_gpu::fx::lens_flare::FlareBand> =
+            lf::spectral_bands(lambda_count, p.dispersion)
+                .into_iter()
+                .map(|b| lumit_gpu::fx::lens_flare::FlareBand {
+                    traced_nm: b.traced_nm,
+                    sub_idx: b.sub_idx,
+                    sub_rgb: b
+                        .sub_rgb
+                        .map(|c| [c[0] * energy, c[1] * energy, c[2] * energy]),
+                })
+                .collect();
+        let op = lumit_gpu::fx::lens_flare::LensFlareOp {
             // Raster pixels → fraction here, where the raster is known (the
             // parameter is px@comp).
             light_frac: [p.light[0] / w.max(1) as f32, p.light[1] / h.max(1) as f32],
@@ -3938,7 +3963,7 @@ impl GpuEffect for LensFlare {
         // both twins share, at the frame's actual light direction.
         let light_frac = op.light_frac;
         let aspect = h as f32 / w.max(1) as f32;
-        let probe = move |pb: &lumit_gpu::fx::FlareProbeBake| {
+        let probe = move |pb: &lumit_gpu::fx::lens_flare::FlareProbeBake| {
             let needs = lf::frame_grid_needs_from_rows(
                 pb.surfaces,
                 pb.ghosts,
@@ -3969,7 +3994,7 @@ impl GpuEffect for LensFlare {
             // `FxEngine::set_deferred_flare_bakes`.
             &(std::sync::Arc::new(move || {
                 let b = lf::bake_with(&params, custom_text.as_deref());
-                lumit_gpu::fx::FlareBakeData {
+                lumit_gpu::fx::lens_flare::FlareBakeData {
                     surfaces: b
                         .surfaces
                         .iter()
@@ -3999,7 +4024,7 @@ impl GpuEffect for LensFlare {
                     sb_res: lf::STARBURST_RES,
                     sb_fields: lf::STARBURST_FIELDS as u32,
                 }
-            }) as lumit_gpu::fx::FlareBake),
+            }) as lumit_gpu::fx::lens_flare::FlareBake),
             &probe,
         )
     }
@@ -4031,7 +4056,7 @@ impl GpuEffect for Median {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::MedianOp {
+            &lumit_gpu::fx::stylise::MedianOp {
                 radius: m.radius,
                 keep: (n + 1) / 2,
                 alpha_on: f32::from(u8::from(m.alpha)),
@@ -4062,7 +4087,7 @@ impl GpuEffect for Mosaic {
             tex,
             w,
             h,
-            &lumit_gpu::fx::MosaicOp {
+            &lumit_gpu::fx::stylise::MosaicOp {
                 blocks: m.blocks,
                 sharp: f32::from(u8::from(m.sharp)),
                 mix: m.mix,
@@ -4087,7 +4112,13 @@ impl GpuEffect for FindEdges {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let (invert, mix) = effects::find_edges::FindEdges::read(p).packed();
-        fx.find_edges(ctx, tex, w, h, &lumit_gpu::fx::FindEdgesOp { invert, mix })
+        fx.find_edges(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::stylise::FindEdgesOp { invert, mix },
+        )
     }
 }
 
@@ -4113,7 +4144,7 @@ impl GpuEffect for MoodLighting {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::MoodLightingOp {
+            &lumit_gpu::fx::stylise::MoodLightingOp {
                 seed: m.field.seed,
                 octaves: m.field.octaves,
                 gain: m.field.gain,
@@ -4155,7 +4186,7 @@ impl GpuEffect for PixelSort {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::PixelSortOp {
+            &lumit_gpu::fx::stylise::PixelSortOp {
                 sort_by: s.sort_by,
                 vertical: s.vertical,
                 span_mode: s.span_mode,
@@ -4193,7 +4224,7 @@ impl GpuEffect for Emboss {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::EmbossOp {
+            &lumit_gpu::fx::stylise::EmbossOp {
                 offset: e.offset,
                 contrast: e.contrast,
                 mix: e.mix,
@@ -4231,7 +4262,7 @@ impl GpuEffect for Texturize {
             h,
             aux.layer_input(),
             aux.matte(),
-            &lumit_gpu::fx::TexturizeOp {
+            &lumit_gpu::fx::stylise::TexturizeOp {
                 offset: t.offset,
                 contrast: t.contrast,
                 inv_scale: t.inv_scale,
@@ -4263,7 +4294,7 @@ impl GpuEffect for BroadcastSafe {
             tex,
             w,
             h,
-            &lumit_gpu::fx::BroadcastSafeOp {
+            &lumit_gpu::fx::utility::BroadcastSafeOp {
                 target: b.target,
                 mode: b.mode,
                 mix: b.mix,
@@ -4293,7 +4324,7 @@ impl GpuEffect for Beam {
             tex,
             w,
             h,
-            &lumit_gpu::fx::BeamOp {
+            &lumit_gpu::fx::generate::BeamOp {
                 start: b.start,
                 axis: b.axis,
                 inv_len2: b.inv_len2,
@@ -4337,7 +4368,7 @@ impl GpuEffect for Lightning {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::LightningOp {
+            &lumit_gpu::fx::generate::LightningOp {
                 segments: l.segments,
                 fades: l.fades,
                 count: l.count,
@@ -4375,7 +4406,7 @@ impl GpuEffect for RadioWaves {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::RadioWavesOp {
+            &lumit_gpu::fx::generate::RadioWavesOp {
                 centre: r.centre,
                 vertex: r.vertex,
                 normal: r.normal,
@@ -4430,7 +4461,7 @@ impl GpuEffect for Vegas {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::VegasOp {
+            &lumit_gpu::fx::generate::VegasOp {
                 from_alpha: v.from_alpha,
                 level: v.level,
                 half_width: v.half_width,
@@ -4451,8 +4482,10 @@ impl GpuEffect for Vegas {
 /// one way of filling its op. `p` is the resolved bag and `aux` the slot
 /// the render prepared; an absent path is an empty polyline, which packs to a
 /// count of zero and draws nothing.
-fn path_draw_op(built: &lumit_core::fx::cpu::PathDrawParams) -> lumit_gpu::fx::PathDrawOp {
-    lumit_gpu::fx::PathDrawOp {
+fn path_draw_op(
+    built: &lumit_core::fx::cpu::PathDrawParams,
+) -> lumit_gpu::fx::generate::PathDrawOp {
+    lumit_gpu::fx::generate::PathDrawOp {
         segments: built.segments,
         arcs: built.arcs,
         count: built.count,
@@ -4546,12 +4579,12 @@ fn particulate_op<'a>(
     projection: Option<[[f32; 4]; 3]>,
     density: Option<&'a Tex>,
     blend: u32,
-) -> lumit_gpu::fx::ParticulateOp<'a> {
+) -> lumit_gpu::fx::particulate::ParticulateOp<'a> {
     let e = &packed.emitter;
     let look = &packed.particle;
     let f = &packed.forces;
     let dt = sched.schedule.dt();
-    lumit_gpu::fx::ParticulateOp {
+    lumit_gpu::fx::particulate::ParticulateOp {
         emitter_pos: e.position,
         emitter_wh: [e.width, e.height],
         emitter_depth: e.depth,
@@ -4641,7 +4674,7 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
 /// always draw something (particulate.md §2) and one branch resolved host-side
 /// cannot come to mean two things in two places.
 ///
-/// **The degradation rung is [`lumit_gpu::fx::ParticulateOp::cap`]**:
+/// **The degradation rung is [`lumit_gpu::fx::particulate::ParticulateOp::cap`]**:
 /// halve it and the newest half is what draws, by the same rule the cap itself
 /// applies. This pass always hands over the *declared* cap, which is why the
 /// rung is never on the export path — there is nothing on this path that could
@@ -4653,7 +4686,7 @@ impl Particulate {
     fn with_op<R>(
         p: Params<'_>,
         aux: AuxSlot<'_>,
-        f: impl FnOnce(&lumit_gpu::fx::ParticulateOp<'_>, Option<&Tex>) -> R,
+        f: impl FnOnce(&lumit_gpu::fx::particulate::ParticulateOp<'_>, Option<&Tex>) -> R,
     ) -> R {
         use lumit_core::fx::effects::particulate::Particulate as P;
         use lumit_core::fx::points::RenderMode;
@@ -4774,12 +4807,12 @@ impl Particulate {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection,
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: inst.seed,
                 mode: u32::from(sprite.is_some()),
                 sprite,
@@ -4839,7 +4872,7 @@ impl GpuEffect for Particulate {
         let f = |i: usize| f32::from_bits(word(i));
         // Half precision, two to a word, as the colour region is written.
         let half = |i: usize, hi: bool| {
-            lumit_gpu::fx::f16_to_f32(if hi {
+            lumit_gpu::fx::common::f16_to_f32(if hi {
                 (word(i) >> 16) as u16
             } else {
                 word(i) as u16
@@ -4879,7 +4912,9 @@ impl GpuEffect for Particulate {
 /// Every point of a host-built stream, as the generic draw reads them: one
 /// conversion, called by Grid and by Scatter, so a generator cannot come to
 /// describe its own points differently from the CPU reference that made them.
-fn draw_points_of(s: &lumit_core::fx::points::PointsStream) -> Vec<lumit_gpu::fx::DrawPoint> {
+fn draw_points_of(
+    s: &lumit_core::fx::points::PointsStream,
+) -> Vec<lumit_gpu::fx::points_draw::DrawPoint> {
     draw_points_tailed(s, &[])
 }
 
@@ -4890,11 +4925,11 @@ fn draw_points_of(s: &lumit_core::fx::points::PointsStream) -> Vec<lumit_gpu::fx
 fn draw_points_tailed(
     s: &lumit_core::fx::points::PointsStream,
     tails: &[[f32; 3]],
-) -> Vec<lumit_gpu::fx::DrawPoint> {
+) -> Vec<lumit_gpu::fx::points_draw::DrawPoint> {
     (0..s.len())
         .map(|i| {
             let position = s.position.get(i).copied().unwrap_or([0.0; 3]);
-            lumit_gpu::fx::DrawPoint {
+            lumit_gpu::fx::points_draw::DrawPoint {
                 position,
                 size: s.size.get(i).copied().unwrap_or(0.0),
                 rotation: s.rotation.get(i).copied().unwrap_or(0.0),
@@ -4969,12 +5004,12 @@ impl GpuEffect for Grid {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: inst.seed,
                 mode: 0,
                 sprite: None,
@@ -5018,12 +5053,12 @@ impl GpuEffect for PointsAlongPath {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5066,12 +5101,12 @@ impl GpuEffect for TrackPoints {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5117,12 +5152,12 @@ impl GpuEffect for PointsModifier {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: (p.float(ParamId::new("feather"), 100.0) / 100.0).clamp(0.0, 1.0),
                 mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5186,12 +5221,12 @@ impl PointsModifier {
                 w,
                 h,
                 aux.layer_input(),
-                &lumit_gpu::fx::PointsDrawOp {
+                &lumit_gpu::fx::points_draw::PointsDrawOp {
                     points: &points,
                     feather: 0.0,
                     mix: 1.0,
                     projection,
-                    field: lumit_gpu::fx::FieldTest::None,
+                    field: lumit_gpu::fx::points_draw::FieldTest::None,
                     seed: 0,
                     mode: 0,
                     sprite: None,
@@ -5255,7 +5290,7 @@ struct Thrown {
     candidates: lumit_core::fx::points::PointsStream,
     /// `None` reads the effect's own input.
     field: Option<Tex>,
-    test: lumit_gpu::fx::FieldTest,
+    test: lumit_gpu::fx::points_draw::FieldTest,
     seed: u32,
     style: lumit_core::fx::points::DrawStyle,
     projection: Option<lumit_core::fx::points::Projection>,
@@ -5278,7 +5313,7 @@ impl Thrown {
             // Unset reads this effect's own picture, which is the documented
             // default.
             field: aux.matte().cloned(),
-            test: lumit_gpu::fx::FieldTest::Alpha {
+            test: lumit_gpu::fx::points_draw::FieldTest::Alpha {
                 invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
             seed: inst.seed,
@@ -5301,7 +5336,7 @@ impl Thrown {
             // The Source layer, or this effect's own picture when the row is
             // unset, which is what `None` means to the generic draw.
             field: aux.layer_input().cloned(),
-            test: lumit_gpu::fx::FieldTest::Luma {
+            test: lumit_gpu::fx::points_draw::FieldTest::Luma {
                 threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
             },
             seed: inst.seed,
@@ -5311,8 +5346,11 @@ impl Thrown {
         }
     }
 
-    fn op<'a>(&self, points: &'a [lumit_gpu::fx::DrawPoint]) -> lumit_gpu::fx::PointsDrawOp<'a> {
-        lumit_gpu::fx::PointsDrawOp {
+    fn op<'a>(
+        &self,
+        points: &'a [lumit_gpu::fx::points_draw::DrawPoint],
+    ) -> lumit_gpu::fx::points_draw::PointsDrawOp<'a> {
+        lumit_gpu::fx::points_draw::PointsDrawOp {
             points,
             feather: self.style.feather,
             mix: self.style.mix,
@@ -5466,17 +5504,17 @@ impl GpuEffect for CloneToPoints {
             if let (Some(run), Some(picture)) = (points.get(from..to), picture) {
                 let fit = inst.fit(picture.size.unwrap_or(frame), px_scale);
                 runs.push((
-                    lumit_gpu::fx::PointsDrawOp {
+                    lumit_gpu::fx::points_draw::PointsDrawOp {
                         points: run,
                         feather: style.feather,
                         mix: style.mix,
                         projection: projection.map(|proj| proj.m),
-                        field: lumit_gpu::fx::FieldTest::None,
+                        field: lumit_gpu::fx::points_draw::FieldTest::None,
                         seed: 0,
                         mode: 1,
                         sprite: Some(&picture.tex),
                     },
-                    lumit_gpu::fx::SpriteFit {
+                    lumit_gpu::fx::points_draw::SpriteFit {
                         unit: fit.unit,
                         anchor: fit.anchor,
                         uv: fit.uv,
@@ -5538,12 +5576,12 @@ impl GpuEffect for Trail {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5596,12 +5634,12 @@ impl GpuEffect for ConnectPoints {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5648,10 +5686,10 @@ impl GpuEffect for PointsField {
 fn field_points(
     inst: lumit_core::fx::effects::points_field::PointsField,
     stream: &lumit_core::fx::points::PointsStream,
-) -> Vec<lumit_gpu::fx::FieldPoint> {
+) -> Vec<lumit_gpu::fx::points_field::FieldPoint> {
     inst.seeds(stream)
         .iter()
-        .map(|s| lumit_gpu::fx::FieldPoint {
+        .map(|s| lumit_gpu::fx::points_field::FieldPoint {
             at: s.at,
             number: s.number,
             colour: s.colour,
@@ -5662,9 +5700,9 @@ fn field_points(
 /// Points field's rows as the card's pass takes them.
 fn points_field_op(
     inst: lumit_core::fx::effects::points_field::PointsField,
-    points: &[lumit_gpu::fx::FieldPoint],
-) -> lumit_gpu::fx::PointsFieldOp<'_> {
-    lumit_gpu::fx::PointsFieldOp {
+    points: &[lumit_gpu::fx::points_field::FieldPoint],
+) -> lumit_gpu::fx::points_field::PointsFieldOp<'_> {
+    lumit_gpu::fx::points_field::PointsFieldOp {
         points,
         output: inst.output,
         radius: inst.radius,
@@ -5723,12 +5761,12 @@ impl GpuEffect for TextToPoints {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -5880,11 +5918,11 @@ impl GpuEffect for LabelPoints {
                 }
             }
         }
-        let sprite = lumit_gpu::fx::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
+        let sprite = lumit_gpu::fx::common::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
         // One stamp, the size of the box and sitting exactly on it, so a
         // pixel of the labels lands on a pixel of the frame.
         let centre = [(x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5, 0.0];
-        let stamp = [lumit_gpu::fx::DrawPoint {
+        let stamp = [lumit_gpu::fx::points_draw::DrawPoint {
             position: centre,
             size: bw as f32,
             rotation: 0.0,
@@ -5899,19 +5937,19 @@ impl GpuEffect for LabelPoints {
             w,
             h,
             &[(
-                lumit_gpu::fx::PointsDrawOp {
+                lumit_gpu::fx::points_draw::PointsDrawOp {
                     points: &stamp,
                     feather: 0.0,
                     mix,
                     // The labels were put where the points are seen, so the
                     // stamp itself is flat.
                     projection: None,
-                    field: lumit_gpu::fx::FieldTest::None,
+                    field: lumit_gpu::fx::points_draw::FieldTest::None,
                     seed: 0,
                     mode: 1,
                     sprite: Some(&sprite),
                 },
-                lumit_gpu::fx::SpriteFit {
+                lumit_gpu::fx::points_draw::SpriteFit {
                     unit: [1.0, bh as f32 / bw as f32],
                     ..Default::default()
                 },
@@ -5943,7 +5981,7 @@ impl GpuEffect for AddGrain {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::AddGrainOp {
+            &lumit_gpu::fx::generate::AddGrainOp {
                 amplitude: g.amplitude,
                 inv_size: g.inv_size,
                 softness: g.softness,
@@ -6174,7 +6212,7 @@ mod tests {
                 [v, v, v, 1.0]
             })
             .collect();
-        let density_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &density, w, h);
+        let density_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &density, w, h);
         let cpu = lumit_core::fx::points::evaluate_dense(
             &packed,
             &sched,
@@ -6207,7 +6245,8 @@ mod tests {
             Some(&density_tex),
             0,
         );
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let (count, words) = fx
             .particulate_stream(&ctx, &tex, w, h, &op)
             .expect("the stream reads back");
@@ -6298,7 +6337,7 @@ mod tests {
         // A flat sprite, so the comparison is of *placement* rather than of two
         // bilinear filters: a solid square samples identically either side.
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
-        let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
+        let sprite_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &sprite_px, 8, 8);
         for mode in [0u32, 1, 2] {
             let (mut inst, sched, carriage) = particulate_fixture_3d(mode, 4_000, projection);
             // Wrapped at the frame's edge, which moves a streak's tail with
@@ -6367,10 +6406,15 @@ mod tests {
                 None,
                 0,
             );
-            let tex =
-                lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+            let tex = lumit_gpu::fx::common::upload_linear_f32(
+                &ctx,
+                &vec![0.0; (w * h * 4) as usize],
+                w,
+                h,
+            );
             let out = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
-            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
             let drawn: f32 = gpu.iter().sum();
             assert!(drawn > 1.0, "mode {mode} drew nothing ({drawn})");
@@ -6385,7 +6429,8 @@ mod tests {
             // Bit-stable against itself (docs/08 §2.4): two evaluations of one
             // frame are one picture.
             let again = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
-            let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+            let twice =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
             assert_eq!(gpu, twice, "mode {mode} is not bit-stable");
         }
 
@@ -6393,7 +6438,7 @@ mod tests {
         // spread of the modes the tiles work out, against the CPU's formula.
         let (mut inst, sched, carriage) = particulate_fixture_3d(0, 4_000, projection);
         let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &ground, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &ground, w, h);
         // Add, Multiply, Screen, Overlay, Darken and Luminosity.
         for blend in [6u32, 2, 8, 11, 1, 25] {
             inst.particle_blend = blend;
@@ -6423,7 +6468,8 @@ mod tests {
                 blend,
             );
             let out = fx.particulate(&ctx, &tex, w, h, None, &op);
-            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
             let worst = cpu
                 .iter()
                 .zip(&gpu)
@@ -6433,7 +6479,8 @@ mod tests {
             assert!(worst < 2e-2, "blend {blend}: worst |Δ| {worst}");
             assert_ne!(gpu, ground, "blend {blend} drew nothing");
             let again = fx.particulate(&ctx, &tex, w, h, None, &op);
-            let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+            let twice =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
             assert_eq!(gpu, twice, "blend {blend} is not bit-stable");
         }
     }
@@ -6510,19 +6557,20 @@ mod tests {
         }
 
         let points = draw_points_of(&stream);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let op = lumit_gpu::fx::PointsDrawOp {
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::points_draw::PointsDrawOp {
             points: &points,
             feather: style.feather,
             mix: style.mix,
             projection: projection.map(|proj| proj.m),
-            field: lumit_gpu::fx::FieldTest::None,
+            field: lumit_gpu::fx::points_draw::FieldTest::None,
             seed: inst.seed,
             mode: 0,
             sprite: None,
         };
         let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
         assert!(drawn > 1.0, "the lattice drew nothing ({drawn})");
@@ -6536,7 +6584,8 @@ mod tests {
 
         // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        let twice =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the generic draw is not bit-stable");
     }
 
@@ -6581,11 +6630,12 @@ mod tests {
             let all = inst.candidates(w, h, 1.0, Default::default());
             assert!(kept.len() < all.len(), "nothing was refused");
 
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &field, w, h);
+            let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &field, w, h);
             // The reference draws over the field as the card holds it — the
             // working format is fp16, so this is the picture the kernel is
             // compositing onto and the comparison is of the discs alone.
-            let mut cpu = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
+            let mut cpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
             lumit_core::fx::points::draw_stream(&mut cpu, w, h, &kept, &[], &style, None);
 
             let points = draw_points_of(&all);
@@ -6595,18 +6645,19 @@ mod tests {
                 w,
                 h,
                 None,
-                &lumit_gpu::fx::PointsDrawOp {
+                &lumit_gpu::fx::points_draw::PointsDrawOp {
                     points: &points,
                     feather: style.feather,
                     mix: style.mix,
                     projection: None,
-                    field: lumit_gpu::fx::FieldTest::Alpha { invert },
+                    field: lumit_gpu::fx::points_draw::FieldTest::Alpha { invert },
                     seed: inst.seed,
                     mode: 0,
                     sprite: None,
                 },
             );
-            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
             let worst = cpu
                 .iter()
                 .zip(&gpu)
@@ -6678,8 +6729,9 @@ mod tests {
             "too few survived the two bright bands"
         );
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &field, w, h);
-        let mut cpu = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &field, w, h);
+        let mut cpu =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
         lumit_core::fx::points::draw_stream(&mut cpu, w, h, &kept, &[], &style, None);
 
         let points = draw_points_of(&all);
@@ -6689,18 +6741,18 @@ mod tests {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: None,
-                field: lumit_gpu::fx::FieldTest::Luma { threshold: 0.5 },
+                field: lumit_gpu::fx::points_draw::FieldTest::Luma { threshold: 0.5 },
                 seed: inst.seed,
                 mode: 0,
                 sprite: None,
             },
         );
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
         let worst = cpu
             .iter()
             .zip(&gpu)
@@ -6731,7 +6783,7 @@ mod tests {
         // A flat sprite, so what is compared is *placement* rather than two
         // bilinear filters: a solid square samples identically either side.
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
-        let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
+        let sprite_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &sprite_px, 8, 8);
 
         // The wire's own stream, made by a producer that is already tested,
         // with every point stretched so the stamps are too.
@@ -6820,20 +6872,21 @@ mod tests {
         }
 
         let points = draw_points_of(&stamps);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let op = lumit_gpu::fx::PointsDrawOp {
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::points_draw::PointsDrawOp {
             points: &points,
             feather: style.feather,
             mix: style.mix,
             projection: projection.map(|proj| proj.m),
-            field: lumit_gpu::fx::FieldTest::None,
+            field: lumit_gpu::fx::points_draw::FieldTest::None,
             seed: 0,
             mode: 1,
             sprite: Some(&sprite_tex),
         };
         let runs = [(
             op,
-            lumit_gpu::fx::SpriteFit {
+            lumit_gpu::fx::points_draw::SpriteFit {
                 unit: fit.unit,
                 anchor: fit.anchor,
                 uv: fit.uv,
@@ -6841,7 +6894,7 @@ mod tests {
             },
         )];
         let out = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
         assert!(drawn > 1.0, "the stamps drew nothing ({drawn})");
@@ -6855,7 +6908,8 @@ mod tests {
 
         // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
-        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        let twice =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
     }
 
@@ -6889,11 +6943,12 @@ mod tests {
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
         inst.draw(&mut cpu, w, h, &stream);
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let points = field_points(inst, &stream);
         assert!(points.len() > 20, "the fixture has {} points", points.len());
         let out = fx.points_field(&ctx, &tex, w, h, &points_field_op(inst, &points));
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         // Alpha is 1 everywhere, so the falloff has to be looked for in red.
         let lit = gpu.chunks_exact(4).filter(|px| px[0] > 0.5).count();
@@ -7003,19 +7058,20 @@ mod tests {
         }
 
         let points = draw_points_tailed(&stream, &tails);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let op = lumit_gpu::fx::PointsDrawOp {
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::points_draw::PointsDrawOp {
             points: &points,
             feather: style.feather,
             mix: style.mix,
             projection: None,
-            field: lumit_gpu::fx::FieldTest::None,
+            field: lumit_gpu::fx::points_draw::FieldTest::None,
             seed: 0,
             mode: 0,
             sprite: None,
         };
         let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
         assert!(drawn > 1.0, "the tail drew nothing ({drawn})");
@@ -7036,17 +7092,18 @@ mod tests {
             w,
             h,
             None,
-            &lumit_gpu::fx::PointsDrawOp {
+            &lumit_gpu::fx::points_draw::PointsDrawOp {
                 points: &dots,
                 ..op
             },
         );
-        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
+        let flat = lumit_gpu::fx::common::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
         assert_ne!(gpu, flat, "the capsules joined nothing up");
 
         // Bit-stable against itself (docs/08 §2.4).
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        let twice =
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the tail draw is not bit-stable");
     }
 
@@ -7637,7 +7694,7 @@ mod tests {
             "the plugin resolved into the middle of the stack"
         );
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
@@ -7658,7 +7715,7 @@ mod tests {
             None,
             None,
         );
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let mut cpu = source.clone();
         lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
@@ -7701,7 +7758,7 @@ mod tests {
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
@@ -7722,12 +7779,12 @@ mod tests {
             None,
             None,
         );
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
         // The picture only ever went to fp16 and back, which is what the working
         // texture already is — so it is the same picture, exactly.
-        let expected = lumit_gpu::fx::readback_linear_f32(
+        let expected = lumit_gpu::fx::common::readback_linear_f32(
             &ctx,
-            &lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h),
+            &lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h),
             w,
             h,
         )
@@ -7780,7 +7837,7 @@ mod tests {
             .map(|i| [(i & 1) as f32, 0.0, ((i >> 2) & 1) as f32])
             .collect();
         let kill_green = crate::fxops::LoadedLut {
-            texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
+            texture: lumit_gpu::fx::common::upload_lut_3d(&ctx, 2, &cube),
             size: 2,
             path: String::new(),
             mtime: None,
@@ -7799,7 +7856,7 @@ mod tests {
         );
         assert_eq!(ops.len(), 2, "two LUT ops, two slots to bind");
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
@@ -7821,7 +7878,7 @@ mod tests {
             None,
             None,
         );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         assert!(
             got[1] < 1e-2,
@@ -7862,8 +7919,11 @@ mod tests {
             std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-        let neighbours = [(-1, lumit_gpu::fx::upload_linear_f32(&ctx, &previous, w, h))];
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
+        let neighbours = [(
+            -1,
+            lumit_gpu::fx::common::upload_linear_f32(&ctx, &previous, w, h),
+        )];
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
@@ -7884,7 +7944,7 @@ mod tests {
             None,
             None,
         );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         assert!(
             got[0] > 0.2 + 1e-2,
@@ -7962,7 +8022,7 @@ mod tests {
 
         let rendered = |ops: &lumit_core::fx::ResolvedStack,
                         mattes: &[crate::fxops::LayerInput]| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
                 fx,
                 &ctx,
@@ -7983,7 +8043,7 @@ mod tests {
                 None,
                 None,
             );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback")
         };
 
         let fresh = rendered(&stack(false), &[]);
@@ -8035,7 +8095,7 @@ mod tests {
                 [lit, lit, lit, 1.0]
             })
             .collect();
-        let shape_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &shape, w, h);
+        let shape_tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &shape, w, h);
 
         let inst = lumit_core::fx::instantiate("set_matte").expect("a built-in");
         let ops = lumit_core::fx::resolve_stack(
@@ -8060,7 +8120,7 @@ mod tests {
 
         let rendered = |layers: &[crate::fxops::LayerInput],
                         mattes: &[crate::fxops::LayerInput]| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
                 fx,
                 &ctx,
@@ -8081,7 +8141,7 @@ mod tests {
                 None,
                 None,
             );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+            lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback")
         };
 
         // Bound on the layer-input list: the picture wears the shape.
@@ -8160,9 +8220,10 @@ mod tests {
         assert_eq!(ops.len(), 2, "two ops, two matte slots to bind");
 
         let black: Vec<f32> = (0..(w * h)).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
-        let off =
-            crate::fxops::LayerInput::Texture(lumit_gpu::fx::upload_linear_f32(&ctx, &black, w, h));
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let off = crate::fxops::LayerInput::Texture(lumit_gpu::fx::common::upload_linear_f32(
+            &ctx, &black, w, h,
+        ));
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
             fx,
             &ctx,
@@ -8185,7 +8246,7 @@ mod tests {
             None,
             None,
         );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         assert!(
             (got[0] - 1.0).abs() < 1e-2,

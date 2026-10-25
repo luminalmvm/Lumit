@@ -222,7 +222,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     assert_eq!(draws.len(), 1);
     assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
     let tr = &pre_layer.transform;
-    let expect = lumit_gpu::place_matrix(
+    let expect = lumit_gpu::composite::place_matrix(
         (
             tr.position_x.value_at(0.0) as f32,
             tr.position_y.value_at(0.0) as f32,
