@@ -1120,10 +1120,6 @@
   "@exportColourManagement": {
     "description": "Export dialog, Colour section: which colour-management configuration names the output space. Disabled — Lumit has no OCIO configuration yet."
   },
-  "exportColourNote": "Ein Export, der einen Raum verlangt, in den dieser Build nicht umrechnen kann, wird abgelehnt statt falsch geschrieben.",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
-  },
   "exportColourOcio": "Keine OCIO-Konfiguration",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
@@ -1682,10 +1678,6 @@
   "firstRunAfterEffects": "Footage kommt als Ebene an, und der Retime-Graph zeigt, welcher Moment der Quelle zu sehen ist.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAutoUpdate": "Nach neuen Versionen von Lumit suchen. Es wird nichts heruntergeladen, bevor Sie es verlangen.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunBlurb": "Lumit kann von Anfang an so aussehen wie der Editor, den Sie schon kennen. Beide Antworten lassen sich später in den Einstellungen ändern.",
   "@firstRunBlurb": {
@@ -6238,22 +6230,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Mit dieser Option entsteht eine neue Zwischenkomposition, die nur '{layer}' enthält. Die neue Komposition wird zur Quelle der aktuellen Ebene.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Alle Attribute in die neue Komposition verschieben",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Mit dieser Option werden die derzeit ausgewählten Ebenen zusammen in eine neue Zwischenkomposition gelegt.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "Name der neuen Komposition",
   "@precomposeNewName": {
@@ -9004,10 +8983,6 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Später speichern",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeNoRecent": "Keine zuletzt verwendeten Projekte",
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
@@ -9015,10 +8990,6 @@
   "welcomeOpenProject": "Öffnen",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum-Datei",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
   "welcomeRecent": "Zuletzt verwendet",
   "@welcomeRecent": {

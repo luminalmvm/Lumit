@@ -1,9 +1,9 @@
 {
   "@@locale": "en",
   "@@x-notes": "Lumit's user-facing text, British English, the single source translation works from. Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
-  "aboutBlurb": "A motion-graphics and compositing editor. Free software under the GNU General Public Licence, version 3.",
+  "aboutBlurb": "Free software under the GNU General Public Licence, version 3.",
   "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
+    "description": "About window: Lumit's licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
   },
   "addAtPlayhead": "Add at playhead",
   "@addAtPlayhead": {
@@ -1635,17 +1635,13 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows the time value of the source.",
+  "firstRunAfterEffects": "Footage arrives as a layer. Retime graphs show source time.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
   "firstRunAfterEffectsShortcuts": "Use the After Effects shortcuts",
   "@firstRunAfterEffectsShortcuts": {
     "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
-  "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
   "@firstRunCut": {
@@ -1659,7 +1655,7 @@
   "@firstRunTitle": {
     "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
-  "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
+  "firstRunVegas": "Video arrives as a Sequence layer. Retime graphs show speed.",
   "@firstRunVegas": {
     "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
   },
@@ -7164,22 +7160,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Use this option to create a new intermediate composition with only '{layer}' in it. The new composition will become the source to the current layer.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Move all attributes into the new composition",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Use this option to place the currently selected layers together into a new intermediate composition.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "New composition name",
   "@precomposeNewName": {
@@ -7378,7 +7361,7 @@
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
-  "recoveryQuestion": "It looks like Lumit crashed with unsaved changes, would you like to restore them?",
+  "recoveryQuestion": "Lumit crashed with unsaved changes. Restore them?",
   "@recoveryQuestion": {
     "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
@@ -9734,7 +9717,7 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
-  "updateNightlyBody": "New features first, less tested. Projects saved in a nightly may not open in the stable version. Keep a copy.",
+  "updateNightlyBody": "Less tested. Projects saved in a nightly may not open in the stable version.",
   "@updateNightlyBody": {
     "description": "Body of the dialogue asking before updates switch to nightly builds."
   },
@@ -9857,15 +9840,6 @@
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
-  "updateNoticeBody": "Lumit {version} is downloaded. Before it is installed, its release notes say:",
-  "@updateNoticeBody": {
-    "description": "Body of the dialogue showing a release's warning, above the warning itself. {version} is the new version, such as 0.4.0.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
   "updateNoticeTitle": "Before you update to Lumit {version}",
   "@updateNoticeTitle": {
     "description": "Title of the dialogue showing what a release warns about before it is installed. {version} is the new version, such as 0.4.0.",
@@ -9875,9 +9849,9 @@
       }
     }
   },
-  "updateOfferBody": "{name} is {size}. Lumit downloads it now and installs it when you restart, so you can carry on working in the meantime.",
+  "updateOfferBody": "{name} is {size}. It installs when you restart.",
   "@updateOfferBody": {
-    "description": "Body of the dialogue offering a new version: what the download costs and that work can continue. {name} is the installer's file name, {size} an amount such as 240 MB.",
+    "description": "Body of the dialogue offering a new version: what the download costs and when it installs. {name} is the installer's file name, {size} an amount such as 240 MB.",
     "placeholders": {
       "name": {
         "type": "String"
@@ -9929,7 +9903,7 @@
       }
     }
   },
-  "updateReadyInPlace": "Lumit {version} is ready. Restarting puts it in place and opens it — no installer, and nothing to answer.",
+  "updateReadyInPlace": "Lumit {version} is ready. Restart to finish.",
   "@updateReadyInPlace": {
     "description": "Update dialogue, for installs Lumit can replace by itself.",
     "placeholders": {
@@ -9938,7 +9912,7 @@
       }
     }
   },
-  "updateReadyInstaller": "Lumit {version} is downloaded. It installs while Lumit is closed, so the update finishes the next time you open it.",
+  "updateReadyInstaller": "Lumit {version} is downloaded. It installs the next time Lumit closes.",
   "@updateReadyInstaller": {
     "description": "Update dialogue, for installs that need the setup program to run.",
     "placeholders": {
@@ -11743,21 +11717,9 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Save later",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeOpenProject": "Open",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum file",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
-  },
-  "emptyStageImportNote": "Video, stills, sound",
-  "@emptyStageImportNote": {
-    "description": "Empty editor: the small note under the Import footage card that stands where the picture would be before anything is open. One line in a 180px card."
   },
   "welcomeRecent": "Recent",
   "@welcomeRecent": {
@@ -12850,10 +12812,6 @@
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
   },
-  "exportColourNote": "An export asking for a space this build cannot transform to is refused rather than written wrongly.",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
-  },
   "exportAudioAuto": "Auto",
   "@exportAudioAuto": {
     "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
@@ -13705,7 +13663,7 @@
       }
     }
   },
-  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} of the names are greyed out because they need things Lumit does not support yet.",
+  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} are greyed out and not supported yet.",
   "@projectColourLoadedPartly": {
     "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use, but some of the colour spaces, views or looks it lists cannot be used. All three blanks are counts; a greyed-out name shows its reason on hover.",
     "placeholders": {
@@ -13720,7 +13678,7 @@
       }
     }
   },
-  "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
+  "projectColourNotInForce": "Not in force: {reason}. Using the built-in colour handling.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
     "placeholders": {
@@ -13769,7 +13727,7 @@
   "@tipExportNoMetadata": {
     "description": "Export dialog: the hover reason on the Metadata section when the chosen format has nowhere to keep any. Two words at most."
   },
-  "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
+  "exportColourConfigUntagged": "Written untagged.",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   },
@@ -14459,9 +14417,9 @@
   "@shaderDetachTitle": {
     "description": "Title of the small window offered when the user opens the text editor on a Custom shader that is built from its node graph. The graph is the master copy, so the text cannot be edited until the graph is detached."
   },
-  "shaderDetachBody": "This shader is built from its graph, so the text cannot be edited while the graph is in charge. Detaching keeps the compiled text and removes the graph. This cannot be reassembled afterwards.",
+  "shaderDetachBody": "Detaching keeps the compiled text and removes the graph for good.",
   "@shaderDetachBody": {
-    "description": "Body of the detach-graph window: explains that editing the text of a graph-built Custom shader requires detaching the graph first, that the compiled text stays, and that the boxes do not come back (undo aside)."
+    "description": "Body of the detach-graph window: the compiled text of a graph-built Custom shader stays, and the graph goes for good (undo aside)."
   },
   "shaderDetachAction": "Detach",
   "@shaderDetachAction": {
@@ -14958,7 +14916,7 @@
   "@startupFailedTitle": {
     "description": "Heading of the screen that takes the place of the whole editor when something went wrong before the window opened. Nothing else is on screen but this, the line below it, and the error itself."
   },
-  "startupFailedBody": "Something went wrong on the way up. What follows is the reason and the file the same line was written to — the useful thing to send with a bug report.",
+  "startupFailedBody": "Send this with a bug report.",
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
@@ -16245,10 +16203,6 @@
   "firstRunSetup": "Set up Lumit",
   "@firstRunSetup": {
     "description": "Title of the screen shown the first time Lumit opens, over its five questions."
-  },
-  "firstRunSetupBlurb": "Customise Lumit, all of them can be later changed in Settings.",
-  "@firstRunSetupBlurb": {
-    "description": "First-run screen: the line under its title."
   },
   "firstRunStyle": "Style",
   "@firstRunStyle": {

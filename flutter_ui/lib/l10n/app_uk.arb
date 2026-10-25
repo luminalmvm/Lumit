@@ -781,10 +781,6 @@
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
-  "firstRunAutoUpdate": "Check for new versions of Lumit. Nothing is downloaded until you ask for it.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
-  },
   "firstRunBlurb": "Lumit can start out shaped like the editor you already know. Either answer can be changed later in Settings.",
   "@firstRunBlurb": {
     "description": "The sentence under the first-run question."
@@ -3786,22 +3782,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Use this option to create a new intermediate composition with only '{layer}' in it. The new composition will become the source to the current layer.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Move all attributes into the new composition",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Use this option to place the currently selected layers together into a new intermediate composition.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "New composition name",
   "@precomposeNewName": {
@@ -5684,10 +5667,6 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Зберегти пізніше",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeNoRecent": "Немає нещодавніх проєктів",
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
@@ -5695,10 +5674,6 @@
   "welcomeOpenProject": "Відкрити",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": "Файл .lum",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
   "welcomeRecent": "Нещодавні",
   "@welcomeRecent": {

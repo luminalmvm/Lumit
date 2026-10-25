@@ -627,10 +627,6 @@
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
-  "firstRunAutoUpdate": "Check for new versions of Lumit. Nothing is downloaded until you ask for it.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
-  },
   "firstRunBlurb": "Lumit сіз бұрыннан білетін редактор ретінде бейімделе алады. Кез келген жауапты кейін Баптаулардан өзгертуге болады.",
   "@firstRunBlurb": {
     "description": "The sentence under the first-run question."
@@ -3268,22 +3264,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Use this option to create a new intermediate composition with only '{layer}' in it. The new composition will become the source to the current layer.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Move all attributes into the new composition",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Use this option to place the currently selected layers together into a new intermediate composition.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "New composition name",
   "@precomposeNewName": {

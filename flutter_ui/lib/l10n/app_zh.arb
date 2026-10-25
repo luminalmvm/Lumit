@@ -1232,10 +1232,6 @@
   "@exportColourManagement": {
     "description": "Export dialog, Colour section: which colour-management configuration names the output space. Disabled — Lumit has no OCIO configuration yet."
   },
-  "exportColourNote": "若导出请求的色彩空间此版本无法转换，它会被拒绝，而不是错误地写出。",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
-  },
   "exportColourOcio": "无 OCIO 配置",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
@@ -1811,10 +1807,6 @@
   "firstRunAfterEffects": "素材以图层的形式加入，Retime 图表显示屏幕上正在播放源素材的哪一刻。",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAutoUpdate": "检查 Lumit 的新版本。在你要求之前不会下载任何内容。",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunBlurb": "Lumit 可以一开始就是你已经熟悉的那个编辑器的样子。两个答案稍后都可以在设置中更改。",
   "@firstRunBlurb": {
@@ -6765,22 +6757,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "使用此选项将创建一个仅包含“{layer}”的新中间合成。该新合成将成为当前图层的源。",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "将所有属性移动到新合成中",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "使用此选项可将当前所选图层一起放入一个新的中间合成中。",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "新合成名称",
   "@precomposeNewName": {
@@ -9643,10 +9622,6 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "稍后保存",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeNoRecent": "没有最近的项目",
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
@@ -9654,10 +9629,6 @@
   "welcomeOpenProject": "打开",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum 文件",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
   "welcomeRecent": "最近",
   "@welcomeRecent": {
