@@ -166,7 +166,7 @@
   "@compositionSettings": {
     "description": "Title of the dialogue that edits an existing composition."
   },
-  "compositionSettingsEllipsis": "Configurações de composição",
+  "compositionSettingsEllipsis": "Configurações da composição…",
   "@compositionSettingsEllipsis": {
     "description": "Context-menu item; the ellipsis means a dialogue opens."
   },
