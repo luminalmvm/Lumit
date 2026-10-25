@@ -11511,9 +11511,22 @@
       }
     }
   },
-  "aeShapeContentsNotMapped": "shape contents are not imported yet — the layer keeps its place and draws nothing",
-  "@aeShapeContentsNotMapped": {
-    "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
+  "aeShapeOperatorNotCarried": "{name} has no equivalent — the shape draws without it",
+  "@aeShapeOperatorNotCarried": {
+    "description": "Import report row reason, lower case. A shape layer operator such as Merge Paths or Zig Zag that Lumit's shapes have no place for. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapePaintKeptStill": "the paint's animation is not carried — it keeps the value it starts on",
+  "@aeShapePaintKeptStill": {
+    "description": "Import report row reason, lower case. A shape's fill or stroke colour, opacity or width was animated, and Lumit keeps these still."
+  },
+  "aeShapeGradientColoursDefault": "the gradient's colours could not be read — it imports white to black",
+  "@aeShapeGradientColoursDefault": {
+    "description": "Import report row reason, lower case. A shape's gradient fill arrived with its type and direction but in After Effects' default colours."
   },
   "aeTextStylingNotMapped": "the text imported, but not its animators, path, tsume, fully justified last line or changing source text",
   "@aeTextStylingNotMapped": {

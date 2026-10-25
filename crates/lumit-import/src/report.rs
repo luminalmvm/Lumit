@@ -186,9 +186,15 @@ pub enum Reason {
     BlendModeUnavailable { ae_mode: String },
     /// One of AE's "Classic" blend modes; imported as its modern counterpart.
     BlendModeClassic { ae_mode: String },
-    /// A shape layer: the paths, fills and strokes are a later stage, so the
-    /// layer keeps its slot, transform and parenting but draws nothing.
-    ShapeContentsNotMapped,
+    /// A shape operator Lumit has no place for, such as Merge Paths or Zig
+    /// Zag. The shape draws without it.
+    ShapeOperatorNotCarried { name: String },
+    /// A fill's or stroke's colour, opacity or width, or a group's opacity, is
+    /// keyed. Lumit keeps these still, so it imports as it starts.
+    ShapePaintKeptStill,
+    /// A gradient's colours are a record neither way in reads yet, so it
+    /// imports in After Effects' own starting colours, white to black.
+    ShapeGradientColoursDefault,
     /// A text layer using something Lumit's text has no place for: animators,
     /// a path, tsume, a justified last line, or source text that changes.
     TextStylingNotMapped,
@@ -422,9 +428,16 @@ impl std::fmt::Display for Reason {
             Self::BlendModeClassic { ae_mode } => {
                 write!(f, "{ae_mode} imported as its modern counterpart")
             }
-            Self::ShapeContentsNotMapped => write!(
+            Self::ShapeOperatorNotCarried { name } => {
+                write!(f, "{name} has no equivalent — the shape draws without it")
+            }
+            Self::ShapePaintKeptStill => write!(
                 f,
-                "shape contents are not imported yet — the layer keeps its place and draws nothing"
+                "the paint's animation is not carried — it keeps the value it starts on"
+            ),
+            Self::ShapeGradientColoursDefault => write!(
+                f,
+                "the gradient's colours could not be read — it imports white to black"
             ),
             Self::TextStylingNotMapped => {
                 write!(

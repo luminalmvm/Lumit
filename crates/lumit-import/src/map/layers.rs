@@ -56,7 +56,7 @@ use super::{srgb_to_linear, Conv, ItemKind, Items};
 /// One layer, whole. Never fails: a layer whose source has vanished still
 /// arrives, keeps its slot and its transform, and says so in the report.
 ///
-/// `text_origins` collects how far each text layer's own origin moved, so the
+/// `origins` collects how far each text or shape layer's own origin moved, so the
 /// layers parented to it can follow.
 pub(crate) fn map_layer(
     conv: &mut Conv<'_>,
@@ -64,7 +64,7 @@ pub(crate) fn map_layer(
     ae: &AeLayer,
     items: &Items,
     ids: &BTreeMap<u32, Uuid>,
-    text_origins: &mut BTreeMap<Uuid, (f64, f64)>,
+    origins: &mut BTreeMap<Uuid, (f64, f64)>,
 ) -> Option<Layer> {
     let name = ae.name.clone().unwrap_or_else(|| "(unnamed)".to_string());
     // A layer with no stacking index cannot be parented to, cannot be a matte,
@@ -144,11 +144,16 @@ pub(crate) fn map_layer(
     // pre-transform deviation is visible exactly on a turned or squashed layer,
     // and that is what decides whether the import says so.
     let mut transform = transform(conv, &path, props);
-    // After Effects measures a text layer from its first baseline and Lumit
-    // from the corner of the raster the words are drawn into. The anchor and
-    // the masks move by the gap, so both stay where After Effects had them.
-    if let LayerKind::Text { document } = &kind {
-        let (x, y) = text_origin(document, source_text(props));
+    // After Effects measures a text layer from its first baseline, and a
+    // shape layer from its own zero, where Lumit measures both from the corner
+    // of the raster they are drawn into. The anchor and the masks move by the
+    // gap, so both stay where After Effects had them.
+    let origin = match &kind {
+        LayerKind::Text { document } => Some(text_origin(document, source_text(props))),
+        LayerKind::Shape { contents } => super::shapes::origin(contents),
+        _ => None,
+    };
+    if let Some((x, y)) = origin {
         shift(&mut transform.anchor_x, x);
         shift(&mut transform.anchor_y, y);
         for mask in &mut masks {
@@ -161,7 +166,10 @@ pub(crate) fn map_layer(
                 vertex.pos.1 += y;
             }
         }
-        text_origins.insert(id, (x, y));
+        origins.insert(id, (x, y));
+    }
+    if let LayerKind::Shape { contents } = &kind {
+        super::shapes::follow(contents, &mut transform);
     }
     casts_shadows(conv, &path, ae, props);
     let styles = super::styles::styles(conv, &path, props, &transform);
@@ -308,16 +316,9 @@ fn layer_kind(
         "light" => LayerKind::Light {
             light: Box::new(light(conv, path, ae, props)),
         },
-        "shape" => {
-            conv.report.row(
-                path.clone(),
-                Outcome::Adjusted,
-                Reason::ShapeContentsNotMapped,
-            );
-            LayerKind::Shape {
-                contents: Vec::new(),
-            }
-        }
+        "shape" => LayerKind::Shape {
+            contents: super::shapes::contents(conv, path, props),
+        },
         "text" => LayerKind::Text {
             document: text(conv, path, props),
         },

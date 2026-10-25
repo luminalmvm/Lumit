@@ -39,6 +39,7 @@ mod fx_distort;
 mod layers;
 mod masks;
 mod props;
+mod shapes;
 mod styles;
 mod table;
 mod text;
@@ -752,18 +753,16 @@ fn composition(
         masks: Vec::new(),
         self_index: 0,
     };
-    let mut text_origins = BTreeMap::new();
+    let mut origins = BTreeMap::new();
     let mut layers: Vec<_> = ae
         .layers
         .iter()
-        .filter_map(|layer| {
-            layers::map_layer(&mut conv, &path, layer, items, &ids, &mut text_origins)
-        })
+        .filter_map(|layer| layers::map_layer(&mut conv, &path, layer, items, &ids, &mut origins))
         .collect();
-    // A layer parented to text sits in that text's own space, whose origin
-    // moved with its anchor.
+    // A layer parented to text or a shape sits in that layer's own space,
+    // whose origin moved with its anchor.
     for layer in &mut layers {
-        if let Some(&(x, y)) = layer.parent.and_then(|parent| text_origins.get(&parent)) {
+        if let Some(&(x, y)) = layer.parent.and_then(|parent| origins.get(&parent)) {
             layers::shift(&mut layer.transform.position_x, x);
             layers::shift(&mut layer.transform.position_y, y);
         }

@@ -427,10 +427,6 @@
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
-  "aeShapeContentsNotMapped": "形状内容尚未导入 — 该图层保留其位置但不绘制任何内容",
-  "@aeShapeContentsNotMapped": {
-    "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
-  },
   "aeSpatialTangentsFlattened": "运动路径的空间切线未被带入 — 每个轴各自独立动画",
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
