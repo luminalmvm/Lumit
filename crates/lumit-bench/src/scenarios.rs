@@ -164,7 +164,7 @@ impl Harness {
     /// Generate (or reuse) the media in `media_dir` and build docs/13 §1's
     /// comp over it. `Err` when the media cannot be made — no ffmpeg, say.
     pub fn new(media_dir: &Path) -> Result<Self, String> {
-        let (doc, comp) = crate::reference_comp(media_dir)?;
+        let (doc, comp) = crate::comp::reference_comp(media_dir)?;
         Ok(Self {
             doc: Arc::new(doc),
             comp,

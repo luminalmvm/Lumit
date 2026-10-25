@@ -6,7 +6,7 @@
 //! ask what a long cut costs around the drawing: opening a comp that names
 //! three hundred files, the bookkeeping every frame pays whatever it shows,
 //! playing across edit points, and committing one edit to a row of six
-//! hundred clips. They run against [`crate::long_comp`], which is light to
+//! hundred clips. They run against [`crate::long_comp::long_comp`], which is light to
 //! draw on purpose, so a number here is the per-clip and per-file work and
 //! not the composite.
 //!
