@@ -685,13 +685,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
-            Text(
-              l10n.settingsChangesApplyImmediately,
-              // A kicker's face at a kicker's size, but neither shouted nor
-              // tracked as wide: the drawing sets this line in sentence case at
-              // half the tracking, because it is a sentence and not a label.
-              style: t.kicker.copyWith(letterSpacing: 0.54),
-            ),
             const Spacer(),
             SizedBox(
               height: settingsFooterButton,
@@ -1093,9 +1086,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ],
                 ],
               ),
-              description: ui.workspace.projectTemplate.isEmpty
-                  ? l10n.settingsHelpProjectTemplate
-                  : ui.workspace.projectTemplate,
+              description: ui.workspace.projectTemplate,
             ),
             // Converted once into the preset library, so the Effects &
             // presets panel lists them beside Lumit's own.
@@ -1907,7 +1898,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- Your themes ---------------------------------------------------------
 
-  /// What the last theme import, export or rename said. Kept beside the
+  /// What the last theme import or export said. Kept beside the
   /// buttons like the keymap page's message, and for the same reason: a file
   /// that would not read is a fact about the file, not an emergency.
   String? _themeMessage;
@@ -1927,8 +1918,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           key: const ValueKey('settings-theme-duplicate'),
           small: true,
           onPressed: () => setState(() {
-            final name = workspace.duplicateActiveTheme();
-            _themeMessage = l10n.themeCopiedTo(name);
+            workspace.duplicateActiveTheme();
+            _themeMessage = null;
           }),
           child: Text(l10n.menuDuplicate, style: t.small),
         ),
@@ -1949,7 +1940,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ? null
               : () => setState(() {
                     workspace.deleteCustomTheme(custom);
-                    _themeMessage = l10n.themeDeleted(custom);
+                    _themeMessage = null;
                   }),
           child: Text(l10n.delete, style: t.small),
         ),
@@ -1978,12 +1969,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final asked = await askThemeName(context,
         title: l10n.themeRenameTitle, suggested: from, confirm: l10n.rename);
     if (asked == null || !mounted) return;
-    final now = workspace.renameCustomTheme(from, asked);
-    setState(() => _themeMessage = now == null || now == from
-        ? null
-        : now == asked.trim()
-            ? l10n.themeRenamedTo(now)
-            : l10n.themeNameTaken(asked.trim(), now));
+    workspace.renameCustomTheme(from, asked);
+    setState(() => _themeMessage = null);
   }
 
   /// Read a theme file and take it in under a name nothing else holds — an
@@ -2007,11 +1994,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       setState(() => _themeMessage = read.refusal);
       return;
     }
-    final wanted = theme.name.trim();
-    final name = ui.workspace.importCustomTheme(theme);
-    setState(() => _themeMessage = name == wanted
-        ? l10n.themeImported(name)
-        : l10n.themeImportedRenamed(wanted, name));
+    ui.workspace.importCustomTheme(theme);
+    setState(() => _themeMessage = null);
   }
 
   /// Write the theme in use out as a file. Offered from a built-in scheme too:

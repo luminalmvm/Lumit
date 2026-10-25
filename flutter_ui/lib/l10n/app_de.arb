@@ -1120,10 +1120,6 @@
   "@exportColourManagement": {
     "description": "Export dialog, Colour section: which colour-management configuration names the output space. Disabled — Lumit has no OCIO configuration yet."
   },
-  "exportColourNote": "Ein Export, der einen Raum verlangt, in den dieser Build nicht umrechnen kann, wird abgelehnt statt falsch geschrieben.",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
-  },
   "exportColourOcio": "Keine OCIO-Konfiguration",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
@@ -1682,10 +1678,6 @@
   "firstRunAfterEffects": "Footage kommt als Ebene an, und der Retime-Graph zeigt, welcher Moment der Quelle zu sehen ist.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAutoUpdate": "Nach neuen Versionen von Lumit suchen. Es wird nichts heruntergeladen, bevor Sie es verlangen.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunBlurb": "Lumit kann von Anfang an so aussehen wie der Editor, den Sie schon kennen. Beide Antworten lassen sich später in den Einstellungen ändern.",
   "@firstRunBlurb": {
@@ -2303,10 +2295,6 @@
   "fxConsoleAll": "Alle",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
-  },
-  "fxConsoleApplies": "Enter wendet es auf die ausgewählten Ebenen an",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
   "fxConsoleHint": "Effekte und Kompositionen suchen",
   "@fxConsoleHint": {
@@ -4640,10 +4628,6 @@
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
   },
-  "graphSearchWires": "Verbindet das gezogene Kabel dort, wo es passt",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
-  },
   "graphSpeed": "Geschwindigkeit",
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
@@ -6238,22 +6222,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Mit dieser Option entsteht eine neue Zwischenkomposition, die nur '{layer}' enthält. Die neue Komposition wird zur Quelle der aktuellen Ebene.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Alle Attribute in die neue Komposition verschieben",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Mit dieser Option werden die derzeit ausgewählten Ebenen zusammen in eine neue Zwischenkomposition gelegt.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "Name der neuen Komposition",
   "@precomposeNewName": {
@@ -6678,10 +6649,6 @@
   "settingsBudget": "Budget",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
-  },
-  "settingsChangesApplyImmediately": "Änderungen werden sofort übernommen",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
   },
   "settingsChromeLabels": "Beschriftungen der Oberfläche",
   "@settingsChromeLabels": {
@@ -7415,15 +7382,6 @@
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
   },
-  "themeCopiedTo": "Als {name} kopiert.",
-  "@themeCopiedTo": {
-    "description": "Shown after duplicating a theme. {name} is the new theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeCopySuffix": "{name} Kopie",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -7436,15 +7394,6 @@
   "themeDefaultName": "My theme",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
-  },
-  "themeDeleted": "{name} gelöscht.",
-  "@themeDeleted": {
-    "description": "Shown after deleting a custom theme. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeEditorTitle": "Customise theme",
   "@themeEditorTitle": {
@@ -7480,39 +7429,6 @@
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
   },
-  "themeImported": "{name} importiert und ausgewählt.",
-  "@themeImported": {
-    "description": "Shown after reading a theme file in. {name} is the theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeImportedRenamed": "A theme was already called {wanted}, so this one came in as {name}.",
-  "@themeImportedRenamed": {
-    "description": "Shown when an imported theme collided with an existing one; an import never overwrites the user’s own.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeNameTaken": "A theme was already called {wanted}, so this one is {name}.",
-  "@themeNameTaken": {
-    "description": "Shown when a rename collided with an existing theme and Lumit picked a free name instead.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeNameTheCopy": "Die Kopie benennen",
   "@themeNameTheCopy": {
     "description": "Title of the dialogue asking what a duplicated theme is called."
@@ -7524,15 +7440,6 @@
   "themeRenameTitle": "Rename this theme",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
-  },
-  "themeRenamedTo": "Umbenannt in {name}.",
-  "@themeRenamedTo": {
-    "description": "Shown after renaming a theme. {name} is the new name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeSaveACopy": "Eine Kopie speichern…",
   "@themeSaveACopy": {
@@ -8065,33 +7972,17 @@
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccentHelp": "Der eine Akzent: Fokus, der Abspielkopf, das Gewählte.",
-  "@tokenAccentHelp": {
-    "description": "Theme editor: the sentence under the \"Accent\" colour, saying where it is used."
-  },
   "tokenAccenthover": "Accent hover",
   "@tokenAccenthover": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenAccenthoverHelp": "Der Akzent, wenn der Zeiger darauf liegt.",
-  "@tokenAccenthoverHelp": {
-    "description": "Theme editor: the sentence under the \"Accent hover\" colour, saying where it is used."
   },
   "tokenAnimated": "Animiert",
   "@tokenAnimated": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAnimatedHelp": "Keyframes, die Stoppuhr, wenn sie an ist, ein Griff oder Wertefeld in der Hand und das Band des Arbeitsbereichs.",
-  "@tokenAnimatedHelp": {
-    "description": "Theme editor: the sentence under the \"Animated\" colour, saying where it is used."
-  },
   "tokenCachedisk": "Cache, auf der Festplatte",
   "@tokenCachedisk": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenCachediskHelp": "Die Festplattenstufe der Cache-Leiste in der Zeitleiste.",
-  "@tokenCachediskHelp": {
-    "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
   "tokenCurve": "Kurve {number}",
   "@tokenCurve": {
@@ -8102,17 +7993,9 @@
       }
     }
   },
-  "tokenCurveHelp": "Die Linie einer Eigenschaft im Graph-Editor.",
-  "@tokenCurveHelp": {
-    "description": "Theme editor: the sentence under the graph curve colours."
-  },
   "tokenError": "Fehler",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenErrorHelp": "Etwas, das nicht funktioniert hat.",
-  "@tokenErrorHelp": {
-    "description": "Theme editor: the sentence under the \"Error\" colour, saying where it is used."
   },
   "tokenGroupGraphCurves": "Graph-Kurven",
   "@tokenGroupGraphCurves": {
@@ -8146,209 +8029,105 @@
   "@tokenHairline": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenHairlineHelp": "Die Linie zwischen Zeilen und Bedienfeldern.",
-  "@tokenHairlineHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline\" colour, saying where it is used."
-  },
   "tokenHairlinestrong": "Haarlinie, kräftig",
   "@tokenHairlinestrong": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenHairlinestrongHelp": "Dieselbe Linie, wo sie mehr Gewicht tragen muss.",
-  "@tokenHairlinestrongHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
   "tokenLayercamera": "Kamera",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayercameraHelp": "Kameraebenen.",
-  "@tokenLayercameraHelp": {
-    "description": "Theme editor: the sentence under the \"Camera\" colour, saying where it is used."
-  },
   "tokenLayerfootage": "Footage",
   "@tokenLayerfootage": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayerfootageHelp": "Footage-Ebenen.",
-  "@tokenLayerfootageHelp": {
-    "description": "Theme editor: the sentence under the \"Footage\" colour, saying where it is used."
   },
   "tokenLayerprecomp": "Precomp",
   "@tokenLayerprecomp": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayerprecompHelp": "Precomp-Ebenen.",
-  "@tokenLayerprecompHelp": {
-    "description": "Theme editor: the sentence under the \"Precomp\" colour, saying where it is used."
-  },
   "tokenLayersequence": "Sequenz",
   "@tokenLayersequence": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayersequenceHelp": "Sequenzebenen.",
-  "@tokenLayersequenceHelp": {
-    "description": "Theme editor: the sentence under the \"Sequence\" colour, saying where it is used."
   },
   "tokenLayersolid": "Farbfläche",
   "@tokenLayersolid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayersolidHelp": "Farbflächen-Ebenen.",
-  "@tokenLayersolidHelp": {
-    "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
-  },
   "tokenLayertext": "Text",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayertextHelp": "Textebenen.",
-  "@tokenLayertextHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
   "tokenMarker": "Marker",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenMarkerHelp": "Kompositionsmarker auf dem Zeitlineal und das Feld mit ihrem Text. Standardmäßig ein Grau — ein Marker sagt *hier*, nicht *Vorsicht*.",
-  "@tokenMarkerHelp": {
-    "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
-  },
   "tokenSelectionfill": "Ausgewählte Zeile",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSelectionfillHelp": "Unter einer ausgewählten Ebene oder Eigenschaft; halb so kräftig unter einer hervorgehobenen.",
-  "@tokenSelectionfillHelp": {
-    "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
   "tokenSuccess": "Erfolg",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSuccessHelp": "Etwas ist fertig oder liegt im Cache.",
-  "@tokenSuccessHelp": {
-    "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
-  },
   "tokenSurface0": "Hintergrund",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface0Help": "Der tiefste Grund — hinter den Bedienfeldern und als Hintergrund der Anwendung.",
-  "@tokenSurface0Help": {
-    "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
   "tokenSurface1": "Bedienfeld",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface1Help": "Der eigene Grund eines Bedienfelds und die Zeitleiste innerhalb des Arbeitsbereichs.",
-  "@tokenSurface1Help": {
-    "description": "Theme editor: the sentence under the \"Panel\" colour, saying where it is used."
-  },
   "tokenSurface2": "Erhoben",
   "@tokenSurface2": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface2Help": "Zeilen und Karten, die vom Bedienfeld abgehoben sind.",
-  "@tokenSurface2Help": {
-    "description": "Theme editor: the sentence under the \"Raised\" colour, saying where it is used."
   },
   "tokenSurface3": "Bedienelement",
   "@tokenSurface3": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface3Help": "Ein Feld oder eine Schaltfläche in Ruhe.",
-  "@tokenSurface3Help": {
-    "description": "Theme editor: the sentence under the \"Control\" colour, saying where it is used."
-  },
   "tokenSurface4": "Control hover",
   "@tokenSurface4": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface4Help": "Dasselbe, mit dem Zeiger darüber.",
-  "@tokenSurface4Help": {
-    "description": "Theme editor: the sentence under the \"Control hover\" colour, saying where it is used."
   },
   "tokenTextdisabled": "Text, deaktiviert",
   "@tokenTextdisabled": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextdisabledHelp": "Ein Bedienelement, das gerade nicht verwendet werden kann.",
-  "@tokenTextdisabledHelp": {
-    "description": "Theme editor: the sentence under the \"Text, disabled\" colour, saying where it is used."
-  },
   "tokenTextmuted": "Text, gedämpft",
   "@tokenTextmuted": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextmutedHelp": "Hinweise und die Zeilen unter einer Einstellung.",
-  "@tokenTextmutedHelp": {
-    "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
   "tokenTextprimary": "Text",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextprimaryHelp": "Namen, Werte, alles, was man zuerst liest.",
-  "@tokenTextprimaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
-  },
   "tokenTextsecondary": "Text, sekundär",
   "@tokenTextsecondary": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextsecondaryHelp": "Begleitender Text neben dem primären.",
-  "@tokenTextsecondaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text, secondary\" colour, saying where it is used."
   },
   "tokenTimelineoutofrange": "Zeitleiste außerhalb des Arbeitsbereichs",
   "@tokenTimelineoutofrange": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTimelineoutofrangeHelp": "Der Grund der Zeitleiste beiderseits des Arbeitsbereichs, damit sich der Teil, den Sie abliefern, vom Rest abhebt.",
-  "@tokenTimelineoutofrangeHelp": {
-    "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
-  },
   "tokenWarning": "Warnung",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWarningHelp": "Etwas, das man lesen sollte, bevor man weitermacht.",
-  "@tokenWarningHelp": {
-    "description": "Theme editor: the sentence under the \"Warning\" colour, saying where it is used."
   },
   "tokenWaveformhigh": "Multiwelle, Höhen",
   "@tokenWaveformhigh": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformhighHelp": "Das obere Band — Hi-Hats, Zischlaute, die Kante von Transienten.",
-  "@tokenWaveformhighHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, treble\" colour, saying where it is used."
-  },
   "tokenWaveformlow": "Multiwelle, Bass",
   "@tokenWaveformlow": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformlowHelp": "Das untere Band des Multiwellen-Stapels — Bassdrums und Bass.",
-  "@tokenWaveformlowHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, bass\" colour, saying where it is used."
   },
   "tokenWaveformmid": "Multiwelle, Mitten",
   "@tokenWaveformmid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformmidHelp": "Das mittlere Band — der größte Teil einer Stimme, der Körper einer Snare.",
-  "@tokenWaveformmidHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, middle\" colour, saying where it is used."
-  },
   "tokenWaveformrest": "Wellenform",
   "@tokenWaveformrest": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformrestHelp": "Die einzelne Welle, die eine Ebene oder ein Clip zeichnet. Inhalt, nicht Zustand — nie der Akzent.",
-  "@tokenWaveformrestHelp": {
-    "description": "Theme editor: the sentence under the \"Waveform\" colour, saying where it is used."
   },
   "toolAnchor": "Ankerpunkt",
   "@toolAnchor": {
@@ -9196,10 +8975,6 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Später speichern",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeNoRecent": "Keine zuletzt verwendeten Projekte",
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
@@ -9207,10 +8982,6 @@
   "welcomeOpenProject": "Öffnen",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum-Datei",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
   "welcomeRecent": "Zuletzt verwendet",
   "@welcomeRecent": {

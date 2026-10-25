@@ -18,8 +18,8 @@ import '../l10n/strings.dart';
 
 import 'theme.dart';
 
-/// One editable colour: what it is called, what it is for, and how to read or
-/// write it on a theme.
+/// One editable colour: what it is called, and how to read or write it on a
+/// theme.
 class ThemeToken {
   /// The stable key a stored custom theme files this colour under. Never
   /// shown; never changed, or every saved theme loses that colour.
@@ -27,9 +27,6 @@ class ThemeToken {
 
   /// The name the editor puts on the left of the row. Sentence case.
   final String label;
-
-  /// One line saying what the colour does, for the row underneath.
-  final String description;
 
   /// The group heading this token sits under in the editor.
   final String group;
@@ -40,7 +37,6 @@ class ThemeToken {
   const ThemeToken({
     required this.key,
     required this.label,
-    required this.description,
     required this.group,
     required this.read,
     required this.write,
@@ -162,7 +158,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'surface0',
         label: l10n.tokenSurface0,
-        description: l10n.tokenSurface0Help,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.surface0,
         write: (t, c) => _with(t, surface0: c),
@@ -170,7 +165,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'surface1',
         label: l10n.tokenSurface1,
-        description: l10n.tokenSurface1Help,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.surface1,
         write: (t, c) => _with(t, surface1: c),
@@ -178,7 +172,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'surface2',
         label: l10n.tokenSurface2,
-        description: l10n.tokenSurface2Help,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.surface2,
         write: (t, c) => _with(t, surface2: c),
@@ -186,7 +179,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'surface3',
         label: l10n.tokenSurface3,
-        description: l10n.tokenSurface3Help,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.surface3,
         write: (t, c) => _with(t, surface3: c),
@@ -194,7 +186,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'surface4',
         label: l10n.tokenSurface4,
-        description: l10n.tokenSurface4Help,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.surface4,
         write: (t, c) => _with(t, surface4: c),
@@ -202,7 +193,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'timelineOutOfRange',
         label: l10n.tokenTimelineoutofrange,
-        description: l10n.tokenTimelineoutofrangeHelp,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.timelineOutOfRange,
         write: (t, c) => _with(t, timelineOutOfRange: c),
@@ -210,7 +200,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'selectionFill',
         label: l10n.tokenSelectionfill,
-        description: l10n.tokenSelectionfillHelp,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.selectionFill,
         write: (t, c) => _with(t, selectionFill: c),
@@ -218,7 +207,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'room',
         label: l10n.tokenRoom,
-        description: l10n.tokenRoomHelp,
         group: l10n.tokenGroupSurfaces,
         read: (t) => t.room,
         write: (t, c) => _with(t, room: c),
@@ -228,7 +216,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'textPrimary',
         label: l10n.tokenTextprimary,
-        description: l10n.tokenTextprimaryHelp,
         group: l10n.tokenGroupText,
         read: (t) => t.textPrimary,
         write: (t, c) => _with(t, textPrimary: c),
@@ -236,7 +223,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'textSecondary',
         label: l10n.tokenTextsecondary,
-        description: l10n.tokenTextsecondaryHelp,
         group: l10n.tokenGroupText,
         read: (t) => t.textSecondary,
         write: (t, c) => _with(t, textSecondary: c),
@@ -244,7 +230,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'textMuted',
         label: l10n.tokenTextmuted,
-        description: l10n.tokenTextmutedHelp,
         group: l10n.tokenGroupText,
         read: (t) => t.textMuted,
         write: (t, c) => _with(t, textMuted: c),
@@ -252,7 +237,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'textDisabled',
         label: l10n.tokenTextdisabled,
-        description: l10n.tokenTextdisabledHelp,
         group: l10n.tokenGroupText,
         read: (t) => t.textDisabled,
         write: (t, c) => _with(t, textDisabled: c),
@@ -262,7 +246,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'hairline',
         label: l10n.tokenHairline,
-        description: l10n.tokenHairlineHelp,
         group: l10n.tokenGroupLines,
         read: (t) => t.hairline,
         write: (t, c) => _with(t, hairline: c),
@@ -270,7 +253,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'hairlineStrong',
         label: l10n.tokenHairlinestrong,
-        description: l10n.tokenHairlinestrongHelp,
         group: l10n.tokenGroupLines,
         read: (t) => t.hairlineStrong,
         write: (t, c) => _with(t, hairlineStrong: c),
@@ -280,7 +262,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'accent',
         label: l10n.tokenAccent,
-        description: l10n.tokenAccentHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.accent,
         write: (t, c) => _with(t, accent: c),
@@ -288,7 +269,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'accentHover',
         label: l10n.tokenAccenthover,
-        description: l10n.tokenAccenthoverHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.accentHover,
         write: (t, c) => _with(t, accentHover: c),
@@ -296,7 +276,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'animated',
         label: l10n.tokenAnimated,
-        description: l10n.tokenAnimatedHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.animated,
         write: (t, c) => _with(t, animated: c),
@@ -304,7 +283,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'success',
         label: l10n.tokenSuccess,
-        description: l10n.tokenSuccessHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.success,
         write: (t, c) => _with(t, success: c),
@@ -312,7 +290,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'warning',
         label: l10n.tokenWarning,
-        description: l10n.tokenWarningHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.warning,
         write: (t, c) => _with(t, warning: c),
@@ -320,7 +297,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'error',
         label: l10n.tokenError,
-        description: l10n.tokenErrorHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.error,
         write: (t, c) => _with(t, error: c),
@@ -328,7 +304,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'marker',
         label: l10n.tokenMarker,
-        description: l10n.tokenMarkerHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.marker,
         write: (t, c) => _with(t, marker: c),
@@ -336,7 +311,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'cacheDisk',
         label: l10n.tokenCachedisk,
-        description: l10n.tokenCachediskHelp,
         group: l10n.tokenGroupRoles,
         read: (t) => t.cacheDisk,
         write: (t, c) => _with(t, cacheDisk: c),
@@ -346,7 +320,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'waveformRest',
         label: l10n.tokenWaveformrest,
-        description: l10n.tokenWaveformrestHelp,
         group: l10n.tokenGroupWaveforms,
         read: (t) => t.waveform.rest,
         write: (t, c) => _with(t, waveform: _waveformWith(t.waveform, rest: c)),
@@ -354,7 +327,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'waveformLow',
         label: l10n.tokenWaveformlow,
-        description: l10n.tokenWaveformlowHelp,
         group: l10n.tokenGroupWaveforms,
         read: (t) => t.waveform.low,
         write: (t, c) => _with(t, waveform: _waveformWith(t.waveform, low: c)),
@@ -362,7 +334,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'waveformMid',
         label: l10n.tokenWaveformmid,
-        description: l10n.tokenWaveformmidHelp,
         group: l10n.tokenGroupWaveforms,
         read: (t) => t.waveform.mid,
         write: (t, c) => _with(t, waveform: _waveformWith(t.waveform, mid: c)),
@@ -370,7 +341,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'waveformHigh',
         label: l10n.tokenWaveformhigh,
-        description: l10n.tokenWaveformhighHelp,
         group: l10n.tokenGroupWaveforms,
         read: (t) => t.waveform.high,
         write: (t, c) => _with(t, waveform: _waveformWith(t.waveform, high: c)),
@@ -381,7 +351,6 @@ List<ThemeToken> get themeTokens => [
         ThemeToken(
           key: 'curve$i',
           label: l10n.tokenCurve('${i + 1}'),
-          description: l10n.tokenCurveHelp,
           group: l10n.tokenGroupGraphCurves,
           read: (t) => i < t.curve.length ? t.curve[i] : t.accent,
           write: (t, c) => _with(t, curve: _curveWith(t.curve, i, c)),
@@ -391,7 +360,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerFootage',
         label: l10n.tokenLayerfootage,
-        description: l10n.tokenLayerfootageHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.footage,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, footage: c)),
@@ -399,7 +367,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerSequence',
         label: l10n.tokenLayersequence,
-        description: l10n.tokenLayersequenceHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.sequence,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, sequence: c)),
@@ -407,7 +374,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerPrecomp',
         label: l10n.tokenLayerprecomp,
-        description: l10n.tokenLayerprecompHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.precomp,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, precomp: c)),
@@ -415,7 +381,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerSolid',
         label: l10n.tokenLayersolid,
-        description: l10n.tokenLayersolidHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.solid,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, solid: c)),
@@ -423,7 +388,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerText',
         label: l10n.tokenLayertext,
-        description: l10n.tokenLayertextHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.text,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, text: c)),
@@ -431,7 +395,6 @@ List<ThemeToken> get themeTokens => [
       ThemeToken(
         key: 'layerCamera',
         label: l10n.tokenLayercamera,
-        description: l10n.tokenLayercameraHelp,
         group: l10n.tokenGroupLayerKinds,
         read: (t) => t.layer.camera,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, camera: c)),

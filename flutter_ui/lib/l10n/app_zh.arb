@@ -1232,10 +1232,6 @@
   "@exportColourManagement": {
     "description": "Export dialog, Colour section: which colour-management configuration names the output space. Disabled — Lumit has no OCIO configuration yet."
   },
-  "exportColourNote": "若导出请求的色彩空间此版本无法转换，它会被拒绝，而不是错误地写出。",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
-  },
   "exportColourOcio": "无 OCIO 配置",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
@@ -1811,10 +1807,6 @@
   "firstRunAfterEffects": "素材以图层的形式加入，Retime 图表显示屏幕上正在播放源素材的哪一刻。",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAutoUpdate": "检查 Lumit 的新版本。在你要求之前不会下载任何内容。",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunBlurb": "Lumit 可以一开始就是你已经熟悉的那个编辑器的样子。两个答案稍后都可以在设置中更改。",
   "@firstRunBlurb": {
@@ -2460,10 +2452,6 @@
   "fxConsoleAll": "全部",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
-  },
-  "fxConsoleApplies": "按 Enter 应用到所选图层",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
   "fxConsoleHint": "搜索效果和合成",
   "@fxConsoleHint": {
@@ -5013,10 +5001,6 @@
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
   },
-  "graphSearchWires": "把拖动的连线接到合适的位置",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
-  },
   "graphSpeed": "速度",
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
@@ -6765,22 +6749,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "使用此选项将创建一个仅包含“{layer}”的新中间合成。该新合成将成为当前图层的源。",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "将所有属性移动到新合成中",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "使用此选项可将当前所选图层一起放入一个新的中间合成中。",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "新合成名称",
   "@precomposeNewName": {
@@ -7213,10 +7184,6 @@
   "settingsBudget": "容量上限",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
-  },
-  "settingsChangesApplyImmediately": "更改会立即生效",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
   },
   "settingsChromeLabels": "界面标签",
   "@settingsChromeLabels": {
@@ -8003,15 +7970,6 @@
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
   },
-  "themeCopiedTo": "已复制为 {name}。",
-  "@themeCopiedTo": {
-    "description": "Shown after duplicating a theme. {name} is the new theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeCopySuffix": "{name} 副本",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -8024,15 +7982,6 @@
   "themeDefaultName": "我的主题",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
-  },
-  "themeDeleted": "已删除 {name}。",
-  "@themeDeleted": {
-    "description": "Shown after deleting a custom theme. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeEditorTitle": "自定义主题",
   "@themeEditorTitle": {
@@ -8068,39 +8017,6 @@
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
   },
-  "themeImported": "已导入并选用 {name}。",
-  "@themeImported": {
-    "description": "Shown after reading a theme file in. {name} is the theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeImportedRenamed": "已有主题名为 {wanted}，因此这个以 {name} 导入。",
-  "@themeImportedRenamed": {
-    "description": "Shown when an imported theme collided with an existing one; an import never overwrites the user’s own.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeNameTaken": "已有主题名为 {wanted}，因此这个改名为 {name}。",
-  "@themeNameTaken": {
-    "description": "Shown when a rename collided with an existing theme and Lumit picked a free name instead.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeNameTheCopy": "为副本命名",
   "@themeNameTheCopy": {
     "description": "Title of the dialogue asking what a duplicated theme is called."
@@ -8112,15 +8028,6 @@
   "themeRenameTitle": "重命名此主题",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
-  },
-  "themeRenamedTo": "已重命名为 {name}。",
-  "@themeRenamedTo": {
-    "description": "Shown after renaming a theme. {name} is the new name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeSaveACopy": "保存副本…",
   "@themeSaveACopy": {
@@ -8704,33 +8611,17 @@
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccentHelp": "唯一的强调色：焦点、时间指示器、被选中的东西。",
-  "@tokenAccentHelp": {
-    "description": "Theme editor: the sentence under the \"Accent\" colour, saying where it is used."
-  },
   "tokenAccenthover": "强调色（悬停）",
   "@tokenAccenthover": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenAccenthoverHelp": "指针停在其上的强调色。",
-  "@tokenAccenthoverHelp": {
-    "description": "Theme editor: the sentence under the \"Accent hover\" colour, saying where it is used."
   },
   "tokenAnimated": "已动画",
   "@tokenAnimated": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAnimatedHelp": "关键帧、开启状态的秒表、正在拖动的手柄或数值框，以及工作区域条。",
-  "@tokenAnimatedHelp": {
-    "description": "Theme editor: the sentence under the \"Animated\" colour, saying where it is used."
-  },
   "tokenCachedisk": "缓存（磁盘）",
   "@tokenCachedisk": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenCachediskHelp": "时间线缓存条的磁盘层。",
-  "@tokenCachediskHelp": {
-    "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
   "tokenCurve": "曲线 {number}",
   "@tokenCurve": {
@@ -8741,17 +8632,9 @@
       }
     }
   },
-  "tokenCurveHelp": "图表编辑器中一个属性的线条。",
-  "@tokenCurveHelp": {
-    "description": "Theme editor: the sentence under the graph curve colours."
-  },
   "tokenError": "错误",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenErrorHelp": "没有成功的事情。",
-  "@tokenErrorHelp": {
-    "description": "Theme editor: the sentence under the \"Error\" colour, saying where it is used."
   },
   "tokenGroupGraphCurves": "图表曲线",
   "@tokenGroupGraphCurves": {
@@ -8785,209 +8668,105 @@
   "@tokenHairline": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenHairlineHelp": "行与面板之间的分隔线。",
-  "@tokenHairlineHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline\" colour, saying where it is used."
-  },
   "tokenHairlinestrong": "细线（加重）",
   "@tokenHairlinestrong": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenHairlinestrongHelp": "同一条线在需要更重时的样子。",
-  "@tokenHairlinestrongHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
   "tokenLayercamera": "摄像机",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayercameraHelp": "摄像机图层。",
-  "@tokenLayercameraHelp": {
-    "description": "Theme editor: the sentence under the \"Camera\" colour, saying where it is used."
-  },
   "tokenLayerfootage": "素材",
   "@tokenLayerfootage": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayerfootageHelp": "素材图层。",
-  "@tokenLayerfootageHelp": {
-    "description": "Theme editor: the sentence under the \"Footage\" colour, saying where it is used."
   },
   "tokenLayerprecomp": "预合成",
   "@tokenLayerprecomp": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayerprecompHelp": "预合成图层。",
-  "@tokenLayerprecompHelp": {
-    "description": "Theme editor: the sentence under the \"Precomp\" colour, saying where it is used."
-  },
   "tokenLayersequence": "序列",
   "@tokenLayersequence": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayersequenceHelp": "序列图层。",
-  "@tokenLayersequenceHelp": {
-    "description": "Theme editor: the sentence under the \"Sequence\" colour, saying where it is used."
   },
   "tokenLayersolid": "纯色",
   "@tokenLayersolid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayersolidHelp": "纯色图层。",
-  "@tokenLayersolidHelp": {
-    "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
-  },
   "tokenLayertext": "文本",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayertextHelp": "文本图层。",
-  "@tokenLayertextHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
   "tokenMarker": "标记",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenMarkerHelp": "Comp markers on the time ruler, and the box holding what one says. A grey by default — a marker says *here*, not *careful*.",
-  "@tokenMarkerHelp": {
-    "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
-  },
   "tokenSelectionfill": "选中行",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSelectionfillHelp": "选中的图层或属性下方；高亮行下方的强度减半。",
-  "@tokenSelectionfillHelp": {
-    "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
   "tokenSuccess": "成功",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSuccessHelp": "已完成，或已在缓存中的东西。",
-  "@tokenSuccessHelp": {
-    "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
-  },
   "tokenSurface0": "背景",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface0Help": "最深的底色 — 面板之后，以及应用的背景。",
-  "@tokenSurface0Help": {
-    "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
   "tokenSurface1": "面板",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface1Help": "面板自身的底色，以及工作区域内的时间线。",
-  "@tokenSurface1Help": {
-    "description": "Theme editor: the sentence under the \"Panel\" colour, saying where it is used."
-  },
   "tokenSurface2": "抬起",
   "@tokenSurface2": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface2Help": "从面板上抬起的行和卡片。",
-  "@tokenSurface2Help": {
-    "description": "Theme editor: the sentence under the \"Raised\" colour, saying where it is used."
   },
   "tokenSurface3": "控件",
   "@tokenSurface3": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface3Help": "静止状态的输入框或按钮。",
-  "@tokenSurface3Help": {
-    "description": "Theme editor: the sentence under the \"Control\" colour, saying where it is used."
-  },
   "tokenSurface4": "控件（悬停）",
   "@tokenSurface4": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface4Help": "同样的控件，指针停在其上时。",
-  "@tokenSurface4Help": {
-    "description": "Theme editor: the sentence under the \"Control hover\" colour, saying where it is used."
   },
   "tokenTextdisabled": "文本（禁用）",
   "@tokenTextdisabled": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextdisabledHelp": "当前无法使用的控件。",
-  "@tokenTextdisabledHelp": {
-    "description": "Theme editor: the sentence under the \"Text, disabled\" colour, saying where it is used."
-  },
   "tokenTextmuted": "文本（弱化）",
   "@tokenTextmuted": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextmutedHelp": "提示，以及设置下方的说明。",
-  "@tokenTextmutedHelp": {
-    "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
   "tokenTextprimary": "文本",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextprimaryHelp": "名称、数值，以及你首先会读到的内容。",
-  "@tokenTextprimaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
-  },
   "tokenTextsecondary": "文本（次要）",
   "@tokenTextsecondary": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextsecondaryHelp": "主文本旁的辅助文字。",
-  "@tokenTextsecondaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text, secondary\" colour, saying where it is used."
   },
   "tokenTimelineoutofrange": "工作区域之外的时间线",
   "@tokenTimelineoutofrange": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTimelineoutofrangeHelp": "工作区域两侧的时间线底色，让你要交付的部分与其余部分区分开。",
-  "@tokenTimelineoutofrangeHelp": {
-    "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
-  },
   "tokenWarning": "警告",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWarningHelp": "继续之前值得一读的内容。",
-  "@tokenWarningHelp": {
-    "description": "Theme editor: the sentence under the \"Warning\" colour, saying where it is used."
   },
   "tokenWaveformhigh": "多波形（高频）",
   "@tokenWaveformhigh": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformhighHelp": "顶部频段 — 踩镲、齿音、瞬态边缘。",
-  "@tokenWaveformhighHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, treble\" colour, saying where it is used."
-  },
   "tokenWaveformlow": "多波形（低频）",
   "@tokenWaveformlow": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformlowHelp": "多波形分层的底部频段 — 底鼓与贝斯。",
-  "@tokenWaveformlowHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, bass\" colour, saying where it is used."
   },
   "tokenWaveformmid": "多波形（中频）",
   "@tokenWaveformmid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformmidHelp": "中间频段 — 人声的大部分，军鼓的主体。",
-  "@tokenWaveformmidHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, middle\" colour, saying where it is used."
-  },
   "tokenWaveformrest": "波形",
   "@tokenWaveformrest": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformrestHelp": "图层或片段绘制的单条波形。属于内容，而非状态 — 绝不使用强调色。",
-  "@tokenWaveformrestHelp": {
-    "description": "Theme editor: the sentence under the \"Waveform\" colour, saying where it is used."
   },
   "toolAnchor": "锚点",
   "@toolAnchor": {
@@ -9835,10 +9614,6 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "稍后保存",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeNoRecent": "没有最近的项目",
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
@@ -9846,10 +9621,6 @@
   "welcomeOpenProject": "打开",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum 文件",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
   "welcomeRecent": "最近",
   "@welcomeRecent": {

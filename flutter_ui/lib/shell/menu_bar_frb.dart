@@ -847,7 +847,6 @@ class LumitMenuBarFrb extends StatelessWidget {
       model: FxConsoleModel(
         // The chord the keymap has for it now, as the menus read theirs.
         keyHint: ui.keymap.chordFor('console.open'),
-        footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
           // The saved presets lead, so their kicker sits first in the strip

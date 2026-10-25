@@ -1781,7 +1781,6 @@ class _ShareDialogState extends State<_ShareDialog> {
           ),
           labelColumn: _labelColumn,
         ),
-        _line(t, l10n.shareFootageHint),
         _advancedFold(t),
         if (_advanced) ..._footageRows(t),
       ];
