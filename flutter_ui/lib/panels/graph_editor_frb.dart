@@ -780,7 +780,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// except a mask's **shape**, which has no value to plot and so
   /// draws its rate of change in both.
   GraphLens lensOf(GraphChannel channel) =>
-      channel.isMaskPath ? GraphLens.speed : widget.lens;
+      channel.isPath ? GraphLens.speed : widget.lens;
 
   /// Whether [channel] draws as the Vegas speed envelope right now —
   /// a Retime, in the speed view, with the preference on.
@@ -799,7 +799,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final keys = _channelKeysWithin(window ?? _visibleSeconds);
     // Only shapes on screen means only speeds on screen.
     final allPaths = widget.channels.isNotEmpty &&
-        widget.channels.every((c) => c.isMaskPath);
+        widget.channels.every((c) => c.isPath);
     if (widget.lens == GraphLens.value && !allPaths) {
       return fitValueRange(
         keys,
@@ -3299,7 +3299,7 @@ class _GraphPainter extends CustomPainter {
       // **A shape draws its rate of change in both lenses**: a path has
       // no value to plot, so the value view would otherwise be an empty pane
       // for a property that is plainly animating.
-      final chLens = channel.isMaskPath ? GraphLens.speed : lens;
+      final chLens = channel.isPath ? GraphLens.speed : lens;
       final paint = Paint()
         ..color = palette[channel.colourIndex % palette.length]
         ..strokeWidth = 1.4

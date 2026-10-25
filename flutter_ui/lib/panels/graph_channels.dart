@@ -149,6 +149,12 @@ class GraphChannel {
   /// draws for a mask path.
   bool get isMaskPath => maskValue == MaskValue.path;
 
+  /// True for a shape item's outline, which keys whole paths as a mask does.
+  bool get isShapePath => shapeValue == ShapeValue.path;
+
+  /// Either kind of path: keys that hold a shape rather than a number.
+  bool get isPath => isMaskPath || isShapePath;
+
   /// The row an expression on this channel sits on, so it reads its own
   /// number of a point. Null for a channel that is neither a transform
   /// property nor an effect parameter.
@@ -415,9 +421,9 @@ List<GraphChannel> graphChannels({
       continue;
     }
 
-    // A shape item's numbers, off the read model as a mask's are. Its outline
-    // keys as whole paths, so like a mask's it has no curve here. A stop's
-    // rows carry the stop after the name: `.../gradientStopPosition2`.
+    // A shape item's numbers, off the read model as a mask's are, its outline
+    // included the way a mask's shape is. A stop's rows carry the stop after
+    // the name: `.../gradientStopPosition2`.
     if (path.startsWith('${contentsPath(layerId)}/')) {
       final rest = path.substring(contentsPath(layerId).length + 1);
       final slash = rest.indexOf('/');
@@ -426,16 +432,19 @@ List<GraphChannel> graphChannels({
       final name = raw.replaceFirst(RegExp(r'\d+$'), '');
       final stop = int.tryParse(raw.substring(name.length)) ?? 0;
       final value = ShapeValue.values.where((v) => v.name == name).firstOrNull;
-      if (value == null || value == ShapeValue.path) continue;
+      if (value == null) continue;
       for (final item in entry.info.shapeContents) {
         if (item.id.toString() != rest.substring(0, slash)) continue;
+        if (value == ShapeValue.path && item.pathKeys.isEmpty) break;
         out.add(GraphChannel(
           path: path,
           id: path,
           label: '${entry.info.name} · ${item.name} · '
               '${shapeValueLabel(value, stop: stop)}',
           colourIndex: out.length,
-          scalar: shapeScalarOf(item, value, stop: stop),
+          scalar: value == ShapeValue.path
+              ? BridgeScalar.keyframed(item.pathKeys)
+              : shapeScalarOf(item, value, stop: stop),
           entry: entry,
           shape: item,
           shapeValue: value,

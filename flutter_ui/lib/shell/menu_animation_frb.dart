@@ -56,7 +56,7 @@ List<GraphChannel> selectedChannels(LumitUiState ui) => graphChannels(
   final fps = ui.model.fps;
   final frame = ui.playheadFrame.value;
   for (final channel in selectedChannels(ui)) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     for (var i = 0; i < keys.length; i++) {
       if (keyFrame(keys[i], fps).round() == frame) {
@@ -84,7 +84,7 @@ bool editKeysAtPlayhead(
   final frame = ui.playheadFrame.value;
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in selectedChannels(ui)) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     var touched = false;
     final next = <BridgeKeyframe>[];
@@ -154,7 +154,7 @@ BridgeKeyframe _keyWith(
 /// a locked layer takes no edits.
 List<GraphChannel> _keyable(List<GraphChannel> channels) => [
       for (final channel in channels)
-        if (!channel.isMaskPath &&
+        if (!channel.isPath &&
             channel.scalar is! BridgeScalar_Expression &&
             !channel.entry.info.switches.locked)
           channel,
@@ -378,7 +378,7 @@ MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
     for (final channel in selectedChannels(ui))
-      if (!channel.isMaskPath) channel,
+      if (!channel.isPath) channel,
   ];
   return MenuEntry(
     l10n.menuAddExpression,

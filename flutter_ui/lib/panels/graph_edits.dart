@@ -132,6 +132,12 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
         value: value,
         to: next,
       );
+    } else if (channel.isShapePath) {
+      // As a mask's shape below: only the keys' times and eases are written.
+      channel.entry.layer.setShapePathKeys(
+        id: channel.shape!.id,
+        keys: keysOf(next),
+      );
     } else if (channel.shapeValue case final value?) {
       (shapes[layerId] ??= (channel.entry.layer, [])).$2.add(
           (channel.shape!.id.toString(), value, channel.shapeStop, next));
@@ -412,7 +418,7 @@ bool plantKeyOnChannels({
   final seconds = frame / (fps <= 0 ? 1 : fps);
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in channels) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     if (keys.isEmpty) continue;
     if (keys.any((k) => keyFrame(k, fps).round() == frame.round())) continue;
