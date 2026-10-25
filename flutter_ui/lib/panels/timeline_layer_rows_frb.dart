@@ -629,6 +629,7 @@ class FoldRow extends StatelessWidget {
           onChanged: onChanged,
           open: open,
           onToggle: () => onToggle(path),
+          onLabelTap: () => onSelectProperty(path),
         ),
       FoldShapePaintRow(:final item, :final which) => ShapePaintRow(
           layer: layer,

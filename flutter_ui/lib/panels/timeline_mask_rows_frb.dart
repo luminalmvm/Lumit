@@ -641,6 +641,10 @@ class ItemOpacityRow extends StatefulWidget {
   /// that is only renamed by hand.
   final ValueNotifier<String?>? renameRequest;
 
+  /// A tap on the name, which picks the item the way a mask's name picks the
+  /// mask.
+  final VoidCallback? onLabelTap;
+
   const ItemOpacityRow({super.key,
     required this.icon,
     required this.name,
@@ -658,6 +662,7 @@ class ItemOpacityRow extends StatefulWidget {
     this.open = false,
     this.onToggle,
     this.renameRequest,
+    this.onLabelTap,
   });
 
   @override
@@ -755,6 +760,7 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
                     nameKey: '${widget.keyPrefix}-name-${widget.id}',
                     editorKey: '${widget.keyPrefix}-rename-${widget.id}',
                     style: t.body,
+                    onTap: widget.onLabelTap,
                   ),
           ),
           if (widget.extra != null) ...[
