@@ -501,7 +501,7 @@ fn cache() -> &'static ProgramCache {
 /// there. The resolved bag carries plain numbers by design — it holds nothing
 /// owned and nothing borrowed — so a kilobyte of shader cannot ride in it; what
 /// rides instead is the source's hash, pushed at resolve time
-/// ([`EffectDef::resolve_derived`](crate::fx::EffectDef::resolve_derived)), and
+/// ([`EffectDef::resolve_derived`](crate::fx::registry::EffectDef::resolve_derived)), and
 /// the resolve step is also what put the program in this cache. The two happen in
 /// that order for every frame that draws, so the render side asks by hash and
 /// gets the very text the document says.

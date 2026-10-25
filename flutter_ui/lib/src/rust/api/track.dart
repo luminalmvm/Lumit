@@ -254,7 +254,7 @@ class BridgePlanarStatus {
 /// A **reason, not a sentence**: the engine's own `AnalysisError`
 /// carries English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
-/// the shape `lumit_import::Reason` already uses for the import report.
+/// the shape `lumit_import::report::Reason` already uses for the import report.
 enum BridgeTrackFailure {
   /// The media could not be opened, or carries no video.
   unreadable,

@@ -10,7 +10,10 @@
 //! The four corners carry §3.48's own names and units, so swapping one effect
 //! for the other costs no dragging.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 /// The panel's four disclosures: the corners stay in the open (they are what
@@ -72,7 +75,7 @@ pub const BEZIER_WARP_GROUPS: &[ParamGroup] = &[
 /// Every point is px@comp (§2.3), declared `Px`. The schema defaults are
 /// a nominal 1080p frame with its handles at the thirds — the patch that is
 /// exactly the identity — and
-/// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) puts a fresh
+/// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster) puts a fresh
 /// instance's twelve points on the actual comp.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(

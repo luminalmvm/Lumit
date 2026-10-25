@@ -57,14 +57,14 @@ static RENDERER: OnceLock<Mutex<Slot>> = OnceLock::new();
 /// Shared with the frb render worker (`api::worker_thread`) rather than copied:
 /// two implementations of the same quality policy would drift, and then the two
 /// frontends would decode at different sizes for the same on-screen scale.
-pub(crate) fn quality_for(scale: f32) -> lumit_render::Quality {
+pub(crate) fn quality_for(scale: f32) -> lumit_render::plan::Quality {
     let sane = if scale.is_finite() && scale > 0.0 {
         scale
     } else {
         1.0
     };
     let rung = preview_rung(sane);
-    lumit_render::Quality {
+    lumit_render::plan::Quality {
         draft: false,
         auto_res: rung < 1.0,
         display_scale: rung,

@@ -70,7 +70,7 @@ fn run() -> Result<(), String> {
 
     // The long-form comp's seven (docs/13 §2 B18-B24), on media of their own
     // in the same directory.
-    let long = lumit_bench::LongHarness::new(&media_dir())?;
+    let long = lumit_bench::long::LongHarness::new(&media_dir())?;
     results.extend(long.all(&mut |m: Measurement| {
         println!(
             "{}",
@@ -80,7 +80,7 @@ fn run() -> Result<(), String> {
 
     // And the same comp's sound (docs/13 §2 B25-B29). No sound card is
     // opened: the plan is filled and mixed as the engine's threads do it.
-    let sound = lumit_bench::SoundHarness::new(&media_dir())?;
+    let sound = lumit_bench::long_sound::SoundHarness::new(&media_dir())?;
     results.extend(sound.all(&mut |m: Measurement| {
         println!(
             "{}",

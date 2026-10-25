@@ -15,7 +15,7 @@
 //!   data, the wires, where the boxes sit, which are twirled open and how they
 //!   are grouped. This is the half the user edits, and it is handed straight
 //!   back to `CompositionReference::set_node_graph`: one gesture, one
-//!   [`lumit_core::Op::SetCompGraph`], one undo step.
+//!   [`lumit_core::ops::Op::SetCompGraph`], one undo step.
 //!
 //! The Fx boxes are not in the wiring. They are ordinary
 //! [`EffectInstance`](lumit_core::model::EffectInstance)s and ride the staged
@@ -242,7 +242,7 @@ pub struct BridgeCompWiring {
     pub reads: Vec<BridgeReadNode>,
     pub inputs: Vec<BridgeInputNode>,
     /// The one Output box's id. A graph always has exactly one, and
-    /// [`lumit_core::Op::SetCompGraph`] refuses a write that has none or two.
+    /// [`lumit_core::ops::Op::SetCompGraph`] refuses a write that has none or two.
     pub output: Uuid,
     pub edges: Vec<BridgeCompEdge>,
     pub layout: Vec<BridgeCompNodePosition>,
@@ -352,7 +352,7 @@ fn read_node(project: Uuid, doc: &Document, graph: &CompGraph, node: &GraphNode)
             drawn.match_name = inst.effect.match_name.clone();
             // An entry this build does not know draws under its own key rather
             // than under nothing, as the layer canvas has it.
-            drawn.label = lumit_core::fx::def(&inst.effect.match_name).map_or_else(
+            drawn.label = lumit_core::fx::builtins::def(&inst.effect.match_name).map_or_else(
                 || inst.effect.match_name.clone(),
                 |d| d.schema().label.to_owned(),
             );

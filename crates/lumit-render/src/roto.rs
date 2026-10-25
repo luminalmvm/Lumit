@@ -54,7 +54,10 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use lumit_core::model::{Document, EffectInstance, Fingerprint, LayerKind};
 use lumit_core::roto::{chain_hash, RotoBlock, RotoSettings, RotoStrokeKind};
-use lumit_roto::{base_seeds, FlowField, FrameRgb, RotoSolver, RotoStroke, Seeds, StrokeKind};
+use lumit_roto::{
+    solve::RotoSolver, stroke::base_seeds, stroke::RotoStroke, stroke::Seeds, stroke::StrokeKind,
+    warp::FlowField, FrameRgb,
+};
 use uuid::Uuid;
 
 use crate::sidecar;
@@ -63,10 +66,7 @@ use crate::sidecar;
 // What a propagation is asked for
 // ---------------------------------------------------------------------------
 
-/// Everything a propagation reads, shared with the planes tier since both read
-/// a clip the same way ([`crate::frames`]). Named from here so nothing that
-/// spoke of a roto frame before has to learn a second name for it.
-pub use crate::frames::RotoFrames;
+use crate::frames::RotoFrames;
 
 /// What names one propagation's file: the media's own content, and everything
 /// [`lumit_core::roto::key_hash`] covers (the tier version, the settings, the
@@ -254,8 +254,8 @@ impl RotoFailure {
     /// The detail a library wrote is dropped on purpose: this enum is what the
     /// bridge hands the interface, and a sentence from ONNX Runtime is not
     /// something a reason can carry (§9).
-    fn of(e: &lumit_ml::MlError) -> Self {
-        use lumit_ml::MlError as E;
+    fn of(e: &lumit_ml::error::MlError) -> Self {
+        use lumit_ml::error::MlError as E;
         match e {
             E::RuntimeMissing
             | E::RuntimeFailed(_)
@@ -294,7 +294,7 @@ pub trait RotoModel {
 
 /// The segmentation model, wrapped so this file never names `lumit_ml` twice.
 struct SegmentModel {
-    model: lumit_ml::Segment,
+    model: lumit_ml::segment::Segment,
     /// The base frame as the encoder described it, kept for the run.
     frame: Option<lumit_ml::segment::Embedding>,
 }
@@ -321,7 +321,7 @@ impl RotoModel for SegmentModel {
         // that a matte can be asked later which pack seeded it, and an updated
         // pack under the same id answers that only by its hash.
         let runtime = match lumit_ml::runtime::status() {
-            lumit_ml::RuntimeStatus::Loaded { version, .. } => version,
+            lumit_ml::runtime::RuntimeStatus::Loaded { version, .. } => version,
             _ => String::new(),
         };
         let hash: String = self
@@ -340,7 +340,7 @@ impl RotoModel for SegmentModel {
 
 /// Open the installed segmentation pack, on the thread that will run it.
 fn open_segment() -> Result<Box<dyn RotoModel>, RotoFailure> {
-    lumit_ml::Segment::open()
+    lumit_ml::segment::Segment::open()
         .map(|model| Box::new(SegmentModel { model, frame: None }) as Box<dyn RotoModel>)
         .map_err(|e| RotoFailure::of(&e))
 }
@@ -1308,7 +1308,7 @@ fn propagate(
                 let mask = model.mask(&taps.0, &taps.1)?;
                 made_with = model.made_with();
                 let mut field = Seeds::new(width, height).map_err(|_| RotoFailure::NoFrames)?;
-                lumit_roto::mask_seeds(&mask, width, height, &mut field)
+                lumit_roto::warp::mask_seeds(&mask, width, height, &mut field)
                     .map_err(|_| RotoFailure::NoSeeds)?;
                 field.stamp_all(&strokes);
                 field
@@ -1410,7 +1410,7 @@ fn propagate(
                 prev_f.extend(prev_plane.iter().map(|&b| f32::from(b) / 255.0));
                 let field = FlowField::new(&interleaved, &validity, &conf, width, height)
                     .map_err(|_| RotoFailure::NoFrames)?;
-                if lumit_roto::warp_and_seed(
+                if lumit_roto::warp::warp_and_seed(
                     &prev_f,
                     &field,
                     solver_settings(job.settings).confidence_floor,
@@ -1505,7 +1505,7 @@ fn record_of(frame: i64, chain: [u8; 32], plane: &[u8], width: u32, height: u32)
 /// The real frames, through the same frame index and decoder every other
 /// consumer opens (docs/impl/media-io.md §2).
 pub struct MediaRgba {
-    decoder: lumit_media::VideoDecoder,
+    decoder: lumit_media::decode::VideoDecoder,
     frames: usize,
     width: u32,
     height: u32,
@@ -1516,11 +1516,11 @@ impl MediaRgba {
     /// Open `path` for propagation. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the propagation thread.
     #[must_use]
-    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
+    pub fn open(path: &lumit_media::sequence::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
-        let decoder = lumit_media::VideoDecoder::open(path, index).ok()?;
+        let decoder = lumit_media::decode::VideoDecoder::open(path, index).ok()?;
         Some(MediaRgba {
             decoder,
             frames,
@@ -1549,11 +1549,11 @@ impl RotoFrames for MediaRgba {
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     propagate: bool,
 ) -> Option<RotoJob> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let block = fx.roto.clone().unwrap_or_default();
     let mut settings = RotoSettings::of(fx);
     // Which pack would seed this run, taken here rather than in the document,

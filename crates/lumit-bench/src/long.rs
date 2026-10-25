@@ -6,7 +6,7 @@
 //! ask what a long cut costs around the drawing: opening a comp that names
 //! three hundred files, the bookkeeping every frame pays whatever it shows,
 //! playing across edit points, and committing one edit to a row of six
-//! hundred clips. They run against [`crate::long_comp`], which is light to
+//! hundred clips. They run against [`crate::long_comp::long_comp`], which is light to
 //! draw on purpose, so a number here is the per-clip and per-file work and
 //! not the composite.
 //!
@@ -16,7 +16,7 @@
 //!   small loop in the same order the worker's takes: file what the read-ahead
 //!   threads have decoded, post the coming frames' decodes and the files of
 //!   the clips about to start, render. The threads themselves are the
-//!   application's own ([`lumit_render::Prefetcher`]).
+//!   application's own ([`lumit_render::prefetch::Prefetcher`]).
 //! - **The read model** the interface is sent after an edit is built in
 //!   `lumit-bridge` too, which is a C library and cannot be linked from here.
 //!   B24 makes the engine reads that builder makes for every clip of every
@@ -29,11 +29,11 @@ use std::time::{Duration as Wall, Instant};
 use lumit_core::model::{Document, Layer, LayerKind};
 use lumit_core::sequence::{self, Clip, ClipSource};
 use lumit_core::time::{CompTime, Rational};
-use lumit_core::{DocumentStore, Op};
+use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_project::JournalFile;
 use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
-use lumit_render::Prefetcher;
+use lumit_render::prefetch::Prefetcher;
 use uuid::Uuid;
 
 use crate::comp::rat;
@@ -450,7 +450,7 @@ fn clip_ops(comp: Uuid, row: &Layer, clips: Vec<Clip>) -> Vec<Op> {
 }
 
 /// A time that overflowed, as a scenario's error.
-fn time(e: lumit_core::TimeError) -> String {
+fn time(e: lumit_core::time::TimeError) -> String {
     format!("long comp time: {e}")
 }
 

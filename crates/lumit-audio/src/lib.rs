@@ -17,7 +17,7 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
-use lumit_media::AudioBuffer;
+use lumit_media::audio::AudioBuffer;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;

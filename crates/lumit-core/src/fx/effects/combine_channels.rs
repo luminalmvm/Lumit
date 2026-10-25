@@ -11,7 +11,9 @@
 //! walk lowers it onto three Set channels passes, so there is no kernel of its
 //! own.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, CHANNEL_OPTIONS};
+use crate::fx::{
+    builtins::CHANNEL_OPTIONS, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Combine channels' controls: which channel of each socket's picture is read.

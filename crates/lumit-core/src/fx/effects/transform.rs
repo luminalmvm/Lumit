@@ -2,7 +2,9 @@
 //! and an opacity applied inside the effect stack, rather than to the layer as a
 //! whole.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Transform's controls.
@@ -10,7 +12,7 @@ use lumit_fx_macros::Effect;
 /// The four point components are px@comp (point parameters are pixels, never
 /// per cent), declared `Px` so the resolve step scales them by the §2.3
 /// preview factor and
-/// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+/// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial)
 /// moves them again if the stack is reused at another size — exactly what the old
 /// arm and `rescale_px` did between them. Scale is per cent and rotation is
 /// degrees, and neither follows the raster, which is why they stay `Raw`.
@@ -163,7 +165,7 @@ impl EffectDef for TransformDef {
         // The kernel's map runs from where a pixel lands back to where it was
         // read, so the corners go through its inverse.
         let Some(([a, b, c, d], [ox, oy])) =
-            crate::fx::transform_inverse(anchor, position, scale, rotation_deg, skew)
+            crate::fx::maths::transform_inverse(anchor, position, scale, rotation_deg, skew)
         else {
             return rect;
         };

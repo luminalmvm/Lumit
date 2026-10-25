@@ -15,7 +15,10 @@
 //! wedge and mirrored about its middle — and what is left is a single straight
 //! edge, whose distance is one dot product. No outline is ever drawn.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// An inner radius means nothing until the star is switched on.
@@ -50,7 +53,7 @@ pub const IRIS_WIPE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
 pub struct IrisWipe {
     /// Where the iris opens, px@comp (point parameters are PIXELS). The
     /// schema default is nominal 1080p centre;
-    /// [`instantiate_for_raster`](crate::fx::instantiate_for_raster) centres a
+    /// [`instantiate_for_raster`](crate::fx::builtins::instantiate_for_raster) centres a
     /// fresh instance on the actual comp.
     #[slider(label = "Iris centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,

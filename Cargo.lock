@@ -2022,6 +2022,7 @@ dependencies = [
 name = "lumit-aplug-broker"
 version = "0.9.1"
 dependencies = [
+ "interprocess",
  "lumit-aplug",
  "lumit-aplug-testplug",
  "lumit-core",
@@ -2055,6 +2056,7 @@ dependencies = [
  "lumit-audio",
  "lumit-core",
  "lumit-gpu",
+ "lumit-media",
  "lumit-project",
  "lumit-render",
  "serde",
@@ -2177,6 +2179,7 @@ dependencies = [
  "lumit-core",
  "lumit-eval",
  "lumit-gpu",
+ "lumit-ingress",
  "metal",
  "naga",
  "objc",
@@ -2285,6 +2288,7 @@ dependencies = [
 name = "lumit-ofx-broker"
 version = "0.9.1"
 dependencies = [
+ "interprocess",
  "lumit-eval",
  "lumit-ofx",
  "lumit-ofx-testplug",
@@ -2336,6 +2340,7 @@ dependencies = [
  "bincode",
  "blake3",
  "bytemuck",
+ "glam",
  "half",
  "lumit-audio",
  "lumit-budget",
@@ -2439,12 +2444,15 @@ name = "lumit_bridge"
 version = "0.9.1"
 dependencies = [
  "flutter_rust_bridge",
+ "interprocess",
  "lumit-aplug",
  "lumit-audio",
  "lumit-budget",
+ "lumit-cache",
  "lumit-core",
  "lumit-eval",
  "lumit-extensions",
+ "lumit-gpu",
  "lumit-import",
  "lumit-ingress",
  "lumit-keymap",
@@ -2452,6 +2460,7 @@ dependencies = [
  "lumit-ml",
  "lumit-ofx",
  "lumit-ofx-testplug",
+ "lumit-peer",
  "lumit-project",
  "lumit-render",
  "lumit-script",

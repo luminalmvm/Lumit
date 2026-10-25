@@ -22,8 +22,9 @@ use uuid::Uuid;
 use super::camera_track::{DENSITY_DEFAULT, DENSITY_OPTIONS};
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, Port, PortType,
-    ResolveCx, Signature, Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::ParamGroup,
+    schema::Port, schema::PortType,
 };
 use crate::model::{EffectInstance, Layer, LayerKind};
 use lumit_fx_macros::Effect;

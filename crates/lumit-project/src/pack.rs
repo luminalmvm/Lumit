@@ -23,8 +23,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
 
+use lumit_core::model::Document;
 use lumit_core::model::{Fingerprint, MediaRef, PackedMedia};
-use lumit_core::Document;
 use uuid::Uuid;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -1124,7 +1124,7 @@ mod tests {
         file_ref(dir.path(), "ocio/luts/grade.cube", b"a table");
         // And a LUT on a layer, whose file is a path in a parameter.
         let look = file_ref(dir.path(), "looks/look.cube", b"a look").absolute_path;
-        let mut lut = lumit_core::fx::instantiate("lut").unwrap();
+        let mut lut = lumit_core::fx::builtins::instantiate("lut").unwrap();
         let look_id = packed_file_id(lut.id, "file", 0);
         let slot = lut.params.iter_mut().find(|p| p.id == "file").unwrap();
         slot.value = EffectValue::File(FileParam::single(look.clone()));

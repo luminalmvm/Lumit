@@ -30,7 +30,7 @@
 //! nothing is ever *silently* something else.
 
 use lumit_core::anim::{Animation, Property as LumProperty};
-use lumit_core::fx::{ParamKind, Unit};
+use lumit_core::fx::{params::Unit, schema::ParamKind};
 use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
 use uuid::Uuid;
 
@@ -128,7 +128,7 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
     }
     let name = display_name(node, match_name).to_string();
     let here = path.property(&name);
-    let mut inst = lumit_core::fx::instantiate("custom_controls")?;
+    let mut inst = lumit_core::fx::builtins::instantiate("custom_controls")?;
     inst.enabled = node.enabled.unwrap_or(true);
     inst.custom_name = Some(name);
     inst.extra = ae_map(vec![
@@ -250,9 +250,9 @@ fn direct(
 ) -> Option<EffectInstance> {
     let (plugin, schema) = row.ofx.iter().find_map(|id| {
         let name = format!("ofx:{id}");
-        lumit_core::fx::schema(&name).map(|schema| (name, schema))
+        lumit_core::fx::builtins::schema(&name).map(|schema| (name, schema))
     })?;
-    let mut inst = lumit_core::fx::instantiate(&plugin)?;
+    let mut inst = lumit_core::fx::builtins::instantiate(&plugin)?;
     // An effect switched off in After Effects imports switched off.
     inst.enabled = node.enabled.unwrap_or(true);
 
@@ -308,7 +308,7 @@ fn carry(
     at: &ItemPath,
     here: &ItemPath,
     node: &Property,
-    schema: &'static lumit_core::fx::EffectSchema,
+    schema: &'static lumit_core::fx::schema::EffectSchema,
     inst: &mut EffectInstance,
     carried: &mut usize,
     controls: &mut usize,

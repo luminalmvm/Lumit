@@ -19,8 +19,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-mod package;
-pub use package::{install_package, pack, read_package, PACKAGE_EXTENSION};
+pub mod package;
 
 /// The file that makes a folder an extension.
 pub const MANIFEST_FILE: &str = "extension.json";
@@ -439,7 +438,7 @@ pub fn machine_dirs() -> Vec<PathBuf> {
 /// The folders the person added, in the order they added them.
 #[must_use]
 pub fn extra_dirs() -> Vec<PathBuf> {
-    lumit_project::PluginPrefs::load_default().extension_folders
+    lumit_project::plugins::PluginPrefs::load_default().extension_folders
 }
 
 /// Every folder extensions are found in, in the order they are scanned:
@@ -471,7 +470,7 @@ pub fn add_dir(folder: &Path) -> Result<bool, ExtensionError> {
     if dirs().iter().any(|dir| dir == folder) {
         return Ok(false);
     }
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     prefs.extension_folders.push(folder.to_path_buf());
     prefs
         .save_default()
@@ -482,7 +481,7 @@ pub fn add_dir(folder: &Path) -> Result<bool, ExtensionError> {
 /// Stop scanning a folder the person added. Nothing in it is deleted. False
 /// when it was not one of theirs.
 pub fn remove_dir(folder: &Path) -> bool {
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     let before = prefs.extension_folders.len();
     prefs.extension_folders.retain(|dir| dir != folder);
     prefs.extension_folders.len() != before && prefs.save_default().is_ok()
@@ -730,6 +729,7 @@ pub fn remove(id: &str) -> Result<(), ExtensionError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::package::{install_package, pack, read_package};
     use super::*;
 
     fn manifest(change: impl Fn(&mut serde_json::Value)) -> String {
@@ -775,7 +775,7 @@ mod tests {
             let passes: Vec<&str> = effect.passes.iter().map(|p| p.name.as_str()).collect();
             let program = lumit_core::fx::shader::build_passes(&effect.shader, &passes).unwrap();
             for (_, text) in &program.passes {
-                if let Err(why) = lumit_gpu::fx::validate(text) {
+                if let Err(why) = lumit_gpu::fx::custom_shader::validate(text) {
                     panic!("{}", program.remap_error(&why));
                 }
             }

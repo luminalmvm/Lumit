@@ -11,7 +11,8 @@
 use crate::comp_graph::GraphNode;
 use crate::fx::effects::node_graph;
 use crate::fx::{
-    points, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    params::Value, points, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use crate::graph::LayerGraph;
 use crate::model::{Document, EffectInstance, Layer, LayerKind};

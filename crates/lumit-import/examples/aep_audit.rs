@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use lumit_core::model::ProjectItem;
-use lumit_import::{ItemPath, Outcome, Reason};
+use lumit_import::{report::ItemPath, report::Outcome, report::Reason};
 
 fn main() {
     let Some(arg) = std::env::args().nth(1) else {
@@ -34,7 +34,7 @@ fn main() {
         }
     };
 
-    let (mut doc, mut report) = lumit_import::map_capture(&bundle.capture);
+    let (mut doc, mut report) = lumit_import::map::map_capture(&bundle.capture);
     lumit_import::note_skipped_chunks(&bundle, &mut report);
 
     // The items, and the two facts a Project panel row cannot do without.

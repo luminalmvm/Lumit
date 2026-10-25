@@ -301,8 +301,8 @@ pub struct CameraSolve {
 
 /// Solve the camera for a whole shot (docs/impl/tracking.md §4).
 ///
-/// `pairs` are phase 2's keyframe pairs ([`crate::select_keyframes`]) and
-/// `zooms` its focal-change boundaries ([`crate::detect_zoom`]); a zoom
+/// `pairs` are phase 2's keyframe pairs ([`crate::pairs::select_keyframes`]) and
+/// `zooms` its focal-change boundaries ([`crate::segment::detect_zoom`]); a zoom
 /// [`ZoomKind::Cut`] splits the focal unknowns into segments while pose stays
 /// continuous across it. Tracks marked [`TrackState::Moving`] never enter the
 /// solve.

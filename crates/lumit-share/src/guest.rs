@@ -10,12 +10,13 @@ use crate::kept::{Finding, Kept, Pair};
 use crate::local::{carry, place, sane, sane_document, settle};
 use crate::wire::{self, decode, encode, Message, Names, Out, Receiver, Sender};
 use crate::{
-    dialled, room, Conflict, Ending, Event, Events, Invite, Person, Presence, ShareError,
-    CLOUD_RELAY, MAX_ADDRESSES,
+    dialled, invite::Invite, invite::MAX_ADDRESSES, room, Ending, Event, Events, Person, Presence,
+    ShareError, CLOUD_RELAY,
 };
 use lumit_core::shared::land;
+use lumit_core::shared::Conflict;
 use lumit_core::store::{Moved, RemoteTag, Tap};
-use lumit_core::{Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentStore};
 use lumit_project::resolve_all_media;
 use parking_lot::Mutex;
 use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};

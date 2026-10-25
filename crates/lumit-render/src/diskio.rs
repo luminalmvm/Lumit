@@ -29,12 +29,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-/// Where a project's parked frames may sit, re-exported so a consumer choosing
-/// between the two does not need a direct dependency on the cache crate (the
-/// application-data option is [`lumit_project::frame_cache_dir`], which lives
-/// with the other app-data paths).
-pub use lumit_cache::disk::{cache_root_for, sidecar_root};
-
 /// Default disk budget (docs/06 §5.4: "default size cap 50 GB, user-set").
 pub const DEFAULT_CAP_BYTES: u64 = 50 * 1024 * 1024 * 1024;
 

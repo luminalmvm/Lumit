@@ -1,13 +1,13 @@
 use super::maths::lattice_hash;
 use super::noise::{fractal, hash01, value3, FractalField};
-use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
+use super::{maths::MAX_BLADES, resolved::MatteKeyParams, resolved::MbQuality, resolved::MbView};
 
 /// Apply a whole resolved stack to an RGBA f32 image (premultiplied, linear
 /// light), in place — the CPU-degradation rung and the parity oracle's
 /// entry point.
 ///
 /// Every effect is dispatched through its own
-/// [`EffectDef::apply_cpu`](super::EffectDef::apply_cpu) with the bag its
+/// [`EffectDef::apply_cpu`](super::registry::EffectDef::apply_cpu) with the bag its
 /// parameters live in (docs/impl/effect-registry.md §3, step 4) — the whole
 /// stack, and not one op, is the unit here because an op's numbers are a
 /// borrowed run of the stack's own arena.
@@ -22,7 +22,7 @@ use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
 /// `EffectDef::apply_cpu`'s identity default, and its §1.6 oracle runs against
 /// its `cpu::` reference directly from the lumit-gpu test, which can upload the
 /// second picture.
-pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack) {
+pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::params::ResolvedStack) {
     for fx in ops.iter() {
         match blend_seam(fx.def.schema(), fx.params) {
             // The Blend row, the CPU half of the seam: the kernel runs
@@ -30,7 +30,8 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack)
             // here, once, exactly as `run_ops` does on the GPU.
             Some((mode, mix, entries)) => {
                 let input = rgba.to_vec();
-                fx.def.apply_cpu(rgba, w, h, super::Params::new(&entries));
+                fx.def
+                    .apply_cpu(rgba, w, h, super::params::Params::new(&entries));
                 blend_mix(rgba, &input, mode, mix);
             }
             None => fx.def.apply_cpu(rgba, w, h, fx.params),
@@ -40,7 +41,11 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack)
 
 /// What [`blend_seam`] hands back when an op blends: the mode, the op's own
 /// Mix as 0..1, and its parameters with Mix forced to 100.
-pub type BlendSeam = (u32, f32, Vec<(super::ParamId, super::Value)>);
+pub type BlendSeam = (
+    u32,
+    f32,
+    Vec<(super::params::ParamId, super::params::Value)>,
+);
 
 /// What the seam does about an op's Blend row, read once for both
 /// render paths: `None` when the row is Normal (or absent), in which case the
@@ -62,20 +67,23 @@ pub type BlendSeam = (u32, f32, Vec<(super::ParamId, super::Value)>);
 /// result a second time out here would read that index into the wrong menu and
 /// spend it against the untouched input.
 #[must_use]
-pub fn blend_seam(schema: &super::EffectSchema, p: super::Params<'_>) -> Option<BlendSeam> {
+pub fn blend_seam(
+    schema: &super::schema::EffectSchema,
+    p: super::params::Params<'_>,
+) -> Option<BlendSeam> {
     if !schema.blend() {
         return None;
     }
-    let mode = p.choice(super::BLEND_ID, 0);
+    let mode = p.choice(super::schema::BLEND_ID, 0);
     if mode == 0 {
         return None;
     }
-    let mix = (p.float(super::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
     let entries = p
         .iter()
         .map(|(id, v)| {
-            if id == super::MIX_ID {
-                (id, super::Value::Float(100.0))
+            if id == super::schema::MIX_ID {
+                (id, super::params::Value::Float(100.0))
             } else {
                 (id, v)
             }
@@ -85,7 +93,7 @@ pub fn blend_seam(schema: &super::EffectSchema, p: super::Params<'_>) -> Option<
 }
 
 /// Glow (docs/08 §3.3, v1 core): bright-pass every premultiplied channel
-/// through [`super::glow_bright`] — alpha included, so the halo carries
+/// through [`super::maths::glow_bright`] — alpha included, so the halo carries
 /// coverage and glow spreads over transparency like light — blur the
 /// leftover light with the shared gaussian (Repeat edges, fixed: the
 /// halo holds its strength along frame borders instead of dimming), then
@@ -227,7 +235,7 @@ pub fn glow_shaped(
     let mut seed = vec![0.0f32; rgba.len()];
     if matte.is_empty() {
         for (dst, src) in seed.iter_mut().zip(original.iter()) {
-            *dst = super::glow_bright(*src, threshold, knee);
+            *dst = super::maths::glow_bright(*src, threshold, knee);
         }
     } else {
         for i in (0..original.len()).step_by(4) {
@@ -236,7 +244,7 @@ pub fn glow_shaped(
             // degrade, never fault (14-ENGINEERING-RULES §4).
             let k = matte_strength(matte, i);
             for c in 0..4 {
-                seed[i + c] = super::glow_bright(original[i + c] * k, threshold, knee);
+                seed[i + c] = super::maths::glow_bright(original[i + c] * k, threshold, knee);
             }
         }
     }
@@ -600,7 +608,7 @@ fn glow_up_add(
 /// inverse of `position + R·K·S·(p − anchor)` — one bilinear tap per
 /// output pixel, the revealed border handled by `edge` (0 Transparent,
 /// 1 Repeat, 2 Mirror — the same shared policy the blur family uses,
-/// [`EdgesMode`](super::EdgesMode)), premultiplied throughout, with
+/// [`EdgesMode`](super::schema::EdgesMode)), premultiplied throughout, with
 /// opacity multiplied into all four channels. The Transform effect passes
 /// `edge = 0`; Shake threads its own Edges control (FX-11).
 /// Identity parameters reproduce the input bit-exactly: the inverse
@@ -609,7 +617,7 @@ fn glow_up_add(
 /// WGSL twin follows the identical arithmetic. A degenerate scale
 /// (|s| < 1e-6) renders fully transparent, never a division blow-up.
 /// `skew` is `[amount, axis_deg]` and a zero amount is the pre-skew path to
-/// the byte — see [`super::transform_inverse`] for the shear itself
+/// the byte — see [`super::maths::transform_inverse`] for the shear itself
 /// and for why it sits between the scale and the rotation.
 #[allow(clippy::too_many_arguments)]
 pub fn transform(
@@ -667,8 +675,9 @@ pub fn transform_matted(
 ) {
     let original = rgba.to_vec();
     // A collapsed (zero-scale) image is invisible: opacity 0, and the
-    // sample point no longer matters (super::transform_op's rule).
-    let (m, o, opacity) = super::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
+    // sample point no longer matters (super::maths::transform_op's rule).
+    let (m, o, opacity) =
+        super::maths::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -691,7 +700,7 @@ pub fn transform_matted(
 
 /// The average of several transform resamples of one image — the reference for
 /// the shake's own motion blur (T18). Each `(m, off)` is a host-computed
-/// inverse affine (`lumit_core::fx::transform_op`): every output pixel centre is
+/// inverse affine (`lumit_core::fx::maths::transform_op`): every output pixel centre is
 /// resampled through all of them (opacity 1, the same `edge` policy and
 /// `bilinear_edge` the single resample uses), the premultiplied results summed
 /// in order and divided by the count, then blended against the untouched input
@@ -1455,7 +1464,7 @@ pub fn exposure_matted(rgba: &mut [f32], factor: f32, stops: f32, mix: f32, matt
 }
 
 /// Hue shift (docs/08 §3.17): a row-major linear 3×3 colour matrix `m`
-/// (from [`super::hue_matrix`]) applied to RGB, alpha untouched. Works on
+/// (from [`super::maths::hue_matrix`]) applied to RGB, alpha untouched. Works on
 /// premultiplied colour directly — a linear matrix scales through alpha —
 /// so no unpremultiply round trip. The identity matrix is the bit-exact
 /// neutral point (the WGSL twin matches); Mix 0 is likewise the identity.
@@ -1464,7 +1473,7 @@ pub fn hue_shift(rgba: &mut [f32], m: [f32; 9], mix: f32) {
 }
 
 /// The hue-rotation matrix for `rad` radians in `f32`, the per-pixel twin of
-/// [`super::hue_matrix`] / [`super::hue_matrix_rgb`] (same coefficients, same
+/// [`super::maths::hue_matrix`] / [`super::maths::hue_matrix_rgb`] (same coefficients, same
 /// order of operations) that the matted [`hue_shift_matted`] builds under a
 /// matte and `fx_hue.wgsl` builds op-for-op. The host keeps computing the
 /// unmatted matrix in `f64`; this only ever runs where a matte has changed the
@@ -1776,8 +1785,8 @@ pub fn curve_identity_table() -> [f32; CURVE_TABLE] {
 /// Evaluated in `f64` in one fixed order, so the same points always bake to
 /// the same bytes on every machine (14-ENGINEERING-RULES §5).
 #[must_use]
-pub fn curve_table(points: &crate::fx::CurvePoints) -> [f32; CURVE_TABLE] {
-    const MAX: usize = crate::fx::CURVE_MAX_POINTS;
+pub fn curve_table(points: &crate::fx::params::CurvePoints) -> [f32; CURVE_TABLE] {
+    const MAX: usize = crate::fx::params::CURVE_MAX_POINTS;
     let p = points.points();
     let n = p.len();
     let mut x = [0.0f64; MAX];
@@ -2632,7 +2641,7 @@ pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
 
 /// Wrap-addressed bilinear sample: the frame is a torus, so a tap that leaves
 /// one side arrives at the other. Offset's own sampler (docs/08 §3.40) — the
-/// three [`EdgesMode`](super::EdgesMode) policies do not include wrapping,
+/// three [`EdgesMode`](super::schema::EdgesMode) policies do not include wrapping,
 /// because no other effect wants it and a fourth policy on every one of them
 /// would be a control nobody sets. Same arithmetic order as [`bilinear`].
 fn bilinear_wrap(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32) -> [f32; 4] {
@@ -4525,7 +4534,7 @@ pub fn matte_mix(processed: &mut [f32], input: &[f32], matte: &[f32], invert: bo
 /// reads luma of that grey and gets the chosen channel back, and Invert is
 /// applied in exactly one place.
 ///
-/// `channel` is a [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index read
+/// `channel` is a [`CHANNEL_OPTIONS`](super::builtins::CHANNEL_OPTIONS) index read
 /// through [`channel_of`]: Luminance is the premultiplied Rec. 709 luma the
 /// kernels have always read, the colour channels are the raw premultiplied
 /// values, and Alpha is the coverage. The seam skips this pass altogether for
@@ -4916,7 +4925,7 @@ pub fn rgb_split_matted(
     matte: &[f32],
 ) {
     let original = rgba.to_vec();
-    let (dx, dy) = super::rgb_split_offset(amount_px, angle_deg);
+    let (dx, dy) = super::maths::rgb_split_offset(amount_px, angle_deg);
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -4967,7 +4976,7 @@ pub fn rgb_split_matted(
 /// (`tints[0]` → `tints[1]` → `tints[2]` across the span) and summed — a smooth
 /// coloured fringe rather than the classic hard three-tap rim. The taps (each
 /// carrying its tint weight and its offset fraction in the `w` lane) come from
-/// [`super::spectral_taps`], shared with the GPU path, and their colour columns
+/// [`super::maths::spectral_taps`], shared with the GPU path, and their colour columns
 /// are normalised so a uniform image passes through unchanged (the dispersion
 /// tints the fringe, never the exposure). More taps fill the same span more
 /// densely, so a large offset disperses smoothly rather than showing a few
@@ -5017,8 +5026,8 @@ pub fn spectral_split_matted(
     matte: &[f32],
 ) {
     let original = rgba.to_vec();
-    let taps = super::spectral_taps(samples, tints);
-    let (dx, dy) = super::rgb_split_offset(amount_px, angle_deg);
+    let taps = super::maths::spectral_taps(samples, tints);
+    let (dx, dy) = super::maths::rgb_split_offset(amount_px, angle_deg);
     let (fw, fh) = (w as f32, h as f32);
     let diag = (fw * fw + fh * fh).sqrt();
     let k = amount_px / (0.5 * diag);
@@ -5316,7 +5325,7 @@ pub struct DofParams {
 }
 
 /// One channel of an auxiliary picture, by the shared
-/// [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index — how a depth pass is
+/// [`CHANNEL_OPTIONS`](super::builtins::CHANNEL_OPTIONS) index — how a depth pass is
 /// reduced to the single number an effect reads.
 ///
 /// Arithmetic only, deliberately: no `atan2` for hue, no `pow`, nothing whose
@@ -5812,7 +5821,7 @@ pub fn blur_directional_matted(
     matte: &[f32],
 ) {
     let original = rgba.to_vec();
-    let (dx, dy) = super::rgb_split_offset(1.0, angle_deg); // unit vector
+    let (dx, dy) = super::maths::rgb_split_offset(1.0, angle_deg); // unit vector
     let n = dir_blur_taps(length_px);
     let nf = n as f32;
     for y in 0..h {
@@ -7422,7 +7431,7 @@ pub fn block_glitch_matted(
             let bx0 = (pos.0 / bw).floor();
             let by0 = (pos.1 / bw).floor();
             let h01 = |ch: u32, bxx: f32, byy: f32| {
-                super::block_hash01(seed, ch, bxx as i32, byy as i32, tick)
+                super::maths::block_hash01(seed, ch, bxx as i32, byy as i32, tick)
             };
             // Grid jitter (status note): a hashed offset of the
             // *nominal* block, scaled by Intensity, decides which
@@ -7467,7 +7476,7 @@ pub fn block_glitch_matted(
 /// Scanlines (docs/08 §3.12, split out from Glitch; single Intensity since
 /// FX-13): standalone periodic darken, the scanline section of the old
 /// combined Glitch effect. No hash, no block resample — reads the input pixel
-/// directly (pointwise, [`Roi::Exact`](super::Roi::Exact)), darkens the dark
+/// directly (pointwise, [`Roi::Exact`](super::schema::Roi::Exact)), darkens the dark
 /// lines by a periodic band in raster Y (plus the precomputed roll offset),
 /// alternating which half of the period darkens on odd periods when Interlace
 /// is on. `intensity` is the single dial (0..1 = how dark the dark lines get,

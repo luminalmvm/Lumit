@@ -23,7 +23,7 @@
 //! * **A 2-D or 3-D parameter becomes two or three rows**, `foo_x` / `foo_y` /
 //!   `foo_z`. Lumit has no point *kind*: a point is two adjacent number rows
 //!   the panel folds into one, which is why
-//!   [`EffectSchema::pairs`](lumit_core::fx::EffectSchema::pairs) reads the
+//!   [`EffectSchema::pairs`](lumit_core::fx::schema::EffectSchema::pairs) reads the
 //!   suffixes. A plugin's Centre therefore draws exactly as a
 //!   built-in's does, link glyph and all.
 //! * **A choice keeps its option labels**, in the plugin's order, with no
@@ -64,8 +64,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use lumit_core::fx::{
-    CostClass, EffectSchema, EffectTraits, FxCategory, MatteRole, ParamGroup, ParamId, ParamKind,
-    ParamSchema, Roi, Unit,
+    params::ParamId, params::Unit, schema::CostClass, schema::EffectSchema, schema::EffectTraits,
+    schema::FxCategory, schema::MatteRole, schema::ParamGroup, schema::ParamKind,
+    schema::ParamSchema, schema::Roi,
 };
 
 use crate::describe::{ParamDescription, PluginDescriptor, Rejection};

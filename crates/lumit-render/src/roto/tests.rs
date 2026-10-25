@@ -132,7 +132,7 @@ fn prompted_at(base: i64) -> (RotoBlock, RotoSettings) {
 /// rather than a reading of somebody's weights.
 ///
 /// It is deliberately soft at the rim, because a real model is: the band
-/// between the two thresholds is what [`lumit_roto::mask_seeds`] declines to
+/// between the two thresholds is what [`lumit_roto::warp::mask_seeds`] declines to
 /// seed and what the solve then decides from the frame's own colours.
 struct FakeModel {
     /// Where the tap the model was asked about landed, so the test can assert
@@ -656,7 +656,7 @@ fn a_document(
             interpretation: Default::default(),
         }));
         let mut brush =
-            lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
+            lumit_core::fx::builtins::instantiate("roto_brush").expect("roto brush is a built-in");
         brush.id = uuid::Uuid::from_u128(9);
         brush.roto = Some(block);
         if let Some(row) = brush.params.iter_mut().find(|p| p.id == "seed") {

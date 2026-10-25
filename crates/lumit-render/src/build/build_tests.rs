@@ -79,7 +79,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         width: 480,
         height: 270,
         rgba: vec![0u8; 480 * 270 * 4].into(),
-        format: lumit_media::PixelFormat::Srgb8,
+        format: lumit_media::decode::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
@@ -222,7 +222,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     assert_eq!(draws.len(), 1);
     assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
     let tr = &pre_layer.transform;
-    let expect = lumit_gpu::place_matrix(
+    let expect = lumit_gpu::composite::place_matrix(
         (
             tr.position_x.value_at(0.0) as f32,
             tr.position_y.value_at(0.0) as f32,
@@ -375,7 +375,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         width: 1920,
         height: 1080,
         rgba: vec![0u8; 16].into(),
-        format: lumit_media::PixelFormat::Srgb8,
+        format: lumit_media::decode::PixelFormat::Srgb8,
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
@@ -444,7 +444,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     adj.name = "adjust".into();
     adj.kind = LayerKind::Adjustment;
     adj.effects
-        .push(lumit_core::fx::instantiate("saturation").unwrap());
+        .push(lumit_core::fx::builtins::instantiate("saturation").unwrap());
     adj.masks
         .push(lumit_core::mask::Mask::rectangle(0.0, 0.0, 960.0, 1080.0));
     let mut doc = Document::new();
@@ -826,23 +826,23 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     };
 
     let mut layer = base.clone();
-    let mut bypassed = lumit_core::fx::instantiate("saturation").unwrap();
+    let mut bypassed = lumit_core::fx::builtins::instantiate("saturation").unwrap();
     bypassed.enabled = false;
-    let mut pointed = lumit_core::fx::instantiate("glow").unwrap();
+    let mut pointed = lumit_core::fx::builtins::instantiate("glow").unwrap();
     for p in &mut pointed.params {
-        if p.id == lumit_core::fx::MATTE_PARAM {
+        if p.id == lumit_core::fx::schema::MATTE_PARAM {
             p.value = lumit_core::model::EffectValue::Layer(Some(layer.id));
         }
     }
     layer.effects = vec![
-        lumit_core::fx::instantiate("blur").unwrap(),
+        lumit_core::fx::builtins::instantiate("blur").unwrap(),
         bypassed,
         // Orchestration-only: a Matte row, but no op to hang it on.
-        lumit_core::fx::instantiate("posterize_time").unwrap(),
+        lumit_core::fx::builtins::instantiate("posterize_time").unwrap(),
         pointed,
         // Claims the matte under its own older id: still one slot on
         // the one carriage, filled from `depth` rather than `matte`.
-        lumit_core::fx::instantiate("dof").unwrap(),
+        lumit_core::fx::builtins::instantiate("dof").unwrap(),
     ];
 
     let comp = Composition {
@@ -933,7 +933,7 @@ fn a_float_plate_reaches_the_draw_list_still_float() {
     assert_eq!(draws.len(), 1);
     match &draws[0].source {
         DrawSource::Pixels { format, rgba, .. } => {
-            assert_eq!(*format, lumit_media::PixelFormat::LinearF32);
+            assert_eq!(*format, lumit_media::decode::PixelFormat::LinearF32);
             // Eight bytes a pixel, and the value untouched on the way through.
             assert_eq!(rgba.len(), 4 * 4 * 16);
             assert_eq!(float_px(rgba, 0)[0], 4.0);
@@ -1018,7 +1018,7 @@ fn float_layer_comp(
         width: 4,
         height: 4,
         rgba: rgba.into(),
-        format: lumit_media::PixelFormat::LinearF32,
+        format: lumit_media::decode::PixelFormat::LinearF32,
         natural_w: 4,
         natural_h: 4,
         temporal: Vec::new(),

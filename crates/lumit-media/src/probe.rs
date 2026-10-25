@@ -117,7 +117,7 @@ pub struct FileFacts {
     pub float: bool,
     /// The field order the file declares, `Off` when it says progressive or
     /// nothing.
-    pub fields: crate::Fields,
+    pub fields: crate::interpret::Fields,
     /// The pixel shape the file declares, as a fraction. 1/1 when it says
     /// square or nothing.
     pub pixel_aspect: (u32, u32),
@@ -185,9 +185,9 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
         out.has_alpha = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_ALPHA);
         out.float = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_FLOAT);
         out.fields = match par.field_order {
-            ffi::AV_FIELD_TT | ffi::AV_FIELD_TB => crate::Fields::Upper,
-            ffi::AV_FIELD_BB | ffi::AV_FIELD_BT => crate::Fields::Lower,
-            _ => crate::Fields::Off,
+            ffi::AV_FIELD_TT | ffi::AV_FIELD_TB => crate::interpret::Fields::Upper,
+            ffi::AV_FIELD_BB | ffi::AV_FIELD_BT => crate::interpret::Fields::Lower,
+            _ => crate::interpret::Fields::Off,
         };
         let shape = [stream.sample_aspect_ratio, par.sample_aspect_ratio]
             .into_iter()

@@ -5,7 +5,9 @@
 //! side. Centre says where the line passes through, Angle which way it runs and
 //! which side is replaced.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Mirror's controls.

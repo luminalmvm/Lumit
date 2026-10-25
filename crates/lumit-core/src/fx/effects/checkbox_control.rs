@@ -6,7 +6,7 @@
 //! mode or the other — so the choice is made in one visible place rather than
 //! buried in the script.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Checkbox control's one control.

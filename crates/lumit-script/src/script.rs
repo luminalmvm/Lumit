@@ -41,7 +41,7 @@ use serde_json::{json, Value};
 
 use crate::include;
 use crate::reach::{self, Reach};
-use crate::{commands, one_step, Host, ScriptError, COMMANDS};
+use crate::{commands, commands::COMMANDS, one_step, Host, ScriptError};
 
 /// The `lumit` object, built in JavaScript over the runner's own functions.
 const LUMIT_JS: &str = include_str!("lumit.js");

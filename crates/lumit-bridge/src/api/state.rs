@@ -5,7 +5,7 @@ use std::{
 };
 
 use flutter_rust_bridge::frb;
-use lumit_core::{store::DocumentChange, Document, DocumentStore};
+use lumit_core::{model::Document, store::DocumentChange, store::DocumentStore};
 use lumit_project::JournalFile;
 use uuid::Uuid;
 
@@ -403,7 +403,7 @@ pub struct BridgeRenderProgress {
     /// has moved on can be recognised as stale rather than drawn.
     pub frame: u64,
     /// The stage's wire code — 0 planning, 1 decoding, 2 building, 3
-    /// compositing, 4 presenting ([`lumit_render::RenderStage::code`]).
+    /// compositing, 4 presenting ([`lumit_render::profile::RenderStage::code`]).
     pub stage: u32,
     /// How much of the whole frame is done, 0..=1. An estimate built from
     /// fixed stage weights, which is what a progress bar needs and all it can
@@ -654,8 +654,8 @@ pub(crate) fn forget_streams_except(keep: Uuid) -> Result<(), BridgeError> {
 ///
 /// Structural layer ops (add / remove / reorder) report the comp but not the
 /// layer: what changed is the comp's layer list, not one layer's contents.
-pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool) {
-    use lumit_core::Op;
+pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>, bool) {
+    use lumit_core::ops::Op;
     match op {
         // The project item list itself.
         Op::AddItem { .. }
@@ -970,7 +970,7 @@ impl LumitBridgeState {
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
         let copy = doc.id;
         let ours = crate::api::share::copy_is_at(copy, &path);
-        let resumed = ours.then(|| lumit_share::resume(&mut doc, beside));
+        let resumed = ours.then(|| lumit_share::guest::resume(&mut doc, beside));
         let (mut doc, resuming) = match resumed.flatten() {
             Some((kept, resuming)) => (kept, Some(resuming)),
             None => (doc, None),

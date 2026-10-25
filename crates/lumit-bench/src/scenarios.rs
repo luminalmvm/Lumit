@@ -164,7 +164,7 @@ impl Harness {
     /// Generate (or reuse) the media in `media_dir` and build docs/13 §1's
     /// comp over it. `Err` when the media cannot be made — no ffmpeg, say.
     pub fn new(media_dir: &Path) -> Result<Self, String> {
-        let (doc, comp) = crate::reference_comp(media_dir)?;
+        let (doc, comp) = crate::comp::reference_comp(media_dir)?;
         Ok(Self {
             doc: Arc::new(doc),
             comp,
@@ -392,7 +392,10 @@ pub mod particulate {
     use lumit_core::expression::ExpressionContext;
     use lumit_core::fx::effects::particulate::Particulate;
     use lumit_core::fx::points::{PointsSchedule, Schedule, CAP_DEFAULT, CAP_HARD};
-    use lumit_core::fx::{instantiate, resolve_stack, EffectMetadata, MarkerContext};
+    use lumit_core::fx::{
+        builtins::instantiate, markers::MarkerContext, registry::EffectMetadata,
+        resolved::resolve_stack,
+    };
     use lumit_core::model::EffectValue;
 
     /// 1080p, which is what docs/13 §1's display target and every B-row assume.
@@ -512,7 +515,7 @@ pub mod particulate {
             Schedule::scan(dt, (t / dt).floor() as i64, read.window_frames(dt), &|_| {
                 rate
             });
-        schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+        schedule.trim_to_newest(lumit_gpu::fx::particulate::MAX_CANDIDATES);
         // **Flat, deliberately**: B12–B14 are the budgets docs/13 §2
         // states and the baselines checked in beside them, so the fixture has
         // to keep measuring the same work. The third axis costs one dot product
@@ -526,7 +529,8 @@ pub mod particulate {
             ..Default::default()
         };
 
-        let tex = lumit_gpu::fx::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let tex =
+            lumit_gpu::fx::common::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let run = || {
             lumit_render::fxops::run_ops(
                 fx,

@@ -23,7 +23,10 @@ use super::{decibels, value, COEFF_FRAMES, SMOOTH_MS};
 use crate::fx::effects::audio::dsp::biquad::{Cascade, Coeffs};
 use crate::fx::effects::audio::dsp::db::gain_of_db;
 use crate::fx::effects::audio::dsp::smoother::Smoother;
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// Bands. Five is what a parametric ships with everywhere else, and the fewest
 /// that holds a high pass, three bells and a low pass at once.

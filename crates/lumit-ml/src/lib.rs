@@ -47,16 +47,6 @@ pub mod store;
 pub mod synthesis;
 pub mod tensor;
 
-pub use depth::Depth;
-pub use error::MlError;
-pub use manifest::{Arch, Kind, Manifest, Task};
-pub use matte::Matte;
-pub use runtime::{no_runtime, RuntimeStatus, REQUIRE_RUNTIME_ENV};
-pub use segment::Segment;
-pub use session::{Prefer, Session};
-pub use store::Installed;
-pub use synthesis::Synthesis;
-
 /// Where the tests find a real runtime and real packs, on the one machine
 /// that has them.
 #[cfg(test)]

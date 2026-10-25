@@ -1,6 +1,8 @@
 //! Vignette (docs/08 §3.14): darkening toward black away from the frame centre.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Vignette's controls.

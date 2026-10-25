@@ -11,7 +11,10 @@
 //! handed over as a plain integer, so the kernel never sees time and two
 //! exports agree bit-for-bit (§2.4).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Noise's controls.

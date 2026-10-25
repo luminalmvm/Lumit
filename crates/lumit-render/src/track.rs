@@ -15,7 +15,7 @@
 //!
 //! **It can be stopped, and it says how far it has got.** The frame loop is the
 //! cancellation seam — one flag, checked between frames — and the solve has its
-//! own ([`lumit_track::solve_camera_cancellable`]). Progress is a value anyone
+//! own ([`lumit_track::solve::solve_camera_cancellable`]). Progress is a value anyone
 //! can read, not a callback anyone has to hold.
 //!
 //! **It stops where the pictures stop carrying the answer.** Not every shot
@@ -68,11 +68,13 @@ use lumit_core::track::{
     CameraSolveStore, LinkedPose, PlanarTrackStore, Quad, SolvedRange, CAMERA_TRACK, PLANAR_TRACK,
 };
 use lumit_track::{
-    detect_zoom, point_outlines, points_quad, quad_outline, segment_dynamic_tracks,
-    select_keyframes, solve_camera_cancellable, solve_planar_cancellable, solve_points_cancellable,
-    BlobSettings, BlobTracker, CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3,
-    PlanarError, PlanarSettings, PlanarTrack, PointSettings, SegmentSettings, SolveError,
-    SolveSettings, SolvedPose, TrackError, TrackSettings, Tracker, ZoomSettings,
+    blobs::BlobSettings, blobs::BlobTracker, exclude::ExclusionMask, geom::Mat3,
+    pairs::select_keyframes, pairs::GeometrySettings, planar::point_outlines, planar::points_quad,
+    planar::quad_outline, planar::solve_planar_cancellable, planar::solve_points_cancellable,
+    planar::PlanarError, planar::PlanarSettings, planar::PlanarTrack, planar::PointSettings,
+    segment::detect_zoom, segment::segment_dynamic_tracks, segment::SegmentSettings,
+    segment::ZoomSettings, solve::solve_camera_cancellable, solve::CameraSolve, solve::SolveError,
+    solve::SolveSettings, solve::SolvedPose, FramePlane, TrackError, TrackSettings, Tracker,
 };
 use uuid::Uuid;
 
@@ -1999,11 +2001,11 @@ pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
 #[must_use]
 pub fn job_for(
     layer: &Layer,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let LayerKind::Footage { item } = layer.kind else {
         return None;
     };
@@ -2086,11 +2088,11 @@ pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
 #[must_use]
 pub fn planar_job_for(
     layer: &Layer,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let LayerKind::Footage { .. } = layer.kind else {
         return None;
     };
@@ -2178,11 +2180,11 @@ pub fn track_points_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstan
 pub fn points_job_for(
     layer: &Layer,
     fx: &EffectInstance,
-    path: impl Into<lumit_media::MediaSource>,
+    path: impl Into<lumit_media::sequence::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
-    let path: lumit_media::MediaSource = path.into();
+    let path: lumit_media::sequence::MediaSource = path.into();
     let analysis = Analysis::of(fx, layer)?;
     Some(Job {
         media: fx.id,
@@ -2259,7 +2261,7 @@ pub fn job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Opt
 /// [`LumaFrames`] over a media file, through the same frame index and decoder
 /// every other consumer opens (docs/impl/media-io.md §2).
 pub struct MediaLuma {
-    decoder: lumit_media::VideoDecoder,
+    decoder: lumit_media::decode::VideoDecoder,
     frames: usize,
     width: u32,
     height: u32,
@@ -2270,11 +2272,11 @@ impl MediaLuma {
     /// Open `path` for tracking. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the analysis thread.
     #[must_use]
-    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
+    pub fn open(path: &lumit_media::sequence::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
-        let decoder = lumit_media::VideoDecoder::open(path, index).ok()?;
+        let decoder = lumit_media::decode::VideoDecoder::open(path, index).ok()?;
         Some(MediaLuma {
             decoder,
             frames,
@@ -2795,9 +2797,9 @@ mod tests {
             LayerKind::Footage { item: media },
             secs(FRAMES as i64, FPS as i64),
         );
-        footage
-            .effects
-            .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        footage.effects.push(
+            lumit_core::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         // The camera outlives the shot on purpose, so the walk past the end of
         // the solve — the hold — has somewhere to happen.
         let mut camera = layer(
@@ -2885,18 +2887,18 @@ mod tests {
                 segment: 0,
                 focal_px: FOCAL,
                 mean_reprojection_px: 0.0,
-                source: lumit_track::PoseSource::Keyframe,
+                source: lumit_track::solve::PoseSource::Keyframe,
             })
             .collect();
         CameraSolve {
             poses,
-            segments: vec![lumit_track::SolveSegment {
+            segments: vec![lumit_track::solve::SolveSegment {
                 first_frame: 0,
                 last_frame: FRAMES as i64 - 1,
                 focal_px: FOCAL,
                 ramp: false,
             }],
-            points: vec![lumit_track::ScenePoint {
+            points: vec![lumit_track::solve::ScenePoint {
                 track: 0,
                 position: [0.0, 0.0, 0.0],
             }],
@@ -3451,9 +3453,10 @@ mod tests {
             ]),
             extra: serde_json::Map::new(),
         };
-        field
-            .effects
-            .push(lumit_core::fx::instantiate("fractal_noise").expect("the effect is registered"));
+        field.effects.push(
+            lumit_core::fx::builtins::instantiate("fractal_noise")
+                .expect("the effect is registered"),
+        );
 
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
@@ -3480,9 +3483,9 @@ mod tests {
             LayerKind::Precomp { comp: nested_id },
             secs(frames as i64, FPS as i64),
         );
-        precomp
-            .effects
-            .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        precomp.effects.push(
+            lumit_core::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         (Arc::new(doc), nested_id, precomp)
     }
 
@@ -3592,7 +3595,7 @@ mod tests {
         }
 
         fn corner_at(n: usize, p: [f64; 2]) -> [f64; 2] {
-            lumit_track::project(&Self::warp(n), p).expect("the fixture's warps stay finite")
+            lumit_track::geom::project(&Self::warp(n), p).expect("the fixture's warps stay finite")
         }
     }
 
@@ -3611,7 +3614,7 @@ mod tests {
             let mut out = vec![0.35f32; W * H];
             for y in 0..H {
                 for x in 0..W {
-                    let p = lumit_track::project(&back, [x as f64, y as f64])?;
+                    let p = lumit_track::geom::project(&back, [x as f64, y as f64])?;
                     if (30.0..370.0).contains(&p[0]) && (20.0..280.0).contains(&p[1]) {
                         out[y * W + x] = texture(p[0], p[1]);
                     }
@@ -3733,7 +3736,7 @@ mod tests {
         let media = Uuid::now_v7();
         let span = secs(PlaneShot::FRAMES as i64, FPS as i64);
         let mut shot = layer("shot", LayerKind::Footage { item: media }, span);
-        let mut fx = lumit_core::fx::instantiate(PLANAR_TRACK).unwrap();
+        let mut fx = lumit_core::fx::builtins::instantiate(PLANAR_TRACK).unwrap();
         fx.id = effect;
         shot.effects.push(fx);
         let target = layer("screen", LayerKind::Null, span);
@@ -3968,27 +3971,27 @@ mod tests {
 
         // A board with a Scatter on it, baked, and a web drawn from the bake.
         // Neither of the first two draws, so the web is the whole picture.
-        let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+        let mut scatter = lumit_core::fx::builtins::instantiate("scatter").unwrap();
         set(&mut scatter, "density", number(3000.0));
         set(&mut scatter, "mix", number(0.0));
         // A Pick points between them marks half the points under a name, so
         // the stream that is baked carries a named column.
-        let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+        let mut pick = lumit_core::fx::builtins::instantiate("pick_points").unwrap();
         set(&mut pick, "result", EffectValue::Choice(1));
         set(&mut pick, "group_name", EffectValue::Text("kept".into()));
         set(&mut pick, "to", number(50.0));
         set(&mut pick, "mix", number(0.0));
         // And a Vary points stores each point's colour under another, so it
         // carries a column four numbers wide as well.
-        let mut vary = lumit_core::fx::instantiate("vary_points").unwrap();
+        let mut vary = lumit_core::fx::builtins::instantiate("vary_points").unwrap();
         set(&mut vary, "opacity", number(40.0));
         set(&mut vary, "set_number", EffectValue::Bool(true));
         set(&mut vary, "number_name", EffectValue::Text("tint".into()));
         set(&mut vary, "number_store", EffectValue::Choice(2));
         set(&mut vary, "mix", number(0.0));
-        let mut bake = lumit_core::fx::instantiate(bake_points::MATCH_NAME).unwrap();
+        let mut bake = lumit_core::fx::builtins::instantiate(bake_points::MATCH_NAME).unwrap();
         set(&mut bake, "mix", number(0.0));
-        let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+        let mut connect = lumit_core::fx::builtins::instantiate("connect_points").unwrap();
         set(&mut connect, "max_distance", number(8.0));
         let (scatter_id, bake_id, connect_id) = (scatter.id, bake.id, connect.id);
         let (pick_id, vary_id) = (pick.id, vary.id);
@@ -4054,8 +4057,8 @@ mod tests {
             let board = &mut doc.comp_mut(comp_id).unwrap().layers[0];
             let mut read = Vec::new();
             for source in [bake_id, scatter_id] {
-                let sample = lumit_core::fx::instantiate("points_sample").unwrap();
-                let slider = lumit_core::fx::instantiate("slider_control").unwrap();
+                let sample = lumit_core::fx::builtins::instantiate("points_sample").unwrap();
+                let slider = lumit_core::fx::builtins::instantiate("slider_control").unwrap();
                 board.graph.edges.extend([
                     wire(stream_of(source), NodeRef::Driver(sample.id), POINTS_PORT),
                     wire(
@@ -4073,7 +4076,7 @@ mod tests {
             }
             let doc = Arc::new(doc);
             let board = &doc.comp(comp_id).unwrap().layers[0];
-            let driven = lumit_core::fx::resolve_drivers(
+            let driven = lumit_core::fx::drivers::resolve_drivers(
                 &board.graph,
                 2.0 / 24.0,
                 Arc::new(lumit_core::expression::ExpressionContext {
@@ -4087,12 +4090,12 @@ mod tests {
                 None,
             );
             read.iter()
-                .map(
-                    |node| match driven.param(*node, lumit_core::fx::ParamId::new("slider")) {
-                        Some(lumit_core::fx::Value::Float(v)) => v,
+                .map(|node| {
+                    match driven.param(*node, lumit_core::fx::params::ParamId::new("slider")) {
+                        Some(lumit_core::fx::params::Value::Float(v)) => v,
                         _ => 0.0,
-                    },
-                )
+                    }
+                })
                 .collect::<Vec<f32>>()
         };
         assert_eq!(counts(&auto), [0.0, 0.0], "nothing to count before a bake");

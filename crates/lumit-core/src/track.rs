@@ -88,7 +88,7 @@ pub struct SolvedRange {
 ///
 /// **The poses are already in Lumit's camera terms**: comp pixels, AE-style
 /// position and rotation, exactly what [`CameraPose`] means everywhere else.
-/// Turning `lumit_track::CameraSolve`'s world-to-camera rotations, its solve
+/// Turning `lumit_track::solve::CameraSolve`'s world-to-camera rotations, its solve
 /// units and its focal in source pixels into these is the *store's* job, and it
 /// is stage 2's — putting it here would make the model depend on the tracker,
 /// which the crate graph forbids in that direction (docs/05).
@@ -618,7 +618,7 @@ const CORNER_PIN_POINTS: [(&str, &str); 4] = [
 /// The four corners of a tracked surface, in the order a Corner pin declares
 /// them: upper left, upper right, lower left, lower right.
 ///
-/// The same shape `lumit_track::Quad` is, spelled again here because
+/// The same shape `lumit_track::planar::Quad` is, spelled again here because
 /// `lumit-core` may not depend on the tracker (docs/05: the crate graph runs the
 /// other way) and four pairs of numbers are not worth a shared crate.
 pub type Quad = [[f64; 2]; 4];
@@ -727,7 +727,7 @@ pub fn corner_pin_from_track(
         }
     }
 
-    let mut pin = crate::fx::instantiate("corner_pin")?;
+    let mut pin = crate::fx::builtins::instantiate("corner_pin")?;
     let mut track = keys.into_iter();
     for (x, y) in CORNER_PIN_POINTS {
         for id in [x, y] {
@@ -1078,8 +1078,9 @@ mod tests {
     /// A tracked layer is one carrying the Camera track effect — that is the
     /// whole of what marks it.
     fn tracked(mut l: Layer) -> Layer {
-        l.effects
-            .push(crate::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        l.effects.push(
+            crate::fx::builtins::instantiate(CAMERA_TRACK).expect("the effect is registered"),
+        );
         l
     }
 
@@ -1596,8 +1597,9 @@ mod tests {
     /// A layer wearing the Planar track effect — the handle, exactly as the
     /// Camera track is one.
     fn planar(mut l: Layer) -> Layer {
-        l.effects
-            .push(crate::fx::instantiate(PLANAR_TRACK).expect("the effect is registered"));
+        l.effects.push(
+            crate::fx::builtins::instantiate(PLANAR_TRACK).expect("the effect is registered"),
+        );
         l
     }
 

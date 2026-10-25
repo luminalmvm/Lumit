@@ -40,8 +40,9 @@
 //! a fault.
 
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, Port, PortType,
-    Signature, Value,
+    params::Value, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
+    schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -184,7 +185,7 @@ impl EffectDef for AudioLevelDef {
         }
     }
 
-    fn driver_window(&self, p: crate::fx::Params<'_>) -> f64 {
+    fn driver_window(&self, p: crate::fx::params::Params<'_>) -> f64 {
         // Centred, so it reaches half the window either side of the frame.
         f64::from(AudioLevel::read(p).window.max(0.0)) / 2.0
     }
@@ -208,7 +209,7 @@ impl EffectDef for AudioLevelDef {
 /// following and must go on following.
 fn read_window(
     cx: &DriverCx<'_>,
-    tap: &dyn crate::fx::AudioTap,
+    tap: &dyn crate::fx::registry::AudioTap,
     source: u32,
     half: f64,
     out: &mut Vec<f32>,

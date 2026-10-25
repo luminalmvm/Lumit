@@ -53,8 +53,9 @@ use crate::fx::drivers::clone_index;
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, Column, PointsStream, SpriteFit};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    Port, PortType, ResolveCx, ShortText, Signature, Value,
+    params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use crate::model::{Composition, Document, EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;

@@ -409,7 +409,7 @@ impl MixPlan {
         end_s: f64,
         buckets: usize,
         pyramid_of: &mut dyn FnMut(
-            &lumit_media::SoundSource,
+            &lumit_media::audio::SoundSource,
         ) -> Option<Arc<crate::peaks::PeakPyramid>>,
     ) -> Vec<f32> {
         let mut out = vec![0.0f32; buckets * 3];
@@ -817,7 +817,7 @@ mod tests {
         }
         let plan = MixPlan {
             clips: vec![PlacedClip {
-                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                     rate: 48_000,
                     samples: src,
                 })),
@@ -852,7 +852,7 @@ mod tests {
         samples.extend(std::iter::repeat_n(0.0f32, 100));
         let plan = MixPlan {
             clips: vec![PlacedClip {
-                source: Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer { rate, samples })),
                 start_frame: 0,
                 src_start: 0,
                 len: 100,
@@ -879,7 +879,7 @@ mod tests {
             total_frames: 30_000,
             clips: vec![PlacedClip {
                 len: 30_000,
-                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                     rate,
                     samples: vec![0.5f32; 60_000],
                 })),
@@ -917,7 +917,7 @@ mod tests {
     fn a_mix_plan_matches_the_baked_mix_sample_for_sample() {
         use std::sync::Arc;
         let buf = |frames: usize, v: f32| {
-            Arc::new(lumit_media::AudioBuffer {
+            Arc::new(lumit_media::audio::AudioBuffer {
                 rate: 48_000,
                 samples: vec![v; frames * 2],
             })
@@ -976,7 +976,7 @@ mod tests {
             );
         }
         // Trimmed clips read the right slice: src_start offsets into the source.
-        let c = Arc::new(lumit_media::AudioBuffer {
+        let c = Arc::new(lumit_media::audio::AudioBuffer {
             rate: 48_000,
             samples: (0..8)
                 .flat_map(|n| [n as f32 * 0.1, n as f32 * 0.1])
@@ -1013,7 +1013,7 @@ mod tests {
     fn metering_reads_each_strip_pre_sum_and_the_master_post_limiter() {
         use std::sync::Arc;
         let buf = |v: f32| {
-            Arc::new(lumit_media::AudioBuffer {
+            Arc::new(lumit_media::audio::AudioBuffer {
                 rate: 48_000,
                 samples: vec![v; 8],
             })
@@ -1116,7 +1116,7 @@ mod tests {
         let plan = MixPlan {
             clips: vec![
                 PlacedClip {
-                    source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                    source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                         rate: 48_000,
                         samples: src.clone(),
                     })),
@@ -1128,7 +1128,7 @@ mod tests {
                     meter: 0,
                 },
                 PlacedClip {
-                    source: Source::whole(Arc::new(lumit_media::AudioBuffer {
+                    source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                         rate: 48_000,
                         samples: src.clone(),
                     })),
@@ -1221,7 +1221,7 @@ mod tests {
         let block = crate::stream::BLOCK_SECONDS * RATE as usize;
 
         let wave = |frames: usize, step: f32| {
-            Source::whole(Arc::new(lumit_media::AudioBuffer {
+            Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                 rate: RATE,
                 samples: (0..frames)
                     .flat_map(|n| {

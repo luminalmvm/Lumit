@@ -49,7 +49,7 @@ impl SolidReference {
     }
 
     #[frb(ignore)]
-    pub(crate) fn commit(&self, op: lumit_core::Op) -> Result<(), BridgeError> {
+    pub(crate) fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
         let project = projects
             .get(&self.project)

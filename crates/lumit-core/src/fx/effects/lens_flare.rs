@@ -37,8 +37,9 @@
 
 use crate::fx::lens_flare as lf;
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
+    schema::ParamGroup,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
@@ -914,7 +915,7 @@ impl LensFlare {
 
     /// The geometry half of every [`Self::DERIVED_LIGHTS`] pair — the sixteen
     /// ids whose values are raster-pixel lengths and so must follow the raster
-    /// under [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial).
+    /// under [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial).
     /// The colour half is deliberately absent: `(r, g, b, 0)` is not a length.
     /// Built from the pairs rather than spelled a second time, so the two lists
     /// cannot drift apart.

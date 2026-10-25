@@ -10,7 +10,7 @@
 //! (docs/impl/addons.md §6.2), and it arrives the same way: a borrowed slice of
 //! coverage, with nothing that opens a model anywhere near this crate either.
 
-use crate::{check_plane, RotoError, Seed, Seeds};
+use crate::{check_plane, stroke::Seed, stroke::Seeds, RotoError};
 
 /// Above this warped alpha a pixel seeds foreground.
 const WARP_FG: f32 = 0.9;

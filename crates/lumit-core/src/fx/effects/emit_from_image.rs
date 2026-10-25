@@ -28,8 +28,9 @@
 use crate::fx::effects::scatter::DENSITY_CELL;
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, Port, PortType,
-    ResolveCx, Signature, Value, MAP_PLACEMENT_OPTIONS,
+    builtins::MAP_PLACEMENT_OPTIONS, params::ParamId, params::Params, params::Value,
+    registry::EffectDef, registry::EffectMetadata, registry::ResolveCx, registry::Signature,
+    schema::EffectSchema, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

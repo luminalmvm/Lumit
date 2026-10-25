@@ -90,14 +90,14 @@ impl Stamper<'_> {
             _ => None,
         };
         let stamp = match run {
-            Some(fps) => lumit_media::MediaSource {
+            Some(fps) => lumit_media::sequence::MediaSource {
                 path: (&media.absolute_path).into(),
                 sequence_fps: Some(fps),
                 ..Default::default()
             }
             .frame_stamp(frame)
             .filter(|(_, at)| fingerprint.is_none_or(|fp| secs(*at) > fp.mtime_secs)),
-            None => lumit_media::MediaSource::file(&media.absolute_path)
+            None => lumit_media::sequence::MediaSource::file(&media.absolute_path)
                 .stamped()
                 .stamp
                 .filter(|(size, at)| {

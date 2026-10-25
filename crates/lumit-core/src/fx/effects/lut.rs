@@ -15,7 +15,7 @@
 //! and back out of the Input space is part of that oracle, so the two
 //! paths cannot disagree about where the picture sits when the table reads it.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// LUT's controls.

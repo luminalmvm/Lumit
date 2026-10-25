@@ -19,7 +19,9 @@
 //! the frame. The seed offsets each line's pieces by its own amount, so the
 //! breaks scatter and the cap stays a cap instead of becoming a pattern.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Pixel sort's controls.

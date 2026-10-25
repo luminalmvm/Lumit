@@ -11,7 +11,10 @@
 //! know by their Wratten numbers, eight plain colours, sepia, four deep ones and
 //! an underwater — plus Custom, which takes any colour.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// A colour picker means nothing until the filter is the custom one.

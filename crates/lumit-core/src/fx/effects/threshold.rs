@@ -18,7 +18,9 @@
 //! multiplied by the matte at each pixel, so a bright matte region cuts where
 //! the user set it and a dark one cuts near black.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Threshold's controls.

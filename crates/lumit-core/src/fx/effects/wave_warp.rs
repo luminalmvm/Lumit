@@ -11,7 +11,9 @@
 //! As with Ripple (§3.53), AE's Wave Speed is not here: Phase is the same motion
 //! with the timeline holding the stopwatch, and nothing reads a clock (§2.4).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Wave warp's controls.

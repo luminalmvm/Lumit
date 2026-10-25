@@ -30,9 +30,10 @@
 
 use crate::fx::points::{self, Emitter, EmitterShape, Forces, ParticleLook, PointsParams};
 use crate::fx::{
-    cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
-    ParamGroup, ParamId, Params, Port, PortType, ResolveCx, Signature, Value,
-    MAP_PLACEMENT_OPTIONS,
+    builtins::MAP_PLACEMENT_OPTIONS, cpu, params::CurvePoints, params::ParamId, params::Params,
+    params::Value, registry::EffectDef, registry::EffectMetadata, registry::ResolveCx,
+    registry::Signature, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
+    schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -695,7 +696,7 @@ pub struct Particulate {
         label = "Particle blend",
         options = *crate::model::BlendMode::NAMES,
         default = 0,
-        dividers_after = crate::fx::CHOICE_UNGROUPED
+        dividers_after = crate::fx::builtins::CHOICE_UNGROUPED
     )]
     pub particle_blend: u32,
 
