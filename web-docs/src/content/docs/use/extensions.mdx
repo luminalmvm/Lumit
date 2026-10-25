@@ -125,9 +125,9 @@ the page through it.
 | `import` | `import.unwatch` | Stops watching. |
 | `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. |
 | `share` | `share.link` | The invite link while this computer hosts, otherwise `null`. |
-| `share` | `share.start {relay}` | Opens the **Shared project** window on **Share this project**, with `relay` offered if given. |
+| `share` | `share.start {relay}` | Opens the **Multi-edit** window on **Share this project**, with `relay` offered if given. |
 | `share` | `share.host {password}` | Asks the person whether the extension may share the open project, and shares it with the name, relay and **Internet** choice they last used. Answers a new invite link, or `null` when they say no, it cannot start, no project is open, or this computer is a guest. While this computer hosts, the link at once. `password` is optional. |
-| `share` | `share.join {link}` | Opens the **Shared project** window on **Join a project** with the link in it. |
+| `share` | `share.join {link}` | Opens the **Multi-edit** window on **Join a project** with the link in it. |
 | `share` | `share.stop` | Stops sharing, or leaves. |
 | `edit` | `edit.commands` | The commands the extension may run, as `[{name, summary, schema}]`. `schema` is a JSON Schema for the command's arguments. |
 | `edit` | `edit.<command> {...}` | Runs one of Lumit's commands on the open project, such as `edit.layer.add`, and answers what it did. |

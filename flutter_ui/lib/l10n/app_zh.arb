@@ -3359,10 +3359,6 @@
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "打开共享项目窗口，查看共享项目中的成员，并读取其邀请链接",
-  "@extensionCanShare": {
-    "description": "One line of the It can list in the extension install question."
-  },
   "extensionCannot": "它不能",
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
@@ -11288,10 +11284,6 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuReviewLinks": "预览…",
-  "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
-  },
   "menuRowTicked": "已勾选",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
@@ -11323,10 +11315,6 @@
   "menuSelectAll": "全选",
   "@menuSelectAll": {
     "description": "Menu item."
-  },
-  "menuSendForReview": "分享预览…",
-  "@menuSendForReview": {
-    "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
   },
   "menuSeparateAxesOf": "分离 {property} 轴",
   "@menuSeparateAxesOf": {
@@ -11361,10 +11349,6 @@
   "menuShareViewOptions": "在各视图间共享视图选项",
   "@menuShareViewOptions": {
     "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
-  },
-  "menuSharedProject": "共享项目…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "menuShowGrid": "显示网格",
   "@menuShowGrid": {
@@ -16883,10 +16867,6 @@
         "type": "int"
       }
     }
-  },
-  "shareTitle": "共享项目",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUnreachable": "无人响应。请检查邀请，并确认主机仍在共享。",
   "@shareUnreachable": {

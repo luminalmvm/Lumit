@@ -61,6 +61,10 @@ String cloudErrorText(CloudError e) => switch (e.code) {
       'too_young' => l10n.signInErrorTooYoung,
       'timed_out' => l10n.signInErrorTimedOut,
       'no_browser' => l10n.signInErrorBrowser,
+      'bad_username' => l10n.accountUsernameBad,
+      'username_taken' => l10n.accountUsernameTaken,
+      'username_needed' => l10n.friendsNeedUsername,
+      'not_friends' => l10n.friendsNotFriends,
       _ => l10n.signInErrorGeneric,
     };
 

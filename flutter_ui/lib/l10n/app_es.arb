@@ -3323,10 +3323,6 @@
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Abrir la ventana Proyecto compartido, ver quién está en un proyecto compartido y leer su enlace de invitación",
-  "@extensionCanShare": {
-    "description": "One line of the It can list in the extension install question."
-  },
   "extensionCannot": "No puede",
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
@@ -10977,10 +10973,6 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuReviewLinks": "Vistas previas…",
-  "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
-  },
   "menuRowTicked": "Marcado",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
@@ -11012,10 +11004,6 @@
   "menuSelectAll": "Seleccionar todo",
   "@menuSelectAll": {
     "description": "Menu item."
-  },
-  "menuSendForReview": "Compartir una vista previa…",
-  "@menuSendForReview": {
-    "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
   },
   "menuSeparateAxesOf": "Separar ejes de {property}",
   "@menuSeparateAxesOf": {
@@ -11050,10 +11038,6 @@
   "menuShareViewOptions": "Compartir opciones de vista entre vistas",
   "@menuShareViewOptions": {
     "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
-  },
-  "menuSharedProject": "Proyecto compartido…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "menuShowGrid": "Mostrar cuadrícula",
   "@menuShowGrid": {
@@ -16454,10 +16438,6 @@
         "type": "int"
       }
     }
-  },
-  "shareTitle": "Proyecto compartido",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUnreachable": "Nadie respondió. Compruebe la invitación y que el anfitrión siga compartiendo.",
   "@shareUnreachable": {

@@ -3196,10 +3196,6 @@
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Otwierać okno Projekt współdzielony, widzieć, kto jest w projekcie współdzielonym, i odczytywać link z zaproszeniem",
-  "@extensionCanShare": {
-    "description": "One line of the It can list in the extension install question."
-  },
   "extensionCannot": "Nie może",
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
@@ -9743,10 +9739,6 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuReviewLinks": "Podglądy…",
-  "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
-  },
   "menuRowTicked": "Zaznaczone",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
@@ -9778,10 +9770,6 @@
   "menuSelectAll": "Zaznacz wszystko",
   "@menuSelectAll": {
     "description": "Menu item."
-  },
-  "menuSendForReview": "Udostępnij podgląd…",
-  "@menuSendForReview": {
-    "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
   },
   "menuSeparateAxesOf": "Rozdziel osie: {property}",
   "@menuSeparateAxesOf": {
@@ -9816,10 +9804,6 @@
   "menuShareViewOptions": "Wspólne opcje dla wszystkich widoków",
   "@menuShareViewOptions": {
     "description": "A row of the View menu. With it on, every view is looked at the way the active one is: same magnification, channel and exposure."
-  },
-  "menuSharedProject": "Projekt współdzielony…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "menuShowGrid": "Pokaż siatkę",
   "@menuShowGrid": {
@@ -15111,10 +15095,6 @@
         "type": "int"
       }
     }
-  },
-  "shareTitle": "Projekt współdzielony",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUnreachable": "Nikt nie odpowiedział. Sprawdź zaproszenie i czy gospodarz nadal udostępnia projekt.",
   "@shareUnreachable": {

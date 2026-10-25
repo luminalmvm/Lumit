@@ -33,6 +33,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/file_dialogs.dart';
+import '../state/friend_invites.dart';
 import '../state/online_footage.dart';
 import '../state/share.dart';
 import '../state/timecode.dart';
@@ -45,6 +46,7 @@ import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'pro_window.dart';
 import 'profile_chip.dart';
+import 'review_link_parts.dart' show reviewRowMenu;
 import 'project_history_window.dart'
     show backupDay, backupSize, backupTime;
 import 'settings_window_frb.dart';
@@ -467,6 +469,10 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// The link in the field wants a password with it.
   bool _needsPassword = false;
 
+  /// The friend's invite whose link is in the Join field, put away once it
+  /// has been joined by.
+  ({String id, String link})? _fromFriend;
+
   /// The password is being shown as it is typed.
   bool _passwordShown = false;
 
@@ -745,6 +751,9 @@ class _ShareDialogState extends State<_ShareDialog> {
       ..addListener(_readLimits);
     _address.addListener(_readLink);
     widget.app.share.roster.addListener(_readLink);
+    _ui.friendInvites.addListener(_redraw);
+    // Opening the window is a fair moment to look for a friend's invite.
+    unawaited(_ui.friendInvites.check());
     _link = _linkNow();
     _readLocked();
     widget.app.share.activityRead.addListener(_lookAtActivity);
@@ -772,6 +781,7 @@ class _ShareDialogState extends State<_ShareDialog> {
   @override
   void dispose() {
     widget.app.share.roster.removeListener(_readLink);
+    _ui.friendInvites.removeListener(_redraw);
     widget.app.share.activityRead.removeListener(_lookAtActivity);
     _name.dispose();
     _port.dispose();
@@ -957,6 +967,9 @@ class _ShareDialogState extends State<_ShareDialog> {
     final outcome = await widget.app.joinShared(
         invite: invite, name: _nameNow(), password: password, footage: _footage);
     if (outcome is BridgeJoinOutcome_Joined) {
+      if (_fromFriend case (:final id, :final link) when link == invite) {
+        unawaited(_ui.friendInvites.dismiss(id));
+      }
       widget.onClose();
       return;
     }
@@ -1025,6 +1038,59 @@ class _ShareDialogState extends State<_ShareDialog> {
         _ => l10n.shareCouldNotJoin,
       };
     });
+  }
+
+  /// The account's friends in a menu under [button], to send the invite to:
+  /// the one that can only look when [look] is set. Without a username there
+  /// are none, and the menu says so.
+  Future<void> _pickFriend(BuildContext button, {bool look = false}) async {
+    final account = _ui.account;
+    await account.loadFriends();
+    if (!mounted || !button.mounted) return;
+    final link = look ? widget.app.share.online?.lookLink : _link;
+    if (link == null) return;
+    final named = account.account?.username != null;
+    final friends = named ? account.friends.friends : const <Friend>[];
+    final box = button.findRenderObject()! as RenderBox;
+    reviewRowMenu(button, box.localToGlobal(Offset(0, box.size.height + 2)), [
+      if (!named)
+        ('friends-username', l10n.friendsNeedUsername, null)
+      else if (friends.isEmpty)
+        ('friends-none', l10n.reviewNoFriends, null)
+      else
+        for (final friend in friends)
+          (
+            'friend-${friend.username}',
+            friend.name,
+            () => unawaited(_invite(friend, link, look)),
+          ),
+    ]);
+  }
+
+  /// Sealed for each of [friend]'s computers, with the password set here
+  /// when the invite needs one, so it opens for them at a click.
+  Future<void> _invite(Friend friend, String link, bool look) async {
+    try {
+      final sent = await _ui.friendInvites.send(friend.username, (
+        link: link,
+        password: look ? null : _passwordNow(),
+        project: projectNameFor(widget.app.project?.path()) ?? _nameNow(),
+        look: look,
+      ));
+      widget.app.postNotice(sent
+          ? l10n.shareInviteSent(friend.name)
+          : l10n.shareInviteNoComputer(friend.name));
+    } on CloudError {
+      widget.app.postNotice(l10n.shareInviteFailed, error: true);
+    }
+  }
+
+  /// Join by a friend's invite, as if its link had been pasted.
+  void _joinFromFriend(FriendInvite invite) {
+    _joinInvite.text = invite.text.link;
+    _password.text = invite.text.password ?? '';
+    _fromFriend = (id: invite.id, link: invite.text.link);
+    unawaited(_join());
   }
 
   /// Copying needs no look at the link, so it never asks.
@@ -1723,6 +1789,39 @@ class _ShareDialogState extends State<_ShareDialog> {
 
   /// Joining somebody else's: their link, and where the footage is here.
   List<Widget> _joinRows(LumitTheme t) => [
+        for (final invite in _ui.friendInvites.waiting)
+          dialogRow(
+            t,
+            l10n.shareFriendInviteFrom(invite.from.name),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                      invite.text.look
+                          ? l10n.shareFriendInviteLook(invite.text.project)
+                          : invite.text.project,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: ValueKey<String>('share-friend-decline-${invite.id}'),
+                  small: true,
+                  onPressed: () =>
+                      unawaited(_ui.friendInvites.dismiss(invite.id)),
+                  child: Text(l10n.shareFriendInviteDecline, style: t.small),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: ValueKey<String>('share-friend-join-${invite.id}'),
+                  small: true,
+                  primary: true,
+                  onPressed: _joining ? null : () => _joinFromFriend(invite),
+                  child: Text(l10n.shareJoin),
+                ),
+              ],
+            ),
+            labelColumn: _labelColumn,
+          ),
         _nameRow(t, _join),
         dialogRow(
           t,
@@ -1848,6 +1947,15 @@ class _ShareDialogState extends State<_ShareDialog> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               _showButton(t),
+              const SizedBox(width: 8),
+              Builder(
+                builder: (button) => HouseButton(
+                  key: const ValueKey('share-send-friend'),
+                  small: true,
+                  onPressed: () => unawaited(_pickFriend(button)),
+                  child: Text(l10n.shareSendToFriend, style: t.small),
+                ),
+              ),
               const SizedBox(width: 8),
               HouseButton(
                 key: const ValueKey('share-copy'),
@@ -2387,6 +2495,16 @@ class _ShareDialogState extends State<_ShareDialog> {
               ),
             const SizedBox(width: 8),
             _showButton(t, look: look),
+            const SizedBox(width: 8),
+            Builder(
+              builder: (button) => HouseButton(
+                key: ValueKey<String>(
+                    look ? 'share-send-friend-look' : 'share-send-friend'),
+                small: true,
+                onPressed: () => unawaited(_pickFriend(button, look: look)),
+                child: Text(l10n.shareSendToFriend, style: t.small),
+              ),
+            ),
             const SizedBox(width: 8),
             HouseButton(
               key: ValueKey<String>(look ? 'share-copy-look' : 'share-copy'),

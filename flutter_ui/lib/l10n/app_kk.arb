@@ -4855,10 +4855,6 @@
   "@menuSettings": {
     "description": "Menu item."
   },
-  "menuSharedProject": "Ортақ проект…",
-  "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
-  },
   "menuShowGrid": "Торды көрсету",
   "@menuShowGrid": {
     "description": "Menu item."
@@ -7346,10 +7342,6 @@
   "shareTabShare": "Бұл проектімен бөлісу",
   "@shareTabShare": {
     "description": "Page tab in the Shared project window, drawn in capitals by the style: the page that shares the open project from this computer."
-  },
-  "shareTitle": "Ортақ проект",
-  "@shareTitle": {
-    "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
   "shareUpLimit": "Жүктеп салу шегі",
   "@shareUpLimit": {
