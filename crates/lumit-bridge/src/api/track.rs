@@ -75,7 +75,7 @@ pub enum BridgeTrackStage {
 /// A **reason, not a sentence**: the engine's own `AnalysisError`
 /// carries English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
-/// the shape `lumit_import::Reason` already uses for the import report.
+/// the shape `lumit_import::report::Reason` already uses for the import report.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgeTrackFailure {

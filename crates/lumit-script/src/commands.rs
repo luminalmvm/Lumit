@@ -1212,7 +1212,7 @@ fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
                 if let Op::AddItem { item, .. } = op {
                     if let ProjectItem::Solid(solid) = item.as_mut() {
                         if let Some(colour) = a.colour {
-                            solid.colour = lumit_import::linear_colour(Some(&colour));
+                            solid.colour = lumit_import::map::linear_colour(Some(&colour));
                         }
                         if let Some(name) = &a.name {
                             solid.name.clone_from(name);

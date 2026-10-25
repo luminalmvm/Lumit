@@ -21,7 +21,7 @@
 use std::path::{Path, PathBuf};
 
 use flutter_rust_bridge::frb;
-use lumit_import::{ItemPath, Outcome, Reason, ReportRow};
+use lumit_import::{report::ItemPath, report::Outcome, report::Reason, report::ReportRow};
 
 use crate::api::{
     project::ProjectReference,
@@ -158,7 +158,7 @@ impl LumitBridgeState {
         if crate::packing::cancelled() {
             return Ok(None);
         }
-        let (doc, mut report) = lumit_import::map_capture(&bundle.capture);
+        let (doc, mut report) = lumit_import::map::map_capture(&bundle.capture);
 
         // What the direct parser had to skip is the report's to say (docs/11
         // §7); the engine decides which rows those are.

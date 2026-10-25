@@ -105,8 +105,8 @@ fn run_with_masks(node: &AeProp, masks: Vec<(Uuid, f64)>) -> Ran {
             self_index: 1,
         };
         let path = crate::report::ItemPath::item("Comp").layer("Layer");
-        let out = crate::map::map_effect(&mut conv, &path, node);
-        mapped = matches!(out, crate::map::MappedEffect::Mapped(_));
+        let out = crate::map::effects::map_effect(&mut conv, &path, node);
+        mapped = matches!(out, crate::map::effects::MappedEffect::Mapped(_));
         out.instance()
     };
     Ran {
@@ -590,7 +590,7 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_dissolve_curve() {
 /// worth having if editing it is the *only* way a mapping changes.
 ///
 /// Each row is a claim about the seam end to end rather than about the file:
-/// the match name goes through [`crate::map::map_effect`] exactly as an import
+/// the match name goes through [`crate::map::effects::map_effect`] exactly as an import
 /// does, and the Lumit effect that comes back is compared. The two deliberate
 /// placeholders are on the list too, as the effects that must NOT map.
 #[test]

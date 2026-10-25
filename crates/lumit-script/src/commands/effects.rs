@@ -68,7 +68,7 @@ fn effect_json(index: usize, e: &EffectInstance, offset: Rational) -> Value {
         "name": name_of(e),
         "enabled": e.enabled,
         // The After Effects effect it stands for, which names its controls.
-        "after_effects": lumit_import::ae_match_name_of(&e.effect.match_name),
+        "after_effects": lumit_import::map::table::ae_match_name_of(&e.effect.match_name),
         "params": params,
     })
 }
@@ -112,7 +112,7 @@ fn converted(ae: &str, controls: Vec<Value>, size: (f64, f64)) -> Option<EffectI
     let node: lumit_import::capture::Property =
         serde_json::from_value(json!({ "match_name": ae, "enabled": true, "group": controls }))
             .ok()?;
-    let (mut made, _) = lumit_import::map_preset("Script", std::slice::from_ref(&node), size);
+    let (mut made, _) = lumit_import::map::map_preset("Script", std::slice::from_ref(&node), size);
     made.pop()
         .filter(|e| e.effect.namespace != EffectNamespace::Placeholder)
 }
@@ -122,7 +122,7 @@ fn converted(ae: &str, controls: Vec<Value>, size: (f64, f64)) -> Option<EffectI
 /// comes the After Effects match name it was asked for by, if it was.
 fn made(comp: &Composition, name: &str) -> Result<(EffectInstance, Option<String>), ScriptError> {
     let (w, h) = (f64::from(comp.width), f64::from(comp.height));
-    let ae = lumit_import::ae_match_name(name).filter(|_| fx::def(name).is_none());
+    let ae = lumit_import::map::table::ae_match_name(name).filter(|_| fx::def(name).is_none());
     let found = if fx::def(name).is_some() {
         fx::instantiate_for_raster(name, w, h)
     } else if let Some(ae) = &ae {

@@ -45,12 +45,10 @@ pub mod capture;
 pub mod map;
 pub mod report;
 
-pub use aep::open_aep;
-pub use capture::{Capture, Manifest, Report};
-pub use map::{
-    ae_match_name, ae_match_name_of, linear_colour, map_capture, map_preset, other_names_of,
-};
-pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
+use aep::open_aep;
+use capture::{Capture, Manifest, Report};
+use map::map_preset;
+use report::{ImportReport, ItemPath, Outcome, Reason};
 
 use std::fs::{self, File};
 use std::io::Read;
@@ -327,6 +325,8 @@ impl Source {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::map::map_capture;
+    use super::report::ReportRow;
     use super::*;
 
     use std::io::Write;

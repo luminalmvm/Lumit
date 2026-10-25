@@ -323,7 +323,7 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 .to_owned(),
                 inputs,
                 outputs,
-                other_names: lumit_import::other_names_of(schema.match_name),
+                other_names: lumit_import::map::table::other_names_of(schema.match_name),
             }
         })
         .collect()
