@@ -12,7 +12,7 @@
 //! count is what makes two runs bit-identical, and it is conservative for
 //! seeds this dense.
 
-use crate::{FrameRgb, Seed, Seeds};
+use crate::{stroke::Seed, stroke::Seeds, FrameRgb};
 
 /// Three pairs of scans, always (docs/impl/roto.md §12: a convergence test
 /// trades determinism for nothing).

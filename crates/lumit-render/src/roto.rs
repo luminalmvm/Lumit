@@ -54,7 +54,10 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use lumit_core::model::{Document, EffectInstance, Fingerprint, LayerKind};
 use lumit_core::roto::{chain_hash, RotoBlock, RotoSettings, RotoStrokeKind};
-use lumit_roto::{base_seeds, FlowField, FrameRgb, RotoSolver, RotoStroke, Seeds, StrokeKind};
+use lumit_roto::{
+    solve::RotoSolver, stroke::base_seeds, stroke::RotoStroke, stroke::Seeds, stroke::StrokeKind,
+    warp::FlowField, FrameRgb,
+};
 use uuid::Uuid;
 
 use crate::sidecar;
@@ -1305,7 +1308,7 @@ fn propagate(
                 let mask = model.mask(&taps.0, &taps.1)?;
                 made_with = model.made_with();
                 let mut field = Seeds::new(width, height).map_err(|_| RotoFailure::NoFrames)?;
-                lumit_roto::mask_seeds(&mask, width, height, &mut field)
+                lumit_roto::warp::mask_seeds(&mask, width, height, &mut field)
                     .map_err(|_| RotoFailure::NoSeeds)?;
                 field.stamp_all(&strokes);
                 field
@@ -1407,7 +1410,7 @@ fn propagate(
                 prev_f.extend(prev_plane.iter().map(|&b| f32::from(b) / 255.0));
                 let field = FlowField::new(&interleaved, &validity, &conf, width, height)
                     .map_err(|_| RotoFailure::NoFrames)?;
-                if lumit_roto::warp_and_seed(
+                if lumit_roto::warp::warp_and_seed(
                     &prev_f,
                     &field,
                     solver_settings(job.settings).confidence_floor,
