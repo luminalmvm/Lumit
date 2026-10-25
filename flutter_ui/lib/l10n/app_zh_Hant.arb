@@ -2293,10 +2293,6 @@
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
   },
-  "fxConsoleApplies": "按 Enter 套用到所選圖層",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
-  },
   "fxConsoleHint": "搜尋效果和合成",
   "@fxConsoleHint": {
     "description": "Placeholder in the FX console’s search field."
@@ -4792,10 +4788,6 @@
   "graphSaveGroup": "儲存組…",
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
-  },
-  "graphSearchWires": "把拖曳的連線接到合適的位置",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
   },
   "graphSpeed": "速度",
   "@graphSpeed": {

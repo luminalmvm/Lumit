@@ -3323,10 +3323,6 @@
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
   },
-  "fxConsoleApplies": "Enter applies to the selected layer",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
-  },
   "fxConsoleCompositions": "Compositions",
   "@fxConsoleCompositions": {
     "description": "The FX console popover: the inline heading in the result list over the open project’s compositions, matching the category headings over the effects."
@@ -9584,7 +9580,7 @@
   "@transportSharedTexture": {
     "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
-  "typeVerticalNotBuilt": "Vertical type is not built yet — the engine lays out one horizontal line",
+  "typeVerticalNotBuilt": "Vertical type is not built yet",
   "@typeVerticalNotBuilt": {
     "description": "Notice when the vertical type tool is used."
   },
@@ -12452,14 +12448,6 @@
   "@graphTypeAudio": {
     "description": "Graph panel legend: what a green wire carries. Lower case."
   },
-  "graphConsoleAdds": "Adds a box to the graph",
-  "@graphConsoleAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened over the node graph with no wire in hand: picking an entry (an effect, a driver or a saved group) adds that box to the canvas."
-  },
-  "graphSearchWires": "Connects the dragged wire where it fits",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
-  },
   "graphSaveGroup": "Save group…",
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button, and a row of the menu on a group's bar: asks for a name, then writes the picked boxes to the user's library as a group that can be dropped into another graph later. Boxes that are not a group yet become one."
@@ -13981,7 +13969,7 @@
       }
     }
   },
-  "workspaceImported": "{name} imported, and selected.",
+  "workspaceImported": "{name} imported.",
   "@workspaceImported": {
     "description": "Status-line notice after reading a workspace file in. {name} is its name.",
     "placeholders": {
@@ -14408,10 +14396,6 @@
   "shaderPortTint": "tint",
   "@shaderPortTint": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the tint colour. Lower case: socket labels are quiet row text beside the wire dots."
-  },
-  "shaderSearchAdds": "Adds a shader box",
-  "@shaderSearchAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened inside a Custom shader's inner node graph: picking an entry adds that box to the shader's canvas."
   },
   "shaderDetachTitle": "Detach graph",
   "@shaderDetachTitle": {

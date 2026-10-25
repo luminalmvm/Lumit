@@ -86,16 +86,10 @@ class FxConsoleModel {
   /// for a console a gesture summoned, which draws nothing).
   final String? keyHint;
 
-  /// One quiet sentence under the list saying what choosing a row will do
-  /// ("Enter applies to the selected layer", "Adds a driver node"). Null
-  /// draws no foot at all.
-  final String? footer;
-
   const FxConsoleModel({
     required this.entries,
     this.onSnapshot,
     this.keyHint,
-    this.footer,
   });
 }
 
@@ -237,7 +231,6 @@ const double _searchRowHeight = 28;
 const double _stripHeight = 22;
 const double _rowHeight = 26;
 const double _headingHeight = 20;
-const double _footHeight = 20;
 const double _margin = 8;
 
 class _FxConsoleState extends State<_FxConsole> {
@@ -439,15 +432,13 @@ class _FxConsoleState extends State<_FxConsole> {
               box.maxHeight -
                   _searchRowHeight -
                   _stripHeight -
-                  _footHeight -
                   56 -
                   _margin);
           final room = box.maxHeight -
               top -
               _margin -
               _searchRowHeight -
-              _stripHeight -
-              _footHeight;
+              _stripHeight;
           return Stack(
             children: [
               // Invisible, not a scrim (owner's ruling: the hush went with the
@@ -506,17 +497,6 @@ class _FxConsoleState extends State<_FxConsole> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: _list(t, matches, room),
               ),
-              if (widget.model.footer case final footer?) ...[
-                Container(height: 1, color: t.hairline),
-                Container(
-                  height: _footHeight,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  alignment: Alignment.centerLeft,
-                  child: Text(footer,
-                      key: const ValueKey('fx-console-foot'),
-                      style: t.kicker.copyWith(letterSpacing: 0.54)),
-                ),
-              ],
             ],
           ),
         ),
