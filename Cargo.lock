@@ -2445,6 +2445,7 @@ version = "0.9.1"
 dependencies = [
  "flutter_rust_bridge",
  "interprocess",
+ "libc",
  "lumit-aplug",
  "lumit-audio",
  "lumit-budget",

@@ -25,10 +25,6 @@
   "@addonTaskMatte": {
     "description": "Settings window, Addons: what a model pack does, shown on its row. This one cuts the subject out of its background."
   },
-  "aeFilterAll": "Барлығы",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeOutcomeImported": "Импортталды",
   "@aeOutcomeImported": {
     "description": "Import report window — an outcome grade: this came across whole."

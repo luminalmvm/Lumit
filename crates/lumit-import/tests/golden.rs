@@ -940,13 +940,21 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     assert_eq!(words.transform.position_x.value_at(0.0), 320.0);
     assert_eq!(words.transform.position_y.value_at(0.0), 180.0);
 
-    assert_eq!(
-        layer(c, "shape").kind,
-        LayerKind::Shape {
-            contents: Vec::new()
-        }
-    );
-    assert!(reported(|r| matches!(r, Reason::ShapeContentsNotMapped)));
+    // The rectangle and the ellipse under one gradient fill, cut to 70 % and
+    // copied three times.
+    let LayerKind::Shape { contents } = &layer(c, "shape").kind else {
+        panic!("a shape layer");
+    };
+    assert_eq!(contents.len(), 2);
+    for item in contents {
+        assert_eq!(item.gradient, 1);
+        assert_eq!(item.trim_end.value_at(0.0), 70.0);
+        assert_eq!(item.repeat_copies.value_at(0.0), 3.0);
+    }
+    assert!(reported(|r| matches!(
+        r,
+        Reason::ShapeGradientColoursDefault
+    )));
 }
 
 // ---------------------------------------------------------------------------

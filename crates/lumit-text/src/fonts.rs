@@ -146,6 +146,39 @@ pub fn faces(family: &str) -> Vec<String> {
     out
 }
 
+/// The family and face of the installed font with this PostScript name, which
+/// is how an After Effects project names a font. `None` when it isn't
+/// installed here.
+///
+/// ponytail: reads the name of every installed font, once per name asked for.
+/// Keep an index if a project with many fonts opens slowly.
+#[must_use]
+pub fn by_postscript_name(postscript: &str) -> Option<(String, String)> {
+    type Found = Option<(String, String)>;
+    static SEEN: OnceLock<Mutex<HashMap<String, Found>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(Mutex::default);
+    if let Some(found) = seen
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(postscript)
+    {
+        return found.clone();
+    }
+    let found = families().into_iter().find_map(|family| {
+        let info = family_named(&family)?;
+        info.fonts().iter().find_map(|font| {
+            let blob = font.load(None)?;
+            let parsed = FontRef::from_index(blob.as_ref(), font.index()).ok()?;
+            (name(&parsed, StringId::POSTSCRIPT_NAME)? == postscript)
+                .then(|| (family.clone(), face_name(&parsed)))
+        })
+    });
+    seen.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(postscript.to_owned(), found.clone());
+    found
+}
+
 /// The face a layer names, or the nearest thing this machine has: the family's
 /// regular when the face is unknown, the built-in Inter when the family is.
 pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
