@@ -17,11 +17,11 @@
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."
   },
-  "aeAudioLayerAsFootage": "已作为携带音频的素材图层导入",
+  "aeAudioLayerAsFootage": "已作为素材图层导入",
   "@aeAudioLayerAsFootage": {
     "description": "Import report row reason, lower case. Lumit has no separate audio layer kind for this case."
   },
-  "aeAudioLevelsDiffer": "音频电平左 {left} dB、右 {right} dB，Lumit 只有一个电平 — 已按左声道导入",
+  "aeAudioLevelsDiffer": "电平 {left} 和 {right} dB 已按 {left} dB 导入",
   "@aeAudioLevelsDiffer": {
     "description": "Import report row reason, lower case. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
     "placeholders": {
@@ -33,7 +33,7 @@
       }
     }
   },
-  "aeBlendModeClassic": "{aeMode} 已导入为它的现代版本",
+  "aeBlendModeClassic": "{aeMode} 已按新版模式导入",
   "@aeBlendModeClassic": {
     "description": "Import report row reason, lower case. After Effects keeps older Classic versions of a few blend modes.",
     "placeholders": {
@@ -42,7 +42,7 @@
       }
     }
   },
-  "aeBlendModeUnavailable": "混合模式 {aeMode} 没有对应项 — 已按“正常”导入",
+  "aeBlendModeUnavailable": "{aeMode} 已按正常导入",
   "@aeBlendModeUnavailable": {
     "description": "Import report row reason, lower case. The After Effects blend mode's own name is substituted; Normal is Lumit's plain composite.",
     "placeholders": {
@@ -51,7 +51,11 @@
       }
     }
   },
-  "aeChunkUnreadable": "项目文件中的一条记录（{chunk}）无法读取，已跳过",
+  "aeCastsShadowsNotCarried": "未带入投影",
+  "@aeCastsShadowsNotCarried": {
+    "description": "Import report row reason. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
+  },
+  "aeChunkUnreadable": "无法读取记录（{chunk}）",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
     "placeholders": {
@@ -60,7 +64,16 @@
       }
     }
   },
-  "aeCompDurationGuessed": "没有持续时间，已按 {used} 秒导入",
+  "aeColourProfileIgnored": "未带入 {profile} 颜色配置文件",
+  "@aeColourProfileIgnored": {
+    "description": "Import report row reason. After Effects read the footage through a colour profile, such as an ICC profile, that Lumit has no way to apply.",
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
+  "aeCompDurationGuessed": "以 {used} 秒长度导入",
   "@aeCompDurationGuessed": {
     "description": "Import report row reason, lower case. The composition's duration was absent, so a default was used.",
     "placeholders": {
@@ -69,7 +82,7 @@
       }
     }
   },
-  "aeCompFrameRateGuessed": "没有帧速率，已按 {used} fps 导入",
+  "aeCompFrameRateGuessed": "以 {used} fps 导入",
   "@aeCompFrameRateGuessed": {
     "description": "Import report row reason, lower case. The composition's frame rate was absent, so a default was used.",
     "placeholders": {
@@ -78,11 +91,11 @@
       }
     }
   },
-  "aeCompMissing": "没有合成数据，已作为空合成导入",
+  "aeCompMissing": "该合成没有数据",
   "@aeCompMissing": {
     "description": "Import report row reason, lower case (it follows the item's name). The bundle named a composition but carried none of its contents."
   },
-  "aeCompStartIgnored": "合成的时间码从 {start} 秒开始，已改为从零开始导入",
+  "aeCompStartIgnored": "从零开始，而非 {start} 秒",
   "@aeCompStartIgnored": {
     "description": "Import report row reason, lower case. After Effects can start a composition's timecode somewhere other than zero; Lumit's begin at zero.",
     "placeholders": {
@@ -100,7 +113,7 @@
       }
     }
   },
-  "aeEffectAsPlugin": "{matchName} 已导入为你已安装的 {plugin} 插件，两者是同一个效果 — 它的 {controls} 个控件中有 {carried} 个按名称对应导入",
+  "aeEffectAsPlugin": "{matchName} 已作为 {plugin} 导入，{controls} 个控件中对应了 {carried} 个",
   "@aeEffectAsPlugin": {
     "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project is one the user also has installed as an OFX plug-in, so it imported as that plug-in rather than as Lumit's closest likeness. matchName is After Effects' internal name for the effect, plugin is the installed plug-in's own name, and the two numbers are how many of its controls carried across out of how many the After Effects effect had.",
     "placeholders": {
@@ -145,7 +158,7 @@
       }
     }
   },
-  "aeEffectParamNotCarried": "{effect} 的 {param} 没有对应项 — 该效果在导入时不含它",
+  "aeEffectParamNotCarried": "未带入 {effect} 的 {param}",
   "@aeEffectParamNotCarried": {
     "description": "Import report row reason, lower case. Names an effect and one of its controls.",
     "placeholders": {
@@ -157,7 +170,7 @@
       }
     }
   },
-  "aeEffectParamRebased": "{effect} 的 {param} 以 After Effects 的单位度量 — 已按 Lumit 单位下的相同长度导入",
+  "aeEffectParamRebased": "{effect} 的 {param} 已换算为 Lumit 单位",
   "@aeEffectParamRebased": {
     "description": "Import report row reason, lower case. Nothing was approximated: the same length is spelled with a different number.",
     "placeholders": {
@@ -169,7 +182,7 @@
       }
     }
   },
-  "aeEffectParamsUnreadable": "有 {count} 个参数无法读取 — 它们被完整保留，但导入后不起作用",
+  "aeEffectParamsUnreadable": "无法读取 {count} 个参数",
   "@aeEffectParamsUnreadable": {
     "description": "Import report row reason, lower case. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
     "placeholders": {
@@ -178,7 +191,7 @@
       }
     }
   },
-  "aeEffectPlaceholder": "{matchName} 已作为占位符导入 — 所有参数都被保留，且不渲染任何内容",
+  "aeEffectPlaceholder": "{matchName} 已作为占位符导入",
   "@aeEffectPlaceholder": {
     "description": "Import report row reason, lower case. The placeholder is the After Effects effect's internal name; leave it as written.",
     "placeholders": {
@@ -187,7 +200,7 @@
       }
     }
   },
-  "aeEffectSpeedAsKeyframes": "{effect} 的 {param} 读取时钟 — 已导入为以相同速率运行的关键帧",
+  "aeEffectSpeedAsKeyframes": "{effect} 的 {param} 已作为关键帧导入",
   "@aeEffectSpeedAsKeyframes": {
     "description": "Import report row reason, lower case. A control that advanced by itself became ordinary keyframes.",
     "placeholders": {
@@ -199,7 +212,7 @@
       }
     }
   },
-  "aeEffectSuggestion": "{matchName} 已作为占位符导入 — 在 Lumit 中由 {instead} 完成这项工作",
+  "aeEffectSuggestion": "{matchName} 已作为占位符导入，试试 {instead}",
   "@aeEffectSuggestion": {
     "description": "Import report row reason, lower case. An After Effects effect deliberately not mapped, naming the Lumit feature that replaces it.",
     "placeholders": {
@@ -211,15 +224,15 @@
       }
     }
   },
-  "aeExpressionCarried": "该表达式已作为源文本导入，并驱动该属性",
+  "aeExpressionCarried": "表达式已导入",
   "@aeExpressionCarried": {
     "description": "Import report row reason, lower case. An expression is a small script that computes a property's value."
   },
-  "aeExpressionDisabledCarried": "一个已关闭的表达式 — 它的文本被保留，且不驱动任何内容",
+  "aeExpressionDisabledCarried": "表达式已以关闭状态导入",
   "@aeExpressionDisabledCarried": {
     "description": "Import report row reason, lower case. After Effects keeps a disabled expression's text, and so does the import."
   },
-  "aeExpressionNotRunnable": "该表达式在这里无法运行，已被关闭 — 它的文本被保留，属性由其下的关键帧驱动：{source}",
+  "aeExpressionNotRunnable": "表达式无法运行，已关闭：{source}",
   "@aeExpressionNotRunnable": {
     "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
     "placeholders": {
@@ -228,19 +241,37 @@
       }
     }
   },
-  "aeFlowEngineDiffers": "Pixel Motion 已导入为 Flow 插值 — 光流引擎不同，因此中间帧会有差异",
+  "aeExpressionOverKeys": "使用关键帧，而非表达式：{source}",
+  "@aeExpressionOverKeys": {
+    "description": "Import report row reason. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "aeFlowEngineDiffers": "Pixel Motion 已作为 Flow 插值导入",
   "@aeFlowEngineDiffers": {
     "description": "Import report row reason, lower case. Pixel Motion is an After Effects feature name; leave it as written."
   },
-  "aeGuideLayerNotSupported": "引导层没有对应项 — 已按可见导入",
+  "aeGuideLayerNotSupported": "引导层已按可见导入",
   "@aeGuideLayerNotSupported": {
     "description": "Import report row reason, lower case. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."
   },
-  "aeItemUnreadable": "无法读取该项目，已跳过",
+  "aeItemUnreadable": "无法读取该项目",
   "@aeItemUnreadable": {
     "description": "Import report row reason. Lower case: it follows the item's name on the line above. Reasons are one line each."
   },
-  "aeLayerKindUnsupported": "图层类型 {aeKind} 没有对应项 — 已作为空对象导入，以保留父子关系",
+  "aeItemsImported": "{count, plural, =1{已导入 1 个项目} other{已导入 {count} 个项目}}",
+  "@aeItemsImported": {
+    "description": "The line under the import report's title: how many items came across from After Effects. What was changed or left out is listed below it, under headings.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aeLayerKindUnsupported": "{aeKind} 已作为空对象导入",
   "@aeLayerKindUnsupported": {
     "description": "Import report row reason, lower case. A null layer is an invisible transform-only layer; keeping one preserves anything parented to it.",
     "placeholders": {
@@ -249,7 +280,7 @@
       }
     }
   },
-  "aeLayerQualityIgnored": "图层质量 {quality} 没有对应项 — 已按完整质量导入",
+  "aeLayerQualityIgnored": "{quality} 品质已按完整品质导入",
   "@aeLayerQualityIgnored": {
     "description": "Import report row reason, lower case. After Effects can draw a layer draft or wireframe; Lumit renders one quality.",
     "placeholders": {
@@ -258,7 +289,7 @@
       }
     }
   },
-  "aeLayerSourceMissing": "捕获中没有源项目 {id} — 已作为空对象导入，以保留父子关系",
+  "aeLayerSourceMissing": "源 {id} 缺失",
   "@aeLayerSourceMissing": {
     "description": "Import report row reason, lower case. The layer named an After Effects item the bundle does not contain.",
     "placeholders": {
@@ -267,15 +298,15 @@
       }
     }
   },
-  "aeLayerSpanRepaired": "该图层的入点和出点无法构成时间范围 — 已按一帧长度导入",
+  "aeLayerSpanRepaired": "以一帧长度导入",
   "@aeLayerSpanRepaired": {
     "description": "Import report row reason, lower case. The layer's start and end times were empty or the wrong way round."
   },
-  "aeLayerUnreadable": "该图层在堆栈中没有位置，已跳过",
+  "aeLayerUnreadable": "无法读取该图层",
   "@aeLayerUnreadable": {
     "description": "Import report row reason, lower case. The capture recorded no stacking position for the layer."
   },
-  "aeLightKindApproximated": "{aeKind} 灯光没有对应项 — 已按最接近的类型导入",
+  "aeLightKindApproximated": "{aeKind} 灯光已按最接近的类型导入",
   "@aeLightKindApproximated": {
     "description": "Import report row reason, lower case. After Effects has light kinds Lumit does not.",
     "placeholders": {
@@ -284,7 +315,7 @@
       }
     }
   },
-  "aeMaskFeatherAxesDiffer": "羽化 {x} × {y} 在 Lumit 中只有一个宽度 — 已按两者的平均值导入",
+  "aeMaskFeatherAxesDiffer": "羽化 {x} × {y} 已按平均值导入",
   "@aeMaskFeatherAxesDiffer": {
     "description": "Import report row reason, lower case. After Effects softens a mask edge by different amounts horizontally and vertically.",
     "placeholders": {
@@ -296,11 +327,11 @@
       }
     }
   },
-  "aeMaskRotoBezierFlattened": "RotoBezier 蒙版的曲线由 After Effects 计算 — 已按它的多边形导入",
+  "aeMaskRotoBezierFlattened": "RotoBezier 蒙版已作为多边形导入",
   "@aeMaskRotoBezierFlattened": {
     "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
   },
-  "aeMatteTargetMissing": "遮罩图层 {index} 不在此合成中 — 已导入为无遮罩",
+  "aeMatteTargetMissing": "遮罩图层 {index} 缺失",
   "@aeMatteTargetMissing": {
     "description": "Import report row reason, lower case. A matte gates one layer's alpha with another layer's.",
     "placeholders": {
@@ -309,7 +340,7 @@
       }
     }
   },
-  "aeMediaMissing": "文件 {path} 在 After Effects 中同样丢失",
+  "aeMediaMissing": "{path} 处的文件缺失",
   "@aeMediaMissing": {
     "description": "Import report row reason, lower case. After Effects itself had already lost this footage file.",
     "placeholders": {
@@ -318,31 +349,40 @@
       }
     }
   },
-  "aeMediaNotFound": "本机上没有此文件 — 已作为脱机素材导入，可重新链接",
+  "aeMediaNotFound": "未找到该文件",
   "@aeMediaNotFound": {
     "description": "Import report row reason, lower case. The footage was fine in After Effects and is not on the machine doing the import."
   },
-  "aeMediaPlaceholder": "这是一个 After Effects 占位符，而不是真实文件",
+  "aeMediaPlaceholder": "After Effects 占位符",
   "@aeMediaPlaceholder": {
     "description": "Import report row reason, lower case. The project item stood in for a file that was never chosen."
   },
-  "aeNestedPreserveBoth": "嵌套时保留帧速率和分辨率没有对应项 — 嵌套合成跟随父级",
+  "aeNestedPreserveBoth": "未带入嵌套时保留帧速率和分辨率",
   "@aeNestedPreserveBoth": {
     "description": "Import report row reason, lower case. Names two After Effects composition switches Lumit does not have."
   },
-  "aeNestedPreserveRate": "嵌套时保留帧速率没有对应项 — 嵌套合成跟随父级",
+  "aeNestedPreserveRate": "未带入嵌套时保留帧速率",
   "@aeNestedPreserveRate": {
     "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
   },
-  "aeNestedPreserveResolution": "嵌套时保留分辨率没有对应项 — 嵌套合成跟随父级",
+  "aeNestedPreserveResolution": "未带入嵌套时保留分辨率",
   "@aeNestedPreserveResolution": {
     "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
   },
-  "aeNothingToReport": "所有内容都原样导入",
+  "aeNothingToReport": "全部已导入",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
   },
-  "aeOrientationNotCarried": "该图层同时通过方向和旋转转动 — 导入的是旋转，方向未被带入",
+  "aeOcioConfigNotFound": "未找到 OCIO 配置 {config}",
+  "@aeOcioConfigNotFound": {
+    "description": "Import report row reason. The After Effects project was colour managed with an OCIO config that Lumit couldn't find, either a file path or the name of a config After Effects ships.",
+    "placeholders": {
+      "config": {
+        "type": "String"
+      }
+    }
+  },
+  "aeOrientationNotCarried": "未带入方向",
   "@aeOrientationNotCarried": {
     "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
   },
@@ -362,7 +402,7 @@
   "@aeOutcomeSkipped": {
     "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
   },
-  "aeParentMissing": "父图层 {index} 不在此合成中 — 已导入为无父级",
+  "aeParentMissing": "父图层 {index} 缺失",
   "@aeParentMissing": {
     "description": "Import report row reason, lower case. The layer named a parent that is not in the same composition.",
     "placeholders": {
@@ -371,7 +411,7 @@
       }
     }
   },
-  "aePixelAspectIgnored": "像素长宽比 {par} 没有对应项，已按方形像素导入",
+  "aePixelAspectIgnored": "像素宽高比 {par} 已按方形导入",
   "@aePixelAspectIgnored": {
     "description": "Import report row reason, lower case. Lumit compositions have square pixels; After Effects' non-square ratio is recorded but not applied.",
     "placeholders": {
@@ -384,11 +424,11 @@
   "@aePointOfInterestNotCarried": {
     "description": "Import report row reason, lower case. After Effects' two-node camera is aimed by a point of interest Lumit has no equivalent for."
   },
-  "aePreserveTransparencyNotSupported": "保留下层透明度暂无对应项 — 未应用",
+  "aePreserveTransparencyNotSupported": "未带入保留基础透明度",
   "@aePreserveTransparencyNotSupported": {
     "description": "Import report row reason, lower case. Names an After Effects layer switch Lumit does not have."
   },
-  "aeProjectBlendingDiffers": "该项目以 {bits} 位混合且未使用线性混合 — Lumit 在场景线性光下合成，因此混合结果可能略有变化",
+  "aeProjectBlendingDiffers": "{bits} 位混合已按线性导入",
   "@aeProjectBlendingDiffers": {
     "description": "Import report row reason, lower case. The After Effects project used different colour arithmetic from Lumit's.",
     "placeholders": {
@@ -397,7 +437,7 @@
       }
     }
   },
-  "aePropertyUnreadable": "After Effects 自身无法读取 {matchName}，因此没有内容可导入",
+  "aePropertyUnreadable": "无法读取 {matchName}",
   "@aePropertyUnreadable": {
     "description": "Import report row reason, lower case. The placeholder is an After Effects internal property name; leave it as written.",
     "placeholders": {
@@ -406,7 +446,7 @@
       }
     }
   },
-  "aeRendererUnrecognised": "{renderer} 渲染器的特性无法导入 — 图层以平面方式导入",
+  "aeRendererUnrecognised": "未带入 {renderer} 渲染器",
   "@aeRendererUnrecognised": {
     "description": "Import report row reason, lower case. The composition used an After Effects renderer whose extras have no Lumit counterpart.",
     "placeholders": {
@@ -419,11 +459,41 @@
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
-  "aeSpatialTangentsFlattened": "运动路径的空间切线未被带入 — 每个轴各自独立动画",
+  "aeRotationOrderConverted": "旋转已转换为 Lumit 的轴顺序",
+  "@aeRotationOrderConverted": {
+    "description": "Import report row reason. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
+  },
+  "aeShapeGradientColoursDefault": "渐变已按白到黑导入",
+  "@aeShapeGradientColoursDefault": {
+    "description": "Import report row reason. A shape's gradient fill arrived with its type and direction but in After Effects' default colours."
+  },
+  "aeShapeOperatorApproximated": "{name} 已按最接近的效果导入",
+  "@aeShapeOperatorApproximated": {
+    "description": "Import report row reason. A shape layer operator such as Wiggle Paths that Lumit draws with its own nearest modifier. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapeOperatorNotCarried": "未带入 {name}",
+  "@aeShapeOperatorNotCarried": {
+    "description": "Import report row reason. A shape layer operator such as Merge Paths or Zig Zag that Lumit's shapes have no place for. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapePaintKeptStill": "未带入颜色动画",
+  "@aeShapePaintKeptStill": {
+    "description": "Import report row reason. A shape's fill or stroke colour, opacity or width was animated, and Lumit keeps these still."
+  },
+  "aeSpatialTangentsFlattened": "未带入运动路径的曲线",
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
   },
-  "aeStretchAsRetime": "时间伸缩 {percent}% 已导入为等效的 Retime",
+  "aeStretchAsRetime": "时间伸缩 {percent}% 已作为 Retime 导入",
   "@aeStretchAsRetime": {
     "description": "Import report row reason, lower case. Retime is Lumit's retiming system and is a product term — leave it as written.",
     "placeholders": {
@@ -432,7 +502,16 @@
       }
     }
   },
-  "aeTextStylingNotMapped": "文字内容、大小和填充颜色已导入；其余样式未导入",
+  "aeStructureUnreadable": "只能读取 {count} 个素材项目",
+  "@aeStructureUnreadable": {
+    "description": "Import report row reason. Only the direct .aep route raises it, once per import, when the item tree cannot be walked but the footage records can. The placeholder is how many references were recovered.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "aeTextStylingNotMapped": "未带入文本的动画制作工具、路径和部分样式",
   "@aeTextStylingNotMapped": {
     "description": "Import report row reason, lower case. A text layer arrives readable but not fully styled."
   },
