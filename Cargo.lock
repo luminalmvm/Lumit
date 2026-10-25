@@ -2228,6 +2228,7 @@ dependencies = [
  "blake3",
  "exr",
  "hayro",
+ "libloading 0.8.9",
  "lumit-ingress",
  "miniz_oxide",
  "rsmpeg",

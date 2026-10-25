@@ -322,6 +322,7 @@ class PlayheadKeyedField extends StatelessWidget {
   final double max;
   final int decimals;
   final String? suffix;
+  final double? resetTo;
 
   /// The scalar with the edit keyed at the playhead.
   final ValueChanged<BridgeScalar> onWrite;
@@ -336,6 +337,7 @@ class PlayheadKeyedField extends StatelessWidget {
     required this.onWrite,
     this.decimals = 1,
     this.suffix,
+    this.resetTo,
   });
 
   @override
@@ -349,6 +351,7 @@ class PlayheadKeyedField extends StatelessWidget {
           max: max,
           decimals: decimals,
           suffix: suffix,
+          resetTo: resetTo,
           onCommit: (v) => onWrite(scalarWithValueAt(scalar, v, comp, frame)),
         ),
       );
