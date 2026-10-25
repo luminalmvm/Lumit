@@ -598,6 +598,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         value: stored,
         min: -100000,
         max: 100000,
+        resetTo: textAnimatorDefault(widget.value),
         decimals: 1,
         onChanged: _commitStatic,
         onChangeLive: (v) => setState(() => _staged = v.toDouble()),
@@ -613,6 +614,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
       comp: widget.comp,
       min: -100000,
       max: 100000,
+      resetTo: textAnimatorDefault(widget.value),
       onWrite: _write,
     );
   }
