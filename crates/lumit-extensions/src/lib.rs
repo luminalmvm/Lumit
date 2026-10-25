@@ -19,8 +19,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-mod package;
-pub use package::{install_package, pack, read_package, PACKAGE_EXTENSION};
+pub mod package;
 
 /// The file that makes a folder an extension.
 pub const MANIFEST_FILE: &str = "extension.json";
@@ -730,6 +729,7 @@ pub fn remove(id: &str) -> Result<(), ExtensionError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::package::{install_package, pack, read_package};
     use super::*;
 
     fn manifest(change: impl Fn(&mut serde_json::Value)) -> String {
