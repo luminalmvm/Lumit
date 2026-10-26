@@ -161,6 +161,8 @@ class _ProfileChipState extends State<ProfileChip> {
   Future<void> _show(LumitUiState ui) async {
     final box = context.findRenderObject()! as RenderBox;
     setState(() => _open = true);
+    // Who has asked since, for the count on the Friends row.
+    unawaited(ui.account.loadFriends());
     // Anchored at the button's own corner. The card is taller than the room
     // under that, so the popup's own placing lifts it clear of the window's
     // edge, and the gap it carries under itself stands it off the strip.
@@ -298,6 +300,26 @@ class _ProfileCard extends StatelessWidget {
                       style: t.bodyPrimary.copyWith(color: t.textSecondary)),
                 ),
                 rule,
+                // Friends are on the Account page, and how many are waiting
+                // for an answer is said here, where it is seen.
+                if (account != null)
+                  MenuRow(
+                    key: const ValueKey('profile-friends'),
+                    onPressed: () => _leave((context) => showSettingsWindowFrb(
+                        context,
+                        initialPage: SettingsPage.account)),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(l10n.settingsFriends)),
+                        if (ui.account.friends.asked.isNotEmpty)
+                          Text('${ui.account.friends.asked.length}',
+                              key: const ValueKey('profile-friends-asked'),
+                              style: t.small.copyWith(
+                                  color: t.textPrimary,
+                                  fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
                 MenuRow(
                   key: const ValueKey('profile-settings'),
                   onPressed: () => _leave((context) => showSettingsWindowFrb(
@@ -578,12 +600,13 @@ class _RingPainter extends CustomPainter {
 }
 
 /// Ask what a profile is called, in a small window headed [title]. Null when
-/// it was dismissed or left empty.
+/// it was dismissed or left empty. [hint] stands in the empty field.
 Future<String?> askProfileName(
   BuildContext context, {
   required String title,
   String suggested = '',
   required String confirm,
+  String? hint,
 }) async {
   final controller = TextEditingController(text: suggested);
   final name = await showLumitModal<String>(
@@ -605,7 +628,7 @@ Future<String?> askProfileName(
                 controller: controller,
                 width: double.infinity,
                 autofocus: true,
-                hint: l10n.signInName,
+                hint: hint ?? l10n.signInName,
                 onSubmitted: close,
               ),
               const SizedBox(height: 12),

@@ -18,6 +18,8 @@ path = "src/main.rs"
 lumit-aplug = { path = "../lumit-aplug" }
 # The handshake that proves the process on the other end of the pipe is Lumit.
 lumit-peer = { path = "../lumit-peer" }
+# The two ends of the pipe, named where the transport comes from.
+interprocess = "2"
 
 [dev-dependencies]
 # The plugin the broker is tested against, and the staging the tests do. The

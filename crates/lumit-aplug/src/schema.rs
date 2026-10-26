@@ -55,8 +55,9 @@
 //! is the honest spelling of that lifetime.
 
 use lumit_core::fx::{
-    CostClass, EffectSchema, EffectTraits, FxCategory, MatteRole, ParamGroup, ParamId, ParamKind,
-    ParamSchema, Roi, Unit,
+    params::ParamId, params::Unit, schema::CostClass, schema::EffectSchema, schema::EffectTraits,
+    schema::FxCategory, schema::MatteRole, schema::ParamGroup, schema::ParamKind,
+    schema::ParamSchema, schema::Roi,
 };
 
 use crate::describe::{ParamDescription, PluginDescriptor, Rejection};
@@ -65,7 +66,7 @@ use crate::describe::{ParamDescription, PluginDescriptor, Rejection};
 /// once, in the engine, so the crate that mints the name and the walks that
 /// read it cannot drift. VST3's is beside it and
 /// [`Abi::prefix`](crate::abi::Abi::prefix) chooses between them.
-pub const MATCH_PREFIX: &str = lumit_core::fx::CLAP_MATCH_PREFIX;
+pub const MATCH_PREFIX: &str = lumit_core::fx::builtins::CLAP_MATCH_PREFIX;
 
 /// The name one described plugin's effect answers to: its standard's prefix and
 /// its own identifier.

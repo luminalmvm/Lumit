@@ -23,9 +23,8 @@ crate-type = ["cdylib", "staticlib"]
 # that cannot draw has no use anyway; this was `render = default` in all but
 # name, and a "feature" nothing could turn off was a lie in the manifest.
 #
-# The `media` feature (default on) genuinely is optional: pulling lumit-media
-# means linking FFmpeg, and building without it is a real configuration. Footage
-# then does not probe and thumbnails are absent.
+# The `media` feature (default on) turns on footage probing and thumbnails.
+# Building without it still works, footage just doesn't probe.
 [features]
 # Zero-copy is the ONLY Viewer transport: the read-back path that sent
 # every pixel across the FFI boundary is deleted, so all three zero-copy features
@@ -39,7 +38,7 @@ default = [
     "shared-texture-linux",
     "shared-texture-macos",
 ]
-media = ["dep:lumit-media"]
+media = []
 # The Windows zero-copy Viewer path: a shared D3D12 texture the Flutter
 # runner imports directly. Forwards to lumit-render's own feature, which pins
 # the D3D12 backend and pulls the shared-texture GPU code.
@@ -72,6 +71,9 @@ lumit-project = { path = "../lumit-project" }
 lumit-share = { path = "../lumit-share" }
 # File > Run script: the commands and the script runner behind them.
 lumit-script = { path = "../lumit-script" }
+# The live endpoint's pipe and the secret that guards it.
+interprocess = "2"
+lumit-peer = { path = "../lumit-peer" }
 # The command line reads the script it is given with a size cap.
 lumit-ingress = { path = "../lumit-ingress" }
 # Installed extensions: reading a manifest, and the folder they live in.
@@ -81,7 +83,9 @@ lumit-extensions = { path = "../lumit-extensions" }
 # tier back (see src/realtime.rs). An engine crate, so the docs/05 layering
 # (engine crates never depend on the UI) is unbroken.
 lumit-eval = { path = "../lumit-eval" }
-lumit-media = { path = "../lumit-media", optional = true }
+# Always built, as lumit-render already links it. The `media` feature only
+# turns the bridge's own probing and thumbnails on.
+lumit-media = { path = "../lumit-media" }
 # The OFX host (docs/12). The bridge is the composition root for plugins: it is
 # the one place that knows the user's preferences, the effect catalogue and the
 # render's pass table at once, which is what a scan has to reach.
@@ -97,6 +101,10 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+# The device the renderer opened, and what it says about the card.
+lumit-gpu = { path = "../lumit-gpu" }
+# Where a project's parked frames may sit.
+lumit-cache = { path = "../lumit-cache" }
 # Only to name `SolveError` when an analysis is refused, so the panel's reason
 # is a typed variant rather than a scraped English sentence. Already in
 # the build graph through lumit-render.
@@ -134,11 +142,17 @@ features = [
     # `timeBeginPeriod`, so the worker's present-pacing sleeps are 1 ms-grained
     # rather than the ~15.6 ms default tick (see `raise_timer_resolution`).
     "Win32_Media",
+    # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
+    "Win32_Storage_FileSystem",
 ]
 
 # libX11, opened at run time for the camera drags' pointer hold under X11.
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading = "0.8"
+
+# `statvfs`, for the same free-space question on macOS and Linux.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

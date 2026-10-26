@@ -20,8 +20,9 @@ use std::sync::{Arc, Mutex, RwLock};
 use super::effects::custom_shader::{self as cs, CustomShader};
 use super::shader::{self, ShaderProgram, ShaderRefusal};
 use super::{
-    EffectDef, EffectMetadata, EffectSchema, FxCategory, MatteRole, ParamSchema, ResolveCx, Value,
-    LFX_MATCH_PREFIX,
+    builtins::LFX_MATCH_PREFIX, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EffectSchema, schema::FxCategory, schema::MatteRole,
+    schema::ParamSchema,
 };
 use crate::model::EffectInstance;
 
@@ -463,7 +464,11 @@ impl EffectDef for LfxDef {
     /// plugin does, and the preview factor the header hands the shader.
     /// Nought while the effect is missing, which the render reads as "draw
     /// nothing".
-    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(super::ParamId, Value)) {
+    fn resolve_derived(
+        &self,
+        cx: &ResolveCx<'_>,
+        push: &mut dyn FnMut(super::params::ParamId, Value),
+    ) {
         let hash = render_term(self.match_name);
         push(cs::HASH_HI, Value::Int((hash >> 32) as u32 as i32));
         push(cs::HASH_LO, Value::Int(hash as u32 as i32));
@@ -538,7 +543,7 @@ mod tests {
             LfxError::TooManyPasses(_)
         ));
 
-        let inst = crate::fx::instantiate("custom_shader").expect("a built-in");
+        let inst = crate::fx::builtins::instantiate("custom_shader").expect("a built-in");
         let rows = |def: &dyn EffectDef| -> Vec<&str> {
             def.derived(&inst).iter().map(|row| row.id).collect()
         };

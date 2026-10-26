@@ -142,7 +142,7 @@ impl Affine {
 
 /// The layer's own placement at layer time `lt`, or `None` when it leaves the
 /// plane or is driven by an expression. Position, rotation and scale about the
-/// anchor, in the renderer's own order (`lumit_gpu::place_matrix`).
+/// anchor, in the renderer's own order (`lumit_gpu::composite::place_matrix`).
 fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     let tr = &layer.transform;
     let props = [

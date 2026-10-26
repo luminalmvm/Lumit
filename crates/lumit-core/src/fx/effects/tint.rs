@@ -1,6 +1,8 @@
 //! Tint (docs/08 §3.23): black and white remapped to two chosen colours.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Tint's controls.

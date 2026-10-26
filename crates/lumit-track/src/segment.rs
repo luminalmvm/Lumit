@@ -87,7 +87,7 @@ pub struct Segmentation {
 /// spans, mark the ones that never agreed as moving, and split the ones that
 /// stopped agreeing (docs/impl/tracking.md §3).
 ///
-/// `pairs` must be in frame order — [`crate::select_keyframes`] returns them
+/// `pairs` must be in frame order — [`crate::pairs::select_keyframes`] returns them
 /// that way — because "clean prefix, dirty suffix" is a statement about time.
 pub fn segment_dynamic_tracks(
     set: &mut TrackSet,

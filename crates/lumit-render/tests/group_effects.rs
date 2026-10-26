@@ -139,8 +139,8 @@ fn group(members: &[Uuid], effects: Vec<EffectInstance>) -> LayerGroup {
 
 /// A fresh builtin instance with `edits` applied to its float rows.
 fn effect(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
-    let mut inst =
-        lumit_core::fx::instantiate(name).unwrap_or_else(|| panic!("{name} is a builtin"));
+    let mut inst = lumit_core::fx::builtins::instantiate(name)
+        .unwrap_or_else(|| panic!("{name} is a builtin"));
     for (id, value) in edits {
         for p in &mut inst.params {
             if p.id == *id {

@@ -32,7 +32,7 @@
 use std::path::PathBuf;
 
 use flutter_rust_bridge::frb;
-use lumit_core::Op;
+use lumit_core::ops::Op;
 use lumit_render::colour::ColourState;
 
 use crate::api::{

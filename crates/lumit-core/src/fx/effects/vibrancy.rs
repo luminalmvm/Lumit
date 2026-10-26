@@ -1,6 +1,8 @@
 //! Vibrancy (docs/08 §3.12): saturation that lifts the flat pixels hardest.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Vibrancy's controls.

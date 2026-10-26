@@ -1,7 +1,10 @@
 //! Radial blur (docs/08 §3.8): arcs (Spin) or rays (Zoom) about a
 //! centre.
 
-use crate::fx::{cpu, EdgesMode, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EdgesMode,
+    schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Radial blur's controls.
@@ -63,7 +66,7 @@ pub struct RadialBlur {
     /// The reusable Edges control (P3).
     #[choice(
         label = "Edges",
-        options = *crate::fx::EDGE_OPTIONS,
+        options = *crate::fx::builtins::EDGE_OPTIONS,
         // Repeat: full-frame game footage never darkens along the border.
         default = 1
     )]

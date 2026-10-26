@@ -115,8 +115,8 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
 
 /// A fresh style with `edits` applied to its rows.
 fn style(name: &str, edits: &[(&str, f64)]) -> EffectInstance {
-    let mut inst =
-        lumit_core::fx::instantiate(name).unwrap_or_else(|| panic!("{name} is a declared style"));
+    let mut inst = lumit_core::fx::builtins::instantiate(name)
+        .unwrap_or_else(|| panic!("{name} is a declared style"));
     for (id, value) in edits {
         for p in &mut inst.params {
             if p.id == *id {
@@ -363,17 +363,17 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
         vec![stroke_centre],
     ] {
         let name = styles[0].effect.match_name.clone();
-        let ops = lumit_core::fx::resolve_stack(
+        let ops = lumit_core::fx::resolved::resolve_stack(
             &styles,
             0.0,
             1000.0,
             1.0,
-            &lumit_core::fx::MarkerContext::NONE,
+            &lumit_core::fx::markers::MarkerContext::NONE,
             Arc::new(lumit_core::expression::ExpressionContext::detached()),
         );
         assert_eq!(ops.len(), 1, "{name} resolved to no op");
 
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
         let out = lumit_render::fxops::run_ops(
             fx,
             &ctx,
@@ -397,7 +397,7 @@ fn cpu_and_gpu_agree_on_every_shipped_style() {
         // An outer style is given room round the picture to fall into, which
         // the reference's one buffer cannot hold, so it is cut back off first.
         let out = lumit_gpu::fx::fit_centred(&ctx, out, w, h);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let gpu = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
         let mut cpu = source.clone();
         lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
 

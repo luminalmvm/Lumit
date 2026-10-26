@@ -1,6 +1,8 @@
 //! Exposure (docs/08 §3.13): photographic stops, each one a doubling of light.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Exposure's controls.

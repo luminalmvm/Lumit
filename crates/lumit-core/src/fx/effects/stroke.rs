@@ -16,7 +16,10 @@
 //! it is the only form that fits a long path with a fine brush inside the
 //! geometry budget.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
+};
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 

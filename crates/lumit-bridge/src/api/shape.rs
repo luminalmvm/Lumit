@@ -530,13 +530,13 @@ impl LayerReference {
                 }
             }
             copy.kind = lumit_core::model::LayerKind::Shape { contents: part };
-            ops.push(lumit_core::Op::AddLayer {
+            ops.push(lumit_core::ops::Op::AddLayer {
                 comp: self.comp_id,
                 index: index + n + 1,
                 layer: Box::new(copy),
             });
         }
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// **Create ▸ Shapes from text, Shapes from vector layer and Split into

@@ -39,14 +39,15 @@ use crate::kept::{self, Finding, Kept};
 use crate::local::{place, sane, sane_document, settle};
 use crate::wire::{scrubbed, unscrubbed, Names, DOCUMENT_LIMIT, GREETING};
 use crate::{
-    Conflict, Ending, Event, Events, Invite, Person, Presence, Refusal, ShareError, Versions,
+    invite::Invite, Ending, Event, Events, Person, Presence, Refusal, ShareError, Versions,
     MAX_PEOPLE, ONLINE_DOOR,
 };
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Nonce};
 use lumit_core::ops::apply;
+use lumit_core::shared::Conflict;
 use lumit_core::store::{Moved, RemoteTag, Tap};
-use lumit_core::{CompTime, Document, DocumentStore, Op};
+use lumit_core::{model::Document, ops::Op, store::DocumentStore, time::CompTime};
 use lumit_project::{semver_triple, SCHEMA_VERSION};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -1602,7 +1603,7 @@ impl Member {
         self.inner.conflicts.lock().clone()
     }
 
-    /// Settle the conflict at `index`, as [`crate::Guest::resolve`] does.
+    /// Settle the conflict at `index`, as [`crate::guest::Guest::resolve`] does.
     pub fn resolve(&self, index: usize, mine: bool) -> usize {
         let inner = &self.inner;
         resolve(&inner.store, &inner.conflicts, &inner.kept, index, mine)
@@ -1719,7 +1720,7 @@ impl Member {
     }
 
     /// What a save writes while the server is away, as
-    /// [`crate::Guest::saving`] answers it.
+    /// [`crate::guest::Guest::saving`] answers it.
     #[must_use]
     pub fn saving(&self) -> Option<(Arc<Document>, u64, usize)> {
         self.inner.store.saving_apart()
@@ -1734,7 +1735,7 @@ impl Member {
     }
 
     /// The person chose not to save the copy they are closing. See
-    /// [`crate::Guest::discard`].
+    /// [`crate::guest::Guest::discard`].
     pub fn discard(&self) {
         self.inner.discard.store(true, Ordering::Relaxed);
     }
@@ -4266,7 +4267,7 @@ mod tests {
         // Its own document from just before is kept, as a project of its
         // own with everything it had made in it and nothing of A's.
         let copy = b.1.snapshot().id;
-        let before = crate::before_returns(copy);
+        let before = crate::kept::before_returns(copy);
         assert_eq!(before.len(), 1, "B has a way back");
         // And beside it, what that return dropped, by name.
         assert!(before[0].refused == 1 && before[0].dropped == *dropped);
@@ -4323,7 +4324,7 @@ mod tests {
             Some("made while nothing was taken")
         );
         // That return dropped nothing, so the copy is the one from before.
-        assert!(crate::before_returns(copy) == before);
+        assert!(crate::kept::before_returns(copy) == before);
         assert!(lumit_project::open(&before[0].path).unwrap().0 == mine);
 
         // B goes away again and comes back to another edit dropped, before
@@ -4346,12 +4347,12 @@ mod tests {
             let back = |event: &Event| matches!(event, Event::Back { refused: 1, .. });
             heard.lock().iter().any(back)
         });
-        let both = crate::before_returns(copy);
+        let both = crate::kept::before_returns(copy);
         assert_eq!(both.len(), 2);
         assert!(both[1] == before[0], "newest first");
         assert!(lumit_project::open(&both[1].path).unwrap().0 == mine);
         // Each names what its own return dropped, and not the other's.
-        let named = |kept: &crate::BeforeReturn| {
+        let named = |kept: &crate::kept::BeforeReturn| {
             let items = kept.dropped.iter();
             items
                 .map(|dropped| dropped.item.clone())
@@ -4362,8 +4363,8 @@ mod tests {
         let (latest, _) = lumit_project::open(&both[0].path).unwrap();
         assert!(latest.comp(again).is_some_and(|comp| comp.sound_mix));
         assert!(latest.comp(gone).is_none(), "which only the first has");
-        crate::forget_before_return(copy);
-        assert!(crate::before_returns(copy).is_empty());
+        crate::kept::forget_before_return(copy);
+        assert!(crate::kept::before_returns(copy).is_empty());
     }
 
     /// A copy that closes is still a member when it is opened again, in a

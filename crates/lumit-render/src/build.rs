@@ -38,7 +38,13 @@ use uuid::Uuid;
 /// One layer's own picture: the bytes, the decoded size, the native source
 /// size, and how wide the bytes' samples are. Everything but a float footage
 /// source is `Srgb8`, which is what it has always been.
-pub type LayerPixels = (Arc<Vec<u8>>, u32, u32, (f32, f32), lumit_media::PixelFormat);
+pub type LayerPixels = (
+    Arc<Vec<u8>>,
+    u32,
+    u32,
+    (f32, f32),
+    lumit_media::decode::PixelFormat,
+);
 
 /// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
@@ -101,10 +107,10 @@ fn warp_puppet(
     // The reference frame is read for its alpha alone, at whichever width it
     // arrived at — the bitmap that comes out is a silhouette either way.
     let alpha = match rfmt {
-        lumit_media::PixelFormat::LinearF32 => {
+        lumit_media::decode::PixelFormat::LinearF32 => {
             lumit_core::puppet::alpha_at_natural_f32(&reference, rw, rh, nw, nh)
         }
-        lumit_media::PixelFormat::Srgb8 => {
+        lumit_media::decode::PixelFormat::Srgb8 => {
             lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh)
         }
     };
@@ -137,8 +143,8 @@ fn warp_puppet(
         },
     );
     let warp = match pixels.4 {
-        lumit_media::PixelFormat::LinearF32 => lumit_core::puppet::apply_puppet_f32,
-        lumit_media::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
+        lumit_media::decode::PixelFormat::LinearF32 => lumit_core::puppet::apply_puppet_f32,
+        lumit_media::decode::PixelFormat::Srgb8 => lumit_core::puppet::apply_puppet,
     };
     warp(
         Arc::make_mut(&mut pixels.0).as_mut_slice(),
@@ -183,9 +189,9 @@ fn preview_puppet(pixels: &LayerPixels, layer: Uuid, density: f64, expansion: f6
 /// that composites (they must never disagree). Every mode maps to its
 /// like-named GPU variant (T24).
 #[must_use]
-pub fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::Blend {
+pub fn blend_of(b: lumit_core::model::BlendMode) -> lumit_gpu::composite::Blend {
     use lumit_core::model::BlendMode as M;
-    use lumit_gpu::Blend as G;
+    use lumit_gpu::composite::Blend as G;
     match b {
         M::Normal => G::Normal,
         M::Add => G::Add,
@@ -291,7 +297,7 @@ pub fn parent_world_placement(
     for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &read, solves) {
         let p = place_of(&p);
         world = Some(match world {
-            Some(w) => lumit_gpu::concat_place(w, p),
+            Some(w) => lumit_gpu::composite::concat_place(w, p),
             None => p,
         });
     }
@@ -308,7 +314,7 @@ fn world_placement(
 ) -> [[f32; 4]; 4] {
     let own = own_placement(layer, t_comp, &context);
     match parent_world_placement(comp, layer, t_comp, context) {
-        Some(pre) => lumit_gpu::concat_place(pre, own),
+        Some(pre) => lumit_gpu::composite::concat_place(pre, own),
         None => own,
     }
 }
@@ -328,7 +334,7 @@ fn own_placement(
 
 fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
     let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
-    lumit_gpu::place_matrix_3d(f(p.position), f(p.anchor), f(p.scale), f(p.rotation_deg))
+    lumit_gpu::composite::place_matrix_3d(f(p.position), f(p.anchor), f(p.scale), f(p.rotation_deg))
 }
 
 /// What the compositor draws `layer`'s own picture with at layer time `lt`,
@@ -339,13 +345,13 @@ fn drawn(
     layer: &lumit_core::model::Layer,
     lt: f64,
     context: &Arc<ExpressionContext>,
-) -> lumit_gpu::MbSample {
+) -> lumit_gpu::composite::MbSample {
     let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
     let p = layer
         .transform
         .placement_at(lt, !layer.switches.three_d, &read);
     let at = p.flat_position();
-    lumit_gpu::MbSample {
+    lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
         anchor: (p.anchor.0 as f32, p.anchor.1 as f32),
         scale: (p.scale.0 as f32, p.scale.1 as f32),
@@ -389,30 +395,32 @@ pub fn reparented(
     ) {
         return reparented_eye(comp, layer, new_parent, t_comp, &context);
     }
-    let identity = lumit_gpu::Mat4::IDENTITY.to_cols_array_2d();
+    let identity = glam::Mat4::IDENTITY.to_cols_array_2d();
     let was = parent_world_placement(comp, layer, t_comp, context.clone()).unwrap_or(identity);
     let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
         Some(parent) => {
             let own = own_placement(parent, t_comp, &context);
             match parent_world_placement(comp, parent, t_comp, context.clone()) {
-                Some(world) => lumit_gpu::concat_place(world, own),
+                Some(world) => lumit_gpu::composite::concat_place(world, own),
                 None => own,
             }
         }
         None => identity,
     };
-    let Some(out) = lumit_gpu::invert_place(now).filter(|_| was != now) else {
+    let Some(out) = lumit_gpu::composite::invert_place(now).filter(|_| was != now) else {
         return Vec::new();
     };
     // Out of the old parent's space and into the new one's.
-    let carry = lumit_gpu::concat_place(out, was);
+    let carry = lumit_gpu::composite::concat_place(out, was);
 
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let tr = &layer.transform;
     let at = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
-    let placed = lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context));
-    let mut to =
-        lumit_gpu::unplace_matrix(placed, (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32));
+    let placed = lumit_gpu::composite::concat_place(carry, own_placement(layer, t_comp, &context));
+    let mut to = lumit_gpu::composite::unplace_matrix(
+        placed,
+        (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32),
+    );
     // The anchor's own z stays where it is, so the position takes what it
     // leaves.
     if layer.switches.three_d {
@@ -580,8 +588,8 @@ pub fn parent_ops(
     layer: Uuid,
     parent: Option<Uuid>,
     t_comp: f64,
-) -> Vec<lumit_core::Op> {
-    let mut ops = vec![lumit_core::Op::SetLayerParent {
+) -> Vec<lumit_core::ops::Op> {
+    let mut ops = vec![lumit_core::ops::Op::SetLayerParent {
         comp,
         layer,
         parent,
@@ -603,12 +611,14 @@ pub fn parent_ops(
     ops.extend(
         reparented(c, l, parent, t_comp, context)
             .into_iter()
-            .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
-                comp,
-                layer,
-                prop,
-                animation,
-            }),
+            .map(
+                |(prop, animation)| lumit_core::ops::Op::SetTransformProperty {
+                    comp,
+                    layer,
+                    prop,
+                    animation,
+                },
+            ),
     );
     ops
 }
@@ -899,7 +909,7 @@ fn made_up(
 ///
 /// This works that "somewhere else" out once a frame, as one 3×4 table.
 /// **Nothing here derives a camera**: it is the compositor's own
-/// [`lumit_gpu::camera_matrix`] and [`lumit_gpu::place_matrix`], multiplied
+/// [`lumit_gpu::composite::camera_matrix`] and [`lumit_gpu::composite::place_matrix`], multiplied
 /// together and then restricted back onto the layer's plane — the plane's own
 /// map `H` (the full product with `z` struck out) inverted and put in front, so
 /// that a particle at `z = 0` comes back to exactly where it started and one
@@ -923,7 +933,7 @@ pub fn points_projection(
     let pose = crate::track::camera_pose(doc, comp, t_comp);
     let cam = crate::export::camera_mat(comp.width, comp.height, pose);
     let d = drawn(layer, lt, &context);
-    let place = lumit_gpu::place_matrix(
+    let place = lumit_gpu::composite::place_matrix(
         d.position,
         d.anchor,
         d.scale,
@@ -934,10 +944,10 @@ pub fn points_projection(
     );
     // Parenting composes exactly as the compositor composes it: `pre × own`.
     let place = match parent_world_placement(comp, layer, t_comp, context) {
-        Some(pre) => lumit_gpu::concat_place(pre, place),
+        Some(pre) => lumit_gpu::composite::concat_place(pre, place),
         None => place,
     };
-    let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+    let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
     // Rows 0, 1 and 3 of the product — x, y and the homogeneous divide; the z
     // output is flattened by the perspective matrix and never read.
     let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
@@ -1022,12 +1032,12 @@ fn points_room(
 fn points_input_for(
     layer: &lumit_core::model::Layer,
     consumer: &lumit_core::model::EffectInstance,
-    def: &'static dyn lumit_core::fx::EffectDef,
+    def: &'static dyn lumit_core::fx::registry::EffectDef,
     t: f64,
     dt: f64,
     projection: lumit_core::fx::points::Projection,
     context: &Arc<ExpressionContext>,
-    audio: &dyn lumit_core::fx::AudioTap,
+    audio: &dyn lumit_core::fx::registry::AudioTap,
     clone: (u32, u32),
 ) -> PointsInput {
     let wiring = (&layer.graph, &layer.effects[..], None);
@@ -1057,12 +1067,12 @@ fn points_input_in(
         Option<&[lumit_core::model::EffectInstance]>,
     ),
     consumer: &lumit_core::model::EffectInstance,
-    def: &'static dyn lumit_core::fx::EffectDef,
+    def: &'static dyn lumit_core::fx::registry::EffectDef,
     t: f64,
     _dt: f64,
     projection: lumit_core::fx::points::Projection,
     context: &Arc<ExpressionContext>,
-    audio: &dyn lumit_core::fx::AudioTap,
+    audio: &dyn lumit_core::fx::registry::AudioTap,
     clone: (u32, u32),
 ) -> PointsInput {
     use lumit_core::graph::{InputRef, NodeRef, OutputRef};
@@ -1093,11 +1103,11 @@ fn points_input_in(
     }
     // Which sockets, from the signature rather than from a name this file
     // would have to keep in step with the effect's own declaration.
-    let ports: Vec<&lumit_core::fx::Port> = def
+    let ports: Vec<&lumit_core::fx::schema::Port> = def
         .signature()
         .inputs()
         .iter()
-        .filter(|p| p.ty == lumit_core::fx::PortType::Points)
+        .filter(|p| p.ty == lumit_core::fx::schema::PortType::Points)
         .collect();
     // Two things a points wire may come out of, and nothing else: a producer in
     // this stack, or a **cross-layer tap** naming another layer's. A
@@ -1213,7 +1223,7 @@ fn birth_schedule(
     dt: f64,
     context: &Arc<ExpressionContext>,
     graph: Option<&lumit_core::graph::LayerGraph>,
-    audio: &dyn lumit_core::fx::AudioTap,
+    audio: &dyn lumit_core::fx::registry::AudioTap,
 ) -> lumit_core::fx::points::Schedule {
     let upto = (t / dt).floor() as i64;
     let rate_at = |lt: f64| -> f64 {
@@ -1244,7 +1254,7 @@ fn birth_schedule(
         })
     };
     lumit_core::fx::effects::particulate::Particulate::add_bursts(e, &mut schedule, &row_at);
-    schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+    schedule.trim_to_newest(lumit_gpu::fx::particulate::MAX_CANDIDATES);
     schedule
 }
 
@@ -1393,7 +1403,7 @@ pub fn points_input_at(
     effect: &lumit_core::model::EffectInstance,
     t_comp: f64,
 ) -> Option<lumit_core::fx::points::PointsStream> {
-    let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name)?;
+    let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&effect.effect.match_name)?;
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let context = Arc::new(ExpressionContext {
         document: doc.clone(),
@@ -1470,7 +1480,7 @@ pub fn motion_blur_samples(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
     context: Arc<ExpressionContext>,
-) -> Vec<lumit_gpu::MbSample> {
+) -> Vec<lumit_gpu::composite::MbSample> {
     if !layer.switches.motion_blur {
         return Vec::new();
     }
@@ -1518,7 +1528,7 @@ pub fn shading_lights(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
     context: &Arc<ExpressionContext>,
-) -> Vec<lumit_gpu::fx::LightingLight> {
+) -> Vec<lumit_gpu::fx::lighting::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
     // Accepts lights off still takes the shadows of the lights that cast
@@ -1548,7 +1558,7 @@ pub fn shading_lights(
     if lights.is_empty() {
         return Vec::new();
     }
-    if lights.len() > lumit_gpu::fx::MAX_LIT_LIGHTS {
+    if lights.len() > lumit_gpu::fx::lighting::MAX_LIT_LIGHTS {
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         let (lx, ly) = (
             layer.transform.position_x.value_at(lt),
@@ -1565,7 +1575,7 @@ pub fn shading_lights(
             })
             .collect();
         keyed.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        keyed.truncate(lumit_gpu::fx::MAX_LIT_LIGHTS);
+        keyed.truncate(lumit_gpu::fx::lighting::MAX_LIT_LIGHTS);
         keyed.sort_by_key(|&(_, i)| i);
         lights = keyed.iter().map(|&(_, i)| lights[i]).collect();
     }
@@ -1575,7 +1585,7 @@ pub fn shading_lights(
         .map(|l| {
             // The same placement maths a layer gets, so a light and a layer
             // that share a transform occupy the same place in space.
-            let place = lumit_gpu::place_matrix(
+            let place = lumit_gpu::composite::place_matrix(
                 (l.position.0 as f32, l.position.1 as f32),
                 (0.0, 0.0),
                 (100.0, 100.0),
@@ -1592,8 +1602,8 @@ pub fn shading_lights(
                 LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
                 _ => -2.0,
             };
-            use lumit_gpu::fx::LightingKind as K;
-            lumit_gpu::fx::LightingLight {
+            use lumit_gpu::fx::lighting::LightingKind as K;
+            lumit_gpu::fx::lighting::LightingLight {
                 corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
                 // A picture lit in display encoding takes the light's colour
                 // encoded too, and its intensity as it is, as After Effects does.
@@ -1639,9 +1649,9 @@ pub fn shading_material(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
     t_comp: f64,
-) -> lumit_gpu::fx::LightingMaterial {
+) -> lumit_gpu::fx::lighting::LightingMaterial {
     if !layer.switches.three_d {
-        return lumit_gpu::fx::LightingMaterial::default();
+        return lumit_gpu::fx::lighting::LightingMaterial::default();
     }
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let m = &layer.transform.material;
@@ -1651,11 +1661,11 @@ pub fn shading_material(
     let adds = comp.lighting == lumit_core::model::CompLighting::Adds;
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
     let shadows = |s: lumit_core::model::ShadowMode| match s {
-        lumit_core::model::ShadowMode::Off => lumit_gpu::fx::LightingShadows::Off,
-        lumit_core::model::ShadowMode::On => lumit_gpu::fx::LightingShadows::On,
-        lumit_core::model::ShadowMode::Only => lumit_gpu::fx::LightingShadows::Only,
+        lumit_core::model::ShadowMode::Off => lumit_gpu::fx::lighting::LightingShadows::Off,
+        lumit_core::model::ShadowMode::On => lumit_gpu::fx::lighting::LightingShadows::On,
+        lumit_core::model::ShadowMode::Only => lumit_gpu::fx::lighting::LightingShadows::Only,
     };
-    lumit_gpu::fx::LightingMaterial {
+    lumit_gpu::fx::lighting::LightingMaterial {
         base: if adds { 1.0 } else { 0.0 },
         ambient: pct(&m.ambient),
         diffuse: if adds { 2.0 } else { 1.0 } * pct(&m.diffuse),
@@ -1723,15 +1733,15 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
 #[allow(clippy::too_many_arguments)]
 fn resolve_layer_fx(
     layer: &lumit_core::model::Layer,
-    drivers: &lumit_core::fx::ResolvedDrivers,
+    drivers: &lumit_core::fx::drivers::ResolvedDrivers,
     effect_lt: f64,
     frame_lt: f64,
     diag_px: f32,
     px_scale: f32,
-    markers: &lumit_core::fx::MarkerContext,
+    markers: &lumit_core::fx::markers::MarkerContext,
     context: Arc<ExpressionContext>,
-) -> (Vec<Uuid>, lumit_core::fx::ResolvedStack) {
-    let (mut ids, mut ops) = lumit_core::fx::resolve_stack_temporal_named(
+) -> (Vec<Uuid>, lumit_core::fx::params::ResolvedStack) {
+    let (mut ids, mut ops) = lumit_core::fx::resolved::resolve_stack_temporal_named(
         &layer.effects,
         drivers,
         effect_lt,
@@ -1751,7 +1761,7 @@ fn resolve_layer_fx(
     // the one that ends up furthest back, and §2 puts the Drop shadow there.
     let walks = std::iter::once(interior).chain((0..outer.len()).rev().map(|i| &outer[i..=i]));
     for slice in walks {
-        let (style_ids, style_ops) = lumit_core::fx::resolve_stack_temporal_named(
+        let (style_ids, style_ops) = lumit_core::fx::resolved::resolve_stack_temporal_named(
             slice,
             drivers,
             effect_lt,
@@ -2018,7 +2028,7 @@ fn comp_walk(
     let drivers_for = |l: &lumit_core::model::Layer,
                        dlt: f64,
                        ctx: Arc<ExpressionContext>|
-     -> lumit_core::fx::ResolvedDrivers {
+     -> lumit_core::fx::drivers::ResolvedDrivers {
         let projection = points_projection(expr_doc, comp, l, t_comp, dlt, ctx.clone())
             .unwrap_or(lumit_core::fx::points::Projection::FLAT);
         lumit_core::fx::drivers::resolve_drivers_cloned(
@@ -2215,8 +2225,8 @@ fn comp_walk(
         let format = match &layer.kind {
             LayerKind::Footage { .. } | LayerKind::Sequence { .. } => pixels_by_layer
                 .get(&layer.id)
-                .map_or(lumit_media::PixelFormat::Srgb8, |lp| lp.format),
-            _ => lumit_media::PixelFormat::Srgb8,
+                .map_or(lumit_media::decode::PixelFormat::Srgb8, |lp| lp.format),
+            _ => lumit_media::decode::PixelFormat::Srgb8,
         };
         raw.map(|(mut rgba, w, h, natural)| {
             // Nothing to stamp in is the ordinary layer, and it keeps the
@@ -2233,8 +2243,10 @@ fn comp_walk(
                 // Both stages come in a width to match the plate, so a float
                 // layer stays float through either of them.
                 let strokes = match format {
-                    lumit_media::PixelFormat::LinearF32 => lumit_core::paint::apply_strokes_f32,
-                    lumit_media::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
+                    lumit_media::decode::PixelFormat::LinearF32 => {
+                        lumit_core::paint::apply_strokes_f32
+                    }
+                    lumit_media::decode::PixelFormat::Srgb8 => lumit_core::paint::apply_strokes,
                 };
                 strokes(
                     rgba,
@@ -2251,8 +2263,10 @@ fn comp_walk(
                 // colour exactly as it arrived — a masked OpenEXR is still an
                 // OpenEXR.
                 let gate = match format {
-                    lumit_media::PixelFormat::LinearF32 => lumit_core::mask::apply_masks_f32,
-                    lumit_media::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
+                    lumit_media::decode::PixelFormat::LinearF32 => {
+                        lumit_core::mask::apply_masks_f32
+                    }
+                    lumit_media::decode::PixelFormat::Srgb8 => lumit_core::mask::apply_masks,
                 };
                 gate(
                     rgba,
@@ -2447,7 +2461,7 @@ fn comp_walk(
             tex_w: nested.width,
             tex_h: nested.height,
             // A comp is realised on the card; there are no source bytes here.
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             fx: Default::default(),
             colour_tables: Vec::new(),
             // A comp reference runs no stack of its own here: its layers were
@@ -2486,7 +2500,7 @@ fn comp_walk(
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter(|e| e.effect.match_name == lumit_core::roto::ROTO_BRUSH)
             .filter(|e| {
-                lumit_core::fx::BUILTIN_DEFS
+                lumit_core::fx::catalogue::BUILTIN_DEFS
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
@@ -2514,7 +2528,7 @@ fn comp_walk(
             .iter()
             .filter(|e| e.enabled && lumit_core::planes::task_of(e).is_some())
             .filter(|e| {
-                lumit_core::fx::BUILTIN_DEFS
+                lumit_core::fx::catalogue::BUILTIN_DEFS
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
@@ -2560,7 +2574,7 @@ fn comp_walk(
                 let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = tex_w as f32 / natural.0.max(1.0);
-                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, src);
                 // The referenced layer's own effects, so its own expressions
                 // resolve about it rather than about the layer that pointed
                 // at it.
@@ -2577,7 +2591,7 @@ fn comp_walk(
                 // to whichever stack is being resolved.
                 let drivers = drivers_for(src, slt, context.clone());
                 (
-                    lumit_core::fx::resolve_stack_temporal_named(
+                    lumit_core::fx::resolved::resolve_stack_temporal_named(
                         &src.effects,
                         &drivers,
                         slt,
@@ -2663,7 +2677,7 @@ fn comp_walk(
                         && e.effect.match_name == lumit_core::comp_graph::NODE_GRAPH
                 })
                 .filter(|e| {
-                    lumit_core::fx::BUILTIN_DEFS
+                    lumit_core::fx::catalogue::BUILTIN_DEFS
                         .get(&e.effect.match_name)
                         .is_some_and(|def| def.is_image_op())
                 })
@@ -2762,7 +2776,7 @@ fn comp_walk(
     let map_place = |e: &lumit_core::model::EffectInstance,
                      param: &str|
      -> Option<Box<crate::draw::MapPlace>> {
-        use lumit_core::fx::MapPlacement;
+        use lumit_core::fx::builtins::MapPlacement;
         // Mid-grey is no push at all, whichever channel steers it, so the
         // frame round a placed map stays still.
         let ground = if matches!(
@@ -2773,7 +2787,7 @@ fn comp_walk(
         } else {
             [0.0; 4]
         };
-        let placed = match lumit_core::fx::map_placement(e, param) {
+        let placed = match lumit_core::fx::builtins::map_placement(e, param) {
             MapPlacement::Stretch => return None,
             MapPlacement::Centre => None,
             MapPlacement::AsPlaced => {
@@ -2798,12 +2812,12 @@ fn comp_walk(
                 Some(match owner {
                     // A layer scaled to nothing shows nothing, so any answer
                     // will do.
-                    Some(owner) => {
-                        lumit_gpu::invert_place(world_placement(comp, owner, t_comp, context))
-                            .map_or(to_comp, |from_comp| {
-                                lumit_gpu::concat_place(from_comp, to_comp)
-                            })
-                    }
+                    Some(owner) => lumit_gpu::composite::invert_place(world_placement(
+                        comp, owner, t_comp, context,
+                    ))
+                    .map_or(to_comp, |from_comp| {
+                        lumit_gpu::composite::concat_place(from_comp, to_comp)
+                    }),
                     None => to_comp,
                 })
             }
@@ -2880,7 +2894,7 @@ fn comp_walk(
             (true, Some(n)) => Some(n),
             (true, None) => {
                 let wired = host
-                    .zip(lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name))
+                    .zip(lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name))
                     .map(|(layer, def)| {
                         let context = Arc::new(ExpressionContext {
                             document: expr_doc.clone(),
@@ -3029,7 +3043,7 @@ fn comp_walk(
                         )
                 })
                 .filter_map(|e| {
-                    let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                    let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
                     let param = def.schema().layer_input()?;
                     def.is_image_op().then_some((e, def, param))
                 })
@@ -3120,7 +3134,7 @@ fn comp_walk(
             .iter()
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
-                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 let param = def.schema().matte.param()?;
                 def.is_image_op().then_some((e, param))
             })
@@ -3138,8 +3152,8 @@ fn comp_walk(
                 // in Manual mode would cost a whole pass per frame for a
                 // picture the kernel ignores. One rule, every effect — the
                 // flare's own named gate, generalised.
-                if !lumit_core::fx::param_visible(e, param)
-                    || !lumit_core::fx::param_enabled(e, param)
+                if !lumit_core::fx::builtins::param_visible(e, param)
+                    || !lumit_core::fx::builtins::param_enabled(e, param)
                 {
                     return LayerInputDraw::Absent;
                 }
@@ -3180,7 +3194,7 @@ fn comp_walk(
             .iter()
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
-                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 def.is_image_op().then_some((e, def))
             })
             .flat_map(|(e, def)| {
@@ -3256,7 +3270,7 @@ fn comp_walk(
             .enumerate()
             .filter(|(_, e)| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|(i, e)| {
-                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 let wants =
                     lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
                 wants.then_some((i, e, def))
@@ -3271,7 +3285,7 @@ fn comp_walk(
         let draws = |e: &lumit_core::model::EffectInstance| {
             e.enabled
                 && (e.effect.namespace != EffectNamespace::Builtin
-                    || lumit_core::fx::BUILTIN_DEFS
+                    || lumit_core::fx::catalogue::BUILTIN_DEFS
                         .get(&e.effect.match_name)
                         .is_none_or(|def| def.is_image_op()))
         };
@@ -3562,10 +3576,10 @@ fn comp_walk(
             // Resolve time is comp time (§1): a group has no in point, start
             // offset or Retime, so there is no layer clock to convert through,
             // and its marker context is the comp's own.
-            let markers = lumit_core::fx::MarkerContext::for_comp(comp);
-            let (fx_ids, fx) = lumit_core::fx::resolve_stack_temporal_named(
+            let markers = lumit_core::fx::markers::MarkerContext::for_comp(comp);
+            let (fx_ids, fx) = lumit_core::fx::resolved::resolve_stack_temporal_named(
                 &group.effects,
-                lumit_core::fx::ResolvedDrivers::NONE,
+                lumit_core::fx::drivers::ResolvedDrivers::NONE,
                 t_comp,
                 frame_t,
                 comp_diag,
@@ -3615,7 +3629,7 @@ fn comp_walk(
                 three_d: false,
                 ends_run: false,
                 matte: None,
-                blend: lumit_gpu::Blend::Normal,
+                blend: lumit_gpu::composite::Blend::Normal,
                 mask_cov: None,
                 pre: None,
                 fx,
@@ -3735,7 +3749,7 @@ fn comp_walk(
         // live. Fed to resolve_stack_temporal as the *sample* time, so a
         // sample_temporally == false effect still holds at the true playhead
         // (§5); equal to `lt` when the stack has no this-layer Posterize.
-        let effect_lt = lumit_core::fx::this_layer_effect_time(
+        let effect_lt = lumit_core::fx::temporal::this_layer_effect_time(
             &layer.effects,
             layer.switches.fx,
             lt,
@@ -3774,7 +3788,7 @@ fn comp_walk(
                     (n.width as f32, n.height as f32),
                     // A comp is realised on the card; there are no source
                     // bytes here.
-                    lumit_media::PixelFormat::Srgb8,
+                    lumit_media::decode::PixelFormat::Srgb8,
                 )
             } else if mr.source.applies_masks() {
                 pixels_for(src)?
@@ -3798,10 +3812,10 @@ fn comp_walk(
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = m_w as f32 / m_nat.0.max(1.0);
 
-                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, src);
                 let drivers = drivers_for(src, mlt, context.clone());
                 (
-                    lumit_core::fx::resolve_stack_temporal_named(
+                    lumit_core::fx::resolved::resolve_stack_temporal_named(
                         &src.effects,
                         &drivers,
                         mlt,
@@ -4010,8 +4024,8 @@ fn comp_walk(
                             height: natural.1 as u32,
                             background: [0.0, 0.0, 0.0, 0.0],
                             draws: vec![
-                                part(going, away, lumit_gpu::Blend::Normal),
-                                part(coming, here, lumit_gpu::Blend::Plus),
+                                part(going, away, lumit_gpu::composite::Blend::Normal),
+                                part(coming, here, lumit_gpu::composite::Blend::Plus),
                             ],
                             camera: None,
                             // A mix has no name of its own. Each comp
@@ -4077,7 +4091,7 @@ fn comp_walk(
 
                     let parent = match parent_world_placement(comp, layer, t_comp, context.clone())
                     {
-                        Some(pw) => lumit_gpu::concat_place(pw, own),
+                        Some(pw) => lumit_gpu::composite::concat_place(pw, own),
                         None => own,
                     };
                     for d in &mut spliced_in {
@@ -4094,7 +4108,7 @@ fn comp_walk(
                         d.pre = Some(match d.pre {
                             // A collapsed chain: this parent wraps the child's
                             // own parent placement.
-                            Some(p) => lumit_gpu::concat_place(parent, p),
+                            Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
                         // Per-layer motion blur on an inner layer of a collapsed
@@ -4178,7 +4192,8 @@ fn comp_walk(
                         ),
                     )
                 };
-                let crosses = |o| lumit_core::fx::cut_between(&nested.layers, st, nested_at(o));
+                let crosses =
+                    |o| lumit_core::fx::temporal::cut_between(&nested.layers, st, nested_at(o));
                 flow_below = crate::plan::rebuild_offsets(layer, lt, dt, crosses)
                     .into_iter()
                     // None inside a walk that is itself a neighbour.
@@ -4274,7 +4289,7 @@ fn comp_walk(
                     // constructor export uses. Effects flagged
                     // sample_temporally == false resolve at the frame time in a
                     // held re-render (§5); equal to `lt` on an ordinary render.
-                    let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
+                    let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, layer);
                     resolve_layer_fx(
                         layer,
                         &drivers_for(layer, effect_lt, context.clone()),
@@ -4333,12 +4348,13 @@ fn comp_walk(
                             && e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
                             && e.effect.match_name == "accumulation_mb"
                     }) {
-                        ab.matte = if e.layer_ref(lumit_core::fx::MATTE_PARAM) == Some(layer.id) {
-                            LayerInputDraw::ThisLayer
-                        } else {
-                            layer_slot(e, lumit_core::fx::MATTE_PARAM)
-                                .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
-                        };
+                        ab.matte =
+                            if e.layer_ref(lumit_core::fx::schema::MATTE_PARAM) == Some(layer.id) {
+                                LayerInputDraw::ThisLayer
+                            } else {
+                                layer_slot(e, lumit_core::fx::schema::MATTE_PARAM)
+                                    .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                            };
                     }
                     ab
                 });
@@ -4365,7 +4381,7 @@ fn comp_walk(
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
-                    blend: lumit_gpu::Blend::Normal,
+                    blend: lumit_gpu::composite::Blend::Normal,
                     mask_cov: (!layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
                         // natural), same as the property panel treats them.
@@ -4501,7 +4517,7 @@ fn comp_walk(
                 // re-render, an effect flagged sample_temporally == false stays
                 // at the frame time `frame_lt` (§5); on an ordinary render
                 // `frame_lt == lt`, so this is the plain resolve.
-                let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
+                let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, layer);
                 resolve_layer_fx(
                     layer,
                     &drivers_for(layer, effect_lt, context.clone()),
@@ -4621,7 +4637,7 @@ fn comp_walk(
                         && layer.transform.material.accepts_shadows
                             == lumit_core::model::ShadowMode::Only =>
                 {
-                    lumit_gpu::Blend::Multiply
+                    lumit_gpu::composite::Blend::Multiply
                 }
                 b => blend_of(b),
             },
@@ -4944,7 +4960,7 @@ fn graph_comp_draw(
         three_d: false,
         ends_run: false,
         matte: None,
-        blend: lumit_gpu::Blend::Normal,
+        blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
         fx: Default::default(),
@@ -5122,7 +5138,7 @@ impl GraphLower<'_> {
             lumit_core::fx::points::Projection::FLAT,
             self.clone,
         );
-        let markers = lumit_core::fx::MarkerContext::for_comp(graph_comp);
+        let markers = lumit_core::fx::markers::MarkerContext::for_comp(graph_comp);
         // Spatial units are px in the graph's own frame, and the realiser
         // rescales them to whatever raster it walks at - the same correction a
         // Precomp layer's stack takes.
@@ -5141,7 +5157,7 @@ impl GraphLower<'_> {
                         .find(|p| p.id == inst.id)
                         .unwrap_or(inst);
                     let index = if inst.enabled {
-                        let rows = lumit_core::fx::resolve_instance(
+                        let rows = lumit_core::fx::resolved::resolve_instance(
                             inst,
                             &drivers,
                             self.t,
@@ -5151,7 +5167,8 @@ impl GraphLower<'_> {
                             context.clone(),
                         );
                         let index = rows.iter().next().map_or(0, |op| {
-                            op.params.int(lumit_core::fx::ParamId::new("index"), 0)
+                            op.params
+                                .int(lumit_core::fx::params::ParamId::new("index"), 0)
                         });
                         index
                     } else {
@@ -5188,7 +5205,7 @@ impl GraphLower<'_> {
         // One Set channels pass over `input` with `source` on its Source row,
         // which is all Split channels and Combine channels are made of.
         let channel_pass = |id: Uuid, input: Option<usize>, source, picks: [u32; 4]| {
-            let mut inst = lumit_core::fx::instantiate("set_channels")?;
+            let mut inst = lumit_core::fx::builtins::instantiate("set_channels")?;
             inst.id = id;
             let rows = ["red_from", "green_from", "blue_from", "alpha_from"];
             for (row, pick) in rows.into_iter().zip(picks) {
@@ -5198,7 +5215,7 @@ impl GraphLower<'_> {
             }
             Some(GraphStep::Fx {
                 input,
-                ops: lumit_core::fx::resolve_stack(
+                ops: lumit_core::fx::resolved::resolve_stack(
                     std::slice::from_ref(&inst),
                     self.t,
                     diag,
@@ -5332,7 +5349,7 @@ impl GraphLower<'_> {
                     }
                     match inst.effect.match_name.as_str() {
                         lumit_core::comp_graph::MERGE => {
-                            let rows = lumit_core::fx::resolve_instance(
+                            let rows = lumit_core::fx::resolved::resolve_instance(
                                 inst,
                                 &drivers,
                                 self.t,
@@ -5346,10 +5363,10 @@ impl GraphLower<'_> {
                                 a: input,
                                 b: wired(&steps, id, lumit_core::comp_graph::BACKGROUND_PORT.id),
                                 mode: p.map_or(0, |p| {
-                                    p.choice(lumit_core::fx::ParamId::new("mode"), 0)
+                                    p.choice(lumit_core::fx::params::ParamId::new("mode"), 0)
                                 }),
                                 opacity: p.map_or(100.0, |p| {
-                                    p.float(lumit_core::fx::ParamId::new("opacity"), 100.0)
+                                    p.float(lumit_core::fx::params::ParamId::new("opacity"), 100.0)
                                 }),
                             });
                             Some(plan.steps.len() - 1)
@@ -5408,7 +5425,7 @@ impl GraphLower<'_> {
                         // An empty Source reads nothing, so an unwired Alpha
                         // is full on instead.
                         COMBINE_CHANNELS => {
-                            let rows = lumit_core::fx::resolve_instance(
+                            let rows = lumit_core::fx::resolved::resolve_instance(
                                 inst,
                                 &drivers,
                                 self.t,
@@ -5421,7 +5438,8 @@ impl GraphLower<'_> {
                             // pick, Luminance first.
                             let own = |row: &str| {
                                 let at = rows.iter().next().map_or(0, |op| {
-                                    op.params.choice(lumit_core::fx::ParamId::new(row), 0)
+                                    op.params
+                                        .choice(lumit_core::fx::params::ParamId::new(row), 0)
                                 });
                                 [LUMINANCE, ALPHA, RED, GREEN, BLUE]
                                     .get(at as usize)
@@ -5484,23 +5502,24 @@ impl GraphLower<'_> {
                             // draws through the same matte.
                             let (roto, plane, baked_from) = self.baked_for(graph, inst, &steps);
                             let mut run = |inst: &lumit_core::model::EffectInstance| {
-                                let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
-                                    std::slice::from_ref(inst),
-                                    &drivers,
-                                    self.t,
-                                    self.frame_t,
-                                    diag,
-                                    1.0,
-                                    &markers,
-                                    context.clone(),
-                                );
+                                let (fx_ids, ops) =
+                                    lumit_core::fx::resolved::resolve_stack_temporal_named(
+                                        std::slice::from_ref(inst),
+                                        &drivers,
+                                        self.t,
+                                        self.frame_t,
+                                        diag,
+                                        1.0,
+                                        &markers,
+                                        context.clone(),
+                                    );
                                 // A bypassed box, an entry this build does not
                                 // know, an orchestration-only effect: no op, so
                                 // the box hands on what it was given.
                                 if ops.is_empty() {
                                     return input;
                                 }
-                                let param = lumit_core::fx::def(&inst.effect.match_name)
+                                let param = lumit_core::fx::builtins::def(&inst.effect.match_name)
                                     .and_then(|d| d.schema().layer_input());
                                 let picture = param.and_then(|param| wired(&steps, id, param));
                                 // Whether that wire carries metres, from the
@@ -5518,7 +5537,9 @@ impl GraphLower<'_> {
                                         .into_iter()
                                         .find(|p| p.id == port)
                                     })
-                                    .is_some_and(|p| p.ty == lumit_core::fx::PortType::Depth);
+                                    .is_some_and(|p| {
+                                        p.ty == lumit_core::fx::schema::PortType::Depth
+                                    });
                                 plan.steps.push(GraphStep::Fx {
                                     input,
                                     ops,
@@ -5786,7 +5807,7 @@ impl GraphLower<'_> {
         inst: &lumit_core::model::EffectInstance,
         context: &Arc<ExpressionContext>,
     ) -> Vec<lumit_core::fx::points::PointsSchedule> {
-        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(&inst.effect.match_name) else {
+        let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name) else {
             return Vec::new();
         };
         if !(lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op()) {
@@ -5843,7 +5864,7 @@ impl GraphLower<'_> {
         end: &lumit_core::model::EffectInstance,
         steps: &[Landed],
         (drivers, projection): (
-            &lumit_core::fx::ResolvedDrivers,
+            &lumit_core::fx::drivers::ResolvedDrivers,
             &lumit_core::comp_graph::Projection,
         ),
         diag: f32,
@@ -5855,7 +5876,7 @@ impl GraphLower<'_> {
         use lumit_core::fx::effects::repeat::{
             Element, FOR_PATHS, FOR_POINTS, MODE_COPIES, POINTS_PORT, SHAPES_PORT,
         };
-        use lumit_core::fx::ParamId;
+        use lumit_core::fx::params::ParamId;
         let landed = |node: Uuid, port: &str| {
             steps
                 .iter()
@@ -5865,8 +5886,8 @@ impl GraphLower<'_> {
         let into = graph
             .wire_into(r.start, lumit_core::graph::INPUT_PORT.id)
             .and_then(|(from, port)| landed(*from, port));
-        let markers = lumit_core::fx::MarkerContext::for_comp(graph_comp);
-        let rows = lumit_core::fx::resolve_instance(
+        let markers = lumit_core::fx::markers::MarkerContext::for_comp(graph_comp);
+        let rows = lumit_core::fx::resolved::resolve_instance(
             end,
             drivers,
             self.t,
@@ -6012,7 +6033,7 @@ impl GraphLower<'_> {
         id: Uuid,
         input: Option<usize>,
         steps: &[Landed],
-        drivers: &lumit_core::fx::ResolvedDrivers,
+        drivers: &lumit_core::fx::drivers::ResolvedDrivers,
         visited: &mut Vec<Uuid>,
         plan: &mut GraphDraw,
     ) -> Option<usize> {
@@ -6073,11 +6094,11 @@ impl GraphLower<'_> {
             return out;
         };
         let value = |id: &str| inst.params.iter().find(|p| p.id == id).map(|p| &p.value);
-        let channel = match value(lumit_core::fx::MATTE_CHANNEL_PARAM) {
+        let channel = match value(lumit_core::fx::schema::MATTE_CHANNEL_PARAM) {
             Some(lumit_core::model::EffectValue::Choice(c)) => *c,
             _ => 0,
         };
-        let has_channel = lumit_core::fx::def(lumit_core::comp_graph::NODE_GRAPH)
+        let has_channel = lumit_core::fx::builtins::def(lumit_core::comp_graph::NODE_GRAPH)
             .is_some_and(|d| d.schema().matte_channel());
         plan.steps.push(GraphStep::Dissolve {
             input,
@@ -6085,7 +6106,7 @@ impl GraphLower<'_> {
             matte,
             channel: has_channel.then_some(channel),
             invert: matches!(
-                value(lumit_core::fx::MATTE_INVERT_PARAM),
+                value(lumit_core::fx::schema::MATTE_INVERT_PARAM),
                 Some(lumit_core::model::EffectValue::Bool(true))
             ),
         });
@@ -6125,7 +6146,7 @@ fn read_draw(
         three_d: false,
         ends_run: false,
         matte: None,
-        blend: lumit_gpu::Blend::Normal,
+        blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
         fx: Default::default(),
@@ -6311,13 +6332,13 @@ pub fn posterize_below(
     clone: (u32, u32),
 ) -> Option<TemporalBelow> {
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-    let p = lumit_core::fx::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
+    let p = lumit_core::fx::temporal::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
     // The below-render reach is implied by the carrier: only an
     // adjustment layer's Posterize holds the composite beneath it.
     if !layer.is_adjustment() {
         return None;
     }
-    let tau = lumit_core::fx::posterize_held_time(t_comp, p.rate, p.phase);
+    let tau = lumit_core::fx::temporal::posterize_held_time(t_comp, p.rate, p.phase);
     let below = &comp.layers[idx + 1..];
     // Posterize never forces per-layer motion blur (that is accumulation MB's
     // Force on all layers).
@@ -6360,7 +6381,7 @@ pub fn accumulation_mb_below(
     clone: (u32, u32),
 ) -> Option<AccumulationBelow> {
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-    let p = lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)?;
+    let p = lumit_core::fx::temporal::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)?;
     let offsets = p.sample_offsets();
     if offsets.is_empty() {
         return None;
@@ -6443,8 +6464,11 @@ fn own_shutter_average(
     lp: &CompLayerPixels,
     lt: f64,
 ) -> Arc<Vec<u8>> {
-    let offsets = match lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)
-    {
+    let offsets = match lumit_core::fx::temporal::stack_accumulation_mb(
+        &layer.effects,
+        layer.switches.fx,
+        lt,
+    ) {
         Some(p) if !layer.is_adjustment() => (p.sample_offsets(), p.mix),
         _ => return Arc::clone(&lp.rgba),
     };
@@ -6518,8 +6542,13 @@ fn adjustment_flow_below(
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let below = &comp.layers[idx + 1..];
-    let crosses =
-        |o| lumit_core::fx::cut_between(below, t_comp, lumit_core::time::frames_on(t_comp, o, dt));
+    let crosses = |o| {
+        lumit_core::fx::temporal::cut_between(
+            below,
+            t_comp,
+            lumit_core::time::frames_on(t_comp, o, dt),
+        )
+    };
     crate::plan::rebuild_offsets(layer, lt, dt, crosses)
         .into_iter()
         .map(|(offset, measure)| {
@@ -6621,10 +6650,10 @@ fn plain_stack(layer: &lumit_core::model::Layer, lt: f64) -> bool {
     let fx_on = layer.switches.fx;
     let fx = &layer.effects;
     fx.iter().chain(&layer.styles).all(|e| e.sample_temporally)
-        && !lumit_core::fx::stack_is_temporal(fx, fx_on)
-        && lumit_core::fx::stack_flow_neighbours(fx, fx_on).is_empty()
-        && lumit_core::fx::stack_posterize(fx, fx_on, lt).is_none()
-        && lumit_core::fx::stack_accumulation_mb(fx, fx_on, lt).is_none()
+        && !lumit_core::fx::temporal::stack_is_temporal(fx, fx_on)
+        && lumit_core::fx::temporal::stack_flow_neighbours(fx, fx_on).is_empty()
+        && lumit_core::fx::temporal::stack_posterize(fx, fx_on, lt).is_none()
+        && lumit_core::fx::temporal::stack_accumulation_mb(fx, fx_on, lt).is_none()
         // Both of these read footage at other moments by roads of their own.
         && fx
             .iter()
@@ -6808,7 +6837,7 @@ mod parent_placement_tests {
     use super::*;
     use lumit_core::anim::Property;
     use lumit_core::model::*;
-    use lumit_core::{CompTime, Duration, FrameRate, Rational};
+    use lumit_core::{time::CompTime, time::Duration, time::FrameRate, time::Rational};
 
     fn layer(px: f64, py: f64, parent: Option<uuid::Uuid>) -> Layer {
         Layer {
@@ -6853,7 +6882,7 @@ mod parent_placement_tests {
 
     fn place_of(l: &Layer) -> [[f32; 4]; 4] {
         let tr = &l.transform;
-        lumit_gpu::place_matrix(
+        lumit_gpu::composite::place_matrix(
             (
                 tr.position_x.value_at(0.0) as f32,
                 tr.position_y.value_at(0.0) as f32,
@@ -6905,7 +6934,7 @@ mod parent_placement_tests {
         let world =
             parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()))
                 .unwrap();
-        let expected = lumit_gpu::concat_place(place_of(&gp), place_of(&parent));
+        let expected = lumit_gpu::composite::concat_place(place_of(&gp), place_of(&parent));
         assert_eq!(world, expected);
         // A 2D grandparent's hidden z and tilt leave the chain as it was.
         let mut tilted = gp.clone();
@@ -6935,7 +6964,7 @@ mod parent_placement_tests {
         let aim =
             lumit_core::camera::look_at((100.0, 50.0, -300.0), (400.0, 0.0, 0.0), (0.0, 0.0, 0.0))
                 .unwrap();
-        let expected = lumit_gpu::place_matrix(
+        let expected = lumit_gpu::composite::place_matrix(
             (100.0, 50.0),
             (0.0, 0.0),
             (100.0, 100.0),
@@ -6955,7 +6984,7 @@ mod parent_placement_tests {
         let world = |c: &Composition, l: &Layer| {
             let own = own_placement(l, 0.0, &ctx());
             match parent_world_placement(c, l, 0.0, ctx()) {
-                Some(pre) => lumit_gpu::concat_place(pre, own),
+                Some(pre) => lumit_gpu::composite::concat_place(pre, own),
                 None => own,
             }
         };
@@ -7218,7 +7247,7 @@ mod parent_placement_tests {
             [0.0, 0.5, 1.0, 2.0].map(|t| {
                 let own = own_placement(l, t, &ctx());
                 match parent_world_placement(c, l, t, ctx()) {
-                    Some(pre) => lumit_gpu::concat_place(pre, own),
+                    Some(pre) => lumit_gpu::composite::concat_place(pre, own),
                     None => own,
                 }
             })
@@ -7250,7 +7279,7 @@ mod parent_placement_tests {
     #[test]
     #[allow(clippy::panic)]
     fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
-        use lumit_core::expression::{evaluate_value_in, ExprValue, Language};
+        use lumit_core::expression::{evaluate_value_in, script::Language, ExprValue};
 
         let mut flat = layer(40.0, -30.0, None);
         flat.transform.position_z = Property::fixed(-50.0);
@@ -7350,7 +7379,7 @@ mod parent_placement_tests {
 
         let world = world_placement(&c, &marker, 0.0, context.clone());
         let d = drawn(&marker, 0.0, &context);
-        let own = lumit_gpu::place_matrix(
+        let own = lumit_gpu::composite::place_matrix(
             d.position,
             d.anchor,
             d.scale,
@@ -7360,7 +7389,7 @@ mod parent_placement_tests {
             d.rotation_y_deg,
         );
         let pre = parent_world_placement(&c, &marker, 0.0, context.clone()).unwrap();
-        let picture = lumit_gpu::concat_place(pre, own);
+        let picture = lumit_gpu::composite::concat_place(pre, own);
         for (x, y) in [(0.0, 0.0), (64.0, 0.0), (0.0, 48.0)] {
             let at = |m: &[[f32; 4]; 4], r: usize| m[0][r] * x + m[1][r] * y + m[3][r];
             for r in 0..3 {
@@ -7369,7 +7398,7 @@ mod parent_placement_tests {
         }
         let pose = c.camera_pose(0.0).unwrap();
         let cam = crate::export::camera_mat(c.width, c.height, pose);
-        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
+        let a = (cam * glam::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
         // After Effects' third number, zoom · (1 − 1/z), from the same divide:
         // the compositor's w is z over the zoom.
         let depth = pose.zoom - 1.0 / f64::from(a[3][3]);
@@ -7429,7 +7458,7 @@ mod parent_placement_tests {
         for (name, t, at) in [("Hud", 0.0, &context), ("Rider", 0.5, &later)] {
             let l = c.layers.iter().find(|l| l.name == name).unwrap();
             let world = world_placement(&c, l, t, at.clone());
-            let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
+            let a = (cam * glam::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
             for axis in 0..2 {
                 let want = a[3][axis] / a[3][3];
                 let text = format!("thisComp.layer('{name}').toComp([0, 0, 0])[{axis}]");
@@ -7452,7 +7481,7 @@ mod parent_placement_tests {
     #[test]
     #[allow(clippy::panic)]
     fn to_comp_reads_what_after_effects_reads() {
-        use lumit_core::expression::{evaluate_value_in, ExprValue, Language};
+        use lumit_core::expression::{evaluate_value_in, script::Language, ExprValue};
 
         let mut rig = layer(900.0, 500.0, None);
         rig.switches.three_d = true;
@@ -7602,8 +7631,8 @@ mod points_projection_tests {
     /// One camera and one placement, and the full comp-space projection of a
     /// point in the layer's own pixels — the compositor's own arithmetic,
     /// written here as the thing the restriction is measured against.
-    fn seen_by_the_compositor(cam: lumit_gpu::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
-        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+    fn seen_by_the_compositor(cam: glam::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
+        let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
         let at = |r: usize| a[0][r] * p[0] + a[1][r] * p[1] + a[2][r] * p[2] + a[3][r];
         let w = at(3);
         [at(0) / w, at(1) / w]
@@ -7619,14 +7648,14 @@ mod points_projection_tests {
     /// checked is the restriction and its inverse, not a second camera.
     #[test]
     fn a_projected_particle_lands_where_the_camera_would_have_put_it() {
-        let cam = lumit_gpu::camera_matrix(
+        let cam = lumit_gpu::composite::camera_matrix(
             1920.0,
             1080.0,
             900.0,
             (860.0, 600.0, -900.0),
             (8.0, -20.0, 5.0),
         );
-        let place = lumit_gpu::place_matrix(
+        let place = lumit_gpu::composite::place_matrix(
             (960.0, 540.0),
             (400.0, 300.0),
             (120.0, 80.0),
@@ -7636,7 +7665,7 @@ mod points_projection_tests {
             -40.0,
         );
         // The restriction, built the way `points_projection` builds it.
-        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+        let a = (cam * glam::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
         let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
         let (rx, ry, rw) = (row(0), row(1), row(3));
         let h = [
@@ -8253,7 +8282,7 @@ mod render_below_at_tests {
         let full_px = bytes(&full);
 
         // A window over the busiest quarter of the frame.
-        let region = lumit_gpu::Region {
+        let region = lumit_gpu::composite::Region {
             x: 64.0,
             y: 32.0,
             w: 160.0,
@@ -8325,7 +8354,7 @@ mod render_below_at_tests {
     // An adjustment layer carrying a Posterize Time effect (everything-below) at
     // the given posterised frame rate.
     fn posterize_adjustment(rate: f64) -> Layer {
-        let mut post = lumit_core::fx::instantiate("posterize_time").unwrap();
+        let mut post = lumit_core::fx::builtins::instantiate("posterize_time").unwrap();
         for p in &mut post.params {
             if p.id == "rate" {
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(rate));
@@ -8478,7 +8507,7 @@ mod render_below_at_tests {
     // An adjustment layer carrying an accumulation motion blur effect at the
     // given sample count (defaults otherwise: 180° shutter centred on the frame).
     fn accumulation_adjustment(samples: f64) -> Layer {
-        let mut e = lumit_core::fx::instantiate("accumulation_mb").unwrap();
+        let mut e = lumit_core::fx::builtins::instantiate("accumulation_mb").unwrap();
         for p in &mut e.params {
             if p.id == "samples" {
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(samples));
@@ -8658,7 +8687,7 @@ mod render_below_at_tests {
         l.name = "flow".into();
         l.effects = names
             .iter()
-            .map(|n| lumit_core::fx::instantiate(n).unwrap())
+            .map(|n| lumit_core::fx::builtins::instantiate(n).unwrap())
             .collect();
         l
     }
@@ -8823,10 +8852,10 @@ mod render_below_at_tests {
     // A stand-in for a plugin that reads the frame before this one, as a
     // motion blur does: it paints the picture with its -1 neighbour, and
     // leaves it alone when it is handed none.
-    struct Previous(&'static lumit_core::fx::EffectSchema);
+    struct Previous(&'static lumit_core::fx::schema::EffectSchema);
 
-    impl lumit_core::fx::EffectDef for Previous {
-        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+    impl lumit_core::fx::registry::EffectDef for Previous {
+        fn schema(&self) -> &'static lumit_core::fx::schema::EffectSchema {
             self.0
         }
         fn apply_cpu_temporal(
@@ -8836,7 +8865,7 @@ mod render_below_at_tests {
             rgba: &mut [f32],
             _w: u32,
             _h: u32,
-            _p: lumit_core::fx::Params<'_>,
+            _p: lumit_core::fx::params::Params<'_>,
             neighbours: &[(i32, &[f32])],
         ) {
             if let Some((_, previous)) = neighbours.iter().find(|(o, _)| *o == -1) {
@@ -8851,14 +8880,14 @@ mod render_below_at_tests {
         const NAME: &str = "ofx:test.build.previous";
         static REGISTERED: std::sync::Once = std::sync::Once::new();
         REGISTERED.call_once(|| {
-            let schema = Box::leak(Box::new(lumit_core::fx::EffectSchema {
+            let schema = Box::leak(Box::new(lumit_core::fx::schema::EffectSchema {
                 match_name: NAME,
                 label: "Previous frame",
                 version: 1,
-                category: lumit_core::fx::FxCategory::Utility,
-                traits: lumit_core::fx::EffectTraits {
-                    cost: lumit_core::fx::CostClass::Heavy,
-                    roi: lumit_core::fx::Roi::FullFrame,
+                category: lumit_core::fx::schema::FxCategory::Utility,
+                traits: lumit_core::fx::schema::EffectTraits {
+                    cost: lumit_core::fx::schema::CostClass::Heavy,
+                    roi: lumit_core::fx::schema::Roi::FullFrame,
                     temporal: &[-1, 0, 1],
                     premultiplied: true,
                     seeded: false,
@@ -8867,19 +8896,19 @@ mod render_below_at_tests {
                 params: &[],
                 groups: &[],
                 enabled_when: &[],
-                matte: lumit_core::fx::MatteRole::None,
+                matte: lumit_core::fx::schema::MatteRole::None,
             }));
             assert!(crate::gpufx::ofx::register(Box::leak(Box::new(Previous(
                 schema
             )))));
         });
-        lumit_core::fx::instantiate(NAME).unwrap()
+        lumit_core::fx::builtins::instantiate(NAME).unwrap()
     }
 
     // A clip that fills the frame, and the item and probe the planner reads
     // it by: 10 fps, the rate of the comps here, so a comp frame is a source
     // frame.
-    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::SourceProbe>) {
+    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::source::SourceProbe>) {
         use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
@@ -8900,7 +8929,7 @@ mod render_below_at_tests {
         let mut l = text_layer(0.0);
         l.kind = LayerKind::Footage { item };
         l.transform.position_y = Property::fixed(0.0);
-        let probe = crate::SourceProbe::Video {
+        let probe = crate::source::SourceProbe::Video {
             fps: 10.0,
             width: 320,
             height: 180,
@@ -8920,7 +8949,7 @@ mod render_below_at_tests {
             width: 8,
             height: 8,
             rgba: [rgb[0], rgb[1], rgb[2], 255].repeat(64).into(),
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             natural_w: 320,
             natural_h: 180,
             temporal: Vec::new(),
@@ -9084,8 +9113,13 @@ mod render_below_at_tests {
 
             // The plan fetches the clip at both of the plugin's neighbours,
             // each the one real frame it shows then.
-            let jobs =
-                crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+            let jobs = crate::plan::plan_comp_frame(
+                &doc,
+                &outer,
+                0.5,
+                crate::plan::Quality::default(),
+                &probes,
+            );
             let job = jobs.iter().find(|j| j.layer == clip_id).expect("planned");
             assert_eq!(job.source_frame, 5, "{what}");
             assert_eq!(
@@ -9138,7 +9172,13 @@ mod render_below_at_tests {
         let mut direct = sequence.clone();
         direct.effects = vec![previous_frame_effect()];
         let comp = comp_with(10, vec![direct]);
-        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &comp,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let job = jobs.first().expect("planned");
         assert_eq!(job.temporal, vec![(1, 6)]);
         assert!(
@@ -9173,7 +9213,13 @@ mod render_below_at_tests {
         let nested = comp_with(10, vec![alone]);
         let outer = precomp(nested.id, vec![previous_frame_effect()]);
         doc.items.push(ProjectItem::Composition(nested));
-        let jobs = crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &outer,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let lp = decoded(jobs.first().expect("planned"));
         let pixels: HashMap<Uuid, &CompLayerPixels> = [(alone_id, &lp)].into_iter().collect();
         let mut v = vec![outer.id];
@@ -9213,7 +9259,8 @@ mod render_below_at_tests {
         next.id = Uuid::now_v7();
         next.in_point = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
         let cut = comp_with(10, vec![adjust.clone(), next.clone(), footage.clone()]);
-        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let jobs =
+            crate::plan::plan_comp_frame(&doc, &cut, 0.5, crate::plan::Quality::default(), &probes);
         assert!(
             jobs.iter().any(|j| j.layer == next.id),
             "the shot after the cut is planned for the neighbour it is in"
@@ -9238,7 +9285,8 @@ mod render_below_at_tests {
         };
         let gap_id = gap.id;
         let cut = comp_with(10, vec![adjust.clone(), gap]);
-        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let jobs =
+            crate::plan::plan_comp_frame(&doc, &cut, 0.5, crate::plan::Quality::default(), &probes);
         let lp = decoded(jobs.first().expect("the clip after the gap is planned"));
         let pixels: HashMap<Uuid, &CompLayerPixels> = [(gap_id, &lp)].into_iter().collect();
         let mut v = vec![cut.id];
@@ -9261,7 +9309,13 @@ mod render_below_at_tests {
         );
         let comp = comp_with(10, vec![adjust, footage]);
 
-        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let jobs = crate::plan::plan_comp_frame(
+            &doc,
+            &comp,
+            0.5,
+            crate::plan::Quality::default(),
+            &probes,
+        );
         let job = jobs
             .iter()
             .find(|j| j.layer == footage_id)
@@ -9329,7 +9383,7 @@ mod render_below_at_tests {
             l.kind = LayerKind::Precomp { comp: nested_id };
             l.effects = names
                 .iter()
-                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .map(|n| lumit_core::fx::builtins::instantiate(n).unwrap())
                 .collect();
             comp_with(10, vec![l])
         };
@@ -9338,7 +9392,7 @@ mod render_below_at_tests {
                 &doc,
                 comp,
                 0.5,
-                crate::Quality::default(),
+                crate::plan::Quality::default(),
                 &probes,
                 Some(&|_, _, _| held),
             )
@@ -9416,7 +9470,7 @@ mod render_below_at_tests {
             l.transform.position_y = Property::fixed(0.0);
             l.effects = names
                 .iter()
-                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .map(|n| lumit_core::fx::builtins::instantiate(n).unwrap())
                 .collect();
             comp_with(10, vec![l])
         };

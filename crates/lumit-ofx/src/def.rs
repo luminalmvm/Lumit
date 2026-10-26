@@ -52,7 +52,8 @@ use std::time::Duration;
 
 use lumit_core::anim::{Animation, Property};
 use lumit_core::fx::{
-    EffectDef, EffectSchema, ParamId, Params, PressFrame, Pressed, ResolveCx, RowState, Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::PressFrame,
+    registry::Pressed, registry::ResolveCx, registry::RowState, schema::EffectSchema,
 };
 use lumit_core::model::{EffectInstance, EffectValue};
 use parking_lot::Mutex;

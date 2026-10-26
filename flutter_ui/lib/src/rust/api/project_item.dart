@@ -59,7 +59,7 @@ sealed class ItemReference with _$ItemReference {
   /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
   ///
   /// Direct placement only, deliberately, and that rule is the engine's
-  /// ([`lumit_core::Document::item_is_used`]): the badge says "a layer
+  /// ([`lumit_core::model::Document::item_is_used`]): the badge says "a layer
   /// somewhere names this", not "some render might reach it", so it does not
   /// come and go as an unrelated comp is nested elsewhere.
   bool isUsed() =>

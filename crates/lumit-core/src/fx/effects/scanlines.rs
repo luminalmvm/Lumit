@@ -11,7 +11,10 @@
 //! the kernel as plain numbers, exactly as the hand-written resolve arm handed
 //! them over before.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Scanlines' controls.
@@ -44,7 +47,7 @@ pub struct Scanlines {
 
     /// px@comp: the deliberately pixel-scale scanline pitch. Declared `Px`, so
     /// the resolve step scales it by the §2.3 preview factor and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size —
     /// which the old `rescale_px` did *not* do for this effect, so a scanlined
     /// adjustment layer under a reduced-resolution preview kept comp-sized lines
@@ -95,7 +98,7 @@ impl Scanlines {
     ///
     /// This is in **raster pixels**, and a derived id carries no declared
     /// unit, so [`ScanlinesDef::derived_spatial`] names it and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial)
     /// moves it with `scanline_period` — a stack resolved against one raster
     /// and reused at another (a precomp realised at a second size) rolls to
     /// the same phase it would have resolved to there. Before that the period

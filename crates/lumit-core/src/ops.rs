@@ -225,7 +225,7 @@ pub enum Op {
     /// one and editing one of its parameters are all "the list is now this".
     ///
     /// The list is **normalised on the way in**
-    /// ([`crate::fx::normalise_styles`]): at most one instance of each style,
+    /// ([`crate::fx::styles::normalise_styles`]): at most one instance of each style,
     /// and sorted into §2's painting order. The invariant is enforced here
     /// rather than in each caller because it is a property of the document, not
     /// of the command that wrote it — a hand-edited file and an add command both
@@ -534,7 +534,7 @@ pub enum Op {
         animation: Animation,
     },
     /// Replace what a transform property's expression knows about its
-    /// property ([`crate::expression::Slot`]): the language it is written in,
+    /// property ([`crate::expression::script::Slot`]): the language it is written in,
     /// the value underneath it, and its seed. `None` is a property with no
     /// such note, which is every one without an expression.
     ///
@@ -1538,7 +1538,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
             let mut next = styles.clone();
-            crate::fx::normalise_styles(&mut next);
+            crate::fx::styles::normalise_styles(&mut next);
             let previous = std::mem::replace(&mut l.styles, next);
             // No graph pruning twin: a driver wires to the effect *stack*
             // (`LayerGraph::validate` is checked against `effects`), and a style
@@ -2192,7 +2192,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
             let property = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
-            let key = crate::expression::SLOT_KEY;
+            let key = crate::expression::script::SLOT_KEY;
             let previous = match slot {
                 Some(slot) => property.extra.insert(key.to_owned(), slot.clone()),
                 None => property.extra.remove(key),

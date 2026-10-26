@@ -21,7 +21,10 @@ use lumit_ofx::instance::ParamSnapshot;
 use lumit_ofx::ipc::shm::Ring;
 use lumit_ofx::props::PropValue;
 use lumit_ofx::render::RenderRequest;
-use lumit_ofx::{Broker, BrokerConfig, BrokerError, Context, RectI};
+use lumit_ofx::{
+    describe::Context, image::RectI, ipc::broker::Broker, ipc::broker::BrokerConfig,
+    ipc::broker::BrokerError,
+};
 
 /// The plugin this whole file is about.
 const PASSTHROUGH: &str = "com.lumitlab.testplug.passthrough";

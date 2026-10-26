@@ -300,6 +300,56 @@ impl DiskCache {
     }
 }
 
+/// How long since its last write a project's cache has to have sat before it
+/// may be emptied to make room for another, since one written more recently
+/// may be open in another Lumit.
+const IN_USE_SECS: u64 = 10 * 60;
+
+/// Make room for the project cached in `root` among the other project caches
+/// in the same folder, so the cap is one total for all of them rather than one
+/// each. The least recently used are emptied first, whole, until the others
+/// and `own_bytes` fit `cap_bytes`. Answers what the others still hold.
+///
+/// Only folders that hold a cache index count, so nothing else that happens
+/// to sit in a folder the user picked is ever touched.
+///
+/// ponytail: the delete runs on the caller's thread, a few seconds for a big
+/// folder. Move it to a thread of its own if opening a project feels it.
+pub fn make_room_beside(root: &Path, own_bytes: u64, cap_bytes: u64) -> u64 {
+    let Some(entries) = root.parent().and_then(|p| fs::read_dir(p).ok()) else {
+        return 0;
+    };
+    let now = std::time::SystemTime::now();
+    let mut others: Vec<(std::time::SystemTime, u64, PathBuf)> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p != root)
+        .filter_map(|p| {
+            let written = ["index.bin", "index.log"]
+                .iter()
+                .filter_map(|f| fs::metadata(p.join(f)).and_then(|m| m.modified()).ok())
+                .max()?;
+            let bytes = crate::index::FrameIndex::open(p.clone()).used_bytes();
+            Some((written, bytes, p))
+        })
+        .collect();
+    others.sort_by_key(|(written, ..)| *written);
+    let mut held: u64 = others.iter().map(|(_, bytes, _)| bytes).sum();
+    for (written, bytes, path) in &others {
+        if held.saturating_add(own_bytes) <= cap_bytes {
+            break;
+        }
+        let idle = now.duration_since(*written).map_or(0, |d| d.as_secs());
+        if idle < IN_USE_SECS {
+            continue;
+        }
+        if fs::remove_dir_all(path).is_ok() {
+            held = held.saturating_sub(*bytes);
+        }
+    }
+    held
+}
+
 /// Decode one `.kfr` byte stream, or None if it is not exactly a well-formed
 /// frame of a format this build understands.
 fn parse_kfr(bytes: &[u8]) -> Option<DiskFrame> {
@@ -441,6 +491,41 @@ mod tests {
         assert!(rebuilt.contains(1), "the frame on disk was found again");
         assert!(rebuilt.used_bytes() > 0);
         assert_eq!(rebuilt.load(1).map(|f| (f.width, f.height)), Some((8, 8)));
+    }
+
+    /// The cap is one total for every project beside the open one: the least
+    /// recently used project goes first, one in use is kept, and a folder that
+    /// is not a cache is never touched.
+    #[test]
+    fn the_oldest_projects_make_room_and_nothing_else_is_touched() {
+        let dir = tempfile::tempdir().unwrap();
+        let ago = |secs: u64| std::time::SystemTime::now() - std::time::Duration::from_secs(secs);
+        let project = |name: &str, written: std::time::SystemTime| {
+            let root = dir.path().join(name);
+            let mut c = DiskCache::open(root.clone(), u64::MAX);
+            c.store(parked(1, 16, 16, &frame(16, 16, 1), 8));
+            c.flush_index();
+            for f in ["index.bin", "index.log"] {
+                if let Ok(file) = fs::File::options().write(true).open(root.join(f)) {
+                    file.set_modified(written).unwrap();
+                }
+            }
+            c.used_bytes()
+        };
+        let size = project("oldest", ago(3 * 3600));
+        project("older", ago(2 * 3600));
+        project("in-use", ago(60));
+        fs::create_dir_all(dir.path().join("notes")).unwrap();
+        fs::write(dir.path().join("notes").join("todo.txt"), b"keep").unwrap();
+
+        let open = dir.path().join("open");
+        let held = make_room_beside(&open, size, size * 3);
+
+        assert_eq!(held, size * 2, "one project had to go to fit");
+        assert!(!dir.path().join("oldest").exists(), "the oldest went first");
+        assert!(dir.path().join("older").exists());
+        assert!(dir.path().join("in-use").exists(), "a cache in use is kept");
+        assert!(dir.path().join("notes").join("todo.txt").exists());
     }
 
     #[test]

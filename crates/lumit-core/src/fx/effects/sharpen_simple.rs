@@ -5,7 +5,9 @@
 //! alpha untouched; the neighbours read the edge pixel (clamp/Repeat) so a
 //! border never invents dark detail. Amount 0 is the bit-exact passthrough.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Sharpen's controls. One job, cheap, one pixel of reach — the honest "just

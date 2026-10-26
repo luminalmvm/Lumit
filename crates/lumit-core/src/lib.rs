@@ -49,8 +49,3 @@ pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
-
-pub use model::Document;
-pub use ops::{Op, OpError};
-pub use store::DocumentStore;
-pub use time::{CompTime, Duration, FrameRate, Rational, TimeError};

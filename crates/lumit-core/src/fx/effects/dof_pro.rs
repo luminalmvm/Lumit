@@ -17,8 +17,9 @@
 //! lens effects can follow it.
 
 use crate::fx::{
-    lens_blur, DriverCx, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
-    ParamGroup, Port, PortType, Signature, Value, CHANNEL_OPTIONS,
+    builtins::CHANNEL_OPTIONS, lens_blur, params::Value, registry::DriverCx, registry::EffectDef,
+    registry::EffectMetadata, registry::Signature, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

@@ -2624,7 +2624,7 @@ mod tests {
         use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
         let (store, comp, layer) = doc_with_layer();
 
-        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur = crate::fx::builtins::instantiate("blur").expect("the catalogue knows it");
         let blur_id = blur.id;
         store
             .commit(Op::SetLayerEffects {
@@ -2634,7 +2634,7 @@ mod tests {
             })
             .expect("the stack goes in");
 
-        let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
+        let wiggle = crate::fx::builtins::instantiate("wiggle").expect("the catalogue knows it");
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
             notes: Vec::new(),
@@ -3238,7 +3238,8 @@ mod tests {
                 // picture and the Output is free.
                 0 => {
                     let name = names[roll % names.len()];
-                    let inst = crate::fx::instantiate(name).expect("the catalogue knows it");
+                    let inst =
+                        crate::fx::builtins::instantiate(name).expect("the catalogue knows it");
                     let id = inst.id;
                     candidate.nodes.insert(0, GraphNode::Fx(inst));
                     candidate.layout.push((id, [roll as f64 % 500.0, 20.0]));
@@ -3603,7 +3604,7 @@ mod tests {
     fn two_people_can_change_different_effects_on_one_layer() {
         use crate::anim::Property;
         let (seed, comp, layer) = doc_with_layer();
-        let blur = || crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur = || crate::fx::builtins::instantiate("blur").expect("the catalogue knows it");
         let stack = vec![blur(), blur()];
         let (first, second) = (stack[0].id, stack[1].id);
         let write = |store: &DocumentStore, effects: Vec<EffectInstance>| {

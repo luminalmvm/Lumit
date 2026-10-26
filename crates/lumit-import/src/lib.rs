@@ -26,7 +26,7 @@
 //! is commentary and the capture is the work.
 //!
 //! [`map::map_capture`] is the other half: it turns the parsed capture into a
-//! whole new [`lumit_core::Document`] plus an [`report::ImportReport`] saying
+//! whole new [`lumit_core::model::Document`] plus an [`report::ImportReport`] saying
 //! what changed on the way across. Import always makes a *new* project —
 //! merging a capture into one that is already open is later work.
 //!
@@ -45,12 +45,10 @@ pub mod capture;
 pub mod map;
 pub mod report;
 
-pub use aep::open_aep;
-pub use capture::{Capture, Manifest, Report};
-pub use map::{
-    ae_match_name, ae_match_name_of, linear_colour, map_capture, map_preset, other_names_of,
-};
-pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
+use aep::open_aep;
+use capture::{Capture, Manifest, Report};
+use map::map_preset;
+use report::{ImportReport, ItemPath, Outcome, Reason};
 
 use std::fs::{self, File};
 use std::io::Read;
@@ -327,6 +325,8 @@ impl Source {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::map::map_capture;
+    use super::report::ReportRow;
     use super::*;
 
     use std::io::Write;
@@ -438,7 +438,7 @@ mod tests {
         let controls = &effects[0];
         assert_eq!(controls.effect.match_name, "custom_controls");
         assert_eq!(controls.custom_name.as_deref(), Some("Shake"));
-        let rows = lumit_core::fx::def("custom_controls")
+        let rows = lumit_core::fx::builtins::def("custom_controls")
             .unwrap()
             .derived(controls);
         assert_eq!(rows.len(), 1);

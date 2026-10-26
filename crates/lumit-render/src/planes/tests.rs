@@ -449,7 +449,8 @@ fn project(
 
     let mut effects = Vec::new();
     if with_depth {
-        let mut depth = lumit_core::fx::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
+        let mut depth =
+            lumit_core::fx::builtins::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
         depth.id = Uuid::from_u128(42);
         depth.params.push(EffectParam {
             id: "model".into(),
@@ -584,7 +585,8 @@ fn the_badge_names_what_is_missing_and_says_nothing_when_it_is_not() {
     let root = dir.path();
     lumit_ml::store::with_dir(Some(root.to_path_buf()));
 
-    let depth = lumit_core::fx::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
+    let depth =
+        lumit_core::fx::builtins::instantiate(lumit_core::planes::DEPTH).expect("a built-in");
 
     // Nothing installed at all: the runtime is the first thing missing, and
     // the badge sends the user to the runtime's own row.

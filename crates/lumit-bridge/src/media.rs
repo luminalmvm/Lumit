@@ -46,7 +46,7 @@ type ThumbKey = (
     Uuid,
     u32,
     i64,
-    lumit_media::Interpretation,
+    lumit_media::interpret::Interpretation,
     Option<String>,
     Option<(u64, std::time::SystemTime)>,
 );
@@ -108,10 +108,10 @@ impl MediaCache {
 /// decodes at the file's own size. `None` asks for the native width.
 #[cfg(feature = "media")]
 pub(crate) fn decode_frame(
-    src: &lumit_media::MediaSource,
+    src: &lumit_media::sequence::MediaSource,
     frame: u64,
     target_width: Option<u32>,
-) -> Option<lumit_media::DecodedFrame> {
+) -> Option<lumit_media::decode::DecodedFrame> {
     if !src.on_disk().is_file() {
         return None;
     }
@@ -119,7 +119,7 @@ pub(crate) fn decode_frame(
         return frame.ok();
     }
     let index = lumit_render::media_index::load_or_build_index(src).ok()?;
-    let mut decoder = lumit_media::VideoDecoder::open(src, index).ok()?;
+    let mut decoder = lumit_media::decode::VideoDecoder::open(src, index).ok()?;
     let count = decoder.frame_count();
     if count == 0 {
         return None;
@@ -134,7 +134,7 @@ pub(crate) fn decode_frame(
 pub(crate) fn thumb_cached(
     cache: &MediaCache,
     id: Uuid,
-    src: &lumit_media::MediaSource,
+    src: &lumit_media::sequence::MediaSource,
     max_edge: u32,
     frame: i64,
 ) -> Option<Thumb> {
@@ -153,7 +153,7 @@ pub(crate) fn thumb_cached(
 /// thumbnail is a caller bug, not something to allocate for.
 #[cfg(feature = "media")]
 pub(crate) fn thumb_decode(
-    src: &lumit_media::MediaSource,
+    src: &lumit_media::sequence::MediaSource,
     max_edge: u32,
     frame: i64,
 ) -> Option<Thumb> {
@@ -164,8 +164,8 @@ pub(crate) fn thumb_decode(
     let decoded = decode_frame(src, frame.max(0).unsigned_abs(), Some(max_edge))?;
     // A deep source decodes to linear floats, and a thumbnail is eight bit.
     let rgba = match decoded.format {
-        lumit_media::PixelFormat::Srgb8 => decoded.rgba,
-        lumit_media::PixelFormat::LinearF32 => (0..decoded.rgba.len() / 16)
+        lumit_media::decode::PixelFormat::Srgb8 => decoded.rgba,
+        lumit_media::decode::PixelFormat::LinearF32 => (0..decoded.rgba.len() / 16)
             .flat_map(|n| {
                 let px = lumit_core::pixels::f32_px(&decoded.rgba, n);
                 lumit_core::pixels::solid_rgba(lumit_core::model::LinearColour(px))
@@ -185,7 +185,7 @@ pub(crate) fn thumb_decode(
 pub(crate) fn thumb_store(
     cache: &mut MediaCache,
     id: Uuid,
-    src: &lumit_media::MediaSource,
+    src: &lumit_media::sequence::MediaSource,
     max_edge: u32,
     frame: i64,
     thumb: &Thumb,
@@ -195,7 +195,12 @@ pub(crate) fn thumb_store(
 }
 
 #[cfg(feature = "media")]
-fn thumb_key(id: Uuid, src: &lumit_media::MediaSource, max_edge: u32, frame: i64) -> ThumbKey {
+fn thumb_key(
+    id: Uuid,
+    src: &lumit_media::sequence::MediaSource,
+    max_edge: u32,
+    frame: i64,
+) -> ThumbKey {
     let pass = src.render_pass.clone();
     (
         id,
@@ -269,7 +274,7 @@ mod tests {
         let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
             return; // no ffmpeg on this machine
         };
-        let src = lumit_media::MediaSource::file(clip);
+        let src = lumit_media::sequence::MediaSource::file(clip);
 
         // The fixture is 320x240, so 64 across the long edge is 64x48.
         let decoded = decode_frame(&src, 0, Some(64)).expect("the fixture decodes");

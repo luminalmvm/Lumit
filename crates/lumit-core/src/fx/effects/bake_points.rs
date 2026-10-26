@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::fx::effects::vary_points::{POINTS_IN, POINTS_OUT};
 use crate::fx::points::{self, PointsStream, Projection};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, Signature,
-    Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::ParamGroup,
 };
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, LayerKind};
 use lumit_fx_macros::Effect;
@@ -992,7 +992,11 @@ impl EffectDef for BakePointsDef {
     }
 
     /// The stream it was handed, which is the bake where one is being read.
-    fn modify_points(&self, _p: Params<'_>, cx: &crate::fx::ModifyCx<'_>) -> Option<PointsStream> {
+    fn modify_points(
+        &self,
+        _p: Params<'_>,
+        cx: &crate::fx::registry::ModifyCx<'_>,
+    ) -> Option<PointsStream> {
         cx.input().cloned()
     }
 }
@@ -1344,7 +1348,7 @@ mod tests {
                 current_depth: 0,
                 inputs: None,
             };
-            let stack = crate::fx::resolve_stack(
+            let stack = crate::fx::resolved::resolve_stack(
                 &layer.effects,
                 t,
                 1000.0,

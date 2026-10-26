@@ -16,7 +16,10 @@
 //! edges' distance field — and it steers the *mask* only. Nothing is softened;
 //! the blur is a question, not an answer.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamGroup, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
+};
 use lumit_fx_macros::Effect;
 
 /// The panel's one disclosure — AE's "More Options", trimmed to the two controls

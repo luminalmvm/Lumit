@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
-use lumit_core::expression::{Language, Slot};
+use lumit_core::expression::{script::Language, script::Slot};
 use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
+use lumit_core::store::DocumentStore;
 use lumit_core::time::{CompTime, FrameRate, Rational};
-use lumit_core::DocumentStore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
@@ -1218,7 +1218,7 @@ fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
                 if let Op::AddItem { item, .. } = op {
                     if let ProjectItem::Solid(solid) = item.as_mut() {
                         if let Some(colour) = a.colour {
-                            solid.colour = lumit_import::linear_colour(Some(&colour));
+                            solid.colour = lumit_import::map::linear_colour(Some(&colour));
                         }
                         if let Some(name) = &a.name {
                             solid.name.clone_from(name);

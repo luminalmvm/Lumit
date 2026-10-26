@@ -344,7 +344,7 @@ struct HueSaturationParams {
 }
 
 /// One resolved hue shift (docs/08 §3.17): a row-major linear 3×3 colour
-/// matrix, computed host-side (`lumit_core::fx::hue_matrix`) so the CPU
+/// matrix, computed host-side (`lumit_core::fx::maths::hue_matrix`) so the CPU
 /// reference and the kernel multiply by identical coefficients. The identity
 /// matrix is the neutral point; alpha is untouched.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1207,7 +1207,7 @@ impl FxEngine {
             w,
             h,
             None,
-            &super::BlurOp {
+            &super::blur::BlurOp {
                 radius_px: op.radius_px,
                 // Repeat: the frame's own border must not read as a dark
                 // neighbourhood and lift the picture's edges.

@@ -59,7 +59,9 @@
 //! unaltered footage, so one shot's mattes serve every comp that cuts it.
 //!
 //! ```
-//! use lumit_roto::{base_seeds, FrameRgb, RotoSolver, RotoSettings, RotoStroke, StrokeKind};
+//! use lumit_roto::solve::RotoSolver;
+//! use lumit_roto::stroke::{base_seeds, RotoStroke, StrokeKind};
+//! use lumit_roto::{FrameRgb, RotoSettings};
 //!
 //! // A 32×32 frame: dark, with a bright square in the middle.
 //! let (w, h) = (32u32, 32u32);
@@ -93,17 +95,13 @@
 
 mod gdt;
 mod guided;
-mod solve;
-mod stroke;
-mod warp;
+pub mod solve;
+pub mod stroke;
+pub mod warp;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
-
-pub use solve::RotoSolver;
-pub use stroke::{base_seeds, RotoStroke, Seed, Seeds, StrokeKind};
-pub use warp::{mask_seeds, warp_and_seed, FlowField};
 
 /// Everything this crate refuses, each a named error and never a fault
 /// (14-ENGINEERING-RULES §4).

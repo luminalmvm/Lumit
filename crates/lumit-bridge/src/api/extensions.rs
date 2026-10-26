@@ -260,7 +260,7 @@ pub fn extension_inspect(folder: String) -> BridgeExtensionOutcome {
 /// Not sync: a large package takes a moment to read.
 #[must_use]
 pub fn extension_inspect_package(path: String) -> BridgeExtensionOutcome {
-    read(lumit_extensions::read_package(Path::new(&path)))
+    read(lumit_extensions::package::read_package(Path::new(&path)))
 }
 
 /// Install the extension in `folder`, over one of the same id if there is
@@ -283,7 +283,10 @@ pub fn extension_install(folder: String) -> BridgeExtensionOutcome {
 #[must_use]
 pub fn extension_install_package(path: String, folder: Option<String>) -> BridgeExtensionOutcome {
     let into = folder.as_deref().map(Path::new);
-    let done = outcome(lumit_extensions::install_package(Path::new(&path), into));
+    let done = outcome(lumit_extensions::package::install_package(
+        Path::new(&path),
+        into,
+    ));
     if let (BridgeExtensionOutcome::Ready { .. }, Some(into)) = (&done, into) {
         // The extension is in place either way; a folder that would not be
         // remembered only means it is not found after a restart.
@@ -300,7 +303,10 @@ pub fn extension_install_package(path: String, folder: Option<String>) -> Bridge
 /// Not sync: a folder of pictures takes a moment to pack.
 #[must_use]
 pub fn extension_make_package(folder: String, out: String) -> BridgeExtensionOutcome {
-    let done = read(lumit_extensions::pack(Path::new(&folder), Path::new(&out)));
+    let done = read(lumit_extensions::package::pack(
+        Path::new(&folder),
+        Path::new(&out),
+    ));
     register_effects();
     done
 }

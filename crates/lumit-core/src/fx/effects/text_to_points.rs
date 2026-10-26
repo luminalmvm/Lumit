@@ -17,8 +17,9 @@
 
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode, TextGlyph};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    Port, PortType, ResolveCx, Signature, Value,
+    params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

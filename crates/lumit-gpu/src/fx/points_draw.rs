@@ -310,7 +310,7 @@ impl FxEngine {
                         8 => px
                             .get(c * 2..c * 2 + 2)
                             .and_then(|b| b.try_into().ok())
-                            .map_or(0.0, |b| super::f16_to_f32(u16::from_le_bytes(b))),
+                            .map_or(0.0, |b| super::common::f16_to_f32(u16::from_le_bytes(b))),
                         _ => px.get(c).map_or(0.0, |b| f32::from(*b) / 255.0),
                     };
                 }

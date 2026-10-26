@@ -15,8 +15,9 @@ use crate::fx::effects::vary_points::{
 };
 use crate::fx::points::PointsStream;
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, ShortText, Signature, Value,
+    params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 
@@ -437,7 +438,11 @@ impl EffectDef for TransformPointsDef {
         &TransformPoints::DERIVED_FRAME
     }
 
-    fn modify_points(&self, p: Params<'_>, cx: &crate::fx::ModifyCx<'_>) -> Option<PointsStream> {
+    fn modify_points(
+        &self,
+        p: Params<'_>,
+        cx: &crate::fx::registry::ModifyCx<'_>,
+    ) -> Option<PointsStream> {
         let frame = TransformPoints::DERIVED_FRAME.map(|id| p.float(id, 0.0));
         Some(TransformPoints::read(p).apply(cx.input()?, frame))
     }

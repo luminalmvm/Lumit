@@ -1366,7 +1366,7 @@ class CompositionReference {
 
   /// This composition's neighbours in the nesting, one step each way, for
   /// the flowchart. Which comp places which is the engine's rule
-  /// ([`lumit_core::Document::comp_flow`]), the one the `in use` badge
+  /// ([`lumit_core::model::Document::comp_flow`]), the one the `in use` badge
   /// follows, so the chart and the badge cannot disagree.
   BridgeCompFlow getFlow() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetFlow(
@@ -1379,7 +1379,7 @@ class CompositionReference {
   /// [`BridgeEffectInstance`](crate::api::effect::BridgeEffectInstance)
   /// handles, so `get_value` / `set_value` and the
   /// staged commit through `LayerReference::set_effects` — which routes a
-  /// group instance to [`lumit_core::Op::SetGroupEffects`] by the shared
+  /// group instance to [`lumit_core::ops::Op::SetGroupEffects`] by the shared
   /// instance lookup — work on a header row unchanged. Offset zero: a group
   /// resolves at comp time.
   List<BridgeEffectInstance> getGroupEffects({required UuidValue group}) =>
@@ -1583,7 +1583,7 @@ class CompositionReference {
   /// Every node id is minted here, so dropping one group twice never makes
   /// two boxes share an id. The Output is left exactly as it was: a group
   /// carries none, and a hand-written file that does carry one is refused
-  /// whole by [`lumit_core::Op::SetCompGraph`] with its own calm sentence,
+  /// whole by [`lumit_core::ops::Op::SetCompGraph`] with its own calm sentence,
   /// which is the treatment every other bad graph gets.
   void insertGraphGroup(
           {required String text, required double x, required double y}) =>
@@ -2269,7 +2269,7 @@ class CompositionReference {
           that: this, on_: on_);
 
   /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
-  /// [`lumit_core::Op::SetCompGraph`].
+  /// [`lumit_core::ops::Op::SetCompGraph`].
   ///
   /// The whole-graph shape is `LayerReference::set_graph`'s and is deliberate.
   /// Add a box, remove one, wire, unwire, drag one, twirl one, name a group:
@@ -2578,7 +2578,7 @@ class CompositionReference {
   /// Take away **every group the given layers touch**, as one undo step —
   /// what Ctrl+Shift+G on a multi-selection commits. Answers whether
   /// anything went; one undo restores every band in its old slot,
-  /// because [`lumit_core::Op::UngroupLayers`]'s inverse carries it.
+  /// because [`lumit_core::ops::Op::UngroupLayers`]'s inverse carries it.
   bool ungroupSelection({required List<UuidValue> layerIds}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceUngroupSelection(

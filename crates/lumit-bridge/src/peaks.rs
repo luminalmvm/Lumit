@@ -29,7 +29,7 @@
 //! (docs/14 §3).
 
 #[cfg(feature = "media")]
-use lumit_media::SoundSource;
+use lumit_media::audio::SoundSource;
 #[cfg(feature = "media")]
 use std::sync::{Arc, Mutex, OnceLock};
 

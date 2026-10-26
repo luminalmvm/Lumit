@@ -3847,7 +3847,7 @@ class LayerReference {
   /// naming the same nested comp.
   ///
   /// **One undo step**: the sibling and the mute go in as a single
-  /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
+  /// [`lumit_core::ops::Op::Batch`], so one Ctrl+Z puts the row back the way it
   /// was — and a locked layer refuses the batch whole, as the lock does
   /// everywhere.
   ///
@@ -4014,7 +4014,7 @@ class LayerReference {
   /// the curve already had and the spans around them are re-described, so the
   /// picture does not move — and a static axis is left static.
   ///
-  /// The whole change is one [`lumit_core::Op::Batch`], so it is one undo
+  /// The whole change is one [`lumit_core::ops::Op::Batch`], so it is one undo
   /// step whatever it had to merge. Separating merges nothing: the axes are
   /// already stored apart, which is what makes a per-axis curve possible at
   /// all.
@@ -4177,7 +4177,7 @@ class LayerReference {
           .crateApiLayerLayerReferenceSetFlowParams(that: this, params: params);
 
   /// Commit a whole graph: the staged driver nodes and the edited wiring, as
-  /// one [`lumit_core::Op::SetLayerGraph`].
+  /// one [`lumit_core::ops::Op::SetLayerGraph`].
   ///
   /// The whole-graph shape is deliberate and mirrors `SetLayerEffects`. Add a
   /// driver, remove one, connect, disconnect, drag a box, toggle exposure —
@@ -4439,7 +4439,7 @@ class LayerReference {
           positionY: positionY);
 
   /// Replace one transform property's whole animation, as one
-  /// [`lumit_core::Op::SetTransformProperty`].
+  /// [`lumit_core::ops::Op::SetTransformProperty`].
   ///
   /// One property per op, not the whole group: the op is exactly invertible
   /// that way, so a nudged Position is one undo step that puts back precisely

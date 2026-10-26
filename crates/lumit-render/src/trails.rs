@@ -15,10 +15,14 @@ use std::sync::{Arc, Mutex};
 
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate as P;
+use lumit_core::fx::params::Params;
 use lumit_core::fx::points::{Projection, RenderMode, Trails};
-use lumit_core::fx::{EffectMetadata, Params};
+use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::model::LayerKind;
-use lumit_gpu::fx::{DrawPoint, EchoOp, FieldTest, FxEngine, PointsDrawOp, TransformOp};
+use lumit_gpu::fx::points_draw::{DrawPoint, FieldTest, PointsDrawOp};
+use lumit_gpu::fx::stylise::TransformOp;
+use lumit_gpu::fx::temporal::EchoOp;
+use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
 use crate::fxops::CachedTex;
@@ -206,7 +210,9 @@ fn frame_at(
     ];
     let centre = projection.map_or([at[0], at[1]], |p| p.apply(at).0);
     let carry = (fade > 0.0)
-        .then(|| lumit_core::fx::transform_inverse(centre, centre, [grow; 2], turn, [0.0; 2]))
+        .then(|| {
+            lumit_core::fx::maths::transform_inverse(centre, centre, [grow; 2], turn, [0.0; 2])
+        })
         .flatten()
         .map(|(m, off)| (fade, m, off));
     Some(Frame {

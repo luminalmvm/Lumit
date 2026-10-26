@@ -37,7 +37,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use host::Headless;
 use lumit_core::time::CompTime;
 use lumit_render::export::ExportSpec;
-use lumit_script::{ExportState, Host, Limits, RunOptions};
+use lumit_script::{script::Limits, script::RunOptions, ExportState, Host};
 use uuid::Uuid;
 
 use crate::api::export::BridgeExportSpec;
@@ -213,7 +213,7 @@ fn find_brokers() {
             lumit_aplug::ipc::broker::broker_exe_name(),
         ),
         #[cfg(feature = "media")]
-        (lumit_media::ai::BROKER_EXE_ENV, media),
+        (lumit_media::ai::helper::BROKER_EXE_ENV, media),
     ];
     for (variable, name) in brokers {
         if std::env::var_os(variable).is_some() || dir.join(name).is_file() {
@@ -570,7 +570,7 @@ fn run(
         .unwrap_or_else(|| "Script".into());
     note!("Running {name}");
     let alert = |message: &str| note!("{message}");
-    let report = lumit_script::run(
+    let report = lumit_script::script::run(
         &host,
         &source,
         RunOptions {

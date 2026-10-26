@@ -19,7 +19,7 @@ use lumit_core::model::{
     ProjectItem,
 };
 use lumit_core::time::Rational;
-use lumit_import::{map_capture, ImportReport, Reason};
+use lumit_import::{map::map_capture, report::ImportReport, report::Reason};
 
 fn mapped(fixture: &str) -> (Document, ImportReport) {
     let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -348,7 +348,7 @@ fn a_damaged_capture_skips_the_broken_parts_and_still_imports() {
 /// the run's first frame is resolution's job, and it happens on open.
 #[test]
 fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
-    let mut capture = lumit_import::Capture::default();
+    let mut capture = lumit_import::capture::Capture::default();
     capture.items.push(lumit_import::capture::Item {
         id: Some(1),
         name: Some("Depth".into()),
@@ -367,7 +367,7 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
         ..Default::default()
     });
 
-    let (doc, _) = lumit_import::map_capture(&capture);
+    let (doc, _) = lumit_import::map::map_capture(&capture);
     let footage = |name: &str| match doc.item(item_id(&doc, name)) {
         Some(ProjectItem::Footage(f)) => f.clone(),
         other => panic!("expected footage, got {other:?}"),

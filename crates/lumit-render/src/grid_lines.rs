@@ -49,7 +49,8 @@ pub(crate) fn draw(
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::params::Params;
+    use lumit_core::fx::registry::EffectMetadata;
 
     /// The kernel lands the lines where the CPU reference draws them, tipped,
     /// turned and rolled, for both ways of sizing a cell.
@@ -60,7 +61,7 @@ mod tests {
         };
         let (w, h) = (160u32, 96u32);
         let base: Vec<f32> = [0.2, 0.2, 0.2, 1.0].repeat((w * h) as usize);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &base, w, h);
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &base, w, h);
         for size_from in [0, 1] {
             let inst = Grid {
                 kind: 1,
@@ -84,7 +85,8 @@ mod tests {
             GridLines::of(&inst, 1.0).draw(&mut cpu, w, h);
             assert_ne!(cpu, base, "the lines drew nothing");
             let out = draw(ctx.fx(), &ctx, &tex, w, h, &inst, 1.0);
-            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
             let worst = cpu
                 .iter()
                 .zip(&gpu)

@@ -4,11 +4,11 @@
 //!
 //! **In plain terms.** Like Posterize time, this effect draws nothing itself. It
 //! changes *what time the layers below it render at*, which the frame walk shared
-//! by the preview and the export decides ([`crate::fx::stack_accumulation_mb`]
+//! by the preview and the export decides ([`crate::fx::temporal::stack_accumulation_mb`]
 //! reads the instance directly). So it declares its controls, and declares that
 //! it has no image operation.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Accumulation motion blur's controls.

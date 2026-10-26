@@ -19,7 +19,7 @@
 //! state, and a string row pretending to be a parameter would put a progress
 //! bar in the save file - the Camera track's reasoning, unchanged.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The depth models this build has code for, in index order. One today: the

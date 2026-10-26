@@ -338,7 +338,7 @@ fn pick<'a>(passes: &'a [Pass], wanted: Option<&str>) -> Option<&'a Pass> {
 /// whose picture isn't just a plain RGBA, so one with several passes, a
 /// lone channel or layer names ffmpeg can't place.
 #[must_use]
-pub fn reads_pass(src: &crate::MediaSource) -> bool {
+pub fn reads_pass(src: &crate::sequence::MediaSource) -> bool {
     let path = src.on_disk();
     if !is_exr(path) {
         return false;
@@ -369,7 +369,7 @@ pub fn passes(path: &Path) -> Result<(Vec<String>, Option<String>), MediaError> 
 /// The size of the pass a source reads, for the probe: ffmpeg says nought for
 /// the files it can't open.
 #[must_use]
-pub fn pass_size(src: &crate::MediaSource) -> Option<(u32, u32)> {
+pub fn pass_size(src: &crate::sequence::MediaSource) -> Option<(u32, u32)> {
     let meta = header_of(src.on_disk()).ok()?;
     let passes = passes_in(&meta);
     let pass = pick(&passes, src.render_pass.as_deref())?;
@@ -512,7 +512,7 @@ pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, Medi
 /// `None` for anything that is not an EXR, which is how the caller decides
 /// between this reader and the ordinary ffmpeg decode.
 #[must_use]
-pub fn file_for(source: &crate::MediaSource, frame: usize) -> Option<std::path::PathBuf> {
+pub fn file_for(source: &crate::sequence::MediaSource, frame: usize) -> Option<std::path::PathBuf> {
     let path = match source.run() {
         Some((run, _)) => run.file_at(frame),
         None => source.path.clone(),
@@ -642,7 +642,7 @@ mod tests {
         );
         Image::from_layer(layer).write().to_file(&out).unwrap();
 
-        let src = crate::MediaSource::file(&out);
+        let src = crate::sequence::MediaSource::file(&out);
         let video = crate::probe::probe(&src).unwrap().video.unwrap();
         assert_eq!((video.width, video.height), (4, 4));
         let frame = crate::read_own(&src, 0, None).unwrap().unwrap();

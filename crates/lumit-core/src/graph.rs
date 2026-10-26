@@ -29,7 +29,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::fx::{Port, PortType};
+use crate::fx::{schema::Port, schema::PortType};
 use crate::model::EffectInstance;
 
 /// The picture leaving a Source node, entering the Layer out node, or the
@@ -98,7 +98,7 @@ pub enum NodeRef {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OutputRef {
     /// A driver node's declared output port
-    /// ([`Signature::Data`](crate::fx::Signature::Data)).
+    /// ([`Signature::Data`](crate::fx::registry::Signature::Data)).
     Driver {
         node: Uuid,
         /// The port's stable id, as the driver's signature declares it.
@@ -270,7 +270,7 @@ pub enum GraphError {
     Cycle,
     /// A **node graph** with nothing to show
     /// ([`crate::comp_graph`]). Here rather than in its own error type so
-    /// [`crate::OpError::InvalidGraph`] carries both graph kinds' sentences.
+    /// [`crate::ops::OpError::InvalidGraph`] carries both graph kinds' sentences.
     #[error("a node graph needs an Output box")]
     NoOutput,
     /// A **node graph** with two Output boxes: the comp would have two
@@ -494,7 +494,7 @@ impl LayerGraph {
     /// above it without a trip to the node graph.
     pub fn wire_points_from_above(&mut self, effects: &[EffectInstance], consumer: Uuid) -> bool {
         let points_ports = |e: &EffectInstance, outputs: bool| {
-            let sig = crate::fx::BUILTIN_DEFS
+            let sig = crate::fx::catalogue::BUILTIN_DEFS
                 .get(&e.effect.match_name)
                 .map(|def| def.signature());
             sig.map_or(&[][..], |s| if outputs { s.outputs() } else { s.inputs() })
@@ -667,8 +667,10 @@ impl LayerGraph {
 
     /// The catalogue entry behind an instance. An effect this build does not
     /// know has no ports to wire, which is the same answer a missing node gets.
-    fn def_of(inst: &EffectInstance) -> Result<&'static dyn crate::fx::EffectDef, GraphError> {
-        crate::fx::BUILTIN_DEFS
+    fn def_of(
+        inst: &EffectInstance,
+    ) -> Result<&'static dyn crate::fx::registry::EffectDef, GraphError> {
+        crate::fx::catalogue::BUILTIN_DEFS
             .get(&inst.effect.match_name)
             .ok_or(GraphError::UnknownNode)
     }
@@ -809,7 +811,7 @@ impl LayerGraph {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::instantiate;
+    use crate::fx::builtins::instantiate;
 
     /// A driver or effect instance to hang wires off.
     fn inst(match_name: &str) -> EffectInstance {

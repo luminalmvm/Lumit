@@ -1255,7 +1255,6 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         model: FxConsoleModel(
           keyHint:
               wire == null ? _ui?.keymap.chordFor('console.open') : null,
-          footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
           entries: entries,
         ),
       );

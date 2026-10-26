@@ -25,8 +25,9 @@
 //! not re-keyed by them either.
 
 use crate::fx::{
-    cpu, EffectDef, EffectMetadata, EffectSchema, MatteKeyParams, MatteKeyView, ParamGroup,
-    ParamId, Params, ReplaceMethod, ResolveCx, Value,
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, resolved::MatteKeyParams,
+    resolved::MatteKeyView, resolved::ReplaceMethod, schema::EffectSchema, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 

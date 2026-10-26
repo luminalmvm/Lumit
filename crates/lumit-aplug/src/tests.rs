@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 use lumit_aplug_testplug::{Kind, PARAM_GAIN, PARAM_KNOB, PARAM_SWEEP, STATE_ECHO_DEFAULT};
-use lumit_core::fx::{EffectDef, ParamId, ParamKind};
+use lumit_core::fx::{params::ParamId, registry::EffectDef, schema::ParamKind};
 
 use crate::abi::AnyModule;
 use crate::def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost};
@@ -460,7 +460,7 @@ fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
     assert_ne!(before, 0.0, "a denormal is a real number by default");
 
     let inside = {
-        let _guard = crate::process::Denormals::on();
+        let _guard = lumit_core::fx::audio_chain::Denormals::on();
         black_box(tiny) * black_box(half)
     };
     assert_eq!(inside, 0.0, "flush to zero, as both standards assume");

@@ -7,14 +7,16 @@
 //! pixel, which is the standard cure for the contour rings a long, shallow ramp
 //! shows on an 8-bit display.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Gradient's controls.
 ///
 /// The two points are px@comp (§2.3), declared `Px` so the resolve step converts
 /// them to the raster in play and
-/// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::rescale_spatial)
+/// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::rescale_spatial)
 /// moves them **together** if the stack is reused at another size — a
 /// ramp that slid when the preview resolution changed would be a ramp nobody
 /// could grade against.

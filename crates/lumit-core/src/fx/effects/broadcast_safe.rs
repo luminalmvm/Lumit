@@ -11,7 +11,9 @@
 //! **It is a delivery tool, not a look** — hence Utility — and it is named for
 //! what it does rather than for what AE calls it (docs/01).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Broadcast safe's controls.

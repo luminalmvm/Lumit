@@ -16,7 +16,7 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
-    match lumit_media::ai::serve(&args, &mut std::io::stdout().lock()) {
+    match lumit_media::ai::helper::serve(&args, &mut std::io::stdout().lock()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             eprintln!("{why}");

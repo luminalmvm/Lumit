@@ -7,7 +7,9 @@
 //! softening blue alone reads as optics rather than as blur), and how an alpha
 //! is feathered without touching the colour inside it.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Channel blur's controls.

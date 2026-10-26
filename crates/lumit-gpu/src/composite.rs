@@ -3510,7 +3510,7 @@ mod tests {
                 pre: None,
             }],
         );
-        let px = crate::fx::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
+        let px = crate::fx::common::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
         // The premultiplied alpha of the matted red == the matte strength.
         let a = px[(4 * 8 + 4) * 4 + 3];
         assert!(
@@ -3676,7 +3676,7 @@ mod tests {
             1.0,
             None,
         );
-        let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
+        let px = crate::fx::common::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
         // The ray from the eye through the pixel's spot on the z = 0 plane
         // meets a card turned `deg` at this many zooms along the view.
         let hit = |x: f32, deg: f32| {
@@ -3727,7 +3727,7 @@ mod tests {
                 Some(_) => &[&[card(-30.0)]],
             };
             let depth = compositor.composite_depth(&ctx, 32, 32, runs, cam, 1.0, 0.0, 1.0, under);
-            let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
+            let px = crate::fx::common::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
             for x in [10u32, 21] {
                 let (got, blue) = (px[((16 * 32 + x) * 4) as usize], hit(x as f32 + 0.5, -30.0));
                 assert!(
@@ -4238,8 +4238,8 @@ mod tests {
             1,
             None,
         );
-        let a = crate::fx::readback_linear_f32(&ctx, &both, 16, 16).unwrap();
-        let b = crate::fx::readback_linear_f32(&ctx, &seeded, 16, 16).unwrap();
+        let a = crate::fx::common::readback_linear_f32(&ctx, &both, 16, 16).unwrap();
+        let b = crate::fx::common::readback_linear_f32(&ctx, &seeded, 16, 16).unwrap();
         assert_eq!(a, b, "seeded continuation must be bit-identical");
     }
 
@@ -4289,7 +4289,7 @@ mod tests {
             None,
         );
         assert_eq!((out.width(), out.height()), (8, 8), "target is scaled");
-        let px = crate::fx::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
+        let px = crate::fx::common::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
         let red_at = |x: usize, y: usize| px[(y * 8 + x) * 4];
         assert!(
             red_at(6, 6) > 0.9,
@@ -4341,7 +4341,7 @@ mod tests {
                 1.0,
                 1,
             );
-            crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap()
+            crate::fx::common::readback_linear_f32(&ctx, &tex, w, h).unwrap()
         };
         let alpha = |px: &[f32], x: usize, y: usize| px[(y * w as usize + x) * 4 + 3];
         let covered_cols = |px: &[f32]| {
@@ -4427,7 +4427,7 @@ mod tests {
         let layers: Vec<(&wgpu::Texture, f32)> = frames.iter().zip(weights).collect();
 
         let one_shot = compositor.accumulate_all_at_once(&ctx, 8, 8, &layers);
-        let expected = crate::fx::readback_linear_f32(&ctx, &one_shot, 8, 8).unwrap();
+        let expected = crate::fx::common::readback_linear_f32(&ctx, &one_shot, 8, 8).unwrap();
 
         // The streaming path, the way a shutter would drive it: one frame in
         // hand at a time.
@@ -4436,7 +4436,7 @@ mod tests {
             compositor.add_into(&ctx, &mut running, frame, weight);
         }
         let streamed = compositor.resolve(&ctx, &running);
-        let got = crate::fx::readback_linear_f32(&ctx, &streamed, 8, 8).unwrap();
+        let got = crate::fx::common::readback_linear_f32(&ctx, &streamed, 8, 8).unwrap();
 
         assert_eq!(
             expected, got,
@@ -4446,7 +4446,7 @@ mod tests {
         // And the public entry point, which is now the streaming one, agrees
         // with the oracle too.
         let through_public = compositor.accumulate(&ctx, 8, 8, &layers);
-        let public = crate::fx::readback_linear_f32(&ctx, &through_public, 8, 8).unwrap();
+        let public = crate::fx::common::readback_linear_f32(&ctx, &through_public, 8, 8).unwrap();
         assert_eq!(expected, public);
     }
 
@@ -4566,7 +4566,7 @@ mod tests {
                 samples,
                 None,
             );
-            crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap()
+            crate::fx::common::readback_linear_f32(&ctx, &tex, w, h).unwrap()
         };
         let aliased = render(1);
         let smooth = render(4);
@@ -4617,7 +4617,7 @@ mod tests {
             got,
             None,
         );
-        let px = crate::fx::readback_linear_f32(&ctx, &tex, w, h).unwrap();
+        let px = crate::fx::common::readback_linear_f32(&ctx, &tex, w, h).unwrap();
         assert!(
             px.chunks_exact(4).any(|t| t[3] > 0.5),
             "the fallback count must still produce a picture"

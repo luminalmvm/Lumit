@@ -761,8 +761,8 @@ mod tests {
 
     fn stack() -> Vec<EffectInstance> {
         vec![
-            crate::fx::instantiate("blur").unwrap(),
-            crate::fx::instantiate("glow").unwrap(),
+            crate::fx::builtins::instantiate("blur").unwrap(),
+            crate::fx::builtins::instantiate("glow").unwrap(),
         ]
     }
 
@@ -842,10 +842,10 @@ mod tests {
         Vec<crate::graph::NodeRef>,
     ) {
         use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-        let wiggle = crate::fx::instantiate("wiggle").unwrap();
-        let smooth = crate::fx::instantiate("smooth").unwrap();
-        let outside = crate::fx::instantiate("wiggle").unwrap();
-        let blur = crate::fx::instantiate("blur").unwrap();
+        let wiggle = crate::fx::builtins::instantiate("wiggle").unwrap();
+        let smooth = crate::fx::builtins::instantiate("smooth").unwrap();
+        let outside = crate::fx::builtins::instantiate("wiggle").unwrap();
+        let blur = crate::fx::builtins::instantiate("blur").unwrap();
         let (a, b, c, d) = (wiggle.id, smooth.id, outside.id, blur.id);
         let graph = LayerGraph {
             notes: Vec::new(),
@@ -977,7 +977,7 @@ mod tests {
             item,
             custom_name: None,
         };
-        let blur = GraphNode::Fx(crate::fx::instantiate("blur").unwrap());
+        let blur = GraphNode::Fx(crate::fx::builtins::instantiate("blur").unwrap());
         let out = GraphNode::Output {
             id: uuid::Uuid::now_v7(),
         };

@@ -155,7 +155,7 @@ impl LayerReference {
                 (policy, parked)
             }
         };
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation,
@@ -194,7 +194,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn set_flow_params(&self, params: BridgeFlowParams) -> Result<(), BridgeError> {
         let base = self.live_flow_params(&self.item()?);
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params.onto(&base)),
@@ -243,7 +243,7 @@ impl LayerReference {
         let animation = value.animation_at(layer.start_offset.0)?;
         let mut params = self.live_flow_params(&layer);
         params.input_fps.animation = animation;
-        self.commit(lumit_core::Op::SetLayerInterpolation {
+        self.commit(lumit_core::ops::Op::SetLayerInterpolation {
             comp: self.comp_id,
             layer: self.layer_id,
             interpolation: Interpolation::Flow(params),
@@ -326,21 +326,27 @@ impl LayerReference {
     pub fn flow_engine_state(&self) -> BridgeFlowEngineState {
         if matches!(
             lumit_ml::runtime::status(),
-            lumit_ml::RuntimeStatus::Missing
+            lumit_ml::runtime::RuntimeStatus::Missing
         ) {
             return BridgeFlowEngineState::RuntimeMissing;
         }
         if lumit_ml::synthesis::installed_identity().is_none() {
             return BridgeFlowEngineState::PackMissing;
         }
-        match lumit_render::synthesis_refusal(self.layer_id) {
+        match lumit_render::decode::synthesis_refusal(self.layer_id) {
             None => BridgeFlowEngineState::Ready,
-            Some(lumit_render::SynthesisRefusal::RuntimeMissing) => {
+            Some(lumit_render::decode::SynthesisRefusal::RuntimeMissing) => {
                 BridgeFlowEngineState::RuntimeMissing
             }
-            Some(lumit_render::SynthesisRefusal::PackMissing) => BridgeFlowEngineState::PackMissing,
-            Some(lumit_render::SynthesisRefusal::FloatSource) => BridgeFlowEngineState::FloatSource,
-            Some(lumit_render::SynthesisRefusal::Failed(_)) => BridgeFlowEngineState::Failed,
+            Some(lumit_render::decode::SynthesisRefusal::PackMissing) => {
+                BridgeFlowEngineState::PackMissing
+            }
+            Some(lumit_render::decode::SynthesisRefusal::FloatSource) => {
+                BridgeFlowEngineState::FloatSource
+            }
+            Some(lumit_render::decode::SynthesisRefusal::Failed(_)) => {
+                BridgeFlowEngineState::Failed
+            }
         }
     }
 }

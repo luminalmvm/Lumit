@@ -2,7 +2,10 @@
 //! split's linear tinted-tap fringe — R pulled outward, B pulled inward, G and
 //! alpha unshifted, growing from the frame centre.
 
-use crate::fx::{cpu, normalise_tint_columns, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, maths::normalise_tint_columns, params::Params, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Which kernel a chromatic aberration instance draws through, and the numbers
@@ -63,7 +66,7 @@ pub struct ChromaticAberration {
     /// shape and one purpose, so "how many pixels of fringe" is the honest
     /// unit. Declared `Px`, so the resolve step scales it by the
     /// §2.3 preview factor and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size —
     /// exactly what the old arm and `rescale_px` did between them.
     #[slider(

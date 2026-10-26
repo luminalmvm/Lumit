@@ -14,7 +14,7 @@
 //! realises the choice by handing on the chosen picture rather than by running
 //! a kernel - so there is no CPU oracle and no GPU entry.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Switch's one control.

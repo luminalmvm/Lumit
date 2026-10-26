@@ -1880,7 +1880,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         else if (_caps.colourSpaces.length > 1)
           _reading(t, l10n.exportColourStated,
               key: const ValueKey('export-colour-tagging')),
-        if (!dim) _reading(t, l10n.exportColourNote),
       ],
       dimmed: dim,
     );

@@ -50,11 +50,3 @@ pub mod long_sound;
 pub mod media;
 pub mod ofx;
 pub mod scenarios;
-
-pub use baseline::Baseline;
-pub use comp::{reference_comp, LAYER_COUNT};
-pub use long::LongHarness;
-pub use long_comp::long_comp;
-pub use long_sound::SoundHarness;
-pub use media::RefMedia;
-pub use scenarios::{Harness, Measurement};

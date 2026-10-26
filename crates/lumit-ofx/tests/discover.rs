@@ -15,7 +15,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use lumit_core::fx::EffectDef;
+use lumit_core::fx::registry::EffectDef;
 use lumit_ofx::bundle::BUNDLE_ARCH_DIR;
 use lumit_ofx::discover::{self, Hosting, ScanOptions};
 

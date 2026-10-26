@@ -10,7 +10,9 @@
 //! frame is folded into a single slat before it is thresholded, so one edge
 //! becomes a rank of them.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Venetian blinds' controls.

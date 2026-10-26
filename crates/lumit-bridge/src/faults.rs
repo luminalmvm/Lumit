@@ -104,7 +104,7 @@ fn record_to(file: &std::path::Path, line: &str) {
 /// because the next fault under it is read against it.
 pub(crate) fn record_adapter() {
     ADAPTER.call_once(|| {
-        if let Some(adapter) = lumit_render::adapter_summary() {
+        if let Some(adapter) = lumit_gpu::adapter_summary() {
             record(&format!("graphics adapter: {adapter}"));
         }
     });

@@ -52,7 +52,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-pub use lumit_ingress::{checked_area, checked_raster_bytes};
+use lumit_ingress::checked_raster_bytes;
 
 /// Which pool a reservation is against.
 ///

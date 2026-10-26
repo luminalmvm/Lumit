@@ -154,7 +154,7 @@ impl CompositionReference {
         let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
         state
             .store
-            .commit(lumit_core::Op::AddLayer {
+            .commit(lumit_core::ops::Op::AddLayer {
                 comp: self.id,
                 index: crate::api::composition::insert_row(row, comp.layers.len()),
                 layer: Box::new(layer),
@@ -169,7 +169,9 @@ impl CompositionReference {
     /// the comp as it was when playback was asked for, and the worker may not
     /// start for some milliseconds.
     #[frb(ignore)]
-    fn document_snapshot(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+    fn document_snapshot(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let state = self.project()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(state.store.snapshot())

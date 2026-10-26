@@ -39,7 +39,7 @@
 //! only to file the result (docs/14 §3).
 
 #[cfg(feature = "media")]
-use lumit_media::MediaSource;
+use lumit_media::sequence::MediaSource;
 #[cfg(feature = "media")]
 use std::{
     collections::{HashMap, HashSet},

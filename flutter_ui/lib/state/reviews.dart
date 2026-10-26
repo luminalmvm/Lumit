@@ -152,6 +152,10 @@ class Review {
   /// What tells the page in a browser that its owner is looking.
   final String ownerKey;
 
+  /// The username of the account that made it, or null when that account
+  /// has not chosen one.
+  final String? ownerUsername;
+
   /// Whether reviewers may comment, may attach a picture to a comment, and
   /// may download the file.
   final bool comments, pictures, downloads;
@@ -185,6 +189,7 @@ class Review {
     required this.url,
     required this.title,
     this.ownerKey = '',
+    this.ownerUsername,
     this.comments = true,
     this.pictures = true,
     this.downloads = false,
@@ -206,6 +211,10 @@ class Review {
         url: _text(j['url']),
         title: _text(j['title']),
         ownerKey: _text(j['owner_key']),
+        ownerUsername: switch (j['owner']) {
+          {'username': final String username} => username,
+          _ => null,
+        },
         comments: j['comments'] != false,
         pictures: j['pictures'] != false,
         downloads: j['downloads'] == true,
@@ -235,6 +244,7 @@ class Review {
         url: url,
         title: title,
         ownerKey: ownerKey,
+        ownerUsername: ownerUsername,
         comments: comments,
         pictures: pictures,
         downloads: downloads,

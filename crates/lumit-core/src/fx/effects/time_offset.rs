@@ -14,7 +14,7 @@
 //! the shifted time rather than by running a kernel, which is why it has no CPU
 //! oracle and no GPU entry.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// The Time offset's one control.

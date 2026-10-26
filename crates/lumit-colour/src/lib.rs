@@ -59,10 +59,3 @@ pub mod resolve;
 pub mod sample;
 pub mod spi;
 pub mod truelight;
-
-pub use bake::{bake, Artefact, Shaper, Stage, VendoredArtefact};
-pub use config::Config;
-pub use error::{ColourError, Result};
-pub use op::{Chain, Direction, Op};
-pub use resolve::{Bridge, LoadedConfig};
-pub use sample::{Cube, Curve};

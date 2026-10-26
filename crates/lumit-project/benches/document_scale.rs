@@ -16,7 +16,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use lumit_core::model::ProjectItem;
 use lumit_core::ops::Op;
-use lumit_core::DocumentStore;
+use lumit_core::store::DocumentStore;
 use lumit_project::fixtures::{stress_document, StressParams};
 
 fn document_scale(c: &mut Criterion) {

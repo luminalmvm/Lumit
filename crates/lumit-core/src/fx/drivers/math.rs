@@ -11,8 +11,9 @@
 //! (14-ENGINEERING-RULES §4).
 
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
-    CHOICE_UNGROUPED,
+    builtins::CHOICE_UNGROUPED, params::Value, registry::DriverCx, registry::EffectDef,
+    registry::EffectMetadata, registry::Signature, schema::EffectSchema, schema::Port,
+    schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

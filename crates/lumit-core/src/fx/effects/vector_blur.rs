@@ -180,7 +180,7 @@ impl VectorBlur {
                 self.vertical_channel.min(last),
             ],
             length,
-            turn: crate::fx::rgb_split_offset(1.0, self.angle_offset),
+            turn: crate::fx::maths::rgb_split_offset(1.0, self.angle_offset),
             constant_length: self.constant_length,
             follow,
             direction: self.direction.min(2),

@@ -895,7 +895,8 @@ mod tests {
     /// even when the cached `source` has been tampered with in the file.
     #[test]
     fn the_graph_is_master() {
-        let mut inst = crate::fx::instantiate("custom_shader").expect("the effect exists");
+        let mut inst =
+            crate::fx::builtins::instantiate("custom_shader").expect("the effect exists");
         let mut block = serde_json::Map::new();
         block.insert(
             "source".into(),

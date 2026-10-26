@@ -14,8 +14,8 @@ Lumit and Lumit Pro are largely maintained and made by Mack Reed, which is who "
 ## Your account
 
 - An account is optional. Lumit works without one.
-- You need to be 13 or over to have an account. If you are under 18, you need a parent or
-  guardian's permission to buy Pro.
+- You need to be 13 or over to have an account, or 16 in the EU. If you are under 18, you need a
+  parent or guardian's permission to buy Pro.
 - Never share your login details. We don't take responsibility if you lose your account. 
 - You can delete your account at any time from **Settings ▸ Account** within Lumit.
 

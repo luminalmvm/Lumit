@@ -128,7 +128,7 @@ fn project(effects: Vec<lumit_core::model::EffectInstance>) -> (Arc<Document>, U
 /// A fresh Particulate at its declared defaults — `Add effect -> Particulate`
 /// and nothing else, which is exactly what the owner did.
 fn default_particulate() -> lumit_core::model::EffectInstance {
-    lumit_core::fx::instantiate("particulate").expect("particulate is a built-in")
+    lumit_core::fx::builtins::instantiate("particulate").expect("particulate is a built-in")
 }
 
 /// Sets one parameter on an instance, for the fiddling half of the report.
@@ -297,7 +297,7 @@ fn the_generators_draw_on_a_solid_through_the_document() {
         .expect("the bare solid renders");
 
     for name in ["grid", "scatter"] {
-        let inst = lumit_core::fx::instantiate(name).expect("a built-in");
+        let inst = lumit_core::fx::builtins::instantiate(name).expect("a built-in");
         let (doc, comp) = project(vec![inst]);
         let (drawn, ..) = r
             .render_rgba(&doc, comp, 60, 1.0)

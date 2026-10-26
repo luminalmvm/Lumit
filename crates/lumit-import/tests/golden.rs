@@ -39,7 +39,9 @@ use lumit_core::model::{
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::Rational;
-use lumit_import::{Bundle, ImportReport, Outcome, Reason, Summary};
+use lumit_import::{
+    report::ImportReport, report::Outcome, report::Reason, report::Summary, Bundle,
+};
 
 // ---------------------------------------------------------------------------
 // One open, one map, shared
@@ -64,7 +66,7 @@ fn golden() -> &'static (Bundle, Document, ImportReport) {
     static ONCE: OnceLock<(Bundle, Document, ImportReport)> = OnceLock::new();
     ONCE.get_or_init(|| {
         let bundle = lumit_import::open_bundle(&bundle_path()).expect("the golden bundle opens");
-        let (doc, report) = lumit_import::map_capture(&bundle.capture);
+        let (doc, report) = lumit_import::map::map_capture(&bundle.capture);
         (bundle, doc, report)
     })
 }
@@ -941,13 +943,30 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     assert_eq!(words.transform.position_x.value_at(0.0), 320.0);
     assert_eq!(words.transform.position_y.value_at(0.0), 180.0);
 
-    assert_eq!(
-        layer(c, "shape").kind,
-        LayerKind::Shape {
-            contents: Vec::new()
-        }
-    );
-    assert!(reported(|r| matches!(r, Reason::ShapeContentsNotMapped)));
+    // The rectangle and the ellipse under one gradient fill, cut to 70 % and
+    // copied three times.
+    let LayerKind::Shape { contents } = &layer(c, "shape").kind else {
+        panic!("a shape layer");
+    };
+    let art = lumit_core::shape::modifier::lowered(contents);
+    assert_eq!(art.len(), 2);
+    for art in art {
+        use lumit_core::shape::modifier::ModifierKind;
+        assert_eq!(art.item.gradient, 1);
+        let trim = art.mods.iter().find_map(|m| match &m.kind {
+            ModifierKind::Trim(trim) => Some(trim.end.value_at(0.0)),
+            _ => None,
+        });
+        let copies = art.mods.iter().find_map(|m| match &m.kind {
+            ModifierKind::Repeat(repeat) => Some(repeat.copies.value_at(0.0)),
+            _ => None,
+        });
+        assert_eq!((trim, copies), (Some(70.0), Some(3.0)));
+    }
+    assert!(reported(|r| matches!(
+        r,
+        Reason::ShapeGradientColoursDefault
+    )));
 }
 
 // ---------------------------------------------------------------------------

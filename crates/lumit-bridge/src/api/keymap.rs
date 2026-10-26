@@ -502,7 +502,7 @@ pub struct BridgeAfterEffectsKeymap {
 /// for keeps the preset's chord. Text with no After Effects command in it is
 /// refused and the current map is left alone.
 pub fn keymap_import_after_effects(text: String) -> Result<BridgeAfterEffectsKeymap, BridgeError> {
-    let import = lumit_keymap::import_after_effects_shortcuts(&text)
+    let import = lumit_keymap::after_effects::import_after_effects_shortcuts(&text)
         .map_err(|e| BridgeError::InvalidKeymapFile(e.to_string()))?;
     // The file says which keys do what. The modifiers for the wheel and for
     // breaking handles are not in it, and stay as they were set.

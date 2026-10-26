@@ -16,7 +16,9 @@
 //! with the first.
 
 use crate::fx::noise::{fractal, hash01, FractalField};
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Steps in a main bolt, and in one of the several bolts the multi-bolt types

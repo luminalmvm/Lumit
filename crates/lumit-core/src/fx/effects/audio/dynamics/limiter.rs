@@ -35,7 +35,10 @@ use crate::fx::effects::audio::dsp::{
     db::gain_of_db, delay_line::DelayLine, oversample::Oversample4x, smoother::coeff_of_ms,
     smoother::Smoother,
 };
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// The frames the true-peak detector hears late: the upward half of the
 /// oversampler's pair, which is half of the pair's own delay because both
@@ -258,7 +261,7 @@ impl AudioProcessor for Limiter {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_BLOCK_SAMPLES};
     use std::f64::consts::TAU;
 
     const RATE: u32 = 48_000;

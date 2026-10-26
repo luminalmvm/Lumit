@@ -47,7 +47,7 @@ struct Live {
     /// Stops a script the program is running.
     run: Arc<AtomicBool>,
     file: PathBuf,
-    secret: lumit_script::live::Secret,
+    secret: lumit_peer::Secret,
 }
 
 impl Live {
@@ -126,8 +126,8 @@ pub(crate) fn disconnect() {
 }
 
 fn serve(
-    listener: &lumit_script::live::Listener,
-    secret: &lumit_script::live::Secret,
+    listener: &interprocess::local_socket::Listener,
+    secret: &lumit_peer::Secret,
     stop: &AtomicBool,
     leave: &AtomicBool,
     run: &Arc<AtomicBool>,

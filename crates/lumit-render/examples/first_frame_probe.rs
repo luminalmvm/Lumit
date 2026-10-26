@@ -8,7 +8,7 @@
 
 use lumit_core::model::{Composition, Document, LinearColour, ProjectItem};
 use lumit_core::time::{Duration, FrameRate, Rational};
-use lumit_render::{HeadlessRenderer, Quality};
+use lumit_render::{headless::HeadlessRenderer, plan::Quality};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -56,7 +56,7 @@ fn main() {
     println!("{:44} {:8.1} ms", "ColourEngine::new", ms(t));
 
     let t = Instant::now();
-    let _compositor = lumit_gpu::Compositor::new(&gpu);
+    let _compositor = lumit_gpu::composite::Compositor::new(&gpu);
     println!("{:44} {:8.1} ms", "Compositor::new", ms(t));
 
     let t = Instant::now();

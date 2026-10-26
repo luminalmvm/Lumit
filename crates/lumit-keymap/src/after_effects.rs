@@ -220,6 +220,12 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
         "layer.shift.later10",
     ),
     ("CCompCmd", "CenterLayerInView", Global, "layer.centre"),
+    (
+        "CCompCmd",
+        "CenterAnchorToBounds",
+        Global,
+        "layer.centre.anchor",
+    ),
     ("CSwitchboard", "MaskFeather", Global, "mask.feather"),
     ("CSwitchboard", "MaskInverse", Global, "mask.invert"),
     (

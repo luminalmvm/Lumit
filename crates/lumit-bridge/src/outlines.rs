@@ -62,7 +62,7 @@ pub(crate) fn add_above(
         top = copy.id;
         // Each part lands above the one before, so later art stays in front
         // as it was drawn.
-        ops.push(lumit_core::Op::AddLayer {
+        ops.push(lumit_core::ops::Op::AddLayer {
             comp: source.comp_id,
             index,
             layer: Box::new(copy),
@@ -71,12 +71,12 @@ pub(crate) fn add_above(
     if ops.is_empty() {
         return Err(BridgeError::NothingToConvert);
     }
-    ops.push(lumit_core::Op::SetLayerVisible {
+    ops.push(lumit_core::ops::Op::SetLayerVisible {
         comp: source.comp_id,
         layer: source.layer_id,
         visible: false,
     });
-    source.commit(lumit_core::Op::Batch { ops })?;
+    source.commit(lumit_core::ops::Op::Batch { ops })?;
     Ok(LayerReference::new(source.project_id, source.comp_id, top))
 }
 

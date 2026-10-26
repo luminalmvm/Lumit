@@ -54,7 +54,7 @@ fn project(view: u32, invert: bool) -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
     }));
 
-    let mut depth = lumit_core::fx::instantiate("depth").expect("depth is a built-in");
+    let mut depth = lumit_core::fx::builtins::instantiate("depth").expect("depth is a built-in");
     for p in &mut depth.params {
         match p.id.as_str() {
             "view" => p.value = EffectValue::Choice(view),
@@ -225,7 +225,7 @@ fn cutting(view: u32, invert: bool) -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
     }));
 
-    let mut cut = lumit_core::fx::instantiate("remove_background").expect("a built-in");
+    let mut cut = lumit_core::fx::builtins::instantiate("remove_background").expect("a built-in");
     for p in &mut cut.params {
         match p.id.as_str() {
             "view" => p.value = EffectValue::Choice(view),
@@ -376,7 +376,7 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
         }));
     }
 
-    let mut depth = lumit_core::fx::instantiate("depth").expect("depth is a built-in");
+    let mut depth = lumit_core::fx::builtins::instantiate("depth").expect("depth is a built-in");
     let instance = depth.id;
     for p in &mut depth.params {
         if p.id == "view" {
@@ -387,7 +387,7 @@ fn a_layer_read_as_a_matte_source_draws_its_own_plane() {
     source.effects = vec![depth];
     let source_id = source.id;
 
-    let mut set_matte = lumit_core::fx::instantiate("set_matte").expect("a built-in");
+    let mut set_matte = lumit_core::fx::builtins::instantiate("set_matte").expect("a built-in");
     match set_matte.params.iter_mut().find(|p| p.id == "matte") {
         Some(p) => p.value = EffectValue::Layer(Some(source_id)),
         None => set_matte.params.push(EffectParam {
@@ -448,11 +448,11 @@ fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
     }));
 
-    let cut = lumit_core::fx::instantiate("remove_background").expect("a built-in");
+    let cut = lumit_core::fx::builtins::instantiate("remove_background").expect("a built-in");
     let instance = cut.id;
     // A box between the Read and the one that cuts, so the file is found
     // through it rather than only beside it.
-    let pass = lumit_core::fx::instantiate("transform").expect("a built-in");
+    let pass = lumit_core::fx::builtins::instantiate("transform").expect("a built-in");
     let (read, through, out) = (Uuid::now_v7(), pass.id, Uuid::now_v7());
     let wire = |from: Uuid, to: Uuid| GraphEdge {
         from,
@@ -598,7 +598,7 @@ fn a_precomp_layer_is_cut_by_the_matte_of_its_nested_comp() {
             comp.duration = Duration(Rational::new(1, 5).unwrap());
         }
     }
-    let cut = lumit_core::fx::instantiate("remove_background").expect("a built-in");
+    let cut = lumit_core::fx::builtins::instantiate("remove_background").expect("a built-in");
     let instance = cut.id;
     let mut precomp = layer("the precomp", LayerKind::Precomp { comp: nested });
     precomp.start_offset = CompTime(Rational::new(1, 2).unwrap());

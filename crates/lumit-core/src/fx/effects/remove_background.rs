@@ -21,7 +21,10 @@
 //! and Depth both give: "Frame 214 of 900" is live job state, and a string row
 //! pretending to be a parameter would put a progress bar in the save file.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen};
+use crate::fx::{
+    registry::EffectDef, registry::EffectMetadata, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// The matte models this build has code for, in index order. The architecture

@@ -64,7 +64,7 @@ pub struct BridgeMediaInfo {
     /// Whether the picture is a **still** rather than something that runs.
     /// A still probes with a video stream too — one frame of it — so
     /// the question is whether the stream lasts, and the engine
-    /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
+    /// ([`lumit_media::probe::MediaProbe::runs_as_video`]) is the one place it is
     /// asked, so the panel cannot call a file a still while the Timeline cuts
     /// it as a clip.
     ///
@@ -176,8 +176,8 @@ impl FootageReference {
     pub(crate) fn resolve_source(
         p: &LumitBridgeState,
         f: &FootageItem,
-    ) -> Option<lumit_media::MediaSource> {
-        Some(lumit_media::MediaSource {
+    ) -> Option<lumit_media::sequence::MediaSource> {
+        Some(lumit_media::sequence::MediaSource {
             path: Self::resolve_path(p, f)?,
             sequence_fps: f
                 .sequence
@@ -225,7 +225,7 @@ impl FootageReference {
         // panel asks every repointed item for its status the moment the change
         // lands.
         #[cfg(feature = "media")]
-        let mut repointed: Vec<lumit_media::MediaSource> = Vec::new();
+        let mut repointed: Vec<lumit_media::sequence::MediaSource> = Vec::new();
 
         let ops = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -346,14 +346,14 @@ impl FootageReference {
                                 .all(|(a, b)| a == b || (a.is_ascii_digit() && b.is_ascii_digit()))
                     });
                     if automatic && *name != other.name {
-                        ops.push(lumit_core::Op::RenameItem {
+                        ops.push(lumit_core::ops::Op::RenameItem {
                             id: other.id,
                             name: name.clone(),
                         });
                     }
                 }
                 #[cfg(feature = "media")]
-                repointed.push(lumit_media::MediaSource {
+                repointed.push(lumit_media::sequence::MediaSource {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
                     source_layer: other.source_layer,
@@ -361,7 +361,7 @@ impl FootageReference {
                     interpret: lumit_render::source::interpretation(other),
                     stamp: None,
                 });
-                ops.push(lumit_core::Op::SetMediaRef {
+                ops.push(lumit_core::ops::Op::SetMediaRef {
                     id: other.id,
                     media: Box::new(media),
                 });
@@ -377,7 +377,7 @@ impl FootageReference {
         let op = if ops.len() == 1 {
             ops.into_iter().next().ok_or(BridgeError::InvalidItem)?
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         proj.store.commit(op).map_err(BridgeError::OpError)?;
         drop(proj);
@@ -435,7 +435,7 @@ impl FootageReference {
             let doc = proj.store.snapshot();
             match doc.item(self.id) {
                 Some(lumit_core::model::ProjectItem::Footage(f)) => Self::resolve_path(&proj, f)
-                    .map(|path| lumit_media::MediaSource {
+                    .map(|path| lumit_media::sequence::MediaSource {
                         path,
                         sequence_fps: Some((fps_num, fps_den)),
                         source_layer: None,
@@ -450,7 +450,7 @@ impl FootageReference {
         {
             let proj = state.write().map_err(|_| BridgeError::WriteFailed)?;
             proj.store
-                .commit(lumit_core::Op::SetSequenceRate {
+                .commit(lumit_core::ops::Op::SetSequenceRate {
                     id: self.id,
                     frame_rate,
                 })
@@ -513,7 +513,7 @@ impl FootageReference {
             return Ok(());
         }
         proj.store
-            .commit(lumit_core::Op::SetFootageTrim {
+            .commit(lumit_core::ops::Op::SetFootageTrim {
                 id: self.id,
                 trim: Some(Box::new(trim)),
             })
@@ -685,7 +685,7 @@ impl FootageReference {
             .iter()
             .flat_map(|plays| plays.places().to_vec())
             .collect();
-        let sound = lumit_media::SoundSource::streams_of(src.path, &places);
+        let sound = lumit_media::audio::SoundSource::streams_of(src.path, &places);
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
@@ -1003,7 +1003,7 @@ impl FootageReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetItemProxy {
+            .commit(lumit_core::ops::Op::SetItemProxy {
                 id: self.id,
                 proxy: None,
             })
@@ -1021,7 +1021,7 @@ impl FootageReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetItemUseProxy {
+            .commit(lumit_core::ops::Op::SetItemUseProxy {
                 id: self.id,
                 use_proxy: on,
             })
@@ -1127,7 +1127,7 @@ pub(crate) fn attach_proxy(
 
     let p = proj.write().map_err(|_| BridgeError::WriteFailed)?;
     p.store
-        .commit(lumit_core::Op::SetItemProxy {
+        .commit(lumit_core::ops::Op::SetItemProxy {
             id: item,
             proxy: Some(Box::new(lumit_core::model::ProxyRef {
                 media,

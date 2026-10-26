@@ -185,7 +185,7 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
     };
     // One shot of the parent comp: the export path at full size, or the
     // preview path at whatever quality is asked for.
-    let mut render = |map: Option<Property>, frame: u64, q: Option<lumit_render::Quality>| {
+    let mut render = |map: Option<Property>, frame: u64, q: Option<lumit_render::plan::Quality>| {
         let (doc, comp) = project(map);
         match q {
             Some(q) => {
@@ -211,10 +211,10 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
 
     // And at half the render scale, where the nested comp's intermediate is
     // half size: the map is read on the clock, not on the raster.
-    let half_res = lumit_render::Quality {
+    let half_res = lumit_render::plan::Quality {
         auto_res: true,
         display_scale: 0.5,
-        ..lumit_render::Quality::default()
+        ..lumit_render::plan::Quality::default()
     };
     assert_eq!(
         render(Some(half.clone()), 30, Some(half_res)),

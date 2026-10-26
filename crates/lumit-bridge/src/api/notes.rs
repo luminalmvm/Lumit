@@ -1,7 +1,7 @@
 //! The Notes panel's text, kept in the project.
 
 use flutter_rust_bridge::frb;
-use lumit_core::Op;
+use lumit_core::ops::Op;
 
 use crate::api::{project::ProjectReference, BridgeError};
 

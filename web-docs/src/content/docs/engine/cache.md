@@ -46,6 +46,10 @@ When Lumit closes, these cached frames do not clear, meaning they can fill up th
 and VRAM caches upon loading. While using Lumit, the other caches will send cached 
 frames to the disk cache to keep them across sessions.
 
+The disk budget is shared by every project cached in the same folder. Opening a project
+empties the least recently used ones until they fit, and the cache always leaves 10 GB free
+on its drive.
+
 ## Related
 
 - [Preview and playback](/use/preview/)

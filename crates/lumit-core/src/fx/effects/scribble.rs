@@ -19,7 +19,10 @@
 //! price of one noise lookup a pixel rather than eight times the geometry
 //! (§3.78's second decision).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value};
+use crate::fx::{
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
+};
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
 
@@ -162,11 +165,12 @@ pub struct Scribble {
 }
 
 /// A rate is not a control while nothing is moving.
-pub const SCRIBBLE_ENABLED_WHEN: &[crate::fx::EnabledWhen] = &[crate::fx::EnabledWhen {
-    param: "wiggles_per_second",
-    on: "wiggle_type",
-    cond: crate::fx::EnabledCond::ChoiceIsNot(Scribble::WIGGLE_STATIC),
-}];
+pub const SCRIBBLE_ENABLED_WHEN: &[crate::fx::schema::EnabledWhen] =
+    &[crate::fx::schema::EnabledWhen {
+        param: "wiggles_per_second",
+        on: "wiggle_type",
+        cond: crate::fx::schema::EnabledCond::ChoiceIsNot(Scribble::WIGGLE_STATIC),
+    }];
 
 /// The waver's amplitude, as a share of the spacing, and its wavelength, as a
 /// multiple of it (docs/08 §3.78's second decision).

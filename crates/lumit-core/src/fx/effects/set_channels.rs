@@ -29,7 +29,9 @@
 //! [`crate::fx::cpu::set_channels`], exercised with a source from the lumit-gpu
 //! test, which can upload one.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Where one output channel is fetched from (docs/08 §3.94).
@@ -41,7 +43,7 @@ use lumit_fx_macros::Effect;
 /// so the import maps by position for those two.
 ///
 /// AE's Hue, Lightness and Saturation are deliberately absent, exactly as they
-/// are absent from [`CHANNEL_OPTIONS`](super::super::CHANNEL_OPTIONS): nothing
+/// are absent from [`CHANNEL_OPTIONS`](super::super::builtins::CHANNEL_OPTIONS): nothing
 /// encodes a channel as a hue, and the import reports the collapse rather than
 /// pretending otherwise.
 pub const SET_CHANNELS_OPTIONS: &[&str] = &[

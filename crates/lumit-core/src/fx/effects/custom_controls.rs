@@ -22,7 +22,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::anim::Property;
 use crate::fx::shader::hash64;
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamKind, ParamSchema, Unit};
+use crate::fx::{
+    params::Unit, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamKind, schema::ParamSchema,
+};
 use crate::model::{EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 

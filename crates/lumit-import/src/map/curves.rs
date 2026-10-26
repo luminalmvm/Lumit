@@ -69,7 +69,7 @@ const TABLES_AT: usize = 4;
 const POINTS_AT: usize = TABLES_AT + CHANNELS * TABLE;
 
 /// The most control points a record has room for. Lumit's own curve carries
-/// more (`lumit_core::fx::CURVE_MAX_POINTS`), which is why the point list
+/// more (`lumit_core::fx::params::CURVE_MAX_POINTS`), which is why the point list
 /// needs no thinning on the way across.
 const MAX_POINTS: usize = 16;
 

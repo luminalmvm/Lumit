@@ -20,7 +20,7 @@ pub mod distortion;
 pub mod reverb;
 
 use super::dsp::smoother::Smoother;
-use crate::fx::ParamId;
+use crate::fx::params::ParamId;
 
 /// What `id` holds this block, or `fallback` where the bake sent no such row.
 ///
@@ -63,13 +63,13 @@ fn held(value: f64, low: f64, high: f64) -> f64 {
 /// the same processor into a second run.
 #[cfg(test)]
 fn play(
-    processor: &dyn crate::fx::AudioProcessor,
+    processor: &dyn crate::fx::audio_chain::AudioProcessor,
     input: &[f32],
     values: &[(ParamId, f64)],
     blocks: std::ops::Range<usize>,
     output: &mut [f32],
 ) {
-    use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
+    use crate::fx::{audio_chain::AUDIO_BLOCK_FRAMES, audio_chain::AUDIO_BLOCK_SAMPLES};
 
     for block in blocks {
         let at = block * AUDIO_BLOCK_SAMPLES;
@@ -90,11 +90,11 @@ fn play(
 /// The whole of `input`, played through a processor that has seen nothing yet.
 #[cfg(test)]
 fn play_all(
-    processor: &dyn crate::fx::AudioProcessor,
+    processor: &dyn crate::fx::audio_chain::AudioProcessor,
     input: &[f32],
     values: &[(ParamId, f64)],
 ) -> Vec<f32> {
-    let blocks = input.len() / crate::fx::AUDIO_BLOCK_SAMPLES;
+    let blocks = input.len() / crate::fx::audio_chain::AUDIO_BLOCK_SAMPLES;
     let mut output = vec![0.0; input.len()];
     play(processor, input, values, 0..blocks, &mut output);
     output

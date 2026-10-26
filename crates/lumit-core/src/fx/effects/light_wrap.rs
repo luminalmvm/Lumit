@@ -19,7 +19,7 @@
 //! §1.6 oracle is [`crate::fx::cpu::light_wrap`], exercised directly from the
 //! lumit-gpu test, which can upload a background.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Light wrap's controls.
@@ -55,7 +55,7 @@ pub struct LightWrap {
     /// px@comp, and the same distance twice: how far the wrap reaches
     /// inside the edge, and the radius the background is softened by. Declared
     /// `Px`, so the resolve step scales it by the §2.3 preview factor and
-    /// [`ResolvedStack::rescale_spatial`](crate::fx::ResolvedStack::
+    /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size —
     /// which is what the old `rescale_px`'s `LightWrap` arm did by hand.
     #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Px)]

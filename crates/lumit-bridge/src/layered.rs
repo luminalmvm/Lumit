@@ -179,7 +179,7 @@ fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
         if number("enab") != Some(1.0) || code("PntT").is_some_and(|paint| paint != "SClr") {
             continue;
         }
-        let Some(mut style) = lumit_core::fx::instantiate(name) else {
+        let Some(mut style) = lumit_core::fx::builtins::instantiate(name) else {
             continue;
         };
         // Photoshop measures the light anticlockwise from the right, and a
@@ -207,7 +207,9 @@ fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
                 }),
                 ("source", _) => EffectValue::Choice(u32::from(code("glwS") == Some("SrcC"))),
                 // A style drawn under the layer has nothing to blend with.
-                (lumit_core::fx::BLEND_PARAM, _) if !lumit_core::fx::style_is_outer(name) => {
+                (lumit_core::fx::schema::BLEND_PARAM, _)
+                    if !lumit_core::fx::styles::style_is_outer(name) =>
+                {
                     let mode = blend_of_code(code("Md  ").unwrap_or_default());
                     let index = BlendMode::ALL.iter().position(|b| *b == mode);
                     EffectValue::Choice(index.unwrap_or(0) as u32)
@@ -228,7 +230,7 @@ fn styles(psd: &PsdDocument, record: &PsdLayer) -> Vec<EffectInstance> {
         }
         out.push(style);
     }
-    lumit_core::fx::normalise_styles(&mut out);
+    lumit_core::fx::styles::normalise_styles(&mut out);
     out
 }
 
@@ -378,7 +380,7 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
             // Photoshop's curve holds up to nineteen points and Lumit's
             // sixteen.
             let count = word(&format!("curv/{at}"))? as usize;
-            if !(2..=lumit_core::fx::CURVE_MAX_POINTS).contains(&count) {
+            if !(2..=lumit_core::fx::params::CURVE_MAX_POINTS).contains(&count) {
                 return None;
             }
             let mut points = Vec::new();
@@ -482,9 +484,9 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
     } else {
         return None;
     };
-    let mut effects = vec![lumit_core::fx::instantiate(name)?];
+    let mut effects = vec![lumit_core::fx::builtins::instantiate(name)?];
     if let Some(second) = second {
-        effects.push(lumit_core::fx::instantiate(second)?);
+        effects.push(lumit_core::fx::builtins::instantiate(second)?);
     }
     let rows = rows
         .into_iter()
