@@ -29,6 +29,7 @@ pub mod keymap;
 pub mod layer;
 pub mod lens;
 pub mod planes;
+pub mod presets;
 pub mod project;
 pub mod project_item;
 pub mod retime;
