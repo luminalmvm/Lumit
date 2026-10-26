@@ -3078,6 +3078,67 @@ type DofField = [[f32; 4]; 3];
 /// the one that comes closest to its pictures.
 const DOF_SOFTNESS: f64 = 1.37;
 
+/// Comp pixels as the camera's eye sees them: the eye at nought, looking
+/// down +z.
+fn from_eye(cam: lumit_core::model::CameraPose, comp: (u32, u32), zoom: f32) -> glam::Mat4 {
+    let (cw, ch) = (comp.0 as f32, comp.1 as f32);
+    let frame = lumit_gpu::composite::camera_frame(
+        cw,
+        ch,
+        zoom,
+        (
+            cam.position.0 as f32,
+            cam.position.1 as f32,
+            cam.position.2 as f32,
+        ),
+        (
+            cam.rotation_deg.0 as f32,
+            cam.rotation_deg.1 as f32,
+            cam.rotation_deg.2 as f32,
+        ),
+    );
+    // In the camera's frame the eye is at the comp centre, zoom back.
+    glam::Mat4::from_translation(glam::Vec3::new(-cw * 0.5, -ch * 0.5, zoom)) * frame
+}
+
+/// Whether the camera's depth of field leaves `l` sharp at its own size,
+/// read without its picture: wholly in front of the eye, and blurred under a
+/// quarter of a pixel at every corner. [`dof_blur`] leaves such a layer
+/// alone too.
+pub(crate) fn dof_leaves_sharp(
+    cam: lumit_core::model::CameraPose,
+    l: &crate::draw::CompLayerDraw,
+    comp: (u32, u32),
+) -> bool {
+    let Some(dof) = cam.dof else {
+        return true;
+    };
+    if !l.three_d {
+        return true;
+    }
+    let zoom = (cam.zoom as f32).max(1.0);
+    let k = (lumit_core::camera::coc_per_zoom(&dof, f64::from(zoom)) / 2.0 * DOF_SOFTNESS) as f32;
+    let focus = dof.focus_distance as f32;
+    let mut place = glam::Mat4::from_cols_array_2d(&lumit_gpu::composite::place_matrix(
+        l.position,
+        l.anchor,
+        l.scale,
+        l.rotation_deg,
+        l.z,
+        l.rotation_x_deg,
+        l.rotation_y_deg,
+    ));
+    if let Some(pre) = &l.pre {
+        place = glam::Mat4::from_cols_array_2d(pre) * place;
+    }
+    let size = glam::vec3(l.natural_size.0, l.natural_size.1, 1.0);
+    let m = from_eye(cam, comp, zoom) * place * glam::Mat4::from_scale(size);
+    [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+        .map(|(x, y)| m.transform_point3(glam::vec3(x, y, 0.0)))
+        .iter()
+        .all(|c| c.z > 0.0 && k * zoom * (c.z - focus).abs() / c.z < 0.25)
+}
+
 /// Depth of field on a 3D layer (docs/impl/camera.md §5), for
 /// `FxEngine::blur_field`: the layer seen from the eye, how far a pass may
 /// reach, and how many texels of room the layer needs on each side for its
@@ -3110,24 +3171,7 @@ fn dof_blur(
         return None;
     }
     let (cw, ch) = (comp.0 as f32, comp.1 as f32);
-    let frame = lumit_gpu::composite::camera_frame(
-        cw,
-        ch,
-        zoom,
-        (
-            cam.position.0 as f32,
-            cam.position.1 as f32,
-            cam.position.2 as f32,
-        ),
-        (
-            cam.rotation_deg.0 as f32,
-            cam.rotation_deg.1 as f32,
-            cam.rotation_deg.2 as f32,
-        ),
-    );
-    // In the camera's frame the eye is at the comp centre, zoom back.
-    let from_eye = glam::Mat4::from_translation(glam::Vec3::new(-cw * 0.5, -ch * 0.5, zoom));
-    let m = from_eye * frame * placed_in_3d(texture, l, grow).world();
+    let m = from_eye(cam, comp, zoom) * placed_in_3d(texture, l, grow).world();
     let corner = m.col(3).truncate();
     let (across, down) = (m.col(0).truncate(), m.col(1).truncate());
     let corners = [

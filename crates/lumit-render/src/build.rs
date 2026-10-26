@@ -4712,11 +4712,14 @@ fn comp_walk(
         wrap_unit(&mut draws, mark, group);
     }
     // A plain solid is a flat 8 x 8 tile stretched to size, with no outline
-    // for the camera's depth of field to blur, so a 3D one under it is drawn
+    // for the camera's depth of field to blur, so a 3D one it blurs is drawn
     // at its own size. A collapsed precomp's are done here once placed.
     if !spliced && seen_through.dof.is_some() {
+        let size = (comp.width, comp.height);
         for d in draws.iter_mut().filter(|d| d.three_d) {
-            at_own_size(d);
+            if !crate::realise::dof_leaves_sharp(seen_through, d, size) {
+                at_own_size(d);
+            }
         }
     }
     draws
