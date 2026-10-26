@@ -36,35 +36,26 @@ class EasingPanelFrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Listening to the claim alone, not to the whole shell: the editor
-          // holds the shape being drawn in its own State, and rebuilding it on
-          // every unrelated notification is how a half-dragged handle would
-          // jump back.
-          ValueListenableBuilder<ValueChanged<EasingCurve>?>(
-            valueListenable: ui.easingApply,
-            builder: (context, apply, _) => EasingEditor(
-              // One State for the panel's whole life, so the drawn shape
-              // survives the claim coming and going. Without the key, Flutter
-              // would still reuse it - same type, same position - but saying
-              // so is cheaper than relying on it.
-              key: const ValueKey('easing-panel-editor'),
-              onApply: apply,
-              whyNot: l10n.easingNeedsTheValueLens,
-            ),
-          ),
-          // The selected key's own numbers, its own listener for the same
-          // reason: a key changing under the panel must not rebuild the box.
-          ValueListenableBuilder<KeyEaseClaim?>(
-            valueListenable: ui.easingKey,
-            builder: (context, claim, _) => claim == null
-                ? const SizedBox.shrink()
-                : _SelectedKey(claim: claim),
-          ),
-        ],
+    // Listening to the claim alone, not to the whole shell: the editor holds
+    // the shape being drawn in its own State, and rebuilding it on every
+    // unrelated notification is how a half-dragged handle would jump back.
+    return ValueListenableBuilder<ValueChanged<EasingCurve>?>(
+      valueListenable: ui.easingApply,
+      builder: (context, apply, _) => EasingEditor(
+        // One State for the panel's whole life, so the drawn shape survives
+        // the claim coming and going.
+        key: const ValueKey('easing-panel-editor'),
+        onApply: apply,
+        whyNot: l10n.easingNeedsTheValueLens,
+        span: ui.easingSpan,
+        // The selected key's own numbers, its own listener for the same
+        // reason: a key changing under the panel must not rebuild the box.
+        footer: ValueListenableBuilder<KeyEaseClaim?>(
+          valueListenable: ui.easingKey,
+          builder: (context, claim, _) => claim == null
+              ? const SizedBox.shrink()
+              : _SelectedKey(claim: claim),
+        ),
       ),
     );
   }
@@ -84,9 +75,12 @@ class _SelectedKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Padding(
+    return Container(
       key: const ValueKey('easing-key'),
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: t.hairline))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

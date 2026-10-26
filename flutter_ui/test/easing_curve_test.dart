@@ -56,6 +56,30 @@ void main() {
       expect(bez(fast.out)!.speed, closeTo(bez(slow.out)!.speed * 10, 1e-12));
       expect(bez(fast.inTo)!.speed, closeTo(bez(slow.inTo)!.speed * 10, 1e-12));
     });
+
+    test('a shape put on a span reads back off it', () {
+      // The panel's Read is sidesFor run backwards: what Apply stamped on two
+      // keys must come back as the shape that was drawn.
+      final curve = EasingCurve(0.2, 1.3, 0.6, 0.9);
+      final sides = curve.sidesFor((140 - 20) / 2);
+      final keys = [
+        BridgeKeyframe(
+            time: BridgeRational(num: 1, den: 1),
+            value: 20,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: sides.out),
+        BridgeKeyframe(
+            time: BridgeRational(num: 3, den: 1),
+            value: 140,
+            interpIn: sides.inTo,
+            interpOut: const BridgeSideInterp.linear()),
+      ];
+      final back = easingCurveOfSpan(keys, 0)!;
+      expect(back.x1, closeTo(curve.x1, 1e-9));
+      expect(back.y1, closeTo(curve.y1, 1e-9));
+      expect(back.x2, closeTo(curve.x2, 1e-9));
+      expect(back.y2, closeTo(curve.y2, 1e-9));
+    });
   });
 
   group('the drawn shape', () {
