@@ -1045,6 +1045,8 @@ pub fn drive_rows(
     let count = u32::try_from(stream.len()).unwrap_or(u32::MAX);
     // Each point resolves the whole graph on its own, so the points are
     // shared out over the cores.
+    // Where every point is, for a driver that keeps away from them.
+    let cloud = points::Cloud::new(stream.position.iter().map(|p| [p[0], p[1]]));
     use rayon::prelude::*;
     let per_point: Vec<Vec<Option<f32>>> = (0..n)
         .into_par_iter()
@@ -1059,6 +1061,7 @@ pub fn drive_rows(
                 projection,
                 (index, count),
                 at,
+                Some(&cloud),
             );
             wired
                 .iter()

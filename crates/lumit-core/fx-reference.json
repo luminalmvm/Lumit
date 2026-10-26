@@ -14385,6 +14385,19 @@
           "dividers_after": []
         },
         {
+          "id": "vertical_anchor",
+          "label": "Vertical anchor",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Middle",
+            "Top",
+            "Bottom"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "max_labels",
           "label": "Max labels",
           "kind": "int",
@@ -14442,7 +14455,8 @@
             "Off",
             "Random hue",
             "Two colours",
-            "By strength"
+            "By strength",
+            "Gradient"
           ],
           "dividers_after": []
         },
@@ -14512,6 +14526,73 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "gradient_stops",
+          "label": "Gradient stops",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 2.0,
+          "slider_max": 4.0,
+          "hard_min": 2.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "gradient_1",
+          "label": "Gradient 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_2",
+          "label": "Gradient 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.63,
+            0.67,
+            0.34,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_3",
+          "label": "Gradient 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.08,
+            0.41,
+            0.13,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_4",
+          "label": "Gradient 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.006,
+            0.11,
+            0.22,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
         },
         {
           "id": "label_scale",
@@ -14667,6 +14748,36 @@
           "on": "flash_colour",
           "cond": "choice_is",
           "value": 3
+        },
+        {
+          "param": "gradient_stops",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_1",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_2",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_3",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_4",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
         }
       ],
       "matte_role": "strength"
@@ -27952,9 +28063,47 @@
           "options": [
             "Anywhere",
             "Edges",
-            "Centre"
+            "Centre",
+            "Away from points"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "clearance",
+          "label": "Clearance",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "add_up",
+          "label": "Add up",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "grow_min",
+          "label": "Grow min",
+          "kind": "float",
+          "unit": "percent",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "grow_max",
+          "label": "Grow max",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
         },
         {
           "id": "spin",
@@ -27974,6 +28123,14 @@
         }
       ],
       "groups": [],
+      "enabled_when": [
+        {
+          "param": "clearance",
+          "on": "origin",
+          "cond": "choice_is",
+          "value": 3
+        }
+      ],
       "matte_role": "none"
     }
   ]

@@ -4820,6 +4820,54 @@
   "@fxLabelRotation": {
     "description": "Effect controls — a control on Label points (SICELIOT): how far each label is turned about its anchor."
   },
+  "fxAddUp": "Add up",
+  "@fxAddUp": {
+    "description": "Effect controls — a checkbox on Ring wave (SICELIOT): let the strengths of overlapping rings add up past Maximum."
+  },
+  "fxAwayFromPoints": "Away from points",
+  "@fxAwayFromPoints": {
+    "description": "Effect controls — an option of Origin on Ring wave (SICELIOT): rings start anywhere on the frame at least Clearance away from the points."
+  },
+  "fxClearance": "Clearance",
+  "@fxClearance": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): how far from every point a ring starts, in pixels."
+  },
+  "fxGradient1": "Gradient 1",
+  "@fxGradient1": {
+    "description": "Effect controls — a colour on Label points (SICELIOT): the first stop of the Gradient option of Flash colour."
+  },
+  "fxGradient2": "Gradient 2",
+  "@fxGradient2": {
+    "description": "Effect controls — a colour on Label points (SICELIOT): the second stop of the Gradient."
+  },
+  "fxGradient3": "Gradient 3",
+  "@fxGradient3": {
+    "description": "Effect controls — a colour on Label points (SICELIOT): the third stop of the Gradient."
+  },
+  "fxGradient4": "Gradient 4",
+  "@fxGradient4": {
+    "description": "Effect controls — a colour on Label points (SICELIOT): the fourth stop of the Gradient."
+  },
+  "fxGradientStops": "Gradient stops",
+  "@fxGradientStops": {
+    "description": "Effect controls — a control on Label points (SICELIOT): how many colours the Gradient runs through, 2 to 4."
+  },
+  "fxGrowMax": "Grow max",
+  "@fxGrowMax": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): the most a ring makes what it crosses grow, per cent."
+  },
+  "fxGrowMin": "Grow min",
+  "@fxGrowMin": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): the least a ring makes what it crosses grow, per cent."
+  },
+  "fxMiddle": "Middle",
+  "@fxMiddle": {
+    "description": "Effect controls — an option of Vertical anchor on Label points (SICELIOT): the middle of the label's height."
+  },
+  "fxVerticalAnchor": "Vertical anchor",
+  "@fxVerticalAnchor": {
+    "description": "Effect controls — a control on Label points (SICELIOT): which part of the label's height sits at its point and what it turns about."
+  },
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
     "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."

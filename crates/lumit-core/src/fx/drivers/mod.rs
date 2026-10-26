@@ -179,6 +179,7 @@ pub fn resolve_drivers_in(
         stack,
         NO_CLONE,
         None,
+        None,
     )
 }
 
@@ -203,7 +204,9 @@ pub fn resolve_drivers_projected(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None, NO_CLONE, None)
+    resolved(
+        graph, lt, context, audio, projection, None, NO_CLONE, None, None,
+    )
 }
 
 /// [`resolve_drivers_projected`] for a layer being rendered as one copy of
@@ -218,13 +221,16 @@ pub fn resolve_drivers_cloned(
     projection: points::Projection,
     clone: (u32, u32),
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None, clone, None)
+    resolved(
+        graph, lt, context, audio, projection, None, clone, None, None,
+    )
 }
 
 /// [`resolve_drivers_cloned`] for one **point** of a Clone to points stream:
 /// copy `clone`, standing at `point` (px@comp), so SICELIOT's drivers can
 /// take their phase from where the copy is as well as from which it is.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_drivers_at_point(
     graph: &LayerGraph,
     lt: f64,
@@ -233,6 +239,7 @@ pub fn resolve_drivers_at_point(
     projection: points::Projection,
     clone: (u32, u32),
     point: [f32; 2],
+    cloud: Option<&points::Cloud>,
 ) -> ResolvedDrivers {
     resolved(
         graph,
@@ -243,6 +250,7 @@ pub fn resolve_drivers_at_point(
         None,
         clone,
         Some(point),
+        cloud,
     )
 }
 
@@ -262,6 +270,7 @@ fn resolved(
     stack: Option<&[EffectInstance]>,
     clone: (u32, u32),
     point: Option<[f32; 2]>,
+    cloud: Option<&points::Cloud>,
 ) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
@@ -278,6 +287,7 @@ fn resolved(
         stack,
         clone,
         point,
+        cloud,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -364,6 +374,7 @@ pub fn driven_volume_db(
         stack: None,
         clone: NO_CLONE,
         point: None,
+        cloud: None,
     };
     match ev.output(*node, port, lt, 0)? {
         // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
@@ -402,6 +413,7 @@ pub fn driven_param(
         stack: None,
         clone: NO_CLONE,
         point: None,
+        cloud: None,
     };
     let v = match from {
         OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
@@ -476,6 +488,7 @@ pub fn effect_stream_in(
             stack,
             clone,
             point: None,
+            cloud: None,
         };
         ev.stream(effect, t, 0)
     }?;
@@ -543,6 +556,7 @@ pub fn driver_stream_in(
             stack,
             clone,
             point: None,
+            cloud: None,
         };
         ev.tap_stream(node, t, 0)
     }?;
@@ -662,6 +676,9 @@ struct Eval<'a> {
     /// Where that copy stands, px@comp, when the walk is for one point of a
     /// Clone to points stream (SICELIOT). `None` everywhere else.
     point: Option<[f32; 2]>,
+    /// Where all the points of that stream are (SICELIOT), for Ring wave to
+    /// start its rings away from them. `None` everywhere else.
+    cloud: Option<&'a points::Cloud>,
 }
 
 impl Eval<'_> {
@@ -759,6 +776,7 @@ impl Eval<'_> {
                 stack: self.stack,
                 clone: self.clone,
                 point: self.point,
+                cloud: self.cloud,
             };
             let wired = ev.wires_into(effect, lt, depth);
             let rows = ev.with_arena(|bag| {
@@ -876,6 +894,7 @@ impl Eval<'_> {
                 points_input: &points,
                 clone: self.clone,
                 point: self.point,
+                cloud: self.cloud,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -960,6 +979,7 @@ impl Eval<'_> {
                 points_input: &|_| None,
                 clone: self.clone,
                 point: self.point,
+                cloud: self.cloud,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -1090,6 +1110,7 @@ impl Eval<'_> {
             stack: None,
             clone: self.clone,
             point: None,
+            cloud: None,
         };
         let stream = far.stream(tapped, t, 0);
         self.budget.set(far.budget.get());
@@ -2487,6 +2508,7 @@ mod tests {
             stack: Some(&stack),
             clone: NO_CLONE,
             point: None,
+            cloud: None,
         };
         assert!(ev.stream(producer.id, 1.0, 0).is_some());
         let spent = EVAL_BUDGET - ev.budget.get();
@@ -2546,6 +2568,7 @@ mod tests {
             stack: None,
             clone: NO_CLONE,
             point: None,
+            cloud: None,
         };
         for _ in 0..64 {
             assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
@@ -2612,6 +2635,7 @@ mod tests {
             stack: None,
             clone: NO_CLONE,
             point: None,
+            cloud: None,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(
@@ -3177,6 +3201,7 @@ mod tests {
             stack: None,
             clone: NO_CLONE,
             point: None,
+            cloud: None,
         };
         ev.output(node.id, port, lt, 0)
             .expect("the port carries a number")

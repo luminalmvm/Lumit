@@ -194,6 +194,9 @@ pub struct DriverCx<'a> {
     /// point of a Clone to points stream; `None` everywhere else. SICELIOT's
     /// Oscillator and Value noise read it to vary by position.
     pub point: Option<[f32; 2]>,
+    /// Where all the points of that stream are (SICELIOT), for Ring wave to
+    /// start its rings away from them. `None` everywhere else.
+    pub cloud: Option<&'a super::points::Cloud>,
 }
 
 /// Where Audio level gets its samples.

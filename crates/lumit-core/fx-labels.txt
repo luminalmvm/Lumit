@@ -19,6 +19,7 @@ Add
 Add grain
 Add input
 Add to picked
+Add up
 Age
 Align to motion
 Align to path
@@ -64,6 +65,7 @@ Attack
 Audio
 Audio level
 Auto
+Away from points
 B
 Background
 Backwards
@@ -179,6 +181,7 @@ Chorus
 Chromatic aberration
 Circle
 Clamp
+Clearance
 Clip
 Clip black
 Clip rollback
@@ -470,7 +473,12 @@ Glow opacity
 Glow radius
 Glow size
 Gradient
+Gradient 1
+Gradient 2
+Gradient 3
+Gradient 4
 Gradient overlay
+Gradient stops
 Gradient type
 Graphic EQ
 Gravity
@@ -486,6 +494,8 @@ Grit
 Group
 Group name
 Grow
+Grow max
+Grow min
 H line rel width
 Hairs
 Half
@@ -683,6 +693,7 @@ Merge
 Merge points
 Method
 Micro Four Thirds
+Middle
 Middle colour
 Midtone contrast
 Midtones
@@ -1219,6 +1230,7 @@ Vegas
 Venetian blinds
 Vertical
 Vertical amount
+Vertical anchor
 Vertical axis
 Vertical blocks
 Vertical channel

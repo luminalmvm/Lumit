@@ -67,10 +67,41 @@ pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "flash_colour",
         cond: EnabledCond::ChoiceIs(3),
     },
+    EnabledWhen {
+        param: "gradient_stops",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_1",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_2",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_3",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_4",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
 ];
 
 /// What a label's colour does while it is in the wave.
-pub const FLASH_COLOUR: &[&str] = &["Off", "Random hue", "Two colours", "By strength"];
+pub const FLASH_COLOUR: &[&str] = &[
+    "Off",
+    "Random hue",
+    "Two colours",
+    "By strength",
+    "Gradient",
+];
 
 /// The rows a driver can give each label its own value for, and the named
 /// columns the render writes those values into (SICELIOT,
@@ -182,6 +213,16 @@ pub struct LabelPoints {
     #[choice(label = "Anchor", options = ["Left", "Centre", "Right"], default = 0)]
     pub anchor: u32,
 
+    /// Which part of the label's height sits at the offset, and what it
+    /// turns and grows about (SICELIOT). Top is how Processing's
+    /// `textAlign(CENTER, TOP)` hangs a letter from its point.
+    #[choice(
+        label = "Vertical anchor",
+        options = ["Middle", "Top", "Bottom"],
+        default = 0
+    )]
+    pub vertical_anchor: u32,
+
     /// The most labels drawn. Past it the newest points keep theirs.
     #[counter(
         label = "Max labels",
@@ -289,6 +330,36 @@ pub struct LabelPoints {
         unit = Percent
     )]
     pub darken: f32,
+
+    /// Gradient: how many of the colours below the gradient runs through,
+    /// evenly spaced from Change 0 to Change 100.
+    #[counter(
+        label = "Gradient stops",
+        min = 2,
+        max = 4,
+        default = 4,
+        hard_min = 2,
+        hard_max = 4,
+        unit = Raw
+    )]
+    pub gradient_stops: i32,
+
+    /// Gradient: the colour at Change 0. Labels are multiplied by it, so
+    /// with white text it is the colour seen.
+    #[colour(label = "Gradient 1", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub gradient_1: [f32; 4],
+
+    /// Gradient: the next colour along.
+    #[colour(label = "Gradient 2", default = [0.63, 0.67, 0.34, 1.0], max = 4.0)]
+    pub gradient_2: [f32; 4],
+
+    /// Gradient: the next, with three or four stops.
+    #[colour(label = "Gradient 3", default = [0.08, 0.41, 0.13, 1.0], max = 4.0)]
+    pub gradient_3: [f32; 4],
+
+    /// Gradient: the colour at Change 100, with four stops.
+    #[colour(label = "Gradient 4", default = [0.006, 0.11, 0.22, 1.0], max = 4.0)]
+    pub gradient_4: [f32; 4],
 
     /// How big a label is drawn, per cent of the Text layer's size. Wire a
     /// driver into it and each label takes its own size.
@@ -477,6 +548,37 @@ impl LabelPoints {
         }
     }
 
+    /// How far down a label its anchor is: 0 its top, 1 its bottom.
+    #[must_use]
+    pub fn anchor_down(self) -> f32 {
+        match self.vertical_anchor {
+            1 => 0.0,
+            2 => 1.0,
+            _ => 0.5,
+        }
+    }
+
+    /// The Gradient's colour at `s` (0..1) of the way along its stops,
+    /// mixed in scene-linear light.
+    #[must_use]
+    pub fn gradient_at(self, s: f32) -> [f32; 4] {
+        let stops = [
+            self.gradient_1,
+            self.gradient_2,
+            self.gradient_3,
+            self.gradient_4,
+        ];
+        #[allow(clippy::cast_sign_loss)]
+        let n = self.gradient_stops.clamp(2, 4) as usize;
+        #[allow(clippy::cast_precision_loss)]
+        let along = s.clamp(0.0, 1.0) * (n - 1) as f32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let k = (along.floor() as usize).min(n - 2);
+        #[allow(clippy::cast_precision_loss)]
+        let t = along - k as f32;
+        std::array::from_fn(|c| stops[k][c] + (stops[k + 1][c] - stops[k][c]) * t)
+    }
+
     /// The template: the Text row, or `layer_text` while that row is empty.
     #[must_use]
     pub fn template<'a>(&'a self, layer_text: &'a str) -> &'a str {
@@ -589,13 +691,19 @@ impl LabelPoints {
         } else {
             self.seed
         };
-        let by_strength = (self.flash_colour == 3 && change > 0.0).then(|| {
-            let s = (change / 100.0).clamp(0.0, 1.0);
-            Tint::Multiply(hsv(
-                self.hue_start + s * self.hue_range,
-                s * self.saturation / 100.0,
-                1.0 - s * self.darken / 100.0,
-            ))
+        // Change past 100 (rings that add up) keeps turning the hue round,
+        // as the sketch's does, while colour and darkness stop at their rows.
+        let by_strength = (change > 0.0).then_some(change / 100.0).and_then(|s| {
+            let full = s.min(1.0);
+            match self.flash_colour {
+                3 => Some(Tint::Multiply(hsv(
+                    self.hue_start + s * self.hue_range,
+                    full * self.saturation / 100.0,
+                    1.0 - full * self.darken / 100.0,
+                ))),
+                4 => Some(Tint::Multiply(self.gradient_at(full))),
+                _ => None,
+            }
         });
         if change <= self.change_above {
             return (rest, by_strength);
@@ -663,14 +771,15 @@ pub struct Placed<'a> {
 impl<'a> Placed<'a> {
     /// `label` drawn from `drawing`, made `drawn_at` times the Text layer's
     /// size, with its anchor `along` the drawing (0 its left end, 1 its
-    /// right) and level with its middle. `None` for nothing to draw.
+    /// right) and `down` it (0 its top, 1 its bottom). `None` for nothing
+    /// to draw.
     #[must_use]
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     pub fn new(
         drawing: &'a LabelDrawing,
         label: &Label,
         drawn_at: f32,
-        along: f32,
+        [along, down]: [f32; 2],
     ) -> Option<Self> {
         if drawing.width == 0
             || drawing.height == 0
@@ -680,7 +789,7 @@ impl<'a> Placed<'a> {
             return None;
         }
         let (w, h) = (drawing.width as f32, drawing.height as f32);
-        let anchor = [along * w, 0.5 * h];
+        let anchor = [along * w, down * h];
         let shrink = label.scale / drawn_at;
         let (sin, cos) = label.rotation.to_radians().sin_cos();
         let (mut lo, mut hi) = ([f32::MAX; 2], [f32::MIN; 2]);
@@ -951,6 +1060,33 @@ mod tests {
         );
         assert_eq!((labels[0].rotation, labels[1].rotation), (-30.0, 45.0));
         assert_eq!(labels[0].tint, None);
+
+        // Gradient: the stops in turn, evenly along Change, mixed between.
+        let mut g = l;
+        g.flash_colour = 4;
+        g.gradient_stops = 3;
+        g.gradient_1 = [1.0, 0.0, 0.0, 1.0];
+        g.gradient_2 = [0.0, 1.0, 0.0, 1.0];
+        g.gradient_3 = [0.0, 0.0, 1.0, 1.0];
+        assert_eq!(g.gradient_at(0.0), g.gradient_1);
+        assert_eq!(g.gradient_at(0.5), g.gradient_2);
+        assert_eq!(g.gradient_at(1.0), g.gradient_3);
+        assert_eq!(g.gradient_at(0.25), [0.5, 0.5, 0.0, 1.0]);
+        assert_eq!(
+            g.in_wave(50.0, 0.0, 5, 0.0).1,
+            Some(Tint::Multiply(g.gradient_2))
+        );
+        assert_eq!(g.in_wave(0.0, 0.0, 5, 0.0).1, None, "at rest, untouched");
+        // By strength past 100 turns the hue on round, as rings that add up.
+        let past = |change: f32| match l.in_wave(change, 0.0, 5, 0.0).1 {
+            Some(Tint::Multiply(c)) => c,
+            other => panic!("{other:?}"),
+        };
+        assert_ne!(past(100.0), past(150.0));
+        // The vertical anchor: Top hangs a label from its point.
+        let mut top = l;
+        top.vertical_anchor = 1;
+        assert_eq!((l.anchor_down(), top.anchor_down()), (0.5, 0.0));
     }
 
     /// SICELIOT's drawing of labels: a label lands where it is asked, between
@@ -977,7 +1113,7 @@ mod tests {
         // Centred on (5, 5): it covers x 3..7 and y 4..6, nothing above.
         let flat = label([5.0, 5.0], 0.0, None);
         let px = composite(
-            &[Placed::new(&bar, &flat, 1.0, 0.5).unwrap()],
+            &[Placed::new(&bar, &flat, 1.0, [0.5, 0.5]).unwrap()],
             [0, 0],
             [10, 10],
         );
@@ -986,7 +1122,7 @@ mod tests {
         // Half a pixel across, the edge pixels are half covered.
         let half = label([5.5, 5.0], 0.0, None);
         let px = composite(
-            &[Placed::new(&bar, &half, 1.0, 0.5).unwrap()],
+            &[Placed::new(&bar, &half, 1.0, [0.5, 0.5]).unwrap()],
             [0, 0],
             [10, 10],
         );
@@ -998,7 +1134,7 @@ mod tests {
         // Turned a quarter, it stands up: y 3..7, x 4..6.
         let up = label([5.0, 5.0], 90.0, None);
         let px = composite(
-            &[Placed::new(&bar, &up, 1.0, 0.5).unwrap()],
+            &[Placed::new(&bar, &up, 1.0, [0.5, 0.5]).unwrap()],
             [0, 0],
             [10, 10],
         );
@@ -1006,7 +1142,7 @@ mod tests {
         assert!(alpha(&px, 2, 5) == 0.0 && alpha(&px, 7, 5) == 0.0);
         // Drawn twice as big as it is shown, it covers half as far.
         let small = label([5.0, 5.5], 0.0, Some(Tint::Multiply([1.0, 0.5, 0.0, 1.0])));
-        let placed = Placed::new(&bar, &small, 2.0, 0.5).unwrap();
+        let placed = Placed::new(&bar, &small, 2.0, [0.5, 0.5]).unwrap();
         let px = composite(&[placed], [0, 0], [10, 10]);
         assert!(alpha(&px, 4, 5) > 0.99 && alpha(&px, 2, 5) == 0.0 && alpha(&px, 4, 3) == 0.0);
         assert_eq!(

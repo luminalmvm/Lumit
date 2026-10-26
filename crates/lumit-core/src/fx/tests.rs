@@ -6829,6 +6829,7 @@ fn every_parameter_declares_a_unit() {
             ("siceliot_ring_wave", "speed_variance"),
             ("siceliot_ring_wave", "thickness_min"),
             ("siceliot_ring_wave", "thickness_max"),
+            ("siceliot_ring_wave", "clearance"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's

@@ -5972,13 +5972,13 @@ impl GpuEffect for LabelPoints {
                 }
             });
         }
-        let along = inst.anchor_along();
+        let anchor = [inst.anchor_along(), inst.anchor_down()];
         let placed: Vec<Placed<'_>> = labels
             .iter()
             .filter_map(|label| {
                 let k = octave(label.scale)?;
                 let d = drawn.get(&(label.text.as_str(), k))?;
-                Placed::new(d, label, octave_size(k), along)
+                Placed::new(d, label, octave_size(k), anchor)
             })
             .collect();
         // The box round every label, kept to the frame.

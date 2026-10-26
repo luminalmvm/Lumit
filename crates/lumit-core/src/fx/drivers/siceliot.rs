@@ -514,7 +514,7 @@ pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64)
 // ----------------------------------------------------------------- RingWave
 
 /// Where RingWave's rings start.
-pub const RING_WAVE_ORIGINS: &[&str] = &["Anywhere", "Edges", "Centre"];
+pub const RING_WAVE_ORIGINS: &[&str] = &["Anywhere", "Edges", "Centre", "Away from points"];
 
 /// The turn the rings give what they cross, degrees.
 pub const ROTATION_PORT: &str = "rotation";
@@ -522,17 +522,29 @@ pub const ROTATION_PORT: &str = "rotation";
 /// How many rings have crossed a point so far.
 pub const PASSES_PORT: &str = "passes";
 
+/// How much bigger the rings make what they cross, per cent: each ring's
+/// own Grow, by how strong it is there, added up.
+pub const GROW_PORT: &str = "grow";
+
 const RING_WAVE_OUT: &[Port] = &[
     Port::new(VALUE_PORT, "Value", PortType::Number),
     Port::new(ROTATION_PORT, "Rotation", PortType::Number),
     Port::new(PASSES_PORT, "Passes", PortType::Number),
+    Port::new(GROW_PORT, "Grow", PortType::Number),
 ];
+
+/// Clearance is read only on Away from points.
+pub const RING_WAVE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "clearance",
+    on: "origin",
+    cond: EnabledCond::ChoiceIs(3),
+}];
 
 /// The dice a ring rolls for where it starts, how fast and thick it is and
 /// how it turns things.
 const RING_WAVE_ATTR: u32 = 120;
 
-/// RingWave's controls.
+/// Ring wave's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "siceliot_ring_wave",
@@ -542,6 +554,7 @@ const RING_WAVE_ATTR: u32 = 120;
     cost = Trivial,
     roi = Exact,
     matte = false,
+    enabled_when = RING_WAVE_ENABLED_WHEN,
 )]
 pub struct RingWave {
     /// The value where no ring is.
@@ -608,10 +621,51 @@ pub struct RingWave {
     )]
     pub thickness_max: f32,
 
-    /// Where the rings start: anywhere on the frame, on its edges, or all in
-    /// its centre.
+    /// Where the rings start: anywhere on the frame, on its edges, all in its
+    /// centre, or anywhere at least Clearance away from the points the driver
+    /// is wired to, so a ring never starts inside the shape they fill.
     #[choice(label = "Origin", options = RING_WAVE_ORIGINS, default = 0)]
     pub origin: u32,
+
+    /// How far from every point a ring starts, px@comp, with Origin on Away
+    /// from points.
+    #[slider(
+        label = "Clearance",
+        min = 0.0,
+        max = 400.0,
+        default = 20.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub clearance: f32,
+
+    /// Let the strengths of rings that overlap add up past Maximum, as the
+    /// rings of the Processing sketch do, instead of stopping there.
+    #[toggle(label = "Add up", default = false)]
+    pub add_up: bool,
+
+    /// The least a ring makes what it crosses grow, per cent, read on the
+    /// Grow port. Each ring has its own, between this and Grow max.
+    #[slider(
+        label = "Grow min",
+        min = 0.0,
+        max = 200.0,
+        default = 20.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub grow_min: f32,
+
+    /// The most.
+    #[slider(
+        label = "Grow max",
+        min = 0.0,
+        max = 200.0,
+        default = 50.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub grow_max: f32,
 
     /// How much the rings turn what they cross, read on the Rotation port.
     #[slider(
@@ -629,7 +683,7 @@ pub struct RingWave {
     pub seed: u32,
 }
 
-/// RingWave's behaviour.
+/// Ring wave's behaviour.
 pub struct RingWaveDef;
 
 impl EffectDef for RingWaveDef {
@@ -656,14 +710,15 @@ impl EffectDef for RingWaveDef {
             .comp
             .and_then(|id| context.document.comp(id))
             .map_or([1920.0, 1080.0], |c| [c.width as f32, c.height as f32]);
-        let at = ring_wave(&p, cx.point.unwrap_or([0.0; 2]), frame, cx.lt);
+        let at = ring_wave(&p, cx.point.unwrap_or([0.0; 2]), frame, cx.lt, cx.cloud);
         push(VALUE_PORT, Value::Float(at.value));
         push(ROTATION_PORT, Value::Float(at.rotation));
         push(PASSES_PORT, Value::Float(at.passes));
+        push(GROW_PORT, Value::Float(at.grow));
     }
 }
 
-/// What RingWave reads at one point.
+/// What Ring wave reads at one point.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RingWaveAt {
     /// Minimum where no ring is, Maximum in the middle of one.
@@ -673,19 +728,33 @@ pub struct RingWaveAt {
     /// How many rings have crossed the point: each counts once its middle
     /// is near, and for good.
     pub passes: f32,
+    /// How much bigger the rings make the point, per cent.
+    pub grow: f32,
 }
 
-/// One ring: where it starts, how fast it grows, how thick it is, and the
-/// turn it gives (a direction offset and how fast that offset spins).
+/// One ring: where it starts, how fast it grows, how thick it is, the turn
+/// it gives (a direction offset and how fast that offset spins) and how
+/// much it makes things grow, 0 to 1.
 struct Ring {
     origin: [f32; 2],
     speed: f32,
     thickness: f32,
     offset: f32,
     spin_rate: f32,
+    grow: f32,
 }
 
-fn ring(p: &RingWave, k: u64, frame: [f32; 2], thin: f32, thick: f32) -> Ring {
+/// The most places Away from points tries before it takes the last.
+const AWAY_TRIES: u32 = 64;
+
+fn ring(
+    p: &RingWave,
+    k: u64,
+    frame: [f32; 2],
+    thin: f32,
+    thick: f32,
+    cloud: Option<&points::Cloud>,
+) -> Ring {
     let roll = |n: u32| points::draw(p.seed, k, RING_WAVE_ATTR + n);
     let [w, h] = frame;
     let origin = match p.origin {
@@ -703,6 +772,15 @@ fn ring(p: &RingWave, k: u64, frame: [f32; 2], thin: f32, thick: f32) -> Ring {
             }
         }
         2 => [w * 0.5, h * 0.5],
+        // Places on the frame in turn until one is clear of the points, as
+        // the sketch's do-while does.
+        3 => {
+            let place = |t: u32| [roll(20 + 2 * t) * w, roll(21 + 2 * t) * h];
+            (0..AWAY_TRIES)
+                .map(place)
+                .find(|at| cloud.is_none_or(|c| !c.near(*at, p.clearance)))
+                .unwrap_or_else(|| place(AWAY_TRIES - 1))
+        }
         _ => [roll(0) * w, roll(1) * h],
     };
     Ring {
@@ -711,18 +789,27 @@ fn ring(p: &RingWave, k: u64, frame: [f32; 2], thin: f32, thick: f32) -> Ring {
         thickness: thin + (thick - thin) * roll(3),
         offset: roll(4) * std::f32::consts::PI,
         spin_rate: (2.0 * roll(5) - 1.0) * std::f32::consts::FRAC_PI_4,
+        grow: (p.grow_min + (p.grow_max - p.grow_min) * roll(6)) / 100.0,
     }
 }
 
-/// RingWave at `at` (px@comp) on a frame of `frame` px, at layer time `lt`.
+/// Ring wave at `at` (px@comp) on a frame of `frame` px, at layer time `lt`,
+/// with `cloud` the points it keeps its rings away from on Away from points.
 ///
 /// Ring `k` starts at `k` Intervals and grows at its speed; at a point its
 /// strength is 1 on its middle line and fades to 0 a Thickness away. The
-/// strengths of the rings on a point add up, to 1 at most. A ring lives
-/// until it has crossed the whole frame, so a ring gone has passed every
-/// point on it, which is what keeps Passes counting without a memory.
+/// strengths of the rings on a point add up, to 1 at most unless Add up is
+/// on. A ring lives until it has crossed the whole frame, so a ring gone has
+/// passed every point on it, which is what keeps Passes counting without a
+/// memory.
 #[must_use]
-pub fn ring_wave(p: &RingWave, at: [f32; 2], frame: [f32; 2], lt: f64) -> RingWaveAt {
+pub fn ring_wave(
+    p: &RingWave,
+    at: [f32; 2],
+    frame: [f32; 2],
+    lt: f64,
+    cloud: Option<&points::Cloud>,
+) -> RingWaveAt {
     let interval = f64::from(p.interval.max(0.01));
     let lt = lt.max(0.0);
     let thick = p.thickness_max.max(p.thickness_min).max(1.0);
@@ -736,12 +823,12 @@ pub fn ring_wave(p: &RingWave, at: [f32; 2], frame: [f32; 2], lt: f64) -> RingWa
     let oldest = ((lt - life) / interval).ceil().max(0.0) as i64;
     #[allow(clippy::cast_precision_loss)]
     let mut passes = oldest as f32;
-    let (mut strength, mut turn) = (0.0f32, 0.0f32);
+    let (mut strength, mut turn, mut grow) = (0.0f32, 0.0f32, 0.0f32);
     for k in oldest..=newest {
-        #[allow(clippy::cast_sign_loss)]
-        let r = ring(p, k as u64, frame, thin, thick);
         #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
         let age = (lt - k as f64 * interval) as f32;
+        #[allow(clippy::cast_sign_loss)]
+        let r = ring(p, k as u64, frame, thin, thick, cloud);
         let radius = age * r.speed;
         if radius > reach {
             passes += 1.0;
@@ -755,16 +842,23 @@ pub fn ring_wave(p: &RingWave, at: [f32; 2], frame: [f32; 2], lt: f64) -> RingWa
         let s = (1.0 - (d - radius).abs() / r.thickness).max(0.0);
         if s > 0.0 {
             strength += s;
+            grow += s * r.grow;
             // The way out from the ring's start, turned by the ring's own
             // offset and spin, and given more the nearer its middle.
             let way = dy.atan2(dx) + r.offset + r.spin_rate * age;
             turn += way * 0.5 * s * s;
         }
     }
+    let strength = if p.add_up {
+        strength
+    } else {
+        strength.min(1.0)
+    };
     RingWaveAt {
-        value: between(p.minimum, p.maximum, strength.min(1.0)),
+        value: between(p.minimum, p.maximum, strength),
         rotation: turn.to_degrees() * p.spin / 100.0,
         passes,
+        grow: grow * 100.0,
     }
 }
 
@@ -787,12 +881,16 @@ mod tests {
             thickness_min: 60.0,
             thickness_max: 60.0,
             origin: 2,
+            clearance: 20.0,
+            add_up: false,
+            grow_min: 30.0,
+            grow_max: 30.0,
             spin: 100.0,
             seed: 3,
         };
         let frame = [1000.0, 1000.0];
         let point = [800.0, 500.0];
-        let at = |lt: f64| ring_wave(&p, point, frame, lt);
+        let at = |lt: f64| ring_wave(&p, point, frame, lt, None);
         // The first ring reaches 300 px at one second.
         assert!((at(1.0).value - 100.0).abs() < 1e-3, "{:?}", at(1.0));
         assert!((at(0.9).value - 50.0).abs() < 1e-2, "half way in");
@@ -818,16 +916,49 @@ mod tests {
         assert!(
             times
                 .clone()
-                .any(|lt| ring_wave(&anywhere, point, frame, lt)
-                    != ring_wave(&other, point, frame, lt)),
+                .any(|lt| ring_wave(&anywhere, point, frame, lt, None)
+                    != ring_wave(&other, point, frame, lt, None)),
             "the seed moves the rings"
         );
         assert!(
             times
                 .clone()
-                .any(|lt| ring_wave(&anywhere, point, frame, lt).rotation != 0.0),
+                .any(|lt| ring_wave(&anywhere, point, frame, lt, None).rotation != 0.0),
             "a ring crossing turns the point"
         );
+        // Grow: a ring's own share, by its strength.
+        assert!((at(1.0).grow - 30.0).abs() < 1e-2, "{:?}", at(1.0));
+        assert!((at(0.9).grow - 15.0).abs() < 0.1);
+        assert_eq!(at(0.3).grow, 0.0);
+        // Add up: two rings on one point go past Maximum only when asked.
+        let busy = RingWave {
+            interval: 0.05,
+            thickness_min: 400.0,
+            thickness_max: 400.0,
+            ..p
+        };
+        assert!((ring_wave(&busy, point, frame, 1.0, None).value - 100.0).abs() < 1e-3);
+        let added = RingWave {
+            add_up: true,
+            ..busy
+        };
+        assert!(ring_wave(&added, point, frame, 1.0, None).value > 150.0);
+        // Away from points: no ring starts within Clearance of a point. A
+        // block of points fills the left half of the frame.
+        let block: Vec<[f32; 2]> = (0..25)
+            .flat_map(|x| (0..50).map(move |y| [x as f32 * 20.0, y as f32 * 20.0]))
+            .collect();
+        let cloud = points::Cloud::new(block);
+        let away = RingWave {
+            origin: 3,
+            clearance: 30.0,
+            ..p
+        };
+        for k in 0..64 {
+            let r = ring(&away, k, frame, 60.0, 60.0, Some(&cloud));
+            assert!(r.origin[0] >= 500.0, "ring {k} starts at {:?}", r.origin);
+        }
+        assert!(cloud.near([105.0, 105.0], 10.0) && !cloud.near([600.0, 100.0], 30.0));
     }
 
     fn stagger_with(curve: [[f32; 2]; 2]) -> Stagger {

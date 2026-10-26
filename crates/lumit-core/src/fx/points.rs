@@ -1631,6 +1631,63 @@ impl Schedule {
     }
 }
 
+/// SICELIOT: where the points of a stream are, binned so a driver can ask
+/// whether a place is near one of them. Made once per per-point driver step
+/// ([`crate::fx::effects::clone_to_points::drive_rows`]); Ring wave reads it
+/// to start its rings away from the points.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Cloud {
+    cell: f32,
+    bins: std::collections::HashMap<(i32, i32), Vec<[f32; 2]>>,
+}
+
+impl Cloud {
+    /// The bin size, px@comp.
+    const CELL: f32 = 32.0;
+
+    /// The points at `positions` (px@comp).
+    #[must_use]
+    pub fn new(positions: impl IntoIterator<Item = [f32; 2]>) -> Self {
+        let mut cloud = Self {
+            cell: Self::CELL,
+            bins: std::collections::HashMap::new(),
+        };
+        for p in positions {
+            if p.iter().all(|v| v.is_finite()) {
+                cloud.bins.entry(cloud.bin(p)).or_default().push(p);
+            }
+        }
+        cloud
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn bin(&self, p: [f32; 2]) -> (i32, i32) {
+        (
+            (p[0] / self.cell).floor().clamp(-1e6, 1e6) as i32,
+            (p[1] / self.cell).floor().clamp(-1e6, 1e6) as i32,
+        )
+    }
+
+    /// Whether any point is closer to `at` than `within` px.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn near(&self, at: [f32; 2], within: f32) -> bool {
+        let reach = (within.max(0.0) / self.cell).ceil().min(64.0) as i32;
+        let (bx, by) = self.bin(at);
+        let within2 = within * within;
+        (-reach..=reach).any(|dy| {
+            (-reach..=reach).any(|dx| {
+                self.bins.get(&(bx + dx, by + dy)).is_some_and(|ps| {
+                    ps.iter().any(|p| {
+                        let (x, y) = (p[0] - at[0], p[1] - at[1]);
+                        x * x + y * y < within2
+                    })
+                })
+            })
+        })
+    }
+}
+
 /// SICELIOT: what a consumer's wired drivers write into a stream that is
 /// made on the card ([`PointsSchedule::late_drive`]). Carried, never compared:
 /// the drivers and the time it reads are already in the frame key.
