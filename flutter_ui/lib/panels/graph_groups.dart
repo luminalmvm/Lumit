@@ -388,7 +388,8 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     // A group saved before keeps the words and the shelf tick it had.
     final before = File(graphGroupFile(dir, called, groupExtension));
     final had = at != null && before.existsSync()
-        ? SavedGroup.read(BridgePresetInfo(name: called, path: before.path))
+        ? SavedGroup.read(
+            BridgePresetInfo(name: called, path: before.path, group: ''))
         : null;
     final details = await askGroupDetails(
       context,

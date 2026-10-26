@@ -72,6 +72,35 @@ void main() {
         expect(x, closeTo(t, 1e-9));
       }
     });
+
+    test('acceleration is the slope of speed, and an influence can set it',
+        () {
+      BridgeSideInterp ease(double s, double b) =>
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: s, influence: b));
+      final keys = [
+        key(0, 1, 0, interpOut: ease(2, 0.2)),
+        key(2, 1, 10, interpIn: ease(-1, 0.6)),
+      ];
+      const h = 1e-5;
+      for (final t in [h, 0.3, 1.0, 1.7, 2 - h]) {
+        final slope = (evaluateKeysSpeed(keys, t + h / 2) -
+                evaluateKeysSpeed(keys, t - h / 2)) /
+            h;
+        expect(evaluateKeysAcceleration(keys, t), closeTo(slope, 1e-2));
+      }
+      expect(sideAccelerationAtKey(keys, 0, isOut: true),
+          closeTo(evaluateKeysAcceleration(keys, h), 1e-2));
+      expect(sideAccelerationAtKey(keys, 1, isOut: false),
+          closeTo(evaluateKeysAcceleration(keys, 2 - h), 1e-2));
+
+      // Ask the out side for the acceleration it reads at influence 0.45.
+      final asked = sideAccelerationAtKey([
+        key(0, 1, 0, interpOut: ease(2, 0.45)),
+        keys[1],
+      ], 0, isOut: true);
+      expect(influenceForAcceleration(keys, 0, isOut: true, target: asked),
+          closeTo(0.45, 1e-9));
+    });
   });
 
   group('handle geometry', () {

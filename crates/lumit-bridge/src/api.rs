@@ -30,6 +30,7 @@ pub mod layer;
 pub mod lens;
 pub mod notes;
 pub mod planes;
+pub mod presets;
 pub mod project;
 pub mod project_item;
 pub mod retime;

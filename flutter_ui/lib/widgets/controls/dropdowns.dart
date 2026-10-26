@@ -263,6 +263,11 @@ class BareSearchDropdown extends StatelessWidget {
   /// takes the plain word "Search", which is what most callers want.
   final String? hint;
 
+  /// The font family an option's row is drawn in, or null for the usual one.
+  /// The platform finds and keeps each face itself, and only for the rows
+  /// on screen.
+  final String? Function(int)? familyOf;
+
   const BareSearchDropdown({
     super.key,
     required this.value,
@@ -270,6 +275,7 @@ class BareSearchDropdown extends StatelessWidget {
     required this.onChanged,
     this.group,
     this.hint,
+    this.familyOf,
   });
 
   @override
@@ -299,6 +305,7 @@ class BareSearchDropdown extends StatelessWidget {
               options: options,
               group: group,
               hint: hint ?? l10n.search,
+              familyOf: familyOf,
               onPick: close,
             ),
           ),
@@ -324,6 +331,7 @@ class _SearchPickerBody extends StatefulWidget {
   final List<String> options;
   final String? Function(String)? group;
   final String hint;
+  final String? Function(int)? familyOf;
   final void Function(int?) onPick;
 
   const _SearchPickerBody({
@@ -331,6 +339,7 @@ class _SearchPickerBody extends StatefulWidget {
     required this.options,
     required this.group,
     required this.hint,
+    required this.familyOf,
     required this.onPick,
   });
 
@@ -427,6 +436,8 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
                         child: Text(
                           widget.options[idx],
                           overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontFamily: widget.familyOf?.call(idx)),
                         ),
                       );
                     },
