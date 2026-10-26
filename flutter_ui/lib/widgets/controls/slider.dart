@@ -141,14 +141,13 @@ class _HouseSliderState extends State<HouseSlider>
             height: 16,
             child: CustomPaint(
               painter: _SliderPainter(
-                // The mockups' own track and knob: a `hairline_strong` rule
-                // with a `text_secondary` handle on it. The track had been a
-                // `surface0` recess, which spends a fourth grey on a groove
-                // two pixels tall (§2.1), and the knob a `text_primary` dot,
-                // which read brighter than the value it points at.
+                // A `hairline_strong` rule with an accent knob, since the
+                // knob is the part you drag. The track had been a `surface0`
+                // recess, which spends a fourth grey on a groove two pixels
+                // tall (§2.1).
                 track: t.hairlineStrong,
                 fill: t.accent,
-                knob: Color.lerp(t.textSecondary, t.textPrimary, _glow.light)!,
+                knob: Color.lerp(t.accent, t.textPrimary, _glow.light * 0.3)!,
                 knobRadius: 5 + _glow.swell(motion),
                 frac: frac,
               ),

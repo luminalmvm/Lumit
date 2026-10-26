@@ -118,8 +118,8 @@ class _DotGridState extends State<_DotGrid> {
           painter: _DotGridPainter(
             hover: pick == null ? null : _hover,
             line: pick == null ? t.textDisabled : t.textMuted,
-            dot: pick == null ? t.textDisabled : t.textSecondary,
-            hot: t.accent,
+            dot: pick == null ? t.textDisabled : t.accent,
+            hot: t.textPrimary,
           ),
         ),
       ),
