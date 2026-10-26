@@ -4748,9 +4748,25 @@
   "@fxLoop": {
     "description": "Effect controls — a checkbox on the SICELIOT Stagger driver: start again from the first copy past the last."
   },
-  "fxPerCopy": "Per copy",
-  "@fxPerCopy": {
-    "description": "Effect controls — a checkbox on the SICELIOT Value noise driver: each copy wanders on its own path."
+  "fxVaryBy": "Vary by",
+  "@fxVaryBy": {
+    "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."
+  },
+  "fxNothing": "Nothing",
+  "@fxNothing": {
+    "description": "Effect controls — an option of Vary by on the SICELIOT Value noise driver: every copy moves together."
+  },
+  "fxCopy": "Copy",
+  "@fxCopy": {
+    "description": "Effect controls — an option on the SICELIOT Oscillator and Value noise drivers: vary by the number of the copy."
+  },
+  "fxPhaseFrom": "Phase from",
+  "@fxPhaseFrom": {
+    "description": "Effect controls — a menu on the SICELIOT Oscillator driver: whether each copy's place on the wave comes from its number or its position."
+  },
+  "fxWaveAngle": "Wave angle",
+  "@fxWaveAngle": {
+    "description": "Effect controls — a dial on the SICELIOT Oscillator driver: the direction the wave travels across the points."
   },
   "fxPhasePerCopy": "Phase per copy",
   "@fxPhasePerCopy": {

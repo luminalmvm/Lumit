@@ -257,10 +257,36 @@ pub struct Oscillator {
     pub phase: f32,
 
     /// How much further along the wave each copy is than the one before, so
-    /// the copies ripple.
+    /// the copies ripple. Read when Phase from is Copy.
     #[dial(label = "Phase per copy", default = 0.0)]
     pub phase_per_copy: f32,
+
+    /// What sets each copy's place on the wave: its number (Copy), or where
+    /// it stands (Position), so the wave crosses the points as a texture
+    /// whatever order they come in.
+    #[choice(label = "Phase from", options = PHASE_FROM, default = 0)]
+    pub phase_from: u32,
+
+    /// The direction the wave travels across the points, when Phase from is
+    /// Position. 0° runs left to right.
+    #[dial(label = "Wave angle", default = 0.0)]
+    pub wave_angle: f32,
+
+    /// The distance from one crest to the next, when Phase from is
+    /// Position.
+    #[slider(
+        label = "Wavelength",
+        min = 10.0,
+        max = 4000.0,
+        default = 400.0,
+        hard_min = 1.0,
+        unit = Px
+    )]
+    pub wavelength: f32,
 }
+
+/// What sets an Oscillator copy's place on the wave.
+pub const PHASE_FROM: &[&str] = &["Copy", "Position"];
 
 /// Oscillator's behaviour.
 pub struct OscillatorDef;
@@ -284,7 +310,10 @@ impl EffectDef for OscillatorDef {
     fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
         let p = Oscillator::read(cx.params);
         let (index, _) = copy(cx);
-        push(VALUE_PORT, Value::Float(oscillator(&p, index, cx.lt)));
+        push(
+            VALUE_PORT,
+            Value::Float(oscillator(&p, index, cx.point, cx.lt)),
+        );
     }
 }
 
@@ -305,12 +334,21 @@ fn wave(shape: u32, x: f64) -> f32 {
     }
 }
 
-/// The value for copy `index` at layer time `lt`.
+/// The value for copy `index`, standing at `point` (px@comp, when known), at
+/// layer time `lt`.
 #[must_use]
-pub fn oscillator(p: &Oscillator, index: u32, lt: f64) -> f32 {
-    let turns = lt * f64::from(p.frequency)
-        + f64::from(p.phase) / 360.0
-        + f64::from(index) * f64::from(p.phase_per_copy) / 360.0;
+pub fn oscillator(p: &Oscillator, index: u32, point: Option<[f32; 2]>, lt: f64) -> f32 {
+    let offset = if p.phase_from == 1 {
+        // How many wavelengths along the wave's direction the point stands,
+        // taken away so the wave travels forward along its angle: a point
+        // further along reads what a point behind it read a moment ago.
+        let [x, y] = point.unwrap_or([0.0; 2]);
+        let a = p.wave_angle.to_radians();
+        -f64::from((x * a.cos() + y * a.sin()) / p.wavelength.max(1.0))
+    } else {
+        f64::from(index) * f64::from(p.phase_per_copy) / 360.0
+    };
+    let turns = lt * f64::from(p.frequency) + f64::from(p.phase) / 360.0 + offset;
     between(p.minimum, p.maximum, 0.5 * (wave(p.shape, turns) + 1.0))
 }
 
@@ -359,14 +397,31 @@ pub struct ValueNoise {
     )]
     pub detail: i32,
 
-    /// Every copy wanders on its own path. Off, they all move together.
-    #[toggle(label = "Per copy", default = true)]
-    pub per_copy: bool,
+    /// What makes the copies wander differently: nothing (they move
+    /// together), their number (each on its own path), or where they stand
+    /// (a texture of noise that drifts across the points).
+    #[choice(label = "Vary by", options = VARY_BY, default = 1)]
+    pub vary_by: u32,
+
+    /// How big the noise's features are across the points, when Vary by is
+    /// Position.
+    #[slider(
+        label = "Noise scale",
+        min = 10.0,
+        max = 4000.0,
+        default = 300.0,
+        hard_min = 1.0,
+        unit = Px
+    )]
+    pub noise_scale: f32,
 
     /// Which path it wanders.
     #[seed]
     pub seed: u32,
 }
+
+/// What makes Value noise differ from copy to copy.
+pub const VARY_BY: &[&str] = &["Nothing", "Copy", "Position"];
 
 /// Value noise's behaviour.
 pub struct ValueNoiseDef;
@@ -390,22 +445,36 @@ impl EffectDef for ValueNoiseDef {
     fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
         let p = ValueNoise::read(cx.params);
         let (index, _) = copy(cx);
-        push(VALUE_PORT, Value::Float(value_noise(&p, index, cx.lt)));
+        push(
+            VALUE_PORT,
+            Value::Float(value_noise(&p, index, cx.point, cx.lt)),
+        );
     }
 }
 
-/// The value for copy `index` at layer time `lt`.
+/// The value for copy `index`, standing at `point` (px@comp, when known), at
+/// layer time `lt`.
 #[must_use]
-pub fn value_noise(p: &ValueNoise, index: u32, lt: f64) -> f32 {
-    // Each copy walks its own row of the noise field.
+pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64) -> f32 {
+    let time = (lt * f64::from(p.frequency)) as f32;
+    // Where in the noise field this copy reads: along time, on a row of its
+    // own (Copy), or at its place in a field that drifts with time
+    // (Position).
     #[allow(clippy::cast_precision_loss)]
-    let row = if p.per_copy { index as f32 * 7.31 } else { 0.0 };
-    let x = (lt * f64::from(p.frequency)) as f32;
+    let at = match p.vary_by {
+        1 => [time, index as f32 * 7.31, 0.0],
+        2 => {
+            let [x, y] = point.unwrap_or([0.0; 2]);
+            let s = p.noise_scale.max(1.0);
+            [x / s, y / s, time]
+        }
+        _ => [time, 0.0, 0.0],
+    };
     let (mut sum, mut weight, mut scale) = (0.0f32, 0.0f32, 1.0f32);
     for octave in 0..p.detail.clamp(1, 4) {
         #[allow(clippy::cast_sign_loss)]
         let channel = octave as u32;
-        sum += scale * noise::value3(p.seed, channel, x / scale, row, 0.0, 0);
+        sum += scale * noise::value3(p.seed, channel, at[0] / scale, at[1] / scale, at[2], 0);
         weight += scale;
         scale *= 0.5;
     }
@@ -471,51 +540,106 @@ mod tests {
             frequency: 1.0,
             phase: 0.0,
             phase_per_copy: 90.0,
+            phase_from: 0,
+            wave_angle: 0.0,
+            wavelength: 400.0,
         };
         assert!(
-            (oscillator(&osc, 0, 0.0) - 5.0).abs() < 1e-3,
+            (oscillator(&osc, 0, None, 0.0) - 5.0).abs() < 1e-3,
             "sine starts mid-way"
         );
         assert!(
-            (oscillator(&osc, 1, 0.0) - 10.0).abs() < 1e-3,
+            (oscillator(&osc, 1, None, 0.0) - 10.0).abs() < 1e-3,
             "a quarter turn on"
         );
-        assert!((oscillator(&osc, 0, 0.25) - 10.0).abs() < 1e-3);
+        assert!((oscillator(&osc, 0, None, 0.25) - 10.0).abs() < 1e-3);
         let tri = Oscillator {
             shape: 1,
             phase_per_copy: 0.0,
             ..osc
         };
-        assert!((oscillator(&tri, 0, 0.0) - 5.0).abs() < 1e-3);
-        assert!((oscillator(&tri, 0, 0.25) - 10.0).abs() < 1e-3);
-        assert!((oscillator(&tri, 0, 0.75) - 0.0).abs() < 1e-3);
+        assert!((oscillator(&tri, 0, None, 0.0) - 5.0).abs() < 1e-3);
+        assert!((oscillator(&tri, 0, None, 0.25) - 10.0).abs() < 1e-3);
+        assert!((oscillator(&tri, 0, None, 0.75) - 0.0).abs() < 1e-3);
 
         let n = ValueNoise {
             minimum: 0.0,
             maximum: 1.0,
             frequency: 3.0,
             detail: 3,
-            per_copy: true,
+            vary_by: 1,
+            noise_scale: 300.0,
             seed: 11,
         };
         for i in 0..8 {
             for f in 0..48 {
-                let v = value_noise(&n, i, f64::from(f) / 24.0);
+                let v = value_noise(&n, i, None, f64::from(f) / 24.0);
                 assert!((0.0..=1.0).contains(&v), "{v} out of range");
             }
         }
         assert_ne!(
-            value_noise(&n, 0, 0.37),
-            value_noise(&n, 1, 0.37),
+            value_noise(&n, 0, None, 0.37),
+            value_noise(&n, 1, None, 0.37),
             "copies wander apart"
         );
-        let together = ValueNoise {
-            per_copy: false,
+        let together = ValueNoise { vary_by: 0, ..n };
+        assert_eq!(
+            value_noise(&together, 0, None, 0.37),
+            value_noise(&together, 5, None, 0.37)
+        );
+
+        // Position: a point a quarter wavelength along the wave's angle is a
+        // quarter turn behind, whatever its number; at 90° the wave runs
+        // down, so moving across changes nothing.
+        let spatial = Oscillator {
+            phase_from: 1,
+            phase_per_copy: 0.0,
+            wavelength: 400.0,
+            ..osc
+        };
+        let at =
+            |x: f32, y: f32, index: u32, lt: f64| oscillator(&spatial, index, Some([x, y]), lt);
+        assert!((at(0.0, 0.0, 7, 0.0) - 5.0).abs() < 1e-3);
+        assert!(
+            (at(100.0, 0.0, 0, 0.0) - 0.0).abs() < 1e-3,
+            "a quarter behind"
+        );
+        assert!(
+            (at(100.0, 0.0, 0, 0.25) - 5.0).abs() < 1e-3,
+            "the crest arrives"
+        );
+        assert_eq!(
+            at(100.0, 0.0, 0, 0.0),
+            at(100.0, 0.0, 9, 0.0),
+            "the number is ignored"
+        );
+        let down = Oscillator {
+            wave_angle: 90.0,
+            ..spatial
+        };
+        assert!(
+            (oscillator(&down, 0, Some([300.0, 0.0]), 0.0) - 5.0).abs() < 1e-3,
+            "across a downward wave nothing changes"
+        );
+
+        // Position noise: neighbours a fraction of Noise scale apart read
+        // nearly the same, points far apart read differently.
+        let field = ValueNoise {
+            vary_by: 2,
+            detail: 1,
             ..n
         };
-        assert_eq!(
-            value_noise(&together, 0, 0.37),
-            value_noise(&together, 5, 0.37)
-        );
+        let near = (value_noise(&field, 0, Some([0.0, 0.0]), 0.0)
+            - value_noise(&field, 1, Some([3.0, 0.0]), 0.0))
+        .abs();
+        let far = (0..8)
+            .map(|k| {
+                (value_noise(&field, 0, Some([0.0, 0.0]), 0.0)
+                    - value_noise(&field, 0, Some([k as f32 * 450.0 + 450.0, 0.0]), 0.0))
+                .abs()
+            })
+            .fold(0.0f32, f32::max);
+        assert!(near < 0.05, "neighbours differ by {near}");
+        assert!(far > 0.1, "far points differ by at most {far}");
     }
 }

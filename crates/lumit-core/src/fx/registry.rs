@@ -190,6 +190,10 @@ pub struct DriverCx<'a> {
     /// points renders it once per stamp. The first copy of one everywhere
     /// else. Clone index and SICELIOT's drivers read it.
     pub clone: (u32, u32),
+    /// Where that copy stands, px@comp, when the drivers are resolved for one
+    /// point of a Clone to points stream; `None` everywhere else. SICELIOT's
+    /// Oscillator and Value noise read it to vary by position.
+    pub point: Option<[f32; 2]>,
 }
 
 /// Where Audio level gets its samples.

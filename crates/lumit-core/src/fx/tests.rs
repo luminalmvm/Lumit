@@ -6823,6 +6823,8 @@ fn every_parameter_declares_a_unit() {
             ("points_sample", "position_y"),
             ("measure", "padding_x"),
             ("measure", "padding_y"),
+            ("siceliot_oscillator", "wavelength"),
+            ("siceliot_noise", "noise_scale"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's

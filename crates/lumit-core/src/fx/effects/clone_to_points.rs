@@ -977,8 +977,9 @@ pub const COPY_DRIVE_MAX: usize = 4096;
 /// In plain terms: a Stagger, Random, Oscillator, Value noise or Clone index
 /// wired into Clone to points' own Scale, Rotation or Opacity gives every
 /// stamp its own value, as a Cavalry behaviour wired into a Duplicator does.
-/// The layer's drivers are resolved once per point, as copy `i` of `n`, and
-/// the values are written into `stream` as the [`COPY_SCALE`],
+/// The layer's drivers are resolved once per point, as copy `i` of `n`
+/// standing at the point's place (which Oscillator and Value noise can vary
+/// by), and the values are written into `stream` as the [`COPY_SCALE`],
 /// [`COPY_ROTATION`] and [`COPY_OPACITY`] columns, which `stamps` reads in
 /// place of the row. The stamp is turned and sized as a whole, so nothing is
 /// cropped the way a Transform on the cloned layer crops.
@@ -1020,13 +1021,15 @@ pub fn drive_copies(
     let mut values = vec![Vec::with_capacity(n); wired.len()];
     for i in 0..n {
         let index = u32::try_from(i).unwrap_or(u32::MAX);
-        let resolved = crate::fx::drivers::resolve_drivers_cloned(
+        let at = stream.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]);
+        let resolved = crate::fx::drivers::resolve_drivers_at_point(
             graph,
             lt,
             context.clone(),
             audio,
             projection,
             (index, count),
+            at,
         );
         for ((row, _), out) in wired.iter().zip(&mut values) {
             let v = match resolved.param(NodeRef::Effect(consumer), ParamId::new(row)) {

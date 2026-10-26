@@ -27536,6 +27536,36 @@
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 15.0
+        },
+        {
+          "id": "phase_from",
+          "label": "Phase from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Copy",
+            "Position"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "wave_angle",
+          "label": "Wave angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "wavelength",
+          "label": "Wavelength",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 10.0,
+          "slider_max": 4000.0,
+          "hard_min": 1.0
         }
       ],
       "groups": [],
@@ -27589,11 +27619,27 @@
           "hard_max": 4.0
         },
         {
-          "id": "per_copy",
-          "label": "Per copy",
-          "kind": "bool",
+          "id": "vary_by",
+          "label": "Vary by",
+          "kind": "choice",
           "unit": "raw",
-          "default": true
+          "default": 1,
+          "options": [
+            "Nothing",
+            "Copy",
+            "Position"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "noise_scale",
+          "label": "Noise scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 300.0,
+          "slider_min": 10.0,
+          "slider_max": 4000.0,
+          "hard_min": 1.0
         },
         {
           "id": "seed",

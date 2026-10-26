@@ -239,6 +239,7 @@ Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
 Copies
+Copy
 Core colour
 Core radius
 Corner pin
@@ -711,6 +712,7 @@ Normal
 Normalised
 Not picked
 Note
+Nothing
 Number
 Number by input
 Number from
@@ -780,11 +782,11 @@ Pattern
 Peak
 Per
 Per clone
-Per copy
 Per-axis wobble
 Perlin
 Persistence
 Phase
+Phase from
 Phase offset
 Phase per copy
 Phaser
@@ -1189,6 +1191,7 @@ V line rel width
 Value
 Value noise
 Variation
+Vary by
 Vary points
 Vector blur
 Vector scale
@@ -1216,6 +1219,7 @@ Warming filter (85)
 Warming filter (LBA)
 Warp
 Wave
+Wave angle
 Wave height
 Wave type
 Wave warp
