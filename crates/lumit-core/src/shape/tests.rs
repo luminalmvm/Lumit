@@ -862,3 +862,73 @@ fn the_box_holds_a_twisted_or_deformed_shape() {
     both.deform = deformed(0, 8.0, 1.0, 0.0, 4.0).deform;
     inside(&both);
 }
+
+/// FNV-1a over `bytes`: a stable name for a buffer, so a picture can be
+/// pinned without keeping the picture.
+fn fnv(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+/// A file from before modifiers were entries still draws the same pixels.
+///
+/// The fixture is a shape layer written by 0.9's `ShapeItem`, with every
+/// modifier field in use: a trim, dashes, an offset, a repeater with the
+/// whole step and the fade, a twist, a smooth, both deforms, a taper, a
+/// combined run wearing its first item's modifiers, keyed values, a morph,
+/// and a plain item between them that no modifier may reach. The box, the
+/// picture and the outline an effect walks are pinned at two times.
+#[test]
+fn an_older_files_modifiers_draw_as_they_did() {
+    let kind: crate::model::LayerKind =
+        serde_json::from_str(include_str!("fixtures/old-modifiers.json")).expect("reads");
+    let crate::model::LayerKind::Shape { contents } = kind else {
+        panic!("a shape layer");
+    };
+    let context = std::sync::Arc::new(crate::expression::ExpressionContext {
+        document: std::sync::Arc::new(crate::model::Document::new()),
+        comp: None,
+        layer: None,
+        comp_time: 0.0,
+        current_depth: 0,
+        inputs: None,
+    });
+    // (time, box, picture, outline)
+    type Pinned = (f64, (f64, f64, f64, f64), u64, u64);
+    let expected: [Pinned; 2] = [
+        (
+            0.0,
+            (-1.1630491652392632, 3.5, 194.0, 164.5),
+            17382974129057078523,
+            5266357332587173629,
+        ),
+        (
+            1.0,
+            (-1.1630491652392632, 3.5, 194.0, 163.75),
+            8980961866031931577,
+            13633090624302635690,
+        ),
+    ];
+    for (t, bounds, picture, outline) in expected {
+        // The renderer's own route: the art settled at `t`, then its box.
+        let settled = contents_at(&contents, t, &context);
+        let (x0, y0, x1, y1) = contents_bounds(&settled, t).expect("a box");
+        let (w, h) = ((x1 - x0).round() as u32, (y1 - y0).round() as u32);
+        let rgba = rasterise_contents(&settled, w, h, x0, y0, x1, y1, t);
+        let line = outline_at(&contents, t);
+        let mut walked = Vec::new();
+        for p in &line.points {
+            walked.extend_from_slice(&p[0].to_le_bytes());
+            walked.extend_from_slice(&p[1].to_le_bytes());
+        }
+        for &c in &line.corners {
+            walked.extend_from_slice(&(c as u32).to_le_bytes());
+        }
+        assert_eq!(
+            ((x0, y0, x1, y1), fnv(&rgba), fnv(&walked)),
+            (bounds, picture, outline),
+            "at {t} s"
+        );
+    }
+}
