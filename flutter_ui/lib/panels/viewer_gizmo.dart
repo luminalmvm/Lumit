@@ -1474,14 +1474,19 @@ enum _GizmoDrag {
 }
 
 /// Where the right-click menu's Align puts a layer's box against the
-/// composition's: an edge to an edge, or a middle to a middle.
+/// composition's: an edge to an edge, or a middle to a middle. [x] and [y]
+/// are that point across and down, null on the axis left alone.
 enum _Align {
-  left,
-  centre,
-  right,
-  top,
-  middle,
-  bottom;
+  left(0, null),
+  centre(0.5, null),
+  right(1, null),
+  top(null, 0),
+  middle(null, 0.5),
+  bottom(null, 1);
+
+  const _Align(this.x, this.y);
+  final double? x;
+  final double? y;
 
   String get title => switch (this) {
         _Align.left => l10n.viewerAlignLeft,
@@ -2284,7 +2289,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
                   key: ValueKey<String>('viewer-align-${to.name}'),
                   onPressed: () {
                     dismiss();
-                    _align(to);
+                    _align(to.x, to.y);
                   },
                   child: Text(to.title),
                 ),
@@ -2324,41 +2329,38 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     );
   }
 
-  /// Move each selected layer so that edge, or the middle, of its box meets
-  /// the composition's. The box is the one the outline draws, so what lines up
+  /// Move each selected layer so a point of its box meets the same point of
+  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
+  /// axis left alone. The box is the one the outline draws, so what lines up
   /// is what is seen. A layer with a keyed position stays where it is, as it
   /// does under a drag.
-  void _align(_Align to) {
+  void _align(double? x, double? y) {
     final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
       if (!box.draggable || _rectOf([box]) == null) continue;
-      var (x, y) = (box.map.px, box.map.py);
+      var (px, py) = (box.map.px, box.map.py);
       // Seen through a camera a move also changes how big the box looks, so
       // a few steps close in on the edge rather than landing near it.
       for (var i = 0; i < (box.map.projected ? 4 : 1); i++) {
         final moved = i == 0
             ? box
-            : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y));
+            : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(px, py));
         final rect = _rectOf([moved]);
         if (rect == null) break;
         // Both measured from the composition's corner, at the view's scale.
         final scale = box.map.viewScale;
         final r = rect.shift(-box.map.origin);
         final frame = widget.compSize * scale;
-        final d = switch (to) {
-              _Align.left => Offset(-r.left, 0),
-              _Align.centre => Offset(frame.width / 2 - r.center.dx, 0),
-              _Align.right => Offset(frame.width - r.right, 0),
-              _Align.top => Offset(0, -r.top),
-              _Align.middle => Offset(0, frame.height / 2 - r.center.dy),
-              _Align.bottom => Offset(0, frame.height - r.bottom),
-            } /
+        final d = Offset(
+              x == null ? 0 : (frame.width - r.width) * x - r.left,
+              y == null ? 0 : (frame.height - r.height) * y - r.top,
+            ) /
             scale;
         final step = moved.map.positionStep(d);
-        x += step.dx;
-        y += step.dy;
+        px += step.dx;
+        py += step.dy;
       }
-      moves.add((box, x, y, null));
+      moves.add((box, px, py, null));
     }
     _place(moves);
   }
