@@ -27954,12 +27954,14 @@ impl SseDecode for crate::api::layer::BridgeRevealGroups {
         let mut var_audio = <bool>::sse_decode(deserializer);
         let mut var_retime = <bool>::sse_decode(deserializer);
         let mut var_effects = <Vec<String>>::sse_decode(deserializer);
+        let mut var_animators = <Vec<u32>>::sse_decode(deserializer);
         let mut var_any = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeRevealGroups {
             transform: var_transform,
             audio: var_audio,
             retime: var_retime,
             effects: var_effects,
+            animators: var_animators,
             any: var_any,
         };
     }
@@ -29460,6 +29462,7 @@ impl SseDecode for crate::api::assets::BridgeTextStyle {
         let mut var_stroke = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
         let mut var_strokeWidth = <f64>::sse_decode(deserializer);
         let mut var_strokeOver = <bool>::sse_decode(deserializer);
+        let mut var_strokesTogether = <bool>::sse_decode(deserializer);
         return crate::api::assets::BridgeTextStyle {
             family: var_family,
             face: var_face,
@@ -29479,6 +29482,7 @@ impl SseDecode for crate::api::assets::BridgeTextStyle {
             stroke: var_stroke,
             stroke_width: var_strokeWidth,
             stroke_over: var_strokeOver,
+            strokes_together: var_strokesTogether,
         };
     }
 }
@@ -39270,6 +39274,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeRevealGroups {
             self.audio.into_into_dart().into_dart(),
             self.retime.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
+            self.animators.into_into_dart().into_dart(),
             self.any.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -41067,6 +41072,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextStyle {
             self.stroke.into_into_dart().into_dart(),
             self.stroke_width.into_into_dart().into_dart(),
             self.stroke_over.into_into_dart().into_dart(),
+            self.strokes_together.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -45308,6 +45314,7 @@ impl SseEncode for crate::api::layer::BridgeRevealGroups {
         <bool>::sse_encode(self.audio, serializer);
         <bool>::sse_encode(self.retime, serializer);
         <Vec<String>>::sse_encode(self.effects, serializer);
+        <Vec<u32>>::sse_encode(self.animators, serializer);
         <bool>::sse_encode(self.any, serializer);
     }
 }
@@ -46441,6 +46448,7 @@ impl SseEncode for crate::api::assets::BridgeTextStyle {
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.stroke, serializer);
         <f64>::sse_encode(self.stroke_width, serializer);
         <bool>::sse_encode(self.stroke_over, serializer);
+        <bool>::sse_encode(self.strokes_together, serializer);
     }
 }
 

@@ -3252,6 +3252,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           }
         }
         if (groups.audio) _open.add(audioPath(id));
+        if (groups.animators.isNotEmpty) {
+          _open.add(animatorsPath(id));
+          for (final i in groups.animators) {
+            _open.add(animatorPath(id, i));
+          }
+        }
         // Retime needs no path of its own: the row sits above Transform on
         // any open layer that has one, and `groups.any` already counts it, so
         // a layer whose only animation is its Retime opens for `U` here.

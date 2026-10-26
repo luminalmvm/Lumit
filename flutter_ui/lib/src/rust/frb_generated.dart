@@ -25533,14 +25533,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeRevealGroups dco_decode_bridge_reveal_groups(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BridgeRevealGroups(
       transform: dco_decode_bool(arr[0]),
       audio: dco_decode_bool(arr[1]),
       retime: dco_decode_bool(arr[2]),
       effects: dco_decode_list_String(arr[3]),
-      any: dco_decode_bool(arr[4]),
+      animators: dco_decode_list_prim_u_32_strict(arr[4]),
+      any: dco_decode_bool(arr[5]),
     );
   }
 
@@ -26603,8 +26604,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTextStyle dco_decode_bridge_text_style(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return BridgeTextStyle(
       family: dco_decode_String(arr[0]),
       face: dco_decode_String(arr[1]),
@@ -26624,6 +26625,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       stroke: dco_decode_bridge_colour_rgba(arr[15]),
       strokeWidth: dco_decode_f_64(arr[16]),
       strokeOver: dco_decode_bool(arr[17]),
+      strokesTogether: dco_decode_bool(arr[18]),
     );
   }
 
@@ -32681,12 +32683,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_audio = sse_decode_bool(deserializer);
     var var_retime = sse_decode_bool(deserializer);
     var var_effects = sse_decode_list_String(deserializer);
+    var var_animators = sse_decode_list_prim_u_32_strict(deserializer);
     var var_any = sse_decode_bool(deserializer);
     return BridgeRevealGroups(
         transform: var_transform,
         audio: var_audio,
         retime: var_retime,
         effects: var_effects,
+        animators: var_animators,
         any: var_any);
   }
 
@@ -33882,6 +33886,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_stroke = sse_decode_bridge_colour_rgba(deserializer);
     var var_strokeWidth = sse_decode_f_64(deserializer);
     var var_strokeOver = sse_decode_bool(deserializer);
+    var var_strokesTogether = sse_decode_bool(deserializer);
     return BridgeTextStyle(
         family: var_family,
         face: var_face,
@@ -33900,7 +33905,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         strokeOn: var_strokeOn,
         stroke: var_stroke,
         strokeWidth: var_strokeWidth,
-        strokeOver: var_strokeOver);
+        strokeOver: var_strokeOver,
+        strokesTogether: var_strokesTogether);
   }
 
   @protected
@@ -40278,6 +40284,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.audio, serializer);
     sse_encode_bool(self.retime, serializer);
     sse_encode_list_String(self.effects, serializer);
+    sse_encode_list_prim_u_32_strict(self.animators, serializer);
     sse_encode_bool(self.any, serializer);
   }
 
@@ -41176,6 +41183,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_colour_rgba(self.stroke, serializer);
     sse_encode_f_64(self.strokeWidth, serializer);
     sse_encode_bool(self.strokeOver, serializer);
+    sse_encode_bool(self.strokesTogether, serializer);
   }
 
   @protected
