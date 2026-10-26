@@ -225,6 +225,12 @@ lumit = "lightning"
 conversion = "lightning"
 
 [[effect]]
+ae = "ADBE Grid"
+name = "Grid"
+lumit = "grid"
+conversion = "grid"
+
+[[effect]]
 ae = "APC Radio Waves"
 name = "Radio Waves"
 lumit = "radio_waves"
@@ -538,6 +544,11 @@ ofx = [
   "com.borisfx.sapphire.Transitions.S_DissolveLuma",
 ]
 pending_audit = true
+
+[[effect]]
+ae = "S_Grid"
+name = "S_Grid"
+ofx = ["com.genarts.sapphire.Render.S_Grid", "com.borisfx.sapphire.Render.S_Grid"]
 
 [[effect]]
 ae = "MB LookSuite3"

@@ -1,6 +1,6 @@
 ---
 title: Grid
-description: "A lattice of points, and the discs that make it visible."
+description: "A lattice of points drawn as discs, or a grid of lines."
 ---
 
 import Compare from "../../../../components/Compare.astro";
@@ -15,7 +15,9 @@ Grid is a **Generate** effect.
 
 ## What it does
 
-Puts points at even intervals: rows, columns, and planes receding into depth.
+Puts points at even intervals: rows, columns, and planes receding into depth. Set **Type**
+to **Lines** and it draws a line grid instead, which can be tilted back in perspective.
+Lines emits no points.
 
 ## Parameters
 
@@ -23,6 +25,7 @@ Puts points at even intervals: rows, columns, and planes receding into depth.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Type** | Dropdown | Points · Lines | Points | - |
 | **Layout** | Dropdown | Rows · Offset rows · Rings · Spiral · Hexagons · Point | Rows | - |
 | **Columns** | Slider, whole numbers | 1 to 100; up to 1000 | 10 | - |
 | **Rows** | Slider, whole numbers | 1 to 100; up to 1000 | 6 | - |
@@ -42,6 +45,23 @@ Puts points at even intervals: rows, columns, and planes receding into depth.
 | **Start angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Arc** | Slider | 0 to 360 | 360 | Degrees |
 | **Inner radius** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Size from** | Dropdown | Grid size · Corner point | Grid size | - |
+| **Boxes x** | Slider, whole numbers | 1 to 100; up to 1000 | 24 | - |
+| **Boxes y** | Slider, whole numbers | 1 to 100; up to 1000 | 16 | - |
+| **Grid size x** | Slider | 0 to 3840; higher | 1920 | Pixels at composition size |
+| **Grid size y** | Slider | 0 to 2160; higher | 1440 | Pixels at composition size |
+| **Corner x** | Slider | 0 to 3840; any value by typing | 1152 | Pixels at composition size |
+| **Corner y** | Slider | 0 to 2160; any value by typing | 648 | Pixels at composition size |
+| **Line width** | Slider | 0 to 50; higher | 2.5 | Pixels at composition size |
+| **H line rel width** | Slider | 0 to 4; higher | 1 | - |
+| **V line rel width** | Slider | 0 to 4; higher | 1 | - |
+| **Major line spacing** | Slider, whole numbers | 0 to 20; up to 1000 | 4 | - |
+| **Major line width** | Slider | 1 to 10; higher | 2.5 | - |
+| **Latitude** | Slider | -89 to 89 | 0 | Degrees |
+| **Swing** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Roll** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Z dist** | Slider | 0.1 to 10; down to 0.01 and higher | 1 | - |
+| **Tele lens width** | Slider | 0.2 to 3 | 1 | - |
 | **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
@@ -55,8 +75,16 @@ Puts points at even intervals: rows, columns, and planes receding into depth.
 
 In the Effect Controls panel:
 
-- **Grid** groups **Layout**, **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Fit to size**, **Width**, **Height**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**.
+- **Grid** groups **Type**, **Layout**, **Columns**, **Rows**, **Planes**, **Spacing x**, **Spacing y**, **Spacing z**, **Fit to size**, **Width**, **Height**, **Position x**, **Position y**, **Position z**, **Jitter x**, **Jitter y**, **Jitter z**.
+- **Lines** groups **Size from**, **Boxes x**, **Boxes y**, **Grid size x**, **Grid size y**, **Corner x**, **Corner y**, **Line width**, **H line rel width**, **V line rel width**, **Major line spacing**, **Major line width**, and appears while **Type** is Lines.
+- **Transform** groups **Latitude**, **Swing**, **Roll**, **Z dist**, **Tele lens width**, and appears while **Type** is Lines.
 - **Point** groups **Size**, **Feather**, **Colour**, **Max points**.
+- **Boxes x** is editable while **Size from** is set to Grid size.
+- **Boxes y** is editable while **Size from** is set to Grid size.
+- **Grid size x** is editable while **Size from** is set to Grid size.
+- **Grid size y** is editable while **Size from** is set to Grid size.
+- **Corner x** is editable while **Size from** is set to Corner point.
+- **Corner y** is editable while **Size from** is set to Corner point.
 - **Spacing x** is editable while **Fit to size** is off.
 - **Spacing x** is editable while **Layout** is anything but Point.
 - **Spacing y** is editable while **Fit to size** is off.
@@ -75,6 +103,8 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Type**: **Points** draws the lattice as discs. **Lines** draws a grid of lines, with its
+  own rows under **Lines** and **Transform**, and hides the rows only Points reads.
 - **Layout**: how the points on each plane are arranged. **Rows** is rows and columns.
   **Offset rows** moves every other row across by half a cell. **Rings** makes Rows the
   number of rings and Columns the points on each, with Spacing x and Spacing y the gap
@@ -109,10 +139,30 @@ In the Effect Controls panel:
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a
   [Glow](/effects/stylise/glow/).
+- **Size from**: how big a cell is. **Grid size** shares the grid's size out between the
+  boxes. **Corner point** makes Position and Corner two corners of one cell, and the lines
+  fill the layer.
+- **Boxes x** and **Boxes y**: how many cells across and down.
+- **Grid size x** and **Grid size y**: how wide and tall the whole grid is.
+- **Corner x** and **Corner y**: the far corner of the cell that starts at Position.
+- **Line width**: how thick a line is.
+- **H line rel width** and **V line rel width**: the across and the up and down lines'
+  width, times Line width.
+- **Major line spacing**: every this many lines from the middle is a major line. At nought
+  every line is the same.
+- **Major line width**: a major line's width, times a line's.
+- **Latitude**: tips the top of the grid away.
+- **Swing**: turns the grid on its own plane.
+- **Roll**: turns the tipped grid about the view. At Latitude 0, Swing and Roll do the same.
+- **Z dist**: how far away the grid is. Above 1 it is smaller.
+- **Tele lens width**: a longer lens zooms in with less perspective, a shorter one widens
+  the view with more.
 - **Max points**: the most points that may exist at once. It does not animate. A lattice
   bigger than the cap is cut off at the end.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
+
+After Effects' Grid imports as Lines. Its Feather and Invert Grid are not carried.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
 

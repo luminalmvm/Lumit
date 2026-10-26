@@ -21439,5 +21439,85 @@
   "fxMapSoftness": "Map softness",
   "@fxMapSoftness": {
     "description": "Vector blur parameter label in the Effect Controls panel — how much the map is blurred before the streak directions are read from it."
+  },
+  "fxLines": "Lines",
+  "@fxLines": {
+    "description": "Grid's Type option that draws a line grid rather than points."
+  },
+  "fxSizeFrom": "Size from",
+  "@fxSizeFrom": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a dropdown choosing how a cell's size is set, as After Effects' Grid names it."
+  },
+  "fxGridSize": "Grid size",
+  "@fxGridSize": {
+    "description": "A Size from option on Grid: the grid's own size is shared out between its boxes, as Sapphire's S_Grid names it. Also the paired Grid size x and y row."
+  },
+  "fxCornerPoint": "Corner point",
+  "@fxCornerPoint": {
+    "description": "A Size from option on Grid: Position and Corner mark two corners of one cell, as After Effects' Grid names it."
+  },
+  "fxBoxesX": "Boxes x",
+  "@fxBoxesX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells across, as Sapphire's S_Grid names it."
+  },
+  "fxBoxesY": "Boxes y",
+  "@fxBoxesY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells down, as Sapphire's S_Grid names it."
+  },
+  "fxGridSizeX": "Grid size x",
+  "@fxGridSizeX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how wide the whole grid is."
+  },
+  "fxGridSizeY": "Grid size y",
+  "@fxGridSizeY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how tall the whole grid is."
+  },
+  "fxCornerX": "Corner x",
+  "@fxCornerX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: across position of a cell's far corner."
+  },
+  "fxCornerY": "Corner y",
+  "@fxCornerY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: down position of a cell's far corner."
+  },
+  "fxLineWidth": "Line width",
+  "@fxLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how thick each line is."
+  },
+  "fxHLineRelWidth": "H line rel width",
+  "@fxHLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the horizontal lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxVLineRelWidth": "V line rel width",
+  "@fxVLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the vertical lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxMajorLineSpacing": "Major line spacing",
+  "@fxMajorLineSpacing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: every this many lines is drawn thicker."
+  },
+  "fxMajorLineWidth": "Major line width",
+  "@fxMajorLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how much thicker the major lines are."
+  },
+  "fxLatitude": "Latitude",
+  "@fxLatitude": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: tilts the grid back in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxSwing": "Swing",
+  "@fxSwing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the grid on its own plane in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxRoll": "Roll",
+  "@fxRoll": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the tilted grid about the view in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxZDist": "Z dist",
+  "@fxZDist": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how far away the grid is, as Sapphire's S_Grid names it."
+  },
+  "fxTeleLensWidth": "Tele lens width",
+  "@fxTeleLensWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a longer or shorter lens, changing the perspective, as Sapphire's S_Grid names it."
   }
 }
