@@ -436,12 +436,9 @@ impl LayerReference {
         self.commit(lumit_core::Op::Batch { ops })
     }
 
-    /// **Text to shapes**: a copy of this Type layer beside it, whose
-    /// picture is the glyph outlines as vector art.
-    ///
-    /// The original is kept and untouched, which is After Effects' convention
-    /// and the only one that survives a mistake: the words are still typeable,
-    /// still keyed, still expression-driven, and the copy is a drawing.
+    /// **Text to shapes**: a shape layer above this Type layer, a group for
+    /// each letter's outlines, with this layer switched off as After Effects
+    /// does.
     ///
     /// Converted **at `frame`**, because a line the words of which come from an
     /// expression says something different at every frame and the honest answer
@@ -450,7 +447,7 @@ impl LayerReference {
     /// uses, so the copy lands on top of the layer it came from rather than
     /// near it.
     ///
-    /// One `Op`, so one undo step — the whole layer arrives at once.
+    /// One `Op`, so one undo step.
     #[frb(sync)]
     pub fn create_shapes_from_text(&self, frame: i64) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
@@ -458,11 +455,6 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Text { document } = &layer.kind else {
             return Err(BridgeError::NotText);
         };
-        let index = comp
-            .layers
-            .iter()
-            .position(|l| l.id == self.layer_id)
-            .ok_or(BridgeError::InvalidLayer)?;
         let t = comp
             .frame_rate
             .time_of_frame(frame)
@@ -492,48 +484,15 @@ impl LayerReference {
             .path
             .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
             .filter(|p| !p.is_empty());
-        let contents: Vec<lumit_core::shape::modifier::ShapeEntry> = lumit_text::shape_items(
+        let contents = lumit_text::shape_items(
             &lumit_text::TextBlock::of(document, &words),
             spine.as_ref(),
             document.path_offset.value_at(lt) as f32,
-        )
-        .into_iter()
-        .map(lumit_core::shape::modifier::ShapeEntry::Item)
-        .collect();
+        );
         if contents.is_empty() {
             return Err(BridgeError::NothingToConvert);
         }
-
-        let mut copy = layer.clone();
-        copy.id = Uuid::now_v7();
-        copy.name = format!("{} outlines", layer.name);
-        for effect in &mut copy.effects {
-            effect.id = Uuid::now_v7();
-        }
-        // **The masks and the paint do not come across.** Both are drawn in
-        // layer pixels measured from the layer's box corner, and a shape
-        // layer's corner is its *art's* bounding box rather than the origin —
-        // so a mask carried over would land somewhere else. The path mask has
-        // already done its work: the curve is in the outlines.
-        copy.masks.clear();
-        copy.paint.clear();
-        // Which is also why the anchor moves by that corner: the art's box
-        // starts at the first glyph's left bearing, not at zero, and without
-        // this the copy would sit a few pixels off the line it came from.
-        if let Some((x0, y0, _, _)) = lumit_core::shape::contents_bounds(&contents, lt) {
-            shift_property(&mut copy.transform.anchor_x, -x0);
-            shift_property(&mut copy.transform.anchor_y, -y0);
-        }
-        copy.kind = lumit_core::model::LayerKind::Shape { contents };
-        crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
-
-        let new_id = copy.id;
-        self.commit(lumit_core::Op::AddLayer {
-            comp: self.comp_id,
-            index,
-            layer: Box::new(copy),
-        })?;
-        Ok(LayerReference::new(self.project_id, self.comp_id, new_id))
+        crate::outlines::add_above(self, contents, lt)
     }
 
     /// **Text to points**: a copy of this Type layer beside it, fitted

@@ -6541,7 +6541,7 @@
   },
   "menuCreateShapesFromText": "Shapes from text",
   "@menuCreateShapesFromText": {
-    "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer whose picture is the outlines of its letters as editable vector shapes."
+    "description": "Layer ▸ Create submenu item: makes a shape layer from the outlines of the selected text layer's letters, one group per letter, and switches the text layer off."
   },
   "menuCut": "Cut",
   "@menuCut": {

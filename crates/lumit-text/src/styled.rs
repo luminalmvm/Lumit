@@ -1226,8 +1226,9 @@ mod tests {
         assert_eq!(top, 0);
 
         assert_eq!(outlines(&b, None, 0.0).len(), 5);
-        let items = crate::shape_items(&b, None, 0.0);
-        assert!(items
+        let groups = crate::shape_items(&b, None, 0.0);
+        assert_eq!(groups.len(), 5, "a group for each letter");
+        assert!(lumit_core::shape::modifier::items(&groups)
             .iter()
             .all(|i| i.stroke.is_some() && i.stroke_width.value_at(0.0) == 3.0));
     }

@@ -3081,12 +3081,9 @@ class LayerReference {
         that: this,
       );
 
-  /// **Text to shapes**: a copy of this Type layer beside it, whose
-  /// picture is the glyph outlines as vector art.
-  ///
-  /// The original is kept and untouched, which is After Effects' convention
-  /// and the only one that survives a mistake: the words are still typeable,
-  /// still keyed, still expression-driven, and the copy is a drawing.
+  /// **Text to shapes**: a shape layer above this Type layer, a group for
+  /// each letter's outlines, with this layer switched off as After Effects
+  /// does.
   ///
   /// Converted **at `frame`**, because a line the words of which come from an
   /// expression says something different at every frame and the honest answer
@@ -3095,7 +3092,7 @@ class LayerReference {
   /// uses, so the copy lands on top of the layer it came from rather than
   /// near it.
   ///
-  /// One `Op`, so one undo step — the whole layer arrives at once.
+  /// One `Op`, so one undo step.
   LayerReference createShapesFromText({required PlatformInt64 frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapesFromText(
           that: this, frame: frame);
