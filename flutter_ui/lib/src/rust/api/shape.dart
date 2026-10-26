@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'shape.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `groups`, `modifiers`, `read_at`, `read_entries`, `write_entries`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `groups`, `modifiers`, `read_at`, `read_at`, `read_entries`, `write_entries`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One entry of a shape layer's contents, and how deep it sits: 0 at the top
 /// of the layer, one more inside each group.
@@ -124,6 +124,74 @@ sealed class BridgeShapeModifierKind with _$BridgeShapeModifierKind {
   const factory BridgeShapeModifierKind.smooth(
     BridgeScalar field0,
   ) = BridgeShapeModifierKind_Smooth;
+}
+
+/// **A parametric shape**: `kind` 0 is a rectangle, 1 an ellipse, 2 a polygon
+/// and 3 a star. The position is its middle in the art's own coordinates. A
+/// rectangle and an ellipse use the width and height, the rectangle its
+/// corner roundness in pixels; a polygon and a star the points, the turn in
+/// degrees, the radii and the roundness of their corners per cent.
+class BridgeShapePrimitive {
+  final int kind;
+  final BridgeScalar positionX;
+  final BridgeScalar positionY;
+  final BridgeScalar width;
+  final BridgeScalar height;
+  final BridgeScalar roundness;
+  final BridgeScalar points;
+  final BridgeScalar rotation;
+  final BridgeScalar outerRadius;
+  final BridgeScalar innerRadius;
+  final BridgeScalar outerRoundness;
+  final BridgeScalar innerRoundness;
+
+  const BridgeShapePrimitive({
+    required this.kind,
+    required this.positionX,
+    required this.positionY,
+    required this.width,
+    required this.height,
+    required this.roundness,
+    required this.points,
+    required this.rotation,
+    required this.outerRadius,
+    required this.innerRadius,
+    required this.outerRoundness,
+    required this.innerRoundness,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      positionX.hashCode ^
+      positionY.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      roundness.hashCode ^
+      points.hashCode ^
+      rotation.hashCode ^
+      outerRadius.hashCode ^
+      innerRadius.hashCode ^
+      outerRoundness.hashCode ^
+      innerRoundness.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShapePrimitive &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          positionX == other.positionX &&
+          positionY == other.positionY &&
+          width == other.width &&
+          height == other.height &&
+          roundness == other.roundness &&
+          points == other.points &&
+          rotation == other.rotation &&
+          outerRadius == other.outerRadius &&
+          innerRadius == other.innerRadius &&
+          outerRoundness == other.outerRoundness &&
+          innerRoundness == other.innerRoundness;
 }
 
 /// **The repeater**: how many copies are drawn, which copy the original is

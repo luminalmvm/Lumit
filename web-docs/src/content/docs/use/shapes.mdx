@@ -17,16 +17,36 @@ A **Shape layer** holds vector shape groups with fills, strokes, and path operat
 2. Pick a shape or pen tool.
 3. Draw in the Viewer.
 
-If a layer is selected the tools draw a [mask](/use/masks/) on it.
+With a shape layer selected the tools add a shape to it. Hold `Alt` to draw a
+[mask](/use/masks/) on it instead. With any other layer selected the tools draw a mask.
 
 When using a shape tool while drawing, if you want to maintain the shape's proportions,
 hold `Shift` while creating the shape.
 
+## Rectangles, ellipses, polygons and stars
+
+A shape drawn with the **Rectangle**, **Rounded rectangle**, **Ellipse**, **Polygon** or
+**Star** tool keeps the numbers that make it. In place of a **Path** row it has:
+
+| Shape | Rows |
+| --- | --- |
+| Rectangle | **Width**, **Height**, **Position x**, **Position y**, **Roundness** |
+| Ellipse | **Width**, **Height**, **Position x**, **Position y** |
+| Polygon | **Points**, **Position x**, **Position y**, **Rotation**, **Outer radius**, **Outer roundness** |
+| Star | **Points**, **Position x**, **Position y**, **Rotation**, **Inner radius**, **Outer radius**, **Inner roundness**, **Outer roundness** |
+
+Every row is animatable. Roundness is in pixels; the roundness of a polygon or star is a
+percentage, and 100 makes a polygon a circle.
+
+**Convert to path** on the shape's menu turns it into a path, the shape it shows at the
+playhead. Dragging one of its points in the Viewer does the same.
+
 ## Fills and strokes
 
 Each shape group carries its own fill and stroke, set from the toolbar when the shape
-is drawn. The fill's colour is editable afterwards from the Timeline, on the group's
-own **Fill** row.
+is drawn. Both are editable afterwards from the Timeline, on the group's own **Fill**,
+**Stroke** and **Stroke width** rows. **Add** and **Remove** on the shape's menu give it a
+fill or a stroke, or take one away.
 
 ## Gradient fills
 
@@ -93,7 +113,8 @@ on every shape above it in its group, in list order. Two modifiers of one kind s
 repeater under a repeater repeats the copies.
 
 Right-click a row in the Timeline for **Add**, which lists **Repeater**, **Trim paths**,
-**Offset paths**, **Twist**, **Deform**, **Smooth**, **Stroke taper** and **Group**. A
+**Offset paths**, **Twist**, **Deform**, **Smooth**, **Fill**, **Stroke**, **Stroke taper**
+and **Group**. A
 modifier is added under the row and acts on it; on a group it is added inside the group. A
 modifier's rows sit under its own twirl, and every row is animatable. **Move up** and
 **Move down** reorder an entry; **Delete modifier** takes one off.

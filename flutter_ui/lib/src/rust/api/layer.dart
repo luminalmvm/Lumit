@@ -24,7 +24,7 @@ import 'state.dart';
 import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -2042,6 +2042,11 @@ class BridgeShapeItem {
   /// **Stroke taper**, or `None` for the full width all the way.
   final BridgeShapeTaper? taper;
 
+  /// **A parametric shape**, or `None` for a drawn path. While it is set
+  /// the path is made from it, and `vertices` is that path at the head of
+  /// the layer.
+  final BridgeShapePrimitive? primitive;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -2065,6 +2070,7 @@ class BridgeShapeItem {
     required this.combine,
     required this.pathKeys,
     this.taper,
+    this.primitive,
   });
 
   @override
@@ -2090,7 +2096,8 @@ class BridgeShapeItem {
       gradientStops.hashCode ^
       combine.hashCode ^
       pathKeys.hashCode ^
-      taper.hashCode;
+      taper.hashCode ^
+      primitive.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -2118,7 +2125,8 @@ class BridgeShapeItem {
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           pathKeys == other.pathKeys &&
-          taper == other.taper;
+          taper == other.taper &&
+          primitive == other.primitive;
 }
 
 /// A shape's stroke taper: how much of the width is gone at each end, how
@@ -3002,6 +3010,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceConvertFromSequenced(
         that: this,
       );
+
+  /// Turn a parametric shape into a drawn path, the shape it shows at
+  /// `time` (composition time), so its points can be moved one by one.
+  void convertShapeToPath(
+          {required UuidValue id, required BridgeRational time}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceConvertShapeToPath(
+          that: this, id: id, time: time);
 
   /// Turn a Footage layer into a Sequence layer holding one clip of what the
   /// layer is showing - the way into the clip-editing surface.

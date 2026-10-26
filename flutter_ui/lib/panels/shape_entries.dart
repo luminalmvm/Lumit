@@ -3,6 +3,7 @@
 // group is the entry that opens it; the entries after it one deeper are
 // inside. Every edit is "the list, changed", written back whole.
 
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
@@ -13,6 +14,25 @@ UuidValue shapeEntryId(BridgeShapeEntry entry) => switch (entry.kind) {
       BridgeShapeEntryKind_Modifier(:final field0) => field0.id,
       BridgeShapeEntryKind_Group(:final field0) => field0.id,
     };
+
+/// Whether [item]'s shape moves: keyed, or made from numbers that move.
+bool shapeMoves(BridgeShapeItem item) {
+  final p = item.primitive;
+  if (p == null) return item.pathKeys.isNotEmpty;
+  return [
+    p.positionX,
+    p.positionY,
+    p.width,
+    p.height,
+    p.roundness,
+    p.points,
+    p.rotation,
+    p.outerRadius,
+    p.innerRadius,
+    p.outerRoundness,
+    p.innerRoundness,
+  ].any((s) => s is! BridgeScalar_Static);
+}
 
 /// [entry] at another depth.
 BridgeShapeEntry shapeEntryAt(BridgeShapeEntry entry, int depth) =>

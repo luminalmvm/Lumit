@@ -29,7 +29,8 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart'
     show sampledExpression, sampledOrientation, sampledScalar, timeOfFrame;
-import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
+import '../state/layer_bounds.dart'
+    show shapeContentsBounds, shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
 import '../state/view_projection.dart' show flatView;
@@ -271,8 +272,7 @@ class ViewerStage extends StatelessWidget {
       anyAnimated: model.heldLayers.any((entry) =>
           outlined.contains(entry.layer.internallayerId.toString()) &&
           (entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty) ||
-              entry.info.shapeContents.items
-                  .any((item) => item.pathKeys.isNotEmpty))),
+              entry.info.shapeContents.items.any(shapeMoves))),
     );
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     // Where the playhead is in seconds, which is the clock a shape item's keys
@@ -364,10 +364,15 @@ class ViewerStage extends StatelessWidget {
         // A line being typed measures what is being typed: the
         // document holds the old one until the edit ends, so a box measured
         // from it would not grow with the words.
-        bounds: live == null
-            ? uiState.layerBounds.boundsOf(entry,
-                compSize: compSize, revision: revision, t: playheadSeconds)
-            : textLayerBounds(live),
+        // A shape layer whose shape moves is measured where the picture has
+        // it, from the same art its points are drawn from.
+        bounds: live != null
+            ? textLayerBounds(live)
+            : (entry.info.shapeContents.items.any(shapeMoves)
+                    ? shapeContentsBounds(art, t: playheadSeconds)
+                    : null) ??
+                uiState.layerBounds.boundsOf(entry,
+                    compSize: compSize, revision: revision, t: playheadSeconds),
         // A keyed position has no one value for a body drag to add to; its
         // keys are dragged on the motion path instead. Keyed scale or
         // rotation likewise grows no handles. A 3D layer keys at the playhead

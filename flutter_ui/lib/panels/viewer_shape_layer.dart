@@ -13,7 +13,9 @@
 // itself rather than a hole in someone else's picture. It is the same
 // gesture and the same geometry; the only difference is which thing the path
 // ends up belonging to, and therefore which coordinates it is built in: the
-// layer's when there is one, the composition's when there is not.
+// layer's when there is one, the composition's when there is not. With a
+// shape layer selected the drag adds a shape to it, as After Effects does,
+// and Alt draws a mask on it instead.
 //
 // The geometry is in viewer_shapes.dart and is pure; this is the gesture and
 // the drawing.
@@ -24,6 +26,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
@@ -200,6 +203,15 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
+  /// Whether what is drawn is art rather than a mask: with nothing selected,
+  /// or on a shape layer unless Alt is held.
+  bool get _drawsArt {
+    final box = _target;
+    return box == null ||
+        (box.shapeContents.isNotEmpty &&
+            !HardwareKeyboard.instance.isAltPressed);
+  }
+
   /// The space the art being drawn lives in, and how to get it back on screen.
   ///
   /// The preview used to be drawn only when a layer was selected, because it
@@ -218,7 +230,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     final t = ThemeScope.of(context).theme;
-    final target = _target;
+    final art = _drawsArt;
     final space = _space;
     return Positioned.fill(
       // The hardware crosshair leads: the OS precise pointer moves at
@@ -252,13 +264,12 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                     // colour of its own — it cuts — so a drag on a selected
                     // layer previews in the accent instead of promising a fill
                     // that will never appear.
-                    fill: target == null
+                    fill: art
                         ? colourOf(widget.uiState.tools.fill)
                         : widget.accent,
-                    stroke: target == null
-                        ? colourOf(widget.uiState.tools.stroke)
-                        : null,
-                    strokeWidth: target == null
+                    stroke:
+                        art ? colourOf(widget.uiState.tools.stroke) : null,
+                    strokeWidth: art
                         ? widget.uiState.tools.strokeWidth * space.screenScale
                         : 0,
                     from: _from,
@@ -339,17 +350,26 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     // a mask on the layer, or a new shape layer at the top of the
     // composition.
     final space = _space;
+    final square = HardwareKeyboard.instance.isShiftPressed;
     final path = shapePath(
       tool: widget.tool,
       from: space.ofScreen(from),
       to: space.ofScreen(to),
-      square: HardwareKeyboard.instance.isShiftPressed,
+      square: square,
+    );
+    // The numbers the same shape is made from, so a shape layer's art keeps
+    // its size and corners as rows that key.
+    final primitive = shapePrimitive(
+      tool: widget.tool,
+      from: space.ofScreen(from),
+      to: space.ofScreen(to),
+      square: square,
     );
     final box = _target;
     if (box == null) {
-      _commitShapeLayer(path);
+      _commitShapeLayer(path, primitive);
     } else {
-      _commit(box, path);
+      _commit(box, path, primitive);
     }
   }
 
@@ -409,46 +429,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 
   /// A new shape layer holding this art, at the top of the composition — what a
   /// shape tool or the Pen does with nothing selected.
-  ///
-  /// The art takes the toolbar's fill, and its stroke when one has a width: the
-  /// two swatches that had nothing to paint until there were shape layers.
-  void _commitShapeLayer(List<BridgeVertex> path) {
+  void _commitShapeLayer(List<BridgeVertex> path,
+      [BridgeShapePrimitive? primitive]) {
     if (path.length < 2) return;
-    final tools = widget.uiState.tools;
-    final name = shapeMaskName(widget.tool);
     try {
       final layer = widget.comp.addShapeLayer(
-        name: name,
-        contents: [
-          BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
-            name: name,
-            vertices: path,
-            // Always closed: a shape tool draws a closed figure, and the Pen
-            // commits only when its path has come back to its first point.
-            closed: true,
-            fill: stillColour(tools.fillRgba),
-            stroke:
-                tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
-            strokeWidth: BridgeScalar.static_(tools.strokeWidth),
-            opacity: const BridgeScalar.static_(100),
-            // Solid, until somebody dashes it.
-            dashes: const [],
-            dashOffset: const BridgeScalar.static_(0),
-            // A flat fill, until somebody ramps it.
-            gradient: 0,
-            gradientColour: null,
-            gradientStartX: const BridgeScalar.static_(0),
-            gradientStartY: const BridgeScalar.static_(0),
-            gradientEndX: const BridgeScalar.static_(0),
-            gradientEndY: const BridgeScalar.static_(0),
-            gradientStartOpacity: const BridgeScalar.static_(100),
-            gradientEndOpacity: const BridgeScalar.static_(100),
-            gradientStops: const [],
-            combine: 0,
-            pathKeys: const [],
-          ),
-        ],
+        name: shapeMaskName(widget.tool),
+        contents: [_item(path, primitive)],
       );
       widget.uiState.setSelection([layer]);
       widget.onChanged();
@@ -457,8 +444,49 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
   }
 
-  void _commit(LayerBox box, List<BridgeVertex> path) {
+  /// A piece of art holding [path], or the shape [primitive] makes, painted
+  /// with the toolbar's fill and its stroke when that has a width: the two
+  /// swatches that had nothing to paint until there were shape layers.
+  BridgeShapeItem _item(List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive) {
+    final tools = widget.uiState.tools;
+    return BridgeShapeItem(
+      id: UuidValue.fromString(const Uuid().v4()),
+      name: shapeMaskName(widget.tool),
+      vertices: path,
+      // Always closed: a shape tool draws a closed figure, and the Pen
+      // commits only when its path has come back to its first point.
+      closed: true,
+      fill: stillColour(tools.fillRgba),
+      stroke: tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
+      strokeWidth: BridgeScalar.static_(tools.strokeWidth),
+      opacity: const BridgeScalar.static_(100),
+      // Solid, until somebody dashes it.
+      dashes: const [],
+      dashOffset: const BridgeScalar.static_(0),
+      // A flat fill, until somebody ramps it.
+      gradient: 0,
+      gradientColour: null,
+      gradientStartX: const BridgeScalar.static_(0),
+      gradientStartY: const BridgeScalar.static_(0),
+      gradientEndX: const BridgeScalar.static_(0),
+      gradientEndY: const BridgeScalar.static_(0),
+      gradientStartOpacity: const BridgeScalar.static_(100),
+      gradientEndOpacity: const BridgeScalar.static_(100),
+      gradientStops: const [],
+      combine: 0,
+      pathKeys: const [],
+      primitive: primitive,
+    );
+  }
+
+  void _commit(LayerBox box, List<BridgeVertex> path,
+      [BridgeShapePrimitive? primitive]) {
     if (path.length < 2) return;
+    if (_drawsArt) {
+      _addArt(box, path, primitive);
+      return;
+    }
     try {
       box.layer.addMask(
         mask: shapeMask(
@@ -470,6 +498,49 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     } catch (_) {
       // The layer went away, or the engine refused the path. Nothing on
       // screen: the same calm refusal every other tool gives.
+    }
+  }
+
+  /// A new piece of art on top of the shape layer [box]. The path was drawn
+  /// in the layer's pixels, and the art's own coordinates sit a bounding box
+  /// away from those.
+  void _addArt(LayerBox box, List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive) {
+    final o = box.artOrigin;
+    BridgeScalar moved(BridgeScalar s, double by) =>
+        BridgeScalar.static_((s as BridgeScalar_Static).field0 + by);
+    try {
+      box.layer.addShapeItem(
+        item: _item([
+          for (final v in path)
+            BridgeVertex(
+                x: v.x + o.dx,
+                y: v.y + o.dy,
+                tanInX: v.tanInX,
+                tanInY: v.tanInY,
+                tanOutX: v.tanOutX,
+                tanOutY: v.tanOutY),
+        ], switch (primitive) {
+          null => null,
+          final p => BridgeShapePrimitive(
+              kind: p.kind,
+              positionX: moved(p.positionX, o.dx),
+              positionY: moved(p.positionY, o.dy),
+              width: p.width,
+              height: p.height,
+              roundness: p.roundness,
+              points: p.points,
+              rotation: p.rotation,
+              outerRadius: p.outerRadius,
+              innerRadius: p.innerRadius,
+              outerRoundness: p.outerRoundness,
+              innerRoundness: p.innerRoundness,
+            ),
+        }),
+      );
+      widget.onChanged();
+    } catch (_) {
+      // The layer went away between the press and the release.
     }
   }
 }
