@@ -63,7 +63,7 @@ class KeyGlyphPainter extends CustomPainter {
       old.key_.interpOut != key_.interpOut;
 }
 
-/// A tangent endpoint's dot: the drawing's **hollow ring** — a `text_primary`
+/// A tangent endpoint's dot: the drawing's **hollow ring** — an accent
 /// stroke round a hole punched in the pane's own ground, so the curve running
 /// under it does not read as running through it.
 class HandleDotPainter extends CustomPainter {
@@ -128,7 +128,7 @@ class HandleRingState extends State<HandleRing> {
             height: 8,
             child: CustomPaint(
               painter: HandleDotPainter(
-                colour: t.textPrimary,
+                colour: t.accent,
                 fill: t.surface0,
                 hovered: _hovered,
               ),
