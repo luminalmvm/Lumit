@@ -9978,6 +9978,10 @@
   "@panelStagger": {
     "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
   },
+  "panelNotes": "Notes",
+  "@panelNotes": {
+    "description": "Name of the panel holding one free text area for the project, saved inside the project file. Shown on its tab and in the Window menu."
+  },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
     "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."
@@ -15447,6 +15451,10 @@
   "histEditSwatches": "Edit swatches",
   "@histEditSwatches": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditNotes": "Edit notes",
+  "@histEditNotes": {
+    "description": "A row of the Edit > History window: the name of one edit that was made, here a change to the text of the Notes panel. Sent by the engine as English and looked up here."
   },
   "histSetColourManagement": "Set colour management",
   "@histSetColourManagement": {

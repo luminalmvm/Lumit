@@ -773,6 +773,10 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
+    /// Replace the project's notes whole. It changes no pixel.
+    SetNotes {
+        notes: String,
+    },
     /// Point this project at an OCIO config, or clear it
     /// (docs/impl/ocio.md §3.1).
     ///
@@ -969,6 +973,7 @@ impl Op {
             Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
+            Op::SetNotes { .. } => "Edit notes",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
             }
@@ -2548,6 +2553,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
         Op::SetProjectSwatches { swatches } => {
             let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
             Ok(Op::SetProjectSwatches { swatches: previous })
+        }
+        Op::SetNotes { notes } => {
+            let previous = std::mem::replace(&mut doc.notes, notes.clone());
+            Ok(Op::SetNotes { notes: previous })
         }
         Op::SetColourConfig { config } => {
             let previous = std::mem::replace(&mut doc.colour.config, config.as_deref().cloned());

@@ -1631,6 +1631,7 @@ Map<String, String> get _built => {
       "Set colour depth": l10n.histSetColourDepth,
       "Set node graph overscan": l10n.histSetGraphRoom,
       "Edit swatches": l10n.histEditSwatches,
+      "Edit notes": l10n.histEditNotes,
       "Set colour management": l10n.histSetColourManagement,
       "Set footage colour space": l10n.histSetFootageColourSpace,
       "Interpret footage": l10n.interpretFootage,
