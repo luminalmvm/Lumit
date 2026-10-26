@@ -1222,12 +1222,19 @@ class _StackGroup extends StatelessWidget {
                     (open.isEmpty ? 0 : open.length - 1) * hit)
                 .clamp(0.0, double.infinity);
             final children = <Widget>[];
-            for (final pane in panes) {
+            for (final (i, pane) in panes.indexed) {
               final isOpen = tabs.isOpen(pane);
+              // A line over the header when an open panel ends right above it
+              // with no seam of its own, as a shut header's line does below.
+              final above = i == 0 ? null : panes[i - 1];
+              final lineAbove = above != null &&
+                  tabs.isOpen(above) &&
+                  open.indexOf(above) == open.length - 1;
               children.add(_StackHeader(
                 key: ValueKey<(String, PaneId)>(('stack-header', pane)),
                 pane: pane,
                 open: isOpen,
+                lineAbove: lineAbove,
                 drag: drag,
                 onToggle: () {
                   tabs.setOpen(pane, !isOpen);
@@ -1302,6 +1309,7 @@ class _StackGroup extends StatelessWidget {
 class _StackHeader extends StatefulWidget {
   final PaneId pane;
   final bool open;
+  final bool lineAbove;
   final _DragController drag;
   final VoidCallback onToggle;
   final void Function(BuildContext context, Offset position) onMenu;
@@ -1310,6 +1318,7 @@ class _StackHeader extends StatefulWidget {
     super.key,
     required this.pane,
     required this.open,
+    required this.lineAbove,
     required this.drag,
     required this.onToggle,
     required this.onMenu,
@@ -1332,7 +1341,12 @@ class _StackHeaderState extends State<_StackHeader> {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: t.tokens.roomed ? t.surface1 : t.surface2,
-        border: Border(bottom: BorderSide(color: t.hairline)),
+        border: Border(
+          top: widget.lineAbove
+              ? BorderSide(color: t.hairline)
+              : BorderSide.none,
+          bottom: BorderSide(color: t.hairline),
+        ),
       ),
       child: Row(
         children: [
