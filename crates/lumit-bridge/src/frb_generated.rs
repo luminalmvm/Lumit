@@ -13172,15 +13172,16 @@ fn wire__crate__api__layer__layer_reference_create_points_from_text_impl(
     )
 }
 fn wire__crate__api__layer__layer_reference_create_shapes_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "layer_reference_create_shapes",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -13196,12 +13197,14 @@ fn wire__crate__api__layer__layer_reference_create_shapes_impl(
             let api_frame = <i64>::sse_decode(&mut deserializer);
             let api_apart = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, BridgeError>((move || {
-                let output_ok = crate::api::layer::LayerReference::create_shapes(
-                    &api_that, api_frame, api_apart,
-                )?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, BridgeError>((move || {
+                    let output_ok = crate::api::layer::LayerReference::create_shapes(
+                        &api_that, api_frame, api_apart,
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -33371,6 +33374,12 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        366 => wire__crate__api__layer__layer_reference_create_shapes_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         375 => wire__crate__api__layer__layer_reference_detach_audio_impl(
             port,
             ptr,
@@ -33795,7 +33804,6 @@ fn pde_ffi_dispatcher_sync_impl(
 363 => wire__crate__api__layer__layer_reference_copy_mask_path_keys_impl(ptr, rust_vec_len, data_len),
 364 => wire__crate__api__layer__layer_reference_copy_sequence_shape_impl(ptr, rust_vec_len, data_len),
 365 => wire__crate__api__layer__layer_reference_create_points_from_text_impl(ptr, rust_vec_len, data_len),
-366 => wire__crate__api__layer__layer_reference_create_shapes_impl(ptr, rust_vec_len, data_len),
 367 => wire__crate__api__layer__layer_reference_cut_clip_at_impl(ptr, rust_vec_len, data_len),
 368 => wire__crate__api__layer__layer_reference_delete_impl(ptr, rust_vec_len, data_len),
 369 => wire__crate__api__layer__layer_reference_delete_clip_impl(ptr, rust_vec_len, data_len),

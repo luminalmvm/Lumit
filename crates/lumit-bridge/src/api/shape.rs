@@ -545,7 +545,8 @@ impl LayerReference {
     /// off as After Effects does. A Type layer gives its letters at `frame`,
     /// a layer of an Illustrator file its paths, and a shape layer its own
     /// groups. One undo step. Hands back the topmost new layer.
-    #[frb(sync)]
+    ///
+    /// Not sync: a large Illustrator file can take seconds to read.
     pub fn create_shapes(&self, frame: i64, apart: bool) -> Result<LayerReference, BridgeError> {
         use lumit_core::model::LayerKind;
         let comp = self.composition()?;

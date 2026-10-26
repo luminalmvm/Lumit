@@ -1489,7 +1489,7 @@ abstract class BridgeLibApi extends BaseApi {
   LayerReference crateApiLayerLayerReferenceCreatePointsFromText(
       {required LayerReference that});
 
-  LayerReference crateApiLayerLayerReferenceCreateShapes(
+  Future<LayerReference> crateApiLayerLayerReferenceCreateShapes(
       {required LayerReference that,
       required PlatformInt64 frame,
       required bool apart});
@@ -13056,17 +13056,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  LayerReference crateApiLayerLayerReferenceCreateShapes(
+  Future<LayerReference> crateApiLayerLayerReferenceCreateShapes(
       {required LayerReference that,
       required PlatformInt64 frame,
       required bool apart}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_i_64(frame, serializer);
         sse_encode_bool(apart, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 366)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 366, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_layer_reference,

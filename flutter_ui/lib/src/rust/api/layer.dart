@@ -3108,7 +3108,9 @@ class LayerReference {
   /// off as After Effects does. A Type layer gives its letters at `frame`,
   /// a layer of an Illustrator file its paths, and a shape layer its own
   /// groups. One undo step. Hands back the topmost new layer.
-  LayerReference createShapes(
+  ///
+  /// Not sync: a large Illustrator file can take seconds to read.
+  Future<LayerReference> createShapes(
           {required PlatformInt64 frame, required bool apart}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapes(
           that: this, frame: frame, apart: apart);

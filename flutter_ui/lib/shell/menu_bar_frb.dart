@@ -1953,9 +1953,9 @@ bool _vector(LayerReference? layer) {
 /// layers, which the engine tells apart by the layer's kind.
 void Function(LayerReference) _createShapes(LumitState app, LumitUiState ui,
         {bool apart = false}) =>
-    (layer) {
+    (layer) async {
       try {
-        layer.createShapes(frame: ui.playheadFrame.value, apart: apart);
+        await layer.createShapes(frame: ui.playheadFrame.value, apart: apart);
         app.notifyDocumentChanged();
       } catch (_) {
         // A line with no ink, or a file that has gone, has no art to make.

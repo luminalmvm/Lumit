@@ -1621,7 +1621,7 @@ class _OutlineRowState extends State<OutlineRow> {
           if (target.info.switches.locked) continue;
           if (!kinds.contains(target.info.kind)) continue;
           try {
-            target.layer.createShapes(
+            await target.layer.createShapes(
                 frame: frame, apart: picked == 'split-shapes');
           } catch (_) {}
         }
