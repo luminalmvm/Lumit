@@ -14,6 +14,9 @@ UuidValue shapeEntryId(BridgeShapeEntry entry) => switch (entry.kind) {
       BridgeShapeEntryKind_Group(:final field0) => field0.id,
     };
 
+/// Whether [item]'s shape moves: whether its path is keyed.
+bool shapeMoves(BridgeShapeItem item) => item.pathKeys.isNotEmpty;
+
 /// [entry] at another depth.
 BridgeShapeEntry shapeEntryAt(BridgeShapeEntry entry, int depth) =>
     BridgeShapeEntry(depth: depth, kind: entry.kind);
