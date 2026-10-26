@@ -335,8 +335,23 @@ BridgeColour stillColour(BridgeColourRgba c) => BridgeColour(
     );
 
 /// What the Add menu on a shape row offers: a modifier entry below the row,
-/// the item's own stroke taper, or a group round the row.
-enum ShapeAdd { repeater, trim, offset, twist, deform, smooth, taper, group }
+/// the item's own fill, outline or stroke taper, or a group round the row.
+enum ShapeAdd {
+  repeater,
+  trim,
+  offset,
+  twist,
+  deform,
+  smooth,
+  fill,
+  stroke,
+  taper,
+  group
+}
+
+/// Which adds belong to an item itself rather than making an entry.
+bool isItemAdd(ShapeAdd add) =>
+    add == ShapeAdd.fill || add == ShapeAdd.stroke || add == ShapeAdd.taper;
 
 /// What [add] is called in the menu, and what a new entry of it is named.
 String shapeAddLabel(ShapeAdd add) => switch (add) {
@@ -346,6 +361,8 @@ String shapeAddLabel(ShapeAdd add) => switch (add) {
       ShapeAdd.twist => l10n.shapeTwist,
       ShapeAdd.deform => l10n.shapeDeform,
       ShapeAdd.smooth => l10n.shapeSmooth,
+      ShapeAdd.fill => l10n.shapeFill,
+      ShapeAdd.stroke => l10n.shapeStroke,
       ShapeAdd.taper => l10n.shapeTaper,
       ShapeAdd.group => l10n.shapeGroup,
     };
@@ -1487,6 +1504,8 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeTaper? taper,
   int? taperScope,
   bool removeTaper = false,
+  bool removeFill = false,
+  bool removeStroke = false,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -1496,18 +1515,22 @@ BridgeShapeItem shapeItemWith(
     name: name ?? item.name,
     vertices: vertices ?? item.vertices,
     closed: item.closed,
-    fill: fill ??
-        switch (item.fill) {
-          final c? when value == ShapeValue.fillColour =>
-            colourWithChannel(c, stop, to!),
-          final c => c,
-        },
-    stroke: stroke ??
-        switch (item.stroke) {
-          final c? when value == ShapeValue.strokeColour =>
-            colourWithChannel(c, stop, to!),
-          final c => c,
-        },
+    fill: removeFill
+        ? null
+        : fill ??
+            switch (item.fill) {
+              final c? when value == ShapeValue.fillColour =>
+                colourWithChannel(c, stop, to!),
+              final c => c,
+            },
+    stroke: removeStroke
+        ? null
+        : stroke ??
+            switch (item.stroke) {
+              final c? when value == ShapeValue.strokeColour =>
+                colourWithChannel(c, stop, to!),
+              final c => c,
+            },
     strokeWidth: at(ShapeValue.strokeWidth, item.strokeWidth),
     opacity: at(ShapeValue.opacity, item.opacity),
     gradient: gradient ?? item.gradient,

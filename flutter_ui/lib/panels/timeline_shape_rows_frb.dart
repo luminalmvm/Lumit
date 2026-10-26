@@ -80,22 +80,44 @@ class ShapeItemRow extends StatelessWidget {
   /// off where that list is empty, then the moves. A taper narrows an
   /// outline, so an item with none is not offered one, and an item combined
   /// into the one above lends its path and nothing else, so it is not either.
+  /// A fill or an outline is offered where the item has none, and taken away
+  /// where it has one.
   List<Widget> _opRows(VoidCallback close) {
-    final tapers = item.stroke != null && item.combine == 0;
+    final paints = item.combine == 0;
+    final tapers = item.stroke != null && paints;
+    bool has(ShapeAdd add) => switch (add) {
+          ShapeAdd.fill => item.fill != null,
+          ShapeAdd.stroke => item.stroke != null,
+          _ => item.taper != null,
+        };
+    bool offered(ShapeAdd add) =>
+        add == ShapeAdd.taper ? tapers : (paints || !isItemAdd(add));
     final adds = [
       for (final add in ShapeAdd.values)
-        if (add != ShapeAdd.taper || (tapers && item.taper == null)) add,
+        if (!isItemAdd(add) || (offered(add) && !has(add))) add,
+    ];
+    final removes = [
+      for (final add in ShapeAdd.values)
+        if (isItemAdd(add) && offered(add) && has(add)) add,
     ];
     return [
       shapeAddSubmenu(close, item.id, adds,
           (add) => _writeEntries((e) => addedToShape(e, item.id, add, item))),
-      if (tapers && item.taper != null)
-        shapeAddSubmenu(close, item.id, const [ShapeAdd.taper],
-            (_) => _write(change: (i) => shapeItemWith(i, removeTaper: true)),
+      if (removes.isNotEmpty)
+        shapeAddSubmenu(
+            close,
+            item.id,
+            removes,
+            (add) => _write(
+                change: (i) => shapeItemWith(i,
+                    removeTaper: add == ShapeAdd.taper,
+                    removeFill: add == ShapeAdd.fill,
+                    removeStroke: add == ShapeAdd.stroke)),
             remove: true),
       ...shapeMoveRows(close, item.id, _writeEntries),
     ];
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -201,6 +223,32 @@ List<BridgeShapeEntry> addedToShape(
     List<BridgeShapeEntry> entries, UuidValue at, ShapeAdd add,
     [BridgeShapeItem? item]) {
   switch (add) {
+    case ShapeAdd.fill:
+      return entries.withItem(
+          at,
+          (i) => shapeItemWith(i,
+              fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1),
+              )));
+    case ShapeAdd.stroke:
+      return entries.withItem(
+          at,
+          (i) => shapeItemWith(i,
+              stroke: const BridgeColour(
+                r: BridgeScalar.static_(0),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1),
+              ),
+              value: ShapeValue.strokeWidth,
+              to: switch (i.strokeWidth) {
+                BridgeScalar_Static(:final field0) when field0 <= 0 =>
+                  const BridgeScalar.static_(2),
+                final width => width,
+              }));
     case ShapeAdd.taper:
       return entries.withItem(
           at,
@@ -305,7 +353,7 @@ class ShapeModifierRow extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final adds = [
       for (final add in ShapeAdd.values)
-        if (add != ShapeAdd.taper && add != ShapeAdd.group) add,
+        if (!isItemAdd(add) && add != ShapeAdd.group) add,
     ];
     return ItemOpacityRow(
       icon: LumitIcon.fx,
@@ -417,7 +465,7 @@ class ShapeGroupRow extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final adds = [
       for (final add in ShapeAdd.values)
-        if (add != ShapeAdd.taper) add,
+        if (!isItemAdd(add)) add,
     ];
     return ItemOpacityRow(
       icon: LumitIcon.folder,
