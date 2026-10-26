@@ -7598,7 +7598,7 @@ impl LayerReference {
 
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             let mut graph = self.item()?.graph;
             graph.nodes.push(instance);
@@ -7949,7 +7949,7 @@ impl LayerReference {
     pub fn add_clip_effect(&self, clip: Uuid, name: String) -> Result<(), BridgeError> {
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             return Err(BridgeError::UnknownEffectName);
         }

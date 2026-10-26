@@ -25,9 +25,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::fx::{
-    params::Unit, schema::FxCategory, schema::ParamKind, schema::Port, schema::PortType,
-};
+use crate::fx::{params::Unit, schema::ParamKind, schema::Port, schema::PortType};
 use crate::graph::{GraphError, INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, ProjectItem};
 
@@ -268,11 +266,13 @@ pub struct Projection {
 /// Whether this catalogue entry makes a value rather than a picture.
 ///
 /// The declared category, which is how the bridge already tells one apart: a
-/// driver declares [`FxCategory::Drivers`] and a data signature together.
+/// driver declares a driver category
+/// ([`crate::fx::schema::FxCategory::is_driver`]) and a data
+/// signature together.
 #[must_use]
 fn is_driver(inst: &EffectInstance) -> bool {
     crate::fx::builtins::def(&inst.effect.match_name)
-        .is_some_and(|def| def.schema().category == FxCategory::Drivers)
+        .is_some_and(|def| def.schema().category.is_driver())
 }
 
 /// Whether this catalogue entry is offered in a node graph's console (§5.1).
@@ -405,7 +405,7 @@ fn fx_ports(
     };
     let schema = def.schema();
     let signature = def.signature();
-    let driver = schema.category == FxCategory::Drivers;
+    let driver = schema.category.is_driver();
 
     let mut ins = Vec::new();
     if !driver {

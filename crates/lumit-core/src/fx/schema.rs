@@ -731,6 +731,12 @@ pub enum FxCategory {
     /// every frame, and a menu that mixed the two would be a menu that could
     /// not say which.
     Drivers,
+    /// **SICELIOT's drivers**: Stagger, Random, Oscillator and Noise, values in
+    /// the manner of Cavalry's behaviours (docs/siceliot/). A driver in every
+    /// respect [`FxCategory::Drivers`] is, asked through
+    /// [`FxCategory::is_driver`], but browsed under the SICELIOT heading with
+    /// the rest of SICELIOT.
+    SiceliotDrivers,
 }
 
 impl FxCategory {
@@ -750,7 +756,15 @@ impl FxCategory {
             FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
+            FxCategory::SiceliotDrivers => "SICELIOT",
         }
+    }
+
+    /// Whether entries here are **drivers**: they make a value rather than a
+    /// picture, land on the layer's graph rather than its stack, and are wired
+    /// into parameters. The one question every "is this a driver?" asks.
+    pub const fn is_driver(self) -> bool {
+        matches!(self, FxCategory::Drivers | FxCategory::SiceliotDrivers)
     }
 
     /// The family this entry is **browsed** under — every category but
@@ -766,12 +780,13 @@ impl FxCategory {
     pub const fn grouping(self) -> FxCategory {
         match self {
             FxCategory::Drivers => FxCategory::Controls,
+            FxCategory::SiceliotDrivers => FxCategory::Siceliot,
             other => other,
         }
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 13] = [
+    pub const ALL: [FxCategory; 14] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -797,6 +812,8 @@ impl FxCategory {
         // rather than from the Add-effect menu, so it sits after the family it
         // is kin to.
         FxCategory::Drivers,
+        // SICELIOT's drivers after Lumit's own; browsed under SICELIOT.
+        FxCategory::SiceliotDrivers,
     ];
 }
 

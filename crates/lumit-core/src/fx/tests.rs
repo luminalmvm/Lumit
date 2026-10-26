@@ -7408,11 +7408,9 @@ fn every_effect_carries_a_matte_row() {
         // them rather than drawing one.
         if matches!(
             s.category,
-            FxCategory::Controls
-                | FxCategory::Drivers
-                | FxCategory::Audio
-                | FxCategory::Compositing
-        ) || matches!(s.match_name, "camera_track" | "planar_track")
+            FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
+        ) || s.category.is_driver()
+            || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
                 s.matte,

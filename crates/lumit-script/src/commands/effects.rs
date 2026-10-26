@@ -137,7 +137,7 @@ fn made(comp: &Composition, name: &str) -> Result<(EffectInstance, Option<String
     let made = found
         .ok_or_else(|| ScriptError::NotFound(format!("Lumit has no effect called {name}.")))?;
     let joins = fx::builtins::schema(&made.effect.match_name)
-        .is_some_and(|s| matches!(s.category, FxCategory::Compositing | FxCategory::Drivers));
+        .is_some_and(|s| s.category == FxCategory::Compositing || s.category.is_driver());
     if joins || made.effect.match_name == lumit_core::comp_graph::NODE_GRAPH {
         return Err(bad(format!("{name} goes in a node graph, not on a layer.")));
     }

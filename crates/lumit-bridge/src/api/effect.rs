@@ -119,7 +119,7 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
 #[frb(sync)]
 pub fn list_graph_nodes() -> Vec<BridgeEffectInfo> {
     use lumit_core::fx::schema::FxCategory;
-    catalogue(|category| matches!(category, FxCategory::Drivers | FxCategory::Compositing))
+    catalogue(|category| category.is_driver() || category == FxCategory::Compositing)
         .into_iter()
         .filter(|entry| lumit_core::comp_graph::offered_in_graph(&entry.name))
         .collect()
@@ -183,7 +183,7 @@ pub struct BridgeStyleInfo {
 /// reads as one more Controls entry wherever it is listed.
 #[frb(sync)]
 pub fn list_drivers() -> Vec<BridgeEffectInfo> {
-    catalogue(|category| category == lumit_core::fx::schema::FxCategory::Drivers)
+    catalogue(lumit_core::fx::schema::FxCategory::is_driver)
 }
 
 /// An entry Lumit itself declares.

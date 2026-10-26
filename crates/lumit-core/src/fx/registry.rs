@@ -188,7 +188,7 @@ pub struct DriverCx<'a> {
     pub points_input: &'a dyn Fn(&str) -> Option<std::rc::Rc<super::points::PointsStream>>,
     /// Which copy of how many the layer is being rendered as, when Clone to
     /// points renders it once per stamp. The first copy of one everywhere
-    /// else. Only the Clone index driver reads it.
+    /// else. Clone index and SICELIOT's drivers read it.
     pub clone: (u32, u32),
 }
 

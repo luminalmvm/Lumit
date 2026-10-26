@@ -65,6 +65,7 @@ pub mod math;
 pub mod measure;
 pub mod points_sample;
 pub mod remap;
+pub mod siceliot;
 pub mod smooth;
 pub mod split;
 pub mod wiggle;

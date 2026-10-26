@@ -58,7 +58,13 @@ pub fn present(graph: &LayerGraph) -> bool {
     graph
         .nodes
         .iter()
-        .any(|n| n.enabled && n.effect.match_name == MATCH_NAME)
+        .any(|n| n.enabled && reads_copy(&n.effect.match_name))
+}
+
+/// Whether a driver reads which copy it is in: Clone index, and SICELIOT's
+/// drivers, which give each copy its own value.
+fn reads_copy(match_name: &str) -> bool {
+    match_name == MATCH_NAME || super::siceliot::MATCH_NAMES.contains(&match_name)
 }
 
 /// Whether a Clone index that is switched on is anywhere a render of `layer`
@@ -109,7 +115,7 @@ fn in_comp(doc: &Document, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
         graph.nodes.iter().any(|node| match node {
             GraphNode::Fx(inst) => {
                 inst.enabled
-                    && (inst.effect.match_name == MATCH_NAME
+                    && (reads_copy(&inst.effect.match_name)
                         || applied(doc, std::slice::from_ref(inst), seen))
             }
             GraphNode::Read { item, .. } => in_comp(doc, *item, seen),

@@ -31,6 +31,10 @@ use super::drivers::{
     measure::{Measure, MeasureDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
+    siceliot::{
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
+        ValueNoiseDef,
+    },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
     wiggle::{Wiggle, WiggleDef},
@@ -483,4 +487,10 @@ crate::catalogue![
     // The music as events rather than a level: markers, beats found in the
     // sound, or a band rising past a threshold.
     BeatTriggerDef => BeatTrigger,
+    // SICELIOT's drivers (docs/siceliot/): Cavalry's value behaviours, each
+    // reading the copy Clone to points stamps, as Clone index does.
+    StaggerDef => Stagger,
+    RandomDef => Random,
+    OscillatorDef => Oscillator,
+    ValueNoiseDef => ValueNoise,
 ];

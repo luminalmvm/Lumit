@@ -52,6 +52,10 @@
     {
       "slug": "drivers",
       "label": "Drivers"
+    },
+    {
+      "slug": "siceliot",
+      "label": "SICELIOT"
     }
   ],
   "effects": [
@@ -27341,6 +27345,264 @@
           "value": 2
         }
       ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "stagger",
+      "match_name": "siceliot_stagger",
+      "label": "Stagger",
+      "version": 1,
+      "category": "SICELIOT",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "curve",
+          "label": "Curve",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "looped",
+          "label": "Loop",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "reverse",
+          "label": "Reverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "random",
+      "match_name": "siceliot_random",
+      "label": "Random",
+      "version": 1,
+      "category": "SICELIOT",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "bias",
+          "label": "Bias",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "oscillator",
+      "match_name": "siceliot_oscillator",
+      "label": "Oscillator",
+      "version": 1,
+      "category": "SICELIOT",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sine",
+            "Triangle",
+            "Square",
+            "Sawtooth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "phase",
+          "label": "Phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "phase_per_copy",
+          "label": "Phase per copy",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "value-noise",
+      "match_name": "siceliot_noise",
+      "label": "Value noise",
+      "version": 1,
+      "category": "SICELIOT",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "detail",
+          "label": "Detail",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 4.0,
+          "hard_min": 1.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "per_copy",
+          "label": "Per copy",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
       "matte_role": "none"
     }
   ]

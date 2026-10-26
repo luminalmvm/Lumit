@@ -3529,7 +3529,7 @@ impl CompositionReference {
             .ok_or(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup))?;
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             return Err(BridgeError::UnknownEffectName);
         }

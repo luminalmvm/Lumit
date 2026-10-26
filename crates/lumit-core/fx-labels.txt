@@ -106,6 +106,7 @@ Bevel and emboss
 Bevel style
 Bezier warp
 BiRefNet
+Bias
 Black and white
 Blades
 Blend
@@ -620,6 +621,7 @@ Lines
 Load from file…
 Look
 Lookahead
+Loop
 Low
 Lower left x
 Lower left y
@@ -747,6 +749,7 @@ Orientation
 Origin
 Origin x
 Origin y
+Oscillator
 Out high
 Out low
 Outer bevel
@@ -777,11 +780,13 @@ Pattern
 Peak
 Per
 Per clone
+Per copy
 Per-axis wobble
 Perlin
 Persistence
 Phase
 Phase offset
+Phase per copy
 Phaser
 Photo filter
 Pick
@@ -1044,6 +1049,7 @@ Sprite layer
 Square
 Squeeze
 Stages
+Stagger
 Standard
 Star
 Star depth
@@ -1181,6 +1187,7 @@ Use source colour
 Utility
 V line rel width
 Value
+Value noise
 Variation
 Vary points
 Vector blur

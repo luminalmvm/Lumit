@@ -4728,6 +4728,34 @@
   "@fxSiceliot": {
     "description": "Add-effect menu category heading. A proper name: keep it as it is in every language."
   },
+  "fxStagger": "Stagger",
+  "@fxStagger": {
+    "description": "SICELIOT driver: a value that steps from Minimum to Maximum across the copies Clone to points stamps."
+  },
+  "fxOscillator": "Oscillator",
+  "@fxOscillator": {
+    "description": "SICELIOT driver: a value that swings in a wave over time."
+  },
+  "fxValueNoise": "Value noise",
+  "@fxValueNoise": {
+    "description": "SICELIOT driver: a value that wanders smoothly over time."
+  },
+  "fxBias": "Bias",
+  "@fxBias": {
+    "description": "Effect controls — a control on the SICELIOT Random driver: leans its values towards Minimum or Maximum."
+  },
+  "fxLoop": "Loop",
+  "@fxLoop": {
+    "description": "Effect controls — a checkbox on the SICELIOT Stagger driver: start again from the first copy past the last."
+  },
+  "fxPerCopy": "Per copy",
+  "@fxPerCopy": {
+    "description": "Effect controls — a checkbox on the SICELIOT Value noise driver: each copy wanders on its own path."
+  },
+  "fxPhasePerCopy": "Phase per copy",
+  "@fxPhasePerCopy": {
+    "description": "Effect controls — a control on the SICELIOT Oscillator driver: how much further along the wave each copy is."
+  },
   "fxSize": "Size",
   "@fxSize": {
     "description": "Effect controls — a control on Turbulent displace."
