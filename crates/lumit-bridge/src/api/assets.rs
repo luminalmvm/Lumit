@@ -494,11 +494,14 @@ impl LayerReference {
             .path
             .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
             .filter(|p| !p.is_empty());
-        let contents = lumit_text::shape_items(
+        let contents: Vec<lumit_core::shape::modifier::ShapeEntry> = lumit_text::shape_items(
             &lumit_text::TextBlock::of(document, &words),
             spine.as_ref(),
             document.path_offset.value_at(lt) as f32,
-        );
+        )
+        .into_iter()
+        .map(lumit_core::shape::modifier::ShapeEntry::Item)
+        .collect();
         if contents.is_empty() {
             return Err(BridgeError::NothingToConvert);
         }

@@ -2348,7 +2348,10 @@ mod tests {
         let item = ProjectItem::Composition(art.clone());
         let mut layer = read_layer(Uuid::now_v7(), &item, &art).expect("a layer");
         layer.kind = LayerKind::Shape {
-            contents: vec![square(100.0), square(300.0)],
+            contents: vec![
+                crate::shape::modifier::ShapeEntry::Item(square(100.0)),
+                crate::shape::modifier::ShapeEntry::Item(square(300.0)),
+            ],
         };
         layer.transform = crate::model::TransformGroup {
             position_x: crate::anim::Property::fixed(100.0),

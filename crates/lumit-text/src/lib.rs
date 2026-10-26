@@ -1307,8 +1307,13 @@ mit",
         // Draw the art into the raster's own box, so the two are comparable
         // pixel for pixel.
         let (w, h) = (raster.width, raster.height);
+        let entries: Vec<_> = items
+            .iter()
+            .cloned()
+            .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            .collect();
         let art = lumit_core::shape::rasterise_contents(
-            &items,
+            &entries,
             w,
             h,
             0.0,
@@ -1362,8 +1367,13 @@ mit",
         assert_eq!(items[1].combine, 4, "the counter cuts by even-odd");
 
         // And the middle of the drawn `o` really is empty.
+        let entries: Vec<_> = items
+            .iter()
+            .cloned()
+            .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            .collect();
         let art =
-            lumit_core::shape::rasterise_contents(&items, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
+            lumit_core::shape::rasterise_contents(&entries, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
         let centre = ((50 * 100 + 50) * 4 + 3) as usize;
         assert_eq!(art[centre], 0, "the counter filled in");
 

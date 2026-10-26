@@ -51,6 +51,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/widgets/dropper_overlay.dart';
 import 'package:uuid/uuid.dart';
@@ -1427,9 +1428,6 @@ void main() {
             stroke: null,
             strokeWidth: const BridgeScalar.static_(0),
             opacity: const BridgeScalar.static_(100),
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
             gradient: 0,
@@ -1443,17 +1441,6 @@ void main() {
             gradientStops: const [],
             combine: 0,
             pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -1461,7 +1448,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final before = shape.getShapeContents().single.vertices;
+      final before = shape.getShapeContents().items.single.vertices;
       final fitted = fittedRect(tester, p.comp);
       Offset onScreen(double x, double y) => Offset(
             fitted.left + x / 1920 * fitted.width,
@@ -1482,7 +1469,7 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(shape.getShapeContents().single.vertices.first.x, before.first.x,
+      expect(shape.getShapeContents().items.single.vertices.first.x, before.first.x,
           reason: 'a sweep only chooses; nothing has moved yet');
 
       final drag = await tester.startGesture(onScreen(400, 200));
@@ -1495,7 +1482,7 @@ void main() {
       await drag.up();
       await tester.pumpAndSettle();
 
-      final after = shape.getShapeContents().single.vertices;
+      final after = shape.getShapeContents().items.single.vertices;
       expect(after[0].x, greaterThan(before[0].x),
           reason: 'the swept top-left point moved');
       expect(after[1].x, greaterThan(before[1].x),
@@ -1764,9 +1751,9 @@ void main() {
           reason: 'and it is at the top of the stack');
       final contents = shape.getShapeContents();
       expect(contents, hasLength(1));
-      expect(contents.single.name, 'Rectangle');
-      expect(contents.single.vertices, hasLength(4));
-      expect(contents.single.fill, isNotNull,
+      expect(contents.items.single.name, 'Rectangle');
+      expect(contents.items.single.vertices, hasLength(4));
+      expect(contents.items.single.fill, isNotNull,
           reason: "it takes the toolbar's fill");
 
       // The art lands where it was drawn: the drag began at the middle of the

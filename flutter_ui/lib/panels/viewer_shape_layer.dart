@@ -432,10 +432,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                 tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
             strokeWidth: BridgeScalar.static_(tools.strokeWidth),
             opacity: const BridgeScalar.static_(100),
-            // Whole, until somebody trims it.
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
             // Solid, until somebody dashes it.
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
@@ -449,21 +445,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             gradientStartOpacity: const BridgeScalar.static_(100),
             gradientEndOpacity: const BridgeScalar.static_(100),
             gradientStops: const [],
-            // On the path itself, until somebody offsets it.
             combine: 0,
             pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            // Drawn once, until somebody repeats it.
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

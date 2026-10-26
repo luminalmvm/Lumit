@@ -16,6 +16,7 @@ import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo_3d.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/tools.dart' show GizmoAxes;
 import 'package:uuid/uuid.dart';
 
@@ -30,7 +31,7 @@ void main() {
     Offset origin = Offset.zero,
     double viewScale = 1,
     List<BridgeMask> masks = const [],
-    List<BridgeShapeItem> shapeContents = const [],
+    List<BridgeShapeEntry> shapeContents = const [],
     Offset artOrigin = Offset.zero,
     BridgeMotionPath? motionPath,
     ViewerDepth? depth,
@@ -142,9 +143,6 @@ void main() {
         stroke: null,
         strokeWidth: const BridgeScalar.static_(0),
         opacity: const BridgeScalar.static_(100),
-        trimStart: const BridgeScalar.static_(0),
-        trimEnd: const BridgeScalar.static_(100),
-        trimOffset: const BridgeScalar.static_(0),
         dashes: const [],
         dashOffset: const BridgeScalar.static_(0),
         gradient: 0,
@@ -158,18 +156,12 @@ void main() {
         gradientStops: const [],
         combine: 0,
         pathKeys: const [],
-        offsetAmount: const BridgeScalar.static_(0),
-        repeatCopies: const BridgeScalar.static_(1),
-        repeatOffset: const BridgeScalar.static_(0),
-        repeatAnchorX: const BridgeScalar.static_(0),
-        repeatAnchorY: const BridgeScalar.static_(0),
-        repeatPositionX: const BridgeScalar.static_(0),
-        repeatPositionY: const BridgeScalar.static_(0),
-        repeatRotation: const BridgeScalar.static_(0),
-        repeatScale: const BridgeScalar.static_(100),
-        repeatStartOpacity: const BridgeScalar.static_(100),
-        repeatEndOpacity: const BridgeScalar.static_(100),
+        taper: null,
       );
+
+  /// [item] as the one entry of a layer's contents.
+  List<BridgeShapeEntry> contentsOf(BridgeShapeItem item) =>
+      [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(item))];
 
   group('A motion path (docs/07 §2.4)', () {
     test('is drawn in comp pixels through the picture\'s placement alone', () {
@@ -334,7 +326,7 @@ void main() {
       // so its first point is the layer's origin and nowhere else.
       final b = box(
         size: const Size(60, 60),
-        shapeContents: [squareShape(left: 120, top: 80, side: 60)],
+        shapeContents: contentsOf(squareShape(left: 120, top: 80, side: 60)),
         artOrigin: const Offset(120, 80),
       );
       final points = pathPointsOf(b);

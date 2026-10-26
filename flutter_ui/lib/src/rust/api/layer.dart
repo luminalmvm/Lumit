@@ -18,12 +18,13 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
 import 'roto.dart';
+import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -828,10 +829,11 @@ class BridgeLayerInfo {
   /// Viewer needs to know a layer is puppeted without asking per frame.
   final BridgePuppet? puppet;
 
-  /// A shape layer's art, bottom first; empty on every other kind.
-  /// Carried for the same reason again — and for one more: the art *is* the
-  /// layer's size, so the Viewer's wireframe reads it here.
-  final List<BridgeShapeItem> shapeContents;
+  /// A shape layer's contents, bottom first and flat
+  /// (`crate::api::shape`); empty on every other kind. Carried for the
+  /// same reason again, and for one more: the art *is* the layer's size,
+  /// so the Viewer's wireframe reads it here.
+  final List<BridgeShapeEntry> shapeContents;
 
   /// The layer's own markers, and the comp frame each falls on — the
   /// marker's layer-local time carried out by the layer's start offset — so
@@ -1972,7 +1974,8 @@ class BridgeShapeDeform {
 }
 
 /// One piece of vector art on a shape layer: a path, and how it is
-/// painted.
+/// painted. What is done to the path is an entry after it in the contents
+/// (`crate::api::shape::BridgeShapeModifier`).
 ///
 /// The path is `BridgeVertex`, the same vertices a mask crosses with: one path
 /// type in the document, drawn by two things.
@@ -1992,15 +1995,6 @@ class BridgeShapeItem {
 
   /// 0..100.
   final BridgeScalar opacity;
-
-  /// **Trim paths**: where along the path's own length the art begins
-  /// and ends, as a per cent, and how far the pair is slid along it in
-  /// degrees. Animatable on the layer's own clock, exactly as a
-  /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
-  /// the same diamonds.
-  final BridgeScalar trimStart;
-  final BridgeScalar trimEnd;
-  final BridgeScalar trimOffset;
 
   /// **Dashes**: the outline's dash and gap lengths in layer pixels,
   /// alternating — dash, gap, dash, gap. Empty is a solid outline.
@@ -2045,40 +2039,6 @@ class BridgeShapeItem {
   /// shape is changing at, which is the one curve a path can honestly draw.
   final List<BridgeKeyframe> pathKeys;
 
-  /// **Offset paths**: how far the outline is pushed out of the path,
-  /// in layer pixels; negative pulls it in and zero is the path itself.
-  final BridgeScalar offsetAmount;
-
-  /// **The repeater**: how many copies of the item are drawn, which
-  /// copy the original is (`repeat_offset`), and the transform each copy is
-  /// one more step of — moved by `repeat_position_*` layer pixels, turned by
-  /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
-  /// about `repeat_anchor_*`. The copies fade evenly from
-  /// `repeat_start_opacity` to `repeat_end_opacity`.
-  ///
-  /// A still count of one is no repeater at all, which is what every shape is
-  /// until somebody asks for more.
-  final BridgeScalar repeatCopies;
-  final BridgeScalar repeatOffset;
-  final BridgeScalar repeatAnchorX;
-  final BridgeScalar repeatAnchorY;
-  final BridgeScalar repeatPositionX;
-  final BridgeScalar repeatPositionY;
-  final BridgeScalar repeatRotation;
-  final BridgeScalar repeatScale;
-  final BridgeScalar repeatStartOpacity;
-  final BridgeScalar repeatEndOpacity;
-
-  /// **Twist**, or `None` for none.
-  final BridgeShapeTwist? twist;
-
-  /// **Deform**, or `None` for none.
-  final BridgeShapeDeform? deform;
-
-  /// **Smooth**: how far along the path each point is averaged with its
-  /// neighbours, in pixels, or `None` for no smooth.
-  final BridgeScalar? smooth;
-
   /// **Stroke taper**, or `None` for the full width all the way.
   final BridgeShapeTaper? taper;
 
@@ -2091,9 +2051,6 @@ class BridgeShapeItem {
     this.stroke,
     required this.strokeWidth,
     required this.opacity,
-    required this.trimStart,
-    required this.trimEnd,
-    required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
     required this.gradient,
@@ -2107,20 +2064,6 @@ class BridgeShapeItem {
     required this.gradientStops,
     required this.combine,
     required this.pathKeys,
-    required this.offsetAmount,
-    required this.repeatCopies,
-    required this.repeatOffset,
-    required this.repeatAnchorX,
-    required this.repeatAnchorY,
-    required this.repeatPositionX,
-    required this.repeatPositionY,
-    required this.repeatRotation,
-    required this.repeatScale,
-    required this.repeatStartOpacity,
-    required this.repeatEndOpacity,
-    this.twist,
-    this.deform,
-    this.smooth,
     this.taper,
   });
 
@@ -2134,9 +2077,6 @@ class BridgeShapeItem {
       stroke.hashCode ^
       strokeWidth.hashCode ^
       opacity.hashCode ^
-      trimStart.hashCode ^
-      trimEnd.hashCode ^
-      trimOffset.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
       gradient.hashCode ^
@@ -2150,20 +2090,6 @@ class BridgeShapeItem {
       gradientStops.hashCode ^
       combine.hashCode ^
       pathKeys.hashCode ^
-      offsetAmount.hashCode ^
-      repeatCopies.hashCode ^
-      repeatOffset.hashCode ^
-      repeatAnchorX.hashCode ^
-      repeatAnchorY.hashCode ^
-      repeatPositionX.hashCode ^
-      repeatPositionY.hashCode ^
-      repeatRotation.hashCode ^
-      repeatScale.hashCode ^
-      repeatStartOpacity.hashCode ^
-      repeatEndOpacity.hashCode ^
-      twist.hashCode ^
-      deform.hashCode ^
-      smooth.hashCode ^
       taper.hashCode;
 
   @override
@@ -2179,9 +2105,6 @@ class BridgeShapeItem {
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
           opacity == other.opacity &&
-          trimStart == other.trimStart &&
-          trimEnd == other.trimEnd &&
-          trimOffset == other.trimOffset &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
           gradient == other.gradient &&
@@ -2195,20 +2118,6 @@ class BridgeShapeItem {
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           pathKeys == other.pathKeys &&
-          offsetAmount == other.offsetAmount &&
-          repeatCopies == other.repeatCopies &&
-          repeatOffset == other.repeatOffset &&
-          repeatAnchorX == other.repeatAnchorX &&
-          repeatAnchorY == other.repeatAnchorY &&
-          repeatPositionX == other.repeatPositionX &&
-          repeatPositionY == other.repeatPositionY &&
-          repeatRotation == other.repeatRotation &&
-          repeatScale == other.repeatScale &&
-          repeatStartOpacity == other.repeatStartOpacity &&
-          repeatEndOpacity == other.repeatEndOpacity &&
-          twist == other.twist &&
-          deform == other.deform &&
-          smooth == other.smooth &&
           taper == other.taper;
 }
 
@@ -3271,6 +3180,24 @@ class LayerReference {
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 
+  /// Make a repeater's copies real: `repeater`'s, or every repeater's on
+  /// the layer when `None`. Each copy becomes a shape of its own, placed
+  /// where the copy was drawn and faded as it was faded, and the repeater
+  /// goes. `time` is composition time, the playhead, where keyed numbers
+  /// are read.
+  ///
+  /// Into this layer, the copies take the repeater's place in the
+  /// contents. Into layers, the first copy stays here and each further
+  /// copy becomes a shape layer of its own directly below this one, a copy
+  /// of this layer holding only the repeated art and what acted on it
+  /// after the repeater. Either way one `Batch`, so one undo step.
+  void expandShapeCopies(
+          {UuidValue? repeater,
+          required BridgeRational time,
+          required bool intoLayers}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceExpandShapeCopies(
+          that: this, repeater: repeater, time: time, intoLayers: intoLayers);
+
   /// **Fade the layer's sound up from silence** over `seconds` from its in
   /// point (docs/09 §6).
   ///
@@ -3578,11 +3505,12 @@ class LayerReference {
         that: this,
       );
 
-  /// This shape layer's contents, bottom of the stack first.
+  /// This shape layer's contents, bottom of the stack first, as one flat
+  /// list of entries with the depth each sits at (`crate::api::shape`).
   ///
   /// Empty on a layer that is not a shape, rather than an error: the Timeline
   /// asks every row what it has to list, exactly as it asks about masks.
-  List<BridgeShapeItem> getShapeContents() =>
+  List<BridgeShapeEntry> getShapeContents() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetShapeContents(
         that: this,
       );
@@ -4411,7 +4339,7 @@ class LayerReference {
   /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
   /// rename, a colour — and the keys are carried through untouched.
   void setShapeContents(
-          {required List<BridgeShapeItem> contents, BridgeRational? at}) =>
+          {required List<BridgeShapeEntry> contents, BridgeRational? at}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapeContents(
           that: this, contents: contents, at: at);
 

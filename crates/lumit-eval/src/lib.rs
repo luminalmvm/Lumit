@@ -3476,44 +3476,56 @@ mod tests {
     /// shape keeps one name.
     #[test]
     fn a_keyed_shape_keys_the_frame_it_moves_in() {
-        use lumit_core::shape::{Deform, ShapeItem, Twist};
+        use lumit_core::shape::modifier::{Deform, ModifierKind, ShapeEntry, ShapeModifier, Twist};
+        use lumit_core::shape::ShapeItem;
         let doc = Document::new();
-        let shape = |item: ShapeItem| {
+        let shape = |item: ShapeItem, kind: Option<ModifierKind>| {
             let mut layer = text_layer("s", 0.0, 10.0, 0.0);
-            layer.kind = LayerKind::Shape {
-                contents: vec![item],
-            };
+            let mut contents = vec![ShapeEntry::Item(item)];
+            contents.extend(kind.map(|kind| {
+                ShapeEntry::Modifier(ShapeModifier {
+                    id: Uuid::now_v7(),
+                    name: kind.label().into(),
+                    kind,
+                })
+            }));
+            layer.kind = LayerKind::Shape { contents };
             comp_with(vec![layer])
         };
-        let mut item = ShapeItem::filled(
+        let item = ShapeItem::filled(
             "e",
             lumit_core::mask::Mask::ellipse(50.0, 50.0, 40.0, 30.0).path,
             LinearColour([1.0, 1.0, 1.0, 1.0]),
         );
-        let still = shape(item.clone());
+        let still = shape(item.clone(), None);
         assert_eq!(key(&doc, &still, 0.0), key(&doc, &still, 1.0));
 
         let keyed = linear_retime(&[(0.0, 0.0), (2.0, 540.0)]);
-        item.twist = Some(Twist {
-            angle: keyed.clone(),
-            rotation: Property::zero(),
-            axis: Property::zero(),
-            centre_x: Property::fixed(50.0),
-            centre_y: Property::fixed(50.0),
-        });
-        let twisted = shape(item.clone());
+        let twisted = shape(
+            item.clone(),
+            Some(ModifierKind::Twist(Twist {
+                angle: keyed.clone(),
+                rotation: Property::zero(),
+                axis: Property::zero(),
+                centre_x: Property::fixed(50.0),
+                centre_y: Property::fixed(50.0),
+                extra: serde_json::Map::new(),
+            })),
+        );
         assert_ne!(key(&doc, &twisted, 0.0), key(&doc, &twisted, 1.0));
 
-        item.twist = None;
-        item.deform = Some(Deform {
-            mode: 0,
-            amount: keyed,
-            scale: Property::fixed(20.0),
-            evolution: Property::zero(),
-            seed: Property::zero(),
-            detail: Property::fixed(4.0),
-        });
-        let deformed = shape(item);
+        let deformed = shape(
+            item,
+            Some(ModifierKind::Deform(Deform {
+                mode: 0,
+                amount: keyed,
+                scale: Property::fixed(20.0),
+                evolution: Property::zero(),
+                seed: Property::zero(),
+                detail: Property::fixed(4.0),
+                extra: serde_json::Map::new(),
+            })),
+        );
         assert_ne!(key(&doc, &deformed, 0.0), key(&doc, &deformed, 1.0));
     }
 

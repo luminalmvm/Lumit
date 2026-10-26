@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/engine_labels.dart';
@@ -31,6 +32,7 @@ import '../panels/keyframe_controls_frb.dart'
 import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
+import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
@@ -147,7 +149,7 @@ VoidCallback? onSelection(
     final id = path.substring(prefix.length).split('/').first;
     for (final entry in ui.model.layers) {
       if (entry.layer.internallayerId.toString() != layerId) continue;
-      for (final item in entry.info.shapeContents) {
+      for (final item in entry.info.shapeContents.items) {
         if (item.id.toString() == id) return (layer: entry.layer, item: item);
       }
     }
@@ -288,6 +290,38 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   }
 
   return [MenuEntry(l10n.menuTogglePathKey, toggle())];
+}
+
+/// Layer ▸ Expand all copies: every repeater on the selected shape layer made
+/// real, into the layer or into layers. Dead until one shape layer with a
+/// repeater is selected.
+List<MenuEntry> expandAllCopiesRows(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final selected = ui.selectedLayers.value;
+  final layer = selected.length == 1 ? selected.single : null;
+  final repeats = layer != null &&
+      ui.model.layers.any((entry) =>
+          entry.layer.internallayerId == layer.internallayerId &&
+          entry.info.shapeContents.modifiers
+              .any((m) => m.kind is BridgeShapeModifierKind_Repeat));
+  VoidCallback? expand(bool intoLayers) {
+    if (comp == null || layer == null || !repeats) return null;
+    return () {
+      try {
+        layer.expandShapeCopies(
+          repeater: null,
+          time: comp.timeOfFrame(frame: ui.playheadFrame.value),
+          intoLayers: intoLayers,
+        );
+        app.notifyDocumentChanged();
+      } catch (_) {}
+    };
+  }
+
+  return [
+    MenuEntry(l10n.shapeExpandIntoLayer, expand(false)),
+    MenuEntry(l10n.shapeExpandIntoLayers, expand(true)),
+  ];
 }
 
 // ---------------------------------------------------------------------------

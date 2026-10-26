@@ -9870,6 +9870,54 @@
   "@shapeOpRemove": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."
   },
+  "shapeRepeater": "Repeater",
+  "@shapeRepeater": {
+    "description": "Entry in a shape layer's contents that draws the art above it several times, each copy one step further; also the row in the Add menu that adds one. After Effects' Repeater."
+  },
+  "shapeTrimPaths": "Trim paths",
+  "@shapeTrimPaths": {
+    "description": "Entry in a shape layer's contents that cuts the paths above it to a piece of their length; also the row in the Add menu that adds one. After Effects' Trim Paths."
+  },
+  "shapeOffsetPaths": "Offset paths",
+  "@shapeOffsetPaths": {
+    "description": "Entry in a shape layer's contents that pushes the outlines above it out or in; also the row in the Add menu that adds one. After Effects' Offset Paths."
+  },
+  "shapeGroup": "Group",
+  "@shapeGroup": {
+    "description": "A group in a shape layer's contents, and the row in the Add menu that puts the row inside a new one. A modifier inside a group acts only inside it."
+  },
+  "shapeUngroup": "Ungroup",
+  "@shapeUngroup": {
+    "description": "Row in the right-click menu of a group in a shape layer's contents: the group goes and its entries take its place."
+  },
+  "shapeModifierAmount": "Amount",
+  "@shapeModifierAmount": {
+    "description": "Timeline row under an Offset paths or a Smooth entry of a shape layer: how far, in pixels."
+  },
+  "deleteShapeModifier": "Delete modifier",
+  "@deleteShapeModifier": {
+    "description": "Context-menu item on a modifier entry (Repeater, Trim paths and the rest) in a shape layer's contents."
+  },
+  "deleteShapeGroup": "Delete group",
+  "@deleteShapeGroup": {
+    "description": "Context-menu item on a group in a shape layer's contents: the group and everything in it go."
+  },
+  "shapeExpandCopies": "Expand copies",
+  "@shapeExpandCopies": {
+    "description": "Submenu in the right-click menu of a Repeater entry in a shape layer's contents: turn its copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandAllCopies": "Expand all copies",
+  "@shapeExpandAllCopies": {
+    "description": "Submenu in the Layer menu, for a selected shape layer: turn every Repeater's copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandIntoLayer": "Into this layer",
+  "@shapeExpandIntoLayer": {
+    "description": "Row under Expand copies: the copies become shapes in the same layer, and the Repeater goes."
+  },
+  "shapeExpandIntoLayers": "Into layers",
+  "@shapeExpandIntoLayers": {
+    "description": "Row under Expand copies: the first copy stays in this layer and each further copy becomes a shape layer of its own, below it."
+  },
   "shapeTwist": "Twist",
   "@shapeTwist": {
     "description": "Shape operation, in the Add and Remove menus of a shape layer's art: spins the shape about an axis and flattens it, so a circle becomes a figure eight."

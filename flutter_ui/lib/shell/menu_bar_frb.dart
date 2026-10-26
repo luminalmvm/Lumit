@@ -1305,6 +1305,8 @@ List<MenuSection> lumitMenus(
             MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
             MenuEntry.submenu(
                 l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
+            MenuEntry.submenu(
+                l10n.shapeExpandAllCopies, expandAllCopiesRows(app, ui)),
             MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
             // Audio ▸ — what to do with the *sound* of a layer that has some.
             // Detach puts it on a row of its own, muting the picture's row, so it

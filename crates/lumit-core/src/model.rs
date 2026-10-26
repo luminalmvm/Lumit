@@ -2468,8 +2468,8 @@ pub enum LayerKind {
     /// deliberately so: a shape layer's path and a mask's path differ in what
     /// they *do*, not in what they are.
     Shape {
-        #[serde(default)]
-        contents: Vec<crate::shape::ShapeItem>,
+        #[serde(default, deserialize_with = "crate::shape::modifier::read_entries")]
+        contents: Vec<crate::shape::modifier::ShapeEntry>,
     },
     /// A Null layer (docs/01-GLOSSARY.md): an invisible layer with no source
     /// and no size, carrying only a transform, so other layers can be parented

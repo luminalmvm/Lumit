@@ -6,11 +6,13 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 
 import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -138,8 +140,10 @@ class GraphChannel {
   final TextAnimatorValue? animatorValue;
 
   /// Set for one of a shape item's numbers: the item, which number, and
-  /// which gradient stop when it is a stop's.
+  /// which gradient stop when it is a stop's. A modifier entry's number
+  /// names the modifier instead.
   final BridgeShapeItem? shape;
+  final BridgeShapeModifier? shapeModifier;
   final ShapeValue? shapeValue;
   final int shapeStop;
 
@@ -186,6 +190,7 @@ class GraphChannel {
     this.animator = -1,
     this.animatorValue,
     this.shape,
+    this.shapeModifier,
     this.shapeValue,
     this.shapeStop = 0,
   });
@@ -434,8 +439,24 @@ List<GraphChannel> graphChannels({
       final stop = int.tryParse(raw.substring(name.length)) ?? 0;
       final value = ShapeValue.values.where((v) => v.name == name).firstOrNull;
       if (value == null) continue;
-      for (final item in entry.info.shapeContents) {
-        if (item.id.toString() != rest.substring(0, slash)) continue;
+      final owner = rest.substring(0, slash);
+      // A modifier entry's numbers, off the same read model.
+      for (final modifier in entry.info.shapeContents.modifiers) {
+        if (modifier.id.toString() != owner) continue;
+        out.add(GraphChannel(
+          path: path,
+          id: path,
+          label: '${entry.info.name} · ${modifier.name} · '
+              '${shapeValueLabel(value)}',
+          colourIndex: out.length,
+          scalar: modifierScalarOf(modifier, value),
+          entry: entry,
+          shapeModifier: modifier,
+          shapeValue: value,
+        ));
+      }
+      for (final item in entry.info.shapeContents.items) {
+        if (item.id.toString() != owner) continue;
         if (value == ShapeValue.path && item.pathKeys.isEmpty) break;
         // A colour is three curves under the row's one stopwatch, one for
         // each channel, the way a position is one for each axis.
