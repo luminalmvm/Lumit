@@ -2001,7 +2001,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lumit-aplug"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "clap-sys",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-aplug-broker"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "interprocess",
  "lumit-aplug",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-aplug-testplug"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "clap-sys",
  "vst3",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-audio"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "cpal",
  "lumit-media",
@@ -2051,7 +2051,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-bench"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-audio",
  "lumit-core",
@@ -2066,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-budget"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-ingress",
  "thiserror 2.0.18",
@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-cache"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-budget",
  "lz4_flex",
@@ -2083,14 +2083,14 @@ dependencies = [
 
 [[package]]
 name = "lumit-cli"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "libloading 0.8.9",
 ]
 
 [[package]]
 name = "lumit-colour"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-core",
  "lumit-ingress",
@@ -2101,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-core"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "arc-swap",
  "blake3",
@@ -2123,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-eval"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "blake3",
  "lumit-core",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-extensions"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "getrandom 0.4.3",
  "lumit-core",
@@ -2148,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-flow"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bytemuck",
  "lumit-gpu",
@@ -2159,7 +2159,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-fx-macros"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-gpu"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ash",
  "bytemuck",
@@ -2194,7 +2194,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-import"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-core",
  "lumit-project",
@@ -2210,14 +2210,14 @@ dependencies = [
 
 [[package]]
 name = "lumit-ingress"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "lumit-keymap"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2225,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-media"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "blake3",
@@ -2242,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-media-broker"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-media",
  "tempfile",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ml"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-project",
  "ort",
@@ -2263,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "cc",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx-broker"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "interprocess",
  "lumit-eval",
@@ -2298,14 +2298,14 @@ dependencies = [
 
 [[package]]
 name = "lumit-ofx-testplug"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-ofx",
 ]
 
 [[package]]
 name = "lumit-peer"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "blake3",
  "getrandom 0.4.3",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-project"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "blake3",
  "criterion",
@@ -2331,11 +2331,11 @@ dependencies = [
 
 [[package]]
 name = "lumit-relay"
-version = "0.9.1"
+version = "0.10.0"
 
 [[package]]
 name = "lumit-render"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "blake3",
@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-roto"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -2379,7 +2379,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-script"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "interprocess",
  "lumit-core",
@@ -2396,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-share"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "argon2",
  "blake3",
@@ -2418,7 +2418,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-text"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "fontdue",
  "fontique",
@@ -2432,7 +2432,7 @@ dependencies = [
 
 [[package]]
 name = "lumit-track"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "lumit-core",
  "serde",
@@ -2441,7 +2441,7 @@ dependencies = [
 
 [[package]]
 name = "lumit_bridge"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "flutter_rust_bridge",
  "interprocess",
