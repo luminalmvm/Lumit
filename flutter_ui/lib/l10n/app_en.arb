@@ -9956,6 +9956,14 @@
   "@panelStagger": {
     "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
   },
+  "panelAlign": "Align",
+  "@panelAlign": {
+    "description": "Name of the panel with two grids of nine dots: one moves the selected layers' anchor points to a point of their boxes, the other lines that point up with the same point of the composition. Shown on its tab and in the Window menu."
+  },
+  "alignComposition": "Composition",
+  "@alignComposition": {
+    "description": "Align panel: heading over the grid of nine dots that moves each selected layer so that point of its box meets the same point of the composition (top left to top left, centre to centre)."
+  },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
     "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."

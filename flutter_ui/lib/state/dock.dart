@@ -72,6 +72,10 @@ enum Panel {
   /// order a stagger drag follows.
   stagger,
 
+  /// Moves the selected layers' anchors to a point of their boxes, or lines
+  /// that point up with the same point of the composition.
+  align,
+
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
@@ -96,6 +100,7 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.align => l10n.panelAlign,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };
@@ -347,7 +352,7 @@ class DockSplit extends DockNode {
 /// 0.68, Timeline 0.32 across the full width); the upper band horizontal
 /// (left tab group 0.22, Viewer 0.58, right group 0.20). The left group
 /// tabs Project (fronted) and Effect controls; the right group is a **stack**:
-/// Effects & presets twirled open, with Scopes, Text and Paragraph shut
+/// Effects & presets twirled open, with Scopes, Text, Paragraph and Align shut
 /// beneath it, each one click away. Viewer and Timeline sit alone and render
 /// bare.
 ///
@@ -377,6 +382,7 @@ DockSplit defaultLayout() => DockSplit(
                 DockPane(Panel.scopes),
                 DockPane(Panel.text),
                 DockPane(Panel.paragraph),
+                DockPane(Panel.align),
               ],
               stacked: true,
               open: {Panel.effectsAndPresets.pane()},

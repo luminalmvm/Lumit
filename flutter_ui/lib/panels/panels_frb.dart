@@ -14,6 +14,7 @@ import 'package:lumit_flutter/panels/debug_panel.dart';
 import 'package:provider/provider.dart';
 
 import '../state/dock.dart';
+import 'align_panel.dart';
 import 'audio_panel_frb.dart';
 import 'audio_timeline_panel_frb.dart';
 import 'cut_timeline_panel_frb.dart';
@@ -48,6 +49,7 @@ const Set<Panel> _changing = {
   Panel.paragraph,
   Panel.expressions,
   Panel.stagger,
+  Panel.align,
 };
 
 Widget buildPanelBodyFrb(BuildContext context, PaneId pane) =>
@@ -100,6 +102,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.paragraph => const ParagraphPanelFrb(),
       Panel.expressions => const ExpressionsPanelFrb(),
       Panel.stagger => const StaggerPanelFrb(),
+      Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),
       Panel.extension => ExtensionPanel(slot: pane.instance),
     };

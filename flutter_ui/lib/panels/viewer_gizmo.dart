@@ -1650,6 +1650,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    widget.uiState.alignRequest.addListener(_onAlignRequest);
     // Chained, as the panels chain theirs: Delete with path points selected
     // is about the points, and anything else goes on down the chain.
     _priorDeleteClaim = widget.uiState.deleteClaim;
@@ -1711,6 +1712,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void dispose() {
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    widget.uiState.alignRequest.removeListener(_onAlignRequest);
     if (widget.uiState.deleteClaim == _deleteClaim) {
       widget.uiState.deleteClaim = _priorDeleteClaim;
     }
@@ -2363,6 +2365,47 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       moves.add((box, px, py, null));
     }
     _place(moves);
+  }
+
+  /// A dot on the Align panel. Only the active view answers, or two Viewers
+  /// would make two undo steps of one press.
+  void _onAlignRequest() {
+    final request = widget.uiState.alignRequest.value;
+    if (request == null || !mounted || !_activeView) return;
+    if (request.anchor) {
+      _anchorTo(request.at);
+    } else {
+      _align(request.at.dx, request.at.dy);
+    }
+  }
+
+  /// Move each selected layer's anchor to [at] of its box, 0 to 1 across and
+  /// down, with Position making up the difference so the picture stays put.
+  /// One undo step. A layer with a keyed anchor or Position is left alone,
+  /// as the Anchor point tool leaves it.
+  void _anchorTo(Offset at) {
+    final boxes = [
+      for (final box in _selected)
+        if (!box.marker) box
+    ];
+    final ready = boxes.where((box) => !panBehindHitsKeys(box)).toList();
+    final app = Provider.of<LumitState>(context, listen: false);
+    if (ready.length < boxes.length) app.postNotice(l10n.anchorKeyedRefused);
+    if (ready.isEmpty) return;
+    asOneUndoStep(ready.length > 1 ? app.project : null, () {
+      for (final box in ready) {
+        try {
+          setPannedBehind(
+              box,
+              Offset(at.dx * box.bounds.width, at.dy * box.bounds.height),
+              comp: widget.comp,
+              frame: widget.uiState.playheadFrame.value);
+        } catch (_) {
+          // A layer deleted meanwhile. The rest still move.
+        }
+      }
+    });
+    widget.onChanged();
   }
 
   /// Write new Positions, in composition pixels: one op a layer for both axes,
