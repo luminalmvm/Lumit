@@ -7449,6 +7449,38 @@ fn the_graph_reports_the_effect_stack_as_the_image_chain() {
     );
 }
 
+/// SICELIOT: a blur driven by a Wiggle, copied off one layer and pasted on
+/// another, arrives with its own Wiggle wired into its radius, every id
+/// fresh, and the source left as it was.
+#[test]
+fn copied_effects_paste_with_their_drivers_and_wires() {
+    let (_project, source) = layer_to_wire();
+    let (blur, wiggle) = wiggle_into_blur(&source);
+    let text = source.copy_effects(vec![blur]).expect("copied");
+
+    let comp = CompositionReference::new(source.project_id(), source.comp_id());
+    let target = comp.add_solid_layer(None).expect("somewhere to paste");
+    target.paste_effects(text, 0).expect("pasted");
+
+    let pasted = target.get_effects().expect("stack");
+    assert_eq!(pasted.len(), 1);
+    assert_ne!(pasted[0].id(), blur, "a fresh blur");
+    let drivers = target.get_graph_drivers().expect("drivers");
+    assert_eq!(drivers.len(), 1, "the wiggle came along");
+    assert_ne!(drivers[0].id(), wiggle, "as a fresh one");
+    let graph = target.get_graph().expect("graph");
+    let blur_node = graph
+        .nodes
+        .iter()
+        .find(|n| n.node == BridgeNodeRef::Effect(pasted[0].id()))
+        .expect("the pasted blur is drawn");
+    assert!(
+        blur_node.inputs.iter().any(|p| p.id == "radius" && p.wired),
+        "and its radius is wired again"
+    );
+    assert_eq!(source.get_graph_drivers().expect("drivers").len(), 1);
+}
+
 /// Adding a driver, wiring it, placing it and growing a box are **one** write
 /// and therefore one undo step (§3).
 #[test]
