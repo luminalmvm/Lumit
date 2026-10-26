@@ -4772,6 +4772,54 @@
   "@fxLabelScale": {
     "description": "Effect controls — a control on Label points (SICELIOT): how big a label is drawn, per cent of the Text layer's size."
   },
+  "fxRingWave": "Ring wave",
+  "@fxRingWave": {
+    "description": "Effect name (SICELIOT driver): rings that grow out from points on the frame one after another, giving each point a value, a turn and a count of the rings that have crossed it."
+  },
+  "fxInterval": "Interval",
+  "@fxInterval": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): seconds between one ring and the next."
+  },
+  "fxSpeedVariance": "Speed variance",
+  "@fxSpeedVariance": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): how much faster or slower each ring may grow."
+  },
+  "fxThicknessMin": "Thickness min",
+  "@fxThicknessMin": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): the thinnest a ring can be, in pixels."
+  },
+  "fxThicknessMax": "Thickness max",
+  "@fxThicknessMax": {
+    "description": "Effect controls — a control on Ring wave (SICELIOT): the thickest a ring can be, in pixels."
+  },
+  "fxPasses": "Passes",
+  "@fxPasses": {
+    "description": "Node graph — an output port on Ring wave (SICELIOT): how many rings have crossed a point so far."
+  },
+  "fxTextStep": "Text step",
+  "@fxTextStep": {
+    "description": "Effect controls — a control on Label points (SICELIOT): each whole number gives the random text a new roll that stays."
+  },
+  "fxByStrength": "By strength",
+  "@fxByStrength": {
+    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): colour each label smoothly by how strong the wave is on it."
+  },
+  "fxHueStart": "Hue start",
+  "@fxHueStart": {
+    "description": "Effect controls — a control on Label points (SICELIOT): the hue a weak wave gives, with Flash colour on By strength."
+  },
+  "fxHueRange": "Hue range",
+  "@fxHueRange": {
+    "description": "Effect controls — a control on Label points (SICELIOT): how far round the hues a full wave goes, in degrees."
+  },
+  "fxGrow": "Grow",
+  "@fxGrow": {
+    "description": "Effect controls — a control on Label points (SICELIOT): how much bigger a full wave makes a label, per cent."
+  },
+  "fxLabelRotation": "Label rotation",
+  "@fxLabelRotation": {
+    "description": "Effect controls — a control on Label points (SICELIOT): how far each label is turned about its anchor."
+  },
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
     "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."

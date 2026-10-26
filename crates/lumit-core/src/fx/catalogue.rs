@@ -32,8 +32,8 @@ use super::drivers::{
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
     siceliot::{
-        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
-        ValueNoiseDef,
+        Oscillator, OscillatorDef, Random, RandomDef, RingWave, RingWaveDef, Stagger, StaggerDef,
+        ValueNoise, ValueNoiseDef,
     },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
@@ -493,4 +493,5 @@ crate::catalogue![
     RandomDef => Random,
     OscillatorDef => Oscillator,
     ValueNoiseDef => ValueNoise,
+    RingWaveDef => RingWave,
 ];

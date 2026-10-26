@@ -1170,6 +1170,11 @@ pub fn run_ops(
                     filled.input.resize(entry + 1, Default::default());
                 }
                 filled.input[entry] = stream.clone();
+                // SICELIOT: the drivers wired into this consumer's rows,
+                // which could not see the stream until now.
+                if let (0, Some(drive)) = (entry, &s.late_drive) {
+                    (drive.0)(&mut filled.input[entry]);
+                }
                 // The op above may have drawn before the room was made, and
                 // this one draws inside it.
                 if s.grow != [0, 0] {

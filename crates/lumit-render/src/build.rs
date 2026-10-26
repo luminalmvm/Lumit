@@ -1028,6 +1028,18 @@ fn points_room(
 /// An empty list with the producer still named is a stream that cannot be made
 /// yet, because its points depend on a picture (Scatter). The walk asks for it
 /// on the card.
+/// SICELIOT: the rows of a points consumer that wired drivers give each point
+/// its own value for, and the stream columns they are written into.
+fn driven_rows(
+    consumer: &lumit_core::model::EffectInstance,
+) -> Option<&'static [(&'static str, &'static str)]> {
+    match consumer.effect.match_name.as_str() {
+        "clone_to_points" => Some(lumit_core::fx::effects::clone_to_points::COPY_ROWS),
+        "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn points_input_for(
     layer: &lumit_core::model::Layer,
@@ -1182,12 +1194,7 @@ fn points_input_in(
         // SICELIOT: drivers wired into Clone to points' Scale, Rotation or
         // Opacity give each stamp its own value, and into Label points'
         // Change or Label scale each label its own.
-        let driven = match consumer.effect.match_name.as_str() {
-            "clone_to_points" => Some(lumit_core::fx::effects::clone_to_points::COPY_ROWS),
-            "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
-            _ => None,
-        };
-        if let Some(rows) = driven {
+        if let Some(rows) = driven_rows(consumer) {
             lumit_core::fx::effects::clone_to_points::drive_rows(
                 graph,
                 consumer.id,
@@ -3362,6 +3369,8 @@ fn comp_walk(
                 // (points-stream.md §3.3). In px@comp — the units a stream is
                 // data in — and rescaled into the raster by whichever
                 // consumer draws it.
+                let drive_projection =
+                    projection.unwrap_or(lumit_core::fx::points::Projection::FLAT);
                 let mut wired = match owner {
                     Some(layer) => points_input_for(
                         layer,
@@ -3408,6 +3417,23 @@ fn comp_walk(
                     text_carriage(comp, layer, e, t_comp, expr_doc)
                 });
                 let late = late(&wired);
+                // SICELIOT: a stream made on the card gets its drivers when
+                // it arrives, as one made here got them in points_input_for.
+                let late_drive = owner
+                    .filter(|_| late.first().is_some_and(|(entry, _)| *entry == 0))
+                    .and_then(|layer| {
+                        let rows = driven_rows(e)?;
+                        let (graph, consumer, context) =
+                            (layer.graph.clone(), e.id, context.clone());
+                        let flat = drive_projection;
+                        Some(lumit_core::fx::points::LateDrive(Arc::new(
+                            move |stream: &mut lumit_core::fx::points::PointsStream| {
+                                lumit_core::fx::effects::clone_to_points::drive_rows(
+                                    &graph, consumer, stream, rows, t, &context, None, flat,
+                                );
+                            },
+                        )))
+                    });
                 let input_from = wired.from.first().copied().flatten();
                 let ports_from: Vec<u32> = wired
                     .from
@@ -3428,6 +3454,7 @@ fn comp_walk(
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3450,6 +3477,7 @@ fn comp_walk(
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3491,6 +3519,7 @@ fn comp_walk(
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3507,6 +3536,7 @@ fn comp_walk(
                     t,
                     projection,
                     late,
+                    late_drive,
                     ports_from,
                     input,
                     input_from,

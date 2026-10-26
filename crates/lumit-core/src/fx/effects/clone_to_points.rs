@@ -1043,29 +1043,39 @@ pub fn drive_rows(
     }
     let n = stream.len().min(COPY_DRIVE_MAX);
     let count = u32::try_from(stream.len()).unwrap_or(u32::MAX);
-    let mut values = vec![Vec::with_capacity(n); wired.len()];
-    for i in 0..n {
-        let index = u32::try_from(i).unwrap_or(u32::MAX);
-        let at = stream.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]);
-        let resolved = crate::fx::drivers::resolve_drivers_at_point(
-            graph,
-            lt,
-            context.clone(),
-            audio,
-            projection,
-            (index, count),
-            at,
-        );
-        for ((row, _), out) in wired.iter().zip(&mut values) {
-            let v = match resolved.param(NodeRef::Effect(consumer), ParamId::new(row)) {
-                Some(Value::Float(v)) => Some(v),
-                #[allow(clippy::cast_precision_loss)]
-                Some(Value::Int(v)) => Some(v as f32),
-                _ => None,
-            };
-            out.push(v);
-        }
-    }
+    // Each point resolves the whole graph on its own, so the points are
+    // shared out over the cores.
+    use rayon::prelude::*;
+    let per_point: Vec<Vec<Option<f32>>> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let index = u32::try_from(i).unwrap_or(u32::MAX);
+            let at = stream.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]);
+            let resolved = crate::fx::drivers::resolve_drivers_at_point(
+                graph,
+                lt,
+                context.clone(),
+                audio,
+                projection,
+                (index, count),
+                at,
+            );
+            wired
+                .iter()
+                .map(|(row, _)| {
+                    match resolved.param(NodeRef::Effect(consumer), ParamId::new(row)) {
+                        Some(Value::Float(v)) => Some(v),
+                        #[allow(clippy::cast_precision_loss)]
+                        Some(Value::Int(v)) => Some(v as f32),
+                        _ => None,
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let values: Vec<Vec<Option<f32>>> = (0..wired.len())
+        .map(|r| per_point.iter().map(|p| p[r]).collect())
+        .collect();
     for ((_, name), column) in wired.iter().zip(values) {
         // A row the driver did not answer for keeps the column unwritten, and
         // so its one value.

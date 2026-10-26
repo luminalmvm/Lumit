@@ -14424,6 +14424,15 @@
           "hard_min": 0.0
         },
         {
+          "id": "text_step",
+          "label": "Text step",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0
+        },
+        {
           "id": "flash_colour",
           "label": "Flash colour",
           "kind": "choice",
@@ -14432,7 +14441,8 @@
           "options": [
             "Off",
             "Random hue",
-            "Two colours"
+            "Two colours",
+            "By strength"
           ],
           "dividers_after": []
         },
@@ -14465,6 +14475,45 @@
           "slider_max": 4.0
         },
         {
+          "id": "hue_start",
+          "label": "Hue start",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "hue_range",
+          "label": "Hue range",
+          "kind": "float",
+          "unit": "raw",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "saturation",
+          "label": "Saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 80.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "darken",
+          "label": "Darken",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "label_scale",
           "label": "Label scale",
           "kind": "float",
@@ -14473,6 +14522,24 @@
           "slider_min": 0.0,
           "slider_max": 400.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "grow",
+          "label": "Grow",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "label_rotation",
+          "label": "Label rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
         },
         {
           "id": "mix",
@@ -14576,6 +14643,30 @@
           "on": "flash_colour",
           "cond": "choice_is",
           "value": 2
+        },
+        {
+          "param": "hue_start",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "hue_range",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "saturation",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "darken",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
         }
       ],
       "matte_role": "strength"
@@ -27774,6 +27865,115 @@
           "value": 2
         }
       ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "ring-wave",
+      "match_name": "siceliot_ring_wave",
+      "label": "Ring wave",
+      "version": 1,
+      "category": "SICELIOT",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "interval",
+          "label": "Interval",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.05,
+          "slider_max": 5.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "px",
+          "default": 300.0,
+          "slider_min": 10.0,
+          "slider_max": 2000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "speed_variance",
+          "label": "Speed variance",
+          "kind": "float",
+          "unit": "px",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "thickness_min",
+          "label": "Thickness min",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "thickness_max",
+          "label": "Thickness max",
+          "kind": "float",
+          "unit": "px",
+          "default": 120.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "origin",
+          "label": "Origin",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Anywhere",
+            "Edges",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "spin",
+          "label": "Spin",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
       "matte_role": "none"
     }
   ]

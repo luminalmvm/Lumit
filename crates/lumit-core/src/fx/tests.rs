@@ -6825,6 +6825,10 @@ fn every_parameter_declares_a_unit() {
             ("measure", "padding_y"),
             ("siceliot_oscillator", "wavelength"),
             ("siceliot_noise", "noise_scale"),
+            ("siceliot_ring_wave", "speed"),
+            ("siceliot_ring_wave", "speed_variance"),
+            ("siceliot_ring_wave", "thickness_min"),
+            ("siceliot_ring_wave", "thickness_max"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's

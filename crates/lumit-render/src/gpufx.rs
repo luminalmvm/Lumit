@@ -5928,48 +5928,66 @@ impl GpuEffect for LabelPoints {
         ) else {
             return tex.clone();
         };
+        use lumit_core::fx::effects::label_points::{composite, LabelDrawing, Placed};
         let labels = inst.labels(stream, inst.template(&doc.text), px_scale, L::time_of(p));
-        // SICELIOT: each label has its own size, kept to steps of 5 % so a
-        // wave of sizes is a handful of drawings rather than one per label.
-        let step = |scale: f32| ((scale * 20.0).round() as i32).max(0);
-        // Labels that read the same at the same size share one drawing. Only
-        // ever looked up, so the map's order decides nothing.
-        let mut drawn: std::collections::HashMap<(&str, i32), lumit_text::RasterText> =
+        // SICELIOT: each label has its own size and turn. A wording is laid
+        // out once per half octave of size, at or just above the sizes it is
+        // drawn at, and every label is resampled from that drawing, so sizes
+        // run smoothly, labels sit between pixels and turn, and nothing is
+        // ever blown up.
+        let octave = |scale: f32| -> Option<i32> {
+            (scale > 1e-3).then(|| ((scale.log2() * 2.0).ceil() as i32).clamp(-12, 8))
+        };
+        let octave_size = |k: i32| 2f32.powf(k as f32 / 2.0);
+        // The text engine's pixels are sRGB bytes with plain alpha. The frame
+        // is linear and premultiplied, so each drawing is made so once.
+        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
+        // Labels that read the same at the same octave share one drawing.
+        // Only ever looked up, so the map's order decides nothing.
+        let mut drawn: std::collections::HashMap<(&str, i32), LabelDrawing> =
             std::collections::HashMap::new();
         for label in &labels {
-            let k = step(label.scale);
-            if k == 0 {
+            let Some(k) = octave(label.scale) else {
                 continue;
-            }
+            };
             drawn.entry((label.text.as_str(), k)).or_insert_with(|| {
-                let sized = label_document(doc, px_scale * k as f32 / 20.0);
-                lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, &label.text), &[])
+                let sized = label_document(doc, px_scale * octave_size(k));
+                let r = lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, &label.text), &[]);
+                LabelDrawing {
+                    width: r.width as usize,
+                    height: r.height as usize,
+                    px: r
+                        .rgba
+                        .chunks_exact(4)
+                        .map(|t| {
+                            let a = f32::from(t[3]) / 255.0;
+                            [
+                                linear[usize::from(t[0])] * a,
+                                linear[usize::from(t[1])] * a,
+                                linear[usize::from(t[2])] * a,
+                                a,
+                            ]
+                        })
+                        .collect(),
+                }
             });
         }
-        // Each label's top left corner on the frame, its picture and the
-        // colour it flashes. The anchor is level with the middle of the
-        // label's height.
         let along = inst.anchor_along();
-        let whole = |v: f32| v.round().clamp(-1e9, 1e9) as i64;
-        let placed: Vec<(i64, i64, &lumit_text::RasterText, Option<[f32; 4]>)> = labels
+        let placed: Vec<Placed<'_>> = labels
             .iter()
             .filter_map(|label| {
-                let r = drawn.get(&(label.text.as_str(), step(label.scale)))?;
-                Some((
-                    whole(label.at[0] - along * r.width as f32),
-                    whole(label.at[1] - 0.5 * r.height as f32),
-                    r,
-                    label.tint,
-                ))
+                let k = octave(label.scale)?;
+                let d = drawn.get(&(label.text.as_str(), k))?;
+                Placed::new(d, label, octave_size(k), along)
             })
             .collect();
         // The box round every label, kept to the frame.
         let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
-        for (x, y, r, _) in &placed {
-            x0 = x0.min(*x);
-            y0 = y0.min(*y);
-            x1 = x1.max(x + i64::from(r.width));
-            y1 = y1.max(y + i64::from(r.height));
+        for l in &placed {
+            x0 = x0.min(l.bounds[0]);
+            y0 = y0.min(l.bounds[1]);
+            x1 = x1.max(l.bounds[2]);
+            y1 = y1.max(l.bounds[3]);
         }
         let (x0, y0) = (x0.max(0), y0.max(0));
         let (x1, y1) = (x1.min(i64::from(w)), y1.min(i64::from(h)));
@@ -5977,36 +5995,7 @@ impl GpuEffect for LabelPoints {
             return tex.clone();
         }
         let (bw, bh) = (x1 - x0, y1 - y0);
-        // The text engine's pixels are sRGB bytes with plain alpha. The frame
-        // is linear and premultiplied.
-        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
-        let mut px = vec![0.0f32; (bw * bh * 4) as usize];
-        for (x, y, r, tint) in &placed {
-            let rw = i64::from(r.width.max(1));
-            for (i, texel) in r.rgba.chunks_exact(4).enumerate() {
-                let &[red, green, blue, alpha] = texel else {
-                    continue;
-                };
-                let (at_x, at_y) = (x + i as i64 % rw - x0, y + i as i64 / rw - y0);
-                if alpha == 0 || !(0..bw).contains(&at_x) || !(0..bh).contains(&at_y) {
-                    continue;
-                }
-                let d = ((at_y * bw + at_x) * 4) as usize;
-                let Some(under) = px.get_mut(d..d + 4) else {
-                    continue;
-                };
-                let a = f32::from(alpha) / 255.0;
-                // A flashing label (SICELIOT) keeps its letters' coverage and
-                // takes the flash colour in place of the Text layer's.
-                let over = match tint {
-                    Some(c) => [c[0] * a, c[1] * a, c[2] * a],
-                    None => [red, green, blue].map(|c| linear[usize::from(c)] * a),
-                };
-                for (under, top) in under.iter_mut().zip(over.into_iter().chain([a])) {
-                    *under = top + *under * (1.0 - a);
-                }
-            }
-        }
+        let px = composite(&placed, [x0, y0], [bw, bh]);
         let sprite = lumit_gpu::fx::common::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
         // One stamp, the size of the box and sitting exactly on it, so a
         // pixel of the labels lands on a pixel of the frame.

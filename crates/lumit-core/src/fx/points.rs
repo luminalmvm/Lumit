@@ -1631,6 +1631,24 @@ impl Schedule {
     }
 }
 
+/// SICELIOT: what a consumer's wired drivers write into a stream that is
+/// made on the card ([`PointsSchedule::late_drive`]). Carried, never compared:
+/// the drivers and the time it reads are already in the frame key.
+#[derive(Clone)]
+pub struct LateDrive(pub std::sync::Arc<dyn Fn(&mut PointsStream) + Send + Sync>);
+
+impl std::fmt::Debug for LateDrive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LateDrive")
+    }
+}
+
+impl PartialEq for LateDrive {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 /// **The schedule, threaded beside the op** (points-stream.md §3.3): one
 /// producer's birth scan and the layer time it was scanned for.
 ///
@@ -1690,6 +1708,12 @@ pub struct PointsSchedule {
     /// this list of the op that makes it. The walk asks that op for it on the
     /// card and fills the entry in.
     pub late: Vec<(u32, u32)>,
+    /// SICELIOT: the per-point driver step for the first of those entries,
+    /// run by the walk once it has filled it in. A stream made only on the
+    /// card (a Pick points by Image, say) is not there when the drivers
+    /// wired into a consumer's rows are resolved per point, so they are
+    /// resolved when it arrives.
+    pub late_drive: Option<LateDrive>,
     /// For an effect with several Points inputs: which effect in the stack
     /// each input after the first is wired from, by index, and `u32::MAX` for
     /// none. Folded into the frame key as `input_from` is. `input` then holds
