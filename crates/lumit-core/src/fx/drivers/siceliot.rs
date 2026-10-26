@@ -14,7 +14,7 @@
 use crate::fx::{
     cpu, noise, params::CurvePoints, params::Value, points, registry::DriverCx,
     registry::EffectDef, registry::EffectMetadata, registry::Signature, schema::EffectSchema,
-    schema::Port, schema::PortType,
+    schema::EnabledCond, schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -226,6 +226,7 @@ pub const OSCILLATOR_SHAPES: &[&str] = &["Sine", "Triangle", "Square", "Sawtooth
     cost = Trivial,
     roi = Exact,
     matte = false,
+    enabled_when = OSCILLATOR_ENABLED_WHEN,
 )]
 pub struct Oscillator {
     /// The wave's shape.
@@ -287,6 +288,26 @@ pub struct Oscillator {
 
 /// What sets an Oscillator copy's place on the wave.
 pub const PHASE_FROM: &[&str] = &["Copy", "Position"];
+
+/// Phase per copy is read on Copy, Wave angle and Wavelength on Position, so
+/// each greys out while the other mode is chosen.
+pub const OSCILLATOR_ENABLED_WHEN: &[EnabledWhen] = &[
+    EnabledWhen {
+        param: "phase_per_copy",
+        on: "phase_from",
+        cond: EnabledCond::ChoiceIs(0),
+    },
+    EnabledWhen {
+        param: "wave_angle",
+        on: "phase_from",
+        cond: EnabledCond::ChoiceIs(1),
+    },
+    EnabledWhen {
+        param: "wavelength",
+        on: "phase_from",
+        cond: EnabledCond::ChoiceIs(1),
+    },
+];
 
 /// Oscillator's behaviour.
 pub struct OscillatorDef;
@@ -364,6 +385,7 @@ pub fn oscillator(p: &Oscillator, index: u32, point: Option<[f32; 2]>, lt: f64) 
     cost = Trivial,
     roi = Exact,
     matte = false,
+    enabled_when = VALUE_NOISE_ENABLED_WHEN,
 )]
 pub struct ValueNoise {
     /// The lowest it wanders to.
@@ -422,6 +444,13 @@ pub struct ValueNoise {
 
 /// What makes Value noise differ from copy to copy.
 pub const VARY_BY: &[&str] = &["Nothing", "Copy", "Position"];
+
+/// Noise scale is read only on Position.
+pub const VALUE_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "noise_scale",
+    on: "vary_by",
+    cond: EnabledCond::ChoiceIs(2),
+}];
 
 /// Value noise's behaviour.
 pub struct ValueNoiseDef;

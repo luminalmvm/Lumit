@@ -30,9 +30,16 @@ can be hidden and still be read.
 | `{age}` | Its age. |
 | `{attr:NAME}` | The number it carries under the name NAME. |
 | `{@NAME}` | One of the `@` names. `{@index}`, `{@id}` and `{@n}` are written whole. |
+| `{pick:a\|b\|c}` | One of the words between the bars, chosen per point. |
+| `{chars:N}` | N random letters and digits (up to 64). |
+| `{hex:N}` | N random hexadecimal digits (up to 64). |
 
 Any other text is written as it is, at every point. So is a token whose name reads nothing.
 See [Names](/effects/generate/vary-points/#names).
+
+The random tokens give each point its own text, the same on every frame and whatever order the
+points come in; **Seed** rolls a new set. A list of words longer than the Text row holds can be
+the Text layer's own text, with the Text row left empty.
 
 Labels follow where the points are seen and do not turn with them. A point behind the
 camera has no label.
@@ -49,6 +56,7 @@ camera has no label.
 | **Text layer** | Layer | Any layer in the composition | None | - |
 | **Text** | Text | A short line of text | Empty | - |
 | **Decimals** | Slider, whole numbers | 0 to 4 | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Offset x** | Slider | -200 to 200; any value by typing | 8 | Pixels at composition size |
 | **Offset y** | Slider | -200 to 200; any value by typing | 0 | Pixels at composition size |
 | **Anchor** | Dropdown | Left · Centre · Right | Left | - |
@@ -79,6 +87,7 @@ In the Effect Controls panel:
 - **Text**: the template. The Text layer then gives only the look. Left empty, the Text
   layer's own text is the template.
 - **Decimals**: how many decimal places the numbers in a label are written to.
+- **Seed**: which words and characters the random tokens choose.
 - **Offset x** and **Offset y**: how far across and down from its point a label sits.
 - **Anchor**: which part of the label sits at that offset. **Left** runs the text away to
   the right of it, and **Right** to the left.

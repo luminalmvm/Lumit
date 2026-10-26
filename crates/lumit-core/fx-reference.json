@@ -14348,6 +14348,12 @@
           "hard_max": 4.0
         },
         {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
           "id": "offset_x",
           "label": "Offset x",
           "kind": "float",
@@ -27569,6 +27575,26 @@
         }
       ],
       "groups": [],
+      "enabled_when": [
+        {
+          "param": "phase_per_copy",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "wave_angle",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "wavelength",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 1
+        }
+      ],
       "matte_role": "none"
     },
     {
@@ -27649,6 +27675,14 @@
         }
       ],
       "groups": [],
+      "enabled_when": [
+        {
+          "param": "noise_scale",
+          "on": "vary_by",
+          "cond": "choice_is",
+          "value": 2
+        }
+      ],
       "matte_role": "none"
     }
   ]
