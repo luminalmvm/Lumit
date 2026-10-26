@@ -1,5 +1,7 @@
+use super::geometry::dist;
+use super::raster::{dashed, Pressed, TAPER_TIP};
 use super::*;
-use crate::mask::Mask;
+use crate::mask::{Mask, Vertex};
 
 fn square(x: f64, y: f64, side: f64) -> BezierPath {
     Mask::rectangle(x, y, side, side).path

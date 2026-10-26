@@ -29,7 +29,7 @@ use crate::fx::{
     DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
 };
 use crate::model::{Composition, Document, Layer, LayerKind};
-use crate::shape::Affine;
+use crate::shape::geometry::Affine;
 use lumit_fx_macros::Effect;
 
 /// The layer-reference row, by parameter id.
