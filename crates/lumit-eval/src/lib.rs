@@ -1681,6 +1681,10 @@ fn feed_layer(
             feed_f64(h, p.value_at(lt));
         }
         h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
+    } else if [m.casts_shadows, m.accepts_shadows].contains(&lumit_core::model::ShadowMode::Only) {
+        // Set to Only, a layer can go undrawn with no light in the comp too.
+        h.update(b"shadow only");
+        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
     }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
