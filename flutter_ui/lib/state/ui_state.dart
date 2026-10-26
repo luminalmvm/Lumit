@@ -2443,6 +2443,18 @@ class LumitUiState extends ChangeNotifier {
   void requestViewerZoom(ViewerZoomCommand command) =>
       viewerZoomRequest.value = (++_viewerZoomRequests, command);
 
+  /// A dot pressed on the Align panel. The Viewer answers it, since the boxes
+  /// it lines up are the ones the Viewer draws. [at] is a point of each box,
+  /// 0 to 1 across and down: the anchor goes there, or that point meets the
+  /// same point of the composition.
+  final ValueNotifier<(int, {bool anchor, Offset at})?> alignRequest =
+      ValueNotifier(null);
+
+  int _alignRequests = 0;
+
+  void requestAlign(Offset at, {required bool anchor}) =>
+      alignRequest.value = (++_alignRequests, anchor: anchor, at: at);
+
   /// The armed dropper, or null when the tool is not armed (docs/07 §7).
   ///
   /// One at a time, and held at the session level rather than inside the Viewer:
@@ -3053,6 +3065,7 @@ class LumitUiState extends ChangeNotifier {
     paletteRequest.dispose();
     consoleRequest.dispose();
     viewerZoomRequest.dispose();
+    alignRequest.dispose();
     viewerCameraRequest.dispose();
     panelSearchRequest.dispose();
     selectAllRequest.dispose();

@@ -80,6 +80,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // The two rows' labels and controls, and the two buttons.
       Panel.stagger => 220,
       Panel.notes => 160,
+      // One grid. The second goes under it when there is no room beside.
+      Panel.align => 120,
       Panel.debug => 180,
       // A page lays itself out, and a timer or a sign-in form needs this much.
       Panel.extension => 240,

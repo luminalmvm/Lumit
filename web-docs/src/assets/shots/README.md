@@ -37,6 +37,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `new-composition.png` | [/start/first-composition/](/start/first-composition/) | The new composition dialogue. |
 | `project-panel.png` | [/panels/project/](/panels/project/), [/use/proxies/](/use/proxies/) | The Project panel, holding footage, a folder and a composition. |
 | `scopes.png` | [/panels/scopes/](/panels/scopes/) | The waveform and vectorscope reading the current frame. |
+| `align.png` | [/panels/align/](/panels/align/) | The Align panel, with a layer selected. |
 | `speed-ramp.png` | [/use/retime/](/use/retime/) | A speed ramp in the graph editor, seen through the Speed lens. |
 | `timeline-lanes.png` | [/panels/timeline/](/panels/timeline/) | A layer twirled open, showing its properties and their keyframes. |
 | `timeline-outline.png` | [/panels/timeline/](/panels/timeline/) | The outline columns, left to right. |
