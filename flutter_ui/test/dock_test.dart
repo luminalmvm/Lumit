@@ -57,19 +57,19 @@ void main() {
   group('panel visibility (the Window menu tick list)', () {
     test('hiding drops the panel and showing puts it back, fronted', () {
       final root = defaultLayout();
-      expect(panelVisible(root, Panel.scopes), isTrue);
+      expect(panelVisible(root, Panel.align), isTrue);
 
-      setPanelVisible(root, Panel.scopes, false);
-      expect(panelVisible(root, Panel.scopes), isFalse);
+      setPanelVisible(root, Panel.align, false);
+      expect(panelVisible(root, Panel.align), isFalse);
       expect(panelsIn(root).toSet().length, panelsIn(root).length,
           reason: 'no panel appears twice after a removal');
 
-      setPanelVisible(root, Panel.scopes, true);
-      expect(panelVisible(root, Panel.scopes), isTrue);
+      setPanelVisible(root, Panel.align, true);
+      expect(panelVisible(root, Panel.align), isTrue);
       // It went into a tab group, fronted — a panel you just asked for is the
       // one you want to look at.
       final tabs = panelsIn(root);
-      expect(tabs.where((p) => p == Panel.scopes), hasLength(1));
+      expect(tabs.where((p) => p == Panel.align), hasLength(1));
     });
 
     test('the last panel standing cannot be hidden', () {

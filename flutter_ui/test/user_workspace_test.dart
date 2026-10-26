@@ -73,11 +73,11 @@ void main() {
     test('dragging the panels writes back to the workspace in force', () {
       final w = _workspace('user-workspace-drag');
       w.saveWorkspaceAs('Mine');
-      setPanelVisible(w.dock, Panel.scopes, false);
+      setPanelVisible(w.dock, Panel.align, false);
       w.rememberActiveWorkspaceLayout();
 
       final next = _reopened()..applyUserWorkspace('Mine');
-      expect(panelVisible(next.dock, Panel.scopes), isFalse);
+      expect(panelVisible(next.dock, Panel.align), isFalse);
     });
   });
 

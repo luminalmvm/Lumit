@@ -694,27 +694,27 @@ void main() {
     testWidgets('the Window menu ticks the panels and toggles them',
         (tester) async {
       final p = await mount(tester);
-      expect(panelsIn(p.uiState.split), contains(Panel.scopes));
+      expect(panelsIn(p.uiState.split), contains(Panel.align));
 
-      await choose(tester, 'Window', Panel.scopes.title);
+      await choose(tester, 'Window', Panel.align.title);
       await tester.pump();
-      expect(panelsIn(p.uiState.split), isNot(contains(Panel.scopes)),
+      expect(panelsIn(p.uiState.split), isNot(contains(Panel.align)),
           reason: 'the tick came off and the panel went with it');
       expect(p.uiState.workspace.toJson()['dock'].toString(),
-          isNot(contains(Panel.scopes.name)),
+          isNot(contains(Panel.align.name)),
           reason: 'the stored arrangement is what persists it');
 
-      expect(find.text(Panel.scopes.title), findsOneWidget,
+      expect(find.text(Panel.align.title), findsOneWidget,
           reason: 'a toggle row leaves the menu up');
-      await tester.tap(find.text(Panel.scopes.title));
+      await tester.tap(find.text(Panel.align.title));
       await tester.pump();
-      expect(panelsIn(p.uiState.split), contains(Panel.scopes),
+      expect(panelsIn(p.uiState.split), contains(Panel.align),
           reason: 'and back again, without opening the menu a second time');
 
       // A row that is not a toggle still closes it.
       await tester.tap(find.text('Command palette…'));
       await tester.pump();
-      expect(find.text(Panel.scopes.title), findsNothing,
+      expect(find.text(Panel.align.title), findsNothing,
           reason: 'an ordinary command closes the menu as it always did');
       await dismiss(tester);
     });
