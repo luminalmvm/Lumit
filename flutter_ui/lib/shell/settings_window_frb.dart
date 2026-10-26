@@ -3191,6 +3191,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             BridgeWheelAction.scrollSideways => l10n.keymapWheelScrollSideways,
             BridgeWheelAction.zoomValues => l10n.keymapWheelZoomValues,
             BridgeWheelAction.dropperSample => l10n.keymapWheelDropperSample,
+            BridgeWheelAction.cameraDolly => l10n.keymapWheelCameraDolly,
           },
           _dropdown<BridgeWheelModifier>(
             key: 'keymap-wheel-${row.action.name}',

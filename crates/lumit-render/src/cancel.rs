@@ -5,6 +5,8 @@
 //! waits a layer rather than a whole frame. The composite itself is never cut
 //! short: it records into one command buffer and caches precomps as it goes,
 //! and stopping half way would leave a cached picture that was never drawn.
+//! Particulate's Trails do stop inside it, so once a stop is asked nothing
+//! more is filed and the frame is not shown.
 
 use lumit_eval::epoch::EpochToken;
 use std::cell::RefCell;
@@ -17,13 +19,15 @@ thread_local! {
 }
 
 /// Keeps `token` as this thread's render token until dropped, then puts back
-/// whatever was there before.
-pub struct Scope(Option<EpochToken>);
+/// whatever was there before. Particulate's walk cannot see the token, so it
+/// is handed [`requested`] to ask with.
+pub struct Scope(Option<EpochToken>, Option<fn() -> bool>);
 
 impl Scope {
     #[must_use]
     pub fn new(token: EpochToken) -> Self {
-        Self(TOKEN.with(|slot| slot.replace(Some(token))))
+        let walk = lumit_core::fx::points::stepped::stop_when(Some(requested));
+        Self(TOKEN.with(|slot| slot.replace(Some(token))), walk)
     }
 }
 
@@ -31,6 +35,7 @@ impl Drop for Scope {
     fn drop(&mut self) {
         let previous = self.0.take();
         TOKEN.with(|slot| *slot.borrow_mut() = previous);
+        lumit_core::fx::points::stepped::stop_when(self.1);
     }
 }
 

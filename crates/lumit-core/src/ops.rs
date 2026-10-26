@@ -207,7 +207,8 @@ pub enum Op {
     SetShapeContents {
         comp: Uuid,
         layer: Uuid,
-        contents: Vec<crate::shape::ShapeItem>,
+        #[serde(default, deserialize_with = "crate::shape::modifier::read_entries")]
+        contents: Vec<crate::shape::modifier::ShapeEntry>,
     },
     /// Replace a layer's whole effect stack (docs/03 §8; coarse + exactly
     /// invertible like SetLayerMasks — add/remove/reorder/param edits all
@@ -560,6 +561,14 @@ pub enum Op {
         pair: TransformPair,
         mode: AxisMode,
     },
+    /// Turn X, Y and Z Rotation in After Effects' order or in Lumit's. Only
+    /// the flag: the rotations rewritten to keep the pose ride along as
+    /// `SetTransformProperty` ops in the same [`Op::Batch`].
+    SetRotationOrder {
+        comp: Uuid,
+        layer: Uuid,
+        after_effects: bool,
+    },
     /// Replace a Camera layer's zoom animation (same coarse-grained shape as
     /// SetTransformProperty, for the same invertibility reason).
     SetCameraZoom {
@@ -575,6 +584,25 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         settings: crate::model::CameraSettings,
+    },
+    /// Replace the non-animatable part of a Light layer: its kind, its
+    /// falloff, whether it is aimed at its point of interest and whether it
+    /// casts shadows. One op, so the settings dialog is one undo step.
+    SetLightSettings {
+        comp: Uuid,
+        layer: Uuid,
+        settings: crate::model::LightSettings,
+    },
+    /// Switch how a composition's lights fall on its layers.
+    SetCompLighting {
+        comp: Uuid,
+        lighting: crate::model::CompLighting,
+    },
+    /// Replace whether a layer casts and accepts shadows, as one undo step.
+    SetMaterialSettings {
+        comp: Uuid,
+        layer: Uuid,
+        settings: crate::model::MaterialSettings,
     },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
@@ -745,6 +773,10 @@ pub enum Op {
     /// list moved underneath them.
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
+    },
+    /// Replace the project's notes whole. It changes no pixel.
+    SetNotes {
+        notes: String,
     },
     /// Point this project at an OCIO config, or clear it
     /// (docs/impl/ocio.md §3.1).
@@ -921,8 +953,11 @@ impl Op {
             Op::SetTransformProperty { .. } => "Edit transform",
             Op::SetTransformExpressionSlot { .. } => "Edit expression",
             Op::SetTransformAxisMode { .. } => "Set axis mode",
+            Op::SetRotationOrder { .. } => "Set rotation order",
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
+            Op::SetLightSettings { .. } => "Set light settings",
+            Op::SetMaterialSettings { .. } => "Set material settings",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
@@ -939,12 +974,14 @@ impl Op {
             Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
+            Op::SetNotes { .. } => "Edit notes",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
             }
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
+            Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
@@ -1013,8 +1050,11 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
+        | Op::SetRotationOrder { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
+        | Op::SetLightSettings { comp, layer, .. }
+        | Op::SetMaterialSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
@@ -1081,6 +1121,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetTransformProperty { comp, .. }
         | Op::SetTransformExpressionSlot { comp, .. }
         | Op::SetTransformAxisMode { comp, .. }
+        | Op::SetRotationOrder { comp, .. }
         | Op::SetCameraZoom { comp, .. }
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
@@ -2113,13 +2154,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let slot = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
-            let previous = std::mem::replace(&mut slot.animation, animation.clone());
-            Ok(Op::SetTransformProperty {
+            // One Orientation key holds all three angles, whoever writes it.
+            let undo = |prop: TransformProp, animation: Animation| Op::SetTransformProperty {
                 comp: *comp,
                 layer: *layer,
-                prop: *prop,
-                animation: previous,
+                prop,
+                animation,
+            };
+            let mut previous = l.transform.set_orientation_angle(*prop, animation.clone());
+            if previous.is_empty() {
+                let slot = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
+                previous.push((
+                    *prop,
+                    std::mem::replace(&mut slot.animation, animation.clone()),
+                ));
+            }
+            Ok(match previous.len() {
+                1 => {
+                    let (prop, animation) = previous.remove(0);
+                    undo(prop, animation)
+                }
+                _ => Op::Batch {
+                    ops: previous.into_iter().map(|(p, a)| undo(p, a)).collect(),
+                },
             })
         }
         Op::SetTransformExpressionSlot {
@@ -2168,6 +2225,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 mode: previous,
             })
         }
+        Op::SetRotationOrder {
+            comp,
+            layer,
+            after_effects,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.transform.after_effects_order, *after_effects);
+            Ok(Op::SetRotationOrder {
+                comp: *comp,
+                layer: *layer,
+                after_effects: previous,
+            })
+        }
         Op::SetCameraZoom {
             comp,
             layer,
@@ -2206,6 +2281,57 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = options.settings();
             options.set_settings(*settings);
             Ok(Op::SetCameraSettings {
+                comp: *comp,
+                layer: *layer,
+                settings: previous,
+            })
+        }
+        Op::SetLightSettings {
+            comp,
+            layer,
+            settings,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let crate::model::LayerKind::Light { light } = &mut l.kind else {
+                return Err(OpError::PropNotOnLayer);
+            };
+            let previous = light.settings();
+            light.set_settings(*settings);
+            Ok(Op::SetLightSettings {
+                comp: *comp,
+                layer: *layer,
+                settings: previous,
+            })
+        }
+        Op::SetCompLighting { comp, lighting } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.lighting, *lighting);
+            Ok(Op::SetCompLighting {
+                comp: *comp,
+                lighting: previous,
+            })
+        }
+        Op::SetMaterialSettings {
+            comp,
+            layer,
+            settings,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let m = &mut l.transform.material;
+            let previous = m.settings();
+            m.casts_shadows = settings.casts_shadows;
+            m.accepts_shadows = settings.accepts_shadows;
+            Ok(Op::SetMaterialSettings {
                 comp: *comp,
                 layer: *layer,
                 settings: previous,
@@ -2428,6 +2554,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
         Op::SetProjectSwatches { swatches } => {
             let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
             Ok(Op::SetProjectSwatches { swatches: previous })
+        }
+        Op::SetNotes { notes } => {
+            let previous = std::mem::replace(&mut doc.notes, notes.clone());
+            Ok(Op::SetNotes { notes: previous })
         }
         Op::SetColourConfig { config } => {
             let previous = std::mem::replace(&mut doc.colour.config, config.as_deref().cloned());

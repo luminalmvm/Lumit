@@ -227,9 +227,8 @@ while (true) {}
     assert!(!host.store().can_redo());
 }
 
-/// An After Effects script keys a camera, and the camera in Lumit faces the
-/// way it does in After Effects, which turns by Rx · Ry · Rz where Lumit turns
-/// by Ry · Rx · Rz.
+/// An After Effects script keys a camera, and the camera turns in After
+/// Effects' order, Rx · Ry · Rz, so it keeps After Effects' own numbers.
 #[test]
 fn an_after_effects_script_keys_a_camera() {
     let host = Bare(DocumentStore::new(Document::new()));
@@ -274,23 +273,20 @@ app.endUndoGroup();
     assert_eq!(at(&p["position"][1], 2), 40.0);
     assert_eq!(p["zoom"][1]["hold"], json!(true));
     assert_eq!(at(&p["zoom"], 2), 1200.0);
-    let faces = |p: &Value, ae: [(f64, f64, f64); 3]| {
-        for (n, ae) in ae.iter().enumerate() {
-            let turned = (
-                at(&p["rotation_x"], n),
-                at(&p["rotation_y"], n),
-                at(&p["rotation"], n),
-            );
-            let want = Mat::rx(ae.0).mul(Mat::ry(ae.1)).mul(Mat::rz(ae.2));
-            let got = lumit_core::camera::rotation(turned);
-            for (r, row) in got.iter().enumerate() {
-                for (c, v) in row.iter().enumerate() {
-                    assert!((v - want.0[r][c]).abs() < 1e-9, "key {n}: {turned:?}");
-                }
-            }
+    // A value, or the value of each key.
+    let angles = |p: &Value| -> Vec<f64> {
+        match p {
+            Value::Array(keys) => keys.iter().map(|k| k["value"].as_f64().unwrap()).collect(),
+            v => vec![v.as_f64().unwrap()],
         }
     };
-    faces(p, [(10.0, 40.0, 5.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)]);
+    let faces = |p: &Value, z: f64| {
+        assert_eq!(angles(&p["rotation_x"]), [10.0, 20.0, 30.0]);
+        assert_eq!(angles(&p["rotation_y"]), [40.0, 50.0, 60.0]);
+        assert_eq!(angles(&p["rotation"]), [z]);
+    };
+    assert_eq!(cam["after_effects_order"], json!(true));
+    faces(p, 5.0);
     // The whole run is one step, named after its undo group.
     let history = host.store().history();
     assert_eq!(history.len(), 1);
@@ -332,10 +328,98 @@ read"#;
         "layer.get",
         json!({ "comp": "Shot", "layer": "Cam" }),
     );
-    faces(
-        &cam["properties"],
-        [(10.0, 40.0, 15.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)],
+    faces(&cam["properties"], 15.0);
+}
+
+/// Orientation and X, Y and Z Rotation from an After Effects script turn a
+/// layer exactly as After Effects does, on a layer the script made 3D, which
+/// turns in After Effects' order (its angles kept as they are), and on one put
+/// back in Lumit's (its rotations rewritten). Placed as the compositor places
+/// them.
+#[test]
+fn an_after_effects_script_turns_layers_in_either_rotation_order() {
+    use lumit_core::anim::Property;
+
+    let host = Bare(DocumentStore::new(Document::new()));
+    let made = r#"var comp = app.project.items.addComp("Shot", 1920, 1080, 1, 2, 30);
+var a = comp.layers.addSolid([1, 1, 1], "Imported", 100, 100, 1);
+a.threeDLayer = true;
+var b = comp.layers.addSolid([1, 1, 1], "Plain", 100, 100, 1);
+b.threeDLayer = true;
+"#;
+    run(&host, made, RunOptions::default()).result.unwrap();
+    let shot: Uuid =
+        serde_json::from_value(call(&host, "comp.get", json!({ "comp": "Shot" }))["id"].clone())
+            .unwrap();
+    let order = |name: &str| {
+        call(&host, "layer.get", json!({ "comp": "Shot", "layer": name }))["after_effects_order"]
+            .clone()
+    };
+    assert_eq!(order("Imported"), json!(true));
+    call(
+        &host,
+        "layer.set",
+        json!({ "comp": "Shot", "layer": "Plain", "after_effects_order": false }),
     );
+    assert_eq!(order("Plain"), json!(false));
+
+    let turn = r#"var comp;
+for (var i = 1; i <= app.project.numItems; i++) {
+    if (app.project.item(i).name === "Shot") comp = app.project.item(i);
+}
+["Imported", "Plain"].forEach(function (name) {
+    var t = comp.layer(name).transform;
+    t.orientation.setValue([10, 20, 30]);
+    t.xRotation.setValue(40);
+    t.yRotation.setValue(50);
+    t.zRotation.setValue(60);
+});
+"#;
+    run(&host, turn, RunOptions::default()).result.unwrap();
+
+    let doc = host.store().snapshot();
+    let comp = doc.comp(shot).unwrap();
+    let read = |_: &Layer, p: &Property| p.value_at(0.0);
+    let want = Mat::rx(10.0)
+        .mul(Mat::ry(20.0))
+        .mul(Mat::rz(30.0))
+        .mul(Mat::rx(40.0))
+        .mul(Mat::ry(50.0))
+        .mul(Mat::rz(60.0));
+    for name in ["Imported", "Plain"] {
+        let layer = comp.layers.iter().find(|l| l.name == name).unwrap();
+        let placed = lumit_core::model::placement(layer, 0.0, &read);
+        let got = lumit_core::camera::rotation(placed.rotation_deg);
+        for (r, row) in got.iter().enumerate() {
+            for (c, v) in row.iter().enumerate() {
+                assert!((v - want.0[r][c]).abs() < 1e-9, "{name}: {got:?}");
+            }
+        }
+        let tr = &layer.transform;
+        let orientation = tr.orientation.each_ref().map(|p| p.value_at(0.0));
+        assert_eq!(orientation, [10.0, 20.0, 30.0], "{name}");
+    }
+    // The imported layer keeps After Effects' own angles, and reads them back.
+    let imported = comp.layers.iter().find(|l| l.name == "Imported").unwrap();
+    let tr = &imported.transform;
+    let rows = [&tr.rotation_x, &tr.rotation_y, &tr.rotation].map(|p| p.value_at(0.0));
+    assert_eq!(rows, [40.0, 50.0, 60.0]);
+    let back = r#"var comp;
+for (var i = 1; i <= app.project.numItems; i++) {
+    if (app.project.item(i).name === "Shot") comp = app.project.item(i);
+}
+var t = comp.layer("Imported").transform;
+[t.xRotation.value, t.yRotation.value, t.zRotation.value].concat(t.orientation.value)"#;
+    let report = run(&host, back, RunOptions::default());
+    let read: Vec<f64> = report
+        .result
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
+    assert_eq!(read, [40.0, 50.0, 60.0, 10.0, 20.0, 30.0]);
 }
 
 /// The After Effects pieces past keys and cameras: includes, eased keys, a

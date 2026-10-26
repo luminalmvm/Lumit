@@ -1812,7 +1812,9 @@ pub fn run_ops(
     if let Some((store, _)) = cache {
         let mut store = store.borrow_mut();
         store.runs += ops.len().saturating_sub(start) as u64;
-        if store.keep && fx.flare_substitutions() == subs_before {
+        // A frame asked to stop may hold a picture drawn short, such as a
+        // trail that stopped walking, so nothing of it is filed.
+        if store.keep && fx.flare_substitutions() == subs_before && !crate::cancel::requested() {
             for (key, out) in made {
                 // The picture leaves the frame that made it and joins the
                 // store, and its charge goes with it: the frame puts it down,
@@ -1901,6 +1903,24 @@ fn op_keys(
                     // this op's picture moves, while nothing `feed_hash`
                     // walked has changed at all.
                     h.update(&[u8::from(sched.projection.is_some())]);
+                    // Trails draw every frame before this one, which the bag
+                    // does not name.
+                    if let Some(trails) = &sched.trails {
+                        h.update(&trails.key);
+                    }
+                    // A walked stream is the whole walk from the in point,
+                    // which the bag does not name either, so it is named by
+                    // what it came to.
+                    if let Some(s) = &sched.stepped {
+                        let numbers = s.position.iter().chain(&s.speed).flatten();
+                        let numbers = numbers.chain(s.colour.iter().flatten());
+                        for v in numbers.chain(&s.size).chain(&s.rotation) {
+                            h.update(&v.to_le_bytes());
+                        }
+                        for id in &s.id {
+                            h.update(&id.to_le_bytes());
+                        }
+                    }
                     // **And the wire**. The stream itself is not hashed
                     // and must not be — it is a pure function of the producer's
                     // bag, the time and the camera, and the producer sits

@@ -9,6 +9,7 @@
 use std::path::Path;
 
 use lumit_core::model::{Document, Layer, LayerKind, ProjectItem};
+use lumit_core::shape::modifier::{items, lowered, ModifierKind};
 
 fn imported() -> Document {
     let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/shapes-and-text.aep");
@@ -38,23 +39,35 @@ fn shape_contents_arrive_where_after_effects_draws_them() {
     // Measured round the outside of the 8 px outline, so 4 px more each side.
     let bounds = lumit_core::shape::contents_bounds(contents, 0.0).unwrap();
     assert_eq!(bounds, (-204.0, -104.0, 204.0, 104.0));
-    assert!(contents.iter().any(|item| item.fill.is_some()));
-    assert!(contents.iter().any(|item| item.stroke_width == 8.0));
-    assert_eq!(contents[0].path.vertices.len(), 8, "rounded corners");
+    let art = items(contents);
+    assert!(art.iter().any(|item| item.fill.is_some()));
+    assert!(art
+        .iter()
+        .any(|item| item.stroke_width.value_at(0.0) == 8.0));
+    assert_eq!(art[0].path.vertices.len(), 8, "rounded corners");
 
     // The drawn path is in pixels, where a mask's points are fractions of the
     // layer, and its trim is keyed.
     let LayerKind::Shape { contents } = &layer(&doc, "Mix").kind else {
         panic!("a shape layer");
     };
-    let path = contents
+    let art = lowered(contents);
+    let path = art
         .iter()
-        .find(|item| item.name == "Path 1")
+        .find(|art| art.item.name == "Path 1")
         .expect("the drawn path");
-    let xs: Vec<f64> = path.path.vertices.iter().map(|v| v.pos.0).collect();
+    let xs: Vec<f64> = path.item.path.vertices.iter().map(|v| v.pos.0).collect();
     assert_eq!(xs, vec![-200.0, 0.0, 200.0]);
-    assert_eq!(path.trim_end.value_at(2.0), 100.0);
-    assert_eq!(path.trim_end.value_at(0.0), 0.0);
+    let trim = path
+        .mods
+        .iter()
+        .find_map(|m| match &m.kind {
+            ModifierKind::Trim(trim) => Some(trim),
+            _ => None,
+        })
+        .expect("a trim");
+    assert_eq!(trim.end.value_at(2.0), 100.0);
+    assert_eq!(trim.end.value_at(0.0), 0.0);
 }
 
 #[test]
@@ -90,11 +103,12 @@ fn gradients_and_merged_paths_come_across() {
     };
 
     // Red, a half clear green half way, blue.
-    let ramp = contents
+    let art = items(contents);
+    let ramp = art
         .iter()
         .find(|item| item.gradient == 1)
         .expect("the gradient");
-    let red = ramp.fill.expect("a start").0;
+    let red = lumit_core::shape::colour::at(ramp.fill.as_ref().expect("a start"), 0.0).0;
     let blue = ramp.gradient_colour.expect("an end").0;
     assert!(red[0] > 0.9 && red[2] < 0.1, "{red:?}");
     assert!(blue[2] > 0.9 && blue[0] < 0.1, "{blue:?}");
@@ -106,7 +120,7 @@ fn gradients_and_merged_paths_come_across() {
     let LayerKind::Shape { contents } = &layer(&doc, "Ops").kind else {
         panic!("a shape layer");
     };
-    let combined: Vec<u32> = contents.iter().map(|item| item.combine).collect();
+    let combined: Vec<u32> = items(contents).iter().map(|item| item.combine).collect();
     assert!(
         combined.windows(2).any(|pair| pair == [0, 2]),
         "{combined:?}"

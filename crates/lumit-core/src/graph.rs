@@ -277,6 +277,14 @@ pub enum GraphError {
     /// pictures and no way to say which it shows.
     #[error("a node graph has one Output box")]
     SecondOutput,
+    /// A Repeat end with no one Repeat start nearest it, or a start two ends
+    /// share.
+    #[error("a Repeat end needs a Repeat start of its own before it")]
+    RepeatUnpaired,
+    /// A wire out of the boxes between a Repeat start and its end, other than
+    /// into the end, or a pair half inside another.
+    #[error("a wire leaves a repeat other than through its Repeat end")]
+    RepeatLeak,
 }
 
 /// How many of `effects` lie at or above `node` in the image chain — the

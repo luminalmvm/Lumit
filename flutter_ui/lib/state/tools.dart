@@ -72,12 +72,12 @@ enum ToolMode {
   shapeStar(ToolGroup.shape, LumitIcon.star, ready: true),
 
   // The Pen builds a mask path point by point. Its four siblings edit a
-  // *finished* path, which is not built.
+  // finished path, which is the gizmo's work.
   pen(ToolGroup.pen, LumitIcon.pen, ready: true),
-  penAddVertex(ToolGroup.pen, LumitIcon.vertexAdd),
-  penDeleteVertex(ToolGroup.pen, LumitIcon.vertexDelete),
-  penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert),
-  penMaskFeather(ToolGroup.pen, LumitIcon.maskFeather),
+  penAddVertex(ToolGroup.pen, LumitIcon.vertexAdd, ready: true),
+  penDeleteVertex(ToolGroup.pen, LumitIcon.vertexDelete, ready: true),
+  penConvertVertex(ToolGroup.pen, LumitIcon.vertexConvert, ready: true),
+  penMaskFeather(ToolGroup.pen, LumitIcon.maskFeather, ready: true),
 
   // Making and editing text layers on the picture. Vertical type would
   // need the engine to lay a line out downwards; it lays out one horizontal
@@ -183,6 +183,8 @@ enum ToolMode {
         ToolMode.shapeStar =>
           l10n.statusHintShape,
         ToolMode.pen => l10n.statusHintPen,
+        ToolMode.penConvertVertex => l10n.statusHintConvertVertex,
+        ToolMode.penMaskFeather => l10n.statusHintMaskFeather,
         ToolMode.typeHorizontal => l10n.statusHintType,
         ToolMode.brush || ToolMode.eraser => l10n.statusHintPaint,
         ToolMode.cloneStamp => l10n.statusHintCloneStamp,
@@ -233,6 +235,37 @@ const Map<String, ToolGroup> toolActions = {
   'tool.puppet': ToolGroup.puppet,
   'tool.camera': ToolGroup.camera,
 };
+
+/// The axes a 3D layer's move arrows and rotation rings follow.
+enum GizmoAxes { local, world, view }
+
+/// What the Rotation tool turns on a 3D layer: its Orientation, or its X, Y
+/// and Z Rotation, as After Effects' Rotation tool offers.
+enum RotateSets { orientation, rotation }
+
+/// What a camera orbit swings round, After Effects' choice on the camera
+/// tools' options.
+enum CameraPivot {
+  /// What the camera looks at: its point of interest, or the middle of the
+  /// frame at its zoom.
+  pointOfInterest,
+
+  /// The point on the layer under the pointer when the drag starts.
+  cursor,
+
+  /// The middle of every 3D layer.
+  scene,
+
+  /// The middle of the selected 3D layers.
+  selection;
+
+  String get label => switch (this) {
+        CameraPivot.pointOfInterest => l10n.cameraPivotPointOfInterest,
+        CameraPivot.cursor => l10n.cameraPivotCursor,
+        CameraPivot.scene => l10n.cameraPivotScene,
+        CameraPivot.selection => l10n.cameraPivotSelection,
+      };
+}
 
 /// A colour the toolbar holds, in the document's own scene-linear channels — the
 /// same numbers a fill crosses the bridge as, so nothing is converted twice.
@@ -335,6 +368,26 @@ class ToolsState extends ChangeNotifier {
   set snapToGrid(bool value) {
     if (_snapToGrid == value) return;
     _snapToGrid = value;
+    notifyListeners();
+  }
+
+  /// Which way the 3D handles point: along the layer's own axes, the comp's,
+  /// or the screen's, as After Effects' three axis modes do.
+  GizmoAxes _axes = GizmoAxes.local;
+  GizmoAxes get axes => _axes;
+  set axes(GizmoAxes value) {
+    if (_axes == value) return;
+    _axes = value;
+    notifyListeners();
+  }
+
+  /// What the Rotation tool turns on a 3D layer, Orientation by default as
+  /// in After Effects.
+  RotateSets _rotateSets = RotateSets.orientation;
+  RotateSets get rotateSets => _rotateSets;
+  set rotateSets(RotateSets value) {
+    if (_rotateSets == value) return;
+    _rotateSets = value;
     notifyListeners();
   }
 
@@ -508,6 +561,16 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(0.0, 100.0);
     if (_puppetExpansion == next) return;
     _puppetExpansion = next;
+    notifyListeners();
+  }
+
+  /// What the camera tools orbit round. The pointer by default, as in After
+  /// Effects.
+  CameraPivot _cameraPivot = CameraPivot.cursor;
+  CameraPivot get cameraPivot => _cameraPivot;
+  set cameraPivot(CameraPivot value) {
+    if (_cameraPivot == value) return;
+    _cameraPivot = value;
     notifyListeners();
   }
 

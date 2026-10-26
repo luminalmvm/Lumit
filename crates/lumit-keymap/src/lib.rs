@@ -209,9 +209,11 @@ impl ActionId {
             "layer.new.solid" => "New Solid layer",
             "layer.new.text" => "New Text layer",
             "layer.new.camera" => "New Camera layer",
-            "layer.new.light.point" => "New Point light layer",
+            "layer.new.light.point" => "New Light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
+            "layer.new.sequence" => "New Sequence layer",
+            "layer.new.audio" => "New Audio layer",
             "layer.settings" => "Layer settings",
             "layer.blend.next" => "Next blend mode",
             "layer.blend.prev" => "Previous blend mode",
@@ -253,6 +255,7 @@ impl ActionId {
             "viewer.rulers.toggle" => "Show or hide the rulers",
             "viewer.grid.toggle" => "Show or hide the grid",
             "viewer.new" => "Open another Viewer",
+            "viewer.new.viewport" => "Open a 3D viewport",
             "viewer.view.next" => "Front the next view",
             "viewer.view.prev" => "Front the previous view",
             "viewer.lock.toggle" => "Lock or unlock this view",
@@ -265,6 +268,21 @@ impl ActionId {
             "viewer.preview.always" => "Always preview this view",
             "viewer.controls.toggle" => "Show or hide the layer controls",
             "viewer.snap.grid.toggle" => "Turn snapping to the grid on or off",
+            "viewer.3d.slot.1" => "Switch to 3D view shortcut 1",
+            "viewer.3d.slot.2" => "Switch to 3D view shortcut 2",
+            "viewer.3d.slot.3" => "Switch to 3D view shortcut 3",
+            "viewer.3d.assign.1" => "Assign the 3D view to shortcut 1",
+            "viewer.3d.assign.2" => "Assign the 3D view to shortcut 2",
+            "viewer.3d.assign.3" => "Assign the 3D view to shortcut 3",
+            "viewer.3d.last" => "Switch to the last 3D view",
+            "viewer.3d.camera" => "Back to the active camera",
+            "viewer.3d.look.selected" => "Look at the selected layers",
+            "viewer.3d.look.all" => "Look at all layers",
+            "viewer.3d.frame.all" => "Frame all layers in a 3D viewport",
+            "viewer.3d.reset" => "Reset the 3D view",
+            "viewer.3d.camera.new" => "Create a camera from the 3D view",
+            "viewer.3d.camera.move" => "Move the active camera to the 3D view",
+            "viewer.3d.place" => "Place the selected layers on a surface",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",
@@ -542,25 +560,28 @@ pub enum WheelAction {
     ZoomValues,
     /// Grow or shrink the dropper's sample in the Viewer.
     DropperSample,
+    /// Dolly a 3D view toward the pointer in the Viewer, with any tool.
+    CameraDolly,
 }
 
 impl WheelAction {
     /// Every wheel action, in the order Settings lists them.
-    pub const ALL: [WheelAction; 4] = [
+    pub const ALL: [WheelAction; 5] = [
         WheelAction::ZoomTime,
         WheelAction::ScrollSideways,
         WheelAction::ZoomValues,
         WheelAction::DropperSample,
+        WheelAction::CameraDolly,
     ];
 
     /// Whether both actions are live in one panel, so they can't share a modifier.
-    /// The first three all meet in the Graph editor, the dropper is on its own.
+    /// The first three all meet in the Graph editor, the last two in the Viewer.
     /// Zooming time and values can share one, and the Graph editor then zooms both.
     fn shares_a_panel_with(self, other: WheelAction) -> bool {
-        use WheelAction::{DropperSample, ZoomTime, ZoomValues};
+        use WheelAction::{CameraDolly, DropperSample, ZoomTime, ZoomValues};
+        let viewer = |a| matches!(a, DropperSample | CameraDolly);
         self != other
-            && self != DropperSample
-            && other != DropperSample
+            && viewer(self) == viewer(other)
             && !matches!(
                 (self, other),
                 (ZoomTime, ZoomValues) | (ZoomValues, ZoomTime)
@@ -576,6 +597,7 @@ pub struct WheelKeys {
     pub scroll_sideways: WheelModifier,
     pub zoom_values: WheelModifier,
     pub dropper_sample: WheelModifier,
+    pub camera_dolly: WheelModifier,
 }
 
 impl Default for WheelKeys {
@@ -585,6 +607,7 @@ impl Default for WheelKeys {
             scroll_sideways: WheelModifier::Shift,
             zoom_values: WheelModifier::Alt,
             dropper_sample: WheelModifier::Shift,
+            camera_dolly: WheelModifier::Alt,
         }
     }
 }
@@ -598,6 +621,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => self.scroll_sideways,
             WheelAction::ZoomValues => self.zoom_values,
             WheelAction::DropperSample => self.dropper_sample,
+            WheelAction::CameraDolly => self.camera_dolly,
         }
     }
 
@@ -607,6 +631,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => &mut self.scroll_sideways,
             WheelAction::ZoomValues => &mut self.zoom_values,
             WheelAction::DropperSample => &mut self.dropper_sample,
+            WheelAction::CameraDolly => &mut self.camera_dolly,
         }
     }
 
@@ -952,14 +977,18 @@ pub fn default_keymap() -> Keymap {
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
         // Layer ▸ New. After Effects' own chords, so the rows read the way
-        // anyone arriving from there expects. Spot and Area lights and the
-        // Sequence layer have no chord there and ship without one here.
+        // anyone arriving from there expects. Spot and Area lights have no
+        // chord there and ship without one here.
         row(Global, "Mod+Y", "layer.new.solid"),
         row(Global, "Mod+Alt+Shift+T", "layer.new.text"),
         row(Global, "Mod+Alt+Shift+C", "layer.new.camera"),
         row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
         row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
         row(Global, "Mod+Alt+Shift+Y", "layer.new.null"),
+        // An empty row for clips, picture or sound. After Effects has neither,
+        // so they take the family's chord with their own initial.
+        row(Global, "Mod+Alt+Shift+S", "layer.new.sequence"),
+        row(Global, "Mod+Alt+Shift+A", "layer.new.audio"),
         // What else After Effects does to the selected layers from the
         // keyboard, on its own chords. App-wide like the ones above, since a
         // layer picked in the Viewer is as selected as one picked in the
@@ -984,6 +1013,16 @@ pub fn default_keymap() -> Keymap {
         // The mask whose row is picked in the Timeline.
         row(Global, "Mod+Shift+F", "mask.feather"),
         row(Global, "Mod+Shift+I", "mask.invert"),
+        // The 3D views on After Effects' own keys, which work from any panel
+        // there too.
+        row(Global, "F10", "viewer.3d.slot.1"),
+        row(Global, "F11", "viewer.3d.slot.2"),
+        row(Global, "F12", "viewer.3d.slot.3"),
+        row(Global, "Shift+F10", "viewer.3d.assign.1"),
+        row(Global, "Shift+F11", "viewer.3d.assign.2"),
+        row(Global, "Shift+F12", "viewer.3d.assign.3"),
+        row(Global, "Mod+Alt+Shift+\\", "viewer.3d.look.selected"),
+        row(Global, "Mod+Shift+\\", "viewer.3d.look.all"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
         row(Tools, "H", "tool.hand"),
@@ -1003,6 +1042,13 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "Alt+W", "tool.roto"),
         row(Tools, "Mod+P", "tool.puppet"),
         row(Tools, "Shift+C", "tool.camera"),
+        // With a camera tool in hand over the Viewer, After Effects' F and
+        // Ctrl+Shift+F look at the selected layers and at all of them.
+        row(Tools, "F", "viewer.3d.look.selected"),
+        row(Tools, "Mod+Shift+F", "viewer.3d.look.all"),
+        // And in a 3D viewport with no tool, F too, with Shift+F to frame
+        // everything.
+        row(Tools, "Shift+F", "viewer.3d.frame.all"),
         // --- Timeline: reveals and edits ---
         row(Timeline, "P", "reveal.position"),
         row(Timeline, "S", "reveal.scale"),
@@ -1087,6 +1133,9 @@ pub fn default_keymap() -> Keymap {
         row(Viewer, "Mod+Alt+P", "viewer.preview.always"),
         row(Viewer, "Mod+Shift+H", "viewer.controls.toggle"),
         row(Viewer, "Mod+Shift+'", "viewer.snap.grid.toggle"),
+        // Escape goes back to the last 3D view, as in After Effects, and
+        // only when nothing else on screen wanted it.
+        row(Viewer, "Escape", "viewer.3d.last"),
         // --- Panels ---
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
@@ -1296,6 +1345,9 @@ pub fn after_effects_preset() -> Keymap {
 /// - **Mod+L** turns auto ripple on and off and **Mod+Shift+X** automatic
 ///   crossfades. Quantise to frames is on Alt+F8 already.
 /// - **M** adds a marker, anywhere.
+/// - **Mod+Q**, **Mod+Shift+Q** and **Mod+Alt+Shift+Q** add an empty Audio,
+///   Sequence or Adjustment layer, anywhere. Not on a Mac, where Cmd+Q quits
+///   and Cmd+Shift+Q logs out before Lumit hears either.
 ///
 /// In the Timeline, **S** splits the layer, **I** and **O** set the work
 /// area as they do in the Cut timeline, Up and Down zoom, and `L` shuttles
@@ -1343,8 +1395,14 @@ pub fn vegas_preset() -> Keymap {
         (Timeline, "O", "workarea.set.end"),
         (Timeline, "ArrowUp", "timeline.zoom.in"),
         (Timeline, "ArrowDown", "timeline.zoom.out"),
+        (Global, "Mod+Q", "layer.new.audio"),
+        (Global, "Mod+Shift+Q", "layer.new.sequence"),
+        (Global, "Mod+Alt+Shift+Q", "layer.new.adjustment"),
     ];
     for (context, chord, action) in moves {
+        if cfg!(target_os = "macos") && chord.ends_with("+Q") {
+            continue;
+        }
         if let Ok(chord) = chord.parse::<Chord>() {
             km.rebind_action(context, &action.into(), chord);
         }
@@ -1459,8 +1517,9 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else. That and the Cut timeline's editing keys are the
-    /// shadows the default ships with, and they are deliberate.
+    /// everywhere else. That, the Cut timeline's editing keys and a camera
+    /// tool's Look at all are the shadows the default ships with, and they
+    /// are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         let km = default_keymap();
@@ -1483,7 +1542,18 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            ["L", "I", "O", ",", ".", "B", "N", "Mod+K", "Mod+Shift+K"],
+            [
+                "Mod+Shift+F",
+                "L",
+                "I",
+                "O",
+                ",",
+                ".",
+                "B",
+                "N",
+                "Mod+K",
+                "Mod+Shift+K"
+            ],
             "the deliberate shadows, and no others"
         );
     }
@@ -1612,6 +1682,10 @@ mod tests {
         assert_eq!(
             km.wheel.modifier(WheelAction::DropperSample),
             WheelModifier::Shift
+        );
+        assert_eq!(
+            km.wheel.modifier(WheelAction::CameraDolly),
+            WheelModifier::Alt
         );
 
         km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);

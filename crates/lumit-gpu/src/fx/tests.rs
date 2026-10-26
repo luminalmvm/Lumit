@@ -213,6 +213,35 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
         }
     }
 
+    // The camera's depth of field on a layer leaning away from the eye through
+    // the focus plane, so the two passes take different radii.
+    let field = [
+        [1.0f32, 0.0, 0.0, 0.3],
+        [0.0, 0.3, 2.0, 70.0],
+        [-24.0, 10.0, 60.0, 0.0],
+    ];
+    let img: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let v = if (i % w / 3 + i / w / 3) % 2 == 0 {
+                1.5
+            } else {
+                0.1
+            };
+            [v, v * 0.5, 0.2, 1.0]
+        })
+        .collect();
+    let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    // Full size, and shrunk onto a grid 3 px apart as past the reach.
+    for step in [1.0, 3.0] {
+        let mut cpu = quantised.clone();
+        lumit_core::fx::cpu::blur_gaussian_field(&mut cpu, w, h, 7.0, field, step);
+        let out = fx.blur_field(&ctx, &tex, w, h, 7.0, field, step);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_diff(&cpu, &gpu);
+        assert!(worst < 2e-2, "field at step {step}: worst diff {worst}");
+    }
+
     // **The width probe.** One bright pixel on black, blurred at radius 10 under
     // a FLAT matte — once at 1.0, once at 0.25 — and the question is how far the
     // light reaches, not how bright it is at the centre.
@@ -6019,7 +6048,8 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
 /// bit of a transcendental — an absolute epsilon, as the blur oracle uses.
 #[test]
 fn wgsl_lighting_matches_the_cpu_oracle() {
-    use lumit_core::lighting::{ShadingLight, ShadingSurface};
+    use lumit_core::lighting::{ShadingKind, ShadingLight, ShadingMaterial, ShadingSurface};
+    use lumit_core::model::LightFalloff;
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6044,39 +6074,75 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             [cx - half, cy + half, cz],
         ]
     };
+    let plain = ShadingLight {
+        corners: [[0.0; 3]; 4],
+        colour: [1.0, 1.0, 1.0],
+        kind: ShadingKind::Point,
+        falloff: LightFalloff::None,
+        radius_px: 0.0,
+        falloff_px: 0.0,
+        legacy: false,
+        cone_cos: -2.0,
+        cone_inner: -2.0,
+        axis: [0.0, 0.0, 1.0],
+        shadow_darkness: 0.0,
+        shadow_diffusion: 0.0,
+    };
     let softbox = ShadingLight {
         corners: rect(16.0, 12.0, -40.0, 30.0),
         colour: [1.0, 0.8, 0.6],
-        falloff_px: 0.0,
-        is_area: true,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        kind: ShadingKind::Area,
+        ..plain
     };
     let bulb = ShadingLight {
         corners: [[4.0, 4.0, -20.0]; 4],
         colour: [0.2, 0.4, 1.0],
+        falloff: LightFalloff::Smooth,
         falloff_px: 120.0,
-        is_area: false,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        legacy: true,
+        ..plain
     };
+    let cone_cos = 25f32.to_radians().cos();
     let spot = ShadingLight {
         corners: [[16.0, 12.0, -60.0]; 4],
-        colour: [1.0, 1.0, 1.0],
-        falloff_px: 0.0,
-        is_area: false,
-        cone_cos: 25f32.to_radians().cos(),
-        axis: [0.0, 0.0, 1.0],
+        cone_cos,
+        cone_inner: cone_cos + (1.0 - cone_cos) * 0.1,
+        ..plain
     };
     // A light sunk behind the layer: the horizon clip is what makes this
     // nothing rather than nonsense, so it belongs in the comparison.
     let behind = ShadingLight {
         corners: rect(16.0, 12.0, 50.0, 30.0),
-        colour: [1.0, 1.0, 1.0],
-        falloff_px: 0.0,
-        is_area: true,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        kind: ShadingKind::Area,
+        ..plain
+    };
+    // The terms the light rows added: a spot feathered right to its middle,
+    // a smooth falloff with a radius, the inverse square, a parallel light
+    // raking in from one side and an ambient one.
+    let feathered = ShadingLight {
+        cone_inner: 1.0,
+        radius_px: 30.0,
+        falloff: LightFalloff::Smooth,
+        falloff_px: 40.0,
+        ..spot
+    };
+    let inverse = ShadingLight {
+        corners: [[24.0, 6.0, -15.0]; 4],
+        colour: [0.9, 0.3, 0.1],
+        falloff: LightFalloff::InverseSquareClamped,
+        radius_px: 18.0,
+        ..plain
+    };
+    let parallel = ShadingLight {
+        kind: ShadingKind::Parallel,
+        axis: [0.6, 0.0, 0.8],
+        colour: [0.5, 0.6, 0.7],
+        ..plain
+    };
+    let ambient = ShadingLight {
+        kind: ShadingKind::Ambient,
+        colour: [0.1, 0.2, 0.05],
+        ..plain
     };
 
     for (name, lights) in [
@@ -6086,29 +6152,79 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("spot", vec![spot]),
         ("behind", vec![behind]),
         ("three", vec![softbox, bulb, spot]),
+        ("feathered", vec![feathered]),
+        ("inverse square", vec![inverse]),
+        ("parallel", vec![parallel]),
+        ("ambient", vec![ambient]),
+        ("specular", vec![softbox, bulb]),
+        (
+            "negative",
+            vec![
+                ShadingLight {
+                    colour: [-0.6, -2.0, 0.3],
+                    ..bulb
+                },
+                ambient,
+            ],
+        ),
+        ("plastic", vec![spot, parallel]),
+        ("after effects", vec![spot, ambient]),
+        ("after effects encoded", vec![spot, ambient]),
+        ("shininess nought", vec![spot, ambient]),
     ] {
-        let mut cpu = img.clone();
-        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &lights);
-
-        let op = crate::fx::lighting::LightingOp {
-            origin: surface.origin,
-            du: surface.du,
-            dv: surface.dv,
-            normal: surface.normal,
-            lights: lights
-                .iter()
-                .map(|l| crate::fx::lighting::LightingLight {
-                    corners: l.corners,
-                    colour: l.colour,
-                    falloff_px: l.falloff_px,
-                    is_area: l.is_area,
-                    cone_cos: l.cone_cos,
-                    axis: l.axis,
-                })
-                .collect(),
+        // Two are seen through a shiny material, a metal one and then a
+        // plastic one, and one lit from black as After Effects does; the rest
+        // through the plain one.
+        let eye = [16.0, 12.0, -200.0];
+        let plain = ShadingMaterial {
+            eye,
+            ..ShadingMaterial::PLAIN
         };
+        let m = match name {
+            "specular" => ShadingMaterial {
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "plastic" => ShadingMaterial {
+                specular: 0.8,
+                exponent: 20.0,
+                metal: 0.0,
+                ambient: 0.5,
+                ..plain
+            },
+            "after effects" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "after effects encoded" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                metal: 0.5,
+                encoded: true,
+                ..plain
+            },
+            // The one exponent a pow can trip on.
+            "shininess nought" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 0.0,
+                ..plain
+            },
+            _ => plain,
+        };
+        let mut cpu = img.clone();
+        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &m, &lights);
+
+        let op = lighting_op(&surface, &m, &lights, None);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.lighting(&ctx, &tex, w, h, &op);
+        let out = fx.lighting(&ctx, &tex, w, h, &op, None);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = cpu
@@ -6125,9 +6241,341 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the light must actually do something");
         }
 
-        let out2 = fx.lighting(&ctx, &tex, w, h, &op);
+        let out2 = fx.lighting(&ctx, &tex, w, h, &op, None);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "{name}: the lighting pass must be bit-stable");
+    }
+}
+
+/// The oracle's surface, material and lights as the kernel takes them.
+fn lighting_op(
+    s: &lumit_core::lighting::ShadingSurface,
+    m: &lumit_core::lighting::ShadingMaterial,
+    lights: &[lumit_core::lighting::ShadingLight],
+    own_caster: Option<usize>,
+) -> crate::fx::lighting::LightingOp {
+    use crate::fx::lighting::{LightingKind as K, LightingShadows as S};
+    use lumit_core::lighting::ShadingKind;
+    use lumit_core::model::ShadowMode;
+    crate::fx::lighting::LightingOp {
+        origin: s.origin,
+        du: s.du,
+        dv: s.dv,
+        normal: s.normal,
+        material: crate::fx::lighting::LightingMaterial {
+            base: m.base,
+            ambient: m.ambient,
+            diffuse: m.diffuse,
+            specular: m.specular,
+            exponent: m.exponent,
+            metal: m.metal,
+            eye: m.eye,
+            encoded: m.encoded,
+            accepts_shadows: match m.accepts_shadows {
+                ShadowMode::Off => S::Off,
+                ShadowMode::On => S::On,
+                ShadowMode::Only => S::Only,
+            },
+            unlit: m.unlit,
+            ..Default::default()
+        },
+        lights: lights
+            .iter()
+            .map(|l| crate::fx::lighting::LightingLight {
+                corners: l.corners,
+                colour: l.colour,
+                kind: match l.kind {
+                    ShadingKind::Point => K::Point,
+                    ShadingKind::Area => K::Area,
+                    ShadingKind::Parallel => K::Parallel,
+                    ShadingKind::Ambient => K::Ambient,
+                },
+                falloff: l.falloff as u32,
+                radius_px: l.radius_px,
+                falloff_px: l.falloff_px,
+                legacy: l.legacy,
+                cone_cos: l.cone_cos,
+                cone_inner: l.cone_inner,
+                axis: l.axis,
+                shadow_darkness: l.shadow_darkness,
+                shadow_diffusion: l.shadow_diffusion,
+            })
+            .collect(),
+        own_caster,
+    }
+}
+
+/// Shadows against the oracle: two cards between a spot and a floor, one
+/// letting coloured light through, hard and diffused, half and fully dark,
+/// with the floor taking them and showing only them, display encoded too,
+/// and a card lit with its own square among the casters. The cards are
+/// turned from the light, so the soft edges stretch.
+#[test]
+fn wgsl_shadows_match_the_cpu_oracle() {
+    use lumit_core::lighting::{
+        caster_box, caster_square, ShadingKind, ShadingLight, ShadingMaterial, ShadingSurface,
+        ShadowCaster,
+    };
+    use lumit_core::model::{LightFalloff, ShadowMode};
+
+    assert_eq!(
+        crate::fx::lighting::DIFFUSION_SPREAD,
+        lumit_core::lighting::DIFFUSION_SPREAD
+    );
+    assert_eq!(
+        crate::fx::lighting::MAX_STRETCH,
+        lumit_core::lighting::MAX_STRETCH
+    );
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (48u32, 40u32);
+    let img = corpus(w, h);
+    // The floor: 4 comp pixels a texel, facing the viewer at z = 0.
+    let floor = ShadingSurface {
+        origin: [0.0, 0.0, 0.0],
+        du: [4.0, 0.0, 0.0],
+        dv: [0.0, 4.0, 0.0],
+        normal: [0.0, 0.0, -1.0],
+    };
+    let spot = ShadingLight {
+        corners: [[96.0, 80.0, -300.0]; 4],
+        colour: [1.0, 0.9, 0.8],
+        kind: ShadingKind::Point,
+        falloff: LightFalloff::None,
+        radius_px: 0.0,
+        falloff_px: 0.0,
+        legacy: false,
+        cone_cos: 50f32.to_radians().cos(),
+        cone_inner: 40f32.to_radians().cos(),
+        axis: [0.0, 0.0, 1.0],
+        shadow_darkness: 1.0,
+        shadow_diffusion: 0.0,
+    };
+    let sun = ShadingLight {
+        kind: ShadingKind::Parallel,
+        axis: [0.3, 0.2, 0.93],
+        colour: [0.4, 0.5, 0.6],
+        cone_cos: -2.0,
+        shadow_darkness: 0.5,
+        shadow_diffusion: 6.0,
+        ..spot
+    };
+    // A card with a hole and a soft edge, and a tinted one that lets light
+    // through, each at its own picture size.
+    let (cw, ch) = (20u32, 16u32);
+    let mut card = vec![0.0f32; (cw * ch * 4) as usize];
+    for y in 0..ch {
+        for x in 0..cw {
+            let i = ((y * cw + x) * 4) as usize;
+            let a = if (8..12).contains(&x) && (6..10).contains(&y) {
+                0.0
+            } else {
+                (x as f32 / 6.0).min(1.0)
+            };
+            card[i..i + 4].copy_from_slice(&[0.9 * a, 0.8 * a, 0.7 * a, a]);
+        }
+    }
+    let tint = [0.1, 0.6, 0.2, 0.8].repeat(16);
+    // A bar much wider than it is tall, as a lower third is.
+    let bar = [0.8, 0.8, 0.8, 1.0].repeat(16);
+    // An 80 px logo under a spread wider than itself.
+    let logo = [0.6, 0.5, 0.4, 1.0].repeat(16);
+    let size = 64u32;
+    const SPREAD: f32 = 100.0;
+    let planes = [
+        (
+            card,
+            cw,
+            ch,
+            crate::fx::lighting::CasterPlane {
+                origin: [40.0, 30.0, -120.0],
+                u: [80.0, 0.0, 0.0],
+                v: [0.0, 50.0, -20.0],
+                transmission: 0.0,
+                opacity: 1.0,
+            },
+        ),
+        (
+            tint,
+            4,
+            4,
+            crate::fx::lighting::CasterPlane {
+                origin: [110.0, 70.0, -60.0],
+                u: [50.0, 0.0, 10.0],
+                v: [0.0, 60.0, 0.0],
+                transmission: 0.7,
+                opacity: 0.9,
+            },
+        ),
+        (
+            bar,
+            4,
+            4,
+            crate::fx::lighting::CasterPlane {
+                origin: [20.0, 120.0, -90.0],
+                u: [150.0, 0.0, 0.0],
+                v: [0.0, 8.0, 0.0],
+                transmission: 0.0,
+                opacity: 1.0,
+            },
+        ),
+        (
+            logo,
+            4,
+            4,
+            crate::fx::lighting::CasterPlane {
+                origin: [140.0, 10.0, -160.0],
+                u: [80.0, 0.0, 0.0],
+                v: [0.0, 80.0, 0.0],
+                transmission: 0.0,
+                opacity: 1.0,
+            },
+        ),
+    ];
+    let cpu_casters = |encoded: bool| -> Vec<ShadowCaster> {
+        planes
+            .iter()
+            .map(|(rgba, cw, ch, p)| {
+                let len = |v: [f32; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+                let place = caster_box(size, len(p.u), len(p.v), SPREAD);
+                ShadowCaster {
+                    origin: p.origin,
+                    u: p.u,
+                    v: p.v,
+                    transmission: p.transmission,
+                    place: place.map(|t| t as f32 / size as f32),
+                    levels: caster_square(rgba, *cw, *ch, p.opacity, size, place, encoded),
+                    size,
+                }
+            })
+            .collect()
+    };
+    let textures: Vec<wgpu::Texture> = planes
+        .iter()
+        .map(|(rgba, cw, ch, _)| upload_linear_f32(&ctx, rgba, *cw, *ch))
+        .collect();
+    let gpu_planes: Vec<(&wgpu::Texture, crate::fx::lighting::CasterPlane)> = textures
+        .iter()
+        .zip(&planes)
+        .map(|(t, p)| (t, p.3))
+        .collect();
+    let squares = [false, true].map(|encoded| {
+        (
+            cpu_casters(encoded),
+            fx.shadow_casters(&ctx, &gpu_planes, size, encoded, SPREAD)
+                .unwrap(),
+        )
+    });
+
+    let takes = ShadingMaterial {
+        base: 0.0,
+        accepts_shadows: ShadowMode::On,
+        eye: [96.0, 80.0, -500.0],
+        specular: 0.4,
+        exponent: 8.0,
+        ..ShadingMaterial::PLAIN
+    };
+    let diffused = ShadingLight {
+        shadow_diffusion: 12.0,
+        ..spot
+    };
+    let half = ShadingLight {
+        shadow_darkness: 0.5,
+        ..spot
+    };
+    // The first card itself, lit by both with its own square left out.
+    let card_surface = ShadingSurface {
+        origin: planes[0].3.origin,
+        du: [4.0, 0.0, 0.0],
+        dv: [0.0, 1.25, -0.5],
+        normal: [0.0, 0.37, -0.93],
+    };
+    let only = ShadingMaterial {
+        accepts_shadows: ShadowMode::Only,
+        ..takes
+    };
+    let adds = ShadingMaterial { base: 1.0, ..takes };
+    let very_wide = ShadingLight {
+        shadow_diffusion: SPREAD,
+        ..spot
+    };
+    let wide = ShadingLight {
+        shadow_diffusion: 60.0,
+        ..spot
+    };
+    let unlit = ShadingMaterial {
+        unlit: true,
+        ..takes
+    };
+    let unlit_only = ShadingMaterial {
+        accepts_shadows: ShadowMode::Only,
+        ..unlit
+    };
+    let encoded = ShadingMaterial {
+        encoded: true,
+        ..takes
+    };
+    let encoded_only = ShadingMaterial {
+        accepts_shadows: ShadowMode::Only,
+        ..encoded
+    };
+    for (name, surface, m, lights, own) in [
+        ("hard", floor, takes, vec![spot], None),
+        ("diffused", floor, takes, vec![diffused], None),
+        ("far reaching", floor, takes, vec![wide], None),
+        ("spread past the logo", floor, takes, vec![very_wide], None),
+        ("half", floor, takes, vec![half], None),
+        ("sun", floor, takes, vec![spot, sun], None),
+        ("only", floor, only, vec![diffused, sun], None),
+        ("adds", floor, adds, vec![spot], None),
+        ("unlit", floor, unlit, vec![diffused, sun], None),
+        ("unlit only", floor, unlit_only, vec![spot], None),
+        ("encoded", floor, encoded, vec![diffused], None),
+        (
+            "encoded only",
+            floor,
+            encoded_only,
+            vec![diffused, sun],
+            None,
+        ),
+        ("far reaching only", floor, only, vec![wide], None),
+        ("own", card_surface, takes, vec![spot, sun], Some(0)),
+    ] {
+        let (cpu_casters, casters) = &squares[usize::from(m.encoded)];
+        let mut cpu = img.clone();
+        lumit_core::lighting::shade_with_shadows(
+            &mut cpu,
+            w,
+            h,
+            &surface,
+            &m,
+            &lights,
+            cpu_casters,
+            own,
+        );
+        let mut unshaded = img.clone();
+        lumit_core::lighting::shade(&mut unshaded, w, h, &surface, &m, &lights);
+        // A card behind the light's way and its own square left out: lit as
+        // if nothing cast at all. Everything else has a shadow somewhere.
+        assert_eq!(cpu == unshaded, own.is_some(), "{name}");
+
+        let op = lighting_op(&surface, &m, &lights, own);
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.lighting(&ctx, &tex, w, h, &op, Some(casters));
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        // Against the pixel's own size where it is bright: the squares are
+        // read through the card's own filtering, which is a little coarser
+        // than the oracle's.
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+            .fold(0.0f32, f32::max);
+        eprintln!("shadows {name}: worst {worst}");
+        assert!(worst < 2e-2, "{name}: worst absolute difference {worst}");
     }
 }
 
@@ -9127,6 +9575,115 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
         (black - 6.0).abs() < 0.2,
         "a black map must push it the other way: {black}"
     );
+}
+
+/// The §1.6 oracle for Vector blur, over both vector sources, straight and
+/// curved streaks, every direction, falloff, constant length, the angle offset,
+/// map softness, all three edge policies, Invert, and no map at all, where the
+/// layer's own picture is the map. Mix 0 is the exact identity.
+#[test]
+fn wgsl_vector_blur_matches_the_cpu_oracle() {
+    use lumit_core::fx::effects::vector_blur::VectorBlur;
+    use lumit_core::fx::params::Params;
+    use lumit_core::fx::registry::EffectMetadata;
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    // Swirling channels, so curved streaks really bend.
+    let mut map = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let (u, v) = (x as f32 * 0.3, y as f32 * 0.25);
+            map[i] = 0.5 + 0.4 * u.sin() * v.cos();
+            map[i + 1] = 0.5 + 0.4 * (u + v).cos();
+            map[i + 2] = 0.5 + 0.3 * (u - v).sin();
+            map[i + 3] = 1.0;
+        }
+    }
+    let qmap: Vec<f32> = map.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    let map_tex = upload_linear_f32(&ctx, &map, w, h);
+
+    let base = {
+        let mut v = VectorBlur::read(Params::EMPTY);
+        v.length = 8.0;
+        v
+    };
+    let with = |f: &dyn Fn(&mut VectorBlur)| {
+        let mut v = base;
+        f(&mut v);
+        v
+    };
+    let cases = [
+        ("slope-curved", base),
+        ("slope-straight", with(&|v| v.follow_vectors = false)),
+        ("channels-curved", with(&|v| v.vectors_from = 1)),
+        (
+            "channels-straight",
+            with(&|v| {
+                v.vectors_from = 1;
+                v.follow_vectors = false;
+            }),
+        ),
+        ("forwards", with(&|v| v.direction = 1)),
+        ("backwards", with(&|v| v.direction = 2)),
+        ("falloff", with(&|v| v.falloff = 100.0)),
+        ("constant", with(&|v| v.constant_length = true)),
+        ("across", with(&|v| v.angle_offset = 90.0)),
+        ("soft", with(&|v| v.map_softness = 4.0)),
+        ("blue", with(&|v| v.slope_channel = 4)),
+        ("transparent-edges", with(&|v| v.edge = 0)),
+        ("mirrored-edges", with(&|v| v.edge = 2)),
+        ("mixed", with(&|v| v.mix = 50.0)),
+        ("mix-zero", with(&|v| v.mix = 0.0)),
+    ];
+    for (name, v) in cases {
+        let p = v.packed();
+        for (bound, invert) in [(true, false), (true, true), (false, false)] {
+            let mut cpu = img.clone();
+            let cpu_map: &[f32] = if bound { &qmap } else { &[] };
+            lumit_core::fx::cpu::vector_blur(&mut cpu, w, h, &p, cpu_map, invert);
+            let op = VectorBlurOp {
+                from_channels: p.from_channels,
+                channels: p.channels,
+                length_px: p.length,
+                turn: p.turn,
+                constant_length: p.constant_length,
+                follow: p.follow,
+                direction: p.direction,
+                falloff: p.falloff,
+                softness_px: p.softness,
+                edge: p.edge,
+                mix: p.mix,
+                taps: p.taps,
+                matte_invert: invert,
+            };
+            let gpu_map = bound.then_some(&map_tex);
+            let out = fx.vector_blur(&ctx, &tex, w, h, gpu_map, &op);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let worst = worst_diff(&cpu, &gpu);
+            eprintln!("vector_blur {name} bound {bound} invert {invert}: worst {worst}");
+            assert!(
+                worst < 2e-3,
+                "{name} bound {bound} invert {invert}: worst {worst}"
+            );
+            if name == "mix-zero" {
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            } else {
+                assert!(
+                    gpu != img,
+                    "{name}: the streaks must actually move something"
+                );
+            }
+        }
+    }
 }
 
 /// The §1.6 oracle for Polar coordinates (docs/08 §3.50), on the smooth corpus

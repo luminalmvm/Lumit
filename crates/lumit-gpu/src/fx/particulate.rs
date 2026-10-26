@@ -135,9 +135,9 @@ pub struct ParticulateOp<'a> {
     /// less branch (particulate.md §2).
     pub mode: u32,
     /// Where the composition's camera puts a particle off the layer's plane:
-    /// a row-major 3×4 already scaled to **this raster**, or `None` on
-    /// a 2D layer, a comp with no camera, and every project saved before the
-    /// axis existed. `None` is not "the identity matrix" — the kernel takes a
+    /// a row-major 3×4 already scaled to **this raster**, or `None` on a 2D
+    /// layer and every project saved before the axis existed. `None` is not
+    /// "the identity matrix" — the kernel takes a
     /// different branch and touches the position's bits not at all, which is
     /// what makes the flat picture bit-identical rather than nearly so.
     pub projection: Option<[[f32; 4]; 3]>,

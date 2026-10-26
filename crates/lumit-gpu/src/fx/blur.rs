@@ -50,6 +50,56 @@ struct DirBlurParams {
     _pad0: f32,
 }
 
+/// One resolved Vector blur. Mirrors `lumit_core::fx::cpu::VectorBlurParams`,
+/// with the Matte row's Invert beside it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VectorBlurOp {
+    /// True reads a push from two channels, false the slope of one.
+    pub from_channels: bool,
+    /// `CHANNEL_OPTIONS` indices: the slope's channel, then x's and y's.
+    pub channels: [u32; 3],
+    /// The longest streak, raster pixels.
+    pub length_px: f32,
+    /// The Angle offset's cos and sin (host-computed).
+    pub turn: (f32, f32),
+    pub constant_length: bool,
+    pub follow: bool,
+    /// 0 both ways, 1 forwards, 2 backwards.
+    pub direction: u32,
+    /// 0..1.
+    pub falloff: f32,
+    /// The map's blur radius, raster pixels.
+    pub softness_px: f32,
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+    /// Must equal `lumit_core::fx::cpu::vector_blur_taps`.
+    pub taps: i32,
+    /// The Matte's Invert: the map is read the other way round.
+    pub matte_invert: bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct VectorBlurParams {
+    turn: [f32; 2],
+    length: f32,
+    falloff: f32,
+    reach: f32,
+    mix_amt: f32,
+    taps: i32,
+    edge: u32,
+    from_channels: u32,
+    chan_s: u32,
+    chan_x: u32,
+    chan_y: u32,
+    constant_length: u32,
+    follow: u32,
+    direction: u32,
+    invert: u32,
+}
+
 /// One resolved radial blur — Blur's Radial mode (docs/08 §3.8, schema
 /// status note). `taps` must equal
 /// `lumit_core::fx::cpu::radial_blur_taps(amount_px)` so the GPU dispatches
@@ -117,6 +167,8 @@ pub(super) struct BlurParams {
     /// Was the Matte's Invert; the seam applies it once instead, before
     /// the kernel (`FxEngine::matte_prepare`), and this pad is always 0.
     pub(super) _pad0: f32,
+    /// With `matte_on` 2, the layer as the camera sees it (`fx_blur.wgsl`).
+    pub(super) field: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -375,6 +427,7 @@ impl FxEngine {
                 mix_amt: 1.0,
                 matte_on,
                 _pad0: 0.0,
+                field: [[0.0; 4]; 3],
             }),
         );
         // Vertical into out, blending against the original input.
@@ -395,8 +448,98 @@ impl FxEngine {
                 mix_amt: op.mix,
                 matte_on,
                 _pad0: 0.0,
+                field: [[0.0; 4]; 3],
             }),
         );
+        out
+    }
+
+    /// The camera's depth of field on one layer: [`Self::blur`] with Repeat
+    /// edges, where each pixel's radius along each pass is worked out from
+    /// where the camera sees it, capped at `cap`, so the blur is round on
+    /// screen and grows with distance from the focus plane. `field` is laid out
+    /// as `fx_blur.wgsl` says and `cpu::blur_gaussian_field` is the oracle.
+    ///
+    /// With `step` above 1 it runs on Glow's grid that many pixels apart and is
+    /// scaled back up, for a layer blurred wider than `cap` everywhere.
+    #[allow(clippy::too_many_arguments)]
+    pub fn blur_field(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        cap: f32,
+        field: [[f32; 4]; 3],
+        step: f32,
+    ) -> wgpu::Texture {
+        if step > 1.0 {
+            // The grid's size, as `cpu::glow_grid` has it.
+            let grid_of = |n: u32| ((n as f32 / step).ceil() as u32).max(1);
+            let (cw, ch) = (grid_of(w), grid_of(h));
+            let grid = |axis: u32| GlowExpParams {
+                step,
+                lambda: 0.0,
+                weight: 1.0,
+                axis,
+                first: 1,
+                taps: 0,
+                reach: 0.0,
+                _pad: 0.0,
+            };
+            let across = work_texture(ctx, cw, h, "fx-dof-across");
+            let coarse = work_texture(ctx, cw, ch, "fx-dof-coarse");
+            let out = work_texture(ctx, w, h, "fx-dof-out");
+            let down = &self.glow_exp_down;
+            let p = grid(0);
+            self.dispatch(ctx, down, src, src, &across, cw, h, bytemuck::bytes_of(&p));
+            let p = grid(1);
+            self.dispatch(
+                ctx,
+                down,
+                &across,
+                &across,
+                &coarse,
+                cw,
+                ch,
+                bytemuck::bytes_of(&p),
+            );
+            let wider = |r: [f32; 4]| [r[0] * step, r[1] * step, r[2] * step, r[3]];
+            let field = [wider(field[0]), wider(field[1]), field[2]];
+            let lit = self.blur_field(ctx, &coarse, cw, ch, cap, field, 1.0);
+            let p = grid(0);
+            self.dispatch(
+                ctx,
+                &self.glow_exp_up,
+                &lit,
+                &lit,
+                &out,
+                w,
+                h,
+                bytemuck::bytes_of(&p),
+            );
+            for spent in [across, coarse, lit] {
+                ctx.recycle(spent);
+            }
+            return out;
+        }
+        let tmp = work_texture(ctx, w, h, "fx-blur-tmp");
+        let out = work_texture(ctx, w, h, "fx-blur-out");
+        let params = |dir: [f32; 2]| BlurParams {
+            dir,
+            radius: cap,
+            sigma: (cap * 0.5).max(1e-3),
+            edge: 1,
+            mix_amt: 1.0,
+            matte_on: 2.0,
+            _pad0: 0.0,
+            field,
+        };
+        for (from, to, dir) in [(src, &tmp, [1.0, 0.0]), (&tmp, &out, [0.0, 1.0])] {
+            let p = params(dir);
+            let p = bytemuck::bytes_of(&p);
+            self.dispatch_matted(ctx, &self.blur, from, src, None, to, w, h, p);
+        }
         out
     }
 
@@ -431,6 +574,58 @@ impl FxEngine {
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
                 _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Vector blur to a linear working texture, returning a new
+    /// texture of the same size. With no map the layer's own picture is the
+    /// map, and with Map softness the map is blurred first.
+    pub fn vector_blur(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        map: Option<&wgpu::Texture>,
+        op: &VectorBlurOp,
+    ) -> wgpu::Texture {
+        let map = map.unwrap_or(src);
+        let soft = (op.softness_px > 0.0).then(|| {
+            let blur = BlurOp {
+                radius_px: op.softness_px,
+                edge: 1,
+                mix: 1.0,
+            };
+            self.blur(ctx, map, w, h, None, &blur)
+        });
+        let out = work_texture(ctx, w, h, "fx-vector-blur-out");
+        self.dispatch_matted(
+            ctx,
+            &self.vector_blur,
+            src,
+            src,
+            Some(soft.as_ref().unwrap_or(map)),
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&VectorBlurParams {
+                turn: [op.turn.0, op.turn.1],
+                length: op.length_px,
+                falloff: op.falloff,
+                reach: (op.softness_px * 0.5).max(1.0),
+                mix_amt: op.mix,
+                taps: op.taps,
+                edge: op.edge,
+                from_channels: u32::from(op.from_channels),
+                chan_s: op.channels[0],
+                chan_x: op.channels[1],
+                chan_y: op.channels[2],
+                constant_length: u32::from(op.constant_length),
+                follow: u32::from(op.follow),
+                direction: op.direction,
+                invert: u32::from(op.matte_invert),
             }),
         );
         out
@@ -527,6 +722,7 @@ impl FxEngine {
                     mix_amt: 1.0,
                     matte_on: 0.0,
                     _pad0: 0.0,
+                    field: [[0.0; 4]; 3],
                 }),
             );
         }
@@ -801,6 +997,7 @@ impl FxEngine {
             mix_amt: 1.0,
             matte_on: 0.0,
             _pad0: 0.0,
+            field: [[0.0; 4]; 3],
         };
         let (across, across_p) = (work_texture(ctx, cw, h, "fx-glow-across"), grid(0));
         let (coarse, coarse_p) = (work_texture(ctx, cw, ch, "fx-glow-coarse"), grid(1));

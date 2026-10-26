@@ -141,6 +141,10 @@ class CompModel extends ChangeNotifier {
     return _model?.isNodeGraph ?? false;
   }
 
+  /// The same from the copy in hand, for a build that runs as the pointer
+  /// moves.
+  bool get heldIsNodeGraph => _model?.isNodeGraph ?? false;
+
   /// The comp this model is bound to has gone — deleted, or undone out of
   /// existence — rather than merely being empty. A comp that is *there* always
   /// reads as a model, even with no layers in it, so the pair below says

@@ -495,6 +495,10 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// How the comp's lights fall on its layers. Lumit's own adds the light to
+    /// the picture; After Effects' lights a layer from black.
+    #[serde(default, skip_serializing_if = "CompLighting::is_default")]
+    pub lighting: CompLighting,
     /// **The mix mark** (docs/impl/audio-timeline.md §2): set by the first
     /// edit made in the Audio timeline, and never by looking at the comp.
     ///
@@ -648,6 +652,29 @@ pub struct TransformGroup {
     pub rotation_x: Property,
     #[serde(default = "Property::zero")]
     pub rotation_y: Property,
+    /// After Effects' Orientation: three angles in its own `Rx · Ry · Rz`,
+    /// turned outside the X, Y and Z Rotation, and keyed as one turn
+    /// ([`Self::orientation_at`]). Anchor Z and Scale Z beside it. All three
+    /// are left out of the file while nothing uses them, so a layer that
+    /// doesn't writes the bytes it always did.
+    #[serde(default = "zero3", skip_serializing_if = "is_still_zero3")]
+    pub orientation: [Property; 3],
+    #[serde(
+        default = "Property::zero",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub anchor_z: Property,
+    #[serde(
+        default = "crate::paint::full",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub scale_z: Property,
+    /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz` rather than
+    /// Lumit's `Ry · Rx · Rz`. Set on the 3D layers, cameras and lights an
+    /// After Effects project brings in, so their rotations come across
+    /// exactly, keys and all.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub after_effects_order: bool,
     /// Percent, 0..100.
     pub opacity: Property,
     /// How each two-axis property is shown and edited (docs/03 §6.5).
@@ -656,8 +683,130 @@ pub struct TransformGroup {
     /// has never been separated writes nothing.
     #[serde(default, skip_serializing_if = "AxisModes::is_default")]
     pub axis_modes: AxisModes,
+    /// How the layer takes the comp's lights. Kept beside the transform
+    /// because it is animated the same way and read in the same places; a
+    /// file from before it existed reads as the lights it had then, and a
+    /// layer that still matches is written without it.
+    #[serde(
+        default = "Material::legacy_boxed",
+        skip_serializing_if = "Material::is_legacy"
+    )]
+    pub material: Box<Material>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A layer's Material options, After Effects' own: how much of each kind of
+/// light it takes. Percentages, as there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Material {
+    /// How much of the ambient lights it takes.
+    pub ambient: Property,
+    /// How much of the other lights it takes. 50 lights a layer as Lumit's
+    /// lights always have.
+    pub diffuse: Property,
+    /// How bright the highlight a light makes on it is.
+    pub specular: Property,
+    /// How small and hard that highlight is.
+    pub shininess: Property,
+    /// How much the highlight takes the layer's own colour rather than the
+    /// light's.
+    pub metal: Property,
+    /// Whether it casts and takes shadows, and how much light passing
+    /// through it takes its colour.
+    pub casts_shadows: ShadowMode,
+    pub accepts_shadows: ShadowMode,
+    pub light_transmission: Property,
+}
+
+/// After Effects' three answers to Casts shadows and Accepts shadows: no,
+/// yes, or only the shadow without the layer itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadowMode {
+    #[default]
+    Off,
+    On,
+    Only,
+}
+
+/// The non-animatable part of a material, what `Op::SetMaterialSettings`
+/// carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterialSettings {
+    pub casts_shadows: ShadowMode,
+    pub accepts_shadows: ShadowMode,
+}
+
+impl Material {
+    /// What layers had before materials: no highlight at all.
+    #[must_use]
+    pub fn legacy() -> Self {
+        Self {
+            specular: Property::zero(),
+            ..Self::default()
+        }
+    }
+
+    fn legacy_boxed() -> Box<Self> {
+        Box::new(Self::legacy())
+    }
+
+    // serde hands the field over as it is stored, box and all.
+    #[allow(clippy::borrowed_box)]
+    fn is_legacy(m: &Box<Self>) -> bool {
+        **m == Self::legacy()
+    }
+
+    #[must_use]
+    pub fn get(&self, prop: TransformProp) -> Option<&Property> {
+        Some(match prop {
+            TransformProp::Ambient => &self.ambient,
+            TransformProp::Diffuse => &self.diffuse,
+            TransformProp::Specular => &self.specular,
+            TransformProp::Shininess => &self.shininess,
+            TransformProp::Metal => &self.metal,
+            TransformProp::LightTransmission => &self.light_transmission,
+            _ => return None,
+        })
+    }
+
+    #[must_use]
+    pub fn settings(&self) -> MaterialSettings {
+        MaterialSettings {
+            casts_shadows: self.casts_shadows,
+            accepts_shadows: self.accepts_shadows,
+        }
+    }
+
+    pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        Some(match prop {
+            TransformProp::Ambient => &mut self.ambient,
+            TransformProp::Diffuse => &mut self.diffuse,
+            TransformProp::Specular => &mut self.specular,
+            TransformProp::Shininess => &mut self.shininess,
+            TransformProp::Metal => &mut self.metal,
+            TransformProp::LightTransmission => &mut self.light_transmission,
+            _ => return None,
+        })
+    }
+}
+
+/// A new layer's material, on After Effects' defaults.
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            ambient: Property::fixed(100.0),
+            diffuse: Property::fixed(50.0),
+            specular: Property::fixed(50.0),
+            shininess: Property::fixed(5.0),
+            metal: Property::fixed(100.0),
+            casts_shadows: ShadowMode::Off,
+            accepts_shadows: ShadowMode::On,
+            light_transmission: Property::zero(),
+        }
+    }
 }
 
 /// How one two-axis transform property is shown and edited.
@@ -733,18 +882,26 @@ pub enum TransformPair {
 }
 
 impl TransformPair {
-    /// The properties this pair covers, in row order. Position's z is one of
-    /// them: a separated Position on a 3D layer is three rows, not two — and on
-    /// a 2D layer the z row is not drawn at all, exactly as it is not today.
+    /// The properties this pair covers, in row order. The z is one of them: a
+    /// separated pair on a 3D layer is three rows, not two, and on a 2D layer
+    /// the z row is not drawn at all.
     pub fn props(self) -> &'static [TransformProp] {
         match self {
-            Self::Anchor => &[TransformProp::AnchorX, TransformProp::AnchorY],
+            Self::Anchor => &[
+                TransformProp::AnchorX,
+                TransformProp::AnchorY,
+                TransformProp::AnchorZ,
+            ],
             Self::Position => &[
                 TransformProp::PositionX,
                 TransformProp::PositionY,
                 TransformProp::PositionZ,
             ],
-            Self::Scale => &[TransformProp::ScaleX, TransformProp::ScaleY],
+            Self::Scale => &[
+                TransformProp::ScaleX,
+                TransformProp::ScaleY,
+                TransformProp::ScaleZ,
+            ],
         }
     }
 }
@@ -762,8 +919,13 @@ impl Default for TransformGroup {
             position_z: Property::fixed(0.0),
             rotation_x: Property::fixed(0.0),
             rotation_y: Property::fixed(0.0),
+            orientation: zero3(),
+            anchor_z: Property::zero(),
+            scale_z: Property::fixed(100.0),
+            after_effects_order: false,
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
+            material: Box::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -783,6 +945,13 @@ pub enum TransformProp {
     RotationX,
     RotationY,
     Opacity,
+    /// After Effects' Orientation, one turn of three angles, and the z of
+    /// Anchor and Scale.
+    OrientationX,
+    OrientationY,
+    OrientationZ,
+    AnchorZ,
+    ScaleZ,
     /// The seven camera channels (docs/impl/camera.md §1). They live in
     /// [`LayerKind::Camera`] rather than the transform group, and answer
     /// through [`Layer::prop`]; on any other layer they are not there.
@@ -793,27 +962,278 @@ pub enum TransformProp {
     FocusDistance,
     Aperture,
     BlurLevel,
+    /// A Light layer's own channels, in [`LightDef`]. A light's point of
+    /// interest is the three `Poi` channels above.
+    LightIntensity,
+    LightColourR,
+    LightColourG,
+    LightColourB,
+    ConeAngle,
+    ConeFeather,
+    LightRadius,
+    FalloffDistance,
+    LightWidth,
+    LightHeight,
+    ShadowDarkness,
+    ShadowDiffusion,
+    /// A layer's Material options, in [`Material`].
+    Ambient,
+    Diffuse,
+    Specular,
+    Shininess,
+    Metal,
+    LightTransmission,
 }
 
-impl TransformProp {
-    /// Whether this channel is one of the camera's own rather than the
-    /// transform group's.
-    #[must_use]
-    pub fn is_camera_channel(self) -> bool {
-        matches!(
-            self,
-            Self::PoiX
-                | Self::PoiY
-                | Self::PoiZ
-                | Self::Zoom
-                | Self::FocusDistance
-                | Self::Aperture
-                | Self::BlurLevel
-        )
-    }
+fn zero3() -> [Property; 3] {
+    [Property::zero(), Property::zero(), Property::zero()]
+}
+
+fn is_still_zero3(p: &[Property; 3]) -> bool {
+    p.iter().all(crate::paint::is_static_zero)
 }
 
 impl TransformGroup {
+    /// The Orientation at layer time `lt`, each angle read by `read`.
+    ///
+    /// After Effects moves from one Orientation key to the next along the
+    /// shortest turn rather than angle by angle, so between two keys the
+    /// angles are the turn that far round. How far round is the eased progress
+    /// of whichever angle moves most there; the three are keyed together and
+    /// eased alike, so any of them would say the same. An expression, or no
+    /// keys at all, reads each angle as it is.
+    #[must_use]
+    pub fn orientation_at(&self, lt: f64, read: &dyn Fn(&Property) -> f64) -> (f64, f64, f64) {
+        use crate::anim::{evaluate, Animation};
+        let o = &self.orientation;
+        let each = || (read(&o[0]), read(&o[1]), read(&o[2]));
+        let keys = o.each_ref().map(|p| match &p.animation {
+            Animation::Keyframed(keys) if !keys.is_empty() => Some(keys.as_slice()),
+            _ => None,
+        });
+        // The keys either side of `lt`, from all three angles.
+        let (mut before, mut after) = (f64::NEG_INFINITY, f64::INFINITY);
+        for keys in keys.iter().flatten() {
+            let i = keys.partition_point(|k| k.time.to_f64() <= lt);
+            if let Some(k) = i.checked_sub(1).and_then(|i| keys.get(i)) {
+                before = before.max(k.time.to_f64());
+            }
+            if let Some(k) = keys.get(i) {
+                after = after.min(k.time.to_f64());
+            }
+        }
+        if !before.is_finite() || !after.is_finite() {
+            return each();
+        }
+        let ends = |t: f64| {
+            let at = |i: usize| {
+                keys[i]
+                    .and_then(|k| evaluate(k, t))
+                    .unwrap_or_else(|| read(&o[i]))
+            };
+            (at(0), at(1), at(2))
+        };
+        let (a, b) = (ends(before), ends(after));
+        let now = each();
+        let moved = [
+            (b.0 - a.0, now.0 - a.0, keys[0].is_some()),
+            (b.1 - a.1, now.1 - a.1, keys[1].is_some()),
+            (b.2 - a.2, now.2 - a.2, keys[2].is_some()),
+        ];
+        let Some(&(span, gone, _)) = moved
+            .iter()
+            .filter(|(span, _, keyed)| *keyed && span.abs() > 1e-9)
+            .max_by(|x, y| x.0.abs().total_cmp(&y.0.abs()))
+        else {
+            return now;
+        };
+        // On a key, or held at one: the key's own angles, exactly.
+        if gone == 0.0 {
+            return now;
+        }
+        crate::camera::orientation_between(a, b, gone / span)
+    }
+
+    /// Put `animation` on the Orientation angle `prop`, keyed as After Effects
+    /// keys it: one key holds all three angles. Where `animation` has a key
+    /// the other two don't, they get one, holding the turn as it read there
+    /// before, so nothing moves but the angle written. Returns every angle
+    /// that changed with what it held, for undo. An expression on an angle is
+    /// left alone.
+    pub fn set_orientation_angle(
+        &mut self,
+        prop: TransformProp,
+        animation: crate::anim::Animation,
+    ) -> Vec<(TransformProp, crate::anim::Animation)> {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        const AXES: [TransformProp; 3] = [
+            TransformProp::OrientationX,
+            TransformProp::OrientationY,
+            TransformProp::OrientationZ,
+        ];
+        let Some(i) = AXES.iter().position(|p| *p == prop) else {
+            return Vec::new();
+        };
+        let mut planted = Vec::new();
+        if let Animation::Keyframed(keys) = &animation {
+            for (j, other) in self.orientation.iter().enumerate() {
+                if j == i || matches!(other.animation, Animation::Expression(_)) {
+                    continue;
+                }
+                let held = match &other.animation {
+                    Animation::Keyframed(held) => held.clone(),
+                    _ => Vec::new(),
+                };
+                let mut next = held.clone();
+                for key in keys {
+                    if held.iter().any(|k| k.time == key.time) {
+                        continue;
+                    }
+                    let lt = key.time.to_f64();
+                    let now = self.orientation_at(lt, &|p: &Property| p.value_at(lt));
+                    // The written key's ease, unless it carries a speed, which
+                    // belonged to that one angle.
+                    let side = |side: SideInterp| match side {
+                        SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+                        other => other,
+                    };
+                    next.push(Keyframe {
+                        time: key.time,
+                        value: [now.0, now.1, now.2][j],
+                        interp_in: side(key.interp_in),
+                        interp_out: side(key.interp_out),
+                    });
+                }
+                if next.len() != held.len() {
+                    next.sort_by_key(|k| k.time);
+                    planted.push((j, Animation::Keyframed(next)));
+                }
+            }
+        }
+        let mut previous = Vec::new();
+        for (j, next) in planted {
+            let was = std::mem::replace(&mut self.orientation[j].animation, next);
+            previous.push((AXES[j], was));
+        }
+        let was = std::mem::replace(&mut self.orientation[i].animation, animation);
+        previous.push((prop, was));
+        previous
+    }
+
+    /// X, Y and Z Rotation rewritten for the other rotation order
+    /// (`after_effects` or Lumit's), so the layer keeps its pose: exact on
+    /// still values and on every key, keys going wherever any of the three
+    /// had one. `None` while an expression drives one of them.
+    #[must_use]
+    pub fn rotations_in_order(
+        &self,
+        after_effects: bool,
+    ) -> Option<Vec<(TransformProp, crate::anim::Animation)>> {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        let rows = [&self.rotation_x, &self.rotation_y, &self.rotation];
+        if rows
+            .iter()
+            .any(|p| matches!(p.animation, Animation::Expression(_)))
+        {
+            return None;
+        }
+        let from = self.after_effects_order;
+        let at = |t: f64| {
+            (
+                rows[0].value_at(t),
+                rows[1].value_at(t),
+                rows[2].value_at(t),
+            )
+        };
+        let keys = rows.map(|p| match &p.animation {
+            Animation::Keyframed(keys) => keys.clone(),
+            _ => Vec::new(),
+        });
+        let mut times: Vec<crate::time::Rational> = keys.iter().flatten().map(|k| k.time).collect();
+        times.sort();
+        times.dedup();
+        let props = [
+            TransformProp::RotationX,
+            TransformProp::RotationY,
+            TransformProp::Rotation,
+        ];
+        if times.is_empty() {
+            let still = at(0.0);
+            let (x, y, z) = crate::camera::reordered(still, from, after_effects, still);
+            return Some(
+                props
+                    .into_iter()
+                    .zip([x, y, z].map(Animation::Static))
+                    .collect(),
+            );
+        }
+        let side = |side: SideInterp| match side {
+            SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+            other => other,
+        };
+        let mut lanes = [Vec::new(), Vec::new(), Vec::new()];
+        let mut near = at(times[0].to_f64());
+        for time in times {
+            let angles = at(time.to_f64());
+            near = crate::camera::reordered(angles, from, after_effects, near);
+            let here = keys.iter().flatten().find(|k| k.time == time);
+            let interp_in = here.map_or(SideInterp::Linear, |k| side(k.interp_in));
+            let interp_out = here.map_or(SideInterp::Linear, |k| side(k.interp_out));
+            for (lane, value) in lanes.iter_mut().zip([near.0, near.1, near.2]) {
+                lane.push(Keyframe {
+                    time,
+                    value,
+                    interp_in,
+                    interp_out,
+                });
+            }
+        }
+        Some(
+            props
+                .into_iter()
+                .zip(lanes.map(Animation::Keyframed))
+                .collect(),
+        )
+    }
+
+    /// The placement these values make at layer time `lt`, each read by
+    /// `read`, with the Orientation turned into the rotations. A `flat` (2D)
+    /// layer counts its hidden z, X and Y Rotation, Orientation, Anchor Z and
+    /// Scale Z as nought, as After Effects does.
+    #[must_use]
+    pub fn placement_at(&self, lt: f64, flat: bool, read: &dyn Fn(&Property) -> f64) -> Placement {
+        let ae_order = self.after_effects_order && !flat;
+        let hidden = |p: &Property, nought: f64| if flat { nought } else { read(p) };
+        let rotation = (
+            hidden(&self.rotation_x, 0.0),
+            hidden(&self.rotation_y, 0.0),
+            read(&self.rotation),
+        );
+        let orientation = if flat {
+            (0.0, 0.0, 0.0)
+        } else {
+            self.orientation_at(lt, read)
+        };
+        Placement {
+            position: (
+                read(&self.position_x),
+                read(&self.position_y),
+                hidden(&self.position_z, 0.0),
+            ),
+            anchor: (
+                read(&self.anchor_x),
+                read(&self.anchor_y),
+                hidden(&self.anchor_z, 0.0),
+            ),
+            scale: (
+                read(&self.scale_x),
+                read(&self.scale_y),
+                hidden(&self.scale_z, 100.0),
+            ),
+            rotation_deg: crate::camera::oriented(orientation, rotation, ae_order),
+        }
+    }
+
     /// The animations a pair's axes need in order to be shown on **one** row
     /// again: every animated axis gains a key wherever any other
     /// animated axis in the pair has one, so a diamond on the recombined row
@@ -860,8 +1280,9 @@ impl TransformGroup {
         out
     }
 
-    /// The group's own channel, or `None` for a camera channel, which is not
-    /// here: [`Layer::prop`] answers both.
+    /// The group's own channel, its material's included, or `None` for a
+    /// camera or light channel, which is not here: [`Layer::prop`] answers
+    /// all of them.
     #[must_use]
     pub fn get(&self, prop: TransformProp) -> Option<&Property> {
         Some(match prop {
@@ -876,7 +1297,12 @@ impl TransformGroup {
             TransformProp::RotationX => &self.rotation_x,
             TransformProp::RotationY => &self.rotation_y,
             TransformProp::Opacity => &self.opacity,
-            _ => return None,
+            TransformProp::OrientationX => &self.orientation[0],
+            TransformProp::OrientationY => &self.orientation[1],
+            TransformProp::OrientationZ => &self.orientation[2],
+            TransformProp::AnchorZ => &self.anchor_z,
+            TransformProp::ScaleZ => &self.scale_z,
+            _ => return self.material.get(prop),
         })
     }
 
@@ -893,7 +1319,12 @@ impl TransformGroup {
             TransformProp::RotationX => &mut self.rotation_x,
             TransformProp::RotationY => &mut self.rotation_y,
             TransformProp::Opacity => &mut self.opacity,
-            _ => return None,
+            TransformProp::OrientationX => &mut self.orientation[0],
+            TransformProp::OrientationY => &mut self.orientation[1],
+            TransformProp::OrientationZ => &mut self.orientation[2],
+            TransformProp::AnchorZ => &mut self.anchor_z,
+            TransformProp::ScaleZ => &mut self.scale_z,
+            _ => return self.material.get_mut(prop),
         })
     }
 }
@@ -1678,17 +2109,74 @@ pub struct Switches {
 }
 
 impl Layer {
+    /// Whether the layer is placed in 3D: its 3D switch is on, or it is a
+    /// camera or a light, which have no switch and always are. A 2D layer
+    /// draws as if its hidden z and X and Y Rotation were nought.
+    #[must_use]
+    pub fn is_3d(&self) -> bool {
+        self.switches.three_d
+            || matches!(
+                self.kind,
+                LayerKind::Camera { .. } | LayerKind::Light { .. }
+            )
+    }
+
+    /// The rows of the point `prop` is one number of, in order, and which of
+    /// them it is: a position is x and y, and z as well on a 3D layer, and so
+    /// are an anchor and a scale. A row that is a number on its own is a point
+    /// of one.
+    #[must_use]
+    pub fn point_rows(&self, prop: TransformProp) -> (Vec<TransformProp>, usize) {
+        use TransformProp as P;
+        let three_d = self.is_3d();
+        let rows = match prop {
+            P::AnchorX | P::AnchorY | P::AnchorZ if three_d => {
+                vec![P::AnchorX, P::AnchorY, P::AnchorZ]
+            }
+            P::AnchorX | P::AnchorY => vec![P::AnchorX, P::AnchorY],
+            P::PositionX | P::PositionY | P::PositionZ if three_d => {
+                vec![P::PositionX, P::PositionY, P::PositionZ]
+            }
+            P::PositionX | P::PositionY => vec![P::PositionX, P::PositionY],
+            P::ScaleX | P::ScaleY | P::ScaleZ if three_d => vec![P::ScaleX, P::ScaleY, P::ScaleZ],
+            P::ScaleX | P::ScaleY => vec![P::ScaleX, P::ScaleY],
+            P::OrientationX | P::OrientationY | P::OrientationZ => {
+                vec![P::OrientationX, P::OrientationY, P::OrientationZ]
+            }
+            P::PoiX | P::PoiY | P::PoiZ => vec![P::PoiX, P::PoiY, P::PoiZ],
+            other => vec![other],
+        };
+        let axis = rows.iter().position(|r| *r == prop).unwrap_or(0);
+        (rows, axis)
+    }
+
+    /// Whether `prop` is shown on a row of its own, as After Effects'
+    /// separated dimensions are, so an expression on it reads one number.
+    #[must_use]
+    pub fn separated(&self, prop: TransformProp) -> bool {
+        use TransformProp as P;
+        let pair = match prop {
+            P::AnchorX | P::AnchorY | P::AnchorZ => TransformPair::Anchor,
+            P::PositionX | P::PositionY | P::PositionZ => TransformPair::Position,
+            P::ScaleX | P::ScaleY | P::ScaleZ => TransformPair::Scale,
+            _ => return false,
+        };
+        self.transform.axis_modes.get(pair) == AxisMode::Separated
+    }
+
     /// One animatable channel by name: the eleven transform channels from the
     /// transform group, the seven camera channels from a Camera's own kind,
-    /// and `None` for a camera channel on any other layer
-    /// (docs/impl/camera.md §1).
+    /// a light's from a Light's, and `None` for a channel the layer does not
+    /// have (docs/impl/camera.md §1).
     #[must_use]
     pub fn prop(&self, prop: TransformProp) -> Option<&Property> {
-        if !prop.is_camera_channel() {
-            return self.transform.get(prop);
+        if let Some(p) = self.transform.get(prop) {
+            return Some(p);
         }
-        let LayerKind::Camera { zoom, options, .. } = &self.kind else {
-            return None;
+        let (zoom, options) = match &self.kind {
+            LayerKind::Camera { zoom, options, .. } => (zoom, options),
+            LayerKind::Light { light } => return light.channel(prop),
+            _ => return None,
         };
         Some(match prop {
             TransformProp::PoiX => &options.point_of_interest[0],
@@ -1703,11 +2191,13 @@ impl Layer {
     }
 
     pub fn prop_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
-        if !prop.is_camera_channel() {
+        if self.transform.get(prop).is_some() {
             return self.transform.get_mut(prop);
         }
-        let LayerKind::Camera { zoom, options, .. } = &mut self.kind else {
-            return None;
+        let (zoom, options) = match &mut self.kind {
+            LayerKind::Camera { zoom, options, .. } => (zoom, options),
+            LayerKind::Light { light } => return light.channel_mut(prop),
+            _ => return None,
         };
         Some(match prop {
             TransformProp::PoiX => &mut options.point_of_interest[0],
@@ -1978,8 +2468,8 @@ pub enum LayerKind {
     /// deliberately so: a shape layer's path and a mask's path differ in what
     /// they *do*, not in what they are.
     Shape {
-        #[serde(default)]
-        contents: Vec<crate::shape::ShapeItem>,
+        #[serde(default, deserialize_with = "crate::shape::modifier::read_entries")]
+        contents: Vec<crate::shape::modifier::ShapeEntry>,
     },
     /// A Null layer (docs/01-GLOSSARY.md): an invisible layer with no source
     /// and no size, carrying only a transform, so other layers can be parented
@@ -2041,65 +2531,333 @@ pub enum LightKind {
     /// kind a compositor actually reaches for, and the reason [`LightDef`]
     /// carries a width and a height at all.
     Area,
+    /// Light from so far away that every ray runs the same way, like the sun.
+    /// It shines along the layer's own forward axis.
+    Parallel,
+    /// Light from everywhere at once: no place and no direction.
+    Ambient,
+}
+
+/// How a composition's lights fall on its layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompLighting {
+    /// The light adds to the picture, so a layer no light reaches is left as
+    /// it is.
+    #[default]
+    Adds,
+    /// As After Effects does it: a lit layer starts from black, the ambient
+    /// lights are its base, and a 2D layer is not lit at all. `linear` is a
+    /// project with Linearize working space on; without it After Effects
+    /// lights the display-encoded picture, and so does this.
+    AfterEffects {
+        #[serde(default)]
+        linear: bool,
+    },
+}
+
+impl CompLighting {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default(&self) -> bool {
+        *self == Self::Adds
+    }
+}
+
+/// How a light weakens with distance, After Effects' three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LightFalloff {
+    /// The same strength at any distance.
+    #[default]
+    None,
+    /// Full strength out to the radius, then eases away to nothing over the
+    /// falloff distance.
+    Smooth,
+    /// Full strength out to the radius, then the inverse square of the
+    /// distance beyond it.
+    InverseSquareClamped,
 }
 
 /// A Light layer's own properties. The placement is NOT here — it is
 /// the layer's ordinary transform, so a light animates and parents exactly as
 /// every other layer does.
+///
+/// Read through [`LightDefFile`], because lights saved before they had rows
+/// held a gain, a half-size and a half-angle where these hold a percentage, a
+/// full size and a full angle.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "LightDefFile")]
 pub struct LightDef {
-    #[serde(default)]
     pub kind: LightKind,
     /// Scene-linear RGB. Animatable per channel, like every colour in the
     /// model.
-    #[serde(default = "LightDef::white")]
     pub colour: [Property; 3],
-    /// Master gain on the light's contribution.
-    #[serde(default = "LightDef::one")]
+    /// Percent; 100 is the light at its own colour.
+    #[serde(rename = "intensity_pct")]
     pub intensity: Property,
-    /// The emitting rectangle's half-width and half-height in comp pixels —
-    /// meaningful for [`LightKind::Area`], ignored by the other two. Half
-    /// rather than full, so it matches the Lens flare's Source size dials
-    /// and a light can be measured from its centre outward.
-    #[serde(default = "LightDef::zero_pair")]
-    pub half_size: [Property; 2],
-    /// The spot cone's half-angle in degrees; ignored unless the kind is
-    /// [`LightKind::Spot`].
-    #[serde(default = "LightDef::default_cone")]
-    pub cone_deg: Property,
-    /// How far the light reaches before it has fallen to nothing, in comp
-    /// pixels. Zero means no falloff at all — the light does not weaken with
-    /// distance, which is what a compositor usually wants from a flare source.
-    #[serde(default = "Property::zero")]
+    /// The emitting rectangle's width and height in comp pixels — meaningful
+    /// for [`LightKind::Area`] and ignored by the others.
+    pub size: [Property; 2],
+    /// The spot cone's full angle in degrees, as After Effects shows it;
+    /// ignored unless the kind is [`LightKind::Spot`].
+    pub cone_angle: Property,
+    /// Percent of the cone, from its edge inwards, that fades rather than
+    /// cuts off.
+    pub cone_feather: Property,
+    pub falloff: LightFalloff,
+    /// Comp pixels the light keeps its full strength out to, when it falls
+    /// off at all.
+    pub radius_px: Property,
+    /// How far past the radius a smooth falloff takes to reach nothing, in
+    /// comp pixels.
     pub falloff_px: Property,
+    /// Aimed at `point_of_interest` rather than by its own rotation, the way
+    /// a two-node camera is. The rotation rows still add on top.
+    pub two_node: bool,
+    /// Where an aimed light points, comp pixels.
+    pub point_of_interest: [Property; 3],
+    /// After Effects' shadow settings: whether it casts them, how dark they
+    /// are as a percentage, and how soft in comp pixels.
+    pub casts_shadows: bool,
+    pub shadow_darkness: Property,
+    pub shadow_diffusion: Property,
+    /// A light from before it had rows keeps the edge and the falloff it had:
+    /// its feather measured along the cone's cosine, and a smooth falloff
+    /// that eases out, with a distance of nought meaning none. Every other
+    /// light measures its feather in angle and falls off in an S-curve, as
+    /// After Effects does.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legacy_shape: bool,
+}
+
+/// [`LightDef`] as a file holds it, old keys and new.
+#[derive(serde::Deserialize)]
+struct LightDefFile {
+    #[serde(default)]
+    kind: LightKind,
+    #[serde(default = "LightDef::white")]
+    colour: [Property; 3],
+    intensity_pct: Option<Property>,
+    size: Option<[Property; 2]>,
+    cone_angle: Option<Property>,
+    /// A tenth was the fixed edge every spot had before the row.
+    #[serde(default = "LightDef::ten")]
+    cone_feather: Property,
+    falloff: Option<LightFalloff>,
+    #[serde(default = "Property::zero")]
+    radius_px: Property,
+    #[serde(default = "Property::zero")]
+    falloff_px: Property,
+    #[serde(default)]
+    two_node: bool,
+    #[serde(default = "LightDef::zero3")]
+    point_of_interest: [Property; 3],
+    #[serde(default)]
+    casts_shadows: bool,
+    #[serde(default = "LightDef::hundred")]
+    shadow_darkness: Property,
+    #[serde(default = "Property::zero")]
+    shadow_diffusion: Property,
+    #[serde(default)]
+    legacy_shape: bool,
+    // What a light held before it had rows.
+    intensity: Option<Property>,
+    half_size: Option<[Property; 2]>,
+    cone_deg: Option<Property>,
+}
+
+impl From<LightDefFile> for LightDef {
+    fn from(f: LightDefFile) -> Self {
+        let falloff = f.falloff.unwrap_or_else(|| {
+            // A distance used to mean a smooth fade with no radius, and none
+            // meant no falloff at all.
+            if f.falloff_px.is_animated() || f.falloff_px.value_at(0.0) > 0.0 {
+                LightFalloff::Smooth
+            } else {
+                LightFalloff::None
+            }
+        });
+        // A file with none of the new keys was written before them.
+        let legacy_shape = f.legacy_shape || (f.cone_angle.is_none() && f.intensity_pct.is_none());
+        Self {
+            kind: f.kind,
+            colour: f.colour,
+            intensity: f
+                .intensity_pct
+                .or_else(|| f.intensity.map(|p| scaled(p, 100.0)))
+                .unwrap_or_else(LightDef::hundred),
+            size: f
+                .size
+                .or_else(|| f.half_size.map(|h| h.map(|p| scaled(p, 2.0))))
+                .unwrap_or_else(LightDef::zero_pair),
+            cone_angle: f
+                .cone_angle
+                .or_else(|| f.cone_deg.map(|p| scaled(p, 2.0)))
+                .unwrap_or_else(LightDef::ninety),
+            cone_feather: f.cone_feather,
+            falloff,
+            radius_px: f.radius_px,
+            falloff_px: f.falloff_px,
+            two_node: f.two_node,
+            point_of_interest: f.point_of_interest,
+            casts_shadows: f.casts_shadows,
+            shadow_darkness: f.shadow_darkness,
+            shadow_diffusion: f.shadow_diffusion,
+            legacy_shape,
+        }
+    }
+}
+
+/// Every value of `p` times `by`, keys and their speeds with them.
+fn scaled(mut p: Property, by: f64) -> Property {
+    use crate::anim::{Animation, SideInterp};
+    let side = |s: SideInterp| match s {
+        SideInterp::Bezier { speed, influence } => SideInterp::Bezier {
+            speed: speed * by,
+            influence,
+        },
+        other => other,
+    };
+    match &mut p.animation {
+        Animation::Static(v) => *v *= by,
+        Animation::Keyframed(keys) => {
+            for k in keys {
+                k.value *= by;
+                k.interp_in = side(k.interp_in);
+                k.interp_out = side(k.interp_out);
+            }
+        }
+        Animation::Expression(_) => {}
+    }
+    p
 }
 
 impl LightDef {
-    fn one() -> Property {
-        Property::fixed(1.0)
-    }
     fn white() -> [Property; 3] {
-        [Self::one(), Self::one(), Self::one()]
+        [
+            Property::fixed(1.0),
+            Property::fixed(1.0),
+            Property::fixed(1.0),
+        ]
     }
     fn zero_pair() -> [Property; 2] {
         [Property::zero(), Property::zero()]
     }
-    fn default_cone() -> Property {
-        Property::fixed(45.0)
+    fn zero3() -> [Property; 3] {
+        [Property::zero(), Property::zero(), Property::zero()]
+    }
+    fn ten() -> Property {
+        Property::fixed(10.0)
+    }
+    fn ninety() -> Property {
+        Property::fixed(90.0)
+    }
+    fn hundred() -> Property {
+        Property::fixed(100.0)
+    }
+
+    /// The light's own channel that `prop` names, or `None` for one it does
+    /// not have.
+    #[must_use]
+    pub fn channel(&self, prop: TransformProp) -> Option<&Property> {
+        Some(match prop {
+            TransformProp::LightIntensity => &self.intensity,
+            TransformProp::LightColourR => &self.colour[0],
+            TransformProp::LightColourG => &self.colour[1],
+            TransformProp::LightColourB => &self.colour[2],
+            TransformProp::ConeAngle => &self.cone_angle,
+            TransformProp::ConeFeather => &self.cone_feather,
+            TransformProp::LightRadius => &self.radius_px,
+            TransformProp::FalloffDistance => &self.falloff_px,
+            TransformProp::LightWidth => &self.size[0],
+            TransformProp::LightHeight => &self.size[1],
+            TransformProp::PoiX => &self.point_of_interest[0],
+            TransformProp::PoiY => &self.point_of_interest[1],
+            TransformProp::PoiZ => &self.point_of_interest[2],
+            TransformProp::ShadowDarkness => &self.shadow_darkness,
+            TransformProp::ShadowDiffusion => &self.shadow_diffusion,
+            _ => return None,
+        })
+    }
+
+    pub fn channel_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        Some(match prop {
+            TransformProp::LightIntensity => &mut self.intensity,
+            TransformProp::LightColourR => &mut self.colour[0],
+            TransformProp::LightColourG => &mut self.colour[1],
+            TransformProp::LightColourB => &mut self.colour[2],
+            TransformProp::ConeAngle => &mut self.cone_angle,
+            TransformProp::ConeFeather => &mut self.cone_feather,
+            TransformProp::LightRadius => &mut self.radius_px,
+            TransformProp::FalloffDistance => &mut self.falloff_px,
+            TransformProp::LightWidth => &mut self.size[0],
+            TransformProp::LightHeight => &mut self.size[1],
+            TransformProp::PoiX => &mut self.point_of_interest[0],
+            TransformProp::PoiY => &mut self.point_of_interest[1],
+            TransformProp::PoiZ => &mut self.point_of_interest[2],
+            TransformProp::ShadowDarkness => &mut self.shadow_darkness,
+            TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
+            _ => return None,
+        })
+    }
+
+    /// The part the settings dialog edits as one op.
+    #[must_use]
+    pub fn settings(&self) -> LightSettings {
+        LightSettings {
+            kind: self.kind,
+            falloff: self.falloff,
+            two_node: self.two_node,
+            legacy_shape: self.legacy_shape,
+            casts_shadows: self.casts_shadows,
+        }
+    }
+
+    pub fn set_settings(&mut self, s: LightSettings) {
+        self.kind = s.kind;
+        self.falloff = s.falloff;
+        self.two_node = s.two_node;
+        self.legacy_shape = s.legacy_shape;
+        self.casts_shadows = s.casts_shadows;
     }
 }
 
+/// A fresh light, on After Effects' defaults. Not aimed, since a point of
+/// interest needs a composition to sit in: whoever places one sets both.
 impl Default for LightDef {
     fn default() -> Self {
         Self {
             kind: LightKind::default(),
             colour: Self::white(),
-            intensity: Self::one(),
-            half_size: Self::zero_pair(),
-            cone_deg: Self::default_cone(),
-            falloff_px: Property::zero(),
+            intensity: Self::hundred(),
+            size: Self::zero_pair(),
+            cone_angle: Self::ninety(),
+            cone_feather: Property::fixed(50.0),
+            falloff: LightFalloff::None,
+            radius_px: Property::fixed(500.0),
+            falloff_px: Property::fixed(500.0),
+            two_node: false,
+            point_of_interest: Self::zero3(),
+            casts_shadows: false,
+            shadow_darkness: Self::hundred(),
+            shadow_diffusion: Property::zero(),
+            legacy_shape: false,
         }
     }
+}
+
+/// The non-animatable part of a light, what `Op::SetLightSettings` carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LightSettings {
+    pub kind: LightKind,
+    pub falloff: LightFalloff,
+    pub two_node: bool,
+    /// See [`LightDef::legacy_shape`]: carried here so the edit that moves an
+    /// old light onto the new curves undoes back off them.
+    #[serde(default)]
+    pub legacy_shape: bool,
+    #[serde(default)]
+    pub casts_shadows: bool,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2112,13 +2870,22 @@ pub struct ResolvedLight {
     pub position: (f64, f64),
     /// Scene-linear RGB, already multiplied by intensity.
     pub colour: [f32; 3],
+    /// The colour and the intensity apart, for a picture lit in display
+    /// encoding, where only the colour is encoded.
+    pub tint: [f32; 3],
+    pub gain: f32,
     /// Half-width and half-height in comp pixels; zero for a point.
     pub half_size: (f64, f64),
     /// The spot cone's half-angle in degrees, and the layer's own rotation
-    /// about z, which is what aims it.
+    /// about z. An aimed light's aim is already in the three rotations.
     pub cone_deg: f64,
     pub rotation_deg: f64,
+    /// Percent of the cone that fades.
+    pub cone_feather: f64,
+    pub falloff: LightFalloff,
+    pub radius_px: f64,
     pub falloff_px: f64,
+    pub legacy_shape: bool,
     /// Depth in comp pixels, and the two out-of-plane rotations. The
     /// Lens flare ignores these — it works in the projected picture, where a
     /// light is wherever it lands. Shading needs them: a rectangle sitting in
@@ -2127,6 +2894,10 @@ pub struct ResolvedLight {
     pub z: f64,
     pub rotation_x_deg: f64,
     pub rotation_y_deg: f64,
+    /// How much light its shadows take away, 0..1 with nought where it
+    /// casts none, and how many comp pixels their edges spread over.
+    pub shadow_darkness: f32,
+    pub shadow_diffusion: f32,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -2155,15 +2926,30 @@ pub struct CameraDof {
     pub blur_level: f64,
 }
 
-/// One Camera layer's placement at comp time `t`, from its own properties.
-/// `None` when `layer` is not a Camera.
+/// One Camera layer's placement at comp time `t`, from its own properties,
+/// each read by `read`. `None` when `layer` is not a Camera.
 #[must_use]
-pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
-    stored_camera_pose_lt(layer, crate::time::layer_time(t, layer.start_offset.0))
+pub fn stored_camera_pose(layer: &Layer, t: f64, read: &Read<'_>) -> Option<CameraPose> {
+    let LayerKind::Camera { zoom, options, .. } = &layer.kind else {
+        return None;
+    };
+    let at = |p: &Property| read(layer, p);
+    // The eye and the turn, a two-node camera's aim in it, as its children see it.
+    let own = placement(layer, t, read);
+    Some(CameraPose {
+        zoom: at(zoom),
+        position: own.position,
+        rotation_deg: own.rotation_deg,
+        dof: options.depth_of_field.then(|| CameraDof {
+            focus_distance: at(&options.focus_distance),
+            aperture: at(&options.aperture),
+            blur_level: at(&options.blur_level),
+        }),
+    })
 }
 
 /// [`stored_camera_pose`] at a **layer** time, which is the clock every property
-/// is actually evaluated at.
+/// is actually evaluated at, with no document behind its expressions.
 ///
 /// Split out because the correction lane's zero is captured at layer
 /// time nought — a fixed moment of the layer's own clock, so moving the layer
@@ -2179,10 +2965,14 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
         tr.position_y.value_at(lt),
         tr.position_z.value_at(lt),
     );
-    let stored = (
-        tr.rotation_x.value_at(lt),
-        tr.rotation_y.value_at(lt),
-        tr.rotation.value_at(lt),
+    let stored = crate::camera::oriented(
+        tr.orientation_at(lt, &|p: &Property| p.value_at(lt)),
+        (
+            tr.rotation_x.value_at(lt),
+            tr.rotation_y.value_at(lt),
+            tr.rotation.value_at(lt),
+        ),
+        tr.after_effects_order,
     );
     // A two-node camera aims at its point of interest and the rows add on
     // top (docs/impl/camera.md §2); with nothing to aim at, the rows alone.
@@ -2257,7 +3047,8 @@ impl Composition {
     }
 
     /// The topmost visible Camera layer whose span contains `t` — the one that
-    /// is *active*. None → the comp renders flat (3D switches ignored).
+    /// is *active*. None → 3D layers are seen through
+    /// [`crate::camera::default_pose`].
     ///
     /// Split out of [`Self::camera_pose`] because the solve link needs
     /// the layer as well as the numbers: a linked camera's placement is derived
@@ -2274,14 +3065,22 @@ impl Composition {
     }
 
     /// The active camera's placement at comp time `t`, read off its **own**
-    /// stored properties at its layer time. None → the comp renders flat.
+    /// stored properties at its layer time and carried out of its parent's
+    /// space. None with no camera layer.
     ///
     /// A camera carrying a solve link derives its placement from the tracked
     /// layer instead ([`crate::track::camera_pose_at`]); this answers
-    /// what the document itself holds, which is what the link's fallback reads
-    /// and what **Convert to keyframes** writes back.
+    /// what the document itself holds, which is what the link's fallback reads.
+    ///
+    /// No document is to hand here, so expressions that read another layer
+    /// don't work; the render reads [`crate::track::camera_pose_at`].
     pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
-        self.active_camera(t).and_then(|l| stored_camera_pose(l, t))
+        let camera = self.active_camera(t)?;
+        let context = timed_context(self, t);
+        let read = context_reader(&context, t);
+        let pose = stored_camera_pose(camera, t, &read)?;
+        let space = parent_space(self, camera, t, &read, None);
+        Some(space.map_or(pose, |space| space.pose(pose)))
     }
 
     /// How many comp pixels make a metre at comp time `t`: the active
@@ -2302,7 +3101,10 @@ impl Composition {
     /// spends its slots on the ones nearest the top, the same rule the layer
     /// stack uses everywhere else. A light switched off is not a light, exactly
     /// as a layer switched off is not on the picture.
-    pub fn lights_at(&self, t: f64) -> Vec<ResolvedLight> {
+    ///
+    /// `read` reads their properties and their parents', and with `solves` a
+    /// light on a solved camera follows the solve.
+    pub fn lights_at(&self, t: f64, read: &Read<'_>, solves: Solves<'_>) -> Vec<ResolvedLight> {
         self.layers
             .iter()
             .filter_map(|l| {
@@ -2313,31 +3115,46 @@ impl Composition {
                     return None;
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);
-                let tr = &l.transform;
-                let gain = light.intensity.value_at(lt).max(0.0) as f32;
+                // Negative, as in After Effects, takes light away.
+                let gain = (light.intensity.value_at(lt) / 100.0) as f32;
+                let tint = light
+                    .colour
+                    .each_ref()
+                    .map(|c| (c.value_at(lt) as f32).max(0.0));
+                let eye = eye_in_comp(self, l, t, read, solves);
                 Some(ResolvedLight {
                     kind: light.kind,
-                    position: (tr.position_x.value_at(lt), tr.position_y.value_at(lt)),
-                    colour: [
-                        (light.colour[0].value_at(lt) as f32).max(0.0) * gain,
-                        (light.colour[1].value_at(lt) as f32).max(0.0) * gain,
-                        (light.colour[2].value_at(lt) as f32).max(0.0) * gain,
-                    ],
-                    // Only an area light has extent; the other two are points,
+                    position: (eye.position.0, eye.position.1),
+                    colour: tint.map(|c| c * gain),
+                    tint,
+                    gain,
+                    // Only an area light has extent; the others are points,
                     // whatever the stored numbers happen to say.
                     half_size: match light.kind {
                         LightKind::Area => (
-                            light.half_size[0].value_at(lt).max(0.0),
-                            light.half_size[1].value_at(lt).max(0.0),
+                            (light.size[0].value_at(lt) / 2.0).max(0.0),
+                            (light.size[1].value_at(lt) / 2.0).max(0.0),
                         ),
                         _ => (0.0, 0.0),
                     },
-                    cone_deg: light.cone_deg.value_at(lt).clamp(0.0, 180.0),
-                    rotation_deg: tr.rotation.value_at(lt),
+                    cone_deg: (light.cone_angle.value_at(lt) / 2.0).clamp(0.0, 180.0),
+                    rotation_deg: eye.rotation_deg.2,
+                    cone_feather: light.cone_feather.value_at(lt).clamp(0.0, 100.0),
+                    falloff: light.falloff,
+                    radius_px: light.radius_px.value_at(lt).max(0.0),
                     falloff_px: light.falloff_px.value_at(lt).max(0.0),
-                    z: tr.position_z.value_at(lt),
-                    rotation_x_deg: tr.rotation_x.value_at(lt),
-                    rotation_y_deg: tr.rotation_y.value_at(lt),
+                    legacy_shape: light.legacy_shape,
+                    z: eye.position.2,
+                    rotation_x_deg: eye.rotation_deg.0,
+                    rotation_y_deg: eye.rotation_deg.1,
+                    // An ambient light comes from nowhere, so it has nothing
+                    // to cast a shadow from.
+                    shadow_darkness: if light.casts_shadows && light.kind != LightKind::Ambient {
+                        (light.shadow_darkness.value_at(lt) / 100.0).clamp(0.0, 1.0) as f32
+                    } else {
+                        0.0
+                    },
+                    shadow_diffusion: light.shadow_diffusion.value_at(lt).max(0.0) as f32,
                 })
             })
             .collect()
@@ -2904,6 +3721,271 @@ pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
     chain
 }
 
+/// One layer's placement at comp time `t`, read the way the compositor places
+/// it and the way it places the layer's children.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Placement {
+    pub position: (f64, f64, f64),
+    pub anchor: (f64, f64, f64),
+    pub scale: (f64, f64, f64),
+    /// Degrees about x, y and z, the compositor's `Ry · Rx · Rz`, with any
+    /// Orientation already turned into them.
+    pub rotation_deg: (f64, f64, f64),
+}
+
+impl Placement {
+    #[must_use]
+    pub fn place(&self) -> crate::camera::Place {
+        crate::camera::place(self.position, self.anchor, self.scale, self.rotation_deg)
+    }
+
+    /// The position the compositor draws the layer's own flat picture at.
+    /// Anchor Z only pushes the picture along the layer's own z, so it goes
+    /// into the position there, which on the picture's plane is the same
+    /// thing. With no Anchor Z the position comes back exactly as it is.
+    #[must_use]
+    pub fn flat_position(&self) -> (f64, f64, f64) {
+        if self.anchor.2 == 0.0 {
+            return self.position;
+        }
+        let lift = crate::camera::place(
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, self.anchor.2),
+            self.scale,
+            self.rotation_deg,
+        )
+        .t;
+        (
+            self.position.0 + lift.0,
+            self.position.1 + lift.1,
+            self.position.2 + lift.2,
+        )
+    }
+}
+
+/// How a property is read: its value at its layer's own time, whatever runs
+/// its expression. The compositor, the frame cache and expressions each hand
+/// the parent walk their own.
+pub type Read<'a> = dyn Fn(&Layer, &Property) -> f64 + 'a;
+
+/// A camera solve store, with the document a solved camera is read against.
+pub type Solves<'a> = Option<(&'a Arc<Document>, &'a dyn crate::track::CameraSolveStore)>;
+
+/// Reads properties at comp time `t` the way the renderer does: an expression
+/// runs under `context` with its own layer as `layer()`.
+pub fn context_reader(
+    context: &Arc<ExpressionContext>,
+    t: f64,
+) -> impl Fn(&Layer, &Property) -> f64 + '_ {
+    // The last layer's context, kept: a layer's properties are read together.
+    let held: std::cell::RefCell<Option<Arc<ExpressionContext>>> = std::cell::RefCell::new(None);
+    move |layer, property| {
+        let lt = crate::time::layer_time(t, layer.start_offset.0);
+        if !matches!(property.animation, crate::anim::Animation::Expression(_)) {
+            return property.value_at(lt);
+        }
+        let own = {
+            let mut held = held.borrow_mut();
+            match held.as_ref().filter(|c| c.layer == Some(layer.id)) {
+                Some(own) => own.clone(),
+                None => {
+                    let own = Arc::new(ExpressionContext {
+                        layer: Some(layer.id),
+                        ..(**context).clone()
+                    });
+                    *held = Some(own.clone());
+                    own
+                }
+            }
+        };
+        property.value_at_with_context(lt, own)
+    }
+}
+
+/// `layer`'s placement, each property read by `read`.
+///
+/// A 2D layer counts its hidden z and X/Y Rotation as 0. A camera or a light
+/// has no anchor or scale (an imported one keeps After Effects' point of
+/// interest in its anchor), and a two-node camera or light is turned by its
+/// aim, so what is parented to it turns with it.
+#[must_use]
+pub fn placement(layer: &Layer, t: f64, read: &Read<'_>) -> Placement {
+    let eye = matches!(
+        layer.kind,
+        LayerKind::Camera { .. } | LayerKind::Light { .. }
+    );
+    let flat = !layer.switches.three_d && !eye;
+    let lt = crate::time::layer_time(t, layer.start_offset.0);
+    let mut out = layer
+        .transform
+        .placement_at(lt, flat, &|p: &Property| read(layer, p));
+    if eye {
+        out.anchor = (0.0, 0.0, 0.0);
+        out.scale = (100.0, 100.0, 100.0);
+    }
+    let aim = match &layer.kind {
+        LayerKind::Camera { options, .. } if options.two_node => Some(&options.point_of_interest),
+        LayerKind::Light { light } if light.two_node => Some(&light.point_of_interest),
+        _ => None,
+    };
+    if let Some(poi) = aim {
+        let [x, y, z] = poi.each_ref().map(|p| read(layer, p));
+        out.rotation_deg = crate::camera::look_at(out.position, (x, y, z), out.rotation_deg)
+            .unwrap_or(out.rotation_deg);
+    }
+    out
+}
+
+/// What a layer's expressions in `comp` read at comp time `t`, the whole
+/// document behind them.
+#[must_use]
+pub fn comp_context(doc: &Arc<Document>, comp: &Composition, t: f64) -> Arc<ExpressionContext> {
+    Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: None,
+        comp_time: t,
+        current_depth: 0,
+        inputs: None,
+    })
+}
+
+/// What a layer's expressions read at comp time `t` when there is no document
+/// to hand: `time`, `value` and `wiggle` work, other layers do not.
+#[must_use]
+pub fn timed_context(comp: &Composition, t: f64) -> Arc<ExpressionContext> {
+    Arc::new(ExpressionContext {
+        comp: Some(comp.id),
+        comp_time: t,
+        ..ExpressionContext::detached()
+    })
+}
+
+/// The placements of `layer`'s parents at comp time `t`, outermost first. The
+/// one parent walk the compositor, the frame cache, expressions, cameras and
+/// lights all read.
+///
+/// With `solves`, a solved camera among the parents is placed by its solve, so
+/// what is parented to it follows the shot.
+#[must_use]
+pub fn parent_placements(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Vec<(Uuid, Placement)> {
+    if layer.parent.is_none() {
+        return Vec::new();
+    }
+    let chain = layer_parent_chain(comp, layer.id);
+    let ancestors = chain
+        .iter()
+        .rev()
+        .filter_map(|id| comp.layers.iter().find(|l| l.id == *id));
+    ancestors
+        .map(|a| (a.id, parent_placement(comp, a, t, read, solves)))
+        .collect()
+}
+
+/// `layer`'s placement as a parent: a solved camera is placed by its solve.
+fn parent_placement(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Placement {
+    let mut p = placement(layer, t, read);
+    let solved = matches!(
+        layer.kind,
+        LayerKind::Camera {
+            solve_link: Some(_),
+            ..
+        }
+    );
+    if let Some((doc, store)) = solves.filter(|_| solved) {
+        if let Some(own) = crate::track::own_camera_pose_of(doc, comp, layer, t, store) {
+            p.position = own.pose.position;
+            p.rotation_deg = own.pose.rotation_deg;
+        }
+    }
+    p
+}
+
+/// The space `layer`'s parents put it in at comp time `t`. `None` with no
+/// parent. What a camera and a light are read in.
+#[must_use]
+pub fn parent_space(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Option<crate::camera::Place> {
+    let mut placements = parent_placements(comp, layer, t, read, solves).into_iter();
+    let first = placements.next()?.1.place();
+    Some(placements.fold(first, |outer, (_, p)| p.place().within(&outer)))
+}
+
+/// Where camera or light `layer` is and how it is turned in the comp at comp
+/// time `t`. An aimed one's turn is its aim with the rows on top, as a
+/// two-node camera's is, and both are read in the parent's space. What a light
+/// shades from and the Viewer draws it at.
+#[must_use]
+pub fn eye_in_comp(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> crate::camera::Eye {
+    let own = placement(layer, t, read);
+    let eye = crate::camera::Eye {
+        position: own.position,
+        rotation_deg: own.rotation_deg,
+        point_of_interest: None,
+    };
+    match parent_space(comp, layer, t, read, solves) {
+        Some(space) => space.carry(eye),
+        None => eye,
+    }
+}
+
+/// Where camera or light `layer`'s point of interest sits in the comp at comp
+/// time `t`, read in its parent's space like the eye. `None` on any other kind.
+#[must_use]
+pub fn point_of_interest(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Option<(f64, f64, f64)> {
+    let poi = match &layer.kind {
+        LayerKind::Camera { options, .. } => &options.point_of_interest,
+        LayerKind::Light { light } => &light.point_of_interest,
+        _ => return None,
+    };
+    let [x, y, z] = poi.each_ref().map(|p| read(layer, p));
+    let space = parent_space(comp, layer, t, read, solves);
+    Some(space.map_or((x, y, z), |space| space.point((x, y, z))))
+}
+
+/// The space `layer`'s own children are read in at comp time `t`, its parents
+/// and all.
+#[must_use]
+pub fn layer_space(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> crate::camera::Place {
+    let own = parent_placement(comp, layer, t, read, solves).place();
+    parent_space(comp, layer, t, read, solves).map_or(own, |outer| own.within(&outer))
+}
+
 /// Would pointing `layer`'s parent at `new_parent` form a cycle — either a
 /// self-parent, or `layer` already being an ancestor of `new_parent`? Used to
 /// reject a bad [`crate::ops::Op::SetLayerParent`] before it lands. (Whether
@@ -3354,6 +4436,10 @@ pub struct Document {
     /// existed (docs/10 §1.1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swatches: Vec<Swatch>,
+    /// The Notes panel's text: whatever the user wants to keep with the
+    /// project. Nothing draws from it. Absent from the file when empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (docs/10-FILE-FORMAT.md §1.2).
@@ -3701,6 +4787,7 @@ impl Document {
             cache_location: None,
             colour: ColourManagement::default(),
             swatches: Vec::new(),
+            notes: String::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }
@@ -3998,6 +5085,37 @@ mod tests {
 
     fn secs(s: i64) -> CompTime {
         CompTime(Rational::new(s, 1).unwrap())
+    }
+
+    /// A light saved before it had rows held a gain, a half-size, a
+    /// half-angle and a bare falloff distance. It must open as the same light:
+    /// a percentage, a full size, a full angle, a smooth falloff with no
+    /// radius, and the tenth of a feather every spot had.
+    #[test]
+    fn a_light_saved_before_its_rows_opens_as_the_same_light() {
+        let p = |v: f64| serde_json::to_value(Property::fixed(v)).unwrap();
+        let old = serde_json::json!({
+            "kind": "spot",
+            "intensity": p(0.75),
+            "half_size": [p(40.0), p(20.0)],
+            "cone_deg": p(30.0),
+            "falloff_px": p(300.0),
+        });
+        let light: LightDef = serde_json::from_value(old).unwrap();
+        assert_eq!(light.intensity.value_at(0.0), 75.0);
+        assert_eq!(light.size[0].value_at(0.0), 80.0);
+        assert_eq!(light.size[1].value_at(0.0), 40.0);
+        assert_eq!(light.cone_angle.value_at(0.0), 60.0);
+        assert_eq!(light.cone_feather.value_at(0.0), 10.0);
+        assert_eq!(light.falloff, LightFalloff::Smooth);
+        assert_eq!(light.radius_px.value_at(0.0), 0.0);
+        assert!(!light.two_node, "an old spot aims by its rotation");
+        assert!(light.legacy_shape, "and keeps its old edge and falloff");
+
+        // And what it is saved as now reads back unchanged.
+        let again: LightDef =
+            serde_json::from_value(serde_json::to_value(&light).unwrap()).unwrap();
+        assert_eq!(again, light);
     }
 
     /// **What "has been retimed" means**. Switching Retime on installs
@@ -4377,6 +5495,7 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -4698,6 +5817,7 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

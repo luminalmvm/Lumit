@@ -51,6 +51,7 @@ import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
+import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
@@ -75,7 +76,7 @@ import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
-import 'layer_settings_frb.dart';
+import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
@@ -1273,16 +1274,18 @@ List<MenuSection> lumitMenus(
               MenuEntry(
                   l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
                   action: 'layer.new.camera'),
-              // The three light kinds are their own rows rather than one row and
-              // a dropdown: which kind you want is known before you make it, and
-              // an area light is a different thing to reach for than a point.
-              MenuEntry(l10n.menuPointLight,
-                  onComp((c) => c.addLightLayer(kind: 0, row: row(c))),
+              // One row and the settings window, as After Effects asks: the
+              // kind is chosen there, with everything else about the light.
+              MenuEntry(
+                  l10n.menuLight,
+                  comp == null
+                      ? null
+                      : () => newLightFrb(
+                          context: context,
+                          comp: comp,
+                          row: row(comp),
+                          onDone: app.notifyDocumentChanged),
                   action: 'layer.new.light.point'),
-              MenuEntry(l10n.menuSpotLight,
-                  onComp((c) => c.addLightLayer(kind: 1, row: row(c)))),
-              MenuEntry(l10n.menuAreaLight,
-                  onComp((c) => c.addLightLayer(kind: 2, row: row(c)))),
               MenuEntry(l10n.menuAdjustment,
                   onComp((c) => c.addAdjustmentLayer(row: row(c))),
                   action: 'layer.new.adjustment'),
@@ -1290,19 +1293,24 @@ List<MenuSection> lumitMenus(
                   l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
                   action: 'layer.new.null'),
               MenuEntry(l10n.menuSequence,
-                  onComp((c) => c.addSequenceLayer(row: row(c)))),
+                  onComp((c) => c.addSequenceLayer(row: row(c))),
+                  action: 'layer.new.sequence'),
+              MenuEntry(
+                  l10n.menuAudio,
+                  onComp((c) => insertEmptyLayer(ui, c, 'layer.new.audio')),
+                  action: 'layer.new.audio'),
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
-            MenuEntry(l10n.menuLayerSettings, onLayer((l) async {
-              if (await showLayerSettingsFrb(context: context, layer: l)) {
-                app.notifyDocumentChanged();
-              }
-            }), action: 'layer.settings'),
+            MenuEntry(l10n.menuLayerSettings,
+                onLayer((l) => layerSettingsOf(context, app, ui, l)),
+                action: 'layer.settings'),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
             MenuEntry.submenu(
                 l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
+            MenuEntry.submenu(
+                l10n.shapeExpandAllCopies, expandAllCopiesRows(app, ui)),
             MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
             // Audio ▸ — what to do with the *sound* of a layer that has some.
             // Detach puts it on a row of its own, muting the picture's row, so it
@@ -1414,24 +1422,18 @@ List<MenuSection> lumitMenus(
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuReveal),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
-            // was. Both rows are live only on a Type layer, said by greying out
-            // rather than by an error after the click; the copy lands directly
-            // above the original, where a duplicate goes.
+            // was. Each row greys out on a layer it has nothing to make of; the
+            // new layer lands directly above the original, where a duplicate
+            // goes.
             MenuEntry.submenu(l10n.menuCreate, [
+              MenuEntry(l10n.menuCreateShapesFromText,
+                  _typed(layer) ? onLayer(_createShapes(app, ui)) : null),
+              MenuEntry(l10n.menuCreateShapesFromVector,
+                  _vector(layer) ? onLayer(_createShapes(app, ui)) : null),
               MenuEntry(
-                  l10n.menuCreateShapesFromText,
-                  _typed(layer)
-                      ? onLayer((l) {
-                          try {
-                            l.createShapesFromText(
-                                frame: ui.playheadFrame.value);
-                            app.notifyDocumentChanged();
-                          } catch (_) {
-                            // A line with no ink has no art to make, and says so
-                            // through the status line rather than taking the
-                            // interface down.
-                          }
-                        })
+                  l10n.menuSplitIntoShapeLayers,
+                  _typed(layer) || _vector(layer) || _shaped(layer)
+                      ? onLayer(_createShapes(app, ui, apart: true))
                       : null),
               MenuEntry(
                   l10n.menuCreatePointsFromText,
@@ -1446,6 +1448,7 @@ List<MenuSection> lumitMenus(
             ]),
             MenuEntry.divider(),
             cameraSettingsRow(context, app, ui),
+            lightSettingsRow(context, app, ui),
             MenuEntry.todo(l10n.menuAutoOutline),
             // Pre-compose… is live only with a comp open and something selected in
             // it — the menu says so by greying out rather than by failing.
@@ -1615,6 +1618,71 @@ List<MenuSection> lumitMenus(
               checked: () => ui.tools.snapToGrid,
             ),
             MenuEntry.divider(),
+            // The 3D view of the view in front, After Effects' rows: a view
+            // on one of the F10 to F12 shortcuts shows its key.
+            MenuEntry.submenu(l10n.menuSwitch3dView, [
+              for (final look in ui.viewsOffered(ui.activeViewId))
+                MenuEntry.option(
+                  look.title,
+                  () {
+                    final view = ui.views.active;
+                    if (view != null) {
+                      ui.setViewerView(look, viewId: view.engineId);
+                    }
+                  },
+                  action: switch ([
+                    for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                  ].indexOf(look)) {
+                    -1 => null,
+                    final slot => 'viewer.3d.slot.${slot + 1}',
+                  },
+                  checked: () =>
+                      ui.views.active != null &&
+                      ui.viewOf(ui.views.active!.engineId) == look,
+                ),
+            ]),
+            MenuEntry.submenu(
+                l10n.menuAssignViewShortcut(ui.views.active == null
+                    ? ViewerView.activeCamera.title
+                    : ui.viewOf(ui.views.active!.engineId).title),
+                [
+                  for (var slot = 0; slot < 3; slot++)
+                    MenuEntry(
+                      l10n.menuViewShortcutSlot(
+                          '${slot + 1}', ui.viewSlotOf(slot).title),
+                      comp == null ? null : () => ui.assignViewSlot(slot),
+                      action: 'viewer.3d.assign.${slot + 1}',
+                    ),
+                ]),
+            MenuEntry(l10n.menuSwitchToLast3dView,
+                comp == null ? null : ui.switchToLastView,
+                action: 'viewer.3d.last'),
+            MenuEntry(l10n.menuBackToActiveCamera,
+                comp == null ? null : ui.backToActiveCamera,
+                action: 'viewer.3d.camera'),
+            for (final command in ViewerCameraCommand.values)
+              MenuEntry(
+                command.title,
+                comp == null ? null : () => ui.requestViewerCamera(command),
+                action: command.action,
+              ),
+            MenuEntry(
+                l10n.menuCameraFromView,
+                comp == null ||
+                        ui.views.active == null ||
+                        !ui.viewOf(ui.views.active!.engineId).orbits
+                    ? null
+                    : () => cameraFromView(app, ui),
+                action: 'viewer.3d.camera.new'),
+            MenuEntry(
+                l10n.menuMoveCameraToView,
+                comp == null ||
+                        ui.views.active == null ||
+                        ui.viewPoseOf(ui.views.active!.engineId) == null
+                    ? null
+                    : () => cameraToView(app, ui),
+                action: 'viewer.3d.camera.move'),
+            MenuEntry.divider(),
             // Several views in one Viewer panel (docs/07 §2, and After Effects'
             // own view-layout menu). Option rows: picking one runs it and leaves
             // the menu open, so two layouts can be compared without reopening it.
@@ -1754,6 +1822,8 @@ List<MenuSection> lumitMenus(
             // (docs/impl/multi-viewer.md §3.1); everything else is a tick above.
             MenuEntry(l10n.menuNewViewer, ui.addViewerPanel,
                 action: 'viewer.new'),
+            MenuEntry(l10n.menuNew3dViewport, ui.addViewportPanel,
+                action: 'viewer.new.viewport'),
             MenuEntry.divider(),
             MenuEntry(l10n.menuExportQueue,
                 () => showExportQueueFrb(context: context),
@@ -1849,7 +1919,7 @@ bool _sequenced(LayerReference? layer) {
 
 /// Whether this layer can cross between footage and sequence at all. Only
 /// footage has clips to cut, and only a sequence has any to put back.
-/// Whether this is a Type layer — the one kind Create ▸ has anything to offer.
+/// Whether this is a Type layer.
 bool _typed(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1858,6 +1928,39 @@ bool _typed(LayerReference? layer) {
     return false;
   }
 }
+
+/// Whether this is a shape layer.
+bool _shaped(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.shape;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Whether this layer reads an Illustrator file.
+bool _vector(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.footage && layer.isVectorLayer();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Create ▸ Shapes from text, Shapes from vector layer and Split into shape
+/// layers, which the engine tells apart by the layer's kind.
+void Function(LayerReference) _createShapes(LumitState app, LumitUiState ui,
+        {bool apart = false}) =>
+    (layer) async {
+      try {
+        await layer.createShapes(frame: ui.playheadFrame.value, apart: apart);
+        app.notifyDocumentChanged();
+      } catch (_) {
+        // A line with no ink, or a file that has gone, has no art to make.
+      }
+    };
 
 bool _convertible(LayerReference? layer) {
   if (layer == null) return false;
@@ -1905,6 +2008,64 @@ int? newLayerRow(LumitUiState ui, CompositionReference comp) {
   } catch (_) {
     return null;
   }
+}
+
+/// An empty Sequence layer, an empty Audio layer or an Adjustment layer, by
+/// its keymap action, above the selected layer as every new layer lands. With
+/// nothing selected an Audio layer goes to the bottom, where sound lives, as
+/// Vegas puts it.
+void insertEmptyLayer(
+    LumitUiState ui, CompositionReference comp, String action) {
+  final row = newLayerRow(ui, comp);
+  switch (action) {
+    case 'layer.new.audio':
+      comp.addEmptyAudioLayer(row: row ?? ui.model.layers.length);
+    case 'layer.new.sequence':
+      comp.addSequenceLayer(row: row);
+    case 'layer.new.adjustment':
+      comp.addAdjustmentLayer(row: row);
+  }
+}
+
+/// The right-click menu on the empty ground under the Cut and Audio
+/// timelines' rows, Vegas's own three. The Audio timeline holds sound only,
+/// so it offers the Audio layer alone.
+Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
+    CompositionReference comp, Offset position,
+    {required bool picture, required VoidCallback onDone}) {
+  final t = ThemeScope.of(context).theme;
+  final rows = [
+    ('layer.new.audio', l10n.insertAudioLayer),
+    if (picture) ...[
+      ('layer.new.sequence', l10n.insertVideoLayer),
+      ('layer.new.adjustment', l10n.insertAdjustmentLayer),
+    ],
+  ];
+  return showMenuAt<void>(
+    context: context,
+    position: position,
+    width: 230,
+    rows: (close) => [
+      for (final (action, label) in rows)
+        MenuRow(
+          key: ValueKey<String>('insert-$action'),
+          onPressed: () {
+            close(null);
+            insertEmptyLayer(ui, comp, action);
+            onDone();
+          },
+          child: Row(children: [
+            Expanded(child: Text(label)),
+            if (ui.keymap.chordFor(action) case final chord?)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child:
+                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+              ),
+          ]),
+        ),
+    ],
+  );
 }
 
 /// Whether this layer can carry a Retime at all. A row of clips cannot: its
@@ -2084,11 +2245,13 @@ Future<void> exportFrb(BuildContext context) async {
 }
 
 void undoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.undo();
   app.notifyDocumentChanged();
 }
 
 void redoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.redo();
   app.notifyDocumentChanged();
 }

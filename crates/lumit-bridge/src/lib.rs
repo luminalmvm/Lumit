@@ -84,6 +84,8 @@ mod autosave;
 mod beats;
 mod claim;
 mod cli;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod cursor;
 mod export;
 mod extension_edit;
 mod faults;
@@ -94,6 +96,7 @@ mod layered;
 mod live;
 mod media;
 mod names;
+mod outlines;
 mod packing;
 mod peaks;
 mod playback;
@@ -105,6 +108,7 @@ mod realtime;
 mod render;
 mod scratch;
 mod script;
+mod shape_paint;
 mod streams;
 
 pub mod api;

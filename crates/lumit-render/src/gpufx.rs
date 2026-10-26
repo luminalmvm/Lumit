@@ -363,6 +363,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Blur,
     &DirectionalBlur,
     &RadialBlur,
+    &VectorBlur,
     &Sharpen,
     &SharpenSimple,
     &SpriteFlare,
@@ -652,6 +653,49 @@ impl GpuEffect for RadialBlur {
                 spin,
                 edge,
                 mix,
+            },
+        )
+    }
+}
+
+struct VectorBlur;
+impl GpuEffect for VectorBlur {
+    fn match_name(&self) -> &'static str {
+        "vector_blur"
+    }
+    /// The matte is the vector map, as Displacement map's is. With none bound
+    /// the op reads the layer's own picture.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let v = effects::vector_blur::VectorBlur::read(p).packed();
+        fx.vector_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::blur::VectorBlurOp {
+                from_channels: v.from_channels,
+                channels: v.channels,
+                length_px: v.length,
+                turn: v.turn,
+                constant_length: v.constant_length,
+                follow: v.follow,
+                direction: v.direction,
+                falloff: v.falloff,
+                softness_px: v.softness,
+                edge: v.edge,
+                mix: v.mix,
+                taps: v.taps,
+                matte_invert: p.bool(lumit_core::fx::schema::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -4785,26 +4829,7 @@ impl Particulate {
         let inst = P::read(p);
         let style = inst.draw_style();
         let px_scale = P::px_scale_of(p);
-        let s = stream.rescaled(px_scale);
-        // A streak runs back along the particle's speed, Streak length's
-        // worth. The walk keeps no earlier frames to run back through.
-        let back = style.streak_seconds;
-        let tails: Vec<[f32; 3]> = if back > 0.0 {
-            s.position
-                .iter()
-                .zip(&s.speed)
-                .map(|(at, v)| {
-                    [
-                        at[0] - v[0] * back,
-                        at[1] - v[1] * back,
-                        at[2] - v[2] * back,
-                    ]
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let points = draw_points_tailed(&s, &tails);
+        let points = stream_points(&stream.rescaled(px_scale), style.streak_seconds);
         let sprite = <P as EffectMetadata>::SCHEMA
             .layer_inputs()
             .position(|row| row == "sprite_layer")
@@ -4848,6 +4873,9 @@ impl GpuEffect for Particulate {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
+        if let Some(trails) = aux.schedule().and_then(|s| s.trails.as_ref()) {
+            return crate::trails::draw(fx, ctx, tex, w, h, p, aux, trails);
+        }
         if let Some(stream) = aux.schedule().and_then(|s| s.stepped.as_ref()) {
             return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
         }
@@ -4870,8 +4898,12 @@ impl GpuEffect for Particulate {
         aux: AuxSlot<'_>,
     ) -> Option<lumit_core::fx::points::PointsStream> {
         use lumit_core::fx::effects::particulate::Particulate as P;
-        // A walked stream was made before the render, by the driver walk.
-        if aux.schedule().is_some_and(|s| s.stepped.is_some()) {
+        // A walked stream was made before the render, by the driver walk, and
+        // Trails draw from that walk too.
+        if aux
+            .schedule()
+            .is_some_and(|s| s.stepped.is_some() || s.trails.is_some())
+        {
             return None;
         }
         let px_scale = P::px_scale_of(p);
@@ -4920,6 +4952,30 @@ impl GpuEffect for Particulate {
         }
         Some(s.rescaled(1.0 / px_scale.max(1e-6)))
     }
+}
+
+/// A walked stream's points, each streak running `back` seconds back along
+/// the particle's speed. The walk keeps no earlier frames to run back through.
+pub(crate) fn stream_points(
+    s: &lumit_core::fx::points::PointsStream,
+    back: f32,
+) -> Vec<lumit_gpu::fx::points_draw::DrawPoint> {
+    let tails: Vec<[f32; 3]> = if back > 0.0 {
+        s.position
+            .iter()
+            .zip(&s.speed)
+            .map(|(at, v)| {
+                [
+                    at[0] - v[0] * back,
+                    at[1] - v[1] * back,
+                    at[2] - v[2] * back,
+                ]
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    draw_points_tailed(s, &tails)
 }
 
 /// Every point of a host-built stream, as the generic draw reads them: one
@@ -5003,6 +5059,9 @@ impl GpuEffect for Grid {
     ) -> Tex {
         use lumit_core::fx::effects::grid::Grid as G;
         let inst = G::read(p);
+        if inst.kind == 1 {
+            return crate::grid_lines::draw(fx, ctx, tex, w, h, &inst, G::px_scale_of(p));
+        }
         let style = inst.draw_style();
         // The camera, in the raster this frame is drawn at.
         let projection = aux
@@ -6078,6 +6137,17 @@ mod tests {
             on_contact: 0,
             bounciness: 60.0,
             friction: 10.0,
+            separation: 0.0,
+            alignment: 0.0,
+            cohesion: 0.0,
+            flock_radius: 50.0,
+            sparks: 0.0,
+            spark_speed: 200.0,
+            spark_life: 0.5,
+            spark_size: 50.0,
+            persistence: 0.0,
+            zoom: 0.0,
+            turn: 0.0,
             direction: -90.0,
             spread: 200.0,
             initial_speed: 70.0,
@@ -6532,6 +6602,7 @@ mod tests {
             colour: [0.8, 0.4, 0.9, 1.0],
             max_points: 20_000,
             mix: 100.0,
+            ..lumit_core::fx::effects::grid::Grid::read(Params::EMPTY)
         }
     }
 

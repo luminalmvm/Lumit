@@ -57,6 +57,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -164,6 +165,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     let nested = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -192,6 +194,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     let parent = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -349,6 +352,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -461,6 +465,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -568,6 +573,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
     let painted = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -693,6 +699,7 @@ fn a_puppet_pin_carries_the_layers_pixels() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -848,6 +855,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -991,6 +999,7 @@ fn float_layer_comp(
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

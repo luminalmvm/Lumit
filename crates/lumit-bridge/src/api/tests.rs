@@ -418,6 +418,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
     let comp = lumit_core::model::Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -789,6 +790,55 @@ fn project_with_layer() -> (ProjectReference, LayerReference) {
 
     let layer = LayerReference::new(project.id, comp.id, layer_id);
     (project, layer)
+}
+
+/// A light from an older file keeps its old edge and falloff until one of
+/// those numbers is edited. The edit moves it onto After Effects' curves, and
+/// its undo moves it back, so nothing about the old picture is lost.
+#[test]
+fn editing_an_old_lights_feather_takes_the_new_curves_and_undo_brings_the_old_back() {
+    use crate::api::effect::BridgeScalar;
+    use crate::api::layer::BridgeTransformProp;
+    use lumit_core::model::{LayerKind, LightDef, TransformGroup};
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = add_comp(&project, "Scene");
+    let old = crate::edits::base_layer(
+        "Spot".into(),
+        LayerKind::Light {
+            light: Box::new(LightDef {
+                legacy_shape: true,
+                ..LightDef::default()
+            }),
+        },
+        lumit_core::time::Rational::new(5, 1).expect("5 s"),
+        TransformGroup::default(),
+    );
+    let id = old.id;
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state
+            .store
+            .commit(Op::AddLayer {
+                comp: comp.id,
+                index: 0,
+                layer: Box::new(old),
+            })
+            .expect("layer added");
+    }
+    let layer = LayerReference::new(project.id, comp.id, id);
+    let legacy = || match layer.item().expect("light").kind {
+        LayerKind::Light { light } => light.legacy_shape,
+        _ => panic!("a light"),
+    };
+
+    layer
+        .set_transform(BridgeTransformProp::ConeFeather, BridgeScalar::Static(30.0))
+        .expect("feather set");
+    assert!(!legacy(), "an edited feather is measured in angle");
+    project.undo().expect("undone");
+    assert!(legacy(), "and undo puts the old edge back");
 }
 
 /// An effect instance carrying one parameter of every `EffectValue` kind, plus a
@@ -3128,18 +3178,15 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
             corner(x, y + side),
         ],
         closed: true,
-        fill: Some(crate::api::assets::BridgeColourRgba {
-            r: 1.0,
-            g: 0.0,
-            b: 0.0,
-            a: 1.0,
+        fill: Some(crate::api::effect::BridgeColour {
+            r: BridgeScalar::Static(1.0),
+            g: BridgeScalar::Static(0.0),
+            b: BridgeScalar::Static(0.0),
+            a: BridgeScalar::Static(1.0),
         }),
         stroke: None,
-        stroke_width: 0.0,
-        opacity: 100.0,
-        trim_start: BridgeScalar::Static(0.0),
-        trim_end: BridgeScalar::Static(100.0),
-        trim_offset: BridgeScalar::Static(0.0),
+        stroke_width: BridgeScalar::Static(0.0),
+        opacity: BridgeScalar::Static(100.0),
         dashes: Vec::new(),
         dash_offset: BridgeScalar::Static(0.0),
         gradient: 0,
@@ -3153,22 +3200,36 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_stops: Vec::new(),
         combine: 0,
         path_keys: Vec::new(),
-        offset_amount: BridgeScalar::Static(0.0),
-        repeat_copies: BridgeScalar::Static(1.0),
-        repeat_offset: BridgeScalar::Static(0.0),
-        repeat_anchor_x: BridgeScalar::Static(0.0),
-        repeat_anchor_y: BridgeScalar::Static(0.0),
-        repeat_position_x: BridgeScalar::Static(0.0),
-        repeat_position_y: BridgeScalar::Static(0.0),
-        repeat_rotation: BridgeScalar::Static(0.0),
-        repeat_scale: BridgeScalar::Static(100.0),
-        repeat_start_opacity: BridgeScalar::Static(100.0),
-        repeat_end_opacity: BridgeScalar::Static(100.0),
-        twist: None,
-        deform: None,
-        smooth: None,
         taper: None,
+        primitive: None,
     }
+}
+
+/// The items of a flat contents list, in order.
+fn shape_items(
+    entries: &[crate::api::shape::BridgeShapeEntry],
+) -> Vec<&crate::api::layer::BridgeShapeItem> {
+    entries
+        .iter()
+        .filter_map(|e| match &e.kind {
+            crate::api::shape::BridgeShapeEntryKind::Item(item) => Some(item),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `entries` with its first item changed.
+fn with_first_item(
+    mut entries: Vec<crate::api::shape::BridgeShapeEntry>,
+    change: impl FnOnce(&mut crate::api::layer::BridgeShapeItem),
+) -> Vec<crate::api::shape::BridgeShapeEntry> {
+    for entry in &mut entries {
+        if let crate::api::shape::BridgeShapeEntryKind::Item(item) = &mut entry.kind {
+            change(item);
+            break;
+        }
+    }
+    entries
 }
 
 /// A shape tool with nothing selected makes one of these, and it lands where
@@ -3188,8 +3249,8 @@ fn a_shape_layer_is_made_from_its_art_and_placed_where_it_was_drawn() {
     assert_eq!(shape.get_kind().expect("kind"), BridgeLayerKind::Shape);
     let contents = shape.get_shape_contents().expect("contents");
     assert_eq!(contents.len(), 1);
-    assert_eq!(contents[0].name, "Rectangle");
-    assert_eq!(contents[0].vertices.len(), 4);
+    assert_eq!(shape_items(&contents)[0].name, "Rectangle");
+    assert_eq!(shape_items(&contents)[0].vertices.len(), 4);
 
     // Anchored on the art's own corner and positioned at it, so the rectangle
     // is where it was drawn.
@@ -3207,11 +3268,15 @@ fn a_shape_layer_is_made_from_its_art_and_placed_where_it_was_drawn() {
     assert_eq!(layers.first().map(|l| l.id()), Some(shape.id()));
 }
 
-/// A shape item's Trim start, end and offset round trip, animate, and are
-/// clamped to the 0..100 they mean — every key of them.
+/// A Trim paths entry's start, end and offset round trip, animate, and are
+/// clamped to the 0..100 they mean, every key of them.
 #[test]
 fn a_shapes_trim_round_trips_and_is_clamped() {
     use crate::api::effect::{BridgeKeyframe, BridgeSideInterp};
+    use crate::api::shape::{
+        BridgeShapeEntry, BridgeShapeEntryKind, BridgeShapeModifier, BridgeShapeModifierKind,
+        BridgeShapeTrim,
+    };
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
@@ -3220,22 +3285,31 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         .expect("a shape layer");
 
     let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].trim_start = BridgeScalar::Static(-40.0);
-    contents[0].trim_offset = BridgeScalar::Static(180.0);
-    contents[0].trim_end = BridgeScalar::Keyframed(vec![
-        BridgeKeyframe {
-            time: BridgeRational { num: 0, den: 1 },
-            value: -10.0,
-            interp_in: BridgeSideInterp::Linear,
-            interp_out: BridgeSideInterp::Linear,
-        },
-        BridgeKeyframe {
-            time: BridgeRational { num: 1, den: 1 },
-            value: 400.0,
-            interp_in: BridgeSideInterp::Linear,
-            interp_out: BridgeSideInterp::Linear,
-        },
-    ]);
+    contents.push(BridgeShapeEntry {
+        depth: 0,
+        kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+            id: Uuid::now_v7(),
+            name: "Trim paths".into(),
+            kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
+                start: BridgeScalar::Static(-40.0),
+                offset: BridgeScalar::Static(180.0),
+                end: BridgeScalar::Keyframed(vec![
+                    BridgeKeyframe {
+                        time: BridgeRational { num: 0, den: 1 },
+                        value: -10.0,
+                        interp_in: BridgeSideInterp::Linear,
+                        interp_out: BridgeSideInterp::Linear,
+                    },
+                    BridgeKeyframe {
+                        time: BridgeRational { num: 1, den: 1 },
+                        value: 400.0,
+                        interp_in: BridgeSideInterp::Linear,
+                        interp_out: BridgeSideInterp::Linear,
+                    },
+                ]),
+            }),
+        }),
+    });
     // A gradient's stops keep the order they were made in, held to the ramp.
     let stop = |position: f64, opacity: f64| crate::api::layer::BridgeGradientStop {
         position: BridgeScalar::Static(position),
@@ -3247,29 +3321,39 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         },
         opacity: BridgeScalar::Static(opacity),
     };
-    contents[0].gradient = 1;
-    contents[0].gradient_end_opacity = BridgeScalar::Static(-20.0);
-    contents[0].gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
+    let contents = with_first_item(contents, |item| {
+        item.gradient = 1;
+        item.gradient_end_opacity = BridgeScalar::Static(-20.0);
+        item.gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
+    });
     shape.set_shape_contents(contents, None).expect("set");
 
-    let got = &shape.get_shape_contents().expect("contents")[0];
+    let contents = shape.get_shape_contents().expect("contents");
+    let got = shape_items(&contents)[0];
     assert_eq!(got.gradient_end_opacity, BridgeScalar::Static(0.0));
     assert_eq!(
         got.gradient_stops,
         vec![stop(100.0, 30.0), stop(25.0, 100.0)],
         "in the order they came, and held inside the ramp"
     );
+    let BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+        kind: BridgeShapeModifierKind::Trim(trim),
+        ..
+    }) = &contents[1].kind
+    else {
+        panic!("the trim sits after the item");
+    };
     assert_eq!(
-        got.trim_start,
+        trim.start,
         BridgeScalar::Static(0.0),
         "a Start below zero could only ever draw wrongly"
     );
     assert_eq!(
-        got.trim_offset,
+        trim.offset,
         BridgeScalar::Static(180.0),
         "the offset is degrees, and degrees wrap"
     );
-    let BridgeScalar::Keyframed(keys) = &got.trim_end else {
+    let BridgeScalar::Keyframed(keys) = &trim.end else {
         panic!("End keeps its keys");
     };
     assert_eq!(keys.len(), 2);
@@ -3291,32 +3375,33 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
     let shape = comp
         .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
         .expect("a shape layer");
-    let id = shape.get_shape_contents().expect("contents")[0].id;
+    let first = || {
+        let contents = shape.get_shape_contents().expect("contents");
+        shape_items(&contents)[0].clone()
+    };
+    let id = first().id;
     let at = |num: i64| BridgeRational { num, den: 1 };
 
     // Unkeyed until somebody keys it, and absent from the read model.
-    assert!(shape.get_shape_contents().expect("contents")[0]
-        .path_keys
-        .is_empty());
+    assert!(first().path_keys.is_empty());
 
     shape.toggle_shape_path_key(id, at(0)).expect("key at 0");
     shape.toggle_shape_path_key(id, at(2)).expect("key at 2");
-    let keys = &shape.get_shape_contents().expect("contents")[0].path_keys;
+    let keys = &first().path_keys;
     assert_eq!(keys.len(), 2);
     // Counted up, so the graph draws the rate the shape changes at.
     assert_eq!(keys[0].value, 0.0);
     assert_eq!(keys[1].value, 1.0);
 
     // A point drag at the second key moves that key's shape, not the first's.
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].vertices[0].x = -4.0;
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x = -4.0;
+    });
     shape
         .set_shape_contents(contents, Some(at(2)))
         .expect("the drag lands on the key");
     assert_eq!(
-        shape.get_shape_contents().expect("contents")[0]
-            .path_keys
-            .len(),
+        first().path_keys.len(),
         2,
         "the drag reused the key there rather than planting a third"
     );
@@ -3331,11 +3416,19 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
         Ok(true)
     ));
 
+    // A shorter list is a delete, which is what the Delete key sends.
+    let kept = first().path_keys[0];
+    assert!(matches!(
+        shape.set_shape_path_keys(id, vec![kept]),
+        Ok(true)
+    ));
+    assert_eq!(first().path_keys.len(), 1);
+
     // The stopwatch off keeps the shape the playhead is over. At the first key
-    // that is the shape as drawn — which is the proof the drag touched only the
+    // that is the shape as drawn, which is the proof the drag touched only the
     // key it was on.
     shape.clear_shape_path_keys(id, at(0)).expect("clear");
-    let after = &shape.get_shape_contents().expect("contents")[0];
+    let after = first();
     assert!(after.path_keys.is_empty());
     assert_eq!(after.vertices[0].x, 0.0, "the first key never moved");
 }
@@ -3350,35 +3443,40 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     let shape = comp
         .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
         .expect("a shape layer");
-    let id = shape.get_shape_contents().expect("contents")[0].id;
+    let first = || {
+        let contents = shape.get_shape_contents().expect("contents");
+        shape_items(&contents)[0].clone()
+    };
+    let id = first().id;
     shape
         .toggle_shape_path_key(id, BridgeRational { num: 0, den: 1 })
         .expect("key");
 
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].opacity = 40.0;
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.opacity = BridgeScalar::Static(40.0);
+    });
     shape
         .set_shape_contents(contents.clone(), None)
         .expect("set");
 
-    let after = &shape.get_shape_contents().expect("contents")[0];
-    assert_eq!(after.opacity, 40.0);
+    let after = first();
+    assert_eq!(after.opacity, BridgeScalar::Static(40.0));
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
 
     shape
         .set_shape_contents(contents, Some(BridgeRational { num: 1, den: 1 }))
         .expect("set at the playhead");
-    let after = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(
-        after.path_keys.len(),
+        first().path_keys.len(),
         1,
         "no key planted for a path nobody moved"
     );
 
     // Nor the shape showing between two keys, which is what the Viewer sends
     // for an item a point drag didn't touch.
-    let mut moved = shape.get_shape_contents().expect("contents");
-    moved[0].vertices[0].x = -4.0;
+    let moved = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x = -4.0;
+    });
     shape
         .set_shape_contents(moved, Some(BridgeRational { num: 2, den: 1 }))
         .expect("a second key");
@@ -3389,19 +3487,111 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
         .into_iter()
         .find(|p| p.mask == id)
         .expect("the shape showing");
-    let mut contents = shape.get_shape_contents().expect("contents");
-    assert_ne!(contents[0].vertices, showing.vertices, "between the keys");
-    contents[0].vertices = showing.vertices;
+    assert_ne!(first().vertices, showing.vertices, "between the keys");
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices = showing.vertices;
+    });
     shape
         .set_shape_contents(contents, Some(comp.time_of_frame(frame).expect("time")))
         .expect("set at the playhead");
     assert_eq!(
-        shape.get_shape_contents().expect("contents")[0]
-            .path_keys
-            .len(),
+        first().path_keys.len(),
         2,
         "no key planted for the shape already showing"
     );
+}
+
+/// Expanding a repeater draws its copies out as items, in the layer or as
+/// layers below it, and either way the art's box is the one the copies drew,
+/// in one undo step.
+#[test]
+fn expanding_a_repeater_makes_its_copies_real() {
+    use crate::api::shape::{
+        BridgeShapeEntry, BridgeShapeEntryKind, BridgeShapeModifier, BridgeShapeModifierKind,
+        BridgeShapeRepeater,
+    };
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+    let mut contents = shape.get_shape_contents().expect("contents");
+    let repeater = Uuid::now_v7();
+    contents.push(BridgeShapeEntry {
+        depth: 0,
+        kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+            id: repeater,
+            name: "Repeater".into(),
+            kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
+                copies: BridgeScalar::Static(3.0),
+                offset: BridgeScalar::Static(0.0),
+                anchor_x: BridgeScalar::Static(0.0),
+                anchor_y: BridgeScalar::Static(0.0),
+                position_x: BridgeScalar::Static(20.0),
+                position_y: BridgeScalar::Static(0.0),
+                rotation: BridgeScalar::Static(0.0),
+                scale: BridgeScalar::Static(100.0),
+                start_opacity: BridgeScalar::Static(100.0),
+                end_opacity: BridgeScalar::Static(50.0),
+            }),
+        }),
+    });
+    shape.set_shape_contents(contents, None).expect("set");
+    let box_of = |l: &LayerReference| {
+        let entries = crate::api::shape::write_entries(
+            &l.get_shape_contents().expect("contents"),
+            &[],
+            lumit_core::time::Rational::ZERO,
+            None,
+        )
+        .expect("entries");
+        lumit_core::shape::contents_bounds(&entries, 0.0).expect("a box")
+    };
+    let before = box_of(&shape);
+    assert_eq!(before, (0.0, 0.0, 50.0, 10.0), "three copies, 20 apart");
+
+    let at = BridgeRational { num: 0, den: 1 };
+    shape
+        .expand_shape_copies(Some(repeater), at, false)
+        .expect("expanded");
+    let contents = shape.get_shape_contents().expect("contents");
+    let items = shape_items(&contents);
+    assert_eq!(items.len(), 3, "a copy each, and no repeater");
+    assert_eq!(contents.len(), 3);
+    assert_eq!(
+        items[0].name, "Rectangle 3",
+        "the far copy first, drawn under"
+    );
+    assert_eq!(items[2].name, "Rectangle", "the original on top");
+    assert_eq!(items[0].vertices[0].x, 40.0);
+    assert_eq!(
+        items[0].opacity,
+        BridgeScalar::Static(50.0),
+        "faded as it was"
+    );
+    assert_eq!(box_of(&shape), before, "the same box");
+    project.undo().expect("undone");
+    assert_eq!(shape.get_shape_contents().expect("contents").len(), 2);
+
+    let layers_before = comp.get_layers().expect("layers").len();
+    shape
+        .expand_shape_copies(Some(repeater), at, true)
+        .expect("into layers");
+    let layers = comp.get_layers().expect("layers");
+    assert_eq!(
+        layers.len(),
+        layers_before + 2,
+        "one layer per further copy"
+    );
+    assert_eq!(
+        shape_items(&shape.get_shape_contents().expect("contents")).len(),
+        1
+    );
+    let second = &layers[1];
+    assert_eq!(second.get_name().expect("name"), "Art 2");
+    assert_eq!(box_of(second), (20.0, 0.0, 30.0, 10.0));
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), layers_before);
 }
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
@@ -3426,16 +3616,16 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     // into the art's box.
     let drawn_at = |index: usize| {
         let contents = shape.get_shape_contents().expect("contents");
-        let items: Vec<_> = contents
-            .iter()
-            .map(|i| {
-                i.write_item(lumit_core::time::Rational::ZERO)
-                    .expect("an item")
-            })
-            .collect();
+        let items = crate::api::shape::write_entries(
+            &contents,
+            &[],
+            lumit_core::time::Rational::ZERO,
+            None,
+        )
+        .expect("entries");
         let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items, 0.0).expect("a box");
         let tf = shape.get_transform().expect("transform");
-        let v = &contents[0].vertices[index];
+        let v = &shape_items(&contents)[0].vertices[index];
         (
             still(&tf.position_x) + v.x - x0,
             still(&tf.position_y) + v.y - y0,
@@ -3443,9 +3633,10 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     };
     let before = drawn_at(2);
 
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].vertices[0].x -= 30.0;
-    contents[0].vertices[0].y -= 20.0;
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x -= 30.0;
+        item.vertices[0].y -= 20.0;
+    });
     shape.set_shape_contents(contents, None).expect("set");
 
     let tf = shape.get_transform().expect("transform");
@@ -3468,10 +3659,8 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
         (200.0, 100.0),
         "the art and the layer went back together, in one step"
     );
-    assert_eq!(
-        shape.get_shape_contents().expect("contents")[0].vertices[0].x,
-        200.0
-    );
+    let contents = shape.get_shape_contents().expect("contents");
+    assert_eq!(shape_items(&contents)[0].vertices[0].x, 200.0);
 }
 
 // --- Puppet: the block and its pins ---------------------------------------
@@ -3779,8 +3968,9 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
 }
 
 /// **Text to shapes and Text to points**: each makes a copy beside the
-/// original, and the original is untouched — the layer is still a Type layer
+/// original, and the original is kept — the layer is still a Type layer
 /// still saying what it said, which is what makes the commands safe to try.
+/// Shapes from text switches it off, as After Effects does.
 #[test]
 fn converting_a_text_layer_leaves_the_original_where_it_was() {
     use crate::api::assets::{BridgeColourRgba, BridgeTextDocument};
@@ -3807,16 +3997,17 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     .expect("set");
     let before = comp.get_layers().expect("layers").len();
 
-    let shapes = text.create_shapes_from_text(0).expect("outlines");
-    assert!(
-        !shapes.get_shape_contents().expect("contents").is_empty(),
-        "the copy has no art"
-    );
+    let shapes = text.create_shapes(0, false).expect("outlines");
+    let lumit_core::model::LayerKind::Shape { contents } = shapes.item().expect("copy").kind else {
+        panic!("the copy is not a shape layer");
+    };
+    assert_eq!(contents.len(), 5, "a group for each letter");
     assert_eq!(
         text.get_text().expect("text").expect("still text").text,
         "Lumit",
         "the original was converted rather than copied"
     );
+    assert!(!text.item().expect("text").switches.visible);
     assert_eq!(comp.get_layers().expect("layers").len(), before + 1);
 
     let points = text.create_points_from_text().expect("points");
@@ -3831,6 +4022,9 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
         "the copy emits nothing: {names:?}"
     );
     assert_eq!(comp.get_layers().expect("layers").len(), before + 2);
+    // Split into shape layers makes one for each letter.
+    text.create_shapes(0, true).expect("letters");
+    assert_eq!(comp.get_layers().expect("layers").len(), before + 7);
 
     // A line with no ink has no art to make, and says so rather than leaving
     // an empty layer behind.
@@ -3852,14 +4046,14 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     })
     .expect("set");
     assert!(matches!(
-        text.create_shapes_from_text(0),
+        text.create_shapes(0, false),
         Err(BridgeError::NothingToConvert)
     ));
 
-    // And neither command is offered anything but a Type layer.
+    // And neither has anything to make of an Adjustment layer.
     assert!(matches!(
-        layer.create_shapes_from_text(0),
-        Err(BridgeError::NotText)
+        layer.create_shapes(0, false),
+        Err(BridgeError::NothingToConvert)
     ));
     assert!(matches!(
         layer.create_points_from_text(),
@@ -4094,27 +4288,29 @@ fn a_camera_carries_its_own_channels_and_a_solid_does_not() {
 /// corners and its eye lands on the middle.
 #[test]
 fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
-    use crate::api::layer::{camera_view_pose, BridgeCameraView};
+    use crate::api::layer::{camera_view_pose, BridgeCameraView, BridgeTransformProp};
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.add_camera_layer(None).expect("a camera");
 
     let view = camera_view_pose(BridgeCameraView::Front, 1920.0, 1080.0);
-    let wires = comp.wireframes(0, view, Vec::new()).expect("wireframes");
+    let wires = comp
+        .wireframes(0, Some(view), false, true, None, Vec::new())
+        .expect("wireframes");
     let cam = match wires.cameras.as_slice() {
         [only] => only,
         other => panic!("one camera, not {}", other.len()),
     };
     let close = |got: f64, want: f64| assert!((got - want).abs() < 1.0, "{got} is not {want}");
-    for (corner, (x, y)) in
-        cam.corners
-            .iter()
+    // The first four lines go round the frustum's far end, each from a corner.
+    for (line, (x, y)) in
+        cam.lines
+            .chunks(4)
             .zip([(0.0, 0.0), (1920.0, 0.0), (1920.0, 1080.0), (0.0, 1080.0)])
     {
-        assert!(corner.in_front, "the frustum is in front of the Front view");
-        close(corner.x, x);
-        close(corner.y, y);
+        close(line[0], x);
+        close(line[1], y);
     }
     close(cam.eye.x, 960.0);
     close(cam.eye.y, 540.0);
@@ -4122,10 +4318,100 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
         cam.eye.in_front,
         "the eye sits between the view and the comp"
     );
-    assert!(
-        cam.point_of_interest.is_none(),
-        "a one-node camera has no line to draw"
+    // The far end, a line to each corner and the body's twelve edges: a
+    // one-node camera has no line to a point of interest.
+    assert_eq!(cam.lines.len(), 20 * 4);
+
+    // A spot on a turned null: its mark and the line it shines along sit
+    // where the lighting pass lights from, the null's turn and all.
+    let null = comp.add_null_layer(None).expect("a null");
+    null.set_switch(crate::api::layer::BridgeLayerSwitch::ThreeD, true)
+        .expect("3D");
+    null.set_transforms(
+        vec![
+            BridgeTransformProp::PositionX,
+            BridgeTransformProp::PositionY,
+            BridgeTransformProp::RotationY,
+            BridgeTransformProp::Rotation,
+        ],
+        [700.0, 400.0, 40.0, 30.0]
+            .map(BridgeScalar::Static)
+            .to_vec(),
+    )
+    .expect("the null turns");
+    let spot = comp.add_light_layer(1, None).expect("a spot");
+    spot.set_parent(Some(null.layer_id), 0).expect("parented");
+    spot.set_transforms(
+        vec![
+            BridgeTransformProp::PositionX,
+            BridgeTransformProp::PositionY,
+            BridgeTransformProp::PositionZ,
+        ],
+        [150.0, -80.0, -200.0].map(BridgeScalar::Static).to_vec(),
+    )
+    .expect("the spot moves");
+    let doc = comp.document().expect("doc");
+    let c = doc.comp(comp.id).expect("comp");
+    let context = lumit_core::model::comp_context(&doc, c, 0.0);
+    let read = lumit_core::model::context_reader(&context, 0.0);
+    let lit = c.lights_at(0.0, &read, None);
+    let lit = match lit.as_slice() {
+        [only] => only,
+        other => panic!("one light, not {}", other.len()),
+    };
+    let place = lumit_gpu::composite::place_matrix(
+        (lit.position.0 as f32, lit.position.1 as f32),
+        (0.0, 0.0),
+        (100.0, 100.0),
+        lit.rotation_deg as f32,
+        lit.z as f32,
+        lit.rotation_x_deg as f32,
+        lit.rotation_y_deg as f32,
     );
+    let wires = comp
+        .wireframes(0, Some(view), false, true, None, Vec::new())
+        .expect("wireframes");
+    let mark = wires
+        .lights
+        .iter()
+        .find(|l| l.layer == spot.layer_id)
+        .expect("the spot is drawn");
+    let rows = lumit_core::camera::projection(&view.core(), 1920.0, 1080.0);
+    let seen = |p: [f32; 4]| {
+        let p = p.map(f64::from);
+        let w = rows[2].iter().zip(p).map(|(r, v)| r * v).sum::<f64>();
+        let at = |r: usize| rows[r].iter().zip(p).map(|(r, v)| r * v).sum::<f64>() / w;
+        (at(0), at(1))
+    };
+    let column = |c: usize, along: f32| {
+        let m = place[3];
+        [0, 1, 2]
+            .map(|r| m[r] + place[c][r] * along)
+            .into_iter()
+            .chain([1.0])
+            .collect::<Vec<_>>()
+    };
+    let at = seen(column(2, 0.0).try_into().expect("four"));
+    close(mark.at.x, at.0);
+    close(mark.at.y, at.1);
+    // The cone's last line runs from the light down the z the lighting pass
+    // aims it along, out to its point of interest.
+    let end = &mark.lines[mark.lines.len() - 4..];
+    let layer = c
+        .layers
+        .iter()
+        .find(|l| l.id == spot.layer_id)
+        .expect("spot");
+    let poi = lumit_core::model::point_of_interest(c, layer, 0.0, &read, None).expect("aimed");
+    let reach = ((poi.0 - lit.position.0).powi(2)
+        + (poi.1 - lit.position.1).powi(2)
+        + (poi.2 - lit.z).powi(2))
+    .sqrt() as f32;
+    let tip = seen(column(2, reach).try_into().expect("four"));
+    close(end[0], at.0);
+    close(end[1], at.1);
+    close(end[2], tip.0);
+    close(end[3], tip.1);
 }
 
 /// Editing a solid changes the **asset**, so every layer drawing it changes at
@@ -4394,20 +4680,23 @@ fn a_dropped_clip_overlaps_or_overwrites() {
 }
 
 /// A clip moved onto another row is one undo step across two of them, and a
-/// move with no target makes a row of its own directly below.
+/// move with no target makes a row of its own. A row left empty goes, since
+/// an empty row is a silent bar nothing can take hold of.
 #[test]
 fn a_clip_moves_between_rows_in_one_step() {
     use crate::api::layer::BridgeLayerKind;
     let (project, comp, layer, footage) = audio_row();
     let other = comp.add_sequence_layer(None).expect("a second row");
     let clip = layer.get_clips().expect("clips").remove(0);
+    let rows = comp.get_layers().expect("layers").len();
 
     layer
         .move_clip(clip.id, Some(other), clip.start_frame + 10, false)
         .expect("moved");
-    assert!(
-        layer.get_clips().expect("clips").is_empty(),
-        "off the row it came from"
+    assert_eq!(
+        comp.get_layers().expect("layers").len(),
+        rows - 1,
+        "the emptied row is gone"
     );
     let landed = other.get_clips().expect("clips");
     assert_eq!(landed.len(), 1);
@@ -4421,13 +4710,13 @@ fn a_clip_moves_between_rows_in_one_step() {
     );
     assert!(other.get_clips().expect("clips").is_empty());
 
-    // No target: a new audio-only Sequence layer directly below the source.
-    let before = comp.get_layers().expect("layers").len();
+    // No target: a new audio-only Sequence layer, in the place of the row it
+    // emptied.
     layer
         .move_clip(clip.id, None, clip.start_frame, false)
         .expect("moved to a new row");
     let layers = comp.get_layers().expect("layers");
-    assert_eq!(layers.len(), before + 1);
+    assert_eq!(layers.len(), rows);
     let made = layers
         .iter()
         .find(|l| !l.equals(&layer) && l.get_clips().is_ok_and(|c| c.len() == 1))
@@ -5650,8 +5939,8 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
 }
 
 /// The preset library listing: real presets appear under their saved name (or
-/// their file's stem when saved without one), sorted case-insensitively, and
-/// strays — non-JSON, JSON that is not a preset, other extensions — are simply
+/// their file's stem when saved without one), sorted case-insensitively, with
+/// the group each sits in, and strays — non-JSON, JSON that is not a preset, other extensions — are simply
 /// not listed. The folder is the user's; a stray file there is not a fault.
 #[test]
 fn the_preset_library_lists_presets_and_skips_strays() {
@@ -5671,14 +5960,21 @@ fn the_preset_library_lists_presets_and_skips_strays() {
     write("notes.txt", "not a preset");
     write("broken.lumfx", "{ this is not json");
     write("shaped.lumfx", r#"{"name":"no effects list here"}"#);
+    std::fs::create_dir_all(dir.path().join("Shakes/Big")).expect("mkdir");
+    write(
+        "Shakes/Big/hard.lumfx",
+        r#"{"format":1,"name":"Hard shake","effects":[]}"#,
+    );
 
     let listed = crate::api::effect::presets_in(dir.path(), "lumfx");
     let names: Vec<&str> = listed.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(
         names,
-        vec!["anon", "bright", "Zeta look"],
+        vec!["anon", "bright", "Hard shake", "Zeta look"],
         "named presets by name, nameless by stem, sorted, strays skipped"
     );
+    let groups: Vec<&str> = listed.iter().map(|p| p.group.as_str()).collect();
+    assert_eq!(groups, vec!["", "", "Shakes/Big", ""], "found in its group");
     assert!(
         listed
             .iter()
@@ -5732,7 +6028,7 @@ fn an_ffx_import_leaves_out_presets_with_no_effects() {
     .expect("write");
     std::fs::write(from.path().join("notes.txt"), "not a preset").expect("write");
 
-    let done = crate::api::effect::import_ffx_into(from.path(), library.path());
+    let done = crate::api::presets::import_ffx_into(from.path(), library.path());
     assert_eq!((done.imported, done.skipped), (0, 1));
     assert_eq!(std::fs::read_dir(library.path()).expect("read").count(), 0);
 }
@@ -10158,16 +10454,17 @@ fn an_illustrator_document_imports_as_a_comp_of_its_layers() {
 #[test]
 fn a_transform_expression_keeps_its_language_through_undo() {
     use crate::api::effect::{
-        expression_fault, sample_scalar_with_context, BridgeExpressionLanguage, BridgeRational,
-        BridgeScalar,
+        expression_fault, sample_scalar_with_context, BridgeExpressionLanguage,
+        BridgeExpressionRow, BridgeRational, BridgeScalar,
     };
     use crate::api::layer::BridgeTransformProp;
 
     let (project, layer) = project_with_layer();
     let rotation = BridgeTransformProp::Rotation;
+    let row = || Some(BridgeExpressionRow::Transform(rotation));
     let read = || layer.get_transform().expect("transform").rotation;
     let at = || BridgeRational { num: 0, den: 1 };
-    let shown = || sample_scalar_with_context(read(), at(), layer, None);
+    let shown = || sample_scalar_with_context(read(), at(), layer, None, row());
     layer
         .set_transform(rotation, BridgeScalar::Static(30.0))
         .expect("a number");
@@ -10186,12 +10483,12 @@ fn a_transform_expression_keeps_its_language_through_undo() {
     let js = BridgeExpressionLanguage::JavaScript;
     let draft = "wiggle(0, 0) + 1".to_owned();
     assert_eq!(
-        expression_fault(draft.clone(), js, at(), layer, Some(read())),
+        expression_fault(draft.clone(), js, at(), layer, Some(read()), row()),
         None
     );
     let typing = BridgeScalar::Expression(draft, js);
     assert_eq!(
-        sample_scalar_with_context(typing, at(), layer, Some(read())),
+        sample_scalar_with_context(typing, at(), layer, Some(read()), row()),
         31.0
     );
 

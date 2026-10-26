@@ -21,10 +21,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
 import 'package:uuid/uuid.dart';
 
 import 'dock.dart';
-import 'viewer_view.dart' show ViewerChannel;
+import 'viewer_view.dart'
+    show PreviewResolution, ViewerChannel, ViewerView, defaultViewSlots;
 import 'workspace.dart' show ViewerLook, neutralLook;
 
 /// Which of the three display modes a view is in (docs/07 §2.1).
@@ -137,6 +139,51 @@ class ViewerSurface {
   bool wireframe;
   bool layerControls;
 
+  /// Whether this view draws the 3D ground (with the comp's frame and the
+  /// axes from the origin) and the small axes in its corner. Null until
+  /// picked, which reads as After Effects has them: both on in a fixed or
+  /// custom view, and only the corner axes through the comp's own camera.
+  bool? ground;
+  bool? axes;
+
+  /// Which way this view looks at each comp it shows, keyed by comp id, and
+  /// the pose each of those views is drawn through, keyed by comp and view.
+  /// Not written down and not shared with the other views: a comp opens on
+  /// its own camera, and a two-up of Active camera beside Top is the point.
+  final Map<String, ViewerView> cameraViews = {};
+  final Map<String, BridgeCameraPose> cameraPoses = {};
+
+  /// The custom view this view last looked through, which is where an orbit
+  /// begun in a fixed view goes.
+  ViewerView lastCustom = ViewerView.custom1;
+
+  /// The 3D view this view was on before the one it is on now, per comp, for
+  /// Escape's switch to the last 3D view.
+  final Map<String, ViewerView> lastViews = {};
+
+  /// The 3D views F10, F11 and F12 switch this view to.
+  final List<ViewerView> viewSlots = [...defaultViewSlots];
+
+  /// In a 3D viewport: how many pixels it is drawn with, its own tier apart
+  /// from the comp's, and the zoom each comp's free view goes back to when
+  /// it leaves orthographic, keyed by comp. A comp named here is orthographic.
+  PreviewResolution resolution;
+  final Map<String, double> orthoZooms = {};
+
+  /// Frame every layer the first time the view is drawn, which is how a new
+  /// 3D viewport opens, and whether the corner axes made it orthographic,
+  /// which the next orbit takes back. Neither is written down.
+  bool frameOnOpen = false;
+  bool snappedOrtho = false;
+
+  /// A 3D viewport's picture: the size it fills round the comp's middle,
+  /// comp pixels, which its panel measures, the share of its tier it is drawn
+  /// at so a wide pane costs at most twice the comp's pixels, and whether it
+  /// is drawn as lines only, which skips the engine altogether.
+  (int, int) canvas = (0, 0);
+  double canvasShare = 1;
+  bool wireframeOnly = false;
+
   ViewerSurface({
     required this.id,
     required this.engineId,
@@ -154,6 +201,9 @@ class ViewerSurface {
     this.colourView,
     this.wireframe = false,
     this.layerControls = true,
+    this.ground,
+    this.axes,
+    this.resolution = PreviewResolution.half,
   });
 
   /// What the project remembers about this view. The display half rides in the
@@ -176,6 +226,28 @@ class ViewerSurface {
         if (colourView != null) 'colour_view': colourView,
         if (wireframe) 'wireframe': true,
         if (!layerControls) 'layer_controls': false,
+        if (!listEquals(viewSlots, defaultViewSlots))
+          'view_slots': [for (final v in viewSlots) v.name],
+        if (ground != null) 'ground': ground,
+        if (axes != null) 'axes': axes,
+        if (resolution != PreviewResolution.half) 'resolution': resolution.name,
+        // A 3D viewport's free view of each comp, so it is where it was left.
+        if (cameraPoses.keys.any((k) => k.endsWith('/${ViewerView.free.name}')))
+          'free': {
+            for (final e in cameraPoses.entries)
+              if (e.key.endsWith('/${ViewerView.free.name}'))
+                e.key.substring(0, e.key.lastIndexOf('/')): [
+                  e.value.zoom,
+                  e.value.x,
+                  e.value.y,
+                  e.value.z,
+                  e.value.rotationX,
+                  e.value.rotationY,
+                  e.value.rotationZ,
+                ],
+          },
+        if (orthoZooms.isNotEmpty) 'ortho': orthoZooms,
+        if (wireframeOnly) 'wireframe_only': true,
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -184,7 +256,8 @@ class ViewerSurface {
     final id = j['id'];
     if (id is! String || id.isEmpty) return null;
     final look = j['look'];
-    return ViewerSurface(
+    final slots = j['view_slots'];
+    final surface = ViewerSurface(
       id: id,
       engineId: engineId,
       mode: ViewMode.values.asNameMap()[j['mode']] ?? ViewMode.composition,
@@ -207,7 +280,46 @@ class ViewerSurface {
       colourView: _pair(j['colour_view']),
       wireframe: j['wireframe'] == true,
       layerControls: j['layer_controls'] != false,
+      ground: j['ground'] is bool ? j['ground'] as bool : null,
+      axes: j['axes'] is bool ? j['axes'] as bool : null,
+      resolution: PreviewResolution.values.asNameMap()[j['resolution']] ??
+          PreviewResolution.half,
     );
+    final free = j['free'];
+    if (free is Map) {
+      for (final e in free.entries) {
+        final v = e.value;
+        if (v is! List || v.length != 7 || v.any((n) => _finite(n) == null)) {
+          continue;
+        }
+        final n = [for (final x in v) _finite(x)!];
+        surface.cameraPoses['${e.key}/${ViewerView.free.name}'] =
+            BridgeCameraPose(
+          zoom: n[0],
+          x: n[1],
+          y: n[2],
+          z: n[3],
+          rotationX: n[4],
+          rotationY: n[5],
+          rotationZ: n[6],
+        );
+      }
+    }
+    surface.wireframeOnly = j['wireframe_only'] == true;
+    final ortho = j['ortho'];
+    if (ortho is Map) {
+      for (final e in ortho.entries) {
+        final zoom = _finite(e.value);
+        if (zoom != null) surface.orthoZooms['${e.key}'] = zoom;
+      }
+    }
+    if (slots is List && slots.length == defaultViewSlots.length) {
+      final named = ViewerView.values.asNameMap();
+      for (var i = 0; i < slots.length; i++) {
+        surface.viewSlots[i] = named[slots[i]] ?? defaultViewSlots[i];
+      }
+    }
+    return surface;
   }
 
   static double? _finite(Object? raw) =>
@@ -258,6 +370,15 @@ class ViewerViews extends ChangeNotifier {
   /// Share view options across views, as After Effects has it. With it on,
   /// every view reads the active view's way of looking rather than its own.
   bool shareViewOptions = false;
+
+  /// The Viewer panes that are 3D viewports, where each view looks through a
+  /// free camera of its own and is moved without a tool. Workspace state,
+  /// like the layout.
+  final Set<PaneId> viewportPanes = {};
+
+  /// Whether [view] is in a 3D viewport.
+  bool isViewport(ViewerSurface view) => viewportPanes
+      .any((pane) => paneViews[pane]?.contains(view.id) ?? false);
 
   /// The next engine id to mint. Small integers, one per view, per open
   /// project; never reused, so a frame in flight for a closed view can never
@@ -395,6 +516,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.remove(pane);
     paneCompare.remove(pane);
     paneDivider.remove(pane);
+    viewportPanes.remove(pane);
     notifyListeners();
   }
 
@@ -477,6 +599,8 @@ class ViewerViews extends ChangeNotifier {
         if (_activeId != null) 'active': _activeId,
         if (alwaysPreviewId != null) 'always_preview': alwaysPreviewId,
         if (shareViewOptions) 'share_options': true,
+        if (viewportPanes.isNotEmpty)
+          'viewports': [for (final pane in viewportPanes) _paneKey(pane)],
       };
 
   static String _paneKey(PaneId pane) => '${pane.panel.name}:${pane.instance}';
@@ -503,6 +627,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.clear();
     paneCompare.clear();
     paneDivider.clear();
+    viewportPanes.clear();
     _activeId = null;
     alwaysPreviewId = null;
     shareViewOptions = false;
@@ -578,5 +703,12 @@ class ViewerViews extends ChangeNotifier {
     final preview = workspace['always_preview'];
     if (preview is String && byId(preview) != null) alwaysPreviewId = preview;
     shareViewOptions = workspace['share_options'] == true;
+    final viewports = workspace['viewports'];
+    if (viewports is List) {
+      for (final key in viewports) {
+        final pane = _paneFromKey('$key');
+        if (pane != null) viewportPanes.add(pane);
+      }
+    }
   }
 }

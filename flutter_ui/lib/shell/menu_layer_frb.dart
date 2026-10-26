@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/engine_labels.dart';
@@ -31,11 +32,14 @@ import '../panels/keyframe_controls_frb.dart'
 import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
+import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
-    show hasThreeDSwitch, transformGroups;
+    show TransformSection, hasThreeDSwitch, transformGroups;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
+import 'layer_settings_frb.dart';
+import 'light_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
 
@@ -146,7 +150,7 @@ VoidCallback? onSelection(
     final id = path.substring(prefix.length).split('/').first;
     for (final entry in ui.model.layers) {
       if (entry.layer.internallayerId.toString() != layerId) continue;
-      for (final item in entry.info.shapeContents) {
+      for (final item in entry.info.shapeContents.items) {
         if (item.id.toString() == id) return (layer: entry.layer, item: item);
       }
     }
@@ -289,6 +293,38 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   return [MenuEntry(l10n.menuTogglePathKey, toggle())];
 }
 
+/// Layer ▸ Expand all copies: every repeater on the selected shape layer made
+/// real, into the layer or into layers. Dead until one shape layer with a
+/// repeater is selected.
+List<MenuEntry> expandAllCopiesRows(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final selected = ui.selectedLayers.value;
+  final layer = selected.length == 1 ? selected.single : null;
+  final repeats = layer != null &&
+      ui.model.layers.any((entry) =>
+          entry.layer.internallayerId == layer.internallayerId &&
+          entry.info.shapeContents.modifiers
+              .any((m) => m.kind is BridgeShapeModifierKind_Repeat));
+  VoidCallback? expand(bool intoLayers) {
+    if (comp == null || layer == null || !repeats) return null;
+    return () {
+      try {
+        layer.expandShapeCopies(
+          repeater: null,
+          time: comp.timeOfFrame(frame: ui.playheadFrame.value),
+          intoLayers: intoLayers,
+        );
+        app.notifyDocumentChanged();
+      } catch (_) {}
+    };
+  }
+
+  return [
+    MenuEntry(l10n.shapeExpandIntoLayer, expand(false)),
+    MenuEntry(l10n.shapeExpandIntoLayers, expand(true)),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // Transform
 // ---------------------------------------------------------------------------
@@ -342,11 +378,11 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
             kind: entry.info.kind,
             twoNode: true,
           ))
-            // The camera options are left alone: a lens is seeded from the
-            // composition it was made in, so there is no still number here
-            // that means "untouched" - and a zoom of nought is a camera that
-            // sees nothing.
-            if (!group.cameraOption)
+            // The camera and light options are left alone: a lens is seeded
+            // from the composition it was made in, so there is no still
+            // number here that means "untouched" - and a zoom of nought is a
+            // camera that sees nothing.
+            if (group.section == TransformSection.transform)
               for (final axis in group.axes) axis.prop,
         ];
         entry.layer.setTransforms(
@@ -557,27 +593,89 @@ MenuEntry threeDRow(LumitState app, LumitUiState ui) {
 /// dialog that asked the engine per rebuild would be the habit the
 /// rebuild-path rule exists to stop.
 MenuEntry cameraSettingsRow(
-    BuildContext context, LumitState app, LumitUiState ui) {
+        BuildContext context, LumitState app, LumitUiState ui) =>
+    MenuEntry(
+      l10n.cameraSettings,
+      _cameraWindow(
+          context,
+          app,
+          ui,
+          selectedEntries(ui)
+              .where((entry) => entry.info.camera != null)
+              .firstOrNull),
+    );
+
+/// Opens [picked]'s camera window, or null where there is none to open.
+VoidCallback? _cameraWindow(BuildContext context, LumitState app,
+    LumitUiState ui, BridgeLayerEntry? picked) {
   final comp = ui.selectedComp;
-  final picked = selectedEntries(ui)
-      .where((entry) => entry.info.camera != null)
-      .firstOrNull;
   final channels = picked?.info.transform.camera;
-  return MenuEntry(
-    l10n.cameraSettings,
-    picked == null || channels == null || comp == null
-        ? null
-        : () async {
-            final applied = await showCameraSettingsFrb(
-              context: context,
-              layer: picked.layer,
-              settings: picked.info.camera!,
-              channels: channels,
-              compWidth: comp.getSettings().width.toDouble(),
-            );
-            if (applied) app.notifyDocumentChanged();
-          },
-  );
+  if (picked == null || channels == null || comp == null) return null;
+  return () async {
+    final applied = await showCameraSettingsFrb(
+      context: context,
+      layer: picked.layer,
+      settings: picked.info.camera!,
+      channels: channels,
+      compWidth: comp.getSettings().width.toDouble(),
+    );
+    if (applied) app.notifyDocumentChanged();
+  };
+}
+
+/// Layer ▸ Light settings: the light's window again, greyed until a light is
+/// picked.
+MenuEntry lightSettingsRow(
+        BuildContext context, LumitState app, LumitUiState ui) =>
+    MenuEntry(
+      l10n.lightSettings,
+      _lightWindow(
+          context,
+          app,
+          ui,
+          selectedEntries(ui)
+              .where((entry) => entry.info.light != null)
+              .firstOrNull),
+    );
+
+/// Opens [picked]'s light window, or null where there is none to open.
+VoidCallback? _lightWindow(BuildContext context, LumitState app,
+    LumitUiState ui, BridgeLayerEntry? picked) {
+  final comp = ui.selectedComp;
+  final channels = picked?.info.transform.light;
+  if (picked == null || channels == null || comp == null) return null;
+  return () async {
+    final size = comp.getSettings();
+    final applied = await showLightSettingsFrb(
+      context: context,
+      layer: picked.layer,
+      name: picked.info.name,
+      settings: picked.info.light!,
+      channels: channels,
+      compWidth: size.width.toDouble(),
+      compHeight: size.height.toDouble(),
+    );
+    if (applied) app.notifyDocumentChanged();
+  };
+}
+
+/// Layer ▸ Layer settings: a light's or a camera's own window on those, as
+/// After Effects opens them, and the layer's name and source on the rest.
+Future<void> layerSettingsOf(BuildContext context, LumitState app,
+    LumitUiState ui, LayerReference layer) async {
+  final entry = ui.model.layers
+      .where((e) => e.layer.internallayerId == layer.internallayerId)
+      .firstOrNull;
+  final own = entry?.info.light != null
+      ? _lightWindow(context, app, ui, entry)
+      : _cameraWindow(context, app, ui, entry);
+  if (own != null) {
+    own();
+    return;
+  }
+  if (await showLayerSettingsFrb(context: context, layer: layer)) {
+    app.notifyDocumentChanged();
+  }
 }
 
 /// Layer ▸ Markers: the layer's own cues, which travel with its bar and are

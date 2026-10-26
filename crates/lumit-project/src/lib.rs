@@ -2862,6 +2862,7 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3032,6 +3033,7 @@ mod tests {
         let plate = doc.items[0].id();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3398,6 +3400,7 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3600,6 +3603,7 @@ mod tests {
             lumit_core::model::Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,

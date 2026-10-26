@@ -26,7 +26,7 @@ selected it sets what the Type tool makes next, and its heading reads **New text
 
 | Control | What it does |
 | --- | --- |
-| **Font** | The font family, from the fonts installed on this computer. **Inter (built in)** is the one Lumit carries. |
+| **Font** | The font family, from the fonts installed on this computer, each listed in its own face. **Inter (built in)** is the one Lumit carries. |
 | **Style** | The face inside the family: Regular, Bold, Italic. |
 | **Size** | The letter size in pixels. |
 | **Leading** | The distance from one baseline to the next, in pixels. |
@@ -41,11 +41,11 @@ selected it sets what the Type tool makes next, and its heading reads **New text
 | --- | --- |
 | **Vertical scale**, **Horizontal scale** | Stretch the letters, in per cent. |
 | **Baseline shift** | Lift the letters off the line they stand on, in pixels. |
+| **Fill and stroke** | Which is drawn on top. **Fill over stroke** and **Stroke over fill** go a letter at a time, so a wide stroke can cover the next letter. **All fills over all strokes** and **All strokes over all fills** go across the whole layer. |
 | **Faux bold**, **Faux italic** | Thicken or slant a font that has no bold or italic of its own. |
 | **All caps**, **Small caps** | Set every letter as a capital, or the lower-case ones as small capitals. |
 | **Superscript**, **Subscript** | Set the letters small and raised, or small and lowered. |
 | **Ligatures** | Join pairs such as *fi* into the font's combined shape. |
-| **Stroke over fill** | Draw the outline on top of the letters. Unticked, the letters cover its inner half. |
 | **Auto leading** | Keep the leading at 120 % of the size. |
 
 Right-click the tracking, stroke width, scale or baseline shift box for **Reset**.
@@ -124,16 +124,19 @@ opacities multiply.
 
 ## Convert it
 
-**Layer ▸ Create** turns a selected text layer into something else, as a **copy directly
-above it**. The original stays a text layer.
+**Layer ▸ Create**, also on a layer's right-click, turns a selected text layer into
+something else, as a **copy directly above it**. The original stays a text layer.
 
 - **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines, taken
-  from the font. Masks and paint do not come across.
+  from the font, one group per letter, and switches the text layer off. Masks and paint do
+  not come across.
+- **Split into shape layers** does the same with one shape layer per letter, each where it
+  sat.
 - **Points from text** makes a copy that emits a stream of points in the shape of the
   words, through [Emit from image](/effects/generate/emit-from-image/).
 
 :::note[Not built yet]
-Per-character layers and creating masks from text are not built.
+Creating masks from text is not built.
 :::
 
 ## Related

@@ -25,9 +25,11 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart' show evaluateScalar;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
+import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
 
 /// A Null layer's box, in layer pixels.
@@ -112,42 +114,61 @@ bool textIsAnimated(BridgeTextDocument document) =>
 /// a time: a keyed repeater puts its copies somewhere new each frame. [t] is
 /// seconds on the composition's clock, which is the clock the bridge already
 /// hands a shape item's keys over on.
-Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
+Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
-  for (final item in contents) {
-    // Half the outline sits outside the path, and an outline pushed *out* of
-    // it sits further out still. Pulled in it never needs more room.
-    final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
-        math.max(0.0, evaluateScalar(item.offsetAmount, t));
+  for (final (index, entry) in contents.indexed) {
+    if (entry.kind is! BridgeShapeEntryKind_Item) continue;
+    final item = (entry.kind as BridgeShapeEntryKind_Item).field0;
     final own = _boxOf(_controlPoints(item));
     if (own == null) continue;
+    // The modifiers acting on this item, in the order they apply: the
+    // engine's `grown`, then its copies.
+    final mods = contents.modifiersOn(index);
     var box = own;
-    // A twist keeps the art inside the box it was turned in, as the engine's
-    // `Twist::bounds` says.
-    if (item.twist case final twist?) box = _twistBox(item, twist, t);
-    // A deform moves the outline no further than its amount: `Deform::bounds`.
-    if (item.deform case final deform?) {
-      final amount = evaluateScalar(deform.amount, t).abs();
-      if (deform.mode != 1) {
-        box = (
-          box.$1 - amount,
-          box.$2 - amount,
-          box.$3 + amount,
-          box.$4 + amount
-        );
-      } else {
-        final (mx, my) = ((own.$1 + own.$3) / 2, (own.$2 + own.$4) / 2);
-        final grow = 1 + amount / 100;
-        final rx = math.max((box.$1 - mx).abs(), (box.$3 - mx).abs()) * grow;
-        final ry = math.max((box.$2 - my).abs(), (box.$4 - my).abs()) * grow;
-        box = (mx - rx, my - ry, mx + rx, my + ry);
+    var margin = 0.0;
+    for (final m in mods) {
+      switch (m.kind) {
+        // A twist keeps the art inside the box it was turned in, as the
+        // engine's `Twist::bounds` says.
+        case BridgeShapeModifierKind_Twist(:final field0):
+          box = _twistBox(item, field0, t);
+        // A deform moves the outline no further than its amount:
+        // `Deform::bounds`.
+        case BridgeShapeModifierKind_Deform(field0: final deform):
+          final amount = evaluateScalar(deform.amount, t).abs();
+          if (deform.mode != 1) {
+            box = (
+              box.$1 - amount,
+              box.$2 - amount,
+              box.$3 + amount,
+              box.$4 + amount
+            );
+          } else {
+            final (mx, my) = ((own.$1 + own.$3) / 2, (own.$2 + own.$4) / 2);
+            final grow = 1 + amount / 100;
+            final rx =
+                math.max((box.$1 - mx).abs(), (box.$3 - mx).abs()) * grow;
+            final ry =
+                math.max((box.$2 - my).abs(), (box.$4 - my).abs()) * grow;
+            box = (mx - rx, my - ry, mx + rx, my + ry);
+          }
+        // An outline pushed *out* of the path sits further out. Pulled in it
+        // never needs more room.
+        case BridgeShapeModifierKind_Offset(:final field0):
+          margin += math.max(0.0, evaluateScalar(field0, t));
+        default:
+          break;
       }
     }
+    // Half the outline sits outside the path.
+    final half =
+        (item.stroke != null ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
+            margin;
     final (ix0, iy0, ix1, iy1) =
         (box.$1 - half, box.$2 - half, box.$3 + half, box.$4 + half);
-    // Every copy's box, unioned. One copy and the identity — every shape
-    // nobody has repeated — is exactly the box above.
-    for (final m in shapeCopyTransforms(item, t)) {
+    // Every copy's box, unioned. One copy and the identity, every shape
+    // nobody has repeated, is exactly the box above.
+    for (final m in shapeCopyTransforms(mods, t)) {
       for (final (x, y) in [
         (ix0, iy0),
         (ix1, iy0),
@@ -218,32 +239,59 @@ Iterable<(double, double)> _controlPoints(BridgeShapeItem item) => [
 
 /// The size of that box, floored at a pixel each way so a straight line still
 /// has a layer to be drawn on.
-Size? shapeContentsBounds(List<BridgeShapeItem> contents, {double t = 0}) {
+Size? shapeContentsBounds(List<BridgeShapeEntry> contents, {double t = 0}) {
   final rect = shapeContentsRect(contents, t: t);
   if (rect == null) return null;
   return Size(math.max(rect.width, 1), math.max(rect.height, 1));
 }
 
-/// The transform each of [item]'s repeated copies is drawn with at [t], as
-/// `[a, b, c, d, e, f]` mapping `(x, y)` to `(ax + cy + e, bx + dy + f)`.
+/// The transform each copy of a piece of art is drawn with at [t], given the
+/// modifiers [mods] acting on it, as `[a, b, c, d, e, f]` mapping `(x, y)` to
+/// `(ax + cy + e, bx + dy + f)`.
 ///
-/// The engine's `ShapeItem::copies_at` in the same six numbers, and it has to
-/// stay that way: the engine sizes the raster from its version and the
-/// wireframe is drawn from this one. A single identity — one copy, no repeater
-/// — is what every shape answers until somebody asks for more.
-List<List<double>> shapeCopyTransforms(BridgeShapeItem item, double t) {
-  final copies = evaluateScalar(item.repeatCopies, t)
+/// The engine's `copies_at` in the same six numbers, and it has to stay that
+/// way: the engine sizes the raster from its version and the wireframe is
+/// drawn from this one. Stacked repeaters multiply, every copy of the later
+/// one made of every copy of the earlier, held to the engine's thousand. A
+/// single identity, no repeater, is what every shape answers until somebody
+/// asks for more.
+List<List<double>> shapeCopyTransforms(
+    List<BridgeShapeModifier> mods, double t) {
+  var out = <List<double>>[identityTransform];
+  for (final m in mods) {
+    if (m.kind case BridgeShapeModifierKind_Repeat(:final field0)) {
+      final copies = _repeaterCopies(field0, t);
+      if (copies.length <= 1) continue;
+      out = [
+        for (final later in copies)
+          for (final earlier in out) _then(earlier, later),
+      ];
+      if (out.length > maxShapeCopiesDrawn) {
+        out = out.sublist(0, maxShapeCopiesDrawn);
+      }
+    }
+  }
+  return out;
+}
+
+/// The most copies stacked repeaters draw of one piece of art between them:
+/// `MAX_COPIES_DRAWN` in the engine.
+const int maxShapeCopiesDrawn = 1000;
+
+/// The copies one repeater draws at [t]: the engine's `Repeater::copies_at`.
+List<List<double>> _repeaterCopies(BridgeShapeRepeater item, double t) {
+  final copies = evaluateScalar(item.copies, t)
       .round()
       .clamp(1, maxShapeCopies.toInt());
   if (copies <= 1) return const [identityTransform];
-  final offset = evaluateScalar(item.repeatOffset, t)
+  final offset = evaluateScalar(item.offset, t)
       .round()
       .clamp(-maxShapeCopies.toInt(), maxShapeCopies.toInt());
 
-  final rotation = evaluateScalar(item.repeatRotation, t) * math.pi / 180;
-  final scale = evaluateScalar(item.repeatScale, t) / 100;
-  final ax = evaluateScalar(item.repeatAnchorX, t);
-  final ay = evaluateScalar(item.repeatAnchorY, t);
+  final rotation = evaluateScalar(item.rotation, t) * math.pi / 180;
+  final scale = evaluateScalar(item.scale, t) / 100;
+  final ax = evaluateScalar(item.anchorX, t);
+  final ay = evaluateScalar(item.anchorY, t);
   final a = math.cos(rotation) * scale;
   final b = math.sin(rotation) * scale;
   final c = -math.sin(rotation) * scale;
@@ -254,8 +302,8 @@ List<List<double>> shapeCopyTransforms(BridgeShapeItem item, double t) {
     b,
     c,
     d,
-    ax - (a * ax + c * ay) + evaluateScalar(item.repeatPositionX, t),
-    ay - (b * ax + d * ay) + evaluateScalar(item.repeatPositionY, t),
+    ax - (a * ax + c * ay) + evaluateScalar(item.positionX, t),
+    ay - (b * ax + d * ay) + evaluateScalar(item.positionY, t),
   ];
   final back = _inverse(step);
 

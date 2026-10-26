@@ -340,11 +340,26 @@ class ColourSwatchButton extends StatelessWidget {
   /// scene-linear one is 0—1 and may leave it.
   final ColourScale scale;
 
+  /// The exact numbers the picker opens on, where [colour] is only what a
+  /// screen can show of them: an over-white light, or a value that has not
+  /// been rounded to a byte. Null opens on [colour].
+  final PickedColour? initial;
+
+  /// How far past white the picker may go, under [ColourScale.unit].
+  final double max;
+
+  /// Called on every tick of a drag, to show it before it settles. Null calls
+  /// [onPicked] for each.
+  final ValueChanged<PickedColour>? onPreview;
+
   const ColourSwatchButton({
     super.key,
     required this.colour,
     required this.onPicked,
     this.scale = ColourScale.bytes,
+    this.initial,
+    this.max = 1,
+    this.onPreview,
   });
 
   @override
@@ -358,8 +373,10 @@ class ColourSwatchButton extends StatelessWidget {
         await showColourPicker(
           context: context,
           position: box.localToGlobal(Offset(0, box.size.height + 4)),
-          initial: PickedColour.of(colour),
+          initial: initial ?? PickedColour.of(colour),
           scale: scale,
+          max: max,
+          onPreview: onPreview,
           onCommit: onPicked,
         );
       },

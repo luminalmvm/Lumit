@@ -108,6 +108,7 @@ fn comp_of(name: &str, layers: Vec<Layer>, groups: Vec<LayerGroup>) -> Compositi
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups,
         beat_grid: None,

@@ -36,6 +36,10 @@ enum EscapeRung {
 
   /// The finest selection held on screen.
   selection,
+
+  /// The Viewer's 3D view, back to the last one: only once nothing above
+  /// had a use for the press.
+  view,
 }
 
 /// Where the surfaces register. Static because Escape is one key and there is

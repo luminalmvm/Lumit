@@ -35,6 +35,11 @@
 // field has something in it every match shows, whatever was folded, because a
 // search that hides what it found is a trap. Clearing the field puts the folds
 // back exactly as they were.
+//
+// **Saved presets are grouped by folder.** A group is a folder inside the
+// preset library, nested as deep as the folders go, and folds like a
+// category. Groups are made, renamed and deleted from their right-click menu,
+// and a preset moves by dragging it onto a group or from its own menu.
 
 import 'dart:io';
 
@@ -42,17 +47,21 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/presets.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../shell/settings_account.dart' show askBefore;
+import '../shell/theme_name_dialog.dart';
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 class EffectsPresetsPanelFrb extends StatefulWidget {
   /// The preset file seams, injected by tests so no plugin channel opens.
@@ -61,6 +70,9 @@ class EffectsPresetsPanelFrb extends StatefulWidget {
 
   /// The library listing seam, injected by tests so no real library is read.
   final List<BridgePresetInfo> Function()? presetsLister;
+
+  /// The library's groups, on the same footing as [presetsLister].
+  final List<String> Function()? groupsLister;
 
   /// The catalogue seam, on the same footing as [presetsLister]. It exists so a
   /// test can put a *discovered plugin* in the list without a real bundle
@@ -74,6 +86,7 @@ class EffectsPresetsPanelFrb extends StatefulWidget {
     this.savePicker,
     this.loadPicker,
     this.presetsLister,
+    this.groupsLister,
     this.effectsLister,
   });
 
@@ -96,6 +109,9 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// rebuild, which would scan a folder on every search keystroke.
   List<BridgePresetInfo> _presets = const [];
 
+  /// Every group in the library, empty ones too, read alongside [_presets].
+  List<String> _groups = const [];
+
   /// The headings the user has folded shut, by engine category name. Nothing
   /// here goes to the engine: which groups are open is how this panel is being
   /// looked at, not part of the document (the Project panel's `_closedFolders`
@@ -105,6 +121,13 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// The saved-preset group's name in [_shut]. No engine category is called
   /// this, so one set holds the presets and the categories without collision.
   static const String _presetsKey = '*saved-presets';
+
+  /// A group's name in [_shut] is its path after this.
+  static const String _groupKey = '*group:';
+
+  /// How far each level of groups is set in: a group's triangle sits under
+  /// its parent's name.
+  static const double _indent = 18;
 
   /// The Favourites group's name in [_shut], on the same footing.
   static const String _favouritesKey = '*favourites';
@@ -131,7 +154,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   void initState() {
     super.initState();
     _search.addListener(() => setState(() {}));
-    _presets = (widget.presetsLister ?? listPresets)();
+    _readLibrary();
     // `Ctrl+F` asks the focused panel for its search box; this answers only
     // while Effects & presets is the focused one.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
@@ -154,7 +177,16 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
 
   void _refreshPresets() {
     if (!mounted) return;
-    setState(() => _presets = (widget.presetsLister ?? listPresets)());
+    setState(_readLibrary);
+  }
+
+  void _readLibrary() {
+    _presets = (widget.presetsLister ?? listPresets)();
+    // A test that hands in its own presets reads no real groups either.
+    _groups = (widget.groupsLister ??
+        (widget.presetsLister == null
+            ? listPresetGroups
+            : () => const <String>[]))();
   }
 
   @override
@@ -328,19 +360,29 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// A heading and its twirl: the whole strip is the target, the way the
   /// Timeline's section headers are, and the triangle points right while the
   /// rows under it are away.
+  ///
+  /// A heading over saved presets names its group in [library], empty for the
+  /// top of the library: it has the groups' menu, and a preset dropped on it
+  /// moves into it.
   Widget _heading(
     LumitTheme t, {
     required String group,
     required String label,
     required bool open,
-  }) =>
-      HoverMark(
+    int depth = 0,
+    String? library,
+  }) {
+    final strip = HoverMark(
         builder: (context, lit) => GestureDetector(
           key: ValueKey<String>('fx-group-$group'),
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggle(group),
+          onSecondaryTapDown: library == null
+              ? null
+              : (d) => _groupMenu(d.globalPosition, library),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 6, 10, 2),
+            padding: EdgeInsets.fromLTRB(
+                4 + depth * _indent, depth == 0 ? 6 : 2, 10, 2),
             child: Row(
               children: [
                 TwirlTurn(
@@ -362,7 +404,149 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             ),
           ),
         ),
-      );
+    );
+    if (library == null) return strip;
+    return DragTarget<EffectDragData>(
+      onWillAcceptWithDetails: (d) => d.data.presetPath != null,
+      onAcceptWithDetails: (d) => _changeLibrary(
+          () => movePreset(path: d.data.presetPath!, group: library)),
+      builder: (context, candidate, _) => candidate.isEmpty
+          ? strip
+          : ColoredBox(color: t.accent.withValues(alpha: 0.12), child: strip),
+    );
+  }
+
+  /// The menu on a group, or on the saved-preset heading for the top of the
+  /// library.
+  void _groupMenu(Offset at, String group) {
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('preset-group-new'),
+          onPressed: () {
+            close(null);
+            _newGroup(group);
+          },
+          child: Text(l10n.presetNewGroup),
+        ),
+        if (group.isNotEmpty) ...[
+          MenuRow(
+            key: const ValueKey('preset-group-rename'),
+            onPressed: () {
+              close(null);
+              _renameGroup(group);
+            },
+            child: Text(l10n.renameEllipsis),
+          ),
+          MenuRow(
+            key: const ValueKey('preset-group-delete'),
+            onPressed: () {
+              close(null);
+              _deleteGroup(group);
+            },
+            child: Text(l10n.delete),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The menu on a saved preset: the groups it can move to.
+  void _presetMenu(Offset at, BridgePresetInfo preset) {
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        SubmenuRow(
+          key: const ValueKey('preset-move-to'),
+          closeParent: () => close(null),
+          submenu: (dismiss) => FloatSurface(
+            width: 220,
+            // A big library has dozens of groups, so the list scrolls.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final group in ['', ..._groups])
+                      MenuRow(
+                        key: ValueKey<String>('preset-move-to-$group'),
+                        selected: group == preset.group,
+                        onPressed: () {
+                          dismiss();
+                          _changeLibrary(() =>
+                              movePreset(path: preset.path, group: group));
+                        },
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                              left: '/'.allMatches(group).length * _indent),
+                          child: Text(
+                              group.isEmpty
+                                  ? l10n.savedPresets
+                                  : group.substring(group.lastIndexOf('/') + 1),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          child: Text(l10n.presetMoveTo),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _newGroup(String parent) async {
+    final name = await askThemeName(context,
+        title: l10n.presetNewGroup, suggested: '', confirm: l10n.create);
+    if (name == null || !mounted) return;
+    _changeLibrary(() =>
+        makePresetGroup(group: parent.isEmpty ? name : '$parent/$name'));
+    // Open where it went, so the new group shows.
+    setState(() => _shut
+      ..remove(_presetsKey)
+      ..removeAll(_withParents(parent).map((g) => '$_groupKey$g')));
+  }
+
+  Future<void> _renameGroup(String group) async {
+    final name = await askThemeName(context,
+        title: l10n.rename,
+        suggested: group.substring(group.lastIndexOf('/') + 1),
+        confirm: l10n.rename);
+    if (name == null) return;
+    _changeLibrary(() => renamePresetGroup(group: group, name: name));
+  }
+
+  /// Delete a group, asking first when there are presets in it.
+  Future<void> _deleteGroup(String group) async {
+    final count = _presets
+        .where((p) => p.group == group || p.group.startsWith('$group/'))
+        .length;
+    if (count > 0 &&
+        !await askBefore(
+            context,
+            l10n.presetDeleteGroup(
+                group.substring(group.lastIndexOf('/') + 1), count),
+            l10n.delete)) {
+      return;
+    }
+    _changeLibrary(() => deletePresetGroup(group: group));
+  }
+
+  /// Change the library on disk, then read it again. A refusal, such as a
+  /// name already taken, changes nothing.
+  void _changeLibrary(void Function() change) {
+    try {
+      change();
+    } catch (_) {}
+    _refreshPresets();
+  }
 
   /// Star something, or take the star off. The workspace saves itself; this
   /// only has to redraw, because the Favourites group above is built from the
@@ -416,7 +600,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           ),
         for (final preset in presets)
           _PresetRow(
-            key: ValueKey<String>('fav-preset-${preset.name}'),
+            key: ValueKey<String>('fav-preset-${_presetId(preset)}'),
             preset: preset,
             onApply: () => _applyPreset(ui, preset),
             favourite: true,
@@ -427,19 +611,55 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     ];
   }
 
+  /// The saved-preset heading, its groups and the presets in them.
   List<Widget> _presetRows(LumitTheme t, LumitUiState ui, String needle) {
+    // A search finds a preset by its name or by a group it is in.
     final shown = _presets
-        .where((p) => needle.isEmpty || p.name.toLowerCase().contains(needle))
+        .where((p) =>
+            needle.isEmpty || _presetId(p).toLowerCase().contains(needle))
         .toList();
-    if (shown.isEmpty) return const [];
+    // While searching, only the groups that hold something found.
+    final groups = <String>{
+      if (needle.isEmpty) ..._groups,
+      for (final preset in shown) ..._withParents(preset.group),
+    };
+    if (shown.isEmpty && groups.isEmpty) return const [];
     final open = _isOpen(_presetsKey, needle);
     return [
-      _heading(t, group: _presetsKey, label: l10n.savedPresets, open: open),
-      if (open)
-        for (final preset in shown)
+      _heading(t,
+          group: _presetsKey,
+          label: l10n.savedPresets,
+          open: open,
+          library: ''),
+      if (open) ..._groupRows(t, ui, needle, '', groups, shown),
+    ];
+  }
+
+  /// The groups directly inside [parent], each with what is in it, then the
+  /// presets in [parent] itself.
+  List<Widget> _groupRows(LumitTheme t, LumitUiState ui, String needle,
+      String parent, Set<String> groups, List<BridgePresetInfo> shown) {
+    final depth = parent.isEmpty ? 0 : '/'.allMatches(parent).length + 1;
+    final inside = groups.where((g) => _parentOf(g) == parent).toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return [
+      for (final group in inside) ...[
+        _heading(t,
+            group: '$_groupKey$group',
+            label: group.substring(group.lastIndexOf('/') + 1),
+            open: _isOpen('$_groupKey$group', needle),
+            depth: depth + 1,
+            library: group),
+        if (_isOpen('$_groupKey$group', needle))
+          ..._groupRows(t, ui, needle, group, groups, shown),
+      ],
+      for (final preset in shown)
+        if (preset.group == parent)
           _PresetRow(
-            key: ValueKey<String>('preset-item-${preset.name}'),
+            key: ValueKey<String>('preset-item-${_presetId(preset)}'),
             preset: preset,
+            indent: depth * _indent,
+            onMenu: (at) => _presetMenu(at, preset),
             onApply: () => _applyPreset(ui, preset),
             favourite: ui.workspace
                 .isFavouriteEffect(_presetFavouriteKey(preset.name)),
@@ -447,6 +667,24 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                 _star(ui, _presetFavouriteKey(preset.name)),
           ),
     ];
+  }
+
+  /// A preset as its group path and name, which tells apart two presets of
+  /// the same name in different groups.
+  static String _presetId(BridgePresetInfo preset) =>
+      preset.group.isEmpty ? preset.name : '${preset.group}/${preset.name}';
+
+  /// The group [group] sits in, empty at the top of the library.
+  static String _parentOf(String group) {
+    final at = group.lastIndexOf('/');
+    return at < 0 ? '' : group.substring(0, at);
+  }
+
+  /// [group] and every group above it.
+  static Iterable<String> _withParents(String group) sync* {
+    for (var at = group; at.isNotEmpty; at = _parentOf(at)) {
+      yield at;
+    }
   }
 
   /// Apply a library preset's whole stack where [_apply] puts an effect. A
@@ -575,9 +813,17 @@ class _PresetRow extends StatelessWidget {
   final VoidCallback onApply;
   final bool favourite;
   final VoidCallback onToggleFavourite;
+
+  /// How far in it is set, by the groups it is in.
+  final double indent;
+
+  /// Opens the preset's menu at a point in the window.
+  final void Function(Offset at)? onMenu;
   const _PresetRow({
     super.key,
     required this.preset,
+    this.indent = 0,
+    this.onMenu,
     required this.onApply,
     required this.favourite,
     required this.onToggleFavourite,
@@ -596,13 +842,21 @@ class _PresetRow extends StatelessWidget {
           child: Text(preset.name, style: t.small),
         ),
       ),
-      child: _libraryRow(
-        context,
-        label: preset.name,
-        favourite: favourite,
-        onToggleFavourite: onToggleFavourite,
-        onApply: onApply,
-        starKey: 'preset-star-${preset.name}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown:
+            onMenu == null ? null : (d) => onMenu!(d.globalPosition),
+        child: Padding(
+          padding: EdgeInsets.only(left: indent),
+          child: _libraryRow(
+            context,
+            label: preset.name,
+            favourite: favourite,
+            onToggleFavourite: onToggleFavourite,
+            onApply: onApply,
+            starKey: 'preset-star-${preset.name}',
+          ),
+        ),
       ),
     );
   }

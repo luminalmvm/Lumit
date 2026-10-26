@@ -22,6 +22,7 @@ Add to picked
 Age
 Align to motion
 Align to path
+Alignment
 All
 All edges
 All frames
@@ -45,6 +46,7 @@ Anchor x
 Anchor y
 Angle
 Angle control
+Angle offset
 Animate
 Anticlockwise
 Aperture
@@ -133,6 +135,8 @@ Bounce
 Bounciness
 Boundary
 Bounds
+Boxes x
+Boxes y
 Brightness
 Broadband, amber
 Broadband, blue
@@ -185,6 +189,7 @@ Clone layer 4
 Clone to points
 Closed
 Coating
+Cohesion
 Collide
 Collide with
 Colour
@@ -225,16 +230,21 @@ Confidence
 Connect points
 Connections
 Constant
+Constant length
 Contrast
 Controls
 Conversion
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
+Copies
 Core colour
 Core radius
 Corner pin
+Corner point
 Corner radius
+Corner x
+Corner y
 Corners
 Count
 Count nested inputs
@@ -312,6 +322,8 @@ Droplets
 Dry
 Duration
 Dust
+Each path
+Each point
 Echo
 Echoes
 Edge
@@ -400,6 +412,8 @@ Flash
 Flip axis
 Flip direction
 Flip order
+Flock
+Flock radius
 Flow points
 Flow resolution
 Flow smoothness
@@ -410,6 +424,8 @@ Focus point x
 Focus point y
 Focus range
 Follow
+Follow the vectors
+For
 Force on all layers
 Forces
 Forking
@@ -457,9 +473,13 @@ Green blur
 Green from
 Greens
 Grid
+Grid size
+Grid size x
+Grid size y
 Grit
 Group
 Group name
+H line rel width
 Hairs
 Half
 Hard
@@ -541,6 +561,7 @@ Kill
 Knee
 LUT
 Label points
+Latitude
 Layer
 Layer in to out
 Layer knocks out shadow
@@ -590,10 +611,12 @@ Limit to radius
 Limiter
 Line
 Line period
+Line width
 Linear
 Linear burn
 Linear light
 Linear wipe
+Lines
 Load from file…
 Look
 Lookahead
@@ -607,11 +630,16 @@ Luminance only
 Luminosity
 Magenta
 Magentas
+Major line spacing
+Major line width
 Makeup
 Manual
 Manual light
 Map black to
+Map channels
 Map placement
+Map slope
+Map softness
 Map white to
 Mask
 Mask path
@@ -751,6 +779,7 @@ Per
 Per clone
 Per-axis wobble
 Perlin
+Persistence
 Phase
 Phase offset
 Phaser
@@ -856,6 +885,8 @@ Render
 Rendered
 Repeat
 Repeat edge pixels
+Repeat end
+Repeat start
 Replace colour
 Replace method
 Reset interval
@@ -877,6 +908,7 @@ Rings
 Ripple
 Rise
 Robust Video Matting
+Roll
 Roll speed
 Room size
 Rotation
@@ -924,6 +956,7 @@ Segments
 Semicircle
 Sensitivity
 Sensor
+Separation
 Sepia
 Set channels
 Set matte
@@ -938,6 +971,7 @@ Shadow tonal width
 Shadows
 Shake
 Shape
+Shapes
 Share of frame
 Sharp colours
 Sharpen
@@ -953,6 +987,7 @@ Single
 Single layer, straw
 Size
 Size by
+Size from
 Size from width
 Size jitter
 Size over life
@@ -962,6 +997,7 @@ Slice repeat
 Slide
 Slider
 Slider control
+Slope channel
 Smooth
 Smooth noise
 Smudges
@@ -985,6 +1021,10 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Spark life
+Spark size
+Spark speed
+Sparks
 Speed
 Speed jitter
 Speed max
@@ -1046,11 +1086,13 @@ Sub settings
 Subtract
 Super 35
 Surface
+Swing
 Switch
 Symmetric
 Sync
 Taper
 Technique
+Tele lens width
 Temperature
 Temporal
 Text
@@ -1072,6 +1114,7 @@ Time offset
 Time samples
 Time since last
 Time step
+Times
 Tint
 Tint colour
 To
@@ -1089,6 +1132,7 @@ Top right tangent y
 Top to bottom
 Track points
 Trail
+Trails
 Transform
 Transform points
 Transition
@@ -1105,6 +1149,7 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turn
 Turn points
 Twirl
 Twist
@@ -1133,10 +1178,13 @@ Use point colour
 Use point size
 Use source colour
 Utility
+V line rel width
 Value
 Variation
 Vary points
+Vector blur
 Vector scale
+Vectors from
 Vegas
 Venetian blinds
 Vertical
@@ -1184,13 +1232,16 @@ Wipe centre y
 Word
 Work area
 Wrap
+X
 X amount
 X frequency
+Y
 Y amount
 Y frequency
 Yellow
 Yellows
 Z amount
+Z dist
 Z frequency
 Zebra
 Zoom

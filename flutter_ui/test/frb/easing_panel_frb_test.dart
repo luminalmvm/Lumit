@@ -52,8 +52,9 @@ void main() {
     testWidgets('a preset tile applies its curve in one click', (tester) async {
       final m = await mount(tester, claimed: true);
 
-      await tester.ensureVisible(find.text('Back out'));
-      await tester.tap(find.text('Back out'));
+      final tile = find.byKey(const ValueKey('easing-preset-backOut'));
+      await tester.ensureVisible(tile);
+      await tester.tap(tile);
       await tester.pump();
 
       expect(m.applied, hasLength(1),
@@ -72,19 +73,17 @@ void main() {
     testWidgets('a custom curve applies what its handles show', (tester) async {
       final m = await mount(tester, claimed: true);
 
-      // Take hold of the first handle — the easy ease it opens on puts it at
+      // Take hold of the first handle - the easy ease it opens on puts it at
       // (1/3, 0) of the box - and drag it up and left. The box is sized to
-      // the panel (docs/07 §5.4), so its side and margins are read off the
-      // drawing: 20 across up to the box's largest, centred past that, and the
-      // rest of the height split above and below.
+      // the panel, so it is read off the drawing: 14 in from each side, and
+      // half its height again above and below for overshoot.
       final paint = find.byKey(const ValueKey('easing-box'));
       final box = tester.getTopLeft(paint);
       final size = tester.getSize(paint);
-      final side = (size.width - 40).clamp(170.0, 240.0);
-      final boxLeft = (size.width - side) / 2;
-      final marginY = (size.height - side) / 2;
+      final across = size.width - 28;
+      final high = size.height / 2;
       final gesture = await tester
-          .startGesture(box + Offset(boxLeft + side / 3, marginY + side));
+          .startGesture(box + Offset(14 + across / 3, high * 1.5));
       await tester.pump();
       await gesture.moveBy(const Offset(-30, -60));
       await tester.pump();
@@ -98,8 +97,8 @@ void main() {
       // What went out is exactly what the handles show: the first control
       // point moved by (−30, −60) px of the box, the second untouched.
       final sent = m.applied.single;
-      expect(sent.x1, closeTo(1 / 3 - 30 / side, 1e-6));
-      expect(sent.y1, closeTo(60 / side, 1e-6));
+      expect(sent.x1, closeTo(1 / 3 - 30 / across, 1e-6));
+      expect(sent.y1, closeTo(60 / high, 1e-6));
       expect(sent.x2, 2 / 3);
       expect(sent.y2, 1);
     });
@@ -190,8 +189,9 @@ void main() {
 
     /// Draw [preset] into the box and keep it as [name].
     Future<void> saveAs(WidgetTester tester, String preset, String name) async {
-      await tester.ensureVisible(find.text(preset));
-      await tester.tap(find.text(preset));
+      final tile = find.byKey(ValueKey('easing-preset-$preset'));
+      await tester.ensureVisible(tile);
+      await tester.tap(tile);
       await tester.pump();
       await tester.ensureVisible(find.byKey(const ValueKey('easing-save')));
       await tester.tap(find.byKey(const ValueKey('easing-save')));
@@ -205,7 +205,7 @@ void main() {
         'a saved shape joins the grid, applies, and outlives the store '
         'being read again', (tester) async {
       final m = await mount(tester, claimed: true);
-      await saveAs(tester, 'Snap', 'My ease');
+      await saveAs(tester, 'snap', 'My ease');
 
       expect(find.text('My ease'), findsOneWidget);
 

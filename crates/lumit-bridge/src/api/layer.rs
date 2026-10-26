@@ -173,7 +173,8 @@ impl BridgeVertex {
 }
 
 /// One piece of vector art on a shape layer: a path, and how it is
-/// painted.
+/// painted. What is done to the path is an entry after it in the contents
+/// (`crate::api::shape::BridgeShapeModifier`).
 ///
 /// The path is `BridgeVertex`, the same vertices a mask crosses with: one path
 /// type in the document, drawn by two things.
@@ -184,22 +185,14 @@ pub struct BridgeShapeItem {
     pub name: String,
     pub vertices: Vec<BridgeVertex>,
     pub closed: bool,
-    /// The colour inside the path. `None` draws no fill.
-    pub fill: Option<crate::api::assets::BridgeColourRgba>,
+    /// The colour inside the path, each channel keyable. `None` draws no fill.
+    pub fill: Option<crate::api::effect::BridgeColour>,
     /// The outline's colour, and its width in layer pixels. `None` draws no
     /// outline; a width of zero draws none either.
-    pub stroke: Option<crate::api::assets::BridgeColourRgba>,
-    pub stroke_width: f64,
+    pub stroke: Option<crate::api::effect::BridgeColour>,
+    pub stroke_width: BridgeScalar,
     /// 0..100.
-    pub opacity: f64,
-    /// **Trim paths**: where along the path's own length the art begins
-    /// and ends, as a per cent, and how far the pair is slid along it in
-    /// degrees. Animatable on the layer's own clock, exactly as a
-    /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
-    /// the same diamonds.
-    pub trim_start: BridgeScalar,
-    pub trim_end: BridgeScalar,
-    pub trim_offset: BridgeScalar,
+    pub opacity: BridgeScalar,
     /// **Dashes**: the outline's dash and gap lengths in layer pixels,
     /// alternating — dash, gap, dash, gap. Empty is a solid outline.
     /// `dash_offset` is how far along the path the pattern starts, in the same
@@ -238,37 +231,12 @@ pub struct BridgeShapeItem {
     /// of them. `value` counts the keys up, so the graph draws the *rate* the
     /// shape is changing at, which is the one curve a path can honestly draw.
     pub path_keys: Vec<BridgeKeyframe>,
-    /// **Offset paths**: how far the outline is pushed out of the path,
-    /// in layer pixels; negative pulls it in and zero is the path itself.
-    pub offset_amount: BridgeScalar,
-    /// **The repeater**: how many copies of the item are drawn, which
-    /// copy the original is (`repeat_offset`), and the transform each copy is
-    /// one more step of — moved by `repeat_position_*` layer pixels, turned by
-    /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
-    /// about `repeat_anchor_*`. The copies fade evenly from
-    /// `repeat_start_opacity` to `repeat_end_opacity`.
-    ///
-    /// A still count of one is no repeater at all, which is what every shape is
-    /// until somebody asks for more.
-    pub repeat_copies: BridgeScalar,
-    pub repeat_offset: BridgeScalar,
-    pub repeat_anchor_x: BridgeScalar,
-    pub repeat_anchor_y: BridgeScalar,
-    pub repeat_position_x: BridgeScalar,
-    pub repeat_position_y: BridgeScalar,
-    pub repeat_rotation: BridgeScalar,
-    pub repeat_scale: BridgeScalar,
-    pub repeat_start_opacity: BridgeScalar,
-    pub repeat_end_opacity: BridgeScalar,
-    /// **Twist**, or `None` for none.
-    pub twist: Option<BridgeShapeTwist>,
-    /// **Deform**, or `None` for none.
-    pub deform: Option<BridgeShapeDeform>,
-    /// **Smooth**: how far along the path each point is averaged with its
-    /// neighbours, in pixels, or `None` for no smooth.
-    pub smooth: Option<BridgeScalar>,
     /// **Stroke taper**, or `None` for the full width all the way.
     pub taper: Option<BridgeShapeTaper>,
+    /// **A parametric shape**, or `None` for a drawn path. While it is set
+    /// the path is made from it, and `vertices` is that path at the head of
+    /// the layer.
+    pub primitive: Option<crate::api::shape::BridgeShapePrimitive>,
 }
 
 /// A shape's stroke taper: how much of the width is gone at each end, how
@@ -314,19 +282,16 @@ pub struct BridgeShapeDeform {
 
 impl BridgeShapeItem {
     #[frb(ignore)]
-    fn read_at(item: &lumit_core::shape::ShapeItem, offset: Rational) -> Self {
+    pub(crate) fn read_at(item: &lumit_core::shape::ShapeItem, offset: Rational) -> Self {
         Self {
             id: item.id,
             name: item.name.clone(),
             vertices: item.path.vertices.iter().map(BridgeVertex::read).collect(),
             closed: item.path.closed,
-            fill: item.fill.map(crate::api::assets::colour_of),
-            stroke: item.stroke.map(crate::api::assets::colour_of),
-            stroke_width: item.stroke_width,
-            opacity: item.opacity,
-            trim_start: BridgeScalar::read_at(&item.trim_start, offset),
-            trim_end: BridgeScalar::read_at(&item.trim_end, offset),
-            trim_offset: BridgeScalar::read_at(&item.trim_offset, offset),
+            fill: crate::shape_paint::read(item.fill.as_ref(), offset),
+            stroke: crate::shape_paint::read(item.stroke.as_ref(), offset),
+            stroke_width: BridgeScalar::read_at(&item.stroke_width, offset),
+            opacity: BridgeScalar::read_at(&item.opacity, offset),
             dashes: item
                 .dashes
                 .iter()
@@ -368,36 +333,6 @@ impl BridgeShapeItem {
                     }
                 })
                 .collect(),
-            offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
-            repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
-            repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
-            repeat_anchor_x: BridgeScalar::read_at(&item.repeat_anchor_x, offset),
-            repeat_anchor_y: BridgeScalar::read_at(&item.repeat_anchor_y, offset),
-            repeat_position_x: BridgeScalar::read_at(&item.repeat_position_x, offset),
-            repeat_position_y: BridgeScalar::read_at(&item.repeat_position_y, offset),
-            repeat_rotation: BridgeScalar::read_at(&item.repeat_rotation, offset),
-            repeat_scale: BridgeScalar::read_at(&item.repeat_scale, offset),
-            repeat_start_opacity: BridgeScalar::read_at(&item.repeat_start_opacity, offset),
-            repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
-            twist: item.twist.as_ref().map(|w| BridgeShapeTwist {
-                angle: BridgeScalar::read_at(&w.angle, offset),
-                rotation: BridgeScalar::read_at(&w.rotation, offset),
-                axis: BridgeScalar::read_at(&w.axis, offset),
-                centre_x: BridgeScalar::read_at(&w.centre_x, offset),
-                centre_y: BridgeScalar::read_at(&w.centre_y, offset),
-            }),
-            deform: item.deform.as_ref().map(|d| BridgeShapeDeform {
-                mode: d.mode,
-                amount: BridgeScalar::read_at(&d.amount, offset),
-                scale: BridgeScalar::read_at(&d.scale, offset),
-                evolution: BridgeScalar::read_at(&d.evolution, offset),
-                seed: BridgeScalar::read_at(&d.seed, offset),
-                detail: BridgeScalar::read_at(&d.detail, offset),
-            }),
-            smooth: item
-                .smooth
-                .as_ref()
-                .map(|s| BridgeScalar::read_at(&s.amount, offset)),
             taper: item.taper.as_ref().map(|w| BridgeShapeTaper {
                 start: BridgeScalar::read_at(&w.start, offset),
                 end: BridgeScalar::read_at(&w.end, offset),
@@ -406,6 +341,10 @@ impl BridgeShapeItem {
                 ease: BridgeScalar::read_at(&w.ease, offset),
                 scope: w.scope,
             }),
+            primitive: item
+                .primitive
+                .as_ref()
+                .map(|p| crate::api::shape::BridgeShapePrimitive::read_at(p, offset)),
         }
     }
 
@@ -416,24 +355,23 @@ impl BridgeShapeItem {
         &self,
         offset: Rational,
     ) -> Result<lumit_core::shape::ShapeItem, BridgeError> {
+        let primitive = match &self.primitive {
+            Some(p) => Some(p.write(offset)?),
+            None => None,
+        };
         Ok(lumit_core::shape::ShapeItem {
             id: self.id,
             name: self.name.clone(),
-            path: lumit_core::mask::BezierPath {
-                vertices: self.vertices.iter().map(BridgeVertex::write).collect(),
-                closed: self.closed,
+            // A parametric shape's path is whatever its numbers make.
+            path: match &primitive {
+                Some(p) => p.path_at(0.0),
+                None => self.sent_path(),
             },
-            fill: self.fill.map(crate::api::assets::linear_of),
-            stroke: self.stroke.map(crate::api::assets::linear_of),
-            stroke_width: self.stroke_width.clamp(0.0, 10_000.0),
-            opacity: self.opacity.clamp(0.0, 100.0),
-            // Per cent of the path's own length, so anything outside 0..100 is
-            // a number that could only ever draw wrongly — clamped here, every
-            // key of it, exactly as a stroke's trim is. The offset is
-            // degrees and wraps, so it is left alone.
-            trim_start: clamped_property(&self.trim_start, offset, 0.0, 100.0)?,
-            trim_end: clamped_property(&self.trim_end, offset, 0.0, 100.0)?,
-            trim_offset: clamped_property(&self.trim_offset, offset, -360_000.0, 360_000.0)?,
+            primitive,
+            fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
+            stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
+            stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,
+            opacity: clamped_property(&self.opacity, offset, 0.0, 100.0)?,
             // Lengths in layer pixels: a negative dash is not a shorter dash,
             // it is a number with no meaning, so zero is where it lands. The
             // offset may be negative — it slides both ways.
@@ -491,91 +429,6 @@ impl BridgeShapeItem {
             // back from the item it is replacing; this bare form is only for
             // art that did not exist a moment ago, which has none.
             path_keys: Vec::new(),
-            // Layer pixels, out or in: both directions mean something, so only
-            // the far ends are held.
-            offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,
-            // The count is what the engine holds to 1..MAX_COPIES as it draws,
-            // so the clamp here only keeps a wild number out of the document;
-            // the offset is a copy index and may be negative, which is what
-            // puts copies behind the original.
-            repeat_copies: clamped_property(
-                &self.repeat_copies,
-                offset,
-                1.0,
-                lumit_core::shape::MAX_COPIES as f64,
-            )?,
-            repeat_offset: clamped_property(
-                &self.repeat_offset,
-                offset,
-                -(lumit_core::shape::MAX_COPIES as f64),
-                lumit_core::shape::MAX_COPIES as f64,
-            )?,
-            repeat_anchor_x: clamped_property(
-                &self.repeat_anchor_x,
-                offset,
-                -100_000.0,
-                100_000.0,
-            )?,
-            repeat_anchor_y: clamped_property(
-                &self.repeat_anchor_y,
-                offset,
-                -100_000.0,
-                100_000.0,
-            )?,
-            repeat_position_x: clamped_property(
-                &self.repeat_position_x,
-                offset,
-                -100_000.0,
-                100_000.0,
-            )?,
-            repeat_position_y: clamped_property(
-                &self.repeat_position_y,
-                offset,
-                -100_000.0,
-                100_000.0,
-            )?,
-            // Degrees, which wrap; a scale of zero collapses a copy to nothing
-            // and a negative one mirrors it, both of which are drawings.
-            repeat_rotation: clamped_property(
-                &self.repeat_rotation,
-                offset,
-                -360_000.0,
-                360_000.0,
-            )?,
-            repeat_scale: clamped_property(&self.repeat_scale, offset, -10_000.0, 10_000.0)?,
-            repeat_start_opacity: clamped_property(&self.repeat_start_opacity, offset, 0.0, 100.0)?,
-            repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
-            // Degrees wrap and the centre is the art's own coordinates, so
-            // only the far ends are held.
-            twist: match &self.twist {
-                Some(w) => Some(lumit_core::shape::Twist {
-                    angle: clamped_property(&w.angle, offset, -360_000.0, 360_000.0)?,
-                    rotation: clamped_property(&w.rotation, offset, -360_000.0, 360_000.0)?,
-                    axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
-                    centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
-                    centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,
-                }),
-                None => None,
-            },
-            // Two readings and no third; the feature size and the detail stay
-            // above nothing, as a field read nowhere is no field.
-            deform: match &self.deform {
-                Some(d) => Some(lumit_core::shape::Deform {
-                    mode: if d.mode <= 1 { d.mode } else { 0 },
-                    amount: clamped_property(&d.amount, offset, -100_000.0, 100_000.0)?,
-                    scale: clamped_property(&d.scale, offset, 1.0, 100_000.0)?,
-                    evolution: clamped_property(&d.evolution, offset, -360_000.0, 360_000.0)?,
-                    seed: clamped_property(&d.seed, offset, 0.0, 1_000_000.0)?,
-                    detail: clamped_property(&d.detail, offset, 0.1, 100.0)?,
-                }),
-                None => None,
-            },
-            smooth: match &self.smooth {
-                Some(amount) => Some(lumit_core::shape::Smooth {
-                    amount: clamped_property(amount, offset, 0.0, 10_000.0)?,
-                }),
-                None => None,
-            },
             // All per cent, held to 0..100.
             taper: match &self.taper {
                 Some(w) => Some(lumit_core::shape::Taper {
@@ -622,6 +475,26 @@ impl BridgeShapeItem {
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };
+        // A parametric shape keeps its numbers until one of its points is
+        // dragged, which makes it a drawn path holding the dragged points.
+        if let Some(p) = &mut written.primitive {
+            if let Some(was) = &previous.primitive {
+                p.extra = was.extra.clone();
+            }
+            let sent = self.sent_path();
+            let showing = match at {
+                Some(at) => at
+                    .checked_sub(offset)
+                    .map(|at| same_shape(&sent, &previous.path_at(at.to_f64())))
+                    .unwrap_or(false),
+                None => false,
+            };
+            if !showing && !same_shape(&sent, &previous.path) {
+                written.primitive = None;
+                written.path = sent;
+            }
+            return Ok(written);
+        }
         if let (false, Some(at)) = (written.path_keys.is_empty(), at) {
             let at = at
                 .checked_sub(offset)
@@ -653,6 +526,15 @@ impl BridgeShapeItem {
             }
         }
         Ok(written)
+    }
+
+    /// The path as the frontend sent it.
+    #[frb(ignore)]
+    fn sent_path(&self) -> lumit_core::mask::BezierPath {
+        lumit_core::mask::BezierPath {
+            vertices: self.vertices.iter().map(BridgeVertex::write).collect(),
+            closed: self.closed,
+        }
     }
 }
 
@@ -1115,7 +997,7 @@ pub struct BridgeMask {
 /// a string until it runs — so it is passed through and the renderer's own
 /// reads keep their clamps.
 #[frb(ignore)]
-fn clamped_property(
+pub(crate) fn clamped_property(
     scalar: &BridgeScalar,
     offset: Rational,
     lo: f64,
@@ -1853,10 +1735,11 @@ pub struct BridgeLayerInfo {
     /// strokes are: the Timeline draws a group row and a row per pin, and the
     /// Viewer needs to know a layer is puppeted without asking per frame.
     pub puppet: Option<BridgePuppet>,
-    /// A shape layer's art, bottom first; empty on every other kind.
-    /// Carried for the same reason again — and for one more: the art *is* the
-    /// layer's size, so the Viewer's wireframe reads it here.
-    pub shape_contents: Vec<BridgeShapeItem>,
+    /// A shape layer's contents, bottom first and flat
+    /// (`crate::api::shape`); empty on every other kind. Carried for the
+    /// same reason again, and for one more: the art *is* the layer's size,
+    /// so the Viewer's wireframe reads it here.
+    pub shape_contents: Vec<crate::api::shape::BridgeShapeEntry>,
     /// The layer's own markers, and the comp frame each falls on — the
     /// marker's layer-local time carried out by the layer's start offset — so
     /// the bar needs no time↔frame trip to draw one. In the read model because
@@ -1926,6 +1809,10 @@ pub struct BridgeLayerInfo {
     /// A Camera layer's non-animatable settings, `None` on every other kind.
     /// What decides whether the fold-out shows a Point of interest row.
     pub camera: Option<BridgeCameraSettings>,
+    /// A Light layer's, the same way: which of its rows show.
+    pub light: Option<BridgeLightSettings>,
+    /// A 3D layer's shadow settings, `None` where it has no Material options.
+    pub material: Option<BridgeMaterialSettings>,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -1953,6 +1840,8 @@ pub struct BridgeMotionKey {
     pub frame: i64,
     pub x: f64,
     pub y: f64,
+    /// Position z at the key, for a 3D layer; nought on a 2D one.
+    pub z: f64,
     pub x_index: Option<u32>,
     pub y_index: Option<u32>,
     /// The tangent handles in comp pixels: on each side, the first control
@@ -1977,6 +1866,9 @@ pub struct BridgeMotionPath {
     /// x and y interleaved, in comp pixels: `samples[2 * i]` and
     /// `samples[2 * i + 1]` are the position at `first_frame + i`.
     pub samples: Vec<f64>,
+    /// A 3D layer's Position z at each sample, so the path can be seen
+    /// through a camera. Empty on a 2D layer.
+    pub depths: Vec<f64>,
     pub keys: Vec<BridgeMotionKey>,
 }
 
@@ -1998,25 +1890,39 @@ pub(crate) fn motion_path_of(
     }
     let (px, py) = (&layer.transform.position_x, &layer.transform.position_y);
     let (kx, ky) = (keys_of(px), keys_of(py));
-    if kx.is_none() && ky.is_none() {
+    // A 3D layer moving only in depth still has a path to show.
+    let pz = layer
+        .switches
+        .three_d
+        .then_some(&layer.transform.position_z);
+    let kz = pz.and_then(keys_of);
+    if kx.is_none() && ky.is_none() && kz.is_none() {
         return None;
     }
     let offset = layer.start_offset.0;
     let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
 
     // Every time either axis has a key at, on the layer's clock, oldest first.
-    let mut times: Vec<Rational> = kx.into_iter().chain(ky).flatten().map(|k| k.time).collect();
+    let mut times: Vec<Rational> = kx
+        .into_iter()
+        .chain(ky)
+        .chain(kz)
+        .flatten()
+        .map(|k| k.time)
+        .collect();
     times.sort_by(|a, b| a.to_f64().total_cmp(&b.to_f64()));
     times.dedup();
     let first_frame = comp.frame_rate.frame_at(comp_time(*times.first()?));
     let last_frame = comp.frame_rate.frame_at(comp_time(*times.last()?));
 
     let mut samples = Vec::new();
+    let mut depths = Vec::new();
     for frame in first_frame..=last_frame {
         let t = comp.frame_rate.time_of_frame(frame).ok()?.0;
         let local = lumit_core::time::layer_time(t.to_f64(), offset);
         samples.push(px.value_at(local));
         samples.push(py.value_at(local));
+        depths.extend(pz.map(|z| z.value_at(local)));
     }
 
     // How far one axis' handle sits from its key on one side: the cubic's
@@ -2066,6 +1972,7 @@ pub(crate) fn motion_path_of(
                 frame: comp.frame_rate.frame_at(comp_time(time)),
                 x,
                 y,
+                z: pz.map_or(0.0, |z| z.value_at(local)),
                 x_index: ix.and_then(|i| u32::try_from(i).ok()),
                 y_index: iy.and_then(|i| u32::try_from(i).ok()),
                 handle_in: handle(false),
@@ -2076,6 +1983,7 @@ pub(crate) fn motion_path_of(
     Some(BridgeMotionPath {
         first_frame,
         samples,
+        depths,
         keys,
     })
 }
@@ -2213,10 +2121,9 @@ pub(crate) fn read_layer_info(
             })
             .collect(),
         shape_contents: match &layer.kind {
-            lumit_core::model::LayerKind::Shape { contents } => contents
-                .iter()
-                .map(|i| BridgeShapeItem::read_at(i, layer.start_offset.0))
-                .collect(),
+            lumit_core::model::LayerKind::Shape { contents } => {
+                crate::api::shape::read_entries(contents, layer.start_offset.0)
+            }
             _ => Vec::new(),
         },
         flow: matches!(
@@ -2298,6 +2205,14 @@ pub(crate) fn read_layer_info(
             }
             _ => None,
         },
+        light: match &layer.kind {
+            lumit_core::model::LayerKind::Light { light } => {
+                Some(BridgeLightSettings::of(light.settings()))
+            }
+            _ => None,
+        },
+        material: (layer.switches.three_d && layer.can_adjust())
+            .then(|| BridgeMaterialSettings::of(layer.transform.material.settings())),
     }
 }
 
@@ -2447,6 +2362,192 @@ pub struct BridgeTransform {
     /// other kind. Beside the eleven rather than among them, so a layer that is
     /// not a camera carries nothing for them.
     pub camera: Option<BridgeCameraChannels>,
+    /// A Light layer's own channels, the same way.
+    pub light: Option<BridgeLightChannels>,
+    /// A 3D layer's Material options; `None` on a 2D layer and on the kinds
+    /// with no picture to light.
+    pub material: Option<BridgeMaterialChannels>,
+    /// Orientation, Anchor Z and Scale Z, on a 3D layer, a camera or a light;
+    /// `None` on a 2D layer, which has none of them.
+    pub depth: Option<BridgeDepthChannels>,
+}
+
+/// After Effects' Orientation, three angles keyed as one turn, and the z of
+/// Anchor and Scale.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeDepthChannels {
+    pub orientation_x: BridgeScalar,
+    pub orientation_y: BridgeScalar,
+    pub orientation_z: BridgeScalar,
+    pub anchor_z: BridgeScalar,
+    pub scale_z: BridgeScalar,
+    /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz`, as an
+    /// imported layer's do, rather than Lumit's `Ry · Rx · Rz`.
+    pub after_effects_order: bool,
+}
+
+/// A layer's Material options, percentages as After Effects shows them.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeMaterialChannels {
+    pub ambient: BridgeScalar,
+    pub diffuse: BridgeScalar,
+    pub specular: BridgeScalar,
+    pub shininess: BridgeScalar,
+    pub metal: BridgeScalar,
+    pub light_transmission: BridgeScalar,
+}
+
+/// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeShadowMode {
+    Off,
+    On,
+    Only,
+}
+
+/// Whether a layer casts and accepts shadows, one op
+/// ([`lumit_core::model::MaterialSettings`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeMaterialSettings {
+    pub casts_shadows: BridgeShadowMode,
+    pub accepts_shadows: BridgeShadowMode,
+}
+
+impl BridgeMaterialSettings {
+    #[frb(ignore)]
+    pub(crate) fn of(s: lumit_core::model::MaterialSettings) -> Self {
+        use lumit_core::model::ShadowMode as M;
+        let mode = |m: M| match m {
+            M::Off => BridgeShadowMode::Off,
+            M::On => BridgeShadowMode::On,
+            M::Only => BridgeShadowMode::Only,
+        };
+        Self {
+            casts_shadows: mode(s.casts_shadows),
+            accepts_shadows: mode(s.accepts_shadows),
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::MaterialSettings {
+        use lumit_core::model::ShadowMode as M;
+        let mode = |m: BridgeShadowMode| match m {
+            BridgeShadowMode::Off => M::Off,
+            BridgeShadowMode::On => M::On,
+            BridgeShadowMode::Only => M::Only,
+        };
+        lumit_core::model::MaterialSettings {
+            casts_shadows: mode(self.casts_shadows),
+            accepts_shadows: mode(self.accepts_shadows),
+        }
+    }
+}
+
+/// The animatable channels a Light layer has beyond its transform. Intensity
+/// and feather are percentages, the cone its full angle in degrees, the rest
+/// comp pixels; the colour is scene-linear.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeLightChannels {
+    pub poi_x: BridgeScalar,
+    pub poi_y: BridgeScalar,
+    pub poi_z: BridgeScalar,
+    pub intensity: BridgeScalar,
+    pub colour_r: BridgeScalar,
+    pub colour_g: BridgeScalar,
+    pub colour_b: BridgeScalar,
+    pub cone_angle: BridgeScalar,
+    pub cone_feather: BridgeScalar,
+    pub radius: BridgeScalar,
+    pub falloff_distance: BridgeScalar,
+    pub width: BridgeScalar,
+    pub height: BridgeScalar,
+    /// Percent.
+    pub shadow_darkness: BridgeScalar,
+    /// Comp pixels.
+    pub shadow_diffusion: BridgeScalar,
+}
+
+/// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeLightKind {
+    Point,
+    Spot,
+    Area,
+    Parallel,
+    Ambient,
+}
+
+/// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeLightFalloff {
+    None,
+    Smooth,
+    InverseSquareClamped,
+}
+
+/// The non-animatable part of a light, what the settings dialog and the
+/// choice rows edit as one op ([`lumit_core::model::LightSettings`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeLightSettings {
+    pub kind: BridgeLightKind,
+    pub falloff: BridgeLightFalloff,
+    /// Aimed at its point of interest.
+    pub two_node: bool,
+    pub casts_shadows: bool,
+}
+
+impl BridgeLightSettings {
+    #[frb(ignore)]
+    pub(crate) fn of(s: lumit_core::model::LightSettings) -> Self {
+        use lumit_core::model::{LightFalloff as F, LightKind as K};
+        Self {
+            kind: match s.kind {
+                K::Point => BridgeLightKind::Point,
+                K::Spot => BridgeLightKind::Spot,
+                K::Area => BridgeLightKind::Area,
+                K::Parallel => BridgeLightKind::Parallel,
+                K::Ambient => BridgeLightKind::Ambient,
+            },
+            falloff: match s.falloff {
+                F::None => BridgeLightFalloff::None,
+                F::Smooth => BridgeLightFalloff::Smooth,
+                F::InverseSquareClamped => BridgeLightFalloff::InverseSquareClamped,
+            },
+            two_node: s.two_node,
+            casts_shadows: s.casts_shadows,
+        }
+    }
+
+    /// `legacy_shape` is the light's own, which the window never shows.
+    #[frb(ignore)]
+    pub(crate) fn core(self, legacy_shape: bool) -> lumit_core::model::LightSettings {
+        use lumit_core::model::{LightFalloff as F, LightKind as K};
+        lumit_core::model::LightSettings {
+            kind: match self.kind {
+                BridgeLightKind::Point => K::Point,
+                BridgeLightKind::Spot => K::Spot,
+                BridgeLightKind::Area => K::Area,
+                BridgeLightKind::Parallel => K::Parallel,
+                BridgeLightKind::Ambient => K::Ambient,
+            },
+            falloff: match self.falloff {
+                BridgeLightFalloff::None => F::None,
+                BridgeLightFalloff::Smooth => F::Smooth,
+                BridgeLightFalloff::InverseSquareClamped => F::InverseSquareClamped,
+            },
+            two_node: self.two_node,
+            legacy_shape,
+            casts_shadows: self.casts_shadows,
+        }
+    }
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -2540,6 +2641,17 @@ impl BridgeCameraPose {
     }
 }
 
+/// A camera's pose and the point it is aimed at, what the camera tools drag.
+/// The point means something only on a two-node camera.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCameraAim {
+    pub pose: BridgeCameraPose,
+    pub poi_x: f64,
+    pub poi_y: f64,
+    pub poi_z: f64,
+}
+
 /// The Viewer's fixed 3D views ([`lumit_core::camera::View`]).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2628,6 +2740,11 @@ pub enum BridgeTransformProp {
     RotationX,
     RotationY,
     Opacity,
+    OrientationX,
+    OrientationY,
+    OrientationZ,
+    AnchorZ,
+    ScaleZ,
     PoiX,
     PoiY,
     PoiZ,
@@ -2635,6 +2752,24 @@ pub enum BridgeTransformProp {
     FocusDistance,
     Aperture,
     BlurLevel,
+    LightIntensity,
+    LightColourR,
+    LightColourG,
+    LightColourB,
+    ConeAngle,
+    ConeFeather,
+    LightRadius,
+    FalloffDistance,
+    LightWidth,
+    LightHeight,
+    ShadowDarkness,
+    ShadowDiffusion,
+    Ambient,
+    Diffuse,
+    Specular,
+    Shininess,
+    Metal,
+    LightTransmission,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2748,6 +2883,11 @@ impl BridgeTransformProp {
             BridgeTransformProp::RotationX => P::RotationX,
             BridgeTransformProp::RotationY => P::RotationY,
             BridgeTransformProp::Opacity => P::Opacity,
+            BridgeTransformProp::OrientationX => P::OrientationX,
+            BridgeTransformProp::OrientationY => P::OrientationY,
+            BridgeTransformProp::OrientationZ => P::OrientationZ,
+            BridgeTransformProp::AnchorZ => P::AnchorZ,
+            BridgeTransformProp::ScaleZ => P::ScaleZ,
             BridgeTransformProp::PoiX => P::PoiX,
             BridgeTransformProp::PoiY => P::PoiY,
             BridgeTransformProp::PoiZ => P::PoiZ,
@@ -2755,6 +2895,24 @@ impl BridgeTransformProp {
             BridgeTransformProp::FocusDistance => P::FocusDistance,
             BridgeTransformProp::Aperture => P::Aperture,
             BridgeTransformProp::BlurLevel => P::BlurLevel,
+            BridgeTransformProp::LightIntensity => P::LightIntensity,
+            BridgeTransformProp::LightColourR => P::LightColourR,
+            BridgeTransformProp::LightColourG => P::LightColourG,
+            BridgeTransformProp::LightColourB => P::LightColourB,
+            BridgeTransformProp::ConeAngle => P::ConeAngle,
+            BridgeTransformProp::ConeFeather => P::ConeFeather,
+            BridgeTransformProp::LightRadius => P::LightRadius,
+            BridgeTransformProp::FalloffDistance => P::FalloffDistance,
+            BridgeTransformProp::LightWidth => P::LightWidth,
+            BridgeTransformProp::LightHeight => P::LightHeight,
+            BridgeTransformProp::Ambient => P::Ambient,
+            BridgeTransformProp::Diffuse => P::Diffuse,
+            BridgeTransformProp::Specular => P::Specular,
+            BridgeTransformProp::Shininess => P::Shininess,
+            BridgeTransformProp::Metal => P::Metal,
+            BridgeTransformProp::ShadowDarkness => P::ShadowDarkness,
+            BridgeTransformProp::ShadowDiffusion => P::ShadowDiffusion,
+            BridgeTransformProp::LightTransmission => P::LightTransmission,
         }
     }
 }
@@ -2782,6 +2940,9 @@ impl BridgeTransform {
             rotation_y: BridgeScalar::read_at(&group.rotation_y, offset),
             opacity: BridgeScalar::read_at(&group.opacity, offset),
             camera: None,
+            light: None,
+            material: None,
+            depth: None,
         }
     }
 
@@ -2799,6 +2960,50 @@ impl BridgeTransform {
                 focus_distance: BridgeScalar::read_at(&options.focus_distance, offset),
                 aperture: BridgeScalar::read_at(&options.aperture, offset),
                 blur_level: BridgeScalar::read_at(&options.blur_level, offset),
+            });
+        }
+        if let lumit_core::model::LayerKind::Light { light } = &layer.kind {
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.light = Some(BridgeLightChannels {
+                poi_x: read(&light.point_of_interest[0]),
+                poi_y: read(&light.point_of_interest[1]),
+                poi_z: read(&light.point_of_interest[2]),
+                intensity: read(&light.intensity),
+                colour_r: read(&light.colour[0]),
+                colour_g: read(&light.colour[1]),
+                colour_b: read(&light.colour[2]),
+                cone_angle: read(&light.cone_angle),
+                cone_feather: read(&light.cone_feather),
+                radius: read(&light.radius_px),
+                falloff_distance: read(&light.falloff_px),
+                width: read(&light.size[0]),
+                height: read(&light.size[1]),
+                shadow_darkness: read(&light.shadow_darkness),
+                shadow_diffusion: read(&light.shadow_diffusion),
+            });
+        }
+        if layer.is_3d() {
+            let tr = &layer.transform;
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.depth = Some(BridgeDepthChannels {
+                orientation_x: read(&tr.orientation[0]),
+                orientation_y: read(&tr.orientation[1]),
+                orientation_z: read(&tr.orientation[2]),
+                anchor_z: read(&tr.anchor_z),
+                scale_z: read(&tr.scale_z),
+                after_effects_order: tr.after_effects_order,
+            });
+        }
+        if layer.switches.three_d && layer.can_adjust() {
+            let m = &layer.transform.material;
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.material = Some(BridgeMaterialChannels {
+                ambient: read(&m.ambient),
+                diffuse: read(&m.diffuse),
+                specular: read(&m.specular),
+                shininess: read(&m.shininess),
+                metal: read(&m.metal),
+                light_transmission: read(&m.light_transmission),
             });
         }
         out
@@ -2824,6 +3029,32 @@ impl BridgeTransform {
             options.focus_distance.animation = c.focus_distance.animation_at(offset)?;
             options.aperture.animation = c.aperture.animation_at(offset)?;
             options.blur_level.animation = c.blur_level.animation_at(offset)?;
+        }
+        if let (Some(c), lumit_core::model::LayerKind::Light { light }) =
+            (&self.light, &mut layer.kind)
+        {
+            let [poi_x, poi_y, poi_z] = &mut light.point_of_interest;
+            let [r, g, b] = &mut light.colour;
+            let [width, height] = &mut light.size;
+            for (to, from) in [
+                (poi_x, &c.poi_x),
+                (poi_y, &c.poi_y),
+                (poi_z, &c.poi_z),
+                (&mut light.intensity, &c.intensity),
+                (r, &c.colour_r),
+                (g, &c.colour_g),
+                (b, &c.colour_b),
+                (&mut light.cone_angle, &c.cone_angle),
+                (&mut light.cone_feather, &c.cone_feather),
+                (&mut light.radius_px, &c.radius),
+                (&mut light.falloff_px, &c.falloff_distance),
+                (width, &c.width),
+                (height, &c.height),
+                (&mut light.shadow_darkness, &c.shadow_darkness),
+                (&mut light.shadow_diffusion, &c.shadow_diffusion),
+            ] {
+                to.animation = from.animation_at(offset)?;
+            }
         }
         Ok(())
     }
@@ -2868,6 +3099,44 @@ impl BridgeTransform {
         );
         self.opacity
             .put(&mut target.opacity, self.opacity.animation_at(offset)?);
+        if let Some(d) = &self.depth {
+            use lumit_core::model::TransformProp as P;
+            // A keyed Orientation previews with all three angles keyed
+            // together, as it commits.
+            for (prop, from) in [
+                (P::OrientationX, &d.orientation_x),
+                (P::OrientationY, &d.orientation_y),
+                (P::OrientationZ, &d.orientation_z),
+            ] {
+                let animation = from.animation_at(offset)?;
+                if matches!(animation, lumit_core::anim::Animation::Expression(_)) {
+                    if let Some(to) = target.get_mut(prop) {
+                        from.put(to, animation);
+                    }
+                } else if target.get(prop).map(|p| &p.animation) != Some(&animation) {
+                    target.set_orientation_angle(prop, animation);
+                }
+            }
+            for (to, from) in [
+                (&mut target.anchor_z, &d.anchor_z),
+                (&mut target.scale_z, &d.scale_z),
+            ] {
+                from.put(to, from.animation_at(offset)?);
+            }
+        }
+        if let Some(m) = &self.material {
+            let to = &mut target.material;
+            for (to, from) in [
+                (&mut to.ambient, &m.ambient),
+                (&mut to.diffuse, &m.diffuse),
+                (&mut to.specular, &m.specular),
+                (&mut to.shininess, &m.shininess),
+                (&mut to.metal, &m.metal),
+                (&mut to.light_transmission, &m.light_transmission),
+            ] {
+                to.animation = from.animation_at(offset)?;
+            }
+        }
         Ok(())
     }
 }
@@ -3879,20 +4148,20 @@ impl LayerReference {
         })
     }
 
-    /// This shape layer's contents, bottom of the stack first.
+    /// This shape layer's contents, bottom of the stack first, as one flat
+    /// list of entries with the depth each sits at (`crate::api::shape`).
     ///
     /// Empty on a layer that is not a shape, rather than an error: the Timeline
     /// asks every row what it has to list, exactly as it asks about masks.
     #[frb(sync)]
-    pub fn get_shape_contents(&self) -> Result<Vec<BridgeShapeItem>, BridgeError> {
+    pub fn get_shape_contents(
+        &self,
+    ) -> Result<Vec<crate::api::shape::BridgeShapeEntry>, BridgeError> {
         let lumit_core::model::LayerKind::Shape { contents } = self.item()?.kind else {
             return Ok(Vec::new());
         };
         let offset = self.item()?.start_offset.0;
-        Ok(contents
-            .iter()
-            .map(|i| BridgeShapeItem::read_at(i, offset))
-            .collect())
+        Ok(crate::api::shape::read_entries(&contents, offset))
     }
 
     /// Replace this shape layer's whole contents.
@@ -3919,16 +4188,13 @@ impl LayerReference {
     #[frb(sync)]
     pub fn set_shape_contents(
         &self,
-        contents: Vec<BridgeShapeItem>,
+        contents: Vec<crate::api::shape::BridgeShapeEntry>,
         at: Option<BridgeRational>,
     ) -> Result<(), BridgeError> {
         let layer = self.item()?;
         let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
             return Err(BridgeError::NotShape);
         };
-        if contents.iter().any(|i| i.vertices.len() < 2) {
-            return Err(BridgeError::EmptyPath);
-        }
         let offset = layer.start_offset.0;
         let at = match at {
             Some(t) => {
@@ -3936,17 +4202,11 @@ impl LayerReference {
             }
             None => None,
         };
-        // An item the layer already had keeps what this type does not carry —
-        // its shape keys and its `extra`; one that did not exist a moment ago
-        // has neither to keep.
-        let items: Vec<lumit_core::shape::ShapeItem> = contents
-            .iter()
-            .map(|i| match before.iter().find(|p| p.id == i.id) {
-                Some(previous) => i.write_item_over(previous, offset, at),
-                None => i.write_item(offset),
-            })
-            .collect::<Result<_, _>>()?;
-        self.commit_shape_items(&layer, before, items)
+        // An entry the layer already had keeps what the bridge does not
+        // carry, an item's shape keys and every entry's `extra`; one that
+        // did not exist a moment ago has nothing to keep.
+        let entries = crate::api::shape::write_entries(&contents, before, offset, at)?;
+        self.commit_shape_items(&layer, before, entries)
     }
 
     /// The op (or the batch) that writes a shape layer's whole contents, with
@@ -3956,13 +4216,31 @@ impl LayerReference {
     /// keying, re-timing and un-keying a morphing path move the layer exactly
     /// as dragging one of its points does.
     #[frb(ignore)]
-    fn commit_shape_items(
+    pub(crate) fn commit_shape_items(
         &self,
         layer: &lumit_core::model::Layer,
-        before: &[lumit_core::shape::ShapeItem],
-        items: Vec<lumit_core::shape::ShapeItem>,
+        before: &[lumit_core::shape::modifier::ShapeEntry],
+        items: Vec<lumit_core::shape::modifier::ShapeEntry>,
     ) -> Result<(), BridgeError> {
-        // Both boxes on the same clock — the head of the layer — so the delta
+        let mut ops = self.shape_ops(layer, before, items);
+        let op = if ops.len() == 1 {
+            ops.remove(0)
+        } else {
+            lumit_core::ops::Op::Batch { ops }
+        };
+        self.commit(op)
+    }
+
+    /// The ops [`Self::commit_shape_items`] commits: the contents, and the
+    /// position following the art's corner where it has to.
+    #[frb(ignore)]
+    pub(crate) fn shape_ops(
+        &self,
+        layer: &lumit_core::model::Layer,
+        before: &[lumit_core::shape::modifier::ShapeEntry],
+        items: Vec<lumit_core::shape::modifier::ShapeEntry>,
+    ) -> Vec<lumit_core::ops::Op> {
+        // Both boxes on the same clock, the head of the layer, so the delta
         // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
             lumit_core::shape::contents_bounds(before, 0.0),
@@ -4006,12 +4284,7 @@ impl LayerReference {
                 animation: lumit_core::anim::Animation::Static(value + delta),
             });
         }
-        let op = if ops.len() == 1 {
-            ops.remove(0)
-        } else {
-            lumit_core::ops::Op::Batch { ops }
-        };
-        self.commit(op)
+        ops
     }
 
     /// Add one piece of art on top of this shape layer's stack.
@@ -4021,7 +4294,10 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Shape { .. } = self.item()?.kind else {
             return Err(BridgeError::NotShape);
         };
-        contents.push(item);
+        contents.push(crate::api::shape::BridgeShapeEntry {
+            depth: 0,
+            kind: crate::api::shape::BridgeShapeEntryKind::Item(item),
+        });
         self.set_shape_contents(contents, None)
     }
 
@@ -4095,11 +4371,8 @@ impl LayerReference {
         };
         let (from, to) = (local(from)?, local(to)?);
         let mut items = before.clone();
-        let at = items
-            .iter()
-            .position(|i| i.id == id)
+        let item = lumit_core::shape::modifier::item_mut(&mut items, id)
             .ok_or(BridgeError::InvalidItem)?;
-        let item = &mut items[at];
         let Some(i) = item.path_keys.iter().position(|k| k.time == from) else {
             return Ok(false);
         };
@@ -4120,9 +4393,12 @@ impl LayerReference {
     /// the graph editor commits when a handle is dragged, and what a lane drag
     /// of several keys at once needs.
     ///
-    /// `keys` must name every key the item has, in order; their `value` is
+    /// `keys` names every key the item has, in order; their `value` is
     /// ignored, because a path key holds a shape rather than a number. Refused
     /// as a whole if the times are not strictly ascending.
+    ///
+    /// A shorter list is a delete. Each key it names is found by its time, and
+    /// the rest go. Deleting the last key leaves the shape that key held.
     #[frb(sync)]
     pub fn set_shape_path_keys(
         &self,
@@ -4135,19 +4411,26 @@ impl LayerReference {
             return Err(BridgeError::NotShape);
         };
         let mut items = before.clone();
-        let at = items
-            .iter()
-            .position(|i| i.id == id)
+        let item = lumit_core::shape::modifier::item_mut(&mut items, id)
             .ok_or(BridgeError::InvalidItem)?;
-        if keys.len() != items[at].path_keys.len() {
+        let count = item.path_keys.len();
+        if keys.len() > count {
             return Ok(false);
         }
         let mut written = Vec::with_capacity(keys.len());
-        for (key, existing) in keys.iter().zip(items[at].path_keys.iter()) {
+        for (i, key) in keys.iter().enumerate() {
             let time = Rational::new(key.time.num, key.time.den)
                 .map_err(|_| BridgeError::InvalidKeyframes)?
                 .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?;
+            let existing = if keys.len() == count {
+                &item.path_keys[i]
+            } else {
+                match item.path_keys.iter().find(|k| k.time == time) {
+                    Some(k) => k,
+                    None => return Ok(false),
+                }
+            };
             if written
                 .last()
                 .is_some_and(|p: &lumit_core::mask::PathKeyframe| time <= p.time)
@@ -4161,7 +4444,12 @@ impl LayerReference {
                 interp_out: key.interp_out.write(),
             });
         }
-        items[at].path_keys = written;
+        if written.is_empty() {
+            if let Some(last) = item.path_keys.last() {
+                item.path = last.path.clone();
+            }
+        }
+        item.path_keys = written;
         self.commit_shape_items(&layer, before, items)?;
         Ok(true)
     }
@@ -4169,7 +4457,7 @@ impl LayerReference {
     /// Read this layer's art, change the one item `id` names at layer-local
     /// `time`, and commit the list — the shape of every shape-key edit.
     #[frb(ignore)]
-    fn edit_shape_item(
+    pub(crate) fn edit_shape_item(
         &self,
         id: Uuid,
         time: BridgeRational,
@@ -4185,11 +4473,9 @@ impl LayerReference {
             .checked_sub(offset)
             .map_err(|_| BridgeError::InvalidKeyframes)?;
         let mut items = before.clone();
-        let at = items
-            .iter()
-            .position(|i| i.id == id)
+        let item = lumit_core::shape::modifier::item_mut(&mut items, id)
             .ok_or(BridgeError::InvalidItem)?;
-        change(&mut items[at], time);
+        change(item, time);
         self.commit_shape_items(&layer, before, items)
     }
 
@@ -4430,7 +4716,17 @@ impl LayerReference {
         let comp = self.composition()?;
         let (mut clips, index) = self.clips_and_index(clip)?;
         let moved = clips.remove(index);
-        let mut ops = self.clip_ops(clips, layer.start_offset)?;
+        // A row left with no clips goes, rather than staying as a silent bar
+        // with nothing on it to take hold of.
+        let emptied = clips.is_empty();
+        let mut ops = if emptied {
+            vec![lumit_core::ops::Op::RemoveLayer {
+                comp: self.comp_id,
+                layer: self.layer_id,
+            }]
+        } else {
+            self.clip_ops(clips, layer.start_offset)?
+        };
 
         match target {
             Some(target) => {
@@ -4478,8 +4774,9 @@ impl LayerReference {
                 crate::edits::solo_on_arrival(&mut row, comp.layers.iter());
                 ops.push(lumit_core::ops::Op::AddLayer {
                     comp: self.comp_id,
-                    // Directly below the row it came off, where the eye looks.
-                    index: index + 1,
+                    // Directly below the row it came off, where the eye looks,
+                    // or in its place when that row has gone.
+                    index: if emptied { index } else { index + 1 },
                     layer: Box::new(row),
                 });
             }
@@ -6967,6 +7264,35 @@ impl LayerReference {
         self.commit(op)
     }
 
+    /// Turn this layer's X, Y and Z Rotation in After Effects' order, or back
+    /// in Lumit's, as one undo step. The rotations are rewritten so the layer
+    /// keeps its pose. Refused while an expression drives one of them.
+    #[frb(sync)]
+    pub fn set_after_effects_order(&self, on: bool) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        if layer.transform.after_effects_order == on {
+            return Ok(());
+        }
+        let rows = layer
+            .transform
+            .rotations_in_order(on)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let mut ops = vec![lumit_core::ops::Op::SetRotationOrder {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            after_effects: on,
+        }];
+        ops.extend(rows.into_iter().map(|(prop, animation)| {
+            lumit_core::ops::Op::SetTransformProperty {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                prop,
+                animation,
+            }
+        }));
+        self.commit(lumit_core::ops::Op::Batch { ops })
+    }
+
     /// The ops that put `value` on one transform property
     /// ([`lumit_core::edits::transform_ops`]).
     #[frb(ignore)]
@@ -7970,7 +8296,7 @@ impl LayerReference {
         let fresh = crate::edits::centred_transform(0.0, 0.0, comp.width, comp.height);
         let t = &layer.transform;
         let default_t = lumit_core::model::TransformGroup::default();
-        let transform_props: [(&lumit_core::anim::Property, &lumit_core::anim::Property); 11] = [
+        let transform_props: [(&lumit_core::anim::Property, &lumit_core::anim::Property); 16] = [
             (&t.anchor_x, &default_t.anchor_x),
             (&t.anchor_y, &default_t.anchor_y),
             (&t.position_x, &fresh.position_x),
@@ -7982,6 +8308,11 @@ impl LayerReference {
             (&t.rotation_x, &default_t.rotation_x),
             (&t.rotation_y, &default_t.rotation_y),
             (&t.opacity, &default_t.opacity),
+            (&t.orientation[0], &default_t.orientation[0]),
+            (&t.orientation[1], &default_t.orientation[1]),
+            (&t.orientation[2], &default_t.orientation[2]),
+            (&t.anchor_z, &default_t.anchor_z),
+            (&t.scale_z, &default_t.scale_z),
         ];
         let transform = match kind {
             BridgeRevealKind::Animated => transform_props.iter().any(|(p, _)| animated(p)),
@@ -8036,12 +8367,30 @@ impl LayerReference {
             (Some(p), BridgeRevealKind::Animated) => animated(p),
         };
 
+        // A text animator qualifies the way an effect does.
+        let animators: Vec<u32> = match &layer.kind {
+            lumit_core::model::LayerKind::Text { document } => (0u32..)
+                .zip(&document.animators)
+                .filter(|(_, a)| {
+                    kind == BridgeRevealKind::Modified
+                        || [&a.selector.start, &a.selector.end, &a.selector.offset]
+                            .into_iter()
+                            .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
+                            .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
+                            .any(animated)
+                })
+                .map(|(i, _)| i)
+                .collect(),
+            _ => Vec::new(),
+        };
+
         Ok(BridgeRevealGroups {
             transform,
             audio,
             retime,
-            any: transform || audio || retime || !effects.is_empty(),
+            any: transform || audio || retime || !effects.is_empty() || !animators.is_empty(),
             effects,
+            animators,
         })
     }
 }
@@ -8093,6 +8442,8 @@ pub struct BridgeRevealGroups {
     pub retime: bool,
     /// The qualifying effects' ids, as text — the same form the fold paths use.
     pub effects: Vec<String>,
+    /// The qualifying text animators, by their place on the layer.
+    pub animators: Vec<u32>,
     /// Whether anything qualified at all. The panel leaves the layer's own
     /// twirl shut when nothing did, rather than opening onto an empty list.
     pub any: bool,

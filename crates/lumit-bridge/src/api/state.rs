@@ -725,6 +725,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::RemoveLayer { comp, .. }
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
+        | Op::SetCompLighting { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
         // The layer Timeline's Sound mix row stands or falls on the mark, so
@@ -789,14 +790,20 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
+        | Op::SetRotationOrder { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
+        | Op::SetLightSettings { comp, layer, .. }
+        | Op::SetMaterialSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
+
+        // The Notes panel rereads on this. No item or layer changed.
+        Op::SetNotes { .. } => (None, None, false),
 
         // A batch is as broad as its members: the item flag is the union, and
         // the reference scope widens to "no one subtree" rather than picking a

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
-use lumit_core::expression::{script::Language, script::Slot, script::SLOT_KEY};
+use lumit_core::expression::{script::Language, script::Slot};
 use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
@@ -269,7 +269,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches, 3D switch or place in the stack",
+        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -281,7 +281,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -313,6 +313,11 @@ pub const COMMANDS: &[Command] = &[
             keys_form!(
                 r#"["position","point_of_interest"]"#,
                 r#"{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":3,"description":"Z is left as it is when there are two"}"#
+            ),
+            ",",
+            keys_form!(
+                r#"["orientation"]"#,
+                r#"{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3,"description":"X, Y and Z, in After Effects' order"}"#
             ),
             r#"],"description":"rotation turns about Z"}"#
         ),
@@ -575,6 +580,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "out": exact(layer.out_point.0),
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
+        "after_effects_order": layer.transform.after_effects_order,
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
@@ -1349,13 +1355,11 @@ struct ShapeArgs {
 
 fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
     use lumit_core::model::TransformGroup;
-    use lumit_core::shape::ShapeItem;
-
     let store = host.store();
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
-    let mut contents = Vec::new();
-    for (n, mut item) in a.items.into_iter().enumerate() {
+    let mut items = a.items;
+    for (n, item) in items.iter_mut().enumerate() {
         let Some(object) = item.as_object_mut() else {
             return Err(bad("Each item is an object."));
         };
@@ -1363,12 +1367,18 @@ fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
         object
             .entry("name")
             .or_insert_with(|| json!(format!("Path {}", n + 1)));
-        let item: ShapeItem =
-            serde_json::from_value(item).map_err(|e| bad(format!("Item {}: {e}.", n + 1)))?;
+    }
+    // Read as a file's contents are, so an item written the old way, with
+    // its trim or its copies as fields, still lands as entries.
+    let contents = lumit_core::shape::modifier::read_entries(Value::Array(items))
+        .map_err(|e| bad(format!("Items: {e}.")))?;
+    for (n, item) in lumit_core::shape::modifier::items(&contents)
+        .iter()
+        .enumerate()
+    {
         if item.path.vertices.len() < 2 {
             return Err(bad(format!("Item {} needs two vertices or more.", n + 1)));
         }
-        contents.push(item);
     }
     // The art is drawn in comp pixels, so the layer sits on the art's own box
     // with its anchor at the corner, as the pen tool's layers do.
@@ -1423,6 +1433,14 @@ const PROPERTIES: &[(&str, &[TransformProp])] = &[
     ("rotation", &[TransformProp::Rotation]),
     ("rotation_x", &[TransformProp::RotationX]),
     ("rotation_y", &[TransformProp::RotationY]),
+    (
+        "orientation",
+        &[
+            TransformProp::OrientationX,
+            TransformProp::OrientationY,
+            TransformProp::OrientationZ,
+        ],
+    ),
     ("opacity", &[TransformProp::Opacity]),
     (
         "point_of_interest",
@@ -1530,6 +1548,7 @@ struct SetArgs {
     three_d: Option<bool>,
     index: Option<usize>,
     two_node: Option<bool>,
+    after_effects_order: Option<bool>,
     #[serde(default)]
     switches: SwitchArgs,
 }
@@ -1587,6 +1606,30 @@ fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
             out_point: at(a.out, found.out_point)?,
             start_offset: at(a.start_offset, found.start_offset)?,
         });
+    }
+    if let Some(on) = a
+        .after_effects_order
+        .filter(|on| *on != found.transform.after_effects_order)
+    {
+        // Rewritten so the layer keeps its pose, as the Timeline's switch does.
+        let rows = found
+            .transform
+            .rotations_in_order(on)
+            .ok_or_else(|| bad("An expression drives a rotation, so the order stays as it is."))?;
+        ops.push(Op::SetRotationOrder {
+            comp: c,
+            layer,
+            after_effects: on,
+        });
+        ops.extend(
+            rows.into_iter()
+                .map(|(prop, animation)| Op::SetTransformProperty {
+                    comp: c,
+                    layer,
+                    prop,
+                    animation,
+                }),
+        );
     }
     if let Some(three_d) = a.three_d {
         ops.push(Op::SetLayerThreeD {
@@ -1863,11 +1906,9 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
         .find(|(name, _)| *name == a.property)
         .map(|(_, channels)| *channels)
         .ok_or_else(|| bad(format!("Lumit has no property called {}.", a.property)))?;
-    let held: Vec<&Property> = channels
-        .iter()
-        .map(|c| layer.prop(*c))
-        .collect::<Option<_>>()
-        .ok_or_else(|| bad(format!("{} is not on this layer.", a.property)))?;
+    if channels.iter().any(|c| layer.prop(*c).is_none()) {
+        return Err(bad(format!("{} is not on this layer.", a.property)));
+    }
     // One number for a one-axis property, a list with one for each axis
     // otherwise, though position can leave Z alone.
     let axes = |values: &Values| -> Result<usize, ScriptError> {
@@ -1895,22 +1936,15 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
             } else {
                 channels.len()
             };
-            let values: Vec<f64> = held.iter().take(used).map(|p| underneath(p)).collect();
             let mut ops = Vec::new();
-            for (axis, (channel, held)) in channels.iter().zip(&held).take(used).enumerate() {
-                let next = expressed(held, &text, &values, axis);
-                ops.push(Op::SetTransformProperty {
-                    comp: comp.id,
-                    layer: layer.id,
-                    prop: *channel,
-                    animation: next.animation,
-                });
-                ops.push(Op::SetTransformExpressionSlot {
-                    comp: comp.id,
-                    layer: layer.id,
-                    prop: *channel,
-                    slot: next.extra.get(SLOT_KEY).cloned(),
-                });
+            for channel in channels.iter().take(used) {
+                ops.extend(edits::transform_ops(
+                    comp.id,
+                    layer,
+                    *channel,
+                    Animation::Expression(text.clone()),
+                    Some(Language::JavaScript),
+                ));
             }
             let id = layer.id;
             commit(store, ops)?;

@@ -233,7 +233,7 @@ Script: `lumit.layer.get({ ... })`. MCP tool: `layer_get`.
 
 ## layer.set
 
-Change a layer's name, parent, span, switches, 3D switch or place in the stack.
+Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack.
 
 Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 
@@ -250,6 +250,7 @@ Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 | `three_d` | boolean |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `two_node` | boolean |  | For a camera, whether it aims at its point of interest |
+| `after_effects_order` | boolean |  | Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose |
 | `switches` | object |  |  |
 | `switches.visible` | boolean |  |  |
 | `switches.audible` | boolean |  |  |
@@ -284,11 +285,11 @@ Script: `lumit.layer.keys({ ... })`. MCP tool: `layer_keys`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
-| `property` | `"rotation"`, `"rotation_x"`, `"rotation_y"`, `"opacity"`, `"zoom"`, `"focus_distance"`, `"aperture"`, `"anchor"`, `"scale"`, `"position"`, `"point_of_interest"` | yes |  |
-| `value` | number or list of 2 numbers or list of 2 to 3 numbers |  | Z is left as it is when there are two |
+| `property` | `"rotation"`, `"rotation_x"`, `"rotation_y"`, `"opacity"`, `"zoom"`, `"focus_distance"`, `"aperture"`, `"anchor"`, `"scale"`, `"position"`, `"point_of_interest"`, `"orientation"` | yes |  |
+| `value` | number or list of 2 numbers or list of 2 to 3 numbers or list of 3 numbers |  | Z is left as it is when there are two; X, Y and Z, in After Effects' order |
 | `keys` | list |  |  |
 | `keys[].time` | integer or `{num, den}` | yes | A frame on the comp's rate, or exact seconds |
-| `keys[].value` | number or list of 2 numbers or list of 2 to 3 numbers | yes | Z is left as it is when there are two |
+| `keys[].value` | number or list of 2 numbers or list of 2 to 3 numbers or list of 3 numbers | yes | Z is left as it is when there are two; X, Y and Z, in After Effects' order |
 | `keys[].interp` | `"linear"`, `"hold"` |  |  |
 | `keys[].in` | `"linear"`, `"hold"`, `"auto"`, `"clamped"` or `{speed, influence}` or list of `{speed, influence}` |  | Linear, hold, auto or clamped, or an ease, or a list with an ease for each value |
 | `keys[].in.speed` | number |  | Units a second |

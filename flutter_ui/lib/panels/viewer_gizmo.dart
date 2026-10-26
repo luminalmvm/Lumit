@@ -36,6 +36,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +51,7 @@ import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
+import 'viewer_gizmo_3d.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart'
     show ViewerOverlayPainter, viewerOverlayToggles, viewerToggleRow;
@@ -57,7 +59,9 @@ import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'viewer_type.dart' show viewerTypeEditRequest;
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 
 /// How big a scale handle is drawn, and how far from it a press still counts.
 ///
@@ -79,6 +83,9 @@ const double gizmoRotateReach = 28;
 /// pan-behind — the pivot would slide and the layer would not, which reads as
 /// the drag being broken. So the pivot has to be *aimed at*.
 const double gizmoAnchorSlop = 16;
+
+/// How far a light's mark reaches either side of its place, in screen pixels.
+const double gizmoMarkerReach = 7;
 
 /// The eight scale handles and the rotation knob.
 ///
@@ -166,7 +173,7 @@ class LayerBox {
   /// `lumit_core::mask` — which is why the points of both can be aimed at,
   /// swept up and dragged by one piece of code. What differs is only where the
   /// edit is written back to: masks one at a time, art via `setShapeContents`.
-  final List<BridgeShapeItem> shapeContents;
+  final List<BridgeShapeEntry> shapeContents;
 
   /// The shape item picked in the Timeline, or null. While one is picked its
   /// points are the only ones offered, so one piece of the art can be worked
@@ -175,8 +182,8 @@ class LayerBox {
 
   /// The items whose points are drawn and can be aimed at.
   Iterable<BridgeShapeItem> get offeredItems => pickedItem == null
-      ? shapeContents
-      : shapeContents.where((i) => i.id == pickedItem);
+      ? shapeContents.items
+      : shapeContents.items.where((i) => i.id == pickedItem);
 
   /// Where the art's bounding box starts, in the art's own coordinates.
   ///
@@ -204,6 +211,18 @@ class LayerBox {
   /// because Position is where the anchor lands in the comp.
   final BridgeMotionPath? motionPath;
 
+  /// Whether the layer is a point rather than a box: a light, which has a
+  /// place in the scene and no picture. It is drawn as a small mark at its
+  /// Position and picked by that.
+  final bool marker;
+
+  /// The transform the box was built from, which a 3D handle drag keys or
+  /// sets, or null where nothing on the box writes it.
+  final BridgeTransform? transform;
+
+  /// A two-node camera's point of interest, which gets handles of its own.
+  final Vec3? aim;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -218,6 +237,9 @@ class LayerBox {
     this.artOrigin = Offset.zero,
     this.puppet,
     this.motionPath,
+    this.marker = false,
+    this.transform,
+    this.aim,
   });
 
   /// A point of the layer's **art** on screen.
@@ -248,6 +270,9 @@ class LayerBox {
         artOrigin: artOrigin,
         puppet: puppet,
         motionPath: motionPath,
+        marker: marker,
+        transform: transform,
+        aim: aim,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -259,8 +284,8 @@ class LayerBox {
   /// The same box with the pivot moved and Position compensating — the shape a
   /// pan-behind in flight has. The box does not move; the anchor mark
   /// on it does, which is the whole of what panning behind looks like.
-  LayerBox pivotedAt(Offset anchor, Offset position) =>
-      copyWith(map: map.pivotedAt(anchor.dx, anchor.dy, position: position));
+  LayerBox pivotedAt(Offset anchor, Offset position, {double? z}) => copyWith(
+      map: map.pivotedAt(anchor.dx, anchor.dy, position: position, z: z));
 
   /// The same box with the layer turned to [degrees] — the shape a rotation in
   /// flight has, before it is committed.
@@ -269,13 +294,62 @@ class LayerBox {
 
   /// The box's four corners in screen space, clockwise from the layer's own
   /// top-left. A rotated layer therefore gives a rotated quad, not an
-  /// axis-aligned rectangle — the box turns with the layer.
-  List<Offset> get corners => [
-        map.toScreen(0, 0),
-        map.toScreen(bounds.width, 0),
-        map.toScreen(bounds.width, bounds.height),
-        map.toScreen(0, bounds.height),
+  /// axis-aligned rectangle — the box turns with the layer. Seen through a
+  /// camera it is the four corners in perspective, and a marker's are a small
+  /// diamond round its place.
+  List<Offset> get corners {
+    if (marker) {
+      final at = anchorScreen;
+      return [
+        at + const Offset(0, -gizmoMarkerReach),
+        at + const Offset(gizmoMarkerReach, 0),
+        at + const Offset(0, gizmoMarkerReach),
+        at + const Offset(-gizmoMarkerReach, 0),
       ];
+    }
+    return [
+      map.toScreen(0, 0),
+      map.toScreen(bounds.width, 0),
+      map.toScreen(bounds.width, bounds.height),
+      map.toScreen(0, bounds.height),
+    ];
+  }
+
+  /// Whether every corner is in front of the eye, which a 2D layer always is.
+  /// A box reaching behind it has no sensible place for its handles.
+  bool get wholeInFront => marker
+      ? map.inFront(map.ax, map.ay)
+      : map.inFront(0, 0) &&
+          map.inFront(bounds.width, 0) &&
+          map.inFront(bounds.width, bounds.height) &&
+          map.inFront(0, bounds.height);
+
+  /// The outline drawn round the layer: [corners], less any part behind the
+  /// eye, which a camera cannot see and has no screen point for.
+  List<Offset> get outline {
+    if (marker) return wholeInFront ? corners : const [];
+    if (!map.projected) return corners;
+    final quad = [
+      (0.0, 0.0),
+      (bounds.width, 0.0),
+      (bounds.width, bounds.height),
+      (0.0, bounds.height),
+    ];
+    // Cut on the layer itself, a hair in front of the eye.
+    final kept = <(double, double)>[];
+    for (var i = 0; i < quad.length; i++) {
+      final a = quad[i];
+      final b = quad[(i + 1) % quad.length];
+      final da = map.depthOf(a.$1, a.$2) - viewerNear;
+      final db = map.depthOf(b.$1, b.$2) - viewerNear;
+      if (da >= 0) kept.add(a);
+      if ((da >= 0) != (db >= 0)) {
+        final t = da / (da - db);
+        kept.add((a.$1 + (b.$1 - a.$1) * t, a.$2 + (b.$2 - a.$2) * t));
+      }
+    }
+    return [for (final p in kept) map.toScreen(p.$1, p.$2)];
+  }
 
   /// Where the layer's anchor — the point it scales and rotates about — is on
   /// screen.
@@ -285,8 +359,14 @@ class LayerBox {
   ///
   /// Answered in *layer* space rather than by a polygon test on screen, which
   /// is both simpler and exact under rotation, scale and pan: the inverse map
-  /// already undoes all three.
+  /// already undoes all three. Seen through a camera the layer has to be in
+  /// front of the eye there too. A marker is hit near its place.
   bool contains(Offset point) {
+    if (marker) {
+      return wholeInFront &&
+          (anchorScreen - point).distance <= gizmoAnchorSlop / 2;
+    }
+    if (map.depthAt(point) == null) return false;
     final p = map.layerOf(point);
     return p.dx >= 0 &&
         p.dy >= 0 &&
@@ -298,7 +378,7 @@ class LayerBox {
   /// corner must be inside, so a layer half-caught by the rubber band is not
   /// selected (After Effects' own behaviour, and the one that makes a sloppy
   /// sweep predictable).
-  bool insideRect(Rect rect) => corners.every(rect.contains);
+  bool insideRect(Rect rect) => wholeInFront && corners.every(rect.contains);
 
   /// Where [handle] is drawn, in screen space.
   Offset handleAt(GizmoHandle handle) {
@@ -326,6 +406,7 @@ class LayerBox {
   /// The handle under [point], or null when none is. Nearest wins, so two
   /// handles whose slop overlaps on a small box do not fight.
   GizmoHandle? handleHit(Offset point) {
+    if (marker || !wholeInFront) return null;
     GizmoHandle? best;
     var bestDistance = gizmoHandleSlop / 2;
     // The anchor first in the list only matters for ties; nearest still wins.
@@ -394,11 +475,19 @@ typedef PathPoint = ({
 ///
 /// Masks and shape items hold the same path type, so this is one walk over two
 /// lists rather than two kinds of point.
-List<PathPoint> pathPointsOf(LayerBox box) {
+///
+/// With [only], the layer and path whose Path row is picked, that layer offers
+/// that path's points alone, so a layer of many paths shows just the one being
+/// edited.
+List<PathPoint> pathPointsOf(LayerBox box, {(UuidValue, UuidValue)? only}) {
   final out = <PathPoint>[];
+  bool shown(UuidValue path) => showsPath(box, path, only);
   for (final mask in box.masks) {
+    if (!shown(mask.id)) continue;
     for (var i = 0; i < mask.vertices.length; i++) {
       final v = mask.vertices[i];
+      // Behind the eye a point is not drawn, so it can't be aimed at.
+      if (!box.map.inFront(v.x, v.y)) continue;
       out.add((
         key: maskPointKey(box.id, mask.id, i),
         at: box.map.toScreen(v.x, v.y),
@@ -409,8 +498,12 @@ List<PathPoint> pathPointsOf(LayerBox box) {
     }
   }
   for (final item in box.offeredItems) {
+    if (!shown(item.id)) continue;
     for (var i = 0; i < item.vertices.length; i++) {
       final v = item.vertices[i];
+      if (!box.map.inFront(v.x - box.artOrigin.dx, v.y - box.artOrigin.dy)) {
+        continue;
+      }
       out.add((
         key: shapePointKey(box.id, item.id, i),
         at: box.shapePoint(v.x, v.y),
@@ -430,11 +523,12 @@ List<PathPoint> pathPointsOf(LayerBox box) {
   List<LayerBox> boxes,
   Offset point, {
   double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
 }) {
   ({LayerBox box, String key, UuidValue pathId, int index, bool shape})? best;
   var bestDistance = slop;
   for (final box in boxes) {
-    for (final p in pathPointsOf(box)) {
+    for (final p in pathPointsOf(box, only: only)) {
       final d = (p.at - point).distance;
       if (d <= bestDistance) {
         bestDistance = d;
@@ -453,37 +547,409 @@ List<PathPoint> pathPointsOf(LayerBox box) {
 
 /// Every editable point of [boxes] inside [rect] — what a marquee catches when
 /// it is sweeping points rather than layers.
-Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect) => {
+Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect,
+        {(UuidValue, UuidValue)? only}) =>
+    {
       for (final box in boxes)
-        for (final p in pathPointsOf(box))
+        for (final p in pathPointsOf(box, only: only))
           if (rect.contains(p.at)) p.key,
     };
+
+/// Whether [box]'s path [path] is drawn and offered: always, unless [only]
+/// names another path of the same layer.
+bool showsPath(LayerBox box, UuidValue path, (UuidValue, UuidValue)? only) =>
+    only == null || only.$1 != box.id || only.$2 == path;
+
+/// One path of a layer as a list of vertices, whichever kind it is, with what
+/// it takes to name its points and put them on screen.
+typedef PathOnBox = ({
+  UuidValue id,
+  List<BridgeVertex> vertices,
+  bool closed,
+  bool shape,
+  String Function(int index) keyOf,
+  Offset Function(double x, double y) screen,
+});
+
+/// Every path of [box], masks first then the art, as [pathPointsOf] walks them.
+List<PathOnBox> pathsOf(LayerBox box, {(UuidValue, UuidValue)? only}) => [
+      for (final mask in box.masks)
+        if (showsPath(box, mask.id, only))
+          (
+            id: mask.id,
+            vertices: mask.vertices,
+            closed: mask.closed,
+            shape: false,
+            keyOf: (int i) => maskPointKey(box.id, mask.id, i),
+            screen: box.map.toScreen,
+          ),
+      for (final item in box.shapeContents.items)
+        if (showsPath(box, item.id, only))
+          (
+            id: item.id,
+            vertices: item.vertices,
+            closed: item.closed,
+            shape: true,
+            keyOf: (int i) => shapePointKey(box.id, item.id, i),
+            screen: box.shapePoint,
+          ),
+    ];
+
+/// Which of a point's two handles: the one the path arrives along, or the one
+/// it leaves along.
+enum HandleSide { arriving, leaving }
+
+/// A handle of a selected point, under the pointer.
+typedef PathHandle = ({
+  LayerBox box,
+  String key,
+  int index,
+  HandleSide side,
+});
+
+/// A vertex's handle on [side], in its own path's coordinates.
+Offset handleOf(BridgeVertex v, HandleSide side) => side == HandleSide.arriving
+    ? Offset(v.tanInX, v.tanInY)
+    : Offset(v.tanOutX, v.tanOutY);
+
+/// The handle of a **selected** point under [point], or null. Only selected
+/// points show their handles, so only theirs can be grabbed. A handle folded
+/// into its point has no end of its own and is left to the point.
+PathHandle? pathHandleAt(
+  List<LayerBox> boxes,
+  Offset point,
+  Set<String> selected, {
+  double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
+}) {
+  PathHandle? best;
+  var bestDistance = slop;
+  for (final box in boxes) {
+    for (final path in pathsOf(box, only: only)) {
+      for (var i = 0; i < path.vertices.length; i++) {
+        final key = path.keyOf(i);
+        if (!selected.contains(key)) continue;
+        final v = path.vertices[i];
+        for (final side in HandleSide.values) {
+          final h = handleOf(v, side);
+          if (h.distance < 1e-9) continue;
+          final d = (path.screen(v.x + h.dx, v.y + h.dy) - point).distance;
+          if (d <= bestDistance) {
+            bestDistance = d;
+            best = (box: box, key: key, index: i, side: side);
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/// Whether [v] is a smooth point: two handles in one line, pointing apart.
+/// Dragging one of a smooth point's handles turns the other with it.
+bool isSmoothVertex(BridgeVertex v) {
+  final a = handleOf(v, HandleSide.arriving);
+  final b = handleOf(v, HandleSide.leaving);
+  if (a.distance < 1e-9 || b.distance < 1e-9) return false;
+  final cos = (a.dx * b.dx + a.dy * b.dy) / (a.distance * b.distance);
+  return cos < -0.995;
+}
+
+BridgeVertex _vertexWith(BridgeVertex v, {Offset? arriving, Offset? leaving}) =>
+    BridgeVertex(
+      x: v.x,
+      y: v.y,
+      tanInX: arriving?.dx ?? v.tanInX,
+      tanInY: arriving?.dy ?? v.tanInY,
+      tanOutX: leaving?.dx ?? v.tanOutX,
+      tanOutY: leaving?.dy ?? v.tanOutY,
+    );
+
+/// How a handle drag treats the point's other handle.
+enum HandleLink {
+  /// Left where it is: the point becomes, or stays, a corner.
+  broken,
+
+  /// Turned to stay in line, at its own length: a smooth point stays smooth.
+  turned,
+
+  /// The mirror of the dragged one, length and all: handles pulled out of a
+  /// point.
+  mirrored,
+}
+
+/// [vertices] with point [index]'s handle on [side] set to [handle].
+List<BridgeVertex> verticesWithHandle(
+  List<BridgeVertex> vertices,
+  int index,
+  HandleSide side,
+  Offset handle,
+  HandleLink link,
+) {
+  final v = vertices[index];
+  final otherSide =
+      side == HandleSide.arriving ? HandleSide.leaving : HandleSide.arriving;
+  final other = handleOf(v, otherSide);
+  final Offset? turned = switch (link) {
+    HandleLink.broken => null,
+    HandleLink.mirrored => -handle,
+    HandleLink.turned => handle.distance < 1e-9
+        ? null
+        : -handle / handle.distance * other.distance,
+  };
+  final (arriving, leaving) =
+      side == HandleSide.arriving ? (handle, turned) : (turned, handle);
+  return [
+    for (var i = 0; i < vertices.length; i++)
+      if (i == index)
+        _vertexWith(v, arriving: arriving, leaving: leaving)
+      else
+        vertices[i],
+  ];
+}
+
+/// [vertices] with point [index] turned from smooth to a corner, or from a
+/// corner to smooth: a point with any handle loses both, and a point with
+/// none grows a pair along the line between its neighbours, each a third of
+/// the way to its own neighbour, as After Effects' Convert Vertex does.
+List<BridgeVertex> verticesConverted(
+  List<BridgeVertex> vertices,
+  int index,
+  bool closed,
+) {
+  final v = vertices[index];
+  final n = vertices.length;
+  final hasHandles = handleOf(v, HandleSide.arriving).distance > 1e-9 ||
+      handleOf(v, HandleSide.leaving).distance > 1e-9;
+  BridgeVertex converted;
+  if (hasHandles) {
+    converted = _vertexWith(v, arriving: Offset.zero, leaving: Offset.zero);
+  } else {
+    final here = Offset(v.x, v.y);
+    final prev = index > 0 || closed ? vertices[(index - 1 + n) % n] : null;
+    final next = index < n - 1 || closed ? vertices[(index + 1) % n] : null;
+    final p = prev == null ? here : Offset(prev.x, prev.y);
+    final q = next == null ? here : Offset(next.x, next.y);
+    final run = q - p;
+    if (run.distance < 1e-9) return vertices;
+    final dir = run / run.distance;
+    converted = _vertexWith(
+      v,
+      arriving: -dir * ((here - p).distance / 3),
+      leaving: dir * ((q - here).distance / 3),
+    );
+  }
+  return [
+    for (var i = 0; i < n; i++) i == index ? converted : vertices[i],
+  ];
+}
+
+/// [vertices] without point [index], or null when the path would be left with
+/// too few points to be a path.
+List<BridgeVertex>? verticesWithoutPoint(
+  List<BridgeVertex> vertices,
+  int index,
+  bool closed,
+) {
+  if (vertices.length <= (closed ? 3 : 2)) return null;
+  return [
+    for (var i = 0; i < vertices.length; i++)
+      if (i != index) vertices[i],
+  ];
+}
+
+/// [vertices] with a point added at [t] along the edge leaving point
+/// [segment]. The edge is split where it lies, handles and all, so the path's
+/// shape does not change.
+List<BridgeVertex> verticesWithPointAdded(
+  List<BridgeVertex> vertices,
+  int segment,
+  double t,
+) {
+  final n = vertices.length;
+  final a = vertices[segment];
+  final b = vertices[(segment + 1) % n];
+  final p0 = Offset(a.x, a.y);
+  final p1 = p0 + handleOf(a, HandleSide.leaving);
+  final p3 = Offset(b.x, b.y);
+  final p2 = p3 + handleOf(b, HandleSide.arriving);
+  // De Casteljau: the two halves of the cubic, and the point between them.
+  Offset lerp(Offset u, Offset w) => u + (w - u) * t;
+  final q0 = lerp(p0, p1), q1 = lerp(p1, p2), q2 = lerp(p2, p3);
+  final r0 = lerp(q0, q1), r1 = lerp(q1, q2);
+  final s = lerp(r0, r1);
+  final added = BridgeVertex(
+    x: s.dx,
+    y: s.dy,
+    tanInX: r0.dx - s.dx,
+    tanInY: r0.dy - s.dy,
+    tanOutX: r1.dx - s.dx,
+    tanOutY: r1.dy - s.dy,
+  );
+  final out = <BridgeVertex>[];
+  for (var i = 0; i < n; i++) {
+    if (i == segment) {
+      out.add(_vertexWith(a, leaving: q0 - p0));
+      out.add(added);
+    } else if (i == (segment + 1) % n) {
+      out.add(_vertexWith(b, arriving: q2 - p3));
+    } else {
+      out.add(vertices[i]);
+    }
+  }
+  return out;
+}
+
+/// The edge of a path under [point], and how far along it, or null when no
+/// edge is near enough. Each edge is walked on the layer and put on screen a
+/// step at a time, so a layer seen through a camera is aimed at as drawn.
+({LayerBox box, PathOnBox path, int segment, double t})? pathEdgeAt(
+  List<LayerBox> boxes,
+  Offset point, {
+  double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
+}) {
+  ({LayerBox box, PathOnBox path, int segment, double t})? best;
+  var bestDistance = slop;
+  for (final box in boxes) {
+    for (final path in pathsOf(box, only: only)) {
+      final v = path.vertices;
+      final edges = path.closed ? v.length : v.length - 1;
+      for (var s = 0; s < edges; s++) {
+        final a = v[s], b = v[(s + 1) % v.length];
+        final p0 = Offset(a.x, a.y);
+        final p1 = p0 + handleOf(a, HandleSide.leaving);
+        final p3 = Offset(b.x, b.y);
+        final p2 = p3 + handleOf(b, HandleSide.arriving);
+        const steps = 48;
+        for (var k = 1; k < steps; k++) {
+          final t = k / steps;
+          final u = 1 - t;
+          final p = p0 * (u * u * u) +
+              p1 * (3 * u * u * t) +
+              p2 * (3 * u * t * t) +
+              p3 * (t * t * t);
+          final d = (path.screen(p.dx, p.dy) - point).distance;
+          if (d <= bestDistance) {
+            bestDistance = d;
+            best = (box: box, path: path, segment: s, t: t);
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
 
 /// A drag's screen delta in [box]'s own coordinates.
 ///
 /// Two points on the picture, subtracted, so the layer's scale and rotation are
 /// undone exactly — which is what lets a selection spanning two layers with
-/// different transforms still move together on screen.
-Offset pointDeltaIn(LayerBox box, Offset screenDelta) =>
-    box.map.layerOf(screenDelta) - box.map.layerOf(Offset.zero);
+/// different transforms still move together on screen. Seen through a camera
+/// a step depends on where it is taken, so it is taken from [from], the
+/// press, which keeps the grabbed point under the pointer.
+Offset pointDeltaIn(LayerBox box, Offset screenDelta, {Offset? from}) {
+  final base = box.map.projected ? from ?? box.anchorScreen : Offset.zero;
+  return box.map.layerOf(base + screenDelta) - box.map.layerOf(base);
+}
+
+Vec3 _flat(Offset step) => (step.dx, step.dy, 0);
+
+/// An arrow key's nudge, as the change it makes to Position. A 2D layer
+/// moves [by] on screen. A 3D layer takes a whole step of [by]'s length on
+/// the Position axis that runs most nearly the arrow's way on screen, with
+/// that axis's sign, however near or far the layer is: z where z runs that
+/// way, as Up does in a Top view. Null when no axis runs anywhere near it.
+Vec3? nudgeStep(LayerBox box, Offset by) {
+  if (!box.map.projected) return _flat(box.map.positionStep(by));
+  final m = box.map;
+  if (!m.inFront(m.ax, m.ay)) return null;
+  final z = m.depth!.z;
+  final at = m.parentToScreen(m.px, m.py);
+  final arrow = by / by.distance;
+  Vec3? best;
+  var nearest = 0.5;
+  for (final (axis, run) in [
+    ((1.0, 0.0, 0.0), m.parentToScreen(m.px + 1, m.py) - at),
+    ((0.0, 1.0, 0.0), m.parentToScreen(m.px, m.py + 1) - at),
+    ((0.0, 0.0, 1.0), m.parentToScreen(m.px, m.py, z + 1) - at),
+  ]) {
+    if (run.distance < 1e-9) continue;
+    final along = (run.dx * arrow.dx + run.dy * arrow.dy) / run.distance;
+    if (along.abs() > nearest) {
+      nearest = along.abs();
+      final k = along.sign * by.distance;
+      best = (axis.$1 * k, axis.$2 * k, axis.$3 * k);
+    }
+  }
+  return best;
+}
 
 /// A Position-space point on screen. A motion path is in the parent's pixels
 /// (the comp's, with no parent) rather than layer pixels, because Position is
 /// where the layer's anchor lands there, so it goes through none of the
-/// layer's own scale or rotation.
-Offset compToScreen(LayerBox box, double x, double y) =>
-    box.map.parentToScreen(x, y);
+/// layer's own scale or rotation. [z] is a 3D layer's depth there.
+Offset compToScreen(LayerBox box, double x, double y, [double? z]) =>
+    box.map.parentToScreen(x, y, z);
 
-/// [box]'s motion path on screen, one point per comp frame; empty when the
-/// layer has none.
-List<Offset> motionPathScreen(LayerBox box) {
+/// [box]'s motion path in its parent's space, one point per comp frame, with
+/// a 3D layer's depth; empty when the layer has none.
+List<(double, double, double?)> _motionPathSamples(LayerBox box) {
   final path = box.motionPath;
   if (path == null) return const [];
+  final depths = path.depths;
   return [
     for (var i = 0; i + 1 < path.samples.length; i += 2)
-      compToScreen(box, path.samples[i], path.samples[i + 1]),
+      (
+        path.samples[i],
+        path.samples[i + 1],
+        i ~/ 2 < depths.length ? depths[i ~/ 2] : null,
+      ),
   ];
 }
+
+/// [box]'s motion path on screen, one point per comp frame in front of the
+/// eye; empty when the layer has none.
+List<Offset> motionPathScreen(LayerBox box) => [
+      for (final (x, y, z) in _motionPathSamples(box))
+        if (box.map.parentInFront(x, y, z)) compToScreen(box, x, y, z),
+    ];
+
+/// [box]'s motion path as lines on screen, cut where it passes behind the
+/// eye: a path flying past the camera is drawn up to the eye and on again
+/// after it.
+List<List<Offset>> motionPathRuns(LayerBox box) {
+  final samples = _motionPathSamples(box);
+  final runs = <List<Offset>>[];
+  var run = <Offset>[];
+  for (var i = 0; i < samples.length; i++) {
+    final (x, y, z) = samples[i];
+    final da = box.map.parentDepthOf(x, y, z) - viewerNear;
+    if (da >= 0) run.add(compToScreen(box, x, y, z));
+    if (i + 1 == samples.length) break;
+    final (nx, ny, nz) = samples[i + 1];
+    final db = box.map.parentDepthOf(nx, ny, nz) - viewerNear;
+    if ((da >= 0) == (db >= 0)) continue;
+    final t = da / (da - db);
+    final az = z ?? 0;
+    run.add(compToScreen(box, x + (nx - x) * t, y + (ny - y) * t,
+        z == null ? null : az + ((nz ?? az) - az) * t));
+    if (da >= 0) {
+      runs.add(run);
+      run = <Offset>[];
+    }
+  }
+  if (run.isNotEmpty) runs.add(run);
+  return runs;
+}
+
+/// Where [key] of [box]'s motion path is on screen.
+Offset motionKeyScreen(LayerBox box, BridgeMotionKey key) =>
+    compToScreen(box, key.x, key.y, box.map.projected ? key.z : null);
+
+/// Whether [key] is in front of the eye, where it can be drawn and grabbed.
+bool _keyInFront(LayerBox box, BridgeMotionKey key) =>
+    box.map.parentInFront(key.x, key.y, box.map.projected ? key.z : null);
 
 /// The motion-path key under [point] across [boxes], or null when none is
 /// near enough. Nearest wins, as it does for a path's points.
@@ -498,7 +964,8 @@ List<Offset> motionPathScreen(LayerBox box) {
     final keys = box.motionPath?.keys;
     if (keys == null) continue;
     for (var i = 0; i < keys.length; i++) {
-      final d = (compToScreen(box, keys[i].x, keys[i].y) - point).distance;
+      if (!_keyInFront(box, keys[i])) continue;
+      final d = (motionKeyScreen(box, keys[i]) - point).distance;
       if (d <= bestDistance) {
         bestDistance = d;
         best = (box: box, index: i);
@@ -580,22 +1047,116 @@ BridgeMask? maskWithPointsMoved(
   BridgeMask mask,
   Set<String> points,
   Offset d,
-) {
-  bool moved(int i) => points.contains(maskPointKey(box.id, mask.id, i));
-  if (!Iterable<int>.generate(mask.vertices.length).any(moved)) return null;
-  return BridgeMask(
-    id: mask.id,
-    name: mask.name,
-    vertices: _verticesMoved(mask.vertices, moved, d),
-    closed: mask.closed,
-    inverted: mask.inverted,
-    opacity: mask.opacity,
-    mode: mask.mode,
-    feather: mask.feather,
-    vertexFeather: mask.vertexFeather,
-    expansion: mask.expansion,
-    pathKeys: mask.pathKeys,
-  );
+) =>
+    maskEdited(box, mask, _pointsMoved(points, d));
+
+/// What an edit does to one path: its vertices afterwards, or null when the
+/// edit does not touch that path. [keyOf] names the path's points, so an edit
+/// can tell which of them are selected or in hand.
+typedef VertexEdit = List<BridgeVertex>? Function(
+  String Function(int index) keyOf,
+  List<BridgeVertex> vertices,
+  bool closed,
+);
+
+VertexEdit _pointsMoved(Set<String> points, Offset d) =>
+    (keyOf, vertices, closed) {
+      bool moved(int i) => points.contains(keyOf(i));
+      if (!Iterable<int>.generate(vertices.length).any(moved)) return null;
+      return _verticesMoved(vertices, moved, d);
+    };
+
+/// [mask] with [edit] made to its path, or null when the edit leaves it be.
+BridgeMask? maskEdited(LayerBox box, BridgeMask mask, VertexEdit edit) {
+  final vertices = edit(
+      (i) => maskPointKey(box.id, mask.id, i), mask.vertices, mask.closed);
+  if (vertices == null) return null;
+  return maskWith(mask,
+      vertices: vertices, vertexFeather: _featherFollowing(mask, vertices));
+}
+
+/// A copy of [mask] with its path or its per-point widths replaced.
+BridgeMask maskWith(
+  BridgeMask mask, {
+  List<BridgeVertex>? vertices,
+  List<BridgeScalar>? vertexFeather,
+}) =>
+    BridgeMask(
+      id: mask.id,
+      name: mask.name,
+      vertices: vertices ?? mask.vertices,
+      closed: mask.closed,
+      inverted: mask.inverted,
+      opacity: mask.opacity,
+      mode: mask.mode,
+      feather: mask.feather,
+      vertexFeather: vertexFeather ?? mask.vertexFeather,
+      expansion: mask.expansion,
+      pathKeys: mask.pathKeys,
+    );
+
+/// [mask]'s per-point widths for the path [to]. A width belongs to its point
+/// by position, so when points are added or removed each width follows its
+/// point, found where it sits, and a new point takes the width before it.
+List<BridgeScalar> _featherFollowing(BridgeMask mask, List<BridgeVertex> to) {
+  final from = mask.vertices;
+  final widths = mask.vertexFeather;
+  if (widths.isEmpty || to.length == from.length) return widths;
+  BridgeScalar widthAt(int i) => i < widths.length ? widths[i] : mask.feather;
+  final out = <BridgeScalar>[];
+  var j = 0;
+  for (final v in to) {
+    var k = j;
+    while (k < from.length && (from[k].x != v.x || from[k].y != v.y)) {
+      k++;
+    }
+    if (k < from.length) {
+      out.add(widthAt(k));
+      j = k + 1;
+    } else {
+      out.add(out.isEmpty ? widthAt(0) : out.last);
+    }
+  }
+  return out;
+}
+
+/// The soft edge's width at [mask]'s point [index], when it is one number
+/// rather than keyed.
+double? stillFeatherAt(BridgeMask mask, int index) {
+  final s = index < mask.vertexFeather.length
+      ? mask.vertexFeather[index]
+      : mask.feather;
+  return s is BridgeScalar_Static ? s.field0 : null;
+}
+
+/// [mask] with point [index]'s soft edge set to [width]. A mask with one width
+/// all the way round gets a width per point first, each the one it had.
+BridgeMask maskWithFeatherAt(BridgeMask mask, int index, double width) {
+  final n = mask.vertices.length;
+  return maskWith(mask, vertexFeather: [
+    for (var i = 0; i < n; i++)
+      if (i == index)
+        BridgeScalar.static_(width)
+      else if (i < mask.vertexFeather.length)
+        mask.vertexFeather[i]
+      else
+        mask.feather,
+  ]);
+}
+
+/// Which way is square to [mask]'s path at point [index], in its layer: the
+/// way a soft edge is measured.
+Offset featherNormalAt(BridgeMask mask, int index) {
+  final v = mask.vertices;
+  final n = v.length;
+  final here = v[index];
+  var run = handleOf(here, HandleSide.leaving) - handleOf(here, HandleSide.arriving);
+  if (run.distance < 1e-9) {
+    final prev = v[(index - 1 + n) % n], next = v[(index + 1) % n];
+    run = Offset(next.x - prev.x, next.y - prev.y);
+  }
+  if (run.distance < 1e-9) return const Offset(0, 1);
+  return Offset(-run.dy, run.dx) / run.distance;
 }
 
 /// [box]'s whole art with every point of it in [points] moved by [d], or null
@@ -603,24 +1164,33 @@ BridgeMask? maskWithPointsMoved(
 ///
 /// The whole list, because that is how art is written back (`setShapeContents`):
 /// one op for a layer however many of its items a drag caught.
-List<BridgeShapeItem>? shapeContentsWithPointsMoved(
+List<BridgeShapeEntry>? shapeContentsWithPointsMoved(
   LayerBox box,
   Set<String> points,
   Offset d,
-) {
+) =>
+    shapeContentsEdited(box, _pointsMoved(points, d));
+
+/// [box]'s whole contents with [edit] made to each path, or null when the
+/// edit touches none of them. The modifiers and groups go through as they
+/// are: an edit changes geometry and nothing else.
+List<BridgeShapeEntry>? shapeContentsEdited(LayerBox box, VertexEdit edit) {
   var touched = false;
-  final contents = <BridgeShapeItem>[];
-  for (final item in box.shapeContents) {
-    bool moved(int i) => points.contains(shapePointKey(box.id, item.id, i));
-    if (!Iterable<int>.generate(item.vertices.length).any(moved)) {
-      contents.add(item);
-      continue;
+  final contents = <BridgeShapeEntry>[];
+  for (final entry in box.shapeContents) {
+    if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)) {
+      final vertices = edit((i) => shapePointKey(box.id, item.id, i),
+          item.vertices, item.closed);
+      if (vertices != null) {
+        touched = true;
+        contents.add(BridgeShapeEntry(
+            depth: entry.depth,
+            kind: BridgeShapeEntryKind.item(
+                shapeItemWith(item, vertices: vertices))));
+        continue;
+      }
     }
-    touched = true;
-    // A point drag moves geometry; every modifier on the item is carried
-    // over untouched.
-    contents.add(shapeItemWith(item,
-        vertices: _verticesMoved(item.vertices, moved, d)));
+    contents.add(entry);
   }
   return touched ? contents : null;
 }
@@ -647,11 +1217,30 @@ UuidValue? pickedShapeItem(List<String> selected, UuidValue layerId) {
 ///
 /// [boxes] is in stacking order, top first — the order the read model reports
 /// layers in — so the first hit is the one a user would say is "on top".
+///
+/// 3D layers next to each other in the stack are one run, as After Effects
+/// sorts them, and within a run the one nearest the eye under the pointer
+/// wins. A 2D layer ends a run.
 LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point) {
+  LayerBox? nearest;
+  var nearestDepth = double.infinity;
   for (final box in boxes) {
-    if (box.contains(point)) return box;
+    if (!box.map.projected) {
+      if (nearest != null) return nearest;
+      if (box.contains(point)) return box;
+      continue;
+    }
+    if (!box.contains(point)) continue;
+    // A light's mark is as far away as the light is.
+    final depth = box.marker
+        ? box.map.depthOf(box.map.ax, box.map.ay)
+        : box.map.depthAt(point) ?? double.infinity;
+    if (depth < nearestDepth) {
+      nearest = box;
+      nearestDepth = depth;
+    }
   }
-  return null;
+  return nearest;
 }
 
 /// Which layer a *drag* at [point] picks up.
@@ -742,6 +1331,131 @@ double rotationForDrag({
   return (result / 45.0).roundToDouble() * 45.0;
 }
 
+/// One set of 3D handles and the three values its arrows write.
+class Handles3d {
+  final LayerBox box;
+  final Gizmo3d gizmo;
+
+  /// x, y and z: Position, or a two-node camera's point of interest.
+  final List<BridgeTransformProp> props;
+
+  const Handles3d(this.box, this.gizmo, this.props);
+
+  /// Where the handles are, as the values the arrows write.
+  Vec3 get at => gizmo.at;
+}
+
+/// The channel [prop] names in [tf], for those a 3D handle writes.
+BridgeScalar? scalarOf(BridgeTransform tf, BridgeTransformProp prop) =>
+    switch (prop) {
+      BridgeTransformProp.positionX => tf.positionX,
+      BridgeTransformProp.positionY => tf.positionY,
+      BridgeTransformProp.positionZ => tf.positionZ,
+      BridgeTransformProp.rotation => tf.rotation,
+      BridgeTransformProp.rotationX => tf.rotationX,
+      BridgeTransformProp.rotationY => tf.rotationY,
+      BridgeTransformProp.poiX => tf.camera?.poiX,
+      BridgeTransformProp.poiY => tf.camera?.poiY,
+      BridgeTransformProp.poiZ => tf.camera?.poiZ,
+      BridgeTransformProp.orientationX => tf.depth?.orientationX,
+      BridgeTransformProp.orientationY => tf.depth?.orientationY,
+      BridgeTransformProp.orientationZ => tf.depth?.orientationZ,
+      _ => null,
+    };
+
+/// [box]'s own axes in its parent's space: the columns of its whole turn,
+/// its Orientation and any aim outside its rotations included.
+List<Vec3> localAxesOfBox(LayerBox box) {
+  final depth = box.map.depth;
+  final m = rowsTurn(turnOfBox(box), ae: depth?.aeOrder ?? false);
+  final o = depth?.outside;
+  final whole = o == null ? m : mul3(o, m);
+  return [
+    for (var c = 0; c < 3; c++) (whole[c], whole[3 + c], whole[6 + c]),
+  ];
+}
+
+/// How [box] is turned, X, Y and Z Rotation in degrees.
+Vec3 turnOfBox(LayerBox box) => (
+      box.map.depth?.rotationX ?? 0,
+      box.map.depth?.rotationY ?? 0,
+      box.rotationDegrees,
+    );
+
+/// Those of [ids] with an ancestor also among them. They follow that
+/// ancestor, so moving or turning them as well would do it twice.
+Set<UuidValue> ridingAlong(Set<UuidValue> ids, List<BridgeLayerEntry> layers) {
+  final parentOf = {
+    for (final entry in layers) entry.layer.internallayerId: entry.info.parent
+  };
+  bool rides(UuidValue id) {
+    final seen = {id};
+    for (var up = parentOf[id]; up != null && seen.add(up); up = parentOf[up]) {
+      if (ids.contains(up)) return true;
+    }
+    return false;
+  }
+
+  return {
+    for (final id in ids)
+      if (rides(id)) id
+  };
+}
+
+/// The box the 3D handles sit on among [boxes]: the layer picked first, as
+/// [LumitUiState.selectedLayer] has it, while that one is seen in depth,
+/// otherwise the first that is.
+LayerBox? primary3d(List<LayerBox> boxes, UuidValue? first) {
+  final deep = [
+    for (final box in boxes)
+      if (box.map.projected) box
+  ];
+  for (final box in deep) {
+    if (box.id == first) return box;
+  }
+  return deep.firstOrNull;
+}
+
+/// The move handles of a 3D layer, a light or a camera: one set at its
+/// anchor, and a second at a two-node camera's point of interest. None where
+/// the place is behind the eye or a value it writes is an expression's.
+List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
+  final tf = box.transform;
+  final map = box.map;
+  if (tf == null || !map.projected) return const [];
+  final local = localAxesOfBox(box);
+  final out = <Handles3d>[];
+  for (final (at, props) in [
+    (
+      (map.px, map.py, map.depth!.z),
+      const [
+        BridgeTransformProp.positionX,
+        BridgeTransformProp.positionY,
+        BridgeTransformProp.positionZ,
+      ]
+    ),
+    if (box.aim case final aim?)
+      (
+        aim,
+        const [
+          BridgeTransformProp.poiX,
+          BridgeTransformProp.poiY,
+          BridgeTransformProp.poiZ,
+        ]
+      ),
+  ]) {
+    if (props.any((p) => switch (scalarOf(tf, p)) {
+          null || BridgeScalar_Expression() => true,
+          _ => false,
+        })) {
+      continue;
+    }
+    final gizmo = Gizmo3d.of(map, at: at, local: local, mode: mode);
+    if (gizmo != null) out.add(Handles3d(box, gizmo, props));
+  }
+  return out;
+}
+
 /// What the pointer is doing to the picture right now.
 enum _GizmoDrag {
   none,
@@ -750,21 +1464,35 @@ enum _GizmoDrag {
   rotate,
   anchor,
   points,
+
+  /// A handle of a selected path point, or a pair pulled out of a point.
+  handle,
+
+  /// A mask point's soft edge, with the Mask feather tool.
+  feather,
   marquee,
 
   /// A key of a motion path (docs/07 §2.4), dragged on the picture.
   motionKey,
+
+  /// A 3D arrow or square.
+  axis3d,
 }
 
 /// Where the right-click menu's Align puts a layer's box against the
-/// composition's: an edge to an edge, or a middle to a middle.
+/// composition's: an edge to an edge, or a middle to a middle. [x] and [y]
+/// are that point across and down, null on the axis left alone.
 enum _Align {
-  left,
-  centre,
-  right,
-  top,
-  middle,
-  bottom;
+  left(0, null),
+  centre(0.5, null),
+  right(1, null),
+  top(null, 0),
+  middle(null, 0.5),
+  bottom(null, 1);
+
+  const _Align(this.x, this.y);
+  final double? x;
+  final double? y;
 
   String get title => switch (this) {
         _Align.left => l10n.viewerAlignLeft,
@@ -783,6 +1511,10 @@ class ViewerGizmoLayer extends StatefulWidget {
 
   /// Every layer of the fronted comp, top first, with its box.
   final List<LayerBox> boxes;
+
+  /// The selected cameras, as marks at their eyes: not on the picture to
+  /// click, but moved by their 3D handles once picked in the Timeline.
+  final List<LayerBox> cameras;
 
   /// Whether the boxes, handles and hover highlight are drawn at all — the
   /// Viewer bar's wireframe switch. Gestures still work when they are off:
@@ -827,6 +1559,7 @@ class ViewerGizmoLayer extends StatefulWidget {
     this.showAnchors = false,
     this.viewId,
     this.onZoom,
+    this.cameras = const [],
   });
 
   @override
@@ -876,15 +1609,58 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// point edits the path, a press anywhere else is the layer's.
   final Set<String> _points = {};
 
+  /// The handle in hand, while [_GizmoDrag.handle] is the drag, what it does
+  /// to the point's other handle, and whether it is a fresh pair being pulled
+  /// out of the point rather than a handle already there.
+  PathHandle? _handleInHand;
+  HandleLink _link = HandleLink.broken;
+  bool _pullingOut = false;
+
+  /// The mask point whose soft edge the Mask feather tool is dragging.
+  ({LayerBox box, BridgeMask mask, int index})? _featherAt;
+
+  /// The claim this layer displaced to take Delete for path points.
+  bool Function()? _priorDeleteClaim;
+
   final PreviewThrottle _throttle = PreviewThrottle();
 
   /// Counts a second click in one place, for opening what a layer holds.
   final DoubleTap _taps = DoubleTap();
 
+  /// The 3D handles a drag is on, as they stood when it began, and which of
+  /// them is in hand.
+  Handles3d? _set;
+  GizmoPick? _part;
+
+  /// Where the 3D drag last put its values, kept while the pointer is
+  /// somewhere the axis cannot reach, such as past its vanishing point.
+  Vec3? _last3d;
+
+  /// The other selected layers a 3D drag moves with it, as they stood when
+  /// it began, and whether the one with the handles rides along on one of
+  /// them rather than being written itself.
+  List<LayerBox> _carried = const [];
+  bool _handlesRide = false;
+
+  /// The layers a body drag leaves to a parent that is moving too.
+  Set<UuidValue> _riders = const {};
+
+  /// The 3D handle under the pointer, which set and which part.
+  (BridgeTransformProp, GizmoPick)? _hot3d;
+
+  /// Whether a body drag moves a 3D layer across the screen (Alt) rather
+  /// than across its parent's flat.
+  bool _onScreen = false;
+
   @override
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    widget.uiState.alignRequest.addListener(_onAlignRequest);
+    // Chained, as the panels chain theirs: Delete with path points selected
+    // is about the points, and anything else goes on down the chain.
+    _priorDeleteClaim = widget.uiState.deleteClaim;
+    widget.uiState.deleteClaim = _deleteClaim;
   }
 
   /// The rows a drag on the picture writes, for the others in a shared
@@ -903,10 +1679,16 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           BridgeTransformProp.anchorX,
           BridgeTransformProp.positionX
         ],
-      _GizmoDrag.points => const <BridgeTransformProp>[],
+      _GizmoDrag.points ||
+      _GizmoDrag.handle ||
+      _GizmoDrag.feather =>
+        const <BridgeTransformProp>[],
+      _GizmoDrag.axis3d => [
+          _set?.props.first ?? BridgeTransformProp.positionX,
+        ],
     };
     if (props == null) return const [];
-    final acting = _acting;
+    final acting = _acting ?? _set?.box;
     return [
       for (final box in acting == null ? _selected : [acting])
         if (props.isEmpty)
@@ -936,11 +1718,32 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void dispose() {
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    widget.uiState.alignRequest.removeListener(_onAlignRequest);
+    if (widget.uiState.deleteClaim == _deleteClaim) {
+      widget.uiState.deleteClaim = _priorDeleteClaim;
+    }
     _throttle.cancel();
     super.dispose();
   }
 
   bool get _selectionTool => widget.tool.group == ToolGroup.select;
+
+  /// The Pen's siblings, which edit a finished path: adding, removing and
+  /// converting its points.
+  bool get _vertexTool =>
+      widget.tool == ToolMode.penAddVertex ||
+      widget.tool == ToolMode.penDeleteVertex ||
+      widget.tool == ToolMode.penConvertVertex ||
+      widget.tool == ToolMode.penMaskFeather;
+
+  /// Ctrl+Alt (Cmd+Option on a Mac) with the Selection tool is Convert
+  /// vertex for the click, as in After Effects.
+  bool get _convertChord {
+    final keys = HardwareKeyboard.instance;
+    return _selectionTool &&
+        (keys.isControlPressed || keys.isMetaPressed) &&
+        keys.isAltPressed;
+  }
 
   /// Whether this is the view the keys and the double-click belong to. Every
   /// view on screen hears a key, and only one of them may answer it.
@@ -991,8 +1794,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final moves = [
       for (final box in _selected)
         if (box.draggable)
-          if (box.map.positionStep(by) case final step)
-            (box, box.map.px + step.dx, box.map.py + step.dy),
+          if (nudgeStep(box, by) case final step?)
+            (
+              box,
+              box.map.px + step.$1,
+              box.map.py + step.$2,
+              step.$3 == 0 ? null : box.map.depth!.z + step.$3,
+            ),
     ];
     if (moves.isEmpty) return false;
     _place(moves);
@@ -1081,6 +1889,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         ? selected.single
         : null;
     final move = _drag == _GizmoDrag.move ? _move : null;
+    final sets =
+        _drag == _GizmoDrag.move ? const <Handles3d>[] : _setsOf(selected);
+    final held = _set;
+    final part = _part;
 
     final painter = CustomPaint(
       key: const ValueKey('viewer-gizmo'),
@@ -1104,8 +1916,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         maskedBoxes: widget.showControls ? outlined : const [],
         selectedPoints: _points,
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
+        pointFrom: _origin,
+        pathEdit: _drag == _GizmoDrag.handle ? _handleEdit() : null,
+        maskInHand: _drag == _GizmoDrag.feather ? _featherNow() : null,
+        onlyPath: _pathBeingEdited,
         anchors: widget.showControls && widget.showAnchors
-            ? [for (final box in selected) box.anchorScreen]
+            ? [
+                for (final box in selected)
+                  if (box.map.inFront(box.map.ax, box.map.ay))
+                    box.anchorScreen +
+                      (box.map.projected
+                          ? Offset.zero
+                          : move?.delta ?? Offset.zero),
+              ]
             : const [],
         marquee: _drag == _GizmoDrag.marquee ? _marqueeRect() : null,
         moved: move?.delta ?? Offset.zero,
@@ -1125,12 +1948,24 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         accent: t.animated,
         hairline: t.hairlineStrong,
         surface: t.surface0,
+        handles3d: sets,
+        hot3d: _drag == _GizmoDrag.none ? _hot3d : null,
+        held3d: held != null && part != null ? (held.props.first, part) : null,
+        neutral: t.textPrimary,
+        readout: switch (_drag) {
+          _GizmoDrag.axis3d => _readout3d(),
+          _GizmoDrag.move when _onScreen => _readoutAcross(),
+          _ => const [],
+        },
+        pointer: _pointer,
+        readoutStyle: t.small.copyWith(color: t.textPrimary),
+        plate: t.surface0.withValues(alpha: 0.85),
       ),
     );
 
     // The Hand tool never edits: its boxes are a read-out, and the drag under
     // them belongs to the panel, which pans the picture with it.
-    if (!_selectionTool) {
+    if (!_selectionTool && !_vertexTool) {
       return Positioned.fill(child: IgnorePointer(child: painter));
     }
 
@@ -1164,6 +1999,16 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// scale handles, both local, and the Rotation tool's turn, which arrives on
   /// [LumitUiState.liveRotations] from another layer of the Viewer's stack.
   LayerBox _live(LayerBox box) {
+    // A move seen through a camera is drawn where it puts the layer, not slid
+    // across the screen with the pointer.
+    if (_drag == _GizmoDrag.move &&
+        box.map.projected &&
+        box.draggable &&
+        !_riders.contains(box.id) &&
+        widget.uiState.selectedLayerIds.contains(box.id)) {
+      final (x, y, z) = _movedPosition(box);
+      return box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y), z: z);
+    }
     if (_acting?.id == box.id) {
       switch (_drag) {
         case _GizmoDrag.rotate:
@@ -1175,7 +2020,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         case _GizmoDrag.anchor:
           final anchor = _anchorNow();
           if (anchor != null) {
-            return box.pivotedAt(anchor, panBehindFor(box, anchor));
+            final (:position, :z) = panBehindFor(box, anchor);
+            return box.pivotedAt(anchor, position, z: z);
           }
         default:
           break;
@@ -1290,6 +2136,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// mark, and highlighting it would read as a second state.
   void _onHover(PointerHoverEvent event) {
     if (_drag != _GizmoDrag.none) return;
+    final hot = _pick3d(event.localPosition);
+    final named = hot == null ? null : (hot.$1.props.first, hot.$2);
+    if (named != _hot3d) setState(() => _hot3d = named);
+    if (named != null) return _setHover(null);
     final hit = layerAtPoint(widget.boxes, event.localPosition);
     final ids = widget.uiState.selectedLayerIds;
     _setHover(hit == null || ids.contains(hit.id) ? null : hit.id);
@@ -1298,11 +2148,26 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// A click selects what is under it — with Shift, adds to or removes from the
   /// selection; on empty space, selects nothing.
   void _onTapUp(TapUpDetails details) {
+    // A click on a 3D handle is a drag that went nowhere, not a pick.
+    if (_pick3d(details.localPosition) != null) return;
     final shift = HardwareKeyboard.instance.isShiftPressed;
+    if (widget.showControls &&
+        (_vertexTool || _convertChord) &&
+        _vertexToolTap(details.localPosition)) {
+      return;
+    }
+    // A click on a handle that went nowhere leaves everything as it was.
+    if (widget.showControls &&
+        pathHandleAt(_editablePointBoxes, details.localPosition, _points,
+                only: _pathBeingEdited) !=
+            null) {
+      return;
+    }
     // A mask point first: it sits on top of the layer it belongs to, and a
     // click on it means the point rather than the layer.
     final point = widget.showControls
-        ? pathPointAt(_editablePointBoxes, details.localPosition)
+        ? pathPointAt(_editablePointBoxes, details.localPosition,
+            only: _pathBeingEdited)
         : null;
     if (point != null) {
       setState(() {
@@ -1375,6 +2240,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// switches, the same rows it draws.
   void _onSecondaryTapUp(TapUpDetails details) {
     final ui = widget.uiState;
+    // The press moved a 3D viewport's view, so it was no click.
+    if (ui.viewerNavigated) return;
     final under = [
       for (final box in widget.boxes)
         if (box.contains(details.localPosition)) box
@@ -1430,7 +2297,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
                   key: ValueKey<String>('viewer-align-${to.name}'),
                   onPressed: () {
                     dismiss();
-                    _align(to);
+                    _align(to.x, to.y);
                   },
                   child: Text(to.title),
                 ),
@@ -1470,37 +2337,88 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     );
   }
 
-  /// Move each selected layer so that edge, or the middle, of its box meets
-  /// the composition's. The box is the one the outline draws, so what lines up
+  /// Move each selected layer so a point of its box meets the same point of
+  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
+  /// axis left alone. The box is the one the outline draws, so what lines up
   /// is what is seen. A layer with a keyed position stays where it is, as it
   /// does under a drag.
-  void _align(_Align to) {
-    final moves = <(LayerBox, double, double)>[];
+  void _align(double? x, double? y) {
+    final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
-      final rect = box.draggable ? _rectOf([box]) : null;
-      if (rect == null) continue;
-      // Both measured from the composition's corner, at the view's scale.
-      final scale = box.map.viewScale;
-      final r = rect.shift(-box.map.origin);
-      final frame = widget.compSize * scale;
-      final d = switch (to) {
-            _Align.left => Offset(-r.left, 0),
-            _Align.centre => Offset(frame.width / 2 - r.center.dx, 0),
-            _Align.right => Offset(frame.width - r.right, 0),
-            _Align.top => Offset(0, -r.top),
-            _Align.middle => Offset(0, frame.height / 2 - r.center.dy),
-            _Align.bottom => Offset(0, frame.height - r.bottom),
-          } /
-          scale;
-      final step = box.map.positionStep(d);
-      moves.add((box, box.map.px + step.dx, box.map.py + step.dy));
+      if (!box.draggable || _rectOf([box]) == null) continue;
+      var (px, py) = (box.map.px, box.map.py);
+      // Seen through a camera a move also changes how big the box looks, so
+      // a few steps close in on the edge rather than landing near it.
+      for (var i = 0; i < (box.map.projected ? 4 : 1); i++) {
+        final moved = i == 0
+            ? box
+            : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(px, py));
+        final rect = _rectOf([moved]);
+        if (rect == null) break;
+        // Both measured from the composition's corner, at the view's scale.
+        final scale = box.map.viewScale;
+        final r = rect.shift(-box.map.origin);
+        final frame = widget.compSize * scale;
+        final d = Offset(
+              x == null ? 0 : (frame.width - r.width) * x - r.left,
+              y == null ? 0 : (frame.height - r.height) * y - r.top,
+            ) /
+            scale;
+        final step = moved.map.positionStep(d);
+        px += step.dx;
+        py += step.dy;
+      }
+      moves.add((box, px, py, null));
     }
     _place(moves);
   }
 
+  /// A dot on the Align panel. Only the active view answers, or two Viewers
+  /// would make two undo steps of one press.
+  void _onAlignRequest() {
+    final request = widget.uiState.alignRequest.value;
+    if (request == null || !mounted || !_activeView) return;
+    if (request.anchor) {
+      _anchorTo(request.at);
+    } else {
+      _align(request.at.dx, request.at.dy);
+    }
+  }
+
+  /// Move each selected layer's anchor to [at] of its box, 0 to 1 across and
+  /// down, with Position making up the difference so the picture stays put.
+  /// One undo step. A layer with a keyed anchor or Position is left alone,
+  /// as the Anchor point tool leaves it.
+  void _anchorTo(Offset at) {
+    final boxes = [
+      for (final box in _selected)
+        if (!box.marker) box
+    ];
+    final ready = boxes.where((box) => !panBehindHitsKeys(box)).toList();
+    final app = Provider.of<LumitState>(context, listen: false);
+    if (ready.length < boxes.length) app.postNotice(l10n.anchorKeyedRefused);
+    if (ready.isEmpty) return;
+    asOneUndoStep(ready.length > 1 ? app.project : null, () {
+      for (final box in ready) {
+        try {
+          setPannedBehind(
+              box,
+              Offset(at.dx * box.bounds.width, at.dy * box.bounds.height),
+              comp: widget.comp,
+              frame: widget.uiState.playheadFrame.value);
+        } catch (_) {
+          // A layer deleted meanwhile. The rest still move.
+        }
+      }
+    });
+    widget.onChanged();
+  }
+
   /// Write new Positions, in composition pixels: one op a layer for both axes,
   /// and the lot as one undo step. A move, a nudge and an align all land here.
-  void _place(List<(LayerBox, double, double)> moves) {
+  /// A z where one is given goes in the same op, and a keyed value takes a
+  /// key at the playhead, as the 3D handles do.
+  void _place(List<(LayerBox, double, double, double?)> moves) {
     if (moves.isEmpty) return;
     var landed = false;
     asOneUndoStep(
@@ -1509,18 +2427,29 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           ? Provider.of<LumitState>(context, listen: false).project
           : null,
       () {
-        for (final (box, x, y) in moves) {
+        for (final (box, x, y, z) in moves) {
           // One op for both axes. x and y are separate properties in the
           // model, and writing them separately made one drag cost two undo
           // steps: Ctrl+Z put the layer back half way, along one axis, which
           // reads as the undo being broken rather than as two honest edits.
           try {
+            BridgeScalar keyed(BridgeScalar? was, double v) =>
+                scalarWithValueAt(was ?? BridgeScalar.static_(v), v,
+                    widget.comp, widget.uiState.playheadFrame.value);
+            final tf = box.transform;
+            final deep =
+                z != null && tf?.positionZ is! BridgeScalar_Expression;
             box.layer.setTransforms(
-              props: const [
+              props: [
                 BridgeTransformProp.positionX,
                 BridgeTransformProp.positionY,
+                if (deep) BridgeTransformProp.positionZ,
               ],
-              values: [BridgeScalar.static_(x), BridgeScalar.static_(y)],
+              values: [
+                keyed(tf?.positionX, x),
+                keyed(tf?.positionY, y),
+                if (deep) keyed(tf?.positionZ, z),
+              ],
             );
             landed = true;
           } catch (_) {
@@ -1552,8 +2481,63 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // point's, so every corner of a drawn square was a scale and never an edit.
     // A press inside a point's own, tighter reach means the point.
     final selected = _selected;
-    final aimedAt =
-        widget.showControls ? pathPointAt(_editablePointBoxes, at) : null;
+    final only = _pathBeingEdited;
+    final aimedAt = widget.showControls
+        ? pathPointAt(_editablePointBoxes, at, only: only)
+        : null;
+
+    // Convert vertex drags a handle on its own, or pulls a pair out of a
+    // point. The other two tools only click, and none of the three moves a
+    // layer or sweeps a marquee.
+    if (widget.showControls && widget.tool == ToolMode.penMaskFeather) {
+      _takeFeather(at);
+      return;
+    }
+    final converting =
+        widget.tool == ToolMode.penConvertVertex || _convertChord;
+    if (_vertexTool || (converting && aimedAt != null)) {
+      if (!widget.showControls || !converting) return;
+      final handle =
+          pathHandleAt(_editablePointBoxes, at, _points, only: only);
+      if (handle != null) {
+        _takeHandle(handle, HandleLink.broken);
+      } else if (aimedAt != null) {
+        _points
+          ..clear()
+          ..add(aimedAt.key);
+        _takeHandle(
+          (
+            box: aimedAt.box,
+            key: aimedAt.key,
+            index: aimedAt.index,
+            side: HandleSide.leaving,
+          ),
+          HandleLink.mirrored,
+          pullingOut: true,
+        );
+      }
+      return;
+    }
+
+    // A handle of a selected point, unless the press is squarely on a point:
+    // a short handle ends close to its own point, and the point must stay
+    // reachable. A smooth point's other handle turns with the one in hand.
+    if (widget.showControls &&
+        (aimedAt == null ||
+            pathPointAt(_editablePointBoxes, at, slop: 4, only: only) ==
+                null)) {
+      final handle =
+          pathHandleAt(_editablePointBoxes, at, _points, only: only);
+      if (handle != null) {
+        final v = _vertexOf(handle);
+        _takeHandle(
+            handle,
+            v != null && isSmoothVertex(v)
+                ? HandleLink.turned
+                : HandleLink.broken);
+        return;
+      }
+    }
 
     // A key on a selected layer's motion path: a press within its own tight
     // reach drags that key, whatever layer's body sits under it.
@@ -1569,8 +2553,49 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       }
     }
 
+    // A 3D arrow or square beats the box's own handles, all but the anchor,
+    // which sits in the middle of them and is aimed at more tightly.
+    if (aimedAt == null &&
+        !(selected.length == 1 &&
+            selected.single.scalable &&
+            selected.single.handleHit(at) == GizmoHandle.anchor)) {
+      if (_pick3d(at) case (final set, final part)) {
+        setState(() {
+          _set = set;
+          _part = part;
+          _last3d = set.at;
+          // A point of interest moves alone. Position takes the rest of the
+          // selection with it, as a body drag does.
+          final carried = set.props.first == BridgeTransformProp.poiX
+              ? const <LayerBox>[]
+              : [
+                  for (final box in [...selected, ...widget.cameras])
+                    if (box.id != set.box.id && box.transform != null) box
+                ];
+          final riders = ridingAlong(
+              {set.box.id, for (final box in carried) box.id},
+              widget.uiState.model.heldLayers);
+          _carried = [
+            for (final box in carried)
+              if (!riders.contains(box.id)) box
+          ];
+          _handlesRide = riders.contains(set.box.id);
+          _drag = _GizmoDrag.axis3d;
+          _hot3d = null;
+          _hover = null;
+        });
+        return;
+      }
+    }
+
     if (aimedAt == null && selected.length == 1 && selected.single.scalable) {
       final handle = selected.single.handleHit(at);
+      if (handle == GizmoHandle.anchor &&
+          panBehindHitsKeys(selected.single)) {
+        Provider.of<LumitState>(context, listen: false)
+            .postNotice(l10n.anchorKeyedRefused);
+        return;
+      }
       if (handle != null) {
         setState(() {
           _acting = selected.single;
@@ -1629,6 +2654,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     setState(() {
       _drag = _GizmoDrag.move;
+      _onScreen = HardwareKeyboard.instance.isAltPressed;
+      _riders = ridingAlong(widget.uiState.selectedLayerIds,
+          widget.uiState.model.heldLayers);
       _hover = null;
     });
   }
@@ -1653,8 +2681,15 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _previewAnchor();
       case _GizmoDrag.points:
         _previewPoints();
+      case _GizmoDrag.handle:
+        final edit = _handleEdit();
+        if (edit != null) _previewEdit((_) => edit);
+      case _GizmoDrag.feather:
+        _previewFeather();
       case _GizmoDrag.motionKey:
         _previewMotionKey();
+      case _GizmoDrag.axis3d:
+        _preview3d();
       case _GizmoDrag.marquee || _GizmoDrag.none:
         break;
     }
@@ -1672,31 +2707,44 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _commitAnchor();
       case _GizmoDrag.points:
         _commitPoints();
+      case _GizmoDrag.handle:
+        final edit = _handleEdit();
+        if (edit != null && _delta != Offset.zero) _commitEdit((_) => edit);
+      case _GizmoDrag.feather:
+        _commitFeather();
       case _GizmoDrag.motionKey:
         _commitMotionKey();
       case _GizmoDrag.marquee:
         _commitMarquee();
+      case _GizmoDrag.axis3d:
+        _commit3d();
       case _GizmoDrag.none:
         break;
     }
-    _throttle.cancel();
-    setState(() {
-      _drag = _GizmoDrag.none;
-      _delta = Offset.zero;
-      _acting = null;
-      _handle = null;
-      _motionKey = null;
-    });
+    _onPanCancel();
   }
 
   void _onPanCancel() {
     _throttle.cancel();
+    if (_drag == _GizmoDrag.axis3d) {
+      widget.uiState.liveTransforms.value = const {};
+    }
     setState(() {
       _drag = _GizmoDrag.none;
       _delta = Offset.zero;
       _acting = null;
       _handle = null;
+      _handleInHand = null;
+      _pullingOut = false;
+      _featherAt = null;
       _motionKey = null;
+      _set = null;
+      _part = null;
+      _last3d = null;
+      _carried = const [];
+      _handlesRide = false;
+      _riders = const {};
+      _onScreen = false;
     });
   }
 
@@ -1714,8 +2762,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   void _sendMovePreview(LayerBox box) {
-    final (x, y) = _movedPosition(box);
-    _sendPreview(box, (tf) => transformWith(tf, positionX: x, positionY: y));
+    final (x, y, z) = _movedPosition(box);
+    _sendPreview(box,
+        (tf) => transformWith(tf, positionX: x, positionY: y, positionZ: z));
   }
 
   /// Ask for the provisional picture, and never let a refusal end the gesture.
@@ -1743,21 +2792,214 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// Where a dragged layer's Position lands: the magnet's travel, not the
   /// pointer's. The preview, the box on screen and the committed op all
   /// come through here, so the picture cannot land anywhere but where the
-  /// wireframe said it would.
-  (double, double) _movedPosition(LayerBox box) {
-    final step = box.map.positionStep(_moveDelta / box.map.viewScale);
-    return (box.map.px + step.dx, box.map.py + step.dy);
+  /// wireframe said it would. With Alt a 3D layer goes across the screen at
+  /// its depth instead, so z moves too.
+  (double, double, double?) _movedPosition(LayerBox box) {
+    final m = box.map;
+    if (_onScreen && m.projected) {
+      final at = (m.px, m.py, m.depth!.z);
+      final d = Gizmo3d.of(m, at: at, local: const [], mode: GizmoAxes.view)
+          ?.onScreen(_origin, _origin + _moveDelta);
+      if (d != null) return (at.$1 + d.$1, at.$2 + d.$2, at.$3 + d.$3);
+    }
+    final step = m.positionStep(_moveDelta / m.viewScale);
+    return (m.px + step.dx, m.py + step.dy, null);
   }
 
   void _commitMove() {
     if (_delta == Offset.zero) return;
-    final moves = <(LayerBox, double, double)>[];
+    final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
-      if (!box.draggable) continue;
-      final (x, y) = _movedPosition(box);
-      moves.add((box, x, y));
+      if (!box.draggable || _riders.contains(box.id)) continue;
+      final (x, y, z) = _movedPosition(box);
+      moves.add((box, x, y, z));
     }
     _place(moves);
+  }
+
+  // --- 3D arrows and squares ------------------------------------------------
+
+  /// The 3D handles on screen, on the selected 3D layer, light or camera
+  /// picked first, in the axes the toolbar is set to.
+  List<Handles3d> _setsOf(List<LayerBox> selected) {
+    if (!widget.showControls || !_selectionTool) return const [];
+    final primary = primary3d([...selected, ...widget.cameras],
+        widget.uiState.selectedLayer.value?.internallayerId);
+    return primary == null
+        ? const []
+        : handles3dOf(primary, widget.uiState.tools.axes);
+  }
+
+  /// The 3D handle under [at], and its set.
+  (Handles3d, GizmoPick)? _pick3d(Offset at) {
+    for (final set in _setsOf(_selected)) {
+      final part = set.gizmo.pick(at, turning: false);
+      if (part != null) return (set, part);
+    }
+    return null;
+  }
+
+  /// Where the 3D drag in hand puts its three values. Shift keeps it to
+  /// whole steps of ten.
+  Vec3? _moved3d() {
+    final set = _set, part = _part;
+    if (set == null || part == null) return null;
+    final step = HardwareKeyboard.instance.isShiftPressed ? 10.0 : null;
+    final d = switch (part.kind) {
+      GizmoKind.arrow =>
+        set.gizmo.along(part.axis, _origin, _pointer, step: step),
+      GizmoKind.screen => set.gizmo.onScreen(_origin, _pointer),
+      _ => set.gizmo.across(part.axis, _origin, _pointer, step: step),
+    };
+    if (d == null) return _last3d;
+    final at = set.at;
+    return _last3d = (at.$1 + d.$1, at.$2 + d.$2, at.$3 + d.$3);
+  }
+
+  /// Every layer the 3D drag moves and where to: the one with the handles,
+  /// then the rest of the selection by the same move in the comp, each in
+  /// its own parent's space. A 2D layer takes the move across the picture.
+  List<(LayerBox, List<BridgeTransformProp>, Vec3, Vec3)> _moves3d() {
+    final set = _set, to = _moved3d();
+    if (set == null || to == null) return const [];
+    final d = (to.$1 - set.at.$1, to.$2 - set.at.$2, to.$3 - set.at.$3);
+    final inComp = parentToComp(set.box.map, d);
+    const position = [
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      BridgeTransformProp.positionZ,
+    ];
+    return [
+      if (!_handlesRide) (set.box, set.props, set.at, to),
+      for (final box in _carried)
+        if (_carriedTo(box, inComp) case (final from, final to))
+          (box, position, from, to),
+    ];
+  }
+
+  (Vec3, Vec3)? _carriedTo(LayerBox box, Vec3 inComp) {
+    final m = box.map;
+    final tf = box.transform;
+    if (tf == null ||
+        [tf.positionX, tf.positionY, if (m.projected) tf.positionZ]
+            .any((s) => s is BridgeScalar_Expression)) {
+      return null;
+    }
+    if (!m.projected) {
+      if (!box.draggable) return null;
+      final step = m.positionStep(Offset(inComp.$1, inComp.$2));
+      return ((m.px, m.py, 0), (m.px + step.dx, m.py + step.dy, 0));
+    }
+    final d = compToParent(m, inComp);
+    if (d == null) return null;
+    final from = (m.px, m.py, m.depth!.z);
+    return (from, (from.$1 + d.$1, from.$2 + d.$2, from.$3 + d.$3));
+  }
+
+  /// [tf] with a 3D drag's three values in it.
+  BridgeTransform _with3d(
+          BridgeTransform tf, List<BridgeTransformProp> props, Vec3 to) =>
+      props.first == BridgeTransformProp.poiX
+          ? transformWith(tf, pointOfInterest: to)
+          : transformWith(tf,
+              positionX: to.$1, positionY: to.$2, positionZ: to.$3);
+
+  /// The boxes and the picture follow the drag: the boxes are rebuilt from
+  /// the provisional transforms, children included, and one layer moving
+  /// alone is previewed as every other drag previews.
+  void _preview3d() {
+    final moves = _moves3d();
+    final live = {
+      for (final (box, props, _, to) in moves)
+        box.id: _with3d(box.transform!, props, to),
+    };
+    if (live.isEmpty) return;
+    widget.uiState.liveTransforms.value = live;
+    if (moves.length != 1) return;
+    final layer = moves.single.$1.layer;
+    final patched = live.values.single;
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithTransformPreview(
+          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          scale: widget.uiState.viewerScale,
+          layer: layer,
+          transform: patched,
+        );
+      } catch (_) {
+        // A preview is a courtesy; the move still lands.
+      }
+    });
+  }
+
+  /// One op a layer for the values the drag changed, the lot as one undo
+  /// step. A keyed value takes a key at the playhead, a still one stays
+  /// still.
+  void _commit3d() {
+    if (_delta == Offset.zero) return;
+    final moves = _moves3d();
+    final frame = widget.uiState.playheadFrame.value;
+    var landed = false;
+    asOneUndoStep(
+      moves.length > 1
+          ? Provider.of<LumitState>(context, listen: false).project
+          : null,
+      () {
+        for (final (box, props, from, to) in moves) {
+          final was = [from.$1, from.$2, from.$3];
+          final now = [to.$1, to.$2, to.$3];
+          final write = <BridgeTransformProp>[];
+          final values = <BridgeScalar>[];
+          for (var i = 0; i < 3; i++) {
+            final scalar = scalarOf(box.transform!, props[i]);
+            if (scalar == null || (now[i] - was[i]).abs() < 1e-9) continue;
+            write.add(props[i]);
+            values.add(scalarWithValueAt(scalar, now[i], widget.comp, frame));
+          }
+          if (write.isEmpty) continue;
+          try {
+            box.layer.setTransforms(props: write, values: values);
+            landed = true;
+          } catch (_) {
+            // A layer deleted mid-drag. The rest still move.
+          }
+        }
+      },
+    );
+    if (landed) widget.onChanged();
+  }
+
+  /// What the 3D drag has changed so far, for the readout by the pointer.
+  List<String> _readout3d() {
+    final set = _set, to = _last3d;
+    if (set == null || to == null) return const [];
+    return _readout(
+        set.props.first == BridgeTransformProp.poiX
+            ? l10n.transformPointOfInterest
+            : l10n.transformPosition,
+        set.at,
+        to);
+  }
+
+  /// The same for an Alt drag across the view, on the layer the handles
+  /// would sit on.
+  List<String> _readoutAcross() {
+    final box = primary3d(
+        _selected, widget.uiState.selectedLayer.value?.internallayerId);
+    if (box == null || !box.draggable) return const [];
+    final (x, y, z) = _movedPosition(box);
+    final m = box.map;
+    return _readout(l10n.transformPosition, (m.px, m.py, m.depth!.z),
+        (x, y, z ?? m.depth!.z));
+  }
+
+  List<String> _readout(String what, Vec3 from, Vec3 to) {
+    final d = [to.$1 - from.$1, to.$2 - from.$2, to.$3 - from.$3];
+    return [
+      what,
+      for (var i = 0; i < 3; i++)
+        if (d[i].abs() >= 0.05) '${'xyz'[i]}  ${gizmoAmount(d[i])}',
+    ];
   }
 
   // --- Scale ----------------------------------------------------------------
@@ -1805,10 +3047,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   double? _rotationNow() {
     final box = _acting;
     if (box == null) return null;
+    final map = box.map;
+    // Seen through a camera the turn is measured on the layer's own plane,
+    // round its anchor, so the knob stays under the pointer on a tilted
+    // layer.
+    Offset onPlane(Offset at) {
+      final p = map.layerOf(at);
+      return Offset((p.dx - map.ax) * map.sx, (p.dy - map.ay) * map.sy);
+    }
+
     return rotationForDrag(
-      anchor: box.anchorScreen,
-      from: _origin,
-      to: _pointer,
+      anchor: map.projected ? Offset.zero : box.anchorScreen,
+      from: map.projected ? onPlane(_origin) : _origin,
+      to: map.projected ? onPlane(_pointer) : _pointer,
       current: box.rotationDegrees,
       uniform: HardwareKeyboard.instance.isShiftPressed,
     );
@@ -1850,16 +3101,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final box = _acting;
     final anchor = _anchorNow();
     if (box == null || anchor == null) return;
-    final position = panBehindFor(box, anchor);
     _throttle.request(() => _sendPreview(
           box,
-          (tf) => transformWith(
-            tf,
-            anchorX: anchor.dx,
-            anchorY: anchor.dy,
-            positionX: position.dx,
-            positionY: position.dy,
-          ),
+          (tf) => transformPannedBehind(box, tf, anchor),
         ));
   }
 
@@ -1867,24 +3111,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final box = _acting;
     final anchor = _anchorNow();
     if (box == null || anchor == null || _delta == Offset.zero) return;
-    final position = panBehindFor(box, anchor);
     try {
-      // One op for the four properties: half of this edit moves the picture,
-      // which is the one thing panning behind promises not to do.
-      box.layer.setTransforms(
-        props: const [
-          BridgeTransformProp.anchorX,
-          BridgeTransformProp.anchorY,
-          BridgeTransformProp.positionX,
-          BridgeTransformProp.positionY,
-        ],
-        values: [
-          BridgeScalar.static_(anchor.dx),
-          BridgeScalar.static_(anchor.dy),
-          BridgeScalar.static_(position.dx),
-          BridgeScalar.static_(position.dy),
-        ],
-      );
+      // One op for all of it: half of this edit moves the picture, which is
+      // the one thing panning behind promises not to do.
+      setPannedBehind(box, anchor,
+          comp: widget.comp, frame: widget.uiState.playheadFrame.value);
       widget.onChanged();
     } catch (_) {
       // The layer went away mid-drag.
@@ -1901,13 +3132,21 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// per mask — the same rule the razor follows for a multi-layer cut.
   void _commitPoints() {
     if (_delta == Offset.zero || _points.isEmpty) return;
+    _commitEdit((box) =>
+        _pointsMoved(_points, pointDeltaIn(box, _delta, from: _origin)));
+  }
+
+  /// Write an edit to every path it touches: a point drag, a handle, or a
+  /// point added, removed or converted. [editFor] gives the edit in each
+  /// layer's own terms.
+  void _commitEdit(VertexEdit Function(LayerBox box) editFor) {
     var landed = false;
     // The same boxes a point can be grabbed from, so a picked Path row's
     // layer gets the write even when the layer isn't selected.
     for (final box in _editablePointBoxes) {
-      final d = pointDeltaIn(box, _delta);
+      final edit = editFor(box);
       for (final mask in box.masks) {
-        final moved = maskWithPointsMoved(box, mask, _points, d);
+        final moved = maskEdited(box, mask, edit);
         if (moved == null) continue;
         try {
           // The playhead goes with it: on a mask whose shape is keyed, the
@@ -1938,7 +3177,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // layer's items are rebuilt together and committed once. That is still
       // one undo step per layer. The engine moves the layer with the art's box
       // in that same op, so the points nobody dragged stay where they are.
-      final contents = shapeContentsWithPointsMoved(box, _points, d);
+      final contents = shapeContentsEdited(box, edit);
       if (contents != null) {
         try {
           // The playhead goes with it, for the mask's reason above: on an item
@@ -1952,7 +3191,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           landed = true;
           // A keyed shape edit shows itself in the Timeline: the row
           // the new key belongs to is the one the author now wants to see.
-          for (final item in contents) {
+          for (final item in contents.items) {
             if (item.pathKeys.isEmpty) continue;
             widget.uiState.requestSelectProperty(
               '${box.id}/contents/${item.id}/${ShapeValue.path.name}',
@@ -1974,19 +3213,24 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// once had, and the reason a path edit was a guess until you let go. The
   /// engine patches **one** layer's paths into a clone of the document per
   /// request, so this previews a single layer, exactly as a move does.
-  void _previewPoints() {
+  void _previewPoints() => _previewEdit((box) =>
+      _pointsMoved(_points, pointDeltaIn(box, _delta, from: _origin)));
+
+  /// The picture under any path edit in flight, as [_previewPoints] has it.
+  void _previewEdit(VertexEdit Function(LayerBox box) editFor) {
     final touched = [
       for (final box in _editablePointBoxes)
-        if (pathPointsOf(box).any((p) => _points.contains(p.key))) box,
+        if (shapeContentsEdited(box, editFor(box)) != null ||
+            box.masks.any((m) => maskEdited(box, m, editFor(box)) != null))
+          box,
     ];
     if (touched.length != 1) return;
     final box = touched.single;
-    _throttle.request(() => _sendPointsPreview(box));
+    _throttle.request(() => _sendEditPreview(box, editFor(box)));
   }
 
-  void _sendPointsPreview(LayerBox box) {
-    final d = pointDeltaIn(box, _delta);
-    final contents = shapeContentsWithPointsMoved(box, _points, d);
+  void _sendEditPreview(LayerBox box, VertexEdit edit) {
+    final contents = shapeContentsEdited(box, edit);
     try {
       if (contents != null) {
         // Art, and the layer moved with it: the layer's picture *is* the art's
@@ -2019,7 +3263,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // both patches rather than a choice between them.
       final masks = [
         for (final mask in box.masks)
-          maskWithPointsMoved(box, mask, _points, d) ?? mask,
+          maskEdited(box, mask, edit) ?? mask,
       ];
       widget.comp.renderFrameWithMaskPreview(
         frame: BigInt.from(widget.uiState.playheadFrame.value),
@@ -2031,6 +3275,241 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // A preview is a courtesy: the wireframe still follows the pointer and
       // the commit still lands.
     }
+  }
+
+  // --- Path handles and the Pen's siblings ---------------------------------
+
+  void _takeHandle(PathHandle handle, HandleLink link,
+      {bool pullingOut = false}) {
+    setState(() {
+      _handleInHand = handle;
+      _link = link;
+      _pullingOut = pullingOut;
+      _drag = _GizmoDrag.handle;
+    });
+  }
+
+  /// The point a handle belongs to, as the document has it.
+  BridgeVertex? _vertexOf(PathHandle h) {
+    for (final path in pathsOf(h.box)) {
+      if (h.index < path.vertices.length && path.keyOf(h.index) == h.key) {
+        return path.vertices[h.index];
+      }
+    }
+    return null;
+  }
+
+  /// What the handle drag in flight does to the path it is on. Alt breaks a
+  /// smooth point's handles apart, as in After Effects.
+  VertexEdit? _handleEdit() {
+    final h = _handleInHand;
+    if (h == null) return null;
+    final d = pointDeltaIn(h.box, _delta, from: _origin);
+    final link = _pullingOut
+        ? HandleLink.mirrored
+        : HardwareKeyboard.instance.isAltPressed
+            ? HandleLink.broken
+            : _link;
+    return (keyOf, vertices, closed) {
+      if (h.index >= vertices.length || keyOf(h.index) != h.key) return null;
+      final from =
+          _pullingOut ? Offset.zero : handleOf(vertices[h.index], h.side);
+      return verticesWithHandle(vertices, h.index, h.side, from + d, link);
+    };
+  }
+
+  /// Delete with path points selected, in the Viewer: the points go, and a
+  /// path left with too few to be a path goes with them, as in After Effects.
+  bool _deleteClaim() {
+    final ui = widget.uiState;
+    if (!mounted ||
+        _points.isEmpty ||
+        ui.activePanel != Panel.viewer ||
+        !_activeView) {
+      return _priorDeleteClaim?.call() ?? false;
+    }
+    final at = widget.comp.timeOfFrame(frame: ui.playheadFrame.value);
+    var landed = false;
+    List<BridgeVertex> kept(
+            List<BridgeVertex> vertices, String Function(int) keyOf) =>
+        [
+          for (var i = 0; i < vertices.length; i++)
+            if (!_points.contains(keyOf(i))) vertices[i],
+        ];
+    for (final box in _editablePointBoxes) {
+      for (final mask in box.masks) {
+        final left =
+            kept(mask.vertices, (i) => maskPointKey(box.id, mask.id, i));
+        if (left.length == mask.vertices.length) continue;
+        try {
+          if (left.length < (mask.closed ? 3 : 2)) {
+            box.layer.deleteMask(id: mask.id);
+          } else {
+            box.layer.setMask(
+                mask: maskEdited(box, mask, (_, __, ___) => left)!, at: at);
+          }
+          landed = true;
+        } catch (_) {
+          // The mask went away; the rest still go.
+        }
+      }
+      var touched = false;
+      final contents = <BridgeShapeEntry>[];
+      for (final entry in box.shapeContents) {
+        if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)) {
+          final left =
+              kept(item.vertices, (i) => shapePointKey(box.id, item.id, i));
+          if (left.length != item.vertices.length) {
+            touched = true;
+            // Too few points left is no shape: the item goes, and whatever
+            // acted on it acts on the rest.
+            if (left.length >= (item.closed ? 3 : 2)) {
+              contents.add(BridgeShapeEntry(
+                  depth: entry.depth,
+                  kind: BridgeShapeEntryKind.item(
+                      shapeItemWith(item, vertices: left))));
+            }
+            continue;
+          }
+        }
+        contents.add(entry);
+      }
+      if (touched) {
+        try {
+          box.layer.setShapeContents(contents: contents, at: at);
+          landed = true;
+        } catch (_) {
+          // The layer went away.
+        }
+      }
+    }
+    setState(_points.clear);
+    if (!landed) return _priorDeleteClaim?.call() ?? false;
+    widget.onChanged();
+    return true;
+  }
+
+  /// The Mask feather tool's press: a mask point, or either edge of the soft
+  /// band drawn round it, starts a drag that sets that point's width.
+  void _takeFeather(Offset at) {
+    ({LayerBox box, BridgeMask mask, int index})? best;
+    var nearest = gizmoAnchorSlop / 2;
+    for (final box in _editablePointBoxes) {
+      for (final mask in box.masks) {
+        if (!showsPath(box, mask.id, _pathBeingEdited)) continue;
+        for (var i = 0; i < mask.vertices.length; i++) {
+          final width = stillFeatherAt(mask, i);
+          if (width == null) continue;
+          final v = mask.vertices[i];
+          final n = featherNormalAt(mask, i) * (width / 2);
+          for (final p in [Offset(v.x, v.y), Offset(v.x, v.y) + n, Offset(v.x, v.y) - n]) {
+            final d = (box.map.toScreen(p.dx, p.dy) - at).distance;
+            if (d <= nearest) {
+              nearest = d;
+              best = (box: box, mask: mask, index: i);
+            }
+          }
+        }
+      }
+    }
+    if (best == null) return;
+    setState(() {
+      _featherAt = best;
+      _points
+        ..clear()
+        ..add(maskPointKey(best!.box.id, best.mask.id, best.index));
+      _drag = _GizmoDrag.feather;
+    });
+  }
+
+  /// The mask in hand as the feather drag has it: the soft band's edge
+  /// follows the pointer, so the width is twice the pointer's distance from
+  /// the path, measured square to it.
+  BridgeMask? _featherNow() {
+    final f = _featherAt;
+    if (f == null) return null;
+    final v = f.mask.vertices[f.index];
+    final p = f.box.map.layerOf(_pointer);
+    final reach = (p - Offset(v.x, v.y));
+    final n = featherNormalAt(f.mask, f.index);
+    final width = 2 * (reach.dx * n.dx + reach.dy * n.dy).abs();
+    return maskWithFeatherAt(f.mask, f.index, width);
+  }
+
+  void _previewFeather() {
+    final f = _featherAt;
+    final mask = _featherNow();
+    if (f == null || mask == null) return;
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithMaskPreview(
+          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          scale: widget.uiState.viewerScale,
+          layer: f.box.layer,
+          masks: [
+            for (final m in f.box.masks) m.id == mask.id ? mask : m,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy, the release still lands.
+      }
+    });
+  }
+
+  void _commitFeather() {
+    final f = _featherAt;
+    final mask = _featherNow();
+    if (f == null || mask == null || _delta == Offset.zero) return;
+    try {
+      f.box.layer.setMask(
+        mask: mask,
+        at: widget.comp.timeOfFrame(frame: widget.uiState.playheadFrame.value),
+      );
+      widget.onChanged();
+    } catch (_) {
+      // The mask went away mid-drag.
+    }
+  }
+
+  /// A click with Add, Delete or Convert vertex. True when it changed a path.
+  bool _vertexToolTap(Offset at) {
+    // Mask feather only drags; its click selects, as the Selection tool's does.
+    if (widget.tool == ToolMode.penMaskFeather) return false;
+    final boxes = _editablePointBoxes;
+    final only = _pathBeingEdited;
+    final point = pathPointAt(boxes, at, only: only);
+    if (widget.tool == ToolMode.penAddVertex) {
+      // A click on a point is left to select it.
+      if (point != null) return false;
+      final edge = pathEdgeAt(boxes, at, only: only);
+      if (edge == null) return false;
+      final first = edge.path.keyOf(edge.segment);
+      _commitEdit((_) => (keyOf, vertices, closed) =>
+          keyOf(edge.segment) == first
+              ? verticesWithPointAdded(vertices, edge.segment, edge.t)
+              : null);
+      setState(() => _points
+        ..clear()
+        ..add(edge.path.keyOf(edge.segment + 1)));
+      return true;
+    }
+    if (point == null) return false;
+    bool mine(String Function(int) keyOf) => keyOf(point.index) == point.key;
+    if (widget.tool == ToolMode.penDeleteVertex) {
+      _commitEdit((_) => (keyOf, vertices, closed) => mine(keyOf)
+          ? verticesWithoutPoint(vertices, point.index, closed)
+          : null);
+      // The points after it have moved up one, so their names have changed.
+      setState(_points.clear);
+    } else {
+      _commitEdit((_) => (keyOf, vertices, closed) => mine(keyOf)
+          ? verticesConverted(vertices, point.index, closed)
+          : null);
+      setState(() => _points
+        ..clear()
+        ..add(point.key));
+    }
+    return true;
   }
 
   // --- Motion-path keys (docs/07 §2.4) ---------------------------------------
@@ -2046,7 +3525,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final key = keys[index];
     return (
       key,
-      Offset(key.x, key.y) + box.map.positionStep(_delta / box.map.viewScale),
+      Offset(key.x, key.y) +
+          box.map.positionStep(_delta / box.map.viewScale,
+              from: motionKeyScreen(box, key),
+              z: box.map.projected ? key.z : null),
     );
   }
 
@@ -2104,7 +3586,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // are already selected anyway. With none caught it is the layer sweep it
     // has always been.
     if (widget.showControls) {
-      final caughtPoints = pathPointsInRect(_editablePointBoxes, rect);
+      final caughtPoints =
+          pathPointsInRect(_editablePointBoxes, rect, only: _pathBeingEdited);
       if (caughtPoints.isNotEmpty) {
         setState(() {
           if (!_additive) _points.clear();
@@ -2135,24 +3618,52 @@ BridgeTransform transformWith(
   double? anchorY,
   double? positionX,
   double? positionY,
+  double? positionZ,
   double? scaleX,
   double? scaleY,
   double? rotation,
+  double? rotationX,
+  double? rotationY,
+  Vec3? pointOfInterest,
+  Vec3? orientation,
 }) {
   BridgeScalar put(double? value, BridgeScalar keep) =>
       value == null ? keep : BridgeScalar.static_(value);
+  final camera = tf.camera;
+  final depth = tf.depth;
   return BridgeTransform(
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
     positionX: put(positionX, tf.positionX),
     positionY: put(positionY, tf.positionY),
-    positionZ: tf.positionZ,
+    positionZ: put(positionZ, tf.positionZ),
     scaleX: put(scaleX, tf.scaleX),
     scaleY: put(scaleY, tf.scaleY),
     rotation: put(rotation, tf.rotation),
-    rotationX: tf.rotationX,
-    rotationY: tf.rotationY,
+    rotationX: put(rotationX, tf.rotationX),
+    rotationY: put(rotationY, tf.rotationY),
     opacity: tf.opacity,
+    camera: camera == null
+        ? null
+        : BridgeCameraChannels(
+            poiX: put(pointOfInterest?.$1, camera.poiX),
+            poiY: put(pointOfInterest?.$2, camera.poiY),
+            poiZ: put(pointOfInterest?.$3, camera.poiZ),
+            zoom: camera.zoom,
+            focusDistance: camera.focusDistance,
+            aperture: camera.aperture,
+            blurLevel: camera.blurLevel,
+          ),
+    depth: depth == null
+        ? null
+        : BridgeDepthChannels(
+            orientationX: put(orientation?.$1, depth.orientationX),
+            orientationY: put(orientation?.$2, depth.orientationY),
+            orientationZ: put(orientation?.$3, depth.orientationZ),
+            anchorZ: depth.anchorZ,
+            scaleZ: depth.scaleZ,
+            afterEffectsOrder: depth.afterEffectsOrder,
+          ),
   );
 }
 
@@ -2176,6 +3687,20 @@ class _GizmoPainter extends CustomPainter {
   /// far — so the path follows the pointer before the document hears about it.
   final Set<String> selectedPoints;
   final Offset pointNudge;
+
+  /// Where the point drag was pressed, which a layer seen through a camera
+  /// measures the drag from.
+  final Offset pointFrom;
+
+  /// A handle drag in flight, drawn on the path it is changing.
+  final VertexEdit? pathEdit;
+
+  /// A mask whose soft edge is being dragged, drawn as the drag has it.
+  final BridgeMask? maskInHand;
+
+  /// The layer and path whose Path row is picked, which is then the only path
+  /// of its layer drawn.
+  final (UuidValue, UuidValue)? onlyPath;
   final LayerBox? hover;
   final LayerBox? handlesFor;
 
@@ -2197,6 +3722,19 @@ class _GizmoPainter extends CustomPainter {
   final Color hairline;
   final Color surface;
 
+  /// The 3D handles, the one under the pointer and the one in hand, each
+  /// named by its set's first value, and the centre ring's colour.
+  final List<Handles3d> handles3d;
+  final (BridgeTransformProp, GizmoPick)? hot3d;
+  final (BridgeTransformProp, GizmoPick)? held3d;
+  final Color neutral;
+
+  /// What a 3D drag has changed, drawn by [pointer].
+  final List<String> readout;
+  final Offset pointer;
+  final TextStyle readoutStyle;
+  final Color plate;
+
   const _GizmoPainter({
     required this.selected,
     required this.motionPaths,
@@ -2204,6 +3742,10 @@ class _GizmoPainter extends CustomPainter {
     required this.maskedBoxes,
     required this.selectedPoints,
     required this.pointNudge,
+    required this.pointFrom,
+    this.pathEdit,
+    this.maskInHand,
+    this.onlyPath,
     required this.hover,
     required this.handlesFor,
     required this.anchors,
@@ -2216,6 +3758,14 @@ class _GizmoPainter extends CustomPainter {
     required this.accent,
     required this.hairline,
     required this.surface,
+    required this.handles3d,
+    required this.hot3d,
+    required this.held3d,
+    required this.neutral,
+    required this.readout,
+    required this.pointer,
+    required this.readoutStyle,
+    required this.plate,
   });
 
   @override
@@ -2238,15 +3788,17 @@ class _GizmoPainter extends CustomPainter {
     // selection, so a selected box is never dimmed by a hover on top of it.
     final hovered = hover;
     if (hovered != null) {
-      _outline(canvas, hovered.corners, accent.withValues(alpha: 0.35));
+      _outline(canvas, hovered.outline, accent.withValues(alpha: 0.35));
     }
 
     for (final box in selected) {
-      _outline(canvas, [for (final c in box.corners) c + moved], accent);
+      final shift = _shift(box);
+      _outline(canvas, [for (final c in box.outline) c + shift], accent);
     }
 
     final handles = handlesFor;
-    if (handles != null) {
+    if (handles != null && handles.wholeInFront) {
+      final moved = _shift(handles);
       final corners = [for (final c in handles.corners) c + moved];
       // The rotation bar first, so the knob's outline draws over it.
       final top = (corners[0] + corners[1]) / 2;
@@ -2269,26 +3821,34 @@ class _GizmoPainter extends CustomPainter {
           canvas, handles.handleAt(GizmoHandle.anchor) + moved, accent);
     }
 
+    List<BridgeVertex> live(String Function(int) keyOf,
+            List<BridgeVertex> vertices, bool closed) =>
+        pathEdit?.call(keyOf, vertices, closed) ?? vertices;
     for (final box in maskedBoxes) {
       for (final mask in box.masks) {
+        if (!showsPath(box, mask.id, onlyPath)) continue;
+        String keyOf(int i) => maskPointKey(box.id, mask.id, i);
         _pathOutline(
           canvas,
           box,
-          mask.vertices,
+          live(keyOf, mask.vertices, mask.closed),
           mask.closed,
-          (i) => maskPointKey(box.id, mask.id, i),
-          feather: stillHalfFeather(mask),
+          keyOf,
+          feather: stillHalfFeather(
+              maskInHand?.id == mask.id ? maskInHand! : mask),
         );
       }
       // A shape layer's own art gets the same outline and the same vertices, so
       // drawn art can be seen point by point and corrected rather than redrawn.
       for (final item in box.offeredItems) {
+        if (!showsPath(box, item.id, onlyPath)) continue;
+        String keyOf(int i) => shapePointKey(box.id, item.id, i);
         _pathOutline(
           canvas,
           box,
-          item.vertices,
+          live(keyOf, item.vertices, item.closed),
           item.closed,
-          (i) => shapePointKey(box.id, item.id, i),
+          keyOf,
           // Art coordinates, a bounding box away from the layer's own.
           art: true,
         );
@@ -2296,12 +3856,29 @@ class _GizmoPainter extends CustomPainter {
     }
 
     for (final anchor in anchors) {
-      paintAnchorMark(canvas, anchor + moved, accent);
+      paintAnchorMark(canvas, anchor, accent);
     }
 
     for (final box in motionPaths) {
       _motionPath(canvas, box);
     }
+
+    final held = held3d;
+    for (final set in handles3d) {
+      final named = set.props.first;
+      if (held != null && held.$1 != named) continue;
+      paintGizmo3d(
+        canvas,
+        set.gizmo,
+        turning: false,
+        neutral: neutral,
+        outline: surface,
+        hot: hot3d?.$1 == named ? hot3d?.$2 : null,
+        held: held?.$2,
+      );
+    }
+    paintGizmoReadout(canvas, pointer, readout,
+        style: readoutStyle, plate: plate);
 
     final band = marquee;
     if (band != null) paintMarquee(canvas, band, accent);
@@ -2318,10 +3895,12 @@ class _GizmoPainter extends CustomPainter {
       ..color = accent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final points = motionPathScreen(box);
-    if (points.length >= 2) {
-      canvas.drawPath(Path()..addPolygon(points, false), line);
+    for (final run in motionPathRuns(box)) {
+      if (run.length >= 2) {
+        canvas.drawPath(Path()..addPolygon(run, false), line);
+      }
     }
+    final points = motionPathScreen(box);
     canvas.drawPoints(
       PointMode.points,
       points,
@@ -2333,12 +3912,16 @@ class _GizmoPainter extends CustomPainter {
     final inHand = keyInHand;
     for (var i = 0; i < path.keys.length; i++) {
       final key = path.keys[i];
+      if (!_keyInFront(box, key)) continue;
       final held = inHand != null && inHand.layer == box.id && inHand.index == i;
       final nudge = held ? inHand.nudge : Offset.zero;
-      final at = compToScreen(box, key.x, key.y) + nudge;
+      final at = motionKeyScreen(box, key) + nudge;
+      final z = box.map.projected ? key.z : null;
       for (final handle in [key.handleIn, key.handleOut]) {
-        if (handle == null) continue;
-        final h = compToScreen(box, handle[0], handle[1]) + nudge;
+        if (handle == null || !box.map.parentInFront(handle[0], handle[1], z)) {
+          continue;
+        }
+        final h = compToScreen(box, handle[0], handle[1], z) + nudge;
         canvas.drawLine(at, h, line);
         canvas.drawCircle(h, 3, Paint()..color = surface);
         canvas.drawCircle(h, 3, line);
@@ -2349,7 +3932,13 @@ class _GizmoPainter extends CustomPainter {
     }
   }
 
+  /// How far a move in flight has carried [box] on screen. A box seen through
+  /// a camera is drawn where the move puts it instead, since perspective
+  /// makes a move more than a slide across the screen.
+  Offset _shift(LayerBox box) => box.map.projected ? Offset.zero : moved;
+
   void _outline(Canvas canvas, List<Offset> corners, Color colour) {
+    if (corners.length < 2) return;
     canvas.drawPath(
       Path()..addPolygon(corners, true),
       Paint()
@@ -2394,35 +3983,49 @@ class _GizmoPainter extends CustomPainter {
     List<double>? feather,
   }) {
     if (vertices.length < 2) return;
+    final projected = box.map.projected;
+    final moved = _shift(box);
     // A selected point follows the pointer while it is being dragged, so the
-    // path bends live rather than jumping on release.
+    // path bends live rather than jumping on release. Seen through a camera
+    // the drag is carried on the layer, where the release writes it.
+    final drag = projected
+        ? pointDeltaIn(box, pointNudge, from: pointFrom)
+        : Offset.zero;
+    bool picked(int i) => selectedPoints.contains(keyOf(i));
     Offset nudgeFor(int i) =>
-        selectedPoints.contains(keyOf(i)) ? pointNudge : Offset.zero;
+        picked(i) && !projected ? pointNudge : Offset.zero;
+    Offset onLayer(int i, double dx, double dy) {
+      final v = vertices[i];
+      final n = picked(i) ? drag : Offset.zero;
+      return Offset(v.x + dx + n.dx, v.y + dy + n.dy);
+    }
+
     Offset screen(double x, double y) =>
         art ? box.shapePoint(x, y) : box.map.toScreen(x, y);
-    Offset at(int i) {
-      final v = vertices[i];
-      return screen(v.x, v.y) + moved + nudgeFor(i);
-    }
-
-    Offset out(int i) {
-      final v = vertices[i];
-      return screen(v.x + v.tanOutX, v.y + v.tanOutY) + moved + nudgeFor(i);
-    }
-
-    Offset into(int i) {
-      final v = vertices[i];
-      return screen(v.x + v.tanInX, v.y + v.tanInY) + moved + nudgeFor(i);
-    }
+    Offset shown(Offset p) => screen(p.dx, p.dy) + moved;
+    // How far in front of the eye a point of the path is, on the layer.
+    double depth(Offset p) => art
+        ? box.map.depthOf(p.dx - box.artOrigin.dx, p.dy - box.artOrigin.dy)
+        : box.map.depthOf(p.dx, p.dy);
+    bool seen(int i) => depth(onLayer(i, 0, 0)) > viewerNear;
+    Offset at(int i) => shown(onLayer(i, 0, 0)) + nudgeFor(i);
+    Offset out(int i) => shown(onLayer(
+            i, vertices[i].tanOutX, vertices[i].tanOutY)) +
+        nudgeFor(i);
+    Offset into(int i) =>
+        shown(onLayer(i, vertices[i].tanInX, vertices[i].tanInY)) +
+        nudgeFor(i);
 
     canvas.drawPath(
-      bezierPath(
-        count: vertices.length,
-        at: at,
-        tangentOut: out,
-        tangentIn: into,
-        closed: closed,
-      ),
+      projected
+          ? _walkedPath(vertices, closed, onLayer, shown, depth)
+          : bezierPath(
+              count: vertices.length,
+              at: at,
+              tangentOut: out,
+              tangentIn: into,
+              closed: closed,
+            ),
       Paint()
         ..color = accent
         ..style = PaintingStyle.stroke
@@ -2434,7 +4037,9 @@ class _GizmoPainter extends CustomPainter {
     // to a width and not a path anybody can grab: they say where the feather
     // reaches, which is the only way a feather that varies from point to point
     // can be seen before the frame is drawn.
-    if (feather != null && vertices.length >= 2) {
+    if (feather != null &&
+        vertices.length >= 2 &&
+        Iterable<int>.generate(vertices.length).every(seen)) {
       final perPx = (screen(1, 0) - screen(0, 0)).distance;
       final segments = closed ? vertices.length : vertices.length - 1;
       final inside = <Offset>[];
@@ -2473,10 +4078,36 @@ class _GizmoPainter extends CustomPainter {
       }
     }
 
+    // A selected point's handles: a line out to each, ending in a dot that
+    // can be dragged. A handle folded into its point has nothing to show.
+    final stem = Paint()
+      ..color = accent
+      ..strokeWidth = 1;
+    for (var i = 0; i < vertices.length; i++) {
+      if (!seen(i) || !picked(i)) continue;
+      final v = vertices[i];
+      for (final (tan, end) in [
+        (Offset(v.tanInX, v.tanInY), into(i)),
+        (Offset(v.tanOutX, v.tanOutY), out(i)),
+      ]) {
+        if (tan.distance < 1e-9) continue;
+        canvas.drawLine(at(i), end, stem);
+        canvas.drawCircle(end, 3, Paint()..color = surface);
+        canvas.drawCircle(
+            end,
+            3,
+            Paint()
+              ..color = accent
+              ..strokeWidth = 1
+              ..style = PaintingStyle.stroke);
+      }
+    }
+
     // Every vertex, so a path can be seen point by point: hollow when
     // it is merely there, filled when it is selected — the same "outline means
     // available, fill means chosen" the keyframe diamonds use.
     for (var i = 0; i < vertices.length; i++) {
+      if (!seen(i)) continue;
       final selected = selectedPoints.contains(keyOf(i));
       final rect = Rect.fromCenter(center: at(i), width: 6, height: 6);
       canvas.drawRect(rect, Paint()..color = selected ? accent : surface);
@@ -2490,6 +4121,78 @@ class _GizmoPainter extends CustomPainter {
         );
       }
     }
+  }
+
+  /// A path through a camera. Perspective bends a curve the way it bends the
+  /// layer, so each span is walked on the layer and every step is put through
+  /// the camera, rather than the handles alone. Steps behind the eye are cut
+  /// out, the line ending a hair in front of it.
+  Path _walkedPath(
+    List<BridgeVertex> vertices,
+    bool closed,
+    Offset Function(int i, double dx, double dy) onLayer,
+    Offset Function(Offset layerPoint) shown,
+    double Function(Offset layerPoint) depth,
+  ) {
+    final path = Path();
+    final spans = closed && vertices.length > 2
+        ? vertices.length
+        : vertices.length - 1;
+    Offset? last;
+    var lastDepth = 0.0;
+    var drawing = false;
+    var whole = true;
+    void step(Offset p) {
+      final d = depth(p) - viewerNear;
+      if (d < 0) whole = false;
+      final was = last;
+      if (was != null && (d >= 0) != (lastDepth >= 0)) {
+        final cut = shown(was + (p - was) * (lastDepth / (lastDepth - d)));
+        if (drawing) {
+          path.lineTo(cut.dx, cut.dy);
+        } else {
+          path.moveTo(cut.dx, cut.dy);
+        }
+        drawing = d >= 0;
+      }
+      if (d >= 0) {
+        final at = shown(p);
+        if (drawing) {
+          path.lineTo(at.dx, at.dy);
+        } else {
+          path.moveTo(at.dx, at.dy);
+          drawing = true;
+        }
+      }
+      last = p;
+      lastDepth = d;
+    }
+
+    step(onLayer(0, 0, 0));
+    for (var i = 0; i < spans; i++) {
+      final j = (i + 1) % vertices.length;
+      final p0 = onLayer(i, 0, 0);
+      final p1 = onLayer(i, vertices[i].tanOutX, vertices[i].tanOutY);
+      final p2 = onLayer(j, vertices[j].tanInX, vertices[j].tanInY);
+      final p3 = onLayer(j, 0, 0);
+      // A step for every eight pixels the span reaches on screen, up to
+      // sixteen: a small path needs few, and a big shape layer's many spans
+      // stay cheap.
+      final reach = (shown(p1) - shown(p0)).distance +
+          (shown(p2) - shown(p1)).distance +
+          (shown(p3) - shown(p2)).distance;
+      final steps = reach.isFinite ? (reach / 8).ceil().clamp(1, 16) : 16;
+      for (var k = 1; k <= steps; k++) {
+        final t = k / steps;
+        final u = 1 - t;
+        step(p0 * (u * u * u) +
+            p1 * (3 * u * u * t) +
+            p2 * (3 * u * t * t) +
+            p3 * (t * t * t));
+      }
+    }
+    if (whole && closed && vertices.length > 2) path.close();
+    return path;
   }
 
   void _knob(Canvas canvas, Offset at) {

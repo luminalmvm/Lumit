@@ -206,16 +206,9 @@ pub enum Reason {
     TextStylingNotMapped,
     /// A light kind Lumit does not have; imported as the nearest.
     LightKindApproximated { ae_kind: String },
-    /// A 3D layer whose Orientation moves while its X/Y/Z Rotation is used too.
-    /// Lumit has the one trio, and two moving Euler triples do not add, so the
-    /// rotations are what arrives and the orientation is named here.
-    OrientationNotCarried,
-    /// A 3D layer's keyed X/Y/Z Rotation rewritten in Lumit's axis order. It
-    /// matches After Effects on every key and can drift a little between them.
-    RotationOrderConverted,
-    /// A 3D layer with Material Options' Casts Shadows on. Lumit's lights cast
-    /// no shadows, so the layer imports without them.
-    CastsShadowsNotCarried,
+    /// Casts Shadows or Accepts Shadows keyframed. Lumit keeps one setting,
+    /// the first key's.
+    ShadowSwitchKeyed,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -383,9 +376,7 @@ impl std::fmt::Display for Reason {
             Self::LightKindApproximated { ae_kind } => {
                 write!(f, "{ae_kind} light imported as the nearest kind")
             }
-            Self::OrientationNotCarried => write!(f, "Orientation was not carried"),
-            Self::RotationOrderConverted => write!(f, "Rotation converted to Lumit's axis order"),
-            Self::CastsShadowsNotCarried => write!(f, "Casts Shadows was not carried"),
+            Self::ShadowSwitchKeyed => write!(f, "The shadow setting kept its first key"),
             Self::SpatialTangentsFlattened => {
                 write!(f, "The motion path's curves were not carried")
             }

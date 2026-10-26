@@ -176,6 +176,8 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("centre_x", f(f64::from(W) * 0.5)),
             ("centre_y", f(f64::from(H) * 0.5)),
         ],
+        // The default length is gentle at page width, so the streaks are longer.
+        "vector_blur" => vec![("length", f(120.0))],
         // A four-pixel period is right on a screen and gone by the time the
         // figure has been scaled to page width, so the example uses a coarse one.
         "scanlines" => vec![("intensity", f(0.9)), ("scanline_period", f(12.0))],
@@ -959,6 +961,7 @@ fn example_doc(
     doc.items.push(ProjectItem::Composition(Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

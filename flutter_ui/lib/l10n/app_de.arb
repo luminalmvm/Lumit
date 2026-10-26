@@ -71,10 +71,6 @@
       }
     }
   },
-  "aeCastsShadowsNotCarried": "Schatten werfen wurde nicht übernommen",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
-  },
   "aeChunkUnreadable": "Ein Eintrag ({chunk}) konnte nicht gelesen werden",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
@@ -402,10 +398,6 @@
       }
     }
   },
-  "aeOrientationNotCarried": "Die Ausrichtung wurde nicht übernommen",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
   "aeOutcomeAdjusted": "Angepasst",
   "@aeOutcomeAdjusted": {
     "description": "Import report window — an outcome grade: mapped, with a difference the row explains."
@@ -474,10 +466,6 @@
   "aeReportTitle": "Importbericht",
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
-  },
-  "aeRotationOrderConverted": "Drehung in Lumits Achsenreihenfolge umgerechnet",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
   "aeShapeGradientColoursDefault": "Der Verlauf wurde als Weiß zu Schwarz importiert",
   "@aeShapeGradientColoursDefault": {
@@ -2276,24 +2264,6 @@
   "easeStaggerTopDown": "Von oben nach unten",
   "@easeStaggerTopDown": {
     "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
-  },
-  "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
-  "@easingHandleNumbers": {
-    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
-    "placeholders": {
-      "x1": {
-        "type": "String"
-      },
-      "y1": {
-        "type": "String"
-      },
-      "x2": {
-        "type": "String"
-      },
-      "y2": {
-        "type": "String"
-      }
-    }
   },
   "easingHeavy": "Heavy ease",
   "@easingHeavy": {
@@ -9336,10 +9306,6 @@
   "@keyNewNullLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewPointLightLayer": "Neues Punktlicht",
-  "@keyNewPointLightLayer": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
-  },
   "keyNewProject": "Neues Projekt",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -10224,10 +10190,6 @@
   "@menuApplyAnimationPreset": {
     "description": "Menu item."
   },
-  "menuAreaLight": "Flächenlicht",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuArrange": "Anordnen",
   "@menuArrange": {
     "description": "A row of the Layer menu that opens the rows for moving the selected layers up and down the stack."
@@ -10606,10 +10568,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "Punktlicht",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "Vorkomponieren…",
   "@menuPreCompose": {
     "description": "Menu item."
@@ -10784,10 +10742,6 @@
   "menuSplitLayer": "Ebene teilen",
   "@menuSplitLayer": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "Spotlicht",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuStaggerLayers": "Ebenen staffeln…",
   "@menuStaggerLayers": {

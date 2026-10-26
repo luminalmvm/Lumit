@@ -216,9 +216,10 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     final t = ThemeScope.of(context).theme;
     comp.renderScope(
       frame: BigInt.from(frame),
-      scale: state.viewerScale,
+      scale: state.measuredScale,
       kind: _kind.index,
       colours: scopeColoursFor(t, themed: state.workspace.themedScopes),
+      view: state.measuredViewId,
     );
   }
 

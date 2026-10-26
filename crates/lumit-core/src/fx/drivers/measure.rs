@@ -30,7 +30,7 @@ use crate::fx::{
     registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use crate::model::{Composition, Document, Layer, LayerKind};
-use crate::shape::Affine;
+use crate::shape::geometry::Affine;
 use lumit_fx_macros::Effect;
 
 /// The layer-reference row, by parameter id.

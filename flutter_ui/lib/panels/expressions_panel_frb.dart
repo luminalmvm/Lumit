@@ -159,11 +159,11 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     super.dispose();
   }
 
-  /// The property rows an expression can go on. A mask's shape row holds a
-  /// path rather than a number, so it is left out.
+  /// The property rows an expression can go on. A mask's or a shape item's
+  /// path row holds a shape rather than a number, so it is left out.
   List<GraphChannel> _targets(LumitUiState ui) => [
         for (final channel in selectedChannels(ui))
-          if (!channel.isMaskPath) channel,
+          if (!channel.isPath) channel,
       ];
 
   void _pick(LumitUiState ui, String name) {
@@ -213,7 +213,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           language: _language,
           time: time,
           layer: layer,
-          held: on.scalar);
+          held: on.scalar,
+          row: on.expressionRow);
     }
     final fault = _fault;
     return Padding(
@@ -233,6 +234,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     time: time,
                     layer: layer,
                     held: on.scalar,
+                    row: on.expressionRow,
                   ).toStringAsPrecision(6)}',
                   style: t.mono.copyWith(color: t.textMuted),
                 ),

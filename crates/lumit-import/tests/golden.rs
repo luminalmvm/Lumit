@@ -820,12 +820,11 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// map.**
 ///
 /// What does come across: the 3D switch and the layer's Z, the layer's
-/// **Orientation** on the rotation lanes (the rotations here are zero, so the
-/// orientation is exactly what they describe), the camera's Zoom out of its
-/// options group, and the light's kind, colour, intensity and cone.
-/// Two of those convert — AE's intensity is a percentage where 100 is unity,
-/// and its cone angle is the *full* angle where Lumit's is the half.
-/// Material Options' **Casts Shadows** has no Lumit field and is reported.
+/// **Orientation** on its own lanes, the camera's Zoom out of its
+/// options group, and the light's kind, colour, intensity, cone and aim.
+/// The colour converts into scene-linear light; the rest is After Effects'
+/// own numbers.
+/// Material Options' **Casts Shadows** is kept and drawn.
 ///
 /// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
 ///
@@ -841,17 +840,17 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     let card = layer(c, "3d card");
     assert!(card.switches.three_d);
     assert_eq!(card.transform.position_z.value_at(0.0), -150.0);
-    // Orientation [0, 30, 0] onto the rotation lanes, the layer's own
-    // rotations being zero.
-    assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
-    assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
-    assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
-    assert!(
-        report().rows.iter().any(|row| {
-            row.reason == Reason::CastsShadowsNotCarried
-                && row.path.layer.as_deref() == Some("3d card")
-        }),
-        "the card casts shadows, and Lumit's lights cast none"
+    // Orientation [0, 30, 0], as it is.
+    let orientation = card
+        .transform
+        .orientation
+        .each_ref()
+        .map(|p| p.value_at(0.0));
+    assert_eq!(orientation, [0.0, 30.0, 0.0]);
+    assert_eq!(card.transform.rotation_y.value_at(0.0), 0.0);
+    assert_eq!(
+        card.transform.material.casts_shadows,
+        lumit_core::model::ShadowMode::On
     );
 
     let camera = layer(c, "camera");
@@ -877,8 +876,12 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
         panic!("a light");
     };
     assert_eq!(light.kind, LightKind::Spot);
-    assert_close(light.intensity.value_at(0.0), 75.0 / 100.0);
-    assert_close(light.cone_deg.value_at(0.0), 60.0 / 2.0);
+    assert_close(light.intensity.value_at(0.0), 75.0);
+    assert_close(light.cone_angle.value_at(0.0), 60.0);
+    assert_close(light.cone_feather.value_at(0.0), 50.0);
+    assert!(light.two_node, "aimed at its point of interest");
+    assert!(light.casts_shadows);
+    assert_close(light.point_of_interest[0].value_at(0.0), 320.0);
     // [1, 0.9, 0.8] in the project's display space.
     assert_close(light.colour[0].value_at(0.0), 1.0);
     assert_close(light.colour[1].value_at(0.0), to_linear(0.899_999_976));
@@ -945,11 +948,20 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     let LayerKind::Shape { contents } = &layer(c, "shape").kind else {
         panic!("a shape layer");
     };
-    assert_eq!(contents.len(), 2);
-    for item in contents {
-        assert_eq!(item.gradient, 1);
-        assert_eq!(item.trim_end.value_at(0.0), 70.0);
-        assert_eq!(item.repeat_copies.value_at(0.0), 3.0);
+    let art = lumit_core::shape::modifier::lowered(contents);
+    assert_eq!(art.len(), 2);
+    for art in art {
+        use lumit_core::shape::modifier::ModifierKind;
+        assert_eq!(art.item.gradient, 1);
+        let trim = art.mods.iter().find_map(|m| match &m.kind {
+            ModifierKind::Trim(trim) => Some(trim.end.value_at(0.0)),
+            _ => None,
+        });
+        let copies = art.mods.iter().find_map(|m| match &m.kind {
+            ModifierKind::Repeat(repeat) => Some(repeat.copies.value_at(0.0)),
+            _ => None,
+        });
+        assert_eq!((trim, copies), (Some(70.0), Some(3.0)));
     }
     assert!(reported(|r| matches!(
         r,
@@ -1139,11 +1151,10 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // Skew and Skew Axis carry rather than report. One fewer since
             // the camera gained its second node: the fixture's two-node
             // camera and its point of interest cross over whole.
-            // One more for the 3D card's Casts Shadows.
             // One fewer since the text layer's styling carries.
             // Two fewer since the Gaussian blur gained Repeat edge pixels:
             // the fixture's two blurs carry theirs.
-            adjusted: 55,
+            adjusted: 54,
             placeholders: 1,
             skipped: 1,
         }

@@ -14,8 +14,8 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `import_ffx_into`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write_ffx_as_lumfx`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -145,7 +145,7 @@ void setPluginEnabled({required String effect, required bool enabled}) =>
 List<String> pluginMessages() =>
     BridgeLib.instance.api.crateApiEffectPluginMessages();
 
-/// Every `.lumfx` in the preset library folder, sorted by name — what the
+/// Every `.lumfx` in the preset library and its groups, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
 /// or not preset JSON) is simply not listed; the folder is the user's to put
 /// things in, and a stray file there is not a fault.
@@ -199,7 +199,8 @@ Future<String> readEffectPreset({required String path}) =>
 
 /// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
 /// into a `.lumfx` in the preset library, where the Effects & presets panel
-/// lists it. A preset already in the library is never written over.
+/// lists it in the same groups. A preset already in the library is never
+/// written over.
 ///
 /// Not sync: a folder of presets can be a few hundred files.
 Future<BridgeFfxImport> importFfxPresets({required String folder}) =>
@@ -241,13 +242,25 @@ Float64List sampleScalars(
     BridgeLib.instance.api
         .crateApiEffectSampleScalars(scalars: scalars, time: time);
 
+/// [`sample_scalars`], and with them Orientations, three scalars each in
+/// `turns`, read as the render reads them: between keys the three turn round
+/// together rather than each on its own. The scalars' values come first, then
+/// three for each Orientation, in order. One crossing for the lot.
+Float64List sampleScalarsAndTurns(
+        {required List<BridgeScalar> scalars,
+        required List<BridgeScalar> turns,
+        required BridgeRational time}) =>
+    BridgeLib.instance.api.crateApiEffectSampleScalarsAndTurns(
+        scalars: scalars, turns: turns, time: time);
+
 double sampleScalarWithContext(
         {required BridgeScalar scalar,
         required BridgeRational time,
         required LayerReference layer,
-        BridgeScalar? held}) =>
+        BridgeScalar? held,
+        BridgeExpressionRow? row}) =>
     BridgeLib.instance.api.crateApiEffectSampleScalarWithContext(
-        scalar: scalar, time: time, layer: layer, held: held);
+        scalar: scalar, time: time, layer: layer, held: held, row: row);
 
 /// Why an expression on `layer` gives no number at `time`, or `None` when it
 /// runs. The sentence an expression's editor shows under the text.
@@ -256,22 +269,30 @@ String? expressionFault(
         required BridgeExpressionLanguage language,
         required BridgeRational time,
         required LayerReference layer,
-        BridgeScalar? held}) =>
+        BridgeScalar? held,
+        BridgeExpressionRow? row}) =>
     BridgeLib.instance.api.crateApiEffectExpressionFault(
         expression: expression,
         language: language,
         time: time,
         layer: layer,
-        held: held);
+        held: held,
+        row: row);
 
 Float64List sampleScalarRangeWithContext(
         {required BridgeScalar scalar,
         required LayerReference layer,
         required BridgeRational start,
         required BridgeRational end,
-        required PlatformInt64 samples}) =>
+        required PlatformInt64 samples,
+        BridgeExpressionRow? row}) =>
     BridgeLib.instance.api.crateApiEffectSampleScalarRangeWithContext(
-        scalar: scalar, layer: layer, start: start, end: end, samples: samples);
+        scalar: scalar,
+        layer: layer,
+        start: start,
+        end: end,
+        samples: samples,
+        row: row);
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
 /// row per.
@@ -1040,6 +1061,9 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 
   /// Editable while the named layer reference names no layer.
   const factory BridgeEnabledCond.layerUnset() = BridgeEnabledCond_LayerUnset;
+
+  /// Editable while the named number is a still nought.
+  const factory BridgeEnabledCond.nought() = BridgeEnabledCond_Nought;
 }
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies
@@ -1085,6 +1109,21 @@ enum BridgeExpressionLanguage {
   /// JavaScript, as After Effects expressions are written.
   javaScript,
   ;
+}
+
+@freezed
+sealed class BridgeExpressionRow with _$BridgeExpressionRow {
+  const BridgeExpressionRow._();
+
+  const factory BridgeExpressionRow.transform(
+    BridgeTransformProp field0,
+  ) = BridgeExpressionRow_Transform;
+
+  /// An effect's parameter by the effect's id and the parameter's.
+  const factory BridgeExpressionRow.effect({
+    required UuidValue effect,
+    required String param,
+  }) = BridgeExpressionRow_Effect;
 }
 
 /// What an import of After Effects presets did.
@@ -1557,13 +1596,18 @@ class BridgePresetInfo {
   final String name;
   final String path;
 
+  /// The group it is filed in, with `/` between nested groups. Empty at the
+  /// top of the library.
+  final String group;
+
   const BridgePresetInfo({
     required this.name,
     required this.path,
+    required this.group,
   });
 
   @override
-  int get hashCode => name.hashCode ^ path.hashCode;
+  int get hashCode => name.hashCode ^ path.hashCode ^ group.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1571,7 +1615,8 @@ class BridgePresetInfo {
       other is BridgePresetInfo &&
           runtimeType == other.runtimeType &&
           name == other.name &&
-          path == other.path;
+          path == other.path &&
+          group == other.group;
 }
 
 /// An exact rational time in seconds, as `num / den`.

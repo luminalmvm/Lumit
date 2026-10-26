@@ -831,7 +831,11 @@ fn test_cache_dir() -> Option<PathBuf> {
 /// is nothing here to evict piecemeal.
 fn solves() -> &'static RwLock<HashMap<Uuid, Arc<Solved>>> {
     static SOLVES: OnceLock<RwLock<HashMap<Uuid, Arc<Solved>>>> = OnceLock::new();
-    SOLVES.get_or_init(|| RwLock::new(HashMap::new()))
+    SOLVES.get_or_init(|| {
+        // From the first solve on, the model poses a linked camera with these.
+        lumit_core::track::use_solve_store(&Store);
+        RwLock::new(HashMap::new())
+    })
 }
 
 /// One planar track, as the store keeps it: the answer, the media's rate, and
@@ -1075,19 +1079,29 @@ pub fn point_centroid(media: Uuid, tracks: &[u32]) -> Option<[f64; 3]> {
     (n > 0).then(|| sum.map(|s| s / f64::from(n)))
 }
 
-/// The **active** camera's placement at comp time `t`, with its solve link
-/// followed. The reading the render path takes, replacing
-/// [`lumit_core::model::Composition::camera_pose`], which answers only what the
-/// document holds.
+/// The renderer's solves with `doc`, for the parent walk: a solved camera among
+/// a layer's parents is placed by its solve.
 #[must_use]
-pub fn camera_pose(doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
-    linked_pose(doc, comp, t).map(|l| l.pose)
+pub fn solves_for(doc: &Arc<Document>) -> lumit_core::model::Solves<'_> {
+    Some((doc, &Store))
+}
+
+/// The **active** camera's placement at comp time `t`, with its solve link
+/// and its parents followed. The reading the render path takes, replacing
+/// [`lumit_core::model::Composition::camera_pose`], which answers only what the
+/// document holds. With no camera layer it is the default camera After
+/// Effects draws 3D layers through.
+#[must_use]
+pub fn camera_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> CameraPose {
+    lumit_core::track::active_camera_pose(doc, comp, t).unwrap_or_else(|| {
+        lumit_core::camera::default_pose(f64::from(comp.width), f64::from(comp.height))
+    })
 }
 
 /// As [`camera_pose`], keeping the [`lumit_core::track::LinkState`] the
 /// interface draws as a badge.
 #[must_use]
-pub fn linked_pose(doc: &Document, comp: &Composition, t: f64) -> Option<LinkedPose> {
+pub fn linked_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<LinkedPose> {
     lumit_core::track::camera_pose_at(doc, comp, t, &Store)
 }
 
@@ -2830,6 +2844,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3026,7 +3041,8 @@ mod tests {
         let (doc, comp) = linked_document(media);
         let mut seen: Vec<CameraPose> = Vec::new();
         for n in 0..FRAMES {
-            let got = linked_pose(&doc, &comp, n as f64 / FPS).expect("the comp has a camera");
+            let got = linked_pose(&Arc::new(doc.clone()), &comp, n as f64 / FPS)
+                .expect("the comp has a camera");
             assert_eq!(
                 got.state,
                 lumit_core::track::LinkState::Derived,
@@ -3044,7 +3060,7 @@ mod tests {
             "the linked camera did not actually move"
         );
         // Past the solved range the last derived motion holds, and says so.
-        let past = linked_pose(&doc, &comp, 10.0).unwrap();
+        let past = linked_pose(&Arc::new(doc.clone()), &comp, 10.0).unwrap();
         assert_eq!(past.state, lumit_core::track::LinkState::Held);
         assert_eq!(Some(past.pose), solved.pose(solved.last_frame));
         clear();
@@ -3358,7 +3374,7 @@ mod tests {
         let solve = written_solve();
         write_sidecar(dir.path(), key, FPS, FRAMES, &filed(&solve));
         assert_eq!(
-            linked_pose(&doc, &comp, 0.0).map(|l| l.state),
+            linked_pose(&Arc::new(doc.clone()), &comp, 0.0).map(|l| l.state),
             Some(lumit_core::track::LinkState::Unresolved),
             "the store starts empty, so the link starts unresolved"
         );
@@ -3381,7 +3397,8 @@ mod tests {
         }
 
         for n in [0i64, 5, FRAMES as i64 - 1] {
-            let got = linked_pose(&doc, &comp, n as f64 / FPS).expect("the comp has a camera");
+            let got = linked_pose(&Arc::new(doc.clone()), &comp, n as f64 / FPS)
+                .expect("the comp has a camera");
             assert_eq!(
                 got.state,
                 lumit_core::track::LinkState::Derived,
@@ -3468,6 +3485,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3751,6 +3769,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -4027,6 +4046,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

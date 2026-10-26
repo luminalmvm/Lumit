@@ -67,10 +67,6 @@
       }
     }
   },
-  "aeCastsShadowsNotCarried": "未帶入投射陰影",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
-  },
   "aeChunkUnreadable": "無法讀取記錄（{chunk}）",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
@@ -398,10 +394,6 @@
       }
     }
   },
-  "aeOrientationNotCarried": "未帶入方向",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
   "aeOutcomeAdjusted": "已調整",
   "@aeOutcomeAdjusted": {
     "description": "Import report window — an outcome grade: mapped, with a difference the row explains."
@@ -470,10 +462,6 @@
   "aeReportTitle": "匯入報告",
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
-  },
-  "aeRotationOrderConverted": "旋轉已轉換為 Lumit 的軸順序",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
   "aeShapeGradientColoursDefault": "漸層已按白到黑匯入",
   "@aeShapeGradientColoursDefault": {
@@ -2220,24 +2208,6 @@
   "easeStaggerTopDown": "自上而下",
   "@easeStaggerTopDown": {
     "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
-  },
-  "easingHandleNumbers": "輸出 {x1}, {y1} · 輸入 {x2}, {y2}",
-  "@easingHandleNumbers": {
-    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
-    "placeholders": {
-      "x1": {
-        "type": "String"
-      },
-      "y1": {
-        "type": "String"
-      },
-      "x2": {
-        "type": "String"
-      },
-      "y2": {
-        "type": "String"
-      }
-    }
   },
   "easingHeavy": "強緩動",
   "@easingHeavy": {
@@ -9794,10 +9764,6 @@
   "@keyNewNullLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewPointLightLayer": "新增點光源圖層",
-  "@keyNewPointLightLayer": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
-  },
   "keyNewProject": "新增專案",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -10718,10 +10684,6 @@
   "@menuApplyAnimationPreset": {
     "description": "Menu item."
   },
-  "menuAreaLight": "區域光",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuArrange": "排列",
   "@menuArrange": {
     "description": "A row of the Layer menu that opens the rows for moving the selected layers up and down the stack."
@@ -11108,10 +11070,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "點光源",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "預合成…",
   "@menuPreCompose": {
     "description": "Menu item."
@@ -11286,10 +11244,6 @@
   "menuSplitLayer": "拆分圖層",
   "@menuSplitLayer": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "聚光燈",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuStaggerLayers": "錯開圖層…",
   "@menuStaggerLayers": {

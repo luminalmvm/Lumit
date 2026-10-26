@@ -132,6 +132,20 @@ pub mod math {
         new_min + t * (new_max - new_min)
     }
 
+    /// the Orientation that turns a layer's z axis from one point to look at another
+    pub fn look_at(from: rhai::Array, to: rhai::Array) -> rhai::Array {
+        let at = |list: &rhai::Array, i: usize| list.get(i).cloned().map_or(0.0, to_f64);
+        let (x, y, z) = crate::camera::look_at_orientation(
+            (at(&from, 0), at(&from, 1), at(&from, 2)),
+            (at(&to, 0), at(&to, 1), at(&to, 2)),
+        );
+        vec![
+            Dynamic::from_float(x),
+            Dynamic::from_float(y),
+            Dynamic::from_float(z),
+        ]
+    }
+
     /// rescale a value between 0 and 1 to a different range
     pub fn fit01(value: Dynamic, min: Dynamic, max: Dynamic) -> f64 {
         fit(

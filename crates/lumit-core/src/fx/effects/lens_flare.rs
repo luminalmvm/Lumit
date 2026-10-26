@@ -1081,7 +1081,12 @@ impl EffectDef for LensFlareDef {
             return;
         };
         let mut count = 0u32;
-        for resolved in owner.lights_at(cx.context.comp_time) {
+        // An ambient light is not anywhere, so it has no place to flare from.
+        let t = cx.context.comp_time;
+        let read = crate::model::context_reader(&cx.context, t);
+        let solves = crate::track::solve_store().map(|store| (&cx.context.document, store));
+        let placed = owner.lights_at(t, &read, solves).into_iter();
+        for resolved in placed.filter(|l| l.kind != crate::model::LightKind::Ambient) {
             let Some(&(geom, rgb)) = LensFlare::DERIVED_LIGHTS.get(count as usize) else {
                 break;
             };
@@ -1097,9 +1102,10 @@ impl EffectDef for LensFlareDef {
             push(
                 rgb,
                 Value::Colour([
-                    resolved.colour[0],
-                    resolved.colour[1],
-                    resolved.colour[2],
+                    // A negative light takes light away, which a flare cannot.
+                    resolved.colour[0].max(0.0),
+                    resolved.colour[1].max(0.0),
+                    resolved.colour[2].max(0.0),
                     0.0,
                 ]),
             );

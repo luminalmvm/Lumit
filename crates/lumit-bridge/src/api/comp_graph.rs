@@ -260,6 +260,17 @@ pub struct BridgeCompGraph {
     /// the order an Input's row is drawn in outside the graph.
     pub nodes: Vec<BridgeCompNode>,
     pub wiring: BridgeCompWiring,
+    /// Each Repeat start and end that pair, for the frame drawn round them.
+    pub repeats: Vec<BridgeCompRepeat>,
+}
+
+/// A Repeat start, the end it pairs with, and the boxes between them.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCompRepeat {
+    pub start: Uuid,
+    pub end: Uuid,
+    pub members: Vec<Uuid>,
 }
 
 /// One socket, with whether a wire is on it.
@@ -287,6 +298,16 @@ pub(crate) fn read_comp_graph(project: Uuid, doc: &Document, graph: &CompGraph) 
             .map(|node| read_node(project, doc, graph, node))
             .collect(),
         wiring: wiring_of(graph),
+        repeats: graph
+            .repeats()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| BridgeCompRepeat {
+                start: r.start,
+                end: r.end,
+                members: r.body,
+            })
+            .collect(),
     }
 }
 

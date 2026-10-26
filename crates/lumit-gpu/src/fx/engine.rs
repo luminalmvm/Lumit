@@ -306,6 +306,7 @@ impl FxEngine {
         };
         let blur_mod = module(include_str!("../fx_blur.wgsl"), "fx-blur");
         let dir_blur_mod = module(include_str!("../fx_dirblur.wgsl"), "fx-dir-blur");
+        let vector_blur_mod = module(include_str!("../fx_vecblur.wgsl"), "fx-vector-blur");
         let radial_blur_mod = module(include_str!("../fx_radialblur.wgsl"), "fx-radial-blur");
         let sharpen_mod = module(include_str!("../fx_sharpen.wgsl"), "fx-sharpen");
         let sharpen_simple_mod = module(
@@ -332,8 +333,8 @@ impl FxEngine {
         let stroke_mod = module(include_str!("../fx_stroke.wgsl"), "fx-stroke");
         let matte_mask_mod = module(include_str!("../fx_matte_mask.wgsl"), "fx-matte-mask");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
+        let ground_mod = module(include_str!("../fx_ground.wgsl"), "fx-ground");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
-        let lighting_mod = module(include_str!("../fx_lighting.wgsl"), "fx-lighting");
         let temperature_mod = module(include_str!("../fx_temperature.wgsl"), "fx-temperature");
         let invert_mod = module(include_str!("../fx_invert.wgsl"), "fx-invert");
         let tint_mod = module(include_str!("../fx_tint.wgsl"), "fx-tint");
@@ -368,6 +369,7 @@ impl FxEngine {
         let beam_mod = module(include_str!("../fx_beam.wgsl"), "fx-beam");
         let lightning_mod = module(include_str!("../fx_lightning.wgsl"), "fx-lightning");
         let radio_waves_mod = module(include_str!("../fx_radiowaves.wgsl"), "fx-radio-waves");
+        let grid_lines_mod = module(include_str!("../fx_gridlines.wgsl"), "fx-grid-lines");
         let vegas_mod = module(include_str!("../fx_vegas.wgsl"), "fx-vegas");
         // Scribble's waver is the shared lattice read as a displacement, so
         // the noise core is prepended exactly as Fractal noise's is.
@@ -472,6 +474,7 @@ impl FxEngine {
         );
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
+        let vector_blur = pipeline(&vector_blur_mod, "fx-vector-blur", "vector_blur");
         let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
@@ -501,7 +504,8 @@ impl FxEngine {
         let matte_mask = pipeline(&matte_mask_mod, "fx-matte-mask", "matte_mask");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
-        let lighting = pipeline(&lighting_mod, "fx-lighting", "lighting");
+        let lighting = super::lighting::LightingFx::start(ctx);
+        let ground = pipeline(&ground_mod, "fx-ground", "ground");
         let temperature = pipeline(&temperature_mod, "fx-temperature", "temperature");
         let invert = pipeline(&invert_mod, "fx-invert", "invert");
         let tint = pipeline(&tint_mod, "fx-tint", "tint");
@@ -529,6 +533,7 @@ impl FxEngine {
         let beam = pipeline(&beam_mod, "fx-beam", "beam");
         let lightning = pipeline(&lightning_mod, "fx-lightning", "lightning");
         let radio_waves = pipeline(&radio_waves_mod, "fx-radio-waves", "radio_waves");
+        let grid_lines = pipeline(&grid_lines_mod, "fx-grid-lines", "grid_lines");
         let vegas = pipeline(&vegas_mod, "fx-vegas", "vegas");
         let path_draw = pipeline(&path_draw_mod, "fx-path-draw", "path_draw");
         let add_grain = pipeline(&add_grain_mod, "fx-add-grain", "add_grain");
@@ -639,6 +644,7 @@ impl FxEngine {
             lens_flare,
             blur: blur.wait(),
             dir_blur: dir_blur.wait(),
+            vector_blur: vector_blur.wait(),
             radial_blur: radial_blur.wait(),
             sharpen_unpremultiply: sharpen_unpremultiply.wait(),
             sharpen_combine: sharpen_combine.wait(),
@@ -664,6 +670,7 @@ impl FxEngine {
             vignette: vignette.wait(),
             exposure: exposure.wait(),
             lighting: lighting.wait(),
+            ground: ground.wait(),
             temperature: temperature.wait(),
             invert: invert.wait(),
             tint: tint.wait(),
@@ -687,6 +694,7 @@ impl FxEngine {
             beam: beam.wait(),
             lightning: lightning.wait(),
             radio_waves: radio_waves.wait(),
+            grid_lines: grid_lines.wait(),
             vegas: vegas.wait(),
             path_draw: path_draw.wait(),
             add_grain: add_grain.wait(),

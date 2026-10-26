@@ -92,6 +92,7 @@ void main() {
           scale: p.uiState.viewerScale,
           kind: 0,
           colours: scopeColoursFor(LumitTheme.dark()),
+          view: 0,
         );
         await settleFrb(
           tester,
@@ -332,6 +333,7 @@ void main() {
         scale: 1.0,
         mode: BridgePlaybackMode.everyFrame,
         view: 0,
+        active: true,
       );
 
       // Fifteen seconds of patience, not five: the first render of a session

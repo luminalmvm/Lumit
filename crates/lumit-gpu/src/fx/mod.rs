@@ -19,6 +19,8 @@ pub mod distort;
 pub mod dof;
 mod engine;
 pub mod generate;
+pub mod grid_lines;
+pub mod ground;
 pub mod lens_blur;
 pub mod lens_dirt;
 pub mod lens_flare;
@@ -45,6 +47,7 @@ pub struct FxEngine {
     custom_shader: custom_shader::CustomShaderPipelines,
     blur: wgpu::ComputePipeline,
     dir_blur: wgpu::ComputePipeline,
+    vector_blur: wgpu::ComputePipeline,
     radial_blur: wgpu::ComputePipeline,
     sharpen_unpremultiply: wgpu::ComputePipeline,
     sharpen_combine: wgpu::ComputePipeline,
@@ -83,8 +86,11 @@ pub struct FxEngine {
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
     /// The lighting pass (docs/06). Not an effect — the realiser calls
-    /// it directly, between a layer's effect stack and its composite.
-    lighting: wgpu::ComputePipeline,
+    /// it directly, between a layer's effect stack and its composite. Its own
+    /// layout, for the shadow casters it reads.
+    lighting: lighting::LightingFx,
+    /// A 3D viewport's ground, drawn over its frame. Not an effect either.
+    ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
     tint: wgpu::ComputePipeline,
@@ -145,6 +151,9 @@ pub struct FxEngine {
     /// Radio waves (docs/08 §3.75): shapes emitted from a point and expanding.
     /// §3.71's sector solve, done once for a unit shape and scaled per wave.
     radio_waves: wgpu::ComputePipeline,
+    /// Grid's Lines type: a line grid on its own plane, seen through its own
+    /// camera.
+    grid_lines: wgpu::ComputePipeline,
     /// Vegas (docs/08 §3.76): marching lights along the picture's contours. The
     /// contour is a level set rather than an edge detector's output, which is
     /// what makes Width a width in pixels.

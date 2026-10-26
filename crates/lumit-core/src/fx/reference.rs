@@ -390,6 +390,7 @@ fn effect(schema: &'static EffectSchema) -> Effect {
                     EnabledCond::ChoiceIsNot(v) => ("choice_is_not", Some(v.into())),
                     EnabledCond::LayerSet => ("layer_set", None),
                     EnabledCond::LayerUnset => ("layer_unset", None),
+                    EnabledCond::Nought => ("nought", None),
                 };
                 EnabledWhen {
                     param: e.param,

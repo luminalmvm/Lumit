@@ -6,14 +6,18 @@
 // rather than by dragging in a widget tree — the same reasoning as
 // viewer_layer_map.dart, whose maths these build on.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
+import 'package:lumit_flutter/panels/viewer_gizmo_3d.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
+import 'package:lumit_flutter/state/tools.dart' show GizmoAxes;
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -27,9 +31,10 @@ void main() {
     Offset origin = Offset.zero,
     double viewScale = 1,
     List<BridgeMask> masks = const [],
-    List<BridgeShapeItem> shapeContents = const [],
+    List<BridgeShapeEntry> shapeContents = const [],
     Offset artOrigin = Offset.zero,
     BridgeMotionPath? motionPath,
+    ViewerDepth? depth,
   }) =>
       LayerBox(
         layer: LayerReference(
@@ -48,6 +53,7 @@ void main() {
           rotationDegrees: rotation,
           origin: origin,
           viewScale: viewScale,
+          depth: depth,
         ),
         bounds: size,
         draggable: true,
@@ -65,6 +71,7 @@ void main() {
   BridgeMotionPath path() => BridgeMotionPath(
         firstFrame: 0,
         samples: Float64List.fromList([100, 200, 200, 300, 300, 400, 400, 500]),
+        depths: Float64List(0),
         keys: [
           for (final (frame, x, y) in [(0, 100.0, 200.0), (3, 400.0, 500.0)])
             BridgeMotionKey(
@@ -72,6 +79,7 @@ void main() {
               frame: frame,
               x: x,
               y: y,
+              z: 0,
               xIndex: frame == 0 ? 0 : 1,
               yIndex: frame == 0 ? 0 : 1,
               handleIn: null,
@@ -133,11 +141,8 @@ void main() {
         closed: true,
         fill: null,
         stroke: null,
-        strokeWidth: 0,
-        opacity: 100,
-        trimStart: const BridgeScalar.static_(0),
-        trimEnd: const BridgeScalar.static_(100),
-        trimOffset: const BridgeScalar.static_(0),
+        strokeWidth: const BridgeScalar.static_(0),
+        opacity: const BridgeScalar.static_(100),
         dashes: const [],
         dashOffset: const BridgeScalar.static_(0),
         gradient: 0,
@@ -151,18 +156,12 @@ void main() {
         gradientStops: const [],
         combine: 0,
         pathKeys: const [],
-        offsetAmount: const BridgeScalar.static_(0),
-        repeatCopies: const BridgeScalar.static_(1),
-        repeatOffset: const BridgeScalar.static_(0),
-        repeatAnchorX: const BridgeScalar.static_(0),
-        repeatAnchorY: const BridgeScalar.static_(0),
-        repeatPositionX: const BridgeScalar.static_(0),
-        repeatPositionY: const BridgeScalar.static_(0),
-        repeatRotation: const BridgeScalar.static_(0),
-        repeatScale: const BridgeScalar.static_(100),
-        repeatStartOpacity: const BridgeScalar.static_(100),
-        repeatEndOpacity: const BridgeScalar.static_(100),
+        taper: null,
       );
+
+  /// [item] as the one entry of a layer's contents.
+  List<BridgeShapeEntry> contentsOf(BridgeShapeItem item) =>
+      [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(item))];
 
   group('A motion path (docs/07 §2.4)', () {
     test('is drawn in comp pixels through the picture\'s placement alone', () {
@@ -213,6 +212,7 @@ void main() {
           frame: last.frame,
           x: last.x,
           y: last.y,
+          z: 0,
           xIndex: 1,
           yIndex: null,
           handleIn: null,
@@ -245,6 +245,20 @@ void main() {
       // Beyond the small one, the big one below still answers.
       expect(layerAtPoint([top, under], const Offset(380, 200))?.id, under.id);
       expect(layerAtPoint([top, under], const Offset(600, 600)), isNull);
+
+      // Through a camera at rest over a 600 by 400 comp, 3D layers next to
+      // each other go nearest first, and a 2D layer above them still wins.
+      ViewerDepth deep(double z) => ViewerDepth(
+            view: () => const [1, 0, 0.3, 0, 0, 1, 0.2, 0, 0, 0, 0.001, 1],
+            z: z,
+            rotationX: 0,
+            rotationY: 0,
+          );
+      final far = box(size: const Size(50, 50), depth: deep(500));
+      final near = box(depth: deep(0));
+      expect(layerAtPoint([far, near], const Offset(300, 200))?.id, near.id);
+      expect(layerAtPoint([top, far, near], const Offset(300, 200))?.id,
+          top.id);
     });
   });
 
@@ -312,7 +326,7 @@ void main() {
       // so its first point is the layer's origin and nowhere else.
       final b = box(
         size: const Size(60, 60),
-        shapeContents: [squareShape(left: 120, top: 80, side: 60)],
+        shapeContents: contentsOf(squareShape(left: 120, top: 80, side: 60)),
         artOrigin: const Offset(120, 80),
       );
       final points = pathPointsOf(b);
@@ -321,6 +335,33 @@ void main() {
           reason: 'the far corner of the art is the far corner of the box');
       expect(b.corners.first, points.first.at,
           reason: 'which is the whole point: the box and the points agree');
+    });
+
+    test('a point added to a curved edge leaves the curve where it was', () {
+      const a = BridgeVertex(
+          x: 0, y: 0, tanInX: 0, tanInY: 0, tanOutX: 40, tanOutY: -60);
+      const b = BridgeVertex(
+          x: 100, y: 0, tanInX: 20, tanInY: -80, tanOutX: 0, tanOutY: 0);
+      Offset along(BridgeVertex p, BridgeVertex q, double t) {
+        final u = 1 - t;
+        Offset at(double x, double y) => Offset(x, y);
+        return at(p.x, p.y) * (u * u * u) +
+            at(p.x + p.tanOutX, p.y + p.tanOutY) * (3 * u * u * t) +
+            at(q.x + q.tanInX, q.y + q.tanInY) * (3 * u * t * t) +
+            at(q.x, q.y) * (t * t * t);
+      }
+
+      final split = verticesWithPointAdded(const [a, b], 0, 0.3);
+      expect(split, hasLength(3));
+      for (final t in [0.0, 0.25, 0.5, 0.75, 1.0]) {
+        // The first half of the new path is the old edge up to 0.3, the
+        // second half the rest of it.
+        final before = along(split[0], split[1], t) - along(a, b, 0.3 * t);
+        final after =
+            along(split[1], split[2], t) - along(a, b, 0.3 + 0.7 * t);
+        expect(before.distance, lessThan(1e-9));
+        expect(after.distance, lessThan(1e-9));
+      }
     });
   });
 
@@ -399,6 +440,120 @@ void main() {
       expect(nonZeroScale(-2), -2, reason: 'a real factor is left alone');
       final collapsed = box().scaledTo(0, 0);
       expect(collapsed.map.layerOf(const Offset(300, 200)).dx.isFinite, isTrue);
+    });
+  });
+
+  /// **The 3D handles land where the pointer says.** A layer tilted under a
+  /// camera that is moved and turned, as the compositor projects it, and the
+  /// drags read back through the same rows.
+  group('The 3D handles', () {
+    // lumit_core::camera::projection for an eye at (200, 100, -900) turned
+    // (-15, 30, 5) with a zoom of 900, over a 600 by 400 comp.
+    List<double> rows() {
+      final m = turnOf((-15, 30, 5));
+      const e = (200.0, 100.0, -900.0);
+      List<double> axis(int k) => [
+            m[k],
+            m[3 + k],
+            m[6 + k],
+            -(m[k] * e.$1 + m[3 + k] * e.$2 + m[6 + k] * e.$3),
+          ];
+      final w = [for (final v in axis(2)) v / 900];
+      return [
+        for (var i = 0; i < 4; i++) 300 * w[i] + axis(0)[i],
+        for (var i = 0; i < 4; i++) 200 * w[i] + axis(1)[i],
+        ...w,
+      ];
+    }
+
+    final tilted = box(
+      depth: ViewerDepth(view: rows, z: 150, rotationX: 40, rotationY: -25),
+      rotation: 10,
+    ).map;
+    const at = (300.0, 200.0, 150.0);
+    Gizmo3d gizmo(GizmoAxes mode) => Gizmo3d.of(tilted,
+        at: at, local: localAxes((40, -25, 10)), mode: mode)!;
+    Offset shown(Vec3 p) => gizmo(GizmoAxes.world).project(p).$1;
+    void near(Vec3? got, Vec3 want) {
+      expect(got, isNotNull);
+      expect(got!.$1, closeTo(want.$1, 1e-6));
+      expect(got.$2, closeTo(want.$2, 1e-6));
+      expect(got.$3, closeTo(want.$3, 1e-6));
+    }
+
+    test('a Z arrow drag moves along z by what the pointer reached', () {
+      final g = gizmo(GizmoAxes.world);
+      near(g.along(2, shown(at), shown((300, 200, 470))), (0, 0, 320));
+      near(g.along(2, shown(at), shown((300, 200, -40))), (0, 0, -190));
+    });
+
+    test('a square drag meets its plane, and a local arrow its own axis', () {
+      near(
+          gizmo(GizmoAxes.world)
+              .across(2, shown(at), shown((345, 160, 150))),
+          (45, -40, 0));
+      final local = gizmo(GizmoAxes.local);
+      final x = localAxes((40, -25, 10))[0];
+      final to = (300 + x.$1 * 80, 200 + x.$2 * 80, 150 + x.$3 * 80);
+      near(local.along(0, shown(at), shown(to)),
+          (x.$1 * 80, x.$2 * 80, x.$3 * 80));
+    });
+
+    test('a ring drag turns that one value by the angle swept', () {
+      const turn = (40.0, -25.0, 10.0);
+      final rings = Gizmo3d.of(tilted,
+          at: at,
+          local: localAxes(turn),
+          turns: rotationAxes(turn),
+          mode: GizmoAxes.local)!;
+      final from = rings.project(rings.ringPoint(0, 0.2)).$1;
+      final to = rings.project(rings.ringPoint(0, 0.9)).$1;
+      expect(RingTurn(rings, 0, from).sweptTo(to), closeTo(0.7, 1e-6));
+      // Turning about the X ring's own axis is X Rotation alone.
+      near(turnedAbout(turn, rotationAxes(turn)[0], 0.7),
+          (40 + 0.7 * 180 / math.pi, -25, 10));
+    });
+
+    test('a drag towards the vanishing point stops short of losing the layer',
+        () {
+      final g = gizmo(GizmoAxes.world);
+      final vanishing = g.project((300, 200, 1e9)).$1;
+      final from = shown(at);
+      expect(g.along(2, from, Offset.lerp(from, vanishing, 0.5)!), isNotNull);
+      // Nearer than that the axis runs off ten times as deep and further.
+      expect(g.along(2, from, Offset.lerp(from, vanishing, 0.99)!), isNull);
+      final horizon = g.project((300, 1e9, 150)).$1;
+      expect(g.across(0, from, Offset.lerp(from, horizon, 0.99)!), isNull);
+    });
+
+    test('a comp with no camera still has handles', () {
+      final flat = box(
+        depth: ViewerDepth(
+            view: () => const [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+            z: 0,
+            rotationX: 0,
+            rotationY: 0),
+      ).map;
+      final g = Gizmo3d.of(flat,
+          at: (300, 200, 0),
+          local: localAxes((0, 0, 0)),
+          mode: GizmoAxes.local)!;
+      expect(g.tips[0], isNotNull);
+      expect(g.tips[1], isNotNull);
+      near(g.along(0, g.centre, g.centre + const Offset(40, 0)), (40, 0, 0));
+    });
+
+    test('a world turn keeps its values wound on, step by step', () {
+      const start = (60.0, 30.0, 20.0);
+      var last = start;
+      for (var i = 1; i <= 360; i++) {
+        final now =
+            turnedAbout(start, (1, 0, 0), i * math.pi / 180, near: last);
+        expect((now.$1 - last.$1).abs() + (now.$2 - last.$2).abs(),
+            lessThan(5),
+            reason: 'jumped at $i degrees');
+        last = now;
+      }
     });
   });
 }

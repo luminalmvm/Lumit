@@ -21,6 +21,7 @@ import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
 import 'roto.dart';
+import 'shape.dart';
 import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
@@ -570,6 +571,12 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceAddCameraLayer(
           that: this, row: row);
 
+  /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
+  /// so there is somewhere to put them. One undo step.
+  LayerReference addEmptyAudioLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddEmptyAudioLayer(
+          that: this, row: row);
+
   /// Place `footage` into this composition as a new top layer.
   ///
   /// The layer's span is the media's own duration in comp frames, and its
@@ -632,13 +639,15 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddGroupEffect(
               that: this, group: group, name: name);
 
-  /// Add a Light layer at the comp centre.
+  /// Add a Light layer.
   ///
-  /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
-  /// because that is the shape every other frb choice takes. An **area**
-  /// light starts at a tenth of the comp's width and height, which is a
-  /// softbox rather than a pinprick: a light with no size would draw exactly
-  /// as a point one and leave nothing to discover.
+  /// `kind` is 0 point, 1 spot, 2 area, 3 parallel, 4 ambient — an integer
+  /// rather than the enum because that is the shape every other frb choice
+  /// takes. As in After Effects, the light stands in front of the comp, up
+  /// and to one side, aimed at its centre: one at the centre in the comp's
+  /// own plane would only graze the layers it is meant to light. Every kind is given
+  /// an area light's size, a fifth of the comp: a light with no size would
+  /// draw exactly as a point one if it is made an area light later.
   LayerReference addLightLayer({required int kind, int? row}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddLightLayer(
@@ -1582,6 +1591,13 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceInsertGraphGroup(
               that: this, text: text, x: x, y: y);
 
+  /// Whether the comp's lights fall as After Effects' do, lighting a layer
+  /// from black, rather than adding to the picture.
+  bool lightingLikeAfterEffects() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceLightingLikeAfterEffects(
+        that: this,
+      );
+
   /// This comp's **master fader**, in dB (docs/09 §3.1). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
@@ -1852,19 +1868,23 @@ class CompositionReference {
   /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
   /// The worker latches it, so the drag previews and the idle work that
   /// follow serve the same view without each growing a parameter.
+  /// `active` says it is the view being worked in, which the idle fill, the
+  /// cache bar and the drags follow.
   void renderFrame(
           {required BigInt frame,
           required double scale,
           required BridgePlaybackMode mode,
           BridgePrefixPoint? prefix,
-          required int view}) =>
+          required int view,
+          required bool active}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderFrame(
           that: this,
           frame: frame,
           scale: scale,
           mode: mode,
           prefix: prefix,
-          view: view);
+          view: view,
+          active: active);
 
   /// Ask for `frame` with one clip's retime replaced — the live envelope
   /// drag, which never touches the document.
@@ -2017,7 +2037,7 @@ class CompositionReference {
           {required BigInt frame,
           required double scale,
           required LayerReference layer,
-          required List<BridgeShapeItem> contents,
+          required List<BridgeShapeEntry> contents,
           BridgeTransform? transform}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceRenderFrameWithShapePreview(
@@ -2069,14 +2089,21 @@ class CompositionReference {
   /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
   /// `colours` is background, trace, then the R, G and B tints, each as
   /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-  /// know what a Lumit surface looks like.
+  /// know what a Lumit surface looks like. `view` is the Viewer view whose
+  /// picture is read.
   void renderScope(
           {required BigInt frame,
           required double scale,
           required int kind,
-          required List<Uint8List> colours}) =>
+          required List<Uint8List> colours,
+          required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderScope(
-          that: this, frame: frame, scale: scale, kind: kind, colours: colours);
+          that: this,
+          frame: frame,
+          scale: scale,
+          kind: kind,
+          colours: colours,
+          view: view);
 
   /// Ask the worker for the pixels under the dropper: a `window × window`
   /// square of `frame` centred on the point `(u, v)` of the picture, each a
@@ -2156,14 +2183,32 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
 
-  /// Look at this comp through `view` rather than its active camera
-  /// (docs/impl/camera.md §6), or through the active camera again with
-  /// `None`. Panel state, so the frontend sends it whenever the Viewer's
-  /// 3D view changes and the next render looks through it. Export never
-  /// sees a view.
-  void setCameraView({BridgeCameraPose? view}) => BridgeLib.instance.api
-      .crateApiCompositionCompositionReferenceSetCameraView(
-          that: this, view: view);
+  /// Look at this comp in Viewer view `view` through `pose` rather than its
+  /// active camera, or through the active camera again with `None`. Panel
+  /// state, kept per view like the look, so the frontend sends it whenever a
+  /// view's 3D view changes and that view's next render looks through it.
+  /// Export never sees a view.
+  ///
+  /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+  /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+  /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+  /// middle, the shape of its pane. Zero is the comp's own size.
+  void setCameraView(
+          {BridgeCameraPose? pose,
+          required int view,
+          required bool draft,
+          int? ground,
+          required int canvasWidth,
+          required int canvasHeight}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetCameraView(
+              that: this,
+              pose: pose,
+              view: view,
+              draft: draft,
+              ground: ground,
+              canvasWidth: canvasWidth,
+              canvasHeight: canvasHeight);
 
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api
@@ -2192,6 +2237,12 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetGroupSwitch(
               that: this, group: group, switch_: switch_, on_: on_);
+
+  /// Switch it, as one undo step.
+  void setLightingLikeAfterEffects({required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetLightingLikeAfterEffects(
+              that: this, on_: on_);
 
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
@@ -2533,14 +2584,40 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceUngroupSelection(
               that: this, layerIds: layerIds);
 
-  /// The wireframes at `frame`, projected through `view`. Asked once per
-  /// frame change or view change, never per rebuild.
+  /// How the picture sees the comp's 3D space at `frame`: twelve numbers,
+  /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
+  /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the
+  /// eye. Through `view` when one is given, otherwise through the comp's
+  /// active camera as the render poses it, aim and solve link included, or
+  /// the default camera when the comp has none.
+  /// Asked once per frame, view or document change and held.
+  Float64List viewProjection({required BigInt frame, BridgeCameraPose? view}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceViewProjection(
+              that: this, frame: frame, view: view);
+
+  /// The wireframes at `frame`, projected through `view`, or through the
+  /// comp's active camera when there is none (which is then left out, being
+  /// the eye). `ground` adds the ground, the comp's frame and the axes from
+  /// the origin, and `grid` the ground's own lines, which a 3D viewport's
+  /// picture already has. `only` names the cameras and lights to outline, and then
+  /// no other layer is; with none given everything is. Asked once per
+  /// frame, view or document change, never per rebuild.
   BridgeWireframes wireframes(
           {required BigInt frame,
-          required BridgeCameraPose view,
+          BridgeCameraPose? view,
+          required bool ground,
+          required bool grid,
+          List<UuidValue>? only,
           required List<BridgeMediaSize> mediaSizes}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceWireframes(
-          that: this, frame: frame, view: view, mediaSizes: mediaSizes);
+          that: this,
+          frame: frame,
+          view: view,
+          ground: ground,
+          grid: grid,
+          only: only,
+          mediaSizes: mediaSizes);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

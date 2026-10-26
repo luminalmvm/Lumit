@@ -287,8 +287,9 @@ pub fn video_memory_bytes() -> u64 {
 /// Windows has no "lock the pointer" call, so this is the way it is done
 /// everywhere: remember where it was, and put it back after each movement.
 /// Putting it back is itself a movement, which the frontend recognises and
-/// ignores (see the camera tools' layer).
-static FROZEN_CURSOR: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
+/// ignores (see the camera tools' layer). macOS and Linux under X11 do the
+/// same ([`crate::cursor`]); Wayland lets nobody move the pointer.
+static FROZEN_CURSOR: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
 
 /// Remember where the pointer is, and say whether it could be — a platform
 /// with no implementation answers `false`, and the frontend then simply lets
@@ -307,10 +308,21 @@ pub fn freeze_cursor() -> bool {
         let Ok(mut held) = FROZEN_CURSOR.lock() else {
             return false;
         };
-        *held = Some((point.x, point.y));
+        *held = Some((f64::from(point.x), f64::from(point.y)));
         true
     }
-    #[cfg(not(windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let Some(at) = crate::cursor::position() else {
+            return false;
+        };
+        let Ok(mut held) = FROZEN_CURSOR.lock() else {
+            return false;
+        };
+        *held = Some(at);
+        true
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         false
     }
@@ -330,7 +342,16 @@ pub fn restore_frozen_cursor() {
             // SAFETY: a plain call with two integers; a refusal (a locked
             // desktop, another window holding the pointer) is not an error
             // worth acting on — the drag carries on either way.
-            let _ = unsafe { SetCursorPos(x, y) };
+            let _ = unsafe { SetCursorPos(x as i32, y as i32) };
+        }
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let Ok(held) = FROZEN_CURSOR.lock() else {
+            return;
+        };
+        if let Some((x, y)) = *held {
+            crate::cursor::warp(x, y);
         }
     }
 }

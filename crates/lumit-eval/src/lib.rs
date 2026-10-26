@@ -63,11 +63,22 @@ pub mod schedule;
 ///   own time.
 /// * 11: Depth of field pro blurs up to the frame's edge, where it left a strip
 ///   of the edge pixel.
-/// * 17: a 3D layer's outline blurs under the camera's depth of field, and a
-///   plain solid under one is blurred at its own size.
-/// * 18: a phone clip filmed upright is drawn upright, where it was on its
-///   side.
-pub const ALGO_VERSION: u32 = 18;
+/// * 12: 3D layers draw farthest first and cut where they pass through each
+///   other, so a 3D comp with a camera can look different.
+/// * 13: with no camera layer, 3D layers are seen through the default camera.
+/// * 14: camera depth of field blurs a 3D layer by each pixel's distance, round
+///   on screen, Scene depth lets a higher group of 3D layers cover a lower
+///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
+///   layers below.
+/// * 15: shadows are drawn, where a light and a layer cast them.
+/// * 16: camera depth of field blurs a 3D layer's outline too, and blurs as
+///   much as After Effects does.
+/// * 17: on main, a 3D layer's outline blurs under the camera's depth of
+///   field, and a plain solid under one is blurred at its own size.
+/// * 18: main's 17 meets 12 to 16.
+/// * 19: a shape whose outline crosses itself is filled where it crosses.
+/// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
+pub const ALGO_VERSION: u32 = 20;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -130,8 +141,16 @@ pub trait SourceStamper {
     ///
     /// The default answers what the document holds, which is what every camera
     /// with no link resolves to anyway.
-    fn camera(&self, _doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
+    fn camera(&self, _doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<CameraPose> {
         comp.camera_pose(t)
+    }
+
+    /// The camera solves a solved camera is placed by, when it is a parent.
+    /// Asked for the reason [`Self::camera`] is: a layer parented to a solved
+    /// camera moves with a solve the document doesn't hold. The default has
+    /// none, which places such a camera by its own values.
+    fn solves(&self) -> Option<&dyn lumit_core::track::CameraSolveStore> {
+        None
     }
 
     /// A fingerprint of what `comp`'s **mix** sounds like
@@ -374,6 +393,8 @@ fn feed_comp(
                 }
             }
         }
+        // No camera layer: the default camera, which the comp's size above
+        // already pins down.
         None => {
             h.update(b"flat");
         }
@@ -394,15 +415,24 @@ fn feed_comp(
     // only when the comp actually has one, so every key made before lighting
     // existed stays valid. A Light layer draws no pixels of its own, so
     // nothing else in this walk would notice it moving.
-    let lights = comp.lights_at(t);
+    let context = lumit_core::model::comp_context(doc, comp, t);
+    let read = lumit_core::model::context_reader(&context, t);
+    let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));
     if !lights.is_empty() {
         h.update(b"lights/");
+        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
+            h.update(b"after-effects/");
+            h.update(&[u8::from(linear)]);
+        }
         for l in &lights {
             h.update(&[match l.kind {
                 lumit_core::model::LightKind::Point => 0u8,
                 lumit_core::model::LightKind::Spot => 1,
                 lumit_core::model::LightKind::Area => 2,
+                lumit_core::model::LightKind::Parallel => 3,
+                lumit_core::model::LightKind::Ambient => 4,
             }]);
+            h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
             for v in [
                 l.position.0,
                 l.position.1,
@@ -414,11 +444,19 @@ fn feed_comp(
                 l.rotation_x_deg,
                 l.rotation_y_deg,
                 l.falloff_px,
+                l.cone_feather,
+                l.radius_px,
+                f64::from(l.gain),
             ] {
                 feed_f64(h, v);
             }
             for c in l.colour {
                 feed_f64(h, f64::from(c));
+            }
+            if l.shadow_darkness > 0.0 {
+                h.update(b"shadows/");
+                feed_f64(h, f64::from(l.shadow_darkness));
+                feed_f64(h, f64::from(l.shadow_diffusion));
             }
         }
     }
@@ -999,16 +1037,33 @@ fn feed_effect_stack(
                 }
             }
         }
-        // **A collider walk** reads every row, every wire and the collider
+        // **A Particulate walk** reads every row, every wire and the collider
         // at every frame from the in point, so all of what it reads is fed,
-        // under the name its kept walks go by.
-        if let Some((layer, target)) =
-            marker_layer.and_then(|l| Some((l, lumit_core::fx::points::stepped::target(comp, e)?)))
-        {
+        // under the name its kept walks go by. Trails draw every frame from
+        // the in point too.
+        if let Some(layer) = marker_layer.filter(|_| {
+            use lumit_core::fx::points::stepped::{trails, wanted};
+            wanted(comp, e) || trails(comp, e)
+        }) {
+            use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");
-            h.update(&lumit_core::fx::points::stepped::definition(
-                doc, comp, layer, e, target,
-            ));
+            h.update(&definition(doc, comp, layer, e, target(comp, e)));
+            // A 3D layer's trail is seen through the camera at every frame
+            // before this one.
+            if layer.switches.three_d && lumit_core::fx::points::stepped::trails(comp, e) {
+                for cam in comp
+                    .layers
+                    .iter()
+                    .filter(|l| matches!(l.kind, lumit_core::model::LayerKind::Camera { .. }))
+                {
+                    let _ = serde_json::to_writer(&mut *h, cam);
+                    for id in lumit_core::model::layer_parent_chain(comp, cam.id) {
+                        if let Some(parent) = comp.layers.iter().find(|l| l.id == id) {
+                            let _ = serde_json::to_writer(&mut *h, parent);
+                        }
+                    }
+                }
+            }
         }
         // **Beat trigger counts from the start.** Its events up to this frame
         // come from every moment before it: the keys of its rows there, and
@@ -1317,6 +1372,7 @@ fn feed_effect_stack(
                             ] {
                                 feed_f64(h, v);
                             }
+                            feed_depth(h, dtr, slt, &|p| p.value_at(slt));
                             h.update(&[u8::from(src.switches.three_d)]);
                             // Layer-input source mode: None / Masks /
                             // Effects and masks. The discriminant is content
@@ -1548,6 +1604,7 @@ fn feed_layer(
     ] {
         feed_f64(h, v);
     }
+    feed_depth(h, tr, lt, &|p| p.value_at_with_context(lt, context.clone()));
     // The parent chain's inherited placement: a parented layer is drawn inside
     // its ancestors' coordinate space, so every ancestor's evaluated transform
     // is content for THIS layer's pixels.
@@ -1561,41 +1618,36 @@ fn feed_layer(
     // (there is nothing to look at), which makes that the common case
     // rather than a corner.
     //
-    // Sampled the way [`lumit_render::build::parent_world_placement`] samples —
-    // each ancestor at its own local time, farthest ancestor first, and only the
-    // values `place_matrix` consumes (opacity does not inherit, so it is not
-    // content here). Hashed only for a layer that HAS a parent, so an unparented
-    // layer's contribution is unchanged.
+    // Read through the same parent walk the renderer places with
+    // ([`lumit_core::model::parent_placements`]), expressions and all, so a
+    // two-node camera's aim and a 2D ancestor's flattening are content too.
+    // Hashed only for a layer that HAS a parent, so an unparented layer's
+    // contribution is unchanged.
     if layer.parent.is_some() {
         h.update(b"parents/");
-        for ancestor in lumit_core::model::layer_parent_chain(comp, layer.id)
-            .iter()
-            .rev()
-            .filter_map(|id| comp.layers.iter().find(|l| l.id == *id))
-        {
-            let alt = lumit_core::time::layer_time(t, ancestor.start_offset.0);
-            let atr = &ancestor.transform;
-            // A 2D ancestor's hidden z and X/Y rotation count as 0, as the
-            // renderer places it. Cameras and lights have no 3D switch.
-            let flat = !ancestor.switches.three_d
-                && !matches!(
-                    ancestor.kind,
-                    lumit_core::model::LayerKind::Camera { .. }
-                        | lumit_core::model::LayerKind::Light { .. }
-                );
-            let hidden = |p: &lumit_core::anim::Property| if flat { 0.0 } else { p.value_at(alt) };
+        let context = lumit_core::model::comp_context(doc, comp, t);
+        let read = lumit_core::model::context_reader(&context, t);
+        let solves = stamper.solves().map(|store| (doc, store));
+        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
             for v in [
-                atr.position_x.value_at(alt),
-                atr.position_y.value_at(alt),
-                hidden(&atr.position_z),
-                atr.anchor_x.value_at(alt),
-                atr.anchor_y.value_at(alt),
-                atr.scale_x.value_at(alt),
-                atr.scale_y.value_at(alt),
-                atr.rotation.value_at(alt),
-                hidden(&atr.rotation_x),
-                hidden(&atr.rotation_y),
-            ] {
+                p.position.0,
+                p.position.1,
+                p.position.2,
+                p.anchor.0,
+                p.anchor.1,
+                p.scale.0,
+                p.scale.1,
+                p.rotation_deg.2,
+                p.rotation_deg.0,
+                p.rotation_deg.1,
+            ]
+            .into_iter()
+            .chain(
+                (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
+                    .then_some([p.anchor.2, p.scale.2])
+                    .into_iter()
+                    .flatten(),
+            ) {
                 feed_f64(h, v);
             }
         }
@@ -1608,6 +1660,31 @@ fn feed_layer(
     // described, and gating it that way keeps every one of those keys valid.
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
+    }
+    // The material shades only a 3D layer and only where there is a light,
+    // and is hashed only once it has moved off what layers had before it
+    // existed, so those keys stay valid.
+    let m = &layer.transform.material;
+    if layer.switches.three_d
+        && comp.layers.iter().any(|l| l.is_light())
+        && **m != lumit_core::model::Material::legacy()
+    {
+        h.update(b"material");
+        for p in [
+            &m.ambient,
+            &m.diffuse,
+            &m.specular,
+            &m.shininess,
+            &m.metal,
+            &m.light_transmission,
+        ] {
+            feed_f64(h, p.value_at(lt));
+        }
+        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
+    } else if [m.casts_shadows, m.accepts_shadows].contains(&lumit_core::model::ShadowMode::Only) {
+        // Set to Only, a layer can go undrawn with no light in the comp too.
+        h.update(b"shadow only");
+        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
     }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
@@ -1647,6 +1724,7 @@ fn feed_layer(
                 ] {
                     feed_f64(h, v);
                 }
+                feed_depth(h, tr, slt, &|p| p.value_at(slt));
             }
         }
     }
@@ -2008,6 +2086,7 @@ fn feed_layer(
                 ] {
                     feed_f64(h, v);
                 }
+                feed_depth(h, mtr, mlt, &|p| p.value_at(mlt));
                 h.update(&[u8::from(src.switches.three_d)]);
                 // Effects-and-masks matte: the matte gates by the
                 // source's *processed* pixels, so the source's own effect stack
@@ -2728,6 +2807,30 @@ fn feed_interp(
     };
 }
 
+/// A layer's Orientation, Anchor Z and Scale Z at layer time `lt`, each read
+/// by `read`, and the order its rotations turn in. Hashed only once one of
+/// them is off its default, so every key from before they existed stays
+/// valid.
+fn feed_depth(
+    h: &mut blake3::Hasher,
+    tr: &lumit_core::model::TransformGroup,
+    lt: f64,
+    read: &dyn Fn(&lumit_core::anim::Property) -> f64,
+) {
+    let (x, y, z) = tr.orientation_at(lt, read);
+    let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
+    if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {
+        h.update(if tr.after_effects_order {
+            b"depth-ae/"
+        } else {
+            b"depth/"
+        });
+        for v in values {
+            feed_f64(h, v);
+        }
+    }
+}
+
 fn feed_f64(h: &mut blake3::Hasher, v: f64) {
     // Canonicalise the one f64 equality wrinkle: 0.0 and -0.0 render alike.
     let v = if v == 0.0 { 0.0 } else { v };
@@ -2865,6 +2968,7 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3136,6 +3240,66 @@ mod tests {
         assert_ne!(before, key(&doc, &chain, 1.0), "the whole chain is content");
     }
 
+    /// A layer on a hidden solved camera moves with the solve, which the
+    /// document doesn't hold, so the solve has to be in its name or every
+    /// frame of it is served from the first.
+    #[test]
+    fn a_layer_on_a_hidden_solved_camera_is_named_by_the_solve() {
+        use lumit_core::model::{CameraOptions, CameraPose};
+        use lumit_core::track::{CameraSolveStore, SolvedRange};
+        struct Drifting;
+        impl CameraSolveStore for Drifting {
+            fn solved_range(&self, _media: Uuid) -> Option<SolvedRange> {
+                Some(SolvedRange {
+                    fps: 30.0,
+                    first_frame: 0,
+                    last_frame: 299,
+                })
+            }
+            fn solved_pose(&self, _media: Uuid, frame: i64) -> Option<CameraPose> {
+                Some(CameraPose {
+                    zoom: 1000.0,
+                    position: (frame as f64, 0.0, -1000.0),
+                    rotation_deg: (0.0, 0.0, 0.0),
+                    dof: None,
+                })
+            }
+        }
+        struct Solved;
+        impl SourceStamper for Solved {
+            fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+                StubStamper.stamp(item, lt, false)
+            }
+            fn solves(&self) -> Option<&dyn CameraSolveStore> {
+                Some(&Drifting)
+            }
+        }
+
+        let doc = Arc::new(Document::new());
+        let mut plate = text_layer("plate", 0.0, 10.0, 0.0);
+        plate.kind = LayerKind::Footage {
+            item: Uuid::now_v7(),
+        };
+        plate.switches.visible = false;
+        let mut camera = text_layer("camera", 0.0, 10.0, 0.0);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1000.0),
+            solve_link: Some(plate.id),
+            correction_base: None,
+            options: Box::new(CameraOptions::fresh(1000.0, (0.0, 0.0, 0.0))),
+        };
+        camera.switches.visible = false;
+        let mut child = text_layer("child", 0.0, 10.0, 0.0);
+        child.switches.three_d = true;
+        child.parent = Some(camera.id);
+        let comp = comp_with(vec![child, camera, plate]);
+        let at = |t: f64, stamper: &dyn SourceStamper| {
+            comp_frame_key(&doc, &comp, t, Quality::default(), stamper).unwrap()
+        };
+        assert_eq!(at(1.0, &StubStamper), at(2.0, &StubStamper));
+        assert_ne!(at(1.0, &Solved), at(2.0, &Solved));
+    }
+
     /// Edits that cannot reach a pixel keep every key — the whole reason the
     /// cache is content-keyed rather than emptied on every commit. The work
     /// area is where the playhead loops, a marker is a label, a label colour is
@@ -3327,44 +3491,56 @@ mod tests {
     /// shape keeps one name.
     #[test]
     fn a_keyed_shape_keys_the_frame_it_moves_in() {
-        use lumit_core::shape::{Deform, ShapeItem, Twist};
+        use lumit_core::shape::modifier::{Deform, ModifierKind, ShapeEntry, ShapeModifier, Twist};
+        use lumit_core::shape::ShapeItem;
         let doc = Document::new();
-        let shape = |item: ShapeItem| {
+        let shape = |item: ShapeItem, kind: Option<ModifierKind>| {
             let mut layer = text_layer("s", 0.0, 10.0, 0.0);
-            layer.kind = LayerKind::Shape {
-                contents: vec![item],
-            };
+            let mut contents = vec![ShapeEntry::Item(item)];
+            contents.extend(kind.map(|kind| {
+                ShapeEntry::Modifier(ShapeModifier {
+                    id: Uuid::now_v7(),
+                    name: kind.label().into(),
+                    kind,
+                })
+            }));
+            layer.kind = LayerKind::Shape { contents };
             comp_with(vec![layer])
         };
-        let mut item = ShapeItem::filled(
+        let item = ShapeItem::filled(
             "e",
             lumit_core::mask::Mask::ellipse(50.0, 50.0, 40.0, 30.0).path,
             LinearColour([1.0, 1.0, 1.0, 1.0]),
         );
-        let still = shape(item.clone());
+        let still = shape(item.clone(), None);
         assert_eq!(key(&doc, &still, 0.0), key(&doc, &still, 1.0));
 
         let keyed = linear_retime(&[(0.0, 0.0), (2.0, 540.0)]);
-        item.twist = Some(Twist {
-            angle: keyed.clone(),
-            rotation: Property::zero(),
-            axis: Property::zero(),
-            centre_x: Property::fixed(50.0),
-            centre_y: Property::fixed(50.0),
-        });
-        let twisted = shape(item.clone());
+        let twisted = shape(
+            item.clone(),
+            Some(ModifierKind::Twist(Twist {
+                angle: keyed.clone(),
+                rotation: Property::zero(),
+                axis: Property::zero(),
+                centre_x: Property::fixed(50.0),
+                centre_y: Property::fixed(50.0),
+                extra: serde_json::Map::new(),
+            })),
+        );
         assert_ne!(key(&doc, &twisted, 0.0), key(&doc, &twisted, 1.0));
 
-        item.twist = None;
-        item.deform = Some(Deform {
-            mode: 0,
-            amount: keyed,
-            scale: Property::fixed(20.0),
-            evolution: Property::zero(),
-            seed: Property::zero(),
-            detail: Property::fixed(4.0),
-        });
-        let deformed = shape(item);
+        let deformed = shape(
+            item,
+            Some(ModifierKind::Deform(Deform {
+                mode: 0,
+                amount: keyed,
+                scale: Property::fixed(20.0),
+                evolution: Property::zero(),
+                seed: Property::zero(),
+                detail: Property::fixed(4.0),
+                extra: serde_json::Map::new(),
+            })),
+        );
         assert_ne!(key(&doc, &deformed, 0.0), key(&doc, &deformed, 1.0));
     }
 
@@ -3996,6 +4172,38 @@ mod tests {
             key(&doc, &edited, 2.5),
             "a tap keys the far layer's whole Emit rate track"
         );
+
+        // A 3D layer's trail is seen through the camera at every frame before
+        // this one, so an earlier camera key renames it too.
+        let mut trail = text_layer("trail", 0.0, 10.0, 0.0);
+        trail.switches.three_d = true;
+        let mut p = particulate();
+        set(
+            &mut p,
+            "persistence",
+            EffectValue::Float(Property::fixed(80.0)),
+        );
+        trail.effects = vec![p];
+        let mut camera = text_layer("camera", 0.0, 10.0, 0.0);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1000.0),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(lumit_core::model::CameraOptions::fresh(
+                1000.0,
+                (0.0, 0.0, 0.0),
+            )),
+        };
+        camera.transform.position_x = linear_retime(&[(0.0, 0.0), (1.0, 100.0), (2.0, 0.0)]);
+        let trailed = comp_with(vec![trail, camera]);
+        let mut edited = trailed.clone();
+        edited.layers[1].transform.position_x =
+            linear_retime(&[(0.0, 0.0), (1.0, 300.0), (2.0, 0.0)]);
+        assert_ne!(
+            key(&doc, &trailed, 2.5),
+            key(&doc, &edited, 2.5),
+            "an earlier camera key changes a 3D trail"
+        );
     }
 
     /// A seeded effect's pixels move with time under constant parameters
@@ -4564,12 +4772,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 18, which renamed every frame.
+        // Pinned under ALGO_VERSION 20, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                43_642_340_716_799_632_156_674_495_559_012_742_681,
-                253_619_975_629_639_521_298_965_030_168_473_732_135
+                190_794_504_286_447_224_961_720_191_318_525_597_499,
+                129_597_391_233_871_061_469_308_816_969_221_614_058
             )
         );
 

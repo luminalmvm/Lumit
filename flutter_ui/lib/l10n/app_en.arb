@@ -155,6 +155,135 @@
   "@cameraTwoNode": {
     "description": "Camera type: a camera that aims at its point of interest."
   },
+  "lightOptions": "Light options",
+  "@lightOptions": {
+    "description": "Heading in a light's Transform group, over the rows about the light itself rather than about where it stands."
+  },
+  "lightType": "Light type",
+  "@lightType": {
+    "description": "Row and settings field: which kind of light a Light layer is."
+  },
+  "lightPoint": "Point",
+  "@lightPoint": {
+    "description": "Light type: light from one point, shining every way."
+  },
+  "lightSpot": "Spot",
+  "@lightSpot": {
+    "description": "Light type: a cone of light."
+  },
+  "lightArea": "Area",
+  "@lightArea": {
+    "description": "Light type: light from a rectangle of a set size, like a softbox."
+  },
+  "lightParallel": "Parallel",
+  "@lightParallel": {
+    "description": "Light type: light from very far away, every ray running the same way, like the sun."
+  },
+  "lightAmbient": "Ambient",
+  "@lightAmbient": {
+    "description": "Light type: light from everywhere at once, with no place or direction."
+  },
+  "lightIntensity": "Intensity",
+  "@lightIntensity": {
+    "description": "Light row: how bright the light is, as a percentage."
+  },
+  "lightColour": "Colour",
+  "@lightColour": {
+    "description": "Light row: the colour of the light."
+  },
+  "lightConeAngle": "Cone angle",
+  "@lightConeAngle": {
+    "description": "Spot light row: the full angle of the cone of light, in degrees."
+  },
+  "lightConeFeather": "Cone feather",
+  "@lightConeFeather": {
+    "description": "Spot light row: how much of the cone's edge fades rather than cuts off, as a percentage."
+  },
+  "lightFalloff": "Falloff",
+  "@lightFalloff": {
+    "description": "Light row and settings field: how the light weakens with distance."
+  },
+  "lightFalloffSmooth": "Smooth",
+  "@lightFalloffSmooth": {
+    "description": "Light falloff: full strength out to the radius, then fading smoothly to nothing over the falloff distance."
+  },
+  "lightFalloffInverseSquare": "Inverse square clamped",
+  "@lightFalloffInverseSquare": {
+    "description": "Light falloff: full strength out to the radius, then weakening with the square of the distance, as real light does. After Effects' name for it."
+  },
+  "lightRadius": "Radius",
+  "@lightRadius": {
+    "description": "Light row: how far the light keeps its full strength before it starts to fall off, in pixels."
+  },
+  "lightFalloffDistance": "Falloff distance",
+  "@lightFalloffDistance": {
+    "description": "Light row: how far past the radius a smooth falloff takes to fade to nothing, in pixels."
+  },
+  "lightSettings": "Light settings",
+  "@lightSettings": {
+    "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
+  },
+  "lightLayerName": "{kind} light",
+  "@lightLayerName": {
+    "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "materialOptions": "Material options",
+  "@materialOptions": {
+    "description": "Heading beside Transform on a 3D layer, over the rows about how it takes the composition's lights. After Effects' name for the group."
+  },
+  "materialAmbient": "Ambient",
+  "@materialAmbient": {
+    "description": "Material options row: how much of the ambient lights the layer takes, as a percentage."
+  },
+  "materialDiffuse": "Diffuse",
+  "@materialDiffuse": {
+    "description": "Material options row: how much of the other lights the layer takes, as a percentage."
+  },
+  "materialSpecular": "Specular intensity",
+  "@materialSpecular": {
+    "description": "Material options row: how bright the highlight a light makes on the layer is, as a percentage."
+  },
+  "materialShininess": "Specular shininess",
+  "@materialShininess": {
+    "description": "Material options row: how small and hard the highlight is, as a percentage."
+  },
+  "materialMetal": "Metal",
+  "@materialMetal": {
+    "description": "Material options row: how much the highlight takes the layer's own colour rather than the light's, as a percentage."
+  },
+  "castsShadows": "Casts shadows",
+  "@castsShadows": {
+    "description": "Row and settings field on a light and in a 3D layer's Material options: whether it casts shadows."
+  },
+  "acceptsShadows": "Accepts shadows",
+  "@acceptsShadows": {
+    "description": "Material options row: whether shadows fall on the layer."
+  },
+  "shadowsOn": "On",
+  "@shadowsOn": {
+    "description": "Casts shadows or Accepts shadows: yes."
+  },
+  "shadowsOnly": "Only",
+  "@shadowsOnly": {
+    "description": "Casts shadows or Accepts shadows: only the shadow, without the layer itself. After Effects' word for it."
+  },
+  "lightShadowDarkness": "Shadow darkness",
+  "@lightShadowDarkness": {
+    "description": "Light row: how dark the shadows the light casts are, as a percentage."
+  },
+  "lightShadowDiffusion": "Shadow diffusion",
+  "@lightShadowDiffusion": {
+    "description": "Light row: how soft the shadows the light casts are, in pixels."
+  },
+  "materialLightTransmission": "Light transmission",
+  "@materialLightTransmission": {
+    "description": "Material options row: how much of the light passing through the layer takes its colour onto what is behind it, as a percentage."
+  },
   "cameraType": "Type",
   "@cameraType": {
     "description": "Camera settings row: whether the camera is one-node or two-node."
@@ -1325,7 +1454,7 @@
   },
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
-    "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
+    "description": "Easing panel: the tooltip on a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
   },
   "easingSaveEllipsis": "Save…",
   "@easingSaveEllipsis": {
@@ -3559,6 +3688,54 @@
   "@fxFriction": {
     "description": "Effect controls — a control on Particulate: how much a particle slows along the surface of a shape it hits, as a percentage."
   },
+  "fxFlock": "Flock",
+  "@fxFlock": {
+    "description": "Effect controls — a group heading on Particulate: the controls for particles steering by their neighbours, like a flock of birds."
+  },
+  "fxSeparation": "Separation",
+  "@fxSeparation": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers away from neighbours that are close, as a percentage."
+  },
+  "fxAlignment": "Alignment",
+  "@fxAlignment": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers to go the way its neighbours go, as a percentage."
+  },
+  "fxCohesion": "Cohesion",
+  "@fxCohesion": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers towards the middle of its neighbours, as a percentage."
+  },
+  "fxFlockRadius": "Flock radius",
+  "@fxFlockRadius": {
+    "description": "Effect controls — a control on Particulate: how far away another particle can be and still count as a neighbour, in pixels."
+  },
+  "fxSparks": "Sparks",
+  "@fxSparks": {
+    "description": "Effect controls — a group heading and a control on Particulate: how many small particles fly out of each particle as it dies."
+  },
+  "fxSparkSpeed": "Spark speed",
+  "@fxSparkSpeed": {
+    "description": "Effect controls — a control on Particulate: how fast sparks fly out from a particle that dies, in pixels per second."
+  },
+  "fxSparkLife": "Spark life",
+  "@fxSparkLife": {
+    "description": "Effect controls — a control on Particulate: how long a spark lasts, in seconds."
+  },
+  "fxSparkSize": "Spark size",
+  "@fxSparkSize": {
+    "description": "Effect controls — a control on Particulate: how big a spark is, as a percentage of the particle it came from."
+  },
+  "fxTrails": "Trails",
+  "@fxTrails": {
+    "description": "Effect controls — a group heading on Particulate: the controls for keeping each frame's picture, so particles leave smears behind them."
+  },
+  "fxPersistence": "Persistence",
+  "@fxPersistence": {
+    "description": "Effect controls — a control on Particulate: how much of the picture it keeps is left after one second, as a percentage."
+  },
+  "fxTurn": "Turn",
+  "@fxTurn": {
+    "description": "Effect controls — a control on Particulate: how far the picture it keeps turns each second, in degrees."
+  },
   "fxVariation": "Variation",
   "@fxVariation": {
     "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."
@@ -4989,7 +5166,7 @@
   },
   "fxZoom": "Zoom",
   "@fxZoom": {
-    "description": "Effect controls — a control on Radial blur."
+    "description": "Effect controls — a control on Radial blur, and on Particulate: how much the picture it keeps grows each second, as a percentage."
   },
   "graphAutoFit": "Auto fit",
   "@graphAutoFit": {
@@ -5395,6 +5572,10 @@
   "@keyNewCameraLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewLightLayer": "New Light layer",
+  "@keyNewLightLayer": {
+    "description": "Keyboard shortcut action: open the light settings window to make a new Light layer."
+  },
   "keyNewComposition": "New composition",
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -5403,8 +5584,12 @@
   "@keyNewNullLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewPointLightLayer": "New Point light layer",
-  "@keyNewPointLightLayer": {
+  "keyNewSequenceLayer": "New Sequence layer",
+  "@keyNewSequenceLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewAudioLayer": "New Audio layer",
+  "@keyNewAudioLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyNewProject": "New project",
@@ -5831,6 +6016,70 @@
   "@keyAlwaysPreviewThisView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keySwitchTo3dViewShortcut1": "Switch to 3D view shortcut 1",
+  "@keySwitchTo3dViewShortcut1": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchTo3dViewShortcut2": "Switch to 3D view shortcut 2",
+  "@keySwitchTo3dViewShortcut2": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchTo3dViewShortcut3": "Switch to 3D view shortcut 3",
+  "@keySwitchTo3dViewShortcut3": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut1": "Assign the 3D view to shortcut 1",
+  "@keyAssignThe3dViewToShortcut1": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut2": "Assign the 3D view to shortcut 2",
+  "@keyAssignThe3dViewToShortcut2": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut3": "Assign the 3D view to shortcut 3",
+  "@keyAssignThe3dViewToShortcut3": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheLast3dView": "Switch to the last 3D view",
+  "@keySwitchToTheLast3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyBackToTheActiveCamera": "Back to the active camera",
+  "@keyBackToTheActiveCamera": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLookAtTheSelectedLayers": "Look at the selected layers",
+  "@keyLookAtTheSelectedLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLookAtAllLayers": "Look at all layers",
+  "@keyLookAtAllLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFrameAllLayersInA3dViewport": "Frame all layers in a 3D viewport",
+  "@keyFrameAllLayersInA3dViewport": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyOpenA3dViewport": "Open a 3D viewport",
+  "@keyOpenA3dViewport": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveTheActiveCameraToThe3dView": "Move the active camera to the 3D view",
+  "@keyMoveTheActiveCameraToThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyPlaceTheSelectedLayersOnASurface": "Place the selected layers on a surface",
+  "@keyPlaceTheSelectedLayersOnASurface": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyResetThe3dView": "Reset the 3D view",
+  "@keyResetThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCreateACameraFromThe3dView": "Create a camera from the 3D view",
+  "@keyCreateACameraFromThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyShowOrHideTheLayer": "Show or hide the layer",
   "@keyShowOrHideTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6030,6 +6279,10 @@
   "@keymapWheelDropperSample": {
     "description": "Scroll wheel row: the modifier that grows or shrinks the colour dropper's sampled area in the Viewer."
   },
+  "keymapWheelCameraDolly": "Dolly a 3D view",
+  "@keymapWheelCameraDolly": {
+    "description": "Settings → Keymap, the scroll wheel section: the modifier that makes the wheel dolly the Viewer’s 3D view toward the pointer, with any tool."
+  },
   "keymapWheelScrollSideways": "Scroll the Timeline sideways",
   "@keymapWheelScrollSideways": {
     "description": "Scroll wheel row: the modifier that scrolls the Timeline, Audio timeline and Graph editor left and right."
@@ -6224,10 +6477,6 @@
   "@menuBlendingMode": {
     "description": "Menu item."
   },
-  "menuAreaLight": "Area light",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuCamera": "Camera",
   "@menuCamera": {
     "description": "Menu item."
@@ -6292,7 +6541,15 @@
   },
   "menuCreateShapesFromText": "Shapes from text",
   "@menuCreateShapesFromText": {
-    "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer whose picture is the outlines of its letters as editable vector shapes."
+    "description": "Layer ▸ Create submenu item: makes a shape layer from the outlines of the selected text layer's letters, one group per letter, and switches the text layer off."
+  },
+  "menuCreateShapesFromVector": "Shapes from vector layer",
+  "@menuCreateShapesFromVector": {
+    "description": "Layer ▸ Create submenu item, live on a layer of an Illustrator file: makes a shape layer from the layer's paths and switches the original off. After Effects calls it Create Shapes from Vector Layer."
+  },
+  "menuSplitIntoShapeLayers": "Split into shape layers",
+  "@menuSplitIntoShapeLayers": {
+    "description": "Layer ▸ Create submenu item: makes one shape layer for each letter of a text layer, each path group of an Illustrator layer, or each top-level group of a shape layer, each where it sat."
   },
   "menuCut": "Cut",
   "@menuCut": {
@@ -6485,6 +6742,10 @@
   "@menuLayerSettings": {
     "description": "Menu item."
   },
+  "menuLight": "Light…",
+  "@menuLight": {
+    "description": "Layer > New menu item: opens the light settings window, then makes the light."
+  },
   "menuLayerStyles": "Layer styles",
   "@menuLayerStyles": {
     "description": "Menu item."
@@ -6548,10 +6809,6 @@
   "menuNull": "Null",
   "@menuNull": {
     "description": "Menu item."
-  },
-  "menuPointLight": "Point light",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
   },
   "menuOpenProject": "Open project…",
   "@menuOpenProject": {
@@ -6748,6 +7005,10 @@
   "@menuNewViewer": {
     "description": "A row of the Window menu: open another Viewer panel, beside the one being worked in."
   },
+  "menuNew3dViewport": "New 3D viewport",
+  "@menuNew3dViewport": {
+    "description": "A row of the Window menu: open a 3D viewport beside the Viewer, a Viewer panel looking at the same composition through a camera of its own that the mouse moves."
+  },
   "menuShowRuler": "Show ruler",
   "@menuShowRuler": {
     "description": "Menu item."
@@ -6760,13 +7021,74 @@
   "@menuSnapToGrid": {
     "description": "Menu item."
   },
+  "menuSwitch3dView": "Switch 3D view",
+  "@menuSwitch3dView": {
+    "description": "View menu: a submenu listing the 3D views the Viewer can look through (Active camera, Front, Top, Custom view 1 and so on), then the three views on the F10, F11 and F12 shortcuts."
+  },
+  "menuAssignViewShortcut": "Assign shortcut to {view}",
+  "@menuAssignViewShortcut": {
+    "description": "View menu: a submenu that puts the Viewer's current 3D view on one of the F10, F11 and F12 shortcuts. {view} is the current view's name, such as Custom view 1.",
+    "placeholders": {
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "menuSwitchToLast3dView": "Switch to last 3D view",
+  "@menuSwitchToLast3dView": {
+    "description": "View menu: switch the Viewer back to the 3D view it was on before the one it is on now. Pressed again it switches back."
+  },
+  "menuViewShortcutSlot": "Shortcut {number}: {view}",
+  "@menuViewShortcutSlot": {
+    "description": "View menu, under Assign shortcut to: one of the three 3D view shortcuts (1, 2 and 3 are F10, F11 and F12), named by the view it switches to now, which the current view replaces. {view} is that view's name, such as Front.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "menuBackToActiveCamera": "Back to active camera",
+  "@menuBackToActiveCamera": {
+    "description": "View menu: switch the Viewer back to looking through the composition's active camera."
+  },
+  "menuLookAtSelectedLayers": "Look at selected layers",
+  "@menuLookAtSelectedLayers": {
+    "description": "View menu: move the 3D view, or the active camera, so the selected 3D layers fill the picture."
+  },
+  "menuLookAtAllLayers": "Look at all layers",
+  "@menuLookAtAllLayers": {
+    "description": "View menu: move the 3D view, or the active camera, so every 3D layer fills the picture."
+  },
+  "menuReset3dView": "Reset 3D view",
+  "@menuReset3dView": {
+    "description": "View menu: put the Viewer's 3D view back where it starts, or the active camera back where a new camera stands."
+  },
+  "menuCameraFromView": "Create camera from 3D view",
+  "@menuCameraFromView": {
+    "description": "View menu: add a camera layer placed where the Viewer's custom 3D view looks from."
+  },
+  "menuMoveCameraToView": "Move active camera to 3D view",
+  "@menuMoveCameraToView": {
+    "description": "View menu: move the composition’s active camera to where the Viewer’s 3D view looks from, keying it where it is keyed."
+  },
+  "menuPlaceOnSurface": "Place on surface",
+  "@menuPlaceOnSurface": {
+    "description": "View menu: move the selected 3D layers so their anchor sits on the layer or Null under the pointer. Ctrl-click in a 3D view does the same, and Shift turns them to match."
+  },
+  "noSurfaceUnderPointer": "No layer under the pointer",
+  "@noSurfaceUnderPointer": {
+    "description": "Notice when Place on surface finds no layer or Null under the pointer to put the selected layers on."
+  },
+  "noLayersToLookAt": "No 3D layers to look at",
+  "@noLayersToLookAt": {
+    "description": "Notice when Look at selected layers or Look at all layers is chosen and there is no 3D layer to frame."
+  },
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "Spot light",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {
@@ -6914,9 +7236,17 @@
   "@newLayer": {
     "description": "Button that opens the list of layer kinds."
   },
+  "anchorKeyedRefused": "Can't move the anchor while Position or Anchor point is keyed",
+  "@anchorKeyedRefused": {
+    "description": "Notice when the anchor is dragged on a layer whose Position or Anchor point has keyframes or an expression, which moving it would overwrite."
+  },
   "noCameraToMove": "No camera to move — add a camera layer first",
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
+  },
+  "cameraExpressionRefused": "Can't move a camera driven by an expression",
+  "@cameraExpressionRefused": {
+    "description": "Notice when a camera tool is dragged in the Viewer and the active camera's Position, Rotation or Point of interest is set by an expression, which the drag would overwrite."
   },
   "noCommandsMatch": "No commands match",
   "@noCommandsMatch": {
@@ -7034,6 +7364,47 @@
   "panelViewer": "Viewer",
   "@panelViewer": {
     "description": "The name of the panel showing the picture."
+  },
+  "panel3dViewport": "3D viewport",
+  "@panel3dViewport": {
+    "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
+  },
+  "tipViewportProjection": "Projection",
+  "@tipViewportProjection": {
+    "description": "Tooltip on the switch under a 3D viewport's corner axes, which reads Persp or Ortho."
+  },
+  "tipViewportWireframe": "Lines only",
+  "@tipViewportWireframe": {
+    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as outlines on the ground, with no picture."
+  },
+  "viewportPersp": "Persp",
+  "@viewportPersp": {
+    "description": "The switch under a 3D viewport's corner axes while it draws in perspective. Short, it is a small button."
+  },
+  "viewportOrtho": "Ortho",
+  "@viewportOrtho": {
+    "description": "The same switch while the viewport draws orthographically, with no perspective. Short, it is a small button."
+  },
+  "viewportAxisX": "X",
+  "@viewportAxisX": {
+    "description": "The letter on the x axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisY": "Y",
+  "@viewportAxisY": {
+    "description": "The letter on the y axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisZ": "Z",
+  "@viewportAxisZ": {
+    "description": "The letter on the z axis in a 3D viewport's corner axes."
+  },
+  "viewportFlySpeed": "Speed ×{speed}",
+  "@viewportFlySpeed": {
+    "description": "Beside the pointer for a moment while the wheel changes how fast a 3D viewport flies. {speed} is how many times its usual pace, such as 1.56.",
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
   },
   "sourceTitle": "Source",
   "@sourceTitle": {
@@ -7465,6 +7836,28 @@
   "savedPresets": "Saved presets",
   "@savedPresets": {
     "description": "Heading over the user's own saved effect stacks."
+  },
+  "presetNewGroup": "New group",
+  "@presetNewGroup": {
+    "description": "Effects & presets panel: right-click menu row on the Saved presets heading or on a group of presets that makes a new group inside it, and the title of the window asking for its name. A group is a folder of saved presets."
+  },
+  "presetMoveTo": "Move to",
+  "@presetMoveTo": {
+    "description": "Effects & presets panel: right-click menu row on a saved preset that opens the list of groups it can be moved into."
+  },
+  "presetDeleteGroup": "{count, plural, =1{Delete “{name}” and the preset in it?} other{Delete “{name}” and the {count} presets in it?}}",
+  "@presetDeleteGroup": {
+    "description": "Effects & presets panel: asked before a group of saved presets is deleted with the presets in it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Shakes"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "savedTo": "Saved to {path}",
   "@savedTo": {
@@ -8722,6 +9115,26 @@
   "@tipSnapOn": {
     "description": "Tooltip on the magnet: dragged keyframes land on whole frames. One or two words."
   },
+  "tipLocalAxes": "Local axes",
+  "@tipLocalAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the layer's own axes. After Effects calls this Local Axis Mode."
+  },
+  "tipWorldAxes": "World axes",
+  "@tipWorldAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the composition's axes. After Effects calls this World Axis Mode."
+  },
+  "tipViewAxes": "View axes",
+  "@tipViewAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the screen. After Effects calls this View Axis Mode."
+  },
+  "tipRotateSetsOrientation": "Turn Orientation",
+  "@tipRotateSetsOrientation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Orientation. After Effects calls this Set: Orientation."
+  },
+  "tipRotateSetsRotation": "Turn Rotation",
+  "@tipRotateSetsRotation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Rotation x, y and z. After Effects calls this Set: Rotation."
+  },
   "tipSpeedGraph": "Speed graph",
   "@tipSpeedGraph": {
     "description": "Tooltip: show how fast the value changes. One or two words."
@@ -9014,6 +9427,26 @@
   "@toolCameraUnified": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip. One tool that does all three camera moves, picked by which mouse button is dragged."
   },
+  "toolOrbitAround": "Orbit around",
+  "@toolOrbitAround": {
+    "description": "Label before a dropdown on the toolbar's options while a camera tool is armed: what a camera orbit swings round. Followed by Point of interest, Cursor, Scene or Selection."
+  },
+  "cameraPivotPointOfInterest": "Point of interest",
+  "@cameraPivotPointOfInterest": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round what the camera is looking at."
+  },
+  "cameraPivotCursor": "Cursor",
+  "@cameraPivotCursor": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the point on the layer under the mouse pointer."
+  },
+  "cameraPivotScene": "Scene",
+  "@cameraPivotScene": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of all the 3D layers."
+  },
+  "cameraPivotSelection": "Selection",
+  "@cameraPivotSelection": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of the selected 3D layers."
+  },
   "toolCloneStamp": "Clone stamp",
   "@toolCloneStamp": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
@@ -9069,6 +9502,34 @@
   "shapeFill": "Fill",
   "@shapeFill": {
     "description": "Timeline row under a shape layer's art: the colour inside its path."
+  },
+  "shapeStroke": "Stroke",
+  "@shapeStroke": {
+    "description": "Timeline row under a shape layer's art: the colour of its outline."
+  },
+  "shapeStrokeWidth": "Stroke width",
+  "@shapeStrokeWidth": {
+    "description": "Timeline row under a shape layer's art: how wide its outline is, in pixels."
+  },
+  "shapePoints": "Points",
+  "@shapePoints": {
+    "description": "Timeline row under a polygon or star in a shape layer's art: how many corners or tips it has."
+  },
+  "shapeOuterRoundness": "Outer roundness",
+  "@shapeOuterRoundness": {
+    "description": "Timeline row under a polygon or star in a shape layer's art: how rounded its outer corners are, per cent. After Effects calls it Outer Roundness."
+  },
+  "shapeInnerRoundness": "Inner roundness",
+  "@shapeInnerRoundness": {
+    "description": "Timeline row under a star in a shape layer's art: how rounded the corners between its tips are, per cent. After Effects calls it Inner Roundness."
+  },
+  "shapeConvertToPath": "Convert to path",
+  "@shapeConvertToPath": {
+    "description": "Menu row on a rectangle, ellipse, polygon or star in a shape layer's art: turns it into a drawn path whose points can be moved one by one. After Effects calls it Convert To Bezier Path."
+  },
+  "shapeOpacity": "Opacity",
+  "@shapeOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the whole piece of art is."
   },
   "shapeGradient": "Gradient",
   "@shapeGradient": {
@@ -9216,6 +9677,54 @@
   "@shapeOpRemove": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."
   },
+  "shapeRepeater": "Repeater",
+  "@shapeRepeater": {
+    "description": "Entry in a shape layer's contents that draws the art above it several times, each copy one step further; also the row in the Add menu that adds one. After Effects' Repeater."
+  },
+  "shapeTrimPaths": "Trim paths",
+  "@shapeTrimPaths": {
+    "description": "Entry in a shape layer's contents that cuts the paths above it to a piece of their length; also the row in the Add menu that adds one. After Effects' Trim Paths."
+  },
+  "shapeOffsetPaths": "Offset paths",
+  "@shapeOffsetPaths": {
+    "description": "Entry in a shape layer's contents that pushes the outlines above it out or in; also the row in the Add menu that adds one. After Effects' Offset Paths."
+  },
+  "shapeGroup": "Group",
+  "@shapeGroup": {
+    "description": "A group in a shape layer's contents, and the row in the Add menu that puts the row inside a new one. A modifier inside a group acts only inside it."
+  },
+  "shapeUngroup": "Ungroup",
+  "@shapeUngroup": {
+    "description": "Row in the right-click menu of a group in a shape layer's contents: the group goes and its entries take its place."
+  },
+  "shapeModifierAmount": "Amount",
+  "@shapeModifierAmount": {
+    "description": "Timeline row under an Offset paths or a Smooth entry of a shape layer: how far, in pixels."
+  },
+  "deleteShapeModifier": "Delete modifier",
+  "@deleteShapeModifier": {
+    "description": "Context-menu item on a modifier entry (Repeater, Trim paths and the rest) in a shape layer's contents."
+  },
+  "deleteShapeGroup": "Delete group",
+  "@deleteShapeGroup": {
+    "description": "Context-menu item on a group in a shape layer's contents: the group and everything in it go."
+  },
+  "shapeExpandCopies": "Expand copies",
+  "@shapeExpandCopies": {
+    "description": "Submenu in the right-click menu of a Repeater entry in a shape layer's contents: turn its copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandAllCopies": "Expand all copies",
+  "@shapeExpandAllCopies": {
+    "description": "Submenu in the Layer menu, for a selected shape layer: turn every Repeater's copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandIntoLayer": "Into this layer",
+  "@shapeExpandIntoLayer": {
+    "description": "Row under Expand copies: the copies become shapes in the same layer, and the Repeater goes."
+  },
+  "shapeExpandIntoLayers": "Into layers",
+  "@shapeExpandIntoLayers": {
+    "description": "Row under Expand copies: the first copy stays in this layer and each further copy becomes a shape layer of its own, below it."
+  },
   "shapeTwist": "Twist",
   "@shapeTwist": {
     "description": "Shape operation, in the Add and Remove menus of a shape layer's art: spins the shape about an axis and flattens it, so a circle becomes a figure eight."
@@ -9331,6 +9840,18 @@
   "panelStagger": "Stagger",
   "@panelStagger": {
     "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
+  },
+  "panelNotes": "Notes",
+  "@panelNotes": {
+    "description": "Name of the panel holding one free text area for the project, saved inside the project file. Shown on its tab and in the Window menu."
+  },
+  "panelAlign": "Align",
+  "@panelAlign": {
+    "description": "Name of the panel with two grids of nine dots: one moves the selected layers' anchor points to a point of their boxes, the other lines that point up with the same point of the composition. Shown on its tab and in the Window menu."
+  },
+  "alignComposition": "Composition",
+  "@alignComposition": {
+    "description": "Align panel: heading over the grid of nine dots that moves each selected layer so that point of its box meets the same point of the composition (top left to top left, centre to centre)."
   },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
@@ -9492,6 +10013,10 @@
   "@toolZoom": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "transformAfterEffectsOrder": "After Effects rotation order",
+  "@transformAfterEffectsOrder": {
+    "description": "Ticked item on the menu opened by right-clicking a 3D layer's, camera's or light's Rotation rows: X, Y and Z Rotation turn in After Effects' order, as an imported layer's do, rather than Lumit's. Changing it keeps the layer where it is."
+  },
   "transformAnchorPoint": "Anchor point",
   "@transformAnchorPoint": {
     "description": "The point a layer rotates and scales about."
@@ -9504,6 +10029,10 @@
   "@transformAnchorPointY": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the anchor point, shown once its axes have been separated."
   },
+  "transformAnchorPointZ": "Anchor point z",
+  "@transformAnchorPointZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth part of a 3D layer's anchor point, shown once its axes have been separated."
+  },
   "transformCombineAxes": "Combine axes",
   "@transformCombineAxes": {
     "description": "Entry in the menu opened by right-clicking a Transform row's name: puts a separated property's axes back on one row."
@@ -9515,6 +10044,10 @@
   "transformOpacity": "Opacity",
   "@transformOpacity": {
     "description": "How solid a layer is."
+  },
+  "transformOrientation": "Orientation",
+  "@transformOrientation": {
+    "description": "A 3D layer's, camera's or light's Transform row, as in After Effects: three angles that turn it as one, outside its Rotation x, y and z, and move between keys by the shortest turn."
   },
   "transformPointOfInterest": "Point of interest",
   "@transformPointOfInterest": {
@@ -9559,6 +10092,10 @@
   "transformScaleY": "Scale y",
   "@transformScaleY": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the height half of the scale, shown once its axes have been separated."
+  },
+  "transformScaleZ": "Scale z",
+  "@transformScaleZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth part of a 3D layer's scale, shown once its axes have been separated. It stretches what is parented to the layer along its z, and how far Anchor point z pushes the layer itself."
   },
   "transformSection": "Transform",
   "@transformSection": {
@@ -10036,6 +10573,14 @@
   "@viewerViewCustom3": {
     "description": "Entry in the Viewer bar's 3D view menu: the third of three viewpoints that start at an angle and keep wherever the camera tools move them."
   },
+  "viewerViewFree": "Free view",
+  "@viewerViewFree": {
+    "description": "Entry in the Viewer bar's 3D view menu, offered only in a 3D viewport: the viewport's own viewpoint, moved with the mouse and kept with the session."
+  },
+  "menuOpenIn3dViewport": "Open in new 3D viewport",
+  "@menuOpenIn3dViewport": {
+    "description": "Last row of the Viewer bar's 3D view menu: open a 3D viewport beside this Viewer, looking at the same composition."
+  },
   "viewerViewFront": "Front",
   "@viewerViewFront": {
     "description": "Entry in the Viewer bar's 3D view menu: the scene seen square on from the front. One of six fixed viewpoints named as the sides of a box."
@@ -10173,6 +10718,18 @@
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
+  },
+  "insertAudioLayer": "Insert audio layer",
+  "@insertAudioLayer": {
+    "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."
+  },
+  "insertVideoLayer": "Insert Sequence layer",
+  "@insertVideoLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an empty Sequence layer for picture clips."
+  },
+  "insertAdjustmentLayer": "Insert adjustment layer",
+  "@insertAdjustmentLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an Adjustment layer."
   },
   "cutCloseGap": "Close gap",
   "@cutCloseGap": {
@@ -10840,6 +11397,46 @@
   "@fxSwitch": {
     "description": "Node graph box name - shows one of its pictures, chosen by an index."
   },
+  "fxRepeatStart": "Repeat start",
+  "@fxRepeatStart": {
+    "description": "Node graph box name - marks where the boxes that run several times begin. Paired with Repeat end."
+  },
+  "fxRepeatEnd": "Repeat end",
+  "@fxRepeatEnd": {
+    "description": "Node graph box name - marks where the boxes that run several times end, and says how many times."
+  },
+  "fxTimes": "Times",
+  "@fxTimes": {
+    "description": "Effect controls - a control on Repeat end: how many times the boxes between Repeat start and Repeat end run."
+  },
+  "fxCopies": "Copies",
+  "@fxCopies": {
+    "description": "Effect controls - a Mode setting on Repeat end: every run starts from the same picture and all of them are laid over each other."
+  },
+  "fxFor": "For",
+  "@fxFor": {
+    "description": "Effect controls - a control on Repeat end: what the boxes between Repeat start and Repeat end run once for, a number of times, each point or each path."
+  },
+  "fxEachPoint": "Each point",
+  "@fxEachPoint": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each point wired into Repeat start."
+  },
+  "fxEachPath": "Each path",
+  "@fxEachPath": {
+    "description": "Effect controls - a For setting on Repeat end: run once for each path wired into Repeat start."
+  },
+  "fxShapes": "Shapes",
+  "@fxShapes": {
+    "description": "Node graph socket - on a Read box of a composition, the paths of its shape layers; on Repeat start, the paths it runs once for."
+  },
+  "fxX": "X",
+  "@fxX": {
+    "description": "Node graph socket - on Repeat start: across, in pixels, where this run's point or path is."
+  },
+  "fxY": "Y",
+  "@fxY": {
+    "description": "Node graph socket - on Repeat start: down, in pixels, where this run's point or path is."
+  },
   "fxSplitChannels": "Split channels",
   "@fxSplitChannels": {
     "description": "Node graph box name - hands out its picture's red, green, blue and alpha as four greyscale pictures."
@@ -11307,17 +11904,9 @@
       }
     }
   },
-  "aeOrientationNotCarried": "Orientation was not carried",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
-  "aeRotationOrderConverted": "Rotation converted to Lumit's axis order",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
-  },
-  "aeCastsShadowsNotCarried": "Casts Shadows was not carried",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
+  "aeShadowSwitchKeyed": "The shadow setting kept its first key",
+  "@aeShadowSwitchKeyed": {
+    "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
   },
   "aeSpatialTangentsFlattened": "The motion path's curves were not carried",
   "@aeSpatialTangentsFlattened": {
@@ -12013,6 +12602,14 @@
   "@viewerOverlayReach": {
     "description": "Entry in the Viewer bar's view menu, shown only for a node graph composition, with a tick beside it when it is on. It draws a dotted outline round how far the graph's picture reaches past the composition's frame, with that size in pixels at its corner."
   },
+  "viewerOverlayGround": "3D ground",
+  "@viewerOverlayGround": {
+    "description": "Entry in the Viewer bar's view menu for a 3D composition, with a tick beside it when it is on. It draws a floor grid through the middle of the composition, the composition's frame and the x, y and z axes from the origin, in 3D over the picture. On by default in the fixed and custom 3D views and off through the composition's camera. Like After Effects' 3D Ground Plane."
+  },
+  "viewerOverlayAxes": "3D axes",
+  "@viewerOverlayAxes": {
+    "description": "Entry in the Viewer bar's view menu for a 3D composition, with a tick beside it when it is on. It draws a small x, y and z mark in the Viewer's corner showing which way the view faces. On by default. Like After Effects' 3D Reference Axes."
+  },
   "viewerOverlaySnap": "Snap to guides",
   "@viewerOverlaySnap": {
     "description": "Entry in the Viewer bar's view menu, with a tick beside it when it is on: whether a layer dragged on the picture is pulled onto the nearest guide. The same switch as the magnet on the toolbar."
@@ -12371,6 +12968,18 @@
   "compShutterAngle": "Shutter angle",
   "@compShutterAngle": {
     "description": "New composition / Composition settings dialog: row label: how much of a frame the shutter is open for, in degrees."
+  },
+  "compGroupLights": "Lights",
+  "@compGroupLights": {
+    "description": "Section of the Composition settings window about how the composition's lights fall on its layers."
+  },
+  "compLightsLikeAfterEffects": "Like After Effects",
+  "@compLightsLikeAfterEffects": {
+    "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, as After Effects does, rather than adding light to the picture. On for compositions imported from After Effects."
+  },
+  "histSetLighting": "Set lighting",
+  "@histSetLighting": {
+    "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
   },
   "compSamples": "Samples",
   "@compSamples": {
@@ -14626,9 +15235,21 @@
   "@histSetAxisMode": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histSetRotationOrder": "Set rotation order",
+  "@histSetRotationOrder": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
   "histSetCameraSettings": "Set camera settings",
   "@histSetCameraSettings": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLightSettings": "Set light settings",
+  "@histSetLightSettings": {
+    "description": "Undo history entry: a light's type, falloff, aim or shadows were changed."
+  },
+  "histSetMaterialSettings": "Set material settings",
+  "@histSetMaterialSettings": {
+    "description": "Undo history entry: whether a layer casts or accepts shadows was changed."
   },
   "histSetCameraZoom": "Set camera zoom",
   "@histSetCameraZoom": {
@@ -14677,6 +15298,10 @@
   "histEditSwatches": "Edit swatches",
   "@histEditSwatches": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditNotes": "Edit notes",
+  "@histEditNotes": {
+    "description": "A row of the Edit > History window: the name of one edit that was made, here a change to the text of the Notes panel. Sent by the engine as English and looked up here."
   },
   "histSetColourManagement": "Set colour management",
   "@histSetColourManagement": {
@@ -14836,9 +15461,9 @@
       }
     }
   },
-  "statusHintSelect": "Shift adds to the selection, keeps a move to one axis and a scale in proportion · Arrow keys nudge a pixel, ten with Shift · Ctrl suspends snapping",
+  "statusHintSelect": "Shift adds to the selection, keeps a move to one axis and a scale in proportion · Alt moves a 3D layer across the view · Arrow keys nudge a pixel, ten with Shift · Ctrl suspends snapping",
   "@statusHintSelect": {
-    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its keys do in the Viewer, one part per key. The parts are separated by a middle dot. Shift and Ctrl are key names."
+    "description": "Right-hand end of the status bar while the Selection tool is armed: one quiet line saying what its keys do in the Viewer, one part per key. The parts are separated by a middle dot. Shift, Alt and Ctrl are key names."
   },
   "statusHintZoom": "Click zooms in · Alt zooms out · Drag a box to zoom to it",
   "@statusHintZoom": {
@@ -14861,13 +15486,21 @@
   "@statusHintRazor": {
     "description": "Right-hand end of the status bar while the Razor tool is armed: one quiet line saying what a click and a Shift-click do in the Timeline. The parts are separated by a middle dot."
   },
-  "statusHintShape": "Draws a mask on the selected layer, or a shape layer with nothing selected · Shift keeps the width and height equal",
+  "statusHintShape": "Draws a shape on a selected shape layer, a mask on any other, or a shape layer with nothing selected · Alt draws a mask · Shift keeps the width and height equal",
   "@statusHintShape": {
-    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Shift key does to it. The parts are separated by a middle dot."
+    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Alt and Shift keys do to it. The parts are separated by a middle dot."
   },
   "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
   "@statusHintPen": {
     "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintConvertVertex": "Click makes a point sharp or smooth · Drag from a point pulls out its handles · Drag a handle moves it alone",
+  "@statusHintConvertVertex": {
+    "description": "Right-hand end of the status bar while the Convert vertex tool is armed: what a click on a path point, a drag from a point and a drag of a handle do in the Viewer. The parts are separated by a middle dot."
+  },
+  "statusHintMaskFeather": "Drag out from a mask point to soften its edge there",
+  "@statusHintMaskFeather": {
+    "description": "Right-hand end of the status bar while the Mask feather tool is armed: what a drag from a point of a mask's path does in the Viewer."
   },
   "statusHintType": "Shift+Enter starts a new line · Enter or Esc finishes the edit",
   "@statusHintType": {
@@ -14938,23 +15571,22 @@
       }
     }
   },
-  "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
-  "@easingHandleNumbers": {
-    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
+  "unitPerSecondSquared": "{unit}/s²",
+  "@unitPerSecondSquared": {
+    "description": "The unit shown after an acceleration in the graph editor: the property's own unit, then per second squared — 'px/s²', '%/s²', '°/s²'. The unit may be empty, giving '/s²' alone.",
     "placeholders": {
-      "x1": {
-        "type": "String"
-      },
-      "y1": {
-        "type": "String"
-      },
-      "x2": {
-        "type": "String"
-      },
-      "y2": {
+      "unit": {
         "type": "String"
       }
     }
+  },
+  "graphAcceleration": "Acceleration",
+  "@graphAcceleration": {
+    "description": "Graph editor: the view showing how fast the speed of a value changes, beside 'Value' and 'Speed'. Lumit says 'speed', never 'velocity'."
+  },
+  "tipAccelerationGraph": "Acceleration graph",
+  "@tipAccelerationGraph": {
+    "description": "Tooltip: show how fast the speed changes. One or two words."
   },
   "fxOcioColourSpaceTransform": "OCIO colour space transform",
   "@fxOcioColourSpaceTransform": {
@@ -15853,9 +16485,25 @@
   "@textStrokeWidth": {
     "description": "Text panel: label beside how wide the outline round the letters is, in pixels."
   },
+  "textFillAndStroke": "Fill and stroke",
+  "@textFillAndStroke": {
+    "description": "Text panel: label beside the choice of whether the letters' fill or their outline is drawn on top. After Effects calls this Fill & Stroke."
+  },
+  "textFillOverStroke": "Fill over stroke",
+  "@textFillOverStroke": {
+    "description": "Text panel, Fill and stroke choice: each letter's fill is drawn on top of its own outline, one letter at a time. After Effects' name for it."
+  },
   "textStrokeOver": "Stroke over fill",
   "@textStrokeOver": {
-    "description": "Text panel: tick box. On draws the outline on top of the letters, off puts the letters on top of it."
+    "description": "Text panel, Fill and stroke choice: each letter's outline is drawn on top of its own fill, one letter at a time. After Effects' name for it."
+  },
+  "textAllFillsOverAllStrokes": "All fills over all strokes",
+  "@textAllFillsOverAllStrokes": {
+    "description": "Text panel, Fill and stroke choice: every letter's outline is drawn first and every fill on top, so a wide outline never covers a neighbouring letter. After Effects' name for it."
+  },
+  "textAllStrokesOverAllFills": "All strokes over all fills",
+  "@textAllStrokesOverAllFills": {
+    "description": "Text panel, Fill and stroke choice: every letter's fill is drawn first and every outline on top. After Effects' name for it."
   },
   "textScaleY": "Vertical scale",
   "@textScaleY": {
@@ -20812,5 +21460,197 @@
         "type": "String"
       }
     }
+  },
+  "fxVectorBlur": "Vector blur",
+  "@fxVectorBlur": {
+    "description": "Effect controls — the name of an effect that streaks each pixel along directions read from a map layer."
+  },
+  "fxVectorsFrom": "Vectors from",
+  "@fxVectorsFrom": {
+    "description": "Vector blur parameter label in the Effect Controls panel — whether the streak directions come from the slope of one channel of the map or from two channels read as a push."
+  },
+  "fxMapSlope": "Map slope",
+  "@fxMapSlope": {
+    "description": "Vector blur option for Vectors from — streaks follow the contours of one channel of the map, longest where it changes fastest."
+  },
+  "fxMapChannels": "Map channels",
+  "@fxMapChannels": {
+    "description": "Vector blur option for Vectors from — two channels of the map say how far to streak sideways and up and down, mid-grey being still."
+  },
+  "fxSlopeChannel": "Slope channel",
+  "@fxSlopeChannel": {
+    "description": "Vector blur parameter label in the Effect Controls panel — the channel of the map whose contours the streaks follow."
+  },
+  "fxAngleOffset": "Angle offset",
+  "@fxAngleOffset": {
+    "description": "Vector blur parameter label in the Effect Controls panel — turns every streak direction by this angle."
+  },
+  "fxConstantLength": "Constant length",
+  "@fxConstantLength": {
+    "description": "Vector blur parameter label in the Effect Controls panel — a switch that gives every streak the full length, however weak the map is there."
+  },
+  "fxFollowTheVectors": "Follow the vectors",
+  "@fxFollowTheVectors": {
+    "description": "Vector blur parameter label in the Effect Controls panel — a switch that bends each streak along the map as it goes, rather than keeping it straight."
+  },
+  "fxMapSoftness": "Map softness",
+  "@fxMapSoftness": {
+    "description": "Vector blur parameter label in the Effect Controls panel — how much the map is blurred before the streak directions are read from it."
+  },
+  "fxLines": "Lines",
+  "@fxLines": {
+    "description": "Grid's Type option that draws a line grid rather than points."
+  },
+  "fxSizeFrom": "Size from",
+  "@fxSizeFrom": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a dropdown choosing how a cell's size is set, as After Effects' Grid names it."
+  },
+  "fxGridSize": "Grid size",
+  "@fxGridSize": {
+    "description": "A Size from option on Grid: the grid's own size is shared out between its boxes, as Sapphire's S_Grid names it. Also the paired Grid size x and y row."
+  },
+  "fxCornerPoint": "Corner point",
+  "@fxCornerPoint": {
+    "description": "A Size from option on Grid: Position and Corner mark two corners of one cell, as After Effects' Grid names it."
+  },
+  "fxBoxesX": "Boxes x",
+  "@fxBoxesX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells across, as Sapphire's S_Grid names it."
+  },
+  "fxBoxesY": "Boxes y",
+  "@fxBoxesY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells down, as Sapphire's S_Grid names it."
+  },
+  "fxGridSizeX": "Grid size x",
+  "@fxGridSizeX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how wide the whole grid is."
+  },
+  "fxGridSizeY": "Grid size y",
+  "@fxGridSizeY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how tall the whole grid is."
+  },
+  "fxCornerX": "Corner x",
+  "@fxCornerX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: across position of a cell's far corner."
+  },
+  "fxCornerY": "Corner y",
+  "@fxCornerY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: down position of a cell's far corner."
+  },
+  "fxLineWidth": "Line width",
+  "@fxLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how thick each line is."
+  },
+  "fxHLineRelWidth": "H line rel width",
+  "@fxHLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the horizontal lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxVLineRelWidth": "V line rel width",
+  "@fxVLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the vertical lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxMajorLineSpacing": "Major line spacing",
+  "@fxMajorLineSpacing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: every this many lines is drawn thicker."
+  },
+  "fxMajorLineWidth": "Major line width",
+  "@fxMajorLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how much thicker the major lines are."
+  },
+  "fxLatitude": "Latitude",
+  "@fxLatitude": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: tilts the grid back in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxSwing": "Swing",
+  "@fxSwing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the grid on its own plane in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxRoll": "Roll",
+  "@fxRoll": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the tilted grid about the view in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxZDist": "Z dist",
+  "@fxZDist": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how far away the grid is, as Sapphire's S_Grid names it."
+  },
+  "fxTeleLensWidth": "Tele lens width",
+  "@fxTeleLensWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a longer or shorter lens, changing the perspective, as Sapphire's S_Grid names it."
+  },
+  "easingRead": "Read from keys",
+  "@easingRead": {
+    "description": "Easing panel: tooltip on the eyedropper button that loads the shape of the two selected keyframes into the editor."
+  },
+  "easingReverse": "Reverse",
+  "@easingReverse": {
+    "description": "Easing panel: tooltip on the button that flips the drawn shape end for end, so a slow start becomes a slow finish."
+  },
+  "easingLiveApply": "Apply as you shape",
+  "@easingLiveApply": {
+    "description": "Easing panel: tooltip on the toggle that applies the shape to the selected keyframes each time a handle is let go or a number is typed."
+  },
+  "easingCopyCss": "Copy as cubic-bezier",
+  "@easingCopyCss": {
+    "description": "Easing panel: right-click menu row on the curve box that copies its four numbers in the CSS cubic-bezier() form. Keep 'cubic-bezier' as it is."
+  },
+  "easingFamilySine": "Sine",
+  "@easingFamilySine": {
+    "description": "Easing panel library: row label for the sine family of easing shapes."
+  },
+  "easingFamilyQuad": "Quad",
+  "@easingFamilyQuad": {
+    "description": "Easing panel library: row label for the quadratic family of easing shapes."
+  },
+  "easingFamilyCubic": "Cubic",
+  "@easingFamilyCubic": {
+    "description": "Easing panel library: row label for the cubic family of easing shapes."
+  },
+  "easingFamilyQuart": "Quart",
+  "@easingFamilyQuart": {
+    "description": "Easing panel library: row label for the quartic family of easing shapes."
+  },
+  "easingFamilyExpo": "Expo",
+  "@easingFamilyExpo": {
+    "description": "Easing panel library: row label for the exponential family of easing shapes."
+  },
+  "easingFamilyBack": "Back",
+  "@easingFamilyBack": {
+    "description": "Easing panel library: row label for the family of easing shapes that overshoot."
+  },
+  "easingColumnIn": "In",
+  "@easingColumnIn": {
+    "description": "Easing panel library: column heading over each family's slow start shape (the web's easeIn). Very short, it sits over a narrow column."
+  },
+  "easingColumnOut": "Out",
+  "@easingColumnOut": {
+    "description": "Easing panel library: column heading over each family's slow finish shape (the web's easeOut). Very short, it sits over a narrow column."
+  },
+  "easingColumnInOut": "In out",
+  "@easingColumnInOut": {
+    "description": "Easing panel library: column heading over each family's shape that is slow at both ends (the web's easeInOut). Very short, it sits over a narrow column."
+  },
+  "easingYours": "Yours",
+  "@easingYours": {
+    "description": "Easing panel library: the tab showing the easing shapes the user has saved, beside the Built in tab. Very short."
+  },
+  "easingImport": "Import easings…",
+  "@easingImport": {
+    "description": "Easing panel: menu row that adds easing shapes from a file someone shared. The ellipsis marks that it opens a file picker."
+  },
+  "easingExport": "Export easings…",
+  "@easingExport": {
+    "description": "Easing panel: menu row that writes the user's saved easing shapes to a file to share. The ellipsis marks that it opens a file picker."
+  },
+  "easingMore": "More",
+  "@easingMore": {
+    "description": "Easing panel: tooltip on the button that opens a menu with Import easings and Export easings."
+  },
+  "fileTypeEasings": "Easings",
+  "@fileTypeEasings": {
+    "description": "File picker: the label of the file type filter for a file of saved easing shapes."
+  },
+  "easingBuiltIn": "Built in",
+  "@easingBuiltIn": {
+    "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
   }
 }

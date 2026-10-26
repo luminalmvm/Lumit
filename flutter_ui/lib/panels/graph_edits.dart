@@ -5,6 +5,7 @@
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart';
 
 import 'easing_curve.dart';
 import 'graph_channels.dart';
@@ -12,6 +13,7 @@ import 'graph_maths.dart';
 import 'key_block.dart';
 import 'keyframe_controls_frb.dart' show scaledScalar;
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -132,9 +134,19 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
         value: value,
         to: next,
       );
+    } else if (channel.isShapePath) {
+      // As a mask's shape below: only the keys' times and eases are written.
+      channel.entry.layer.setShapePathKeys(
+        id: channel.shape!.id,
+        keys: keysOf(next),
+      );
     } else if (channel.shapeValue case final value?) {
-      (shapes[layerId] ??= (channel.entry.layer, [])).$2.add(
-          (channel.shape!.id.toString(), value, channel.shapeStop, next));
+      (shapes[layerId] ??= (channel.entry.layer, [])).$2.add((
+        (channel.shapeModifier?.id ?? channel.shape!.id).toString(),
+        value,
+        channel.shapeStop,
+        next
+      ));
     } else if (channel.isMaskPath && channel.mask != null) {
       // A shape key holds a path, not a number, so only its time and its eases
       // can be written — which is exactly what a graph edit changes.
@@ -168,17 +180,16 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
     layer.setEffects(effects: staged);
   }
   for (final (layer, writes) in shapes.values) {
-    layer.setShapeContents(
-      contents: [
-        for (final item in layer.getShapeContents())
-          writes.fold(
-              item,
-              (it, w) => w.$1 == it.id.toString()
-                  ? shapeWithScalar(it, w.$2, w.$4, stop: w.$3)
-                  : it),
-      ],
-      at: null,
-    );
+    var entries = layer.getShapeContents();
+    for (final (id, value, stop, scalar) in writes) {
+      final owner = UuidValue.fromString(id);
+      entries = shapeModifierOf(value) != null
+          ? entries.withModifier(
+              owner, (m) => modifierWith(m, value: value, to: scalar))
+          : entries.withItem(
+              owner, (it) => shapeWithScalar(it, value, scalar, stop: stop));
+    }
+    layer.setShapeContents(contents: entries, at: null);
   }
 }
 
@@ -412,7 +423,7 @@ bool plantKeyOnChannels({
   final seconds = frame / (fps <= 0 ? 1 : fps);
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in channels) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     if (keys.isEmpty) continue;
     if (keys.any((k) => keyFrame(k, fps).round() == frame.round())) continue;

@@ -15,13 +15,18 @@
 //! as feathered discs, because a generator you cannot see is a generator you
 //! cannot aim; **Mix at nought emits the stream and draws nothing**, which is
 //! the emit-only mode without a row of its own.
+//!
+//! Type Lines draws a line grid instead, with Sapphire's S_Grid controls, and
+//! emits no points. Its drawing is in [`super::grid_lines`].
 
+use super::grid_lines::GridLines;
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
     params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
-    registry::ResolveCx, registry::Signature, schema::EffectSchema, schema::EnabledCond,
-    schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
+    registry::ResolveCx, registry::RowState, registry::Signature, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
 /// Grid's declared **data** output — the same port Particulate declares, so a
@@ -38,11 +43,13 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// Two kickers: what the lattice is, and what a cell looks like.
+/// What the lattice is, what a cell looks like, and the line grid's own rows,
+/// which only show for Lines.
 pub const GRID_GROUPS: &[ParamGroup] = &[
     group(
         "Grid",
         &[
+            "kind",
             "layout",
             "columns",
             "rows",
@@ -69,7 +76,59 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
         visible_when: Some(("layout", &[2])),
         visible_when_lens_elements: None,
     },
+    ParamGroup {
+        label: "Lines",
+        params: &[
+            "size_from",
+            "boxes_across",
+            "boxes_down",
+            "grid_size_x",
+            "grid_size_y",
+            "corner_x",
+            "corner_y",
+            "line_width",
+            "h_line_rel_width",
+            "v_line_rel_width",
+            "major_line_spacing",
+            "major_line_width",
+        ],
+        collapsed: false,
+        visible_when: Some(("kind", &[1])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "Transform",
+        params: &["latitude", "swing", "roll", "z_dist", "tele_lens_width"],
+        collapsed: false,
+        visible_when: Some(("kind", &[1])),
+        visible_when_lens_elements: None,
+    },
     group("Point", &["size", "feather", "colour", "max_points"]),
+];
+
+/// The rows only Points reads, which the panel leaves out for Lines.
+const POINTS_ONLY: &[&str] = &[
+    "layout",
+    "columns",
+    "rows",
+    "planes",
+    "spacing_x",
+    "spacing_y",
+    "spacing_z",
+    "fit",
+    "width",
+    "height",
+    "position_z",
+    "jitter_x",
+    "jitter_y",
+    "jitter_z",
+    "start_angle",
+    "arc",
+    "inner_radius",
+    "size",
+    "feather",
+    "max_points",
+    "seed",
 ];
 
 const fn grey(param: &'static str, on: &'static str, cond: EnabledCond) -> EnabledWhen {
@@ -77,8 +136,15 @@ const fn grey(param: &'static str, on: &'static str, cond: EnabledCond) -> Enabl
 }
 
 /// Fit to size swaps the spacings for Width and Height. Hexagons works its
-/// row gap out from the column gap, and Point has no gaps at all.
+/// row gap out from the column gap, and Point has no gaps at all. Size from
+/// picks between the grid's size and a corner.
 pub const GRID_ENABLED_WHEN: &[EnabledWhen] = &[
+    grey("boxes_across", "size_from", EnabledCond::ChoiceIs(0)),
+    grey("boxes_down", "size_from", EnabledCond::ChoiceIs(0)),
+    grey("grid_size_x", "size_from", EnabledCond::ChoiceIs(0)),
+    grey("grid_size_y", "size_from", EnabledCond::ChoiceIs(0)),
+    grey("corner_x", "size_from", EnabledCond::ChoiceIs(1)),
+    grey("corner_y", "size_from", EnabledCond::ChoiceIs(1)),
     grey("spacing_x", "fit", EnabledCond::BoolIs(false)),
     grey("spacing_x", "layout", EnabledCond::ChoiceIsNot(5)),
     grey("spacing_y", "fit", EnabledCond::BoolIs(false)),
@@ -169,6 +235,11 @@ impl GridLayout {
     enabled_when = GRID_ENABLED_WHEN,
 )]
 pub struct Grid {
+    /// Points is the lattice as discs, Lines a line grid on its own plane.
+    /// Points is 0, so a project saved before Lines stays Points.
+    #[choice(label = "Type", options = ["Points", "Lines"], default = 0)]
+    pub kind: u32,
+
     /// How the cells are laid out. Every layout has Columns times Rows points
     /// on each plane, and reads the two spacings as its own two sizes. For
     /// one circle of points, pick Rings with Rows at 1.
@@ -350,6 +421,168 @@ pub struct Grid {
     )]
     pub inner_radius: f32,
 
+    /// Lines: how big a cell is. Grid size is Sapphire's way, the boxes
+    /// sharing the grid's size, and Corner point is After Effects', Position
+    /// and Corner the two corners of one cell and the lines filling the layer.
+    #[choice(label = "Size from", options = ["Grid size", "Corner point"], default = 0)]
+    pub size_from: u32,
+
+    /// Lines: cells across.
+    #[counter(
+        label = "Boxes x",
+        min = 1,
+        max = 100,
+        default = 24,
+        hard_min = 1,
+        hard_max = 1000,
+        unit = Raw
+    )]
+    pub boxes_across: i32,
+
+    /// Lines: cells down.
+    #[counter(
+        label = "Boxes y",
+        min = 1,
+        max = 100,
+        default = 16,
+        hard_min = 1,
+        hard_max = 1000,
+        unit = Raw
+    )]
+    pub boxes_down: i32,
+
+    /// Lines: how wide the whole grid is, px@comp. S_Grid's Grid size times
+    /// its Grid size x.
+    #[slider(
+        label = "Grid size x",
+        min = 0.0,
+        max = 3840.0,
+        default = 1920.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub grid_size_x: f32,
+
+    /// Lines: how tall the whole grid is, px@comp.
+    #[slider(
+        label = "Grid size y",
+        min = 0.0,
+        max = 2160.0,
+        default = 1440.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub grid_size_y: f32,
+
+    /// Lines: the cell's far corner, px@comp. Position is the near one.
+    #[slider(label = "Corner x", min = 0.0, max = 3840.0, default = 1152.0, unit = Px)]
+    pub corner_x: f32,
+
+    /// px@comp; see [`corner_x`](Self::corner_x).
+    #[slider(label = "Corner y", min = 0.0, max = 2160.0, default = 648.0, unit = Px)]
+    pub corner_y: f32,
+
+    /// Lines: how thick a line is, px@comp, on the grid's own plane.
+    #[slider(
+        label = "Line width",
+        min = 0.0,
+        max = 50.0,
+        default = 2.5,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub line_width: f32,
+
+    /// Lines: the across lines' width, times Line width.
+    #[slider(
+        label = "H line rel width",
+        min = 0.0,
+        max = 4.0,
+        default = 1.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub h_line_rel_width: f32,
+
+    /// Lines: the up and down lines' width, times Line width.
+    #[slider(
+        label = "V line rel width",
+        min = 0.0,
+        max = 4.0,
+        default = 1.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub v_line_rel_width: f32,
+
+    /// Lines: every this many lines from the middle is a major line. Nought
+    /// draws every line the same.
+    #[counter(
+        label = "Major line spacing",
+        min = 0,
+        max = 20,
+        default = 4,
+        hard_min = 0,
+        hard_max = 1000,
+        unit = Raw
+    )]
+    pub major_line_spacing: i32,
+
+    /// Lines: a major line's width, times its own line's.
+    #[slider(
+        label = "Major line width",
+        min = 1.0,
+        max = 10.0,
+        default = 2.5,
+        hard_min = 1.0,
+        unit = Raw
+    )]
+    pub major_line_width: f32,
+
+    /// Lines: tips the grid's top away, degrees, so it lies back like a floor.
+    #[slider(
+        label = "Latitude",
+        min = -89.0,
+        max = 89.0,
+        default = 0.0,
+        hard_min = -89.0,
+        hard_max = 89.0,
+        unit = Degrees
+    )]
+    pub latitude: f32,
+
+    /// Lines: turns the grid on its own plane, degrees, before Latitude.
+    #[dial(label = "Swing", default = 0.0)]
+    pub swing: f32,
+
+    /// Lines: turns the tilted grid about the view, degrees.
+    #[dial(label = "Roll", default = 0.0)]
+    pub roll: f32,
+
+    /// Lines: how far off the grid is. Above 1 is further and smaller.
+    #[slider(
+        label = "Z dist",
+        min = 0.1,
+        max = 10.0,
+        default = 1.0,
+        hard_min = 0.01,
+        unit = Raw
+    )]
+    pub z_dist: f32,
+
+    /// Lines: a longer lens zooms in with less perspective, a shorter one
+    /// widens the view with more.
+    #[slider(
+        label = "Tele lens width",
+        min = 0.2,
+        max = 3.0,
+        default = 1.0,
+        hard_min = 0.2,
+        hard_max = 3.0,
+        unit = Raw
+    )]
+    pub tele_lens_width: f32,
+
     /// The diameter of the disc a point is drawn as, px@comp.
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
@@ -442,6 +675,10 @@ impl Grid {
             projection,
             ..PointsStream::default()
         };
+        // A line grid is a picture, not points.
+        if self.kind == 1 {
+            return out;
+        }
         let cols = self.columns.clamp(1, 100_000);
         let rows = self.rows.clamp(1, 100_000);
         let planes = self.planes.clamp(1, 100_000);
@@ -597,6 +834,8 @@ impl Grid {
 /// §1.6 oracle is [`Grid::stream`] with [`points::draw_stream`], exercised
 /// directly from the test suite — and it is the very stream the GPU draw is
 /// handed, so the two paths cannot describe different lattices.
+///
+/// Lines needs no camera, so it does have one: [`GridLines`].
 pub struct GridDef;
 
 impl EffectDef for GridDef {
@@ -616,5 +855,27 @@ impl EffectDef for GridDef {
     /// frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Grid::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+    }
+
+    /// Lines hides the Points rows rather than greying them, since a group
+    /// can only answer to one dropdown and the Rings rows already answer to
+    /// Layout.
+    fn row_state(&self, inst: &EffectInstance) -> RowState {
+        let lines = matches!(inst.param("kind"), Some(EffectValue::Choice(1)));
+        RowState {
+            hidden: if lines {
+                POINTS_ONLY.to_vec()
+            } else {
+                Vec::new()
+            },
+            ..RowState::default()
+        }
+    }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        let grid = Grid::read(p);
+        if grid.kind == 1 {
+            GridLines::of(&grid, Grid::px_scale_of(p)).draw(rgba, w, h);
+        }
     }
 }

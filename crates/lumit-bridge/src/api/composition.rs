@@ -481,6 +481,29 @@ impl CompositionReference {
         })
     }
 
+    /// Whether the comp's lights fall as After Effects' do, lighting a layer
+    /// from black, rather than adding to the picture.
+    #[frb(sync)]
+    pub fn lighting_like_after_effects(&self) -> Result<bool, BridgeError> {
+        Ok(self.composition()?.lighting != lumit_core::model::CompLighting::Adds)
+    }
+
+    /// Switch it, as one undo step.
+    #[frb(sync)]
+    pub fn set_lighting_like_after_effects(&self, on: bool) -> Result<(), BridgeError> {
+        use lumit_core::model::CompLighting;
+        self.commit(lumit_core::ops::Op::SetCompLighting {
+            comp: self.id,
+            // Ticked by hand it lights the display-encoded picture, as a new
+            // After Effects project does.
+            lighting: if on {
+                CompLighting::AfterEffects { linear: false }
+            } else {
+                CompLighting::Adds
+            },
+        })
+    }
+
     /// How many frames the comp is long at its own rate — the Timeline's axis,
     /// and one past the last frame the transport can reach.
     ///
@@ -886,6 +909,7 @@ impl CompositionReference {
                 Composition {
                     graph: None,
                     master_volume_db: 0.0,
+                    lighting: Default::default(),
                     sound_mix: false,
                     groups: Vec::new(),
                     beat_grid: None,
@@ -1283,9 +1307,12 @@ impl CompositionReference {
         let comp = self.composition()?;
         // A fresh layer starts at the head of the comp, so its own clock is
         // the composition's: no offset to carry.
-        let items: Vec<lumit_core::shape::ShapeItem> = contents
+        let items: Vec<lumit_core::shape::modifier::ShapeEntry> = contents
             .iter()
-            .map(|i| i.write_item(lumit_core::time::Rational::ZERO))
+            .map(|i| {
+                i.write_item(lumit_core::time::Rational::ZERO)
+                    .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            })
             .collect::<Result<_, _>>()?;
         // The art's own box: the layer's natural size, and where it sits.
         let (x0, y0, _x1, _y1) =
@@ -1371,13 +1398,15 @@ impl CompositionReference {
         )
     }
 
-    /// Add a Light layer at the comp centre.
+    /// Add a Light layer.
     ///
-    /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
-    /// because that is the shape every other frb choice takes. An **area**
-    /// light starts at a tenth of the comp's width and height, which is a
-    /// softbox rather than a pinprick: a light with no size would draw exactly
-    /// as a point one and leave nothing to discover.
+    /// `kind` is 0 point, 1 spot, 2 area, 3 parallel, 4 ambient — an integer
+    /// rather than the enum because that is the shape every other frb choice
+    /// takes. As in After Effects, the light stands in front of the comp, up
+    /// and to one side, aimed at its centre: one at the centre in the comp's
+    /// own plane would only graze the layers it is meant to light. Every kind is given
+    /// an area light's size, a fifth of the comp: a light with no size would
+    /// draw exactly as a point one if it is made an area light later.
     #[frb(sync)]
     pub fn add_light_layer(
         &self,
@@ -1391,29 +1420,37 @@ impl CompositionReference {
         let kind = match kind {
             1 => LightKind::Spot,
             2 => LightKind::Area,
+            3 => LightKind::Parallel,
+            4 => LightKind::Ambient,
             _ => LightKind::Point,
         };
-        let half = |v: u32| Property::fixed(f64::from(v) * 0.1);
+        let (w, h) = (f64::from(comp.width), f64::from(comp.height));
         let light = Box::new(LightDef {
             kind,
-            half_size: match kind {
-                LightKind::Area => [half(comp.width), half(comp.height)],
-                _ => [Property::zero(), Property::zero()],
-            },
+            size: [Property::fixed(w * 0.2), Property::fixed(h * 0.2)],
+            two_node: true,
+            point_of_interest: [
+                Property::fixed(w * 0.5),
+                Property::fixed(h * 0.5),
+                Property::zero(),
+            ],
             ..LightDef::default()
         });
         let name = match kind {
             LightKind::Point => "Point light",
             LightKind::Spot => "Spot light",
             LightKind::Area => "Area light",
+            LightKind::Parallel => "Parallel light",
+            LightKind::Ambient => "Ambient light",
         };
         let layer = crate::edits::base_layer(
             name.into(),
             lumit_core::model::LayerKind::Light { light },
             comp.duration.0,
             TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
+                position_x: Property::fixed(w * 0.4),
+                position_y: Property::fixed(h * 0.35),
+                position_z: Property::fixed(-w * 0.35),
                 ..TransformGroup::default()
             },
         );
@@ -2212,8 +2249,10 @@ impl CompositionReference {
                 }
             }
             if let lumit_core::model::LayerKind::Shape { contents } = &layer.kind {
-                for item in contents.iter().filter(|i| i.path_is_animated()) {
-                    push(item.id, &item.path_at(local.to_f64()));
+                for item in lumit_core::shape::modifier::items(contents) {
+                    if item.path_is_animated() {
+                        push(item.id, &item.path_at(local.to_f64()));
+                    }
                 }
             }
         }
@@ -2270,6 +2309,9 @@ impl CompositionReference {
     /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
     /// The worker latches it, so the drag previews and the idle work that
     /// follow serve the same view without each growing a parameter.
+    /// `active` says it is the view being worked in, which the idle fill, the
+    /// cache bar and the drags follow.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn render_frame(
         &self,
@@ -2278,6 +2320,7 @@ impl CompositionReference {
         mode: BridgePlaybackMode,
         prefix: Option<crate::api::state::BridgePrefixPoint>,
         view: u32,
+        active: bool,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderComp(RenderCompRequest {
             comp: self.clone(),
@@ -2286,6 +2329,7 @@ impl CompositionReference {
             mode,
             prefix,
             view,
+            active,
         }))
     }
 
@@ -2426,19 +2470,43 @@ impl CompositionReference {
         })
     }
 
-    /// Look at this comp through `view` rather than its active camera
-    /// (docs/impl/camera.md §6), or through the active camera again with
-    /// `None`. Panel state, so the frontend sends it whenever the Viewer's
-    /// 3D view changes and the next render looks through it. Export never
-    /// sees a view.
+    /// Look at this comp in Viewer view `view` through `pose` rather than its
+    /// active camera, or through the active camera again with `None`. Panel
+    /// state, kept per view like the look, so the frontend sends it whenever a
+    /// view's 3D view changes and that view's next render looks through it.
+    /// Export never sees a view.
+    ///
+    /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+    /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+    /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+    /// middle, the shape of its pane. Zero is the comp's own size.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
-        view: Option<crate::api::layer::BridgeCameraPose>,
+        pose: Option<crate::api::layer::BridgeCameraPose>,
+        view: u32,
+        draft: bool,
+        ground: Option<u32>,
+        canvas_width: u32,
+        canvas_height: u32,
     ) -> Result<(), BridgeError> {
+        let channel =
+            |argb: u32, shift: u32| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
+        let ground = ground.map(|argb| {
+            [
+                channel(argb, 16),
+                channel(argb, 8),
+                channel(argb, 0),
+                f32::from((argb >> 24) as u8) / 255.0,
+            ]
+        });
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
+            pose,
             view,
+            draft,
+            ground,
+            canvas: (canvas_width, canvas_height),
         })
     }
 
@@ -2743,7 +2811,8 @@ impl CompositionReference {
     /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
     /// `colours` is background, trace, then the R, G and B tints, each as
     /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-    /// know what a Lumit surface looks like.
+    /// know what a Lumit surface looks like. `view` is the Viewer view whose
+    /// picture is read.
     #[frb(sync)]
     pub fn render_scope(
         &self,
@@ -2751,6 +2820,7 @@ impl CompositionReference {
         scale: f32,
         kind: u32,
         colours: Vec<Vec<u8>>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         // Five triples, and anything else is a caller bug rather than something
         // to pad out with a colour nobody chose.
@@ -2768,6 +2838,7 @@ impl CompositionReference {
             scale,
             kind,
             colours: packed,
+            view,
         }))
     }
 
@@ -2990,7 +3061,7 @@ impl CompositionReference {
         frame: u64,
         scale: f32,
         layer: LayerReference,
-        contents: Vec<crate::api::layer::BridgeShapeItem>,
+        contents: Vec<crate::api::shape::BridgeShapeEntry>,
         transform: Option<crate::api::layer::BridgeTransform>,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {

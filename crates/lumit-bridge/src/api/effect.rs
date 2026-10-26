@@ -30,7 +30,11 @@ use lumit_core::{
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
+use crate::api::{
+    layer::{BridgeTransformProp, LayerReference},
+    state::PROJECTS,
+    BridgeError,
+};
 use crate::frb_generated::StreamSink;
 
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
@@ -611,9 +615,12 @@ pub fn plugin_messages() -> Vec<String> {
 pub struct BridgePresetInfo {
     pub name: String,
     pub path: String,
+    /// The group it is filed in, with `/` between nested groups. Empty at the
+    /// top of the library.
+    pub group: String,
 }
 
-/// Every `.lumfx` in the preset library folder, sorted by name — what the
+/// Every `.lumfx` in the preset library and its groups, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
 /// or not preset JSON) is simply not listed; the folder is the user's to put
 /// things in, and a stray file there is not a fault.
@@ -731,74 +738,17 @@ pub struct BridgeFfxImport {
 
 /// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
 /// into a `.lumfx` in the preset library, where the Effects & presets panel
-/// lists it. A preset already in the library is never written over.
+/// lists it in the same groups. A preset already in the library is never
+/// written over.
 ///
 /// Not sync: a folder of presets can be a few hundred files.
 pub fn import_ffx_presets(folder: String) -> Result<BridgeFfxImport, BridgeError> {
     let library = lumit_project::presets_dir().ok_or(BridgeError::InvalidPreset)?;
     std::fs::create_dir_all(&library).map_err(|_| BridgeError::InvalidPreset)?;
-    Ok(import_ffx_into(std::path::Path::new(&folder), &library))
-}
-
-/// [`import_ffx_presets`] on any library folder, so it is testable without
-/// the user's own.
-#[frb(ignore)]
-pub(crate) fn import_ffx_into(
-    folder: &std::path::Path,
-    library: &std::path::Path,
-) -> BridgeFfxImport {
-    let mut done = BridgeFfxImport {
-        imported: 0,
-        skipped: 0,
-    };
-    let mut folders = vec![folder.to_path_buf()];
-    while let Some(dir) = folders.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for path in entries.flatten().map(|entry| entry.path()) {
-            if path.is_dir() {
-                folders.push(path);
-                continue;
-            }
-            let is_ffx = path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("ffx"));
-            if !is_ffx {
-                continue;
-            }
-            if write_ffx_as_lumfx(&path, library) {
-                done.imported += 1;
-            } else {
-                done.skipped += 1;
-            }
-        }
-    }
-    done
-}
-
-/// One `.ffx` into the library under its own name. False when it is left out.
-fn write_ffx_as_lumfx(ffx: &std::path::Path, library: &std::path::Path) -> bool {
-    let Some(name) = ffx
-        .file_stem()
-        .map(|stem| stem.to_string_lossy().into_owned())
-    else {
-        return false;
-    };
-    let to = library.join(format!("{name}.{}", lumit_core::preset::PRESET_EXTENSION));
-    if to.exists() {
-        return false;
-    }
-    let Ok((effects, _report)) = lumit_import::open_ffx(ffx) else {
-        return false;
-    };
-    // A preset of text animators or a transform alone has nothing Lumit reads.
-    if effects.is_empty() {
-        return false;
-    }
-    lumit_core::preset::to_json(&name, &effects)
-        .ok()
-        .is_some_and(|text| std::fs::write(&to, text).is_ok())
+    Ok(crate::api::presets::import_ffx_into(
+        std::path::Path::new(&folder),
+        &library,
+    ))
 }
 
 /// Where the preset library lives, created on first ask — the save dialogue's
@@ -826,11 +776,15 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
         effects: Option<serde_json::Value>,
         nodes: Option<serde_json::Value>,
     }
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut out: Vec<BridgePresetInfo> = entries
-        .filter_map(|entry| {
+    let mut out: Vec<BridgePresetInfo> = Vec::new();
+    for folder in crate::api::presets::folders_under(dir) {
+        let Some(group) = crate::api::presets::group_of(dir, &folder) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        out.extend(entries.filter_map(|entry| {
             let path = entry.ok()?.path();
             if !path
                 .extension()
@@ -857,9 +811,10 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
             Some(BridgePresetInfo {
                 name,
                 path: path.to_string_lossy().into_owned(),
+                group: group.clone(),
             })
-        })
-        .collect();
+        }));
+    }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out
 }
@@ -898,6 +853,34 @@ pub fn sample_scalars(scalars: Vec<BridgeScalar>, time: BridgeRational) -> Vec<f
         .collect()
 }
 
+/// [`sample_scalars`], and with them Orientations, three scalars each in
+/// `turns`, read as the render reads them: between keys the three turn round
+/// together rather than each on its own. The scalars' values come first, then
+/// three for each Orientation, in order. One crossing for the lot.
+#[frb(sync)]
+pub fn sample_scalars_and_turns(
+    scalars: Vec<BridgeScalar>,
+    turns: Vec<BridgeScalar>,
+    time: BridgeRational,
+) -> Vec<f64> {
+    let seconds = seconds_of(time);
+    let mut out: Vec<f64> = scalars
+        .into_iter()
+        .map(|scalar| sample_at(scalar, seconds))
+        .collect();
+    for turn in turns.chunks_exact(3) {
+        let mut group = lumit_core::model::TransformGroup::default();
+        for (to, from) in group.orientation.iter_mut().zip(turn) {
+            to.animation = from
+                .animation_at(Rational::ZERO)
+                .unwrap_or(Animation::Static(0.0));
+        }
+        let (x, y, z) = group.orientation_at(seconds, &|p| p.value_at(seconds));
+        out.extend([x, y, z]);
+    }
+    out
+}
+
 /// A bridge time in seconds, and zero for the denominator no rational has.
 fn seconds_of(time: BridgeRational) -> f64 {
     if time.den == 0 {
@@ -932,12 +915,41 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
     }
 }
 
+/// The row an expression sits on, so a sampler reads it as that row: a
+/// point's halves carry the same text and each takes its own number.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum BridgeExpressionRow {
+    Transform(BridgeTransformProp),
+    /// An effect's parameter by the effect's id and the parameter's.
+    Effect {
+        effect: Uuid,
+        param: String,
+    },
+}
+
+impl BridgeExpressionRow {
+    #[frb(ignore)]
+    fn core(&self) -> lumit_core::expression::Row<'_> {
+        match self {
+            BridgeExpressionRow::Transform(prop) => {
+                lumit_core::expression::Row::Transform(prop.core())
+            }
+            BridgeExpressionRow::Effect { effect, param } => lumit_core::expression::Row::Effect {
+                effect: *effect,
+                param,
+            },
+        }
+    }
+}
+
 #[frb(sync)]
 pub fn sample_scalar_with_context(
     scalar: BridgeScalar,
     time: BridgeRational,
     layer: LayerReference,
     held: Option<BridgeScalar>,
+    row: Option<BridgeExpressionRow>,
 ) -> f64 {
     let seconds = seconds_of(time);
     match scalar {
@@ -969,7 +981,7 @@ pub fn sample_scalar_with_context(
                 current_depth: 0,
                 inputs: None,
             });
-            let slot = own_slot(&context, &expr, held, seconds);
+            let slot = own_slot(&context, &expr, held, seconds, row.as_ref());
             // This runs on the interface's thread, for every row on screen.
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
                 lumit_core::expression::evaluate_with(language.read(), &expr, Some(context), slot)
@@ -987,6 +999,7 @@ pub fn expression_fault(
     time: BridgeRational,
     layer: LayerReference,
     held: Option<BridgeScalar>,
+    row: Option<BridgeExpressionRow>,
 ) -> Option<String> {
     let doc = document_for(&layer)?;
     let context = Arc::new(ExpressionContext {
@@ -999,7 +1012,7 @@ pub fn expression_fault(
         current_depth: 0,
         inputs: None,
     });
-    let slot = own_slot(&context, &expression, held, seconds_of(time));
+    let slot = own_slot(&context, &expression, held, seconds_of(time), row.as_ref());
     // On the interface's thread, as the sampler above is.
     lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
         lumit_core::expression::fault_in(language.read(), &expression, Some(context), slot)
@@ -1009,18 +1022,27 @@ pub fn expression_fault(
 /// What an expression knows about its property, as a render gives it: `value`
 /// and `wiggle` read this. `held` is the property as it is while new text is
 /// typed for it, and `None` when the text is already the property's own.
+/// `row` is the row asking, when it is known.
 fn own_slot(
     context: &ExpressionContext,
     expression: &str,
     held: Option<BridgeScalar>,
     seconds: f64,
+    row: Option<&BridgeExpressionRow>,
 ) -> lumit_core::expression::script::Slot {
-    use lumit_core::expression::{script::Slot, slot_on_layer};
-    match held {
-        None => slot_on_layer(context, expression),
-        Some(BridgeScalar::Expression(text, _)) => slot_on_layer(context, &text),
-        // Not an expression yet, so the number it shows is what one will read.
-        Some(number) => Slot::new(&[sample_at(number, seconds)], 0, 0),
+    use lumit_core::expression::{script::Slot, slot_of_row, slot_on_layer};
+    // Not an expression yet, so the number it shows is what one will read.
+    let own = match &held {
+        Some(BridgeScalar::Expression(..)) | None => None,
+        Some(number) => Some(sample_at(number.clone(), seconds)),
+    };
+    if let Some(row) = row {
+        return slot_of_row(context, row.core(), own);
+    }
+    match (held, own) {
+        (_, Some(own)) => Slot::new(&[own], 0, 0),
+        (Some(BridgeScalar::Expression(text, _)), None) => slot_on_layer(context, &text),
+        _ => slot_on_layer(context, expression),
     }
 }
 
@@ -1046,6 +1068,7 @@ pub fn sample_scalar_range_with_context(
     start: BridgeRational,
     end: BridgeRational,
     samples: i64,
+    row: Option<BridgeExpressionRow>,
 ) -> Vec<f64> {
     match scalar {
         BridgeScalar::Expression(expr, language) => {
@@ -1069,6 +1092,9 @@ pub fn sample_scalar_range_with_context(
                 current_depth: 0,
                 inputs: None,
             };
+            let slot = row
+                .as_ref()
+                .map(|row| lumit_core::expression::slot_of_row(&context, row.core(), None));
             // The whole curve shares what one frame of a render may spend, so
             // a loop that never ends costs one repaint a fixed amount.
             lumit_core::expression::within_steps(
@@ -1081,6 +1107,7 @@ pub fn sample_scalar_range_with_context(
                         start,
                         end,
                         samples,
+                        slot,
                     )
                 },
             )
@@ -1629,6 +1656,8 @@ pub enum BridgeEnabledCond {
     LayerSet,
     /// Editable while the named layer reference names no layer.
     LayerUnset,
+    /// Editable while the named number is a still nought.
+    Nought,
 }
 
 /// Every greying rule `effect` declares (empty for an effect whose controls are
@@ -1660,6 +1689,7 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
                 EnabledCond::ChoiceIsNot(i) => BridgeEnabledCond::ChoiceIsNot(i),
                 EnabledCond::LayerSet => BridgeEnabledCond::LayerSet,
                 EnabledCond::LayerUnset => BridgeEnabledCond::LayerUnset,
+                EnabledCond::Nought => BridgeEnabledCond::Nought,
             },
         })
         .collect()
@@ -3393,6 +3423,7 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
+        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::script::SLOT_KEY));
 
         value.write_at(&mut param.value, offset, bounds)?;
         // A typed text is held to its cap here, as a number is to its range.
@@ -3400,6 +3431,10 @@ impl BridgeEffectInstance {
             (kind, &mut param.value)
         {
             text.truncate(lumit_core::fx::params::capped_text(text).len());
+        }
+        // A new expression on half of a point reads the whole point.
+        if fresh {
+            lumit_core::expression::note_effect_point(&mut self.effect, &id);
         }
         // Writing to an offered row is the act that adopts it (§1.5): from
         // here it rides the commit like every row the document holds.

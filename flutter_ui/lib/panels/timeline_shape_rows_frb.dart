@@ -3,8 +3,6 @@
 //
 // Split out of timeline_panel_frb.dart.
 
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
@@ -12,7 +10,9 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
@@ -26,11 +26,13 @@ import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 import 'timeline_mask_rows_frb.dart';
 
 /// One piece of a shape layer's art in the Timeline, on the shared
-/// [ItemOpacityRow]. The engine takes the whole contents list, so every
-/// edit — and the drag's preview — is "the list, with this item changed".
+/// [ItemOpacityRow] with no opacity of its own: a shape's opacity keys, so it
+/// is a row under the item. The engine takes the whole contents list, so every
+/// edit is "the list, with this item changed".
 class ShapeItemRow extends StatelessWidget {
   final LayerReference layer;
   final BridgeShapeItem item;
@@ -44,6 +46,9 @@ class ShapeItemRow extends StatelessWidget {
   final bool open;
   final VoidCallback? onToggle;
 
+  /// A tap on the name: the item picked, so the Viewer shows its points.
+  final VoidCallback? onLabelTap;
+
   const ShapeItemRow({super.key, 
     required this.layer,
     required this.item,
@@ -52,115 +57,86 @@ class ShapeItemRow extends StatelessWidget {
     required this.comp,
     this.open = false,
     this.onToggle,
+    this.onLabelTap,
   });
-
-  static BridgeShapeItem _with(BridgeShapeItem i,
-          {String? name, double? opacity}) =>
-      shapeItemWith(i, name: name, opacity: opacity);
 
   /// Write the contents back with this item changed, or dropped.
   void _write(
       {String? name,
-      double? opacity,
       bool delete = false,
       BridgeShapeItem Function(BridgeShapeItem)? change}) {
+    _writeEntries((entries) => delete
+        ? entries.without(item.id)
+        : entries.withItem(item.id,
+            (other) => change?.call(other) ?? shapeItemWith(other, name: name)));
+  }
+
+  void _writeEntries(
+      List<BridgeShapeEntry> Function(List<BridgeShapeEntry>) change) {
+    writeShapeEntries(layer, onChanged, change);
+  }
+
+  /// The menu's Add and Remove, each a list of what it can act on and left
+  /// off where that list is empty, then the moves. A taper narrows an
+  /// outline, so an item with none is not offered one, and an item combined
+  /// into the one above lends its path and nothing else, so it is not either.
+  /// A fill or an outline is offered where the item has none, and taken away
+  /// where it has one.
+  List<Widget> _opRows(VoidCallback close, BuildContext context) {
+    final paints = item.combine == 0;
+    final tapers = item.stroke != null && paints;
+    bool has(ShapeAdd add) => switch (add) {
+          ShapeAdd.fill => item.fill != null,
+          ShapeAdd.stroke => item.stroke != null,
+          _ => item.taper != null,
+        };
+    bool offered(ShapeAdd add) =>
+        add == ShapeAdd.taper ? tapers : (paints || !isItemAdd(add));
+    final adds = [
+      for (final add in ShapeAdd.values)
+        if (!isItemAdd(add) || (offered(add) && !has(add))) add,
+    ];
+    final removes = [
+      for (final add in ShapeAdd.values)
+        if (isItemAdd(add) && offered(add) && has(add)) add,
+    ];
+    return [
+      shapeAddSubmenu(close, item.id, adds,
+          (add) => _writeEntries((e) => addedToShape(e, item.id, add, item))),
+      if (removes.isNotEmpty)
+        shapeAddSubmenu(
+            close,
+            item.id,
+            removes,
+            (add) => _write(
+                change: (i) => shapeItemWith(i,
+                    removeTaper: add == ShapeAdd.taper,
+                    removeFill: add == ShapeAdd.fill,
+                    removeStroke: add == ShapeAdd.stroke)),
+            remove: true),
+      if (item.primitive != null)
+        MenuRow(
+          key: ValueKey<String>('tl-shape-to-path-${item.id}'),
+          onPressed: () {
+            close();
+            _convertToPath(context);
+          },
+          child: Text(l10n.shapeConvertToPath),
+        ),
+      ...shapeMoveRows(close, item.id, _writeEntries),
+    ];
+  }
+
+  /// The parametric shape as a drawn path, the shape it shows at the playhead.
+  void _convertToPath(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
     try {
-      layer.setShapeContents(contents: [
-        for (final other in layer.getShapeContents())
-          if (other.id != item.id)
-            other
-          else if (!delete)
-            change?.call(other) ?? _with(other, name: name, opacity: opacity),
-      ]);
+      layer.convertShapeToPath(
+          id: item.id, time: comp.timeOfFrame(frame: ui.playheadFrame.value));
       onChanged();
     } catch (_) {
       // The item or its layer went away between the draw and the click.
     }
-  }
-
-  /// [i] with [op] taken off, or added where it was missing. A twist starts
-  /// at 10 degrees in the middle of the path's own points, so it turns the
-  /// shape in place and shows it has done something.
-  static BridgeShapeItem _toggled(BridgeShapeItem i, ShapeOp op) {
-    if (hasShapeOp(i, op)) return shapeItemWith(i, remove: op);
-    final xs = i.vertices.map((v) => v.x);
-    final ys = i.vertices.map((v) => v.y);
-    final centre = i.vertices.isEmpty
-        ? Offset.zero
-        : Offset((xs.reduce(math.min) + xs.reduce(math.max)) / 2,
-            (ys.reduce(math.min) + ys.reduce(math.max)) / 2);
-    return switch (op) {
-      ShapeOp.twist => shapeItemWith(i,
-          twist: BridgeShapeTwist(
-            angle: const BridgeScalar.static_(10),
-            rotation: const BridgeScalar.static_(0),
-            axis: const BridgeScalar.static_(0),
-            centreX: BridgeScalar.static_(centre.dx),
-            centreY: BridgeScalar.static_(centre.dy),
-          )),
-      ShapeOp.deform => shapeItemWith(i,
-          deform: const BridgeShapeDeform(
-            mode: 0,
-            amount: BridgeScalar.static_(10),
-            scale: BridgeScalar.static_(100),
-            evolution: BridgeScalar.static_(0),
-            seed: BridgeScalar.static_(0),
-            detail: BridgeScalar.static_(4),
-          )),
-      ShapeOp.smooth =>
-        shapeItemWith(i, smooth: const BridgeScalar.static_(10)),
-      ShapeOp.taper => shapeItemWith(i,
-          taper: const BridgeShapeTaper(
-            start: BridgeScalar.static_(100),
-            end: BridgeScalar.static_(100),
-            startLength: BridgeScalar.static_(50),
-            endLength: BridgeScalar.static_(50),
-            ease: BridgeScalar.static_(0),
-            scope: 0,
-          )),
-    };
-  }
-
-  /// The menu's Add and Remove, each a list of the operations it can act on
-  /// and left off where that list is empty. An item combined into the one
-  /// above lends its path and nothing else, so it has neither.
-  List<Widget> _opRows(VoidCallback close) {
-    if (item.combine != 0) return const [];
-    // A taper narrows an outline, so an item with none is not offered one.
-    final open = [
-      for (final op in ShapeOp.values)
-        if (op != ShapeOp.taper || item.stroke != null) op,
-    ];
-    final has = [for (final op in open) if (hasShapeOp(item, op)) op];
-    final lacks = [for (final op in open) if (!hasShapeOp(item, op)) op];
-    Widget submenu(String key, String label, List<ShapeOp> ops) => SubmenuRow(
-          key: ValueKey<String>('tl-shape-$key-${item.id}'),
-          closeParent: close,
-          submenu: (dismiss) => FloatSurface(
-            width: 150,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final op in ops)
-                  MenuRow(
-                    key: ValueKey<String>(
-                        'tl-shape-$key-${op.name}-${item.id}'),
-                    onPressed: () {
-                      dismiss();
-                      _write(change: (i) => _toggled(i, op));
-                    },
-                    child: Text(shapeOpLabel(op)),
-                  ),
-              ],
-            ),
-          ),
-          child: Text(label),
-        );
-    return [
-      if (lacks.isNotEmpty) submenu('add', l10n.shapeOpAdd, lacks),
-      if (has.isNotEmpty) submenu('remove', l10n.shapeOpRemove, has),
-    ];
   }
 
   @override
@@ -174,30 +150,371 @@ class ShapeItemRow extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       renameRequest: ui.renameItemRequest,
-      opacity: item.opacity,
+      onLabelTap: onLabelTap,
+      opacity: null,
       valueColumn: valueColumn,
-      // Show the opacity the drag is passing through without writing it,
-      // exactly as the stroke row does.
-      onPreview: (opacity) {
-        try {
-          comp.renderFrameWithShapePreview(
-            frame: BigInt.from(ui.playheadFrame.value),
-            scale: ui.viewerScale,
-            layer: layer,
-            contents: [
-              for (final i in layer.getShapeContents())
-                if (i.id == item.id) _with(i, opacity: opacity) else i,
-            ],
-          );
-        } catch (_) {
-          // A preview is a courtesy; the drag carries on without it.
-        }
-      },
-      onCommit: (opacity) => _write(opacity: opacity),
       onRename: (name) => _write(name: name),
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
-      menuRows: _opRows,
+      menuRows: (close) => _opRows(close, context),
+    );
+  }
+}
+
+/// Read the layer's contents, change the list, and write it back whole: one
+/// op and one undo step, which is how every shape edit is written.
+void writeShapeEntries(LayerReference layer, VoidCallback onChanged,
+    List<BridgeShapeEntry> Function(List<BridgeShapeEntry>) change) {
+  try {
+    layer.setShapeContents(
+        contents: change(layer.getShapeContents()), at: null);
+    onChanged();
+  } catch (_) {
+    // The entry or its layer went away between the draw and the click.
+  }
+}
+
+/// The Add (or Remove) submenu on a shape row: [adds], each a row.
+Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
+        void Function(ShapeAdd) pick,
+        {bool remove = false}) =>
+    SubmenuRow(
+      key: ValueKey<String>('tl-shape-${remove ? 'remove' : 'add'}-$id'),
+      closeParent: close,
+      submenu: (dismiss) => FloatSurface(
+        width: 150,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final add in adds)
+              MenuRow(
+                key: ValueKey<String>(
+                    'tl-shape-${remove ? 'remove' : 'add'}-${add.name}-$id'),
+                onPressed: () {
+                  dismiss();
+                  pick(add);
+                },
+                child: Text(shapeAddLabel(add)),
+              ),
+          ],
+        ),
+      ),
+      child: Text(remove ? l10n.shapeOpRemove : l10n.shapeOpAdd),
+    );
+
+/// Move up and Move down, swapping the entry with its neighbour at its own
+/// depth. A modifier moved past an item changes what it acts on.
+List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
+        void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
+            write) =>
+    [
+      for (final (by, label) in [(-1, l10n.moveUp), (1, l10n.moveDown)])
+        MenuRow(
+          key: ValueKey<String>('tl-shape-move-${by < 0 ? 'up' : 'down'}-$id'),
+          onPressed: () {
+            close();
+            write((entries) => entries.moved(id, by));
+          },
+          child: Text(label),
+        ),
+    ];
+
+/// Which kind of entry a modifier is, in the Add menu's terms.
+ShapeAdd shapeAddOf(BridgeShapeModifier modifier) => switch (modifier.kind) {
+      BridgeShapeModifierKind_Repeat() => ShapeAdd.repeater,
+      BridgeShapeModifierKind_Trim() => ShapeAdd.trim,
+      BridgeShapeModifierKind_Offset() => ShapeAdd.offset,
+      BridgeShapeModifierKind_Twist() => ShapeAdd.twist,
+      BridgeShapeModifierKind_Deform() => ShapeAdd.deform,
+      BridgeShapeModifierKind_Smooth() => ShapeAdd.smooth,
+    };
+
+/// [entries] with [add] given at the entry [at]: a stroke taper on the item
+/// itself, a group round the entry, or a modifier entry after it (inside it,
+/// for a group), named for its kind and numbered after any already there.
+///
+/// A new modifier shows it has done something: a twist starts at 10 degrees
+/// in the middle of the item's own points, so it turns the shape in place; a
+/// repeater steps one width to the right, so its copies sit beside the shape;
+/// an offset pushes out by ten. A trim starts whole, which is what After
+/// Effects does too.
+List<BridgeShapeEntry> addedToShape(
+    List<BridgeShapeEntry> entries, UuidValue at, ShapeAdd add,
+    [BridgeShapeItem? item]) {
+  switch (add) {
+    case ShapeAdd.fill:
+      return entries.withItem(
+          at,
+          (i) => shapeItemWith(i,
+              fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1),
+              )));
+    case ShapeAdd.stroke:
+      return entries.withItem(
+          at,
+          (i) => shapeItemWith(i,
+              stroke: const BridgeColour(
+                r: BridgeScalar.static_(0),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1),
+              ),
+              value: ShapeValue.strokeWidth,
+              to: switch (i.strokeWidth) {
+                BridgeScalar_Static(:final field0) when field0 <= 0 =>
+                  const BridgeScalar.static_(2),
+                final width => width,
+              }));
+    case ShapeAdd.taper:
+      return entries.withItem(
+          at,
+          (i) => shapeItemWith(i,
+              taper: const BridgeShapeTaper(
+                start: BridgeScalar.static_(100),
+                end: BridgeScalar.static_(100),
+                startLength: BridgeScalar.static_(50),
+                endLength: BridgeScalar.static_(50),
+                ease: BridgeScalar.static_(0),
+                scope: 0,
+              )));
+    case ShapeAdd.group:
+      return entries.grouped(at, shapeAddLabel(add));
+    default:
+      final box = item == null ? null : shapeContentsRect([
+          BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(item))
+        ]);
+      final centre = box?.center ?? Offset.zero;
+      final kind = switch (add) {
+        ShapeAdd.repeater =>
+          BridgeShapeModifierKind.repeat(BridgeShapeRepeater(
+            copies: const BridgeScalar.static_(3),
+            offset: const BridgeScalar.static_(0),
+            anchorX: const BridgeScalar.static_(0),
+            anchorY: const BridgeScalar.static_(0),
+            positionX: BridgeScalar.static_(box?.width ?? 100),
+            positionY: const BridgeScalar.static_(0),
+            rotation: const BridgeScalar.static_(0),
+            scale: const BridgeScalar.static_(100),
+            startOpacity: const BridgeScalar.static_(100),
+            endOpacity: const BridgeScalar.static_(100),
+          )),
+        ShapeAdd.trim => const BridgeShapeModifierKind.trim(BridgeShapeTrim(
+            start: BridgeScalar.static_(0),
+            end: BridgeScalar.static_(100),
+            offset: BridgeScalar.static_(0),
+          )),
+        ShapeAdd.offset =>
+          const BridgeShapeModifierKind.offset(BridgeScalar.static_(10)),
+        ShapeAdd.twist => BridgeShapeModifierKind.twist(BridgeShapeTwist(
+            angle: const BridgeScalar.static_(10),
+            rotation: const BridgeScalar.static_(0),
+            axis: const BridgeScalar.static_(0),
+            centreX: BridgeScalar.static_(centre.dx),
+            centreY: BridgeScalar.static_(centre.dy),
+          )),
+        ShapeAdd.deform =>
+          const BridgeShapeModifierKind.deform(BridgeShapeDeform(
+            mode: 0,
+            amount: BridgeScalar.static_(10),
+            scale: BridgeScalar.static_(100),
+            evolution: BridgeScalar.static_(0),
+            seed: BridgeScalar.static_(0),
+            detail: BridgeScalar.static_(4),
+          )),
+        _ => const BridgeShapeModifierKind.smooth(BridgeScalar.static_(10)),
+      };
+      final alike = entries.modifiers.where((m) => shapeAddOf(m) == add).length;
+      final name = alike == 0
+          ? shapeAddLabel(add)
+          : '${shapeAddLabel(add)} ${alike + 1}';
+      final modifier = BridgeShapeEntryKind.modifier(BridgeShapeModifier(
+          id: UuidValue.fromString(const Uuid().v4()), name: name, kind: kind));
+      final inside = entries.any((e) =>
+          e.kind is BridgeShapeEntryKind_Group && shapeEntryId(e) == at);
+      return inside
+          ? entries.appendedInto(at, modifier)
+          : entries.insertedAfter(at, modifier);
+  }
+}
+
+/// A modifier entry in the Timeline: a repeater, a trim, an offset, a twist,
+/// a deform or a smooth, on the shared [ItemOpacityRow]. It acts on the rows
+/// above it, and its numbers sit under it.
+class ShapeModifierRow extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeShapeModifier modifier;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+  final bool open;
+  final VoidCallback? onToggle;
+  final VoidCallback? onLabelTap;
+
+  const ShapeModifierRow({
+    super.key,
+    required this.layer,
+    required this.modifier,
+    required this.valueColumn,
+    required this.onChanged,
+    this.open = false,
+    this.onToggle,
+    this.onLabelTap,
+  });
+
+  void _write(
+          List<BridgeShapeEntry> Function(List<BridgeShapeEntry>) change) =>
+      writeShapeEntries(layer, onChanged, change);
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final adds = [
+      for (final add in ShapeAdd.values)
+        if (!isItemAdd(add) && add != ShapeAdd.group) add,
+    ];
+    return ItemOpacityRow(
+      icon: LumitIcon.fx,
+      name: modifier.name,
+      keyPrefix: 'tl-shape',
+      id: modifier.id.toString(),
+      open: open,
+      onToggle: onToggle,
+      renameRequest: ui.renameItemRequest,
+      onLabelTap: onLabelTap,
+      opacity: null,
+      valueColumn: valueColumn,
+      onRename: (name) => _write((e) => e.withModifier(
+          modifier.id,
+          (m) => BridgeShapeModifier(id: m.id, name: name, kind: m.kind))),
+      onDelete: () => _write((e) => e.without(modifier.id)),
+      deleteLabel: l10n.deleteShapeModifier,
+      menuRows: (close) => [
+        // Added under this one, so the two stack.
+        shapeAddSubmenu(close, modifier.id, adds,
+            (add) => _write((e) => addedToShape(e, modifier.id, add))),
+        if (modifier.kind is BridgeShapeModifierKind_Repeat)
+          shapeExpandSubmenu(
+              close, 'tl-shape-expand-${modifier.id}', l10n.shapeExpandCopies,
+              (intoLayers) => expandShapeCopies(
+                  ui, layer, onChanged, modifier.id, intoLayers)),
+        ...shapeMoveRows(close, modifier.id, _write),
+      ],
+    );
+  }
+}
+
+/// Make a repeater's copies real: [repeater]'s, or every repeater's when
+/// null. Keyed numbers are read at the playhead. One op, one undo step.
+void expandShapeCopies(LumitUiState ui, LayerReference layer,
+    VoidCallback onChanged, UuidValue? repeater, bool intoLayers) {
+  final comp = ui.selectedComp;
+  if (comp == null) return;
+  try {
+    layer.expandShapeCopies(
+      repeater: repeater,
+      time: comp.timeOfFrame(frame: ui.playheadFrame.value),
+      intoLayers: intoLayers,
+    );
+    onChanged();
+  } catch (_) {
+    // The repeater or its layer went away between the draw and the click.
+  }
+}
+
+/// Expand copies ▸ Into this layer, Into layers.
+Widget shapeExpandSubmenu(VoidCallback close, String key, String label,
+        void Function(bool intoLayers) pick) =>
+    SubmenuRow(
+      key: ValueKey<String>(key),
+      closeParent: close,
+      submenu: (dismiss) => FloatSurface(
+        width: 150,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (intoLayers, row) in [
+              (false, l10n.shapeExpandIntoLayer),
+              (true, l10n.shapeExpandIntoLayers),
+            ])
+              MenuRow(
+                key: ValueKey<String>('$key-${intoLayers ? 'layers' : 'layer'}'),
+                onPressed: () {
+                  dismiss();
+                  pick(intoLayers);
+                },
+                child: Text(row),
+              ),
+          ],
+        ),
+      ),
+      child: Text(label),
+    );
+
+/// A group in the Timeline, on the shared [ItemOpacityRow]: its entries sit
+/// under it, one deeper, and a modifier inside it acts inside it alone.
+class ShapeGroupRow extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeShapeGroup group;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+  final bool open;
+  final VoidCallback? onToggle;
+  final VoidCallback? onLabelTap;
+
+  const ShapeGroupRow({
+    super.key,
+    required this.layer,
+    required this.group,
+    required this.valueColumn,
+    required this.onChanged,
+    this.open = false,
+    this.onToggle,
+    this.onLabelTap,
+  });
+
+  void _write(
+          List<BridgeShapeEntry> Function(List<BridgeShapeEntry>) change) =>
+      writeShapeEntries(layer, onChanged, change);
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final adds = [
+      for (final add in ShapeAdd.values)
+        if (!isItemAdd(add)) add,
+    ];
+    return ItemOpacityRow(
+      icon: LumitIcon.folder,
+      name: group.name,
+      keyPrefix: 'tl-shape',
+      id: group.id.toString(),
+      open: open,
+      onToggle: onToggle,
+      renameRequest: ui.renameItemRequest,
+      onLabelTap: onLabelTap,
+      opacity: null,
+      valueColumn: valueColumn,
+      onRename: (name) => _write((e) => e.withGroupName(group.id, name)),
+      onDelete: () => _write((e) => e.without(group.id)),
+      deleteLabel: l10n.deleteShapeGroup,
+      menuRows: (close) => [
+        // Added at the end of the group, inside it.
+        shapeAddSubmenu(close, group.id, adds,
+            (add) => _write((e) => addedToShape(e, group.id, add))),
+        MenuRow(
+          key: ValueKey<String>('tl-shape-ungroup-${group.id}'),
+          onPressed: () {
+            close();
+            _write((e) => e.ungrouped(group.id));
+          },
+          child: Text(l10n.shapeUngroup),
+        ),
+        ...shapeMoveRows(close, group.id, _write),
+      ],
     );
   }
 }
@@ -620,8 +937,8 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
   }
 }
 
-/// One of a shape item's animatable numbers in the Timeline — its Trim
-/// start, end or offset — on the same shape of row a stroke's write-on uses.
+/// One of a shape item's animatable numbers in the Timeline, or one of a
+/// modifier entry's, on the same shape of row a stroke's write-on uses.
 ///
 /// The whole contents list is sent for every write, because a shape layer's art
 /// is stored and committed as a whole list: a preview shaped differently
@@ -629,7 +946,10 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
 class ShapeValueRow extends StatefulWidget {
   final CompositionReference comp;
   final LayerReference layer;
-  final BridgeShapeItem item;
+
+  /// The item the number belongs to, or null for a modifier's.
+  final BridgeShapeItem? item;
+  final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
   /// Which gradient stop the row is for, on the two values a stop has.
@@ -643,6 +963,7 @@ class ShapeValueRow extends StatefulWidget {
     required this.comp,
     required this.layer,
     required this.item,
+    this.modifier,
     required this.value,
     this.stop = 0,
     required this.valueColumn,
@@ -659,11 +980,82 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   double? _staged;
   final PreviewThrottle _throttle = PreviewThrottle();
 
-  BridgeScalar get _scalar =>
-      shapeScalarOf(widget.item, widget.value, stop: widget.stop);
+  BridgeScalar get _scalar => switch (widget.modifier) {
+        final m? => modifierScalarOf(m, widget.value),
+        null => shapeScalarOf(widget.item!, widget.value, stop: widget.stop),
+      };
 
-  String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}'
+  bool get _isColour => isColourValue(widget.value);
+
+  BridgeColour? get _colour => widget.value == ShapeValue.fillColour
+      ? widget.item?.fill
+      : widget.item?.stroke;
+
+  /// What the stopwatch keys: a colour's red, green and blue together, the
+  /// one number otherwise.
+  List<BridgeScalar> get _scalars => switch (_colour) {
+        final c? when _isColour => [c.r, c.g, c.b],
+        _ => [_scalar],
+      };
+
+  /// [i] with the row's values replaced by [to], in [_scalars]' order.
+  BridgeShapeItem _with(BridgeShapeItem i, List<BridgeScalar> to) {
+    if (!_isColour) {
+      return shapeWithScalar(i, widget.value, to.first, stop: widget.stop);
+    }
+    final was = widget.value == ShapeValue.fillColour ? i.fill : i.stroke;
+    if (was == null || to.length < 3) return i;
+    final c = BridgeColour(r: to[0], g: to[1], b: to[2], a: was.a);
+    return widget.value == ShapeValue.fillColour
+        ? shapeItemWith(i, fill: c)
+        : shapeItemWith(i, stroke: c);
+  }
+
+  String get _rowKey =>
+      'tl-shape-${widget.value.name}-${widget.modifier?.id ?? widget.item!.id}'
       '${isGradientStopValue(widget.value) ? '-${widget.stop}' : ''}';
+
+  /// The whole list with this row's values replaced by [to]: on the item, or
+  /// on the modifier entry.
+  List<BridgeShapeEntry> _entriesWith(
+          List<BridgeShapeEntry> entries, List<BridgeScalar> to) =>
+      switch (widget.modifier) {
+        final m? => entries.withModifier(
+            m.id, (was) => modifierWith(was, value: widget.value, to: to.first)),
+        null => entries.withItem(widget.item!.id, (was) => _with(was, to)),
+      };
+
+  /// The colour as it reads under the playhead. Picking one writes each keyed
+  /// channel a key there and sets a still one, as an effect's colour does.
+  Widget _swatch(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final rgb = _scalars;
+    Widget swatch() {
+      final frame = ui.playheadFrame.value;
+      double now(BridgeScalar s) =>
+          sampledScalar(s, timeOfFrame(widget.comp, frame));
+      int byte(BridgeScalar s) => (now(s).clamp(0.0, 1.0) * 255).round();
+      return ColourSwatchButton(
+        key: ValueKey<String>(_rowKey),
+        colour: documentColour(byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), 255),
+        // A shape's colours are scene-linear, so the picker counts in 0—1
+        // rather than in bytes.
+        scale: ColourScale.unit,
+        onPicked: (p) => _writeAll([
+          for (final (channel, v) in [p.r, p.g, p.b].indexed)
+            rgb[channel] is BridgeScalar_Static
+                ? BridgeScalar.static_(v)
+                : scalarWithValueAt(rgb[channel], v, widget.comp, frame),
+        ]),
+      );
+    }
+
+    if (rgb.every((s) => s is BridgeScalar_Static)) return swatch();
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, _, __) => swatch(),
+    );
+  }
 
   /// The trim's two ends are a per cent of the path's own length; its offset is
   /// degrees, because degrees go round; the dashes are lengths in layer pixels.
@@ -672,7 +1064,28 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   (double, double, String) get _units => switch (widget.value) {
         // The shape has no number to drag, so no range and no unit: its row is
         // the stopwatch and its diamonds.
-        ShapeValue.path => (0, 0, ''),
+        ShapeValue.path ||
+        ShapeValue.fillColour ||
+        ShapeValue.strokeColour =>
+          (0, 0, ''),
+        ShapeValue.strokeWidth => (0, 1000, ' px'),
+        // A parametric shape's size and place in the art's own pixels, the
+        // corners of a polygon or a star per cent of round.
+        ShapeValue.shapeWidth ||
+        ShapeValue.shapeHeight ||
+        ShapeValue.outerRadius ||
+        ShapeValue.innerRadius ||
+        ShapeValue.roundness =>
+          (0, 10000, ' px'),
+        ShapeValue.shapePositionX ||
+        ShapeValue.shapePositionY =>
+          (-10000, 10000, ' px'),
+        ShapeValue.points => (3, 100, ''),
+        ShapeValue.shapeRotation => (-3600, 3600, '°'),
+        ShapeValue.outerRoundness ||
+        ShapeValue.innerRoundness =>
+          (-1000, 1000, '%'),
+        ShapeValue.opacity => (0, 100, '%'),
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),
         // Where the ramp starts and ends, in the art's own coordinates.
@@ -696,8 +1109,11 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.twistCentreY =>
           (-10000, 10000, ' px'),
         // Pixels pushed out, or a per cent of the distance from the middle.
-        ShapeValue.deformAmount =>
-          widget.item.deform?.mode == 1 ? (-1000, 1000, '%') : (-1000, 1000, ' px'),
+        ShapeValue.deformAmount => switch (widget.modifier?.kind) {
+            BridgeShapeModifierKind_Deform(:final field0) when field0.mode == 1 =>
+              (-1000, 1000, '%'),
+            _ => (-1000, 1000, ' px'),
+          },
         ShapeValue.deformScale => (1, 10000, ' px'),
         ShapeValue.deformEvolution => (-3600, 3600, '°'),
         ShapeValue.deformSeed => (0, 100000, ''),
@@ -741,7 +1157,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 
   /// Show the value the drag is passing through without writing it.
-  void _preview(BridgeScalar v) {
+  void _preview(BridgeScalar v) => _previewAll([v]);
+
+  void _previewAll(List<BridgeScalar> v) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _throttle.request(() {
       try {
@@ -749,13 +1167,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           frame: BigInt.from(ui.playheadFrame.value),
           scale: ui.viewerScale,
           layer: widget.layer,
-          contents: [
-            for (final i in widget.layer.getShapeContents())
-              if (i.id == widget.item.id)
-                shapeWithScalar(i, widget.value, v, stop: widget.stop)
-              else
-                i,
-          ],
+          contents: _entriesWith(widget.layer.getShapeContents(), v),
         );
       } catch (_) {
         // A preview is a courtesy; the drag carries on without it.
@@ -763,17 +1175,14 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     });
   }
 
-  void _write(BridgeScalar v) {
+  void _write(BridgeScalar v) => _writeAll([v]);
+
+  void _writeAll(List<BridgeScalar> v) {
+    _throttle.cancel();
     setState(() => _staged = null);
     try {
       widget.layer.setShapeContents(
-        contents: [
-          for (final i in widget.layer.getShapeContents())
-            if (i.id == widget.item.id)
-              shapeWithScalar(i, widget.value, v, stop: widget.stop)
-            else
-              i,
-        ],
+        contents: _entriesWith(widget.layer.getShapeContents(), v),
         // Not a shape edit: a keyed path is carried through untouched.
         at: null,
       );
@@ -792,20 +1201,20 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
       children: [
         if (_isPath)
           PathKeyframesFrb(
-            keys: widget.item.pathKeys,
+            keys: widget.item!.pathKeys,
             rowKey: _rowKey,
             onToggleKey: (time) => widget.layer
-                .toggleShapePathKey(id: widget.item.id, time: time),
+                .toggleShapePathKey(id: widget.item!.id, time: time),
             onClear: (time) => widget.layer
-                .clearShapePathKeys(id: widget.item.id, time: time),
+                .clearShapePathKeys(id: widget.item!.id, time: time),
             comp: widget.comp,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
           )
         else
           KeyframeControlsFrb(
-            scalars: [_scalar],
-            onWrite: (s) => _write(s.first),
+            scalars: _scalars,
+            onWrite: _writeAll,
             comp: widget.comp,
             onSeek: widget.onSeek,
             rowKey: _rowKey,
@@ -825,7 +1234,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             // drawing tools are where it is edited.
             child: _isPath
                 ? const SizedBox.shrink()
-                : SizedBox(width: 72, child: _field()),
+                : _isColour
+                    ? _swatch(context)
+                    : SizedBox(width: 72, child: _field()),
           ),
         ),
         SizedBox(width: widget.valueColumn.rightInset),
@@ -902,42 +1313,38 @@ class _RampChip extends StatelessWidget {
   }
 }
 
-/// A shape item's fill colour, its gradient choice, or the gradient's second
-/// colour. None of the three is a number, so this row carries a swatch
-/// or a dropdown where the others carry a value field — and no stopwatch,
-/// because none of them keys.
+/// A shape item's gradient choice or the gradient's second colour, and the
+/// other choices an item has, or a deform entry's Displace or Scale. None of
+/// them is a number, so this row carries a swatch or a dropdown where the
+/// others carry a value field, and no stopwatch, because none of them keys.
 class ShapePaintRow extends StatelessWidget {
   final LayerReference layer;
-  final BridgeShapeItem item;
+
+  /// The item the choice belongs to, or null for a modifier's.
+  final BridgeShapeItem? _item;
+  final BridgeShapeModifier? modifier;
   final ShapePaint which;
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
   const ShapePaintRow({super.key, 
     required this.layer,
-    required this.item,
+    required BridgeShapeItem? item,
+    this.modifier,
     required this.which,
     required this.valueColumn,
     required this.onChanged,
-  });
+  }) : _item = item;
 
-  /// The whole list back with this item changed — how every shape edit is
-  /// written, so this is one op and one undo step.
-  void _write(BridgeShapeItem Function(BridgeShapeItem) change) {
-    try {
-      layer.setShapeContents(
-        contents: [
-          for (final other in layer.getShapeContents())
-            if (other.id == item.id) change(other) else other,
-        ],
-        // Not a shape edit: a keyed path is carried through untouched.
-        at: null,
-      );
-      onChanged();
-    } catch (_) {
-      // The item or its layer went away between the draw and the click.
-    }
-  }
+  /// The item, on the rows that are an item's. The deform choice is the one
+  /// that is not, and never reads this.
+  BridgeShapeItem get item => _item!;
+
+  /// The whole list back with this item changed, which is how every shape
+  /// edit is written, so this is one op and one undo step.
+  void _write(BridgeShapeItem Function(BridgeShapeItem) change) =>
+      writeShapeEntries(
+          layer, onChanged, (entries) => entries.withItem(item.id, change));
 
   /// The far end of the ramp before anybody has picked one: black, which is
   /// what the engine draws for a gradient with no second colour.
@@ -963,7 +1370,8 @@ class ShapePaintRow extends StatelessWidget {
         i.gradientStartY != const BridgeScalar.static_(0) ||
         i.gradientEndY != const BridgeScalar.static_(0);
     if (kind == 0 || aimed) return shapeItemWith(i, gradient: kind);
-    final box = shapeContentsRect([i]);
+    final box = shapeContentsRect(
+        [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(i))]);
     if (box == null) return shapeItemWith(i, gradient: kind);
     final (start, end) = kind == 2
         ? (box.center, Offset(box.right, box.center.dy))
@@ -990,7 +1398,11 @@ class ShapePaintRow extends StatelessWidget {
   /// The gradient as its editor holds it, each stop named by where it is in
   /// the item's list.
   GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
-        startColour: i.fill ?? _defaultEnd,
+        startColour: switch (i.fill) {
+          final c? => BridgeColourRgba(
+              r: _now(c.r, ui), g: _now(c.g, ui), b: _now(c.b, ui), a: _now(c.a, ui)),
+          null => _defaultEnd,
+        },
         startOpacity: _now(i.gradientStartOpacity, ui),
         endColour: i.gradientColour ?? _defaultEnd,
         endOpacity: _now(i.gradientEndOpacity, ui),
@@ -1021,7 +1433,14 @@ class ShapePaintRow extends StatelessWidget {
           LumitUiState ui, Map<int, BridgeGradientStop> known) =>
       shapeItemWith(
         i,
-        fill: ramp.startColour,
+        fill: switch (i.fill) {
+          final c? => BridgeColour(
+              r: _held(c.r, ramp.startColour.r, ui),
+              g: _held(c.g, ramp.startColour.g, ui),
+              b: _held(c.b, ramp.startColour.b, ui),
+              a: c.a),
+          null => stillColour(ramp.startColour),
+        },
         gradientColour: ramp.endColour,
         gradientStartOpacity:
             _held(i.gradientStartOpacity, ramp.startOpacity, ui),
@@ -1052,7 +1471,9 @@ class ShapePaintRow extends StatelessWidget {
           ramp: _rampOf(item, ui),
           onOpen: (at) => _editStops(context, at),
         );
+    final fill = item.fill;
     final still = [
+      if (fill != null) ...[fill.r, fill.g, fill.b],
       item.gradientStartOpacity,
       item.gradientEndOpacity,
       for (final s in item.gradientStops) ...[s.position, s.opacity],
@@ -1072,13 +1493,9 @@ class ShapePaintRow extends StatelessWidget {
     final known = {
       for (final (index, s) in item.gradientStops.indexed) index: s,
     };
-    List<BridgeShapeItem> contents(GradientRamp ramp) => [
-          for (final other in layer.getShapeContents())
-            if (other.id == item.id)
-              _withRamp(other, ramp, ui, known)
-            else
-              other,
-        ];
+    List<BridgeShapeEntry> contents(GradientRamp ramp) => layer
+        .getShapeContents()
+        .withItem(item.id, (other) => _withRamp(other, ramp, ui, known));
     showGradientStopsPopover(
       context: context,
       position: at,
@@ -1101,8 +1518,9 @@ class ShapePaintRow extends StatelessWidget {
           final written = contents(ramp);
           layer.setShapeContents(contents: written, at: null);
           // What each stop is now, for the next edit to start from.
-          final stops =
-              written.firstWhere((i) => i.id == item.id).gradientStops;
+          final stops = written.items
+              .firstWhere((i) => i.id == item.id)
+              .gradientStops;
           known.clear();
           for (final (index, s) in ramp.between.indexed) {
             known[s.id] = stops[index];
@@ -1118,7 +1536,7 @@ class ShapePaintRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final key = 'tl-shape-${which.name}-${item.id}';
+    final key = 'tl-shape-${which.name}-${modifier?.id ?? item.id}';
     return Row(
       children: [
         // The width the stopwatch and its gap take on every other row, so the
@@ -1164,15 +1582,6 @@ class ShapePaintRow extends StatelessWidget {
                     onChanged: (k) => _write((i) => _aimed(i, k)),
                   ),
                 ),
-              ShapePaint.fill => ColourSwatchButton(
-                  key: ValueKey<String>(key),
-                  colour: _shown(item.fill ?? _defaultEnd),
-                  // A shape's colours are scene-linear, so the picker counts
-                  // in 0—1 rather than in bytes.
-                  scale: ColourScale.unit,
-                  onPicked: (p) => _write((i) =>
-                      shapeItemWith(i, fill: _picked(p, i.fill?.a ?? 1))),
-                ),
               ShapePaint.gradientColour => ColourSwatchButton(
                   key: ValueKey<String>(key),
                   colour: _shown(item.gradientColour ?? _defaultEnd),
@@ -1181,18 +1590,26 @@ class ShapePaintRow extends StatelessWidget {
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
                 ),
               ShapePaint.gradientStops => _rampChip(context, key),
-              // Displace or Scale.
+              // Displace or Scale, on the deform entry.
               ShapePaint.deformMode => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(
                     key: ValueKey<String>(key),
-                    value: item.deform?.mode == 1 ? 1 : 0,
+                    value: switch (modifier?.kind) {
+                      BridgeShapeModifierKind_Deform(:final field0)
+                          when field0.mode == 1 =>
+                        1,
+                      _ => 0,
+                    },
                     options: const [0, 1],
                     label: (k) => k == 1
                         ? l10n.shapeDeformModeScale
                         : l10n.shapeDeformModeDisplace,
-                    onChanged: (k) =>
-                        _write((i) => shapeItemWith(i, deformMode: k)),
+                    onChanged: (k) => writeShapeEntries(
+                        layer,
+                        onChanged,
+                        (entries) => entries.withModifier(modifier!.id,
+                            (m) => modifierWith(m, deformMode: k))),
                   ),
                 ),
               // Each path, or the whole shape as one.

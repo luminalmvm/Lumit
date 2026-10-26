@@ -1,0 +1,1098 @@
+{
+  "Shape": {
+    "contents": [
+      {
+        "id": "01a174f9-be2c-7bb2-889d-bdcf46285e8a",
+        "name": "Trimmed",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                5.0,
+                5.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                45.0,
+                5.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                45.0,
+                45.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                5.0,
+                45.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "stroke_width": 3.0,
+        "opacity": 100.0,
+        "trim_start": 10.0,
+        "trim_end": 70.0,
+        "trim_offset": 45.0,
+        "dashes": [
+          6.0,
+          4.0
+        ],
+        "dash_offset": 2.0
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-bdec1d768db2",
+        "name": "Repeated",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                80.0,
+                20.0
+              ],
+              "tan_in": [
+                -8.284271247461902,
+                0.0
+              ],
+              "tan_out": [
+                8.284271247461902,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                95.0,
+                30.0
+              ],
+              "tan_in": [
+                0.0,
+                -5.522847498307934
+              ],
+              "tan_out": [
+                0.0,
+                5.522847498307934
+              ]
+            },
+            {
+              "pos": [
+                80.0,
+                40.0
+              ],
+              "tan_in": [
+                8.284271247461902,
+                0.0
+              ],
+              "tan_out": [
+                -8.284271247461902,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                65.0,
+                30.0
+              ],
+              "tan_in": [
+                0.0,
+                5.522847498307934
+              ],
+              "tan_out": [
+                0.0,
+                -5.522847498307934
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "stroke_width": 2.0,
+        "opacity": 80.0,
+        "offset_amount": 3.0,
+        "repeat_copies": 3.0,
+        "repeat_offset": -1.0,
+        "repeat_anchor_x": 80.0,
+        "repeat_anchor_y": 30.0,
+        "repeat_position_x": 25.0,
+        "repeat_position_y": 5.0,
+        "repeat_rotation": 10.0,
+        "repeat_scale": 90.0,
+        "repeat_end_opacity": 40.0
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be0d406cecb7",
+        "name": "Bent",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                40.0,
+                65.0
+              ],
+              "tan_in": [
+                -13.807118745769836,
+                0.0
+              ],
+              "tan_out": [
+                13.807118745769836,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                65.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                -13.807118745769836
+              ],
+              "tan_out": [
+                0.0,
+                13.807118745769836
+              ]
+            },
+            {
+              "pos": [
+                40.0,
+                115.0
+              ],
+              "tan_in": [
+                13.807118745769836,
+                0.0
+              ],
+              "tan_out": [
+                -13.807118745769836,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                15.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                13.807118745769836
+              ],
+              "tan_out": [
+                0.0,
+                -13.807118745769836
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "gradient": 1,
+        "gradient_colour": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "gradient_start_x": 15.0,
+        "gradient_start_y": 90.0,
+        "gradient_end_x": 65.0,
+        "gradient_end_y": 90.0,
+        "gradient_stops": [
+          {
+            "position": 50.0,
+            "colour": [
+              0.0,
+              1.0,
+              0.0,
+              1.0
+            ],
+            "opacity": 60.0
+          }
+        ],
+        "twist": {
+          "angle": 60.0,
+          "rotation": 15.0,
+          "axis": 20.0,
+          "centre_x": 40.0,
+          "centre_y": 90.0
+        },
+        "deform": {
+          "amount": 5.0,
+          "scale": 15.0,
+          "evolution": 30.0,
+          "seed": 2.0,
+          "detail": 4.0
+        },
+        "smooth": {
+          "amount": 4.0
+        }
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be21fb9b45ae",
+        "name": "Run",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                100.0,
+                70.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                120.0,
+                70.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                120.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                100.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "stroke_width": 2.0,
+        "opacity": 100.0,
+        "trim_end": 80.0,
+        "repeat_copies": 2.0,
+        "repeat_position_y": 30.0
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be420c7b55ba",
+        "name": "Run union",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                110.0,
+                80.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                130.0,
+                80.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                130.0,
+                100.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                110.0,
+                100.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "combine": 1
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be6cb897c6aa",
+        "name": "Run subtract",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                105.0,
+                75.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                113.0,
+                75.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                113.0,
+                83.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                105.0,
+                83.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "combine": 2
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be8e4e2eb0ac",
+        "name": "Keyed",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                140.0,
+                10.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                152.0,
+                10.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                152.0,
+                22.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                140.0,
+                22.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "trim_end": {
+          "animation": {
+            "Keyframed": [
+              {
+                "time": [
+                  0,
+                  1
+                ],
+                "value": 0.0,
+                "interp_in": "Linear",
+                "interp_out": "Linear"
+              },
+              {
+                "time": [
+                  2,
+                  1
+                ],
+                "value": 100.0,
+                "interp_in": "Linear",
+                "interp_out": "Linear"
+              }
+            ]
+          }
+        },
+        "repeat_copies": {
+          "animation": {
+            "Keyframed": [
+              {
+                "time": [
+                  0,
+                  1
+                ],
+                "value": 1.0,
+                "interp_in": "Linear",
+                "interp_out": "Linear"
+              },
+              {
+                "time": [
+                  2,
+                  1
+                ],
+                "value": 4.0,
+                "interp_in": "Linear",
+                "interp_out": "Linear"
+              }
+            ]
+          }
+        },
+        "repeat_position_x": 12.0
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-be9e14f0c5ff",
+        "name": "Tapered",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                130.0,
+                120.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                170.0,
+                110.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                190.0,
+                130.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": false
+        },
+        "fill": null,
+        "stroke": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "stroke_width": 8.0,
+        "opacity": 100.0,
+        "dashes": [
+          9.0,
+          3.0
+        ],
+        "taper": {
+          "start": 100.0,
+          "end": 60.0,
+          "start_length": 40.0,
+          "end_length": 40.0,
+          "ease": 50.0,
+          "scope": 1
+        }
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-beb00aa8df29",
+        "name": "Plain",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                95.0,
+                20.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                125.0,
+                20.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                125.0,
+                50.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                95.0,
+                50.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 60.0
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-bed308f97d09",
+        "name": "Morph",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                20.0,
+                130.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                50.0,
+                130.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                50.0,
+                160.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                20.0,
+                160.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "trim_start": 20.0,
+        "path_keys": [
+          {
+            "time": [
+              0,
+              1
+            ],
+            "path": {
+              "vertices": [
+                {
+                  "pos": [
+                    20.0,
+                    130.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    50.0,
+                    130.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    50.0,
+                    160.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    20.0,
+                    160.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "closed": true
+            },
+            "interp_in": "Linear",
+            "interp_out": "Linear"
+          },
+          {
+            "time": [
+              2,
+              1
+            ],
+            "path": {
+              "vertices": [
+                {
+                  "pos": [
+                    50.0,
+                    140.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    70.0,
+                    140.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    70.0,
+                    160.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "pos": [
+                    50.0,
+                    160.0
+                  ],
+                  "tan_in": [
+                    0.0,
+                    0.0
+                  ],
+                  "tan_out": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "closed": true
+            },
+            "interp_in": "Linear",
+            "interp_out": "Linear"
+          }
+        ],
+        "deform": {
+          "mode": 1,
+          "amount": 30.0,
+          "scale": 20.0,
+          "evolution": 0.0,
+          "seed": 5.0,
+          "detail": 3.0
+        }
+      },
+      {
+        "id": "01a174f9-be2c-7bb2-889d-bf1e95132690",
+        "name": "Shrunk",
+        "path": {
+          "vertices": [
+            {
+              "pos": [
+                150.0,
+                60.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                180.0,
+                60.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                180.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "pos": [
+                150.0,
+                90.0
+              ],
+              "tan_in": [
+                0.0,
+                0.0
+              ],
+              "tan_out": [
+                0.0,
+                0.0
+              ]
+            }
+          ],
+          "closed": true
+        },
+        "fill": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "stroke": null,
+        "stroke_width": 0.0,
+        "opacity": 100.0,
+        "offset_amount": -4.0,
+        "smooth": {
+          "amount": 6.0
+        }
+      }
+    ]
+  }
+}

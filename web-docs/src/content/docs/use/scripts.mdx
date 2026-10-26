@@ -94,9 +94,9 @@ Anything else stops the script with a message naming it.
 - `valueAtTime()` reads between eased keys in a straight line.
 - Roving keys stay at their times.
 - Key times land on the nearest frame of the comp.
-- A 3D layer's X, Y and Z Rotation are turned into Lumit's rotation order. The layer
-  matches After Effects on every key.
-- Orientation is set once. Keys on it stop the script.
+- A camera a script adds, and a layer it makes 3D, turn in After Effects' rotation order and
+  keep their X, Y and Z Rotation as they are. On a 3D layer in Lumit's order they are turned
+  into that order, which matches After Effects on every key.
 - A layer given a `parent` stays where it is at the comp's start.
 - `app.newProject()` answers the open project.
 - `activeItem` is the comp open in the Viewer. On the command line it is the project's only

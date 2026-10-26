@@ -8,7 +8,7 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `paragraph_of`, `read_animator`, `read_paragraph`, `read_style`, `reference_point`, `restyle_shift`, `shift_property`, `style_of`, `text_document_of`
+// These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `paragraph_of`, `read_animator`, `read_paragraph`, `read_style`, `reference_point`, `restyle_shift`, `shift_property`, `style_of`, `text_document_of`, `with_camera_at`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The style a text layer has before anything is styled.
@@ -496,6 +496,9 @@ class BridgeTextStyle {
   /// The outline is drawn over the fill. Off puts the fill on top.
   final bool strokeOver;
 
+  /// Every fill, then every outline (or the other way round), not letter by letter.
+  final bool strokesTogether;
+
   const BridgeTextStyle({
     required this.family,
     required this.face,
@@ -515,6 +518,7 @@ class BridgeTextStyle {
     required this.stroke,
     required this.strokeWidth,
     required this.strokeOver,
+    required this.strokesTogether,
   });
 
   @override
@@ -536,7 +540,8 @@ class BridgeTextStyle {
       strokeOn.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
-      strokeOver.hashCode;
+      strokeOver.hashCode ^
+      strokesTogether.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -560,5 +565,6 @@ class BridgeTextStyle {
           strokeOn == other.strokeOn &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
-          strokeOver == other.strokeOver;
+          strokeOver == other.strokeOver &&
+          strokesTogether == other.strokesTogether;
 }

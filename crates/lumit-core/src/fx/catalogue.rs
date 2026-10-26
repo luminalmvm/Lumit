@@ -152,6 +152,7 @@ use super::effects::{
     radio_waves::{RadioWaves, RadioWavesDef},
     relax_points::{RelaxPoints, RelaxPointsDef},
     remove_background::{RemoveBackground, RemoveBackgroundDef},
+    repeat::{RepeatEnd, RepeatEndDef, RepeatStart, RepeatStartDef},
     rgb_split::{RgbSplit, RgbSplitDef},
     ripple::{Ripple, RippleDef},
     roto_brush::{RotoBrush, RotoBrushDef},
@@ -187,6 +188,7 @@ use super::effects::{
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
     twirl::{Twirl, TwirlDef},
     vary_points::{VaryPoints, VaryPointsDef},
+    vector_blur::{VectorBlur, VectorBlurDef},
     vegas::{Vegas, VegasDef},
     venetian_blinds::{VenetianBlinds, VenetianBlindsDef},
     vibrancy::{Vibrancy, VibrancyDef},
@@ -224,6 +226,7 @@ crate::catalogue![
     DofProDef => DofPro,
     // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,
+    VectorBlurDef => VectorBlur,
     TransformDef => Transform,
     GlowDef => Glow,
     ShakeDef => Shake,
@@ -430,6 +433,9 @@ crate::catalogue![
     // alone.
     SplitChannelsDef => SplitChannels,
     CombineChannelsDef => CombineChannels,
+    // The boxes between these two run several times.
+    RepeatStartDef => RepeatStart,
+    RepeatEndDef => RepeatEnd,
     // The Controls family, last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here. The order
     // inside it is After Effects' own Expression Controls order, which is what

@@ -30,7 +30,8 @@ import '../panels/graph_maths.dart';
 import '../panels/layer_fold_frb.dart'
     show asOneUndoStep, transformGroupPath;
 import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
-import '../panels/transform_rows_frb.dart' show transformGroups;
+import '../panels/transform_rows_frb.dart'
+    show TransformSection, transformGroups;
 import '../state/comp_time.dart';
 import '../state/file_dialogs.dart';
 import 'keyframe_dialogs_frb.dart';
@@ -55,7 +56,7 @@ List<GraphChannel> selectedChannels(LumitUiState ui) => graphChannels(
   final fps = ui.model.fps;
   final frame = ui.playheadFrame.value;
   for (final channel in selectedChannels(ui)) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     for (var i = 0; i < keys.length; i++) {
       if (keyFrame(keys[i], fps).round() == frame) {
@@ -83,7 +84,7 @@ bool editKeysAtPlayhead(
   final frame = ui.playheadFrame.value;
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in selectedChannels(ui)) {
-    if (channel.isMaskPath) continue;
+    if (channel.isPath) continue;
     final keys = channel.keys;
     var touched = false;
     final next = <BridgeKeyframe>[];
@@ -153,7 +154,7 @@ BridgeKeyframe _keyWith(
 /// a locked layer takes no edits.
 List<GraphChannel> _keyable(List<GraphChannel> channels) => [
       for (final channel in channels)
-        if (!channel.isMaskPath &&
+        if (!channel.isPath &&
             channel.scalar is! BridgeScalar_Expression &&
             !channel.entry.info.switches.locked)
           channel,
@@ -245,8 +246,10 @@ bool toggleTransformKeys(LumitState app, LumitUiState ui, String property) {
       modes: entry.info.axisModes,
       kind: entry.info.kind,
       twoNode: entry.info.camera?.twoNode ?? false,
+      light: entry.info.light,
+      material: entry.info.material,
     )) {
-      if (group.cameraOption) continue;
+      if (group.section != TransformSection.transform) continue;
       if (!group.axes.first.prop.name.startsWith(property)) continue;
       paths.add(
           transformGroupPath(entry.layer.internallayerId.toString(), group));
@@ -375,7 +378,7 @@ MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
     for (final channel in selectedChannels(ui))
-      if (!channel.isMaskPath) channel,
+      if (!channel.isPath) channel,
   ];
   return MenuEntry(
     l10n.menuAddExpression,
@@ -398,13 +401,15 @@ MenuEntry addExpressionRow(
                       sampleScalarWithContext(
                               scalar: was,
                               time: timeOfFrame(comp, ui.playheadFrame.value),
-                              layer: layer)
+                              layer: layer,
+                              row: first.expressionRow)
                           .toString(),
                       ui.workspace.defaultExpressionLanguage),
               fresh: was is! BridgeScalar_Expression,
               held: was,
               comp: comp,
               layer: layer,
+              row: first.expressionRow,
               onCommit: (next) {
                 // An expression goes on every picked row. Taking one off
                 // leaves a number, which is only the first row's to hold.

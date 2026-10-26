@@ -49,6 +49,7 @@ use crate::probe::{MediaProbe, VideoInfo};
 use crate::MediaError;
 
 pub mod helper;
+pub mod paths;
 
 /// What one read may spend: a picture's worth of bytes, and more layers than
 /// anybody draws on.
@@ -177,6 +178,19 @@ fn read_layer_here(
 ) -> Result<DecodedFrame, MediaError> {
     let bytes = lumit_ingress::read_capped(path, MAX_FILE)?;
     guarded(move || draw(bytes, index, target_width))
+}
+
+/// One layer's artwork as paths, in the artboard's pixels, for making shapes
+/// from it. `index` is as [`read_layer`] takes it.
+pub fn read_paths(path: &Path, index: Option<u32>) -> Result<Vec<paths::AiPath>, MediaError> {
+    helper::read_paths(path, index)
+}
+
+/// [`read_paths`], in this process. Only the helper does this to a file it
+/// is given.
+fn read_paths_here(path: &Path, index: Option<u32>) -> Result<Vec<paths::AiPath>, MediaError> {
+    let bytes = lumit_ingress::read_capped(path, MAX_FILE)?;
+    guarded(move || paths::paths(bytes, index))
 }
 
 /// Run `read`, turning a panic inside the PDF reader into an error. The
@@ -402,11 +416,9 @@ fn took(pdf: &Pdf, layers: usize) -> bool {
     off.is_some_and(|off| off.raw_iter().count() + 1 == layers)
 }
 
-fn draw(
-    bytes: Vec<u8>,
-    index: Option<u32>,
-    target_width: Option<u32>,
-) -> Result<DecodedFrame, MediaError> {
+/// The PDF in `bytes` with only layer `index` switched on, or as the file
+/// has it when `index` is `None`.
+fn picked(bytes: Vec<u8>, index: Option<u32>) -> Result<(Pdf, AiDocument), MediaError> {
     let (mut pdf, doc) = parse(bytes)?;
     // A file with no layers to tell apart is all one layer.
     if let Some(index) = index.filter(|_| !doc.layers.is_empty()) {
@@ -420,6 +432,15 @@ fn draw(
             return Err(bad("the layers can't be told apart"));
         }
     }
+    Ok((pdf, doc))
+}
+
+fn draw(
+    bytes: Vec<u8>,
+    index: Option<u32>,
+    target_width: Option<u32>,
+) -> Result<DecodedFrame, MediaError> {
+    let (pdf, doc) = picked(bytes, index)?;
     let page = pdf
         .pages()
         .iter()

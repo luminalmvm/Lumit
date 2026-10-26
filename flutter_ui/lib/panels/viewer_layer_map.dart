@@ -26,6 +26,8 @@
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
+import 'package:flutter/widgets.dart' show Matrix4;
+
 /// A scale factor that can be flipped but never vanishes.
 ///
 /// **Negative scale is a real value**: dragging a handle past the anchor turns
@@ -78,7 +80,12 @@ class ViewerLayerMap {
   /// and everything under it, is in the parent's space, not the comp's.
   final ParentPlacement? parent;
 
-  const ViewerLayerMap({
+  /// How the picture sees a 3D layer, null for a 2D one. With it every map
+  /// here goes through the camera, so the box, the handles and the paths sit
+  /// where the picture has them.
+  final ViewerDepth? depth;
+
+  ViewerLayerMap({
     required this.px,
     required this.py,
     required this.ax,
@@ -90,6 +97,7 @@ class ViewerLayerMap {
     required this.origin,
     required this.viewScale,
     this.parent,
+    this.depth,
   });
 
   /// Build the map from the layer's evaluated transform values (as the snapshot
@@ -107,6 +115,7 @@ class ViewerLayerMap {
     required Offset origin,
     required double viewScale,
     ParentPlacement? parent,
+    ViewerDepth? depth,
   }) {
     final rot = rotationDegrees * math.pi / 180.0;
     return ViewerLayerMap(
@@ -121,6 +130,7 @@ class ViewerLayerMap {
       origin: origin,
       viewScale: viewScale,
       parent: parent,
+      depth: depth,
     );
   }
 
@@ -143,6 +153,7 @@ class ViewerLayerMap {
       origin: origin,
       viewScale: viewScale,
       parent: parent,
+      depth: depth,
     );
   }
 
@@ -162,6 +173,7 @@ class ViewerLayerMap {
         origin: origin,
         viewScale: viewScale,
         parent: parent,
+        depth: depth,
       );
 
   /// The same map with the layer's pivot moved to ([anchorX], [anchorY]) and
@@ -173,6 +185,7 @@ class ViewerLayerMap {
     double anchorX,
     double anchorY, {
     required Offset position,
+    double? z,
   }) =>
       ViewerLayerMap(
         px: position.dx,
@@ -186,10 +199,132 @@ class ViewerLayerMap {
         origin: origin,
         viewScale: viewScale,
         parent: parent,
+        depth: z == null ? depth : depth?.at(z),
       );
+
+  /// Whether this layer is seen through a camera rather than flat.
+  bool get projected => depth != null;
+
+  /// Parent space `(x, y, z, 1)` to `(X, Y, W)` in comp pixels, row by row:
+  /// the view's rows times the parent chain.
+  late final List<double> _parentRows = depth!.parentRows();
+
+  /// The same rows, for the 3D handles, which work in the parent's space.
+  List<double> get parentRows => _parentRows;
+
+  /// The layer's own plane `(x, y, 1)` to `(X, Y, W)`: the rows above times
+  /// the layer's own placement, which has no z of its own because the layer
+  /// is flat.
+  late final List<double> _plane = () {
+    final o = inParent(0, 0);
+    final ex = inParent(1, 0);
+    final ey = inParent(0, 1);
+    final r = _parentRows;
+    return [
+      for (var row = 0; row < 3; row++) ...[
+        _dot(r, row, ex.$1 - o.$1, ex.$2 - o.$2, ex.$3 - o.$3, 0),
+        _dot(r, row, ey.$1 - o.$1, ey.$2 - o.$2, ey.$3 - o.$3, 0),
+        _dot(r, row, o.$1, o.$2, o.$3, 1),
+      ],
+    ];
+  }();
+
+  late final List<double>? _planeInverse = _invert3(_plane);
+
+  late final (double, double, double, double) _turns = () {
+    final rx = (depth?.rotationX ?? 0) * math.pi / 180;
+    final ry = (depth?.rotationY ?? 0) * math.pi / 180;
+    return (math.sin(rx), math.cos(rx), math.sin(ry), math.cos(ry));
+  }();
+
+  /// Whether the layer is turned out of its parent's flat by its X or Y
+  /// rotation or its Orientation, so a point moved on it moves in depth too.
+  bool get tilted =>
+      projected &&
+      (_turns.$1.abs() > 1e-9 ||
+          _turns.$3.abs() > 1e-9 ||
+          depth?.outside != null);
+
+  /// Where the layer point ([x], [y]) is in its parent's space, depth and
+  /// all: the compositor's T · O · Ry · Rx · Rz · S · T(-anchor), worked
+  /// through by hand, with O the turn outside the rotations, and Rx · Ry · Rz
+  /// on a layer turning in After Effects' order. A 2D layer's is at depth 0.
+  (double, double, double) inParent(double x, double y) {
+    final (sinX, cosX, sinY, cosY) = _turns;
+    final dx = (x - ax) * sx;
+    final dy = (y - ay) * sy;
+    // Anchor Z pushes the flat picture back along its own z.
+    final dz = -(depth?.anchorZ ?? 0) * (depth?.scaleZ ?? 100) / 100;
+    final zx = dx * cos - dy * sin;
+    final zy = dx * sin + dy * cos;
+    (double, double, double) v;
+    if (depth?.aeOrder ?? false) {
+      // Y first, then X outside it.
+      final (yx, yz) = (zx * cosY + dz * sinY, -zx * sinY + dz * cosY);
+      v = (yx, zy * cosX - yz * sinX, zy * sinX + yz * cosX);
+    } else {
+      final (yy, yz) = (zy * cosX - dz * sinX, zy * sinX + dz * cosX);
+      v = (zx * cosY + yz * sinY, yy, -zx * sinY + yz * cosY);
+    }
+    final o = depth?.outside;
+    if (o != null) {
+      v = (
+        o[0] * v.$1 + o[1] * v.$2 + o[2] * v.$3,
+        o[3] * v.$1 + o[4] * v.$2 + o[5] * v.$3,
+        o[6] * v.$1 + o[7] * v.$2 + o[8] * v.$3,
+      );
+    }
+    return (px + v.$1, py + v.$2, (depth?.z ?? 0) + v.$3);
+  }
+
+  /// How far in front of the eye the parent-space point ([x], [y], [z]) is,
+  /// as [depthOf] measures it. [z] is the layer's own Position z unless
+  /// given.
+  double parentDepthOf(double x, double y, [double? z]) => projected
+      ? _dot(_parentRows, 2, x, y, z ?? depth!.z, 1)
+      : 1;
+
+  /// Whether the parent-space point ([x], [y], [z]) is in front of the eye.
+  bool parentInFront(double x, double y, [double? z]) =>
+      parentDepthOf(x, y, z) > viewerNear;
+
+  /// Comp pixels, still to be divided by [w], to screen.
+  Offset _shown(double x, double y, double w) {
+    final safe = w.abs() < 1e-9 ? 1e-9 : w;
+    return origin + Offset(x / safe, y / safe) * viewScale;
+  }
+
+  /// How far in front of the eye the layer point ([x], [y]) is, as the depth
+  /// over the camera's zoom: at or below 0 behind it. A 2D layer is 1
+  /// everywhere.
+  double depthOf(double x, double y) {
+    if (!projected) return 1;
+    final h = _plane;
+    return h[6] * x + h[7] * y + h[8];
+  }
+
+  /// Whether the layer point ([x], [y]) is in front of the eye.
+  bool inFront(double x, double y) => depthOf(x, y) > viewerNear;
+
+  /// How far away the layer is under the screen point [pos], as the depth
+  /// over the camera's zoom, or null where the layer there is behind the eye
+  /// or seen edge on. Nearer is smaller. A 2D layer is 1 everywhere.
+  double? depthAt(Offset pos) {
+    if (!projected) return 1;
+    final inv = _planeInverse;
+    if (inv == null) return null;
+    final c = (pos - origin) / viewScale;
+    final s = inv[6] * c.dx + inv[7] * c.dy + inv[8];
+    return s > 1e-12 ? 1 / s : null;
+  }
 
   /// Layer space → screen (local) coordinate.
   Offset toScreen(double x, double y) {
+    if (projected) {
+      final h = _plane;
+      return _shown(h[0] * x + h[1] * y + h[2], h[3] * x + h[4] * y + h[5],
+          h[6] * x + h[7] * y + h[8]);
+    }
     final dx = (x - ax) * sx;
     final dy = (y - ay) * sy;
     final rx = dx * cos - dy * sin;
@@ -198,8 +333,15 @@ class ViewerLayerMap {
   }
 
   /// A point in the parent's space (where Position and a motion path live)
-  /// → screen. Without a parent that space is the comp.
-  Offset parentToScreen(double x, double y) {
+  /// → screen. Without a parent that space is the comp. [z] is a 3D layer's
+  /// depth there, its own Position z unless given.
+  Offset parentToScreen(double x, double y, [double? z]) {
+    if (projected) {
+      final r = _parentRows;
+      final at = z ?? depth!.z;
+      return _shown(_dot(r, 0, x, y, at, 1), _dot(r, 1, x, y, at, 1),
+          _dot(r, 2, x, y, at, 1));
+    }
     final p = parent;
     final c = p == null
         ? Offset(x, y)
@@ -208,9 +350,23 @@ class ViewerLayerMap {
   }
 
   /// Screen (local) → the parent's space, the inverse of [parentToScreen].
-  /// A parent scaled to nought has no inverse and is read as no parent.
-  Offset parentOf(Offset pos) {
+  /// A parent scaled to nought has no inverse and is read as no parent. A 3D
+  /// layer's answer is on the flat of its parent's space at depth [z], its
+  /// own Position z unless given, which is where a move keeps it.
+  Offset parentOf(Offset pos, [double? z]) {
     final c = (pos - origin) / viewScale;
+    if (projected) {
+      final r = _parentRows;
+      final at = z ?? depth!.z;
+      final inv = _invert3([
+        for (var row = 0; row < 3; row++) ...[
+          r[row * 4],
+          r[row * 4 + 1],
+          r[row * 4 + 2] * at + r[row * 4 + 3],
+        ],
+      ]);
+      return inv == null ? Offset(px, py) : _dehom(inv, c);
+    }
     final p = parent;
     final det = p == null ? 0.0 : p.a * p.d - p.b * p.c;
     if (p == null || det == 0) return c;
@@ -220,12 +376,27 @@ class ViewerLayerMap {
   }
 
   /// A move of [compDelta] comp pixels on the picture, as the change it makes
-  /// to Position.
-  Offset positionStep(Offset compDelta) =>
-      parentOf(origin + compDelta * viewScale) - parentOf(origin);
+  /// to Position. Seen through a camera a step is longer the further away it
+  /// is taken, so a 3D layer's is measured from [from] on screen at depth
+  /// [z], its own Position unless given.
+  Offset positionStep(Offset compDelta, {Offset? from, double? z}) {
+    if (!projected) {
+      return parentOf(origin + compDelta * viewScale) - parentOf(origin);
+    }
+    final base = from ?? parentToScreen(px, py, z);
+    return parentOf(base + compDelta * viewScale, z) - parentOf(base, z);
+  }
 
   /// Screen (local) → layer space coordinate (the inverse of [toScreen]).
+  /// Seen through a camera this is where the pointer's ray meets the layer,
+  /// in front of the eye or not, which [depthAt] says.
   Offset layerOf(Offset pos) {
+    if (projected) {
+      final inv = _planeInverse;
+      return inv == null
+          ? Offset(ax, ay)
+          : _dehom(inv, (pos - origin) / viewScale);
+    }
     final c = parentOf(pos);
     final dx = c.dx - px;
     final dy = c.dy - py;
@@ -251,16 +422,135 @@ class ViewerLayerMap {
     required double dyFromAnchor,
     required Offset pointer,
   }) {
-    final at = parentOf(pointer);
-    final ex = at.dx - px;
-    final ey = at.dy - py;
-    // Un-rotate the screen delta into the layer's un-scaled frame.
-    final ux = ex * cos + ey * sin;
-    final uy = -ex * sin + ey * cos;
+    final double ux, uy;
+    if (projected) {
+      // On the layer's own plane, which is where the handle is dragged.
+      final at = layerOf(pointer);
+      ux = (at.dx - ax) * sx;
+      uy = (at.dy - ay) * sy;
+    } else {
+      final at = parentOf(pointer);
+      final ex = at.dx - px;
+      final ey = at.dy - py;
+      // Un-rotate the screen delta into the layer's un-scaled frame.
+      ux = ex * cos + ey * sin;
+      uy = -ex * sin + ey * cos;
+    }
     final newSx = dxFromAnchor.abs() < 1e-9 ? sx : ux / dxFromAnchor;
     final newSy = dyFromAnchor.abs() < 1e-9 ? sy : uy / dyFromAnchor;
     return (newSx * 100.0, newSy * 100.0);
   }
+}
+
+/// How near the eye a point may be and still be drawn, as the depth over the
+/// camera's zoom: a hair in front of it. Anything nearer is cut off.
+const double viewerNear = 1e-3;
+
+/// How the picture sees one 3D layer: the view it is looked at through, its
+/// parents in full, and the parts of its own transform a flat map has no room
+/// for.
+class ViewerDepth {
+  /// Comp space `(x, y, z, 1)` to `(X, Y, W)`, three rows of four, as the
+  /// engine's `viewProjection` answers it. Asked for only once something is
+  /// drawn or aimed at, so playback with nothing outlined asks nothing.
+  final List<double> Function() view;
+
+  /// The parent chain, parent space to comp space, null with no parent.
+  final Matrix4? parent;
+
+  /// Position z, and the x and y rotations in degrees.
+  final double z;
+  final double rotationX;
+  final double rotationY;
+
+  /// The turn outside the rotations, row by row: the Orientation, and an
+  /// aimed camera's aim. Null for none.
+  final List<double>? outside;
+
+  /// Anchor Z, and Scale Z as a percentage.
+  final double anchorZ;
+  final double scaleZ;
+
+  /// The rotations turn in After Effects' `Rx · Ry · Rz`, as an imported
+  /// layer's do, rather than Lumit's `Ry · Rx · Rz`.
+  final bool aeOrder;
+
+  const ViewerDepth({
+    required this.view,
+    required this.z,
+    required this.rotationX,
+    required this.rotationY,
+    this.parent,
+    this.outside,
+    this.anchorZ = 0,
+    this.scaleZ = 100,
+    this.aeOrder = false,
+  });
+
+  /// The same layer at Position z [z].
+  ViewerDepth at(double z) => ViewerDepth(
+        view: view,
+        z: z,
+        rotationX: rotationX,
+        rotationY: rotationY,
+        parent: parent,
+        outside: outside,
+        anchorZ: anchorZ,
+        scaleZ: scaleZ,
+        aeOrder: aeOrder,
+      );
+
+  /// The view's rows times the parent chain.
+  List<double> parentRows() {
+    final rows = view();
+    final m = parent?.storage;
+    if (m == null) return rows;
+    return [
+      for (var row = 0; row < 3; row++)
+        for (var col = 0; col < 4; col++)
+          _dot(rows, row, m[col * 4], m[col * 4 + 1], m[col * 4 + 2],
+              m[col * 4 + 3]),
+    ];
+  }
+}
+
+/// Row [row] of the three rows of four in [rows], times `(x, y, z, w)`.
+double _dot(
+        List<double> rows, int row, double x, double y, double z, double w) =>
+    rows[row * 4] * x +
+    rows[row * 4 + 1] * y +
+    rows[row * 4 + 2] * z +
+    rows[row * 4 + 3] * w;
+
+/// The inverse of a three by three matrix, row by row, or null when there is
+/// none: a layer seen exactly edge on.
+List<double>? _invert3(List<double> m) {
+  final a = m[4] * m[8] - m[5] * m[7];
+  final b = m[5] * m[6] - m[3] * m[8];
+  final c = m[3] * m[7] - m[4] * m[6];
+  final det = m[0] * a + m[1] * b + m[2] * c;
+  if (det.abs() < 1e-12) return null;
+  final k = 1 / det;
+  return [
+    a * k,
+    (m[2] * m[7] - m[1] * m[8]) * k,
+    (m[1] * m[5] - m[2] * m[4]) * k,
+    b * k,
+    (m[0] * m[8] - m[2] * m[6]) * k,
+    (m[2] * m[3] - m[0] * m[5]) * k,
+    c * k,
+    (m[1] * m[6] - m[0] * m[7]) * k,
+    (m[0] * m[4] - m[1] * m[3]) * k,
+  ];
+}
+
+/// [inv] times `(c, 1)`, divided through.
+Offset _dehom(List<double> inv, Offset c) {
+  final x = inv[0] * c.dx + inv[1] * c.dy + inv[2];
+  final y = inv[3] * c.dx + inv[4] * c.dy + inv[5];
+  final w = inv[6] * c.dx + inv[7] * c.dy + inv[8];
+  final safe = w.abs() < 1e-12 ? 1e-12 : w;
+  return Offset(x / safe, y / safe);
 }
 
 /// The pan-behind position a moved anchor implies, so the layer stays visually

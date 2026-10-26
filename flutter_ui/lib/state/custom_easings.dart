@@ -83,14 +83,7 @@ class CustomEasings {
     try {
       final f = storeFile();
       if (!f.existsSync()) return;
-      final j = jsonDecode(f.readAsStringSync());
-      if (j is! List) return;
-      for (final entry in j) {
-        if (entry is Map) {
-          final e = SavedEasing.fromJson(entry.cast<String, dynamic>());
-          if (e != null) _list.add(e);
-        }
-      }
+      _list = _parse(f.readAsStringSync());
     } catch (_) {
       // A corrupt file reads as an empty collection — never a crash.
     }
@@ -140,12 +133,45 @@ class CustomEasings {
     return tried;
   }
 
+  /// Every saved shape written to [path] in the store's own form, so a
+  /// collection can be handed to somebody else.
+  static void exportTo(String path) => File(path).writeAsStringSync(_encode());
+
+  /// The shapes in the file at [path] kept after the ones already here, a
+  /// clashing name numbered. Returns how many came in, none for a file that
+  /// is not a collection.
+  static int importFrom(String path) {
+    if (!_loaded) reload();
+    List<SavedEasing> found;
+    try {
+      found = _parse(File(path).readAsStringSync());
+    } catch (_) {
+      return 0;
+    }
+    for (final e in found) {
+      _list = [..._list, SavedEasing(_free(e.name)!, e.curve)];
+    }
+    if (found.isNotEmpty) _write();
+    return found.length;
+  }
+
+  static List<SavedEasing> _parse(String text) {
+    final j = jsonDecode(text);
+    if (j is! List) return [];
+    return [
+      for (final entry in j)
+        if (entry is Map) SavedEasing.fromJson(entry.cast<String, dynamic>()),
+    ].whereType<SavedEasing>().toList();
+  }
+
+  static String _encode() => const JsonEncoder.withIndent('  ')
+      .convert([for (final e in _list) e.toJson()]);
+
   static void _write() {
     try {
       final f = storeFile();
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(const JsonEncoder.withIndent('  ')
-          .convert([for (final e in _list) e.toJson()]));
+      f.writeAsStringSync(_encode());
     } catch (_) {
       // Persistence is best-effort; the session keeps working without it.
     }

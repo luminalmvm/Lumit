@@ -146,6 +146,10 @@ features = [
     "Win32_Storage_FileSystem",
 ]
 
+# libX11, opened at run time for the camera drags' pointer hold under X11.
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading = "0.8"
+
 # `statvfs`, for the same free-space question on macOS and Linux.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

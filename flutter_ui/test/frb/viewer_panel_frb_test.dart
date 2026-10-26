@@ -34,7 +34,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart' show CameraPose;
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
@@ -52,6 +51,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/widgets/dropper_overlay.dart';
 import 'package:uuid/uuid.dart';
@@ -1420,13 +1420,14 @@ void main() {
                   x: 400, y: 400, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
             ],
             closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1)),
             stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: const BridgeScalar.static_(100),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
             gradient: 0,
@@ -1440,17 +1441,6 @@ void main() {
             gradientStops: const [],
             combine: 0,
             pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -1458,7 +1448,7 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final before = shape.getShapeContents().single.vertices;
+      final before = shape.getShapeContents().items.single.vertices;
       final fitted = fittedRect(tester, p.comp);
       Offset onScreen(double x, double y) => Offset(
             fitted.left + x / 1920 * fitted.width,
@@ -1479,7 +1469,7 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(shape.getShapeContents().single.vertices.first.x, before.first.x,
+      expect(shape.getShapeContents().items.single.vertices.first.x, before.first.x,
           reason: 'a sweep only chooses; nothing has moved yet');
 
       final drag = await tester.startGesture(onScreen(400, 200));
@@ -1492,7 +1482,7 @@ void main() {
       await drag.up();
       await tester.pumpAndSettle();
 
-      final after = shape.getShapeContents().single.vertices;
+      final after = shape.getShapeContents().items.single.vertices;
       expect(after[0].x, greaterThan(before[0].x),
           reason: 'the swept top-left point moved');
       expect(after[1].x, greaterThan(before[1].x),
@@ -1761,9 +1751,9 @@ void main() {
           reason: 'and it is at the top of the stack');
       final contents = shape.getShapeContents();
       expect(contents, hasLength(1));
-      expect(contents.single.name, 'Rectangle');
-      expect(contents.single.vertices, hasLength(4));
-      expect(contents.single.fill, isNotNull,
+      expect(contents.items.single.name, 'Rectangle');
+      expect(contents.items.single.vertices, hasLength(4));
+      expect(contents.items.single.fill, isNotNull,
           reason: "it takes the toolbar's fill");
 
       // The art lands where it was drawn: the drag began at the middle of the
@@ -1773,8 +1763,22 @@ void main() {
       expect(still(shape.getTransform().positionX),
           closeTo(size.width / 2, size.width * 0.02));
 
-      // And the new layer is what is selected, so the next drag masks it.
+      // And the new layer is what is selected, so the next drag adds a shape
+      // to it rather than a mask, as After Effects does.
       expect(p.uiState.selectedLayerIds, contains(shape.internallayerId));
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      final again = await tester.startGesture(fitted.center);
+      await tester.pump();
+      await again.moveBy(const Offset(-40, -30));
+      await tester.pump();
+      await again.moveBy(const Offset(-40, -30));
+      await tester.pump();
+      await again.up();
+      await tester.pumpAndSettle();
+      expect(p.comp.getLayers().length, before + 1);
+      expect(shape.getShapeContents().items, hasLength(2));
+      expect(shape.getMasks(), isEmpty);
     });
 
     /// The camera tools: a drag moves the composition's active camera,
@@ -1845,6 +1849,163 @@ void main() {
       await drag(const Offset(150, 0));
       after = camera.getTransform();
       expect(still(after.positionZ), greaterThan(still(beforeDolly.positionZ)));
+
+      // A keyed camera moves too: the orbit keys what is keyed at the
+      // playhead, leaves a still row still, and is one undo step.
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: frame),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      final placed = camera.getTransform();
+      final x = still(placed.positionX);
+      camera.setTransform(
+        prop: BridgeTransformProp.positionX,
+        value: BridgeScalar.keyframed([key(0, x), key(30, x + 200)]),
+      );
+      p.uiState.model.refresh();
+      p.uiState.playheadFrame.value = 10;
+      p.uiState.tools.select(ToolMode.cameraOrbit);
+      await tester.pump();
+      await drag(const Offset(120, 0));
+      List<BridgeKeyframe> keysOfX() =>
+          (camera.getTransform().positionX as BridgeScalar_Keyframed).field0;
+      expect(keysOfX(), hasLength(3), reason: 'a key landed at the playhead');
+      expect(camera.getTransform().rotationY, isA<BridgeScalar_Static>());
+      expect(still(camera.getTransform().rotationY),
+          isNot(closeTo(still(placed.rotationY), 1e-9)));
+      p.state.project!.undo();
+      expect(keysOfX(), hasLength(2), reason: 'the drag was one undo step');
+      expect(still(camera.getTransform().rotationY),
+          closeTo(still(placed.rotationY), 1e-9));
+    });
+
+    /// The Viewer's own parent walk, which boxes follow during a drag, puts a
+    /// child where the engine does: under a 2D null, a camera on a doubled
+    /// null, a two-node camera and an aimed light. A point light on each is
+    /// the probe, its engine mark against the walk through the same view.
+    testWidgets('the Viewer places children of every kind of parent as the engine does',
+        (tester) async {
+      final p = withLayer();
+      final comp = p.comp;
+      void set(LayerReference l, Map<BridgeTransformProp, double> values) =>
+          l.setTransforms(
+              props: values.keys.toList(),
+              values: [for (final v in values.values) BridgeScalar.static_(v)]);
+
+      final flat = comp.addNullLayer();
+      set(flat, {
+        BridgeTransformProp.positionX: 300,
+        BridgeTransformProp.positionZ: -50,
+        BridgeTransformProp.rotationX: 60,
+        BridgeTransformProp.rotation: 10,
+      });
+      final big = comp.addNullLayer();
+      big.setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      set(big, {
+        BridgeTransformProp.positionX: 900,
+        BridgeTransformProp.scaleX: 200,
+        BridgeTransformProp.scaleY: 200,
+        BridgeTransformProp.rotationY: 20,
+      });
+      final onBig = comp.addCameraLayer();
+      onBig.setParent(parent: big.internallayerId, frame: 0);
+      set(onBig, {
+        BridgeTransformProp.positionX: 40,
+        BridgeTransformProp.positionY: -30,
+        BridgeTransformProp.positionZ: -500,
+        BridgeTransformProp.rotationY: 15,
+      });
+      final aimed = comp.addCameraLayer();
+      final camera = aimed.getCameraSettings()!;
+      aimed.setCameraSettings(
+          settings: BridgeCameraSettings(
+              twoNode: true,
+              depthOfField: false,
+              lockToZoom: camera.lockToZoom,
+              filmSizeMm: camera.filmSizeMm,
+              pxPerMetre: camera.pxPerMetre));
+      set(aimed, {
+        BridgeTransformProp.positionZ: -600,
+        BridgeTransformProp.rotation: 20,
+        BridgeTransformProp.poiX: 400,
+        BridgeTransformProp.poiY: 300,
+        BridgeTransformProp.poiZ: 200,
+      });
+      final beam = comp.addLightLayer(kind: 1);
+      beam.setLightSettings(
+          settings: const BridgeLightSettings(
+              kind: BridgeLightKind.spot,
+              falloff: BridgeLightFalloff.none,
+              twoNode: true,
+              castsShadows: false));
+      set(beam, {
+        BridgeTransformProp.positionZ: -300,
+        BridgeTransformProp.rotation: -15,
+        BridgeTransformProp.poiX: 700,
+        BridgeTransformProp.poiY: 100,
+        BridgeTransformProp.poiZ: 500,
+      });
+      final probes = [
+        for (final parent in [flat, onBig, aimed, beam])
+          () {
+            final probe = comp.addLightLayer(kind: 0);
+            probe.setParent(parent: parent.internallayerId, frame: 0);
+            set(probe, {
+              BridgeTransformProp.positionX: 30,
+              BridgeTransformProp.positionY: -20,
+              BridgeTransformProp.positionZ: 40,
+            });
+            return probe;
+          }()
+      ];
+
+      const view = BridgeCameraPose(
+          zoom: 2000,
+          x: 900,
+          y: 300,
+          z: -2500,
+          rotationX: -10,
+          rotationY: 25,
+          rotationZ: 0);
+      final rows = comp.viewProjection(frame: BigInt.zero, view: view);
+      final marks = comp.wireframes(
+          frame: BigInt.zero,
+          view: view,
+          ground: false,
+          grid: false,
+          only: [for (final probe in probes) probe.internallayerId],
+          mediaSizes: const []);
+      final layers = comp.getModel().layers;
+      final byId = {for (final e in layers) e.layer.internallayerId: e};
+      for (final probe in probes) {
+        final entry = byId[probe.internallayerId]!;
+        final parent = parentMatrix(
+          entry,
+          byId,
+          (e) => e.info.transform,
+          (s, _, __) => (s as BridgeScalar_Static).field0,
+          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: BigInt.zero),
+        )!;
+        final m = parent.storage;
+        final w = [
+          for (var r = 0; r < 3; r++)
+            m[r] * 30 + m[4 + r] * -20 + m[8 + r] * 40 + m[12 + r]
+        ];
+        double row(int r) =>
+            rows[r * 4] * w[0] +
+            rows[r * 4 + 1] * w[1] +
+            rows[r * 4 + 2] * w[2] +
+            rows[r * 4 + 3];
+        final mark = marks.lights
+            .firstWhere((l) => l.layer == probe.internallayerId)
+            .at;
+        expect(row(0) / row(2), closeTo(mark.x, 0.05),
+            reason: 'x under ${entry.info.parent}');
+        expect(row(1) / row(2), closeTo(mark.y, 0.05),
+            reason: 'y under ${entry.info.parent}');
+      }
     });
 
     testWidgets('relinking the missing footage clears the badge',

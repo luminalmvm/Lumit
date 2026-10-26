@@ -18,14 +18,15 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
 import 'roto.dart';
+import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -190,6 +191,36 @@ enum BridgeBrushShape {
   /// A square with flat sides and square corners.
   square,
   ;
+}
+
+/// A camera's pose and the point it is aimed at, what the camera tools drag.
+/// The point means something only on a two-node camera.
+class BridgeCameraAim {
+  final BridgeCameraPose pose;
+  final double poiX;
+  final double poiY;
+  final double poiZ;
+
+  const BridgeCameraAim({
+    required this.pose,
+    required this.poiX,
+    required this.poiY,
+    required this.poiZ,
+  });
+
+  @override
+  int get hashCode =>
+      pose.hashCode ^ poiX.hashCode ^ poiY.hashCode ^ poiZ.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraAim &&
+          runtimeType == other.runtimeType &&
+          pose == other.pose &&
+          poiX == other.poiX &&
+          poiY == other.poiY &&
+          poiZ == other.poiZ;
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -604,6 +635,50 @@ sealed class BridgeClipFadeShape with _$BridgeClipFadeShape {
   }) = BridgeClipFadeShape_Custom;
 }
 
+/// After Effects' Orientation, three angles keyed as one turn, and the z of
+/// Anchor and Scale.
+class BridgeDepthChannels {
+  final BridgeScalar orientationX;
+  final BridgeScalar orientationY;
+  final BridgeScalar orientationZ;
+  final BridgeScalar anchorZ;
+  final BridgeScalar scaleZ;
+
+  /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz`, as an
+  /// imported layer's do, rather than Lumit's `Ry · Rx · Rz`.
+  final bool afterEffectsOrder;
+
+  const BridgeDepthChannels({
+    required this.orientationX,
+    required this.orientationY,
+    required this.orientationZ,
+    required this.anchorZ,
+    required this.scaleZ,
+    required this.afterEffectsOrder,
+  });
+
+  @override
+  int get hashCode =>
+      orientationX.hashCode ^
+      orientationY.hashCode ^
+      orientationZ.hashCode ^
+      anchorZ.hashCode ^
+      scaleZ.hashCode ^
+      afterEffectsOrder.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeDepthChannels &&
+          runtimeType == other.runtimeType &&
+          orientationX == other.orientationX &&
+          orientationY == other.orientationY &&
+          orientationZ == other.orientationZ &&
+          anchorZ == other.anchorZ &&
+          scaleZ == other.scaleZ &&
+          afterEffectsOrder == other.afterEffectsOrder;
+}
+
 /// The curve a fade command writes (docs/09 §6) — the Audio panel's
 /// three chips. Each is built from the easing vocabulary that already exists,
 /// so a fade's keys can be dragged and reshaped like any others afterwards.
@@ -754,10 +829,11 @@ class BridgeLayerInfo {
   /// Viewer needs to know a layer is puppeted without asking per frame.
   final BridgePuppet? puppet;
 
-  /// A shape layer's art, bottom first; empty on every other kind.
-  /// Carried for the same reason again — and for one more: the art *is* the
-  /// layer's size, so the Viewer's wireframe reads it here.
-  final List<BridgeShapeItem> shapeContents;
+  /// A shape layer's contents, bottom first and flat
+  /// (`crate::api::shape`); empty on every other kind. Carried for the
+  /// same reason again, and for one more: the art *is* the layer's size,
+  /// so the Viewer's wireframe reads it here.
+  final List<BridgeShapeEntry> shapeContents;
 
   /// The layer's own markers, and the comp frame each falls on — the
   /// marker's layer-local time carried out by the layer's start offset — so
@@ -840,6 +916,12 @@ class BridgeLayerInfo {
   /// What decides whether the fold-out shows a Point of interest row.
   final BridgeCameraSettings? camera;
 
+  /// A Light layer's, the same way: which of its rows show.
+  final BridgeLightSettings? light;
+
+  /// A 3D layer's shadow settings, `None` where it has no Material options.
+  final BridgeMaterialSettings? material;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -878,6 +960,8 @@ class BridgeLayerInfo {
     required this.pan,
     required this.wired,
     this.camera,
+    this.light,
+    this.material,
   });
 
   @override
@@ -918,7 +1002,9 @@ class BridgeLayerInfo {
       volumeDb.hashCode ^
       pan.hashCode ^
       wired.hashCode ^
-      camera.hashCode;
+      camera.hashCode ^
+      light.hashCode ^
+      material.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -961,7 +1047,9 @@ class BridgeLayerInfo {
           volumeDb == other.volumeDb &&
           pan == other.pan &&
           wired == other.wired &&
-          camera == other.camera;
+          camera == other.camera &&
+          light == other.light &&
+          material == other.material;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its
@@ -1141,6 +1229,141 @@ class BridgeLayerSwitches {
           adjustment == other.adjustment;
 }
 
+/// The animatable channels a Light layer has beyond its transform. Intensity
+/// and feather are percentages, the cone its full angle in degrees, the rest
+/// comp pixels; the colour is scene-linear.
+class BridgeLightChannels {
+  final BridgeScalar poiX;
+  final BridgeScalar poiY;
+  final BridgeScalar poiZ;
+  final BridgeScalar intensity;
+  final BridgeScalar colourR;
+  final BridgeScalar colourG;
+  final BridgeScalar colourB;
+  final BridgeScalar coneAngle;
+  final BridgeScalar coneFeather;
+  final BridgeScalar radius;
+  final BridgeScalar falloffDistance;
+  final BridgeScalar width;
+  final BridgeScalar height;
+
+  /// Percent.
+  final BridgeScalar shadowDarkness;
+
+  /// Comp pixels.
+  final BridgeScalar shadowDiffusion;
+
+  const BridgeLightChannels({
+    required this.poiX,
+    required this.poiY,
+    required this.poiZ,
+    required this.intensity,
+    required this.colourR,
+    required this.colourG,
+    required this.colourB,
+    required this.coneAngle,
+    required this.coneFeather,
+    required this.radius,
+    required this.falloffDistance,
+    required this.width,
+    required this.height,
+    required this.shadowDarkness,
+    required this.shadowDiffusion,
+  });
+
+  @override
+  int get hashCode =>
+      poiX.hashCode ^
+      poiY.hashCode ^
+      poiZ.hashCode ^
+      intensity.hashCode ^
+      colourR.hashCode ^
+      colourG.hashCode ^
+      colourB.hashCode ^
+      coneAngle.hashCode ^
+      coneFeather.hashCode ^
+      radius.hashCode ^
+      falloffDistance.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      shadowDarkness.hashCode ^
+      shadowDiffusion.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLightChannels &&
+          runtimeType == other.runtimeType &&
+          poiX == other.poiX &&
+          poiY == other.poiY &&
+          poiZ == other.poiZ &&
+          intensity == other.intensity &&
+          colourR == other.colourR &&
+          colourG == other.colourG &&
+          colourB == other.colourB &&
+          coneAngle == other.coneAngle &&
+          coneFeather == other.coneFeather &&
+          radius == other.radius &&
+          falloffDistance == other.falloffDistance &&
+          width == other.width &&
+          height == other.height &&
+          shadowDarkness == other.shadowDarkness &&
+          shadowDiffusion == other.shadowDiffusion;
+}
+
+/// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
+enum BridgeLightFalloff {
+  none,
+  smooth,
+  inverseSquareClamped,
+  ;
+}
+
+/// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
+enum BridgeLightKind {
+  point,
+  spot,
+  area,
+  parallel,
+  ambient,
+  ;
+}
+
+/// The non-animatable part of a light, what the settings dialog and the
+/// choice rows edit as one op ([`lumit_core::model::LightSettings`]).
+class BridgeLightSettings {
+  final BridgeLightKind kind;
+  final BridgeLightFalloff falloff;
+
+  /// Aimed at its point of interest.
+  final bool twoNode;
+  final bool castsShadows;
+
+  const BridgeLightSettings({
+    required this.kind,
+    required this.falloff,
+    required this.twoNode,
+    required this.castsShadows,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      falloff.hashCode ^
+      twoNode.hashCode ^
+      castsShadows.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLightSettings &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          falloff == other.falloff &&
+          twoNode == other.twoNode &&
+          castsShadows == other.castsShadows;
+}
+
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
 /// effects and transform (docs/06 render order).
 ///
@@ -1265,6 +1488,69 @@ enum BridgeMaskMode {
       BridgeLib.instance.api.crateApiLayerBridgeMaskModeDefault();
 }
 
+/// A layer's Material options, percentages as After Effects shows them.
+class BridgeMaterialChannels {
+  final BridgeScalar ambient;
+  final BridgeScalar diffuse;
+  final BridgeScalar specular;
+  final BridgeScalar shininess;
+  final BridgeScalar metal;
+  final BridgeScalar lightTransmission;
+
+  const BridgeMaterialChannels({
+    required this.ambient,
+    required this.diffuse,
+    required this.specular,
+    required this.shininess,
+    required this.metal,
+    required this.lightTransmission,
+  });
+
+  @override
+  int get hashCode =>
+      ambient.hashCode ^
+      diffuse.hashCode ^
+      specular.hashCode ^
+      shininess.hashCode ^
+      metal.hashCode ^
+      lightTransmission.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeMaterialChannels &&
+          runtimeType == other.runtimeType &&
+          ambient == other.ambient &&
+          diffuse == other.diffuse &&
+          specular == other.specular &&
+          shininess == other.shininess &&
+          metal == other.metal &&
+          lightTransmission == other.lightTransmission;
+}
+
+/// Whether a layer casts and accepts shadows, one op
+/// ([`lumit_core::model::MaterialSettings`]).
+class BridgeMaterialSettings {
+  final BridgeShadowMode castsShadows;
+  final BridgeShadowMode acceptsShadows;
+
+  const BridgeMaterialSettings({
+    required this.castsShadows,
+    required this.acceptsShadows,
+  });
+
+  @override
+  int get hashCode => castsShadows.hashCode ^ acceptsShadows.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeMaterialSettings &&
+          runtimeType == other.runtimeType &&
+          castsShadows == other.castsShadows &&
+          acceptsShadows == other.acceptsShadows;
+}
+
 /// A layer used as another layer's matte (docs/03 §5.1).
 class BridgeMatte {
   final UuidValue layer;
@@ -1306,6 +1592,9 @@ class BridgeMotionKey {
   final PlatformInt64 frame;
   final double x;
   final double y;
+
+  /// Position z at the key, for a 3D layer; nought on a 2D one.
+  final double z;
   final int? xIndex;
   final int? yIndex;
 
@@ -1322,6 +1611,7 @@ class BridgeMotionKey {
     required this.frame,
     required this.x,
     required this.y,
+    required this.z,
     this.xIndex,
     this.yIndex,
     this.handleIn,
@@ -1334,6 +1624,7 @@ class BridgeMotionKey {
       frame.hashCode ^
       x.hashCode ^
       y.hashCode ^
+      z.hashCode ^
       xIndex.hashCode ^
       yIndex.hashCode ^
       handleIn.hashCode ^
@@ -1348,6 +1639,7 @@ class BridgeMotionKey {
           frame == other.frame &&
           x == other.x &&
           y == other.y &&
+          z == other.z &&
           xIndex == other.xIndex &&
           yIndex == other.yIndex &&
           handleIn == other.handleIn &&
@@ -1366,16 +1658,22 @@ class BridgeMotionPath {
   /// x and y interleaved, in comp pixels: `samples[2 * i]` and
   /// `samples[2 * i + 1]` are the position at `first_frame + i`.
   final Float64List samples;
+
+  /// A 3D layer's Position z at each sample, so the path can be seen
+  /// through a camera. Empty on a 2D layer.
+  final Float64List depths;
   final List<BridgeMotionKey> keys;
 
   const BridgeMotionPath({
     required this.firstFrame,
     required this.samples,
+    required this.depths,
     required this.keys,
   });
 
   @override
-  int get hashCode => firstFrame.hashCode ^ samples.hashCode ^ keys.hashCode;
+  int get hashCode =>
+      firstFrame.hashCode ^ samples.hashCode ^ depths.hashCode ^ keys.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1384,6 +1682,7 @@ class BridgeMotionPath {
           runtimeType == other.runtimeType &&
           firstFrame == other.firstFrame &&
           samples == other.samples &&
+          depths == other.depths &&
           keys == other.keys;
 }
 
@@ -1575,6 +1874,9 @@ class BridgeRevealGroups {
   /// The qualifying effects' ids, as text — the same form the fold paths use.
   final List<String> effects;
 
+  /// The qualifying text animators, by their place on the layer.
+  final Uint32List animators;
+
   /// Whether anything qualified at all. The panel leaves the layer's own
   /// twirl shut when nothing did, rather than opening onto an empty list.
   final bool any;
@@ -1584,6 +1886,7 @@ class BridgeRevealGroups {
     required this.audio,
     required this.retime,
     required this.effects,
+    required this.animators,
     required this.any,
   });
 
@@ -1593,6 +1896,7 @@ class BridgeRevealGroups {
       audio.hashCode ^
       retime.hashCode ^
       effects.hashCode ^
+      animators.hashCode ^
       any.hashCode;
 
   @override
@@ -1604,6 +1908,7 @@ class BridgeRevealGroups {
           audio == other.audio &&
           retime == other.retime &&
           effects == other.effects &&
+          animators == other.animators &&
           any == other.any;
 }
 
@@ -1614,6 +1919,14 @@ enum BridgeRevealKind {
 
   /// `UU`: groups holding anything changed from a fresh layer's state.
   modified,
+  ;
+}
+
+/// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
+enum BridgeShadowMode {
+  off,
+  on_,
+  only,
   ;
 }
 
@@ -1661,7 +1974,8 @@ class BridgeShapeDeform {
 }
 
 /// One piece of vector art on a shape layer: a path, and how it is
-/// painted.
+/// painted. What is done to the path is an entry after it in the contents
+/// (`crate::api::shape::BridgeShapeModifier`).
 ///
 /// The path is `BridgeVertex`, the same vertices a mask crosses with: one path
 /// type in the document, drawn by two things.
@@ -1671,25 +1985,16 @@ class BridgeShapeItem {
   final List<BridgeVertex> vertices;
   final bool closed;
 
-  /// The colour inside the path. `None` draws no fill.
-  final BridgeColourRgba? fill;
+  /// The colour inside the path, each channel keyable. `None` draws no fill.
+  final BridgeColour? fill;
 
   /// The outline's colour, and its width in layer pixels. `None` draws no
   /// outline; a width of zero draws none either.
-  final BridgeColourRgba? stroke;
-  final double strokeWidth;
+  final BridgeColour? stroke;
+  final BridgeScalar strokeWidth;
 
   /// 0..100.
-  final double opacity;
-
-  /// **Trim paths**: where along the path's own length the art begins
-  /// and ends, as a per cent, and how far the pair is slid along it in
-  /// degrees. Animatable on the layer's own clock, exactly as a
-  /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
-  /// the same diamonds.
-  final BridgeScalar trimStart;
-  final BridgeScalar trimEnd;
-  final BridgeScalar trimOffset;
+  final BridgeScalar opacity;
 
   /// **Dashes**: the outline's dash and gap lengths in layer pixels,
   /// alternating — dash, gap, dash, gap. Empty is a solid outline.
@@ -1734,42 +2039,13 @@ class BridgeShapeItem {
   /// shape is changing at, which is the one curve a path can honestly draw.
   final List<BridgeKeyframe> pathKeys;
 
-  /// **Offset paths**: how far the outline is pushed out of the path,
-  /// in layer pixels; negative pulls it in and zero is the path itself.
-  final BridgeScalar offsetAmount;
-
-  /// **The repeater**: how many copies of the item are drawn, which
-  /// copy the original is (`repeat_offset`), and the transform each copy is
-  /// one more step of — moved by `repeat_position_*` layer pixels, turned by
-  /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
-  /// about `repeat_anchor_*`. The copies fade evenly from
-  /// `repeat_start_opacity` to `repeat_end_opacity`.
-  ///
-  /// A still count of one is no repeater at all, which is what every shape is
-  /// until somebody asks for more.
-  final BridgeScalar repeatCopies;
-  final BridgeScalar repeatOffset;
-  final BridgeScalar repeatAnchorX;
-  final BridgeScalar repeatAnchorY;
-  final BridgeScalar repeatPositionX;
-  final BridgeScalar repeatPositionY;
-  final BridgeScalar repeatRotation;
-  final BridgeScalar repeatScale;
-  final BridgeScalar repeatStartOpacity;
-  final BridgeScalar repeatEndOpacity;
-
-  /// **Twist**, or `None` for none.
-  final BridgeShapeTwist? twist;
-
-  /// **Deform**, or `None` for none.
-  final BridgeShapeDeform? deform;
-
-  /// **Smooth**: how far along the path each point is averaged with its
-  /// neighbours, in pixels, or `None` for no smooth.
-  final BridgeScalar? smooth;
-
   /// **Stroke taper**, or `None` for the full width all the way.
   final BridgeShapeTaper? taper;
+
+  /// **A parametric shape**, or `None` for a drawn path. While it is set
+  /// the path is made from it, and `vertices` is that path at the head of
+  /// the layer.
+  final BridgeShapePrimitive? primitive;
 
   const BridgeShapeItem({
     required this.id,
@@ -1780,9 +2056,6 @@ class BridgeShapeItem {
     this.stroke,
     required this.strokeWidth,
     required this.opacity,
-    required this.trimStart,
-    required this.trimEnd,
-    required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
     required this.gradient,
@@ -1796,21 +2069,8 @@ class BridgeShapeItem {
     required this.gradientStops,
     required this.combine,
     required this.pathKeys,
-    required this.offsetAmount,
-    required this.repeatCopies,
-    required this.repeatOffset,
-    required this.repeatAnchorX,
-    required this.repeatAnchorY,
-    required this.repeatPositionX,
-    required this.repeatPositionY,
-    required this.repeatRotation,
-    required this.repeatScale,
-    required this.repeatStartOpacity,
-    required this.repeatEndOpacity,
-    this.twist,
-    this.deform,
-    this.smooth,
     this.taper,
+    this.primitive,
   });
 
   @override
@@ -1823,9 +2083,6 @@ class BridgeShapeItem {
       stroke.hashCode ^
       strokeWidth.hashCode ^
       opacity.hashCode ^
-      trimStart.hashCode ^
-      trimEnd.hashCode ^
-      trimOffset.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
       gradient.hashCode ^
@@ -1839,21 +2096,8 @@ class BridgeShapeItem {
       gradientStops.hashCode ^
       combine.hashCode ^
       pathKeys.hashCode ^
-      offsetAmount.hashCode ^
-      repeatCopies.hashCode ^
-      repeatOffset.hashCode ^
-      repeatAnchorX.hashCode ^
-      repeatAnchorY.hashCode ^
-      repeatPositionX.hashCode ^
-      repeatPositionY.hashCode ^
-      repeatRotation.hashCode ^
-      repeatScale.hashCode ^
-      repeatStartOpacity.hashCode ^
-      repeatEndOpacity.hashCode ^
-      twist.hashCode ^
-      deform.hashCode ^
-      smooth.hashCode ^
-      taper.hashCode;
+      taper.hashCode ^
+      primitive.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1868,9 +2112,6 @@ class BridgeShapeItem {
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
           opacity == other.opacity &&
-          trimStart == other.trimStart &&
-          trimEnd == other.trimEnd &&
-          trimOffset == other.trimOffset &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
           gradient == other.gradient &&
@@ -1884,21 +2125,8 @@ class BridgeShapeItem {
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           pathKeys == other.pathKeys &&
-          offsetAmount == other.offsetAmount &&
-          repeatCopies == other.repeatCopies &&
-          repeatOffset == other.repeatOffset &&
-          repeatAnchorX == other.repeatAnchorX &&
-          repeatAnchorY == other.repeatAnchorY &&
-          repeatPositionX == other.repeatPositionX &&
-          repeatPositionY == other.repeatPositionY &&
-          repeatRotation == other.repeatRotation &&
-          repeatScale == other.repeatScale &&
-          repeatStartOpacity == other.repeatStartOpacity &&
-          repeatEndOpacity == other.repeatEndOpacity &&
-          twist == other.twist &&
-          deform == other.deform &&
-          smooth == other.smooth &&
-          taper == other.taper;
+          taper == other.taper &&
+          primitive == other.primitive;
 }
 
 /// A shape's stroke taper: how much of the width is gone at each end, how
@@ -2228,6 +2456,17 @@ class BridgeTransform {
   /// not a camera carries nothing for them.
   final BridgeCameraChannels? camera;
 
+  /// A Light layer's own channels, the same way.
+  final BridgeLightChannels? light;
+
+  /// A 3D layer's Material options; `None` on a 2D layer and on the kinds
+  /// with no picture to light.
+  final BridgeMaterialChannels? material;
+
+  /// Orientation, Anchor Z and Scale Z, on a 3D layer, a camera or a light;
+  /// `None` on a 2D layer, which has none of them.
+  final BridgeDepthChannels? depth;
+
   const BridgeTransform({
     required this.anchorX,
     required this.anchorY,
@@ -2241,6 +2480,9 @@ class BridgeTransform {
     required this.rotationY,
     required this.opacity,
     this.camera,
+    this.light,
+    this.material,
+    this.depth,
   });
 
   @override
@@ -2256,7 +2498,10 @@ class BridgeTransform {
       rotationX.hashCode ^
       rotationY.hashCode ^
       opacity.hashCode ^
-      camera.hashCode;
+      camera.hashCode ^
+      light.hashCode ^
+      material.hashCode ^
+      depth.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -2274,7 +2519,10 @@ class BridgeTransform {
           rotationX == other.rotationX &&
           rotationY == other.rotationY &&
           opacity == other.opacity &&
-          camera == other.camera;
+          camera == other.camera &&
+          light == other.light &&
+          material == other.material &&
+          depth == other.depth;
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2299,6 +2547,11 @@ enum BridgeTransformProp {
   rotationX,
   rotationY,
   opacity,
+  orientationX,
+  orientationY,
+  orientationZ,
+  anchorZ,
+  scaleZ,
   poiX,
   poiY,
   poiZ,
@@ -2306,6 +2559,24 @@ enum BridgeTransformProp {
   focusDistance,
   aperture,
   blurLevel,
+  lightIntensity,
+  lightColourR,
+  lightColourG,
+  lightColourB,
+  coneAngle,
+  coneFeather,
+  lightRadius,
+  falloffDistance,
+  lightWidth,
+  lightHeight,
+  shadowDarkness,
+  shadowDiffusion,
+  ambient,
+  diffuse,
+  specular,
+  shininess,
+  metal,
+  lightTransmission,
   ;
 }
 
@@ -2590,13 +2861,31 @@ class LayerReference {
         that: this,
       );
 
-  /// This camera's evaluated placement at `frame`: the eye, the effective
-  /// rotation with a two-node camera's aim already in it, and the zoom, with
-  /// a solve link followed (docs/impl/camera.md §2). What the camera tools
-  /// start a drag from. `None` on any other kind.
-  BridgeCameraPose? cameraPoseAt({required BigInt frame}) =>
+  /// This camera's evaluated placement in the comp at `frame`: the eye, the
+  /// effective rotation with a two-node camera's aim already in it, and the
+  /// zoom, with a solve link and its parents followed (docs/impl/camera.md
+  /// §2). The point of interest comes out of the parent's space the same way.
+  /// What the camera tools start a drag from. `None` on any other kind.
+  BridgeCameraAim? cameraAimAt({required BigInt frame}) =>
       BridgeLib.instance.api
-          .crateApiLayerLayerReferenceCameraPoseAt(that: this, frame: frame);
+          .crateApiLayerLayerReferenceCameraAimAt(that: this, frame: frame);
+
+  /// The camera's own values that put it at `aim` in the comp at `frame`:
+  /// the eye, the rotation rows and the point of interest carried back into
+  /// its parent's space, and the camera's Orientation taken off the rows.
+  /// What a camera drag writes, so a parented camera lands where the drag
+  /// put it. `aim` comes back as it is with no parent and no Orientation.
+  BridgeCameraAim cameraOwnAim(
+          {required BigInt frame, required BridgeCameraAim aim}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCameraOwnAim(
+          that: this, frame: frame, aim: aim);
+
+  /// This camera's own placement at `frame`, inside its parents: its eye, and
+  /// its turn with a two-node camera's aim and a solve link in it. What a
+  /// layer parented to it is placed by. `None` on any other kind.
+  BridgeCameraPose? cameraOwnPoseAt({required BigInt frame}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
@@ -2722,6 +3011,13 @@ class LayerReference {
         that: this,
       );
 
+  /// Turn a parametric shape into a drawn path, the shape it shows at
+  /// `time` (composition time), so its points can be moved one by one.
+  void convertShapeToPath(
+          {required UuidValue id, required BridgeRational time}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceConvertShapeToPath(
+          that: this, id: id, time: time);
+
   /// Turn a Footage layer into a Sequence layer holding one clip of what the
   /// layer is showing - the way into the clip-editing surface.
   ///
@@ -2806,24 +3102,18 @@ class LayerReference {
         that: this,
       );
 
-  /// **Text to shapes**: a copy of this Type layer beside it, whose
-  /// picture is the glyph outlines as vector art.
+  /// **Create ▸ Shapes from text, Shapes from vector layer and Split into
+  /// shape layers**: this layer's art as a shape layer directly above it,
+  /// or one for each letter or group when `apart`, with this layer switched
+  /// off as After Effects does. A Type layer gives its letters at `frame`,
+  /// a layer of an Illustrator file its paths, and a shape layer its own
+  /// groups. One undo step. Hands back the topmost new layer.
   ///
-  /// The original is kept and untouched, which is After Effects' convention
-  /// and the only one that survives a mistake: the words are still typeable,
-  /// still keyed, still expression-driven, and the copy is a drawing.
-  ///
-  /// Converted **at `frame`**, because a line the words of which come from an
-  /// expression says something different at every frame and the honest answer
-  /// is what it says at the moment the command is used. A line on a path
-  /// converts curved: the outlines are placed by the same walk the rasteriser
-  /// uses, so the copy lands on top of the layer it came from rather than
-  /// near it.
-  ///
-  /// One `Op`, so one undo step — the whole layer arrives at once.
-  LayerReference createShapesFromText({required PlatformInt64 frame}) =>
-      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapesFromText(
-          that: this, frame: frame);
+  /// Not sync: a large Illustrator file can take seconds to read.
+  Future<LayerReference> createShapes(
+          {required PlatformInt64 frame, required bool apart}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapes(
+          that: this, frame: frame, apart: apart);
 
   /// Razor: cut the clip under `frame` in two, at the playhead.
   ///
@@ -2898,6 +3188,24 @@ class LayerReference {
 
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
+
+  /// Make a repeater's copies real: `repeater`'s, or every repeater's on
+  /// the layer when `None`. Each copy becomes a shape of its own, placed
+  /// where the copy was drawn and faded as it was faded, and the repeater
+  /// goes. `time` is composition time, the playhead, where keyed numbers
+  /// are read.
+  ///
+  /// Into this layer, the copies take the repeater's place in the
+  /// contents. Into layers, the first copy stays here and each further
+  /// copy becomes a shape layer of its own directly below this one, a copy
+  /// of this layer holding only the repeated art and what acted on it
+  /// after the repeater. Either way one `Batch`, so one undo step.
+  void expandShapeCopies(
+          {UuidValue? repeater,
+          required BridgeRational time,
+          required bool intoLayers}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceExpandShapeCopies(
+          that: this, repeater: repeater, time: time, intoLayers: intoLayers);
 
   /// **Fade the layer's sound up from silence** over `seconds` from its in
   /// point (docs/09 §6).
@@ -3206,11 +3514,12 @@ class LayerReference {
         that: this,
       );
 
-  /// This shape layer's contents, bottom of the stack first.
+  /// This shape layer's contents, bottom of the stack first, as one flat
+  /// list of entries with the depth each sits at (`crate::api::shape`).
   ///
   /// Empty on a layer that is not a shape, rather than an error: the Timeline
   /// asks every row what it has to list, exactly as it asks about masks.
-  List<BridgeShapeItem> getShapeContents() =>
+  List<BridgeShapeEntry> getShapeContents() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetShapeContents(
         that: this,
       );
@@ -3321,6 +3630,13 @@ class LayerReference {
           {required String text, required double x, required double y}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
           that: this, text: text, x: x, y: y);
+
+  /// Whether this layer reads an Illustrator file, so Shapes from vector
+  /// layer can be offered.
+  bool isVectorLayer() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceIsVectorLayer(
+        that: this,
+      );
 
   /// Append a `.lumfx` preset's effects to this layer's stack, or with
   /// `clip` to that clip's own, as one op.
@@ -3675,6 +3991,12 @@ class LayerReference {
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
 
+  /// Turn this layer's X, Y and Z Rotation in After Effects' order, or back
+  /// in Lumit's, as one undo step. The rotations are rewritten so the layer
+  /// keeps its pose. Refused while an expression drives one of them.
+  void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
+
   /// Choose which audio streams this layer sounds, mixed. One undo step.
   ///
   /// On a Sequence layer every footage clip takes the choice. An empty
@@ -3899,6 +4221,12 @@ class LayerReference {
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetLabel(that: this, label: label);
 
+  /// Replace a light's kind, falloff, aim and shadows as one undo step.
+  /// Refused on any other kind of layer.
+  void setLightSettings({required BridgeLightSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetLightSettings(
+          that: this, settings: settings);
+
   /// Replace this layer's whole marker list — one op, trivially invertible,
   /// the same shape as the composition's.
   void setMarkers({required List<BridgeMarker> markers}) =>
@@ -3930,6 +4258,11 @@ class LayerReference {
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaskPathKeys(
           that: this, id: id, keys: keys);
+
+  /// Replace whether a layer casts and accepts shadows, as one undo step.
+  void setMaterialSettings({required BridgeMaterialSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaterialSettings(
+          that: this, settings: settings);
 
   /// Point this layer at another as its matte, or clear it with `None`.
   ///
@@ -4022,7 +4355,7 @@ class LayerReference {
   /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
   /// rename, a colour — and the keys are carried through untouched.
   void setShapeContents(
-          {required List<BridgeShapeItem> contents, BridgeRational? at}) =>
+          {required List<BridgeShapeEntry> contents, BridgeRational? at}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapeContents(
           that: this, contents: contents, at: at);
 
@@ -4030,9 +4363,12 @@ class LayerReference {
   /// the graph editor commits when a handle is dragged, and what a lane drag
   /// of several keys at once needs.
   ///
-  /// `keys` must name every key the item has, in order; their `value` is
+  /// `keys` names every key the item has, in order; their `value` is
   /// ignored, because a path key holds a shape rather than a number. Refused
   /// as a whole if the times are not strictly ascending.
+  ///
+  /// A shorter list is a delete. Each key it names is found by its time, and
+  /// the rest go. Deleting the last key leaves the shape that key held.
   bool setShapePathKeys(
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(

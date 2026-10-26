@@ -7,7 +7,9 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `apply`, `compose`, `cut`, `dot`, `emit`, `flat`, `hidden_line`, `hides`, `lerp`, `line`, `new`, `point`, `ring`, `row`, `sub`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Card`, `Outline`, `View`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A footage item's measured size, from the frontend's own probe cache: the
 /// engine's probe lives on the worker, and this call runs on the caller's
@@ -37,27 +39,22 @@ class BridgeMediaSize {
           height == other.height;
 }
 
-/// A camera: its eye, the four corners of the comp-sized rectangle its zoom
-/// in front of it, and the point of interest when it has one.
+/// A camera: its eye, and the lines of its frustum (the first four go round
+/// the comp-sized rectangle its zoom in front of it), its body behind the eye,
+/// and the line to its point of interest when it has one.
 class BridgeWireCamera {
   final UuidValue layer;
   final BridgeWirePoint eye;
-  final List<BridgeWirePoint> corners;
-  final BridgeWirePoint? pointOfInterest;
+  final Float64List lines;
 
   const BridgeWireCamera({
     required this.layer,
     required this.eye,
-    required this.corners,
-    this.pointOfInterest,
+    required this.lines,
   });
 
   @override
-  int get hashCode =>
-      layer.hashCode ^
-      eye.hashCode ^
-      corners.hashCode ^
-      pointOfInterest.hashCode;
+  int get hashCode => layer.hashCode ^ eye.hashCode ^ lines.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -66,22 +63,22 @@ class BridgeWireCamera {
           runtimeType == other.runtimeType &&
           layer == other.layer &&
           eye == other.eye &&
-          corners == other.corners &&
-          pointOfInterest == other.pointOfInterest;
+          lines == other.lines;
 }
 
-/// A 3D layer's rectangle: four corners, clockwise from the top left.
+/// A 3D layer's rectangle, four lines to a list. A Null's square comes with a
+/// small cross through its anchor along its own three axes.
 class BridgeWireLayer {
   final UuidValue layer;
-  final List<BridgeWirePoint> corners;
+  final Float64List lines;
 
   const BridgeWireLayer({
     required this.layer,
-    required this.corners,
+    required this.lines,
   });
 
   @override
-  int get hashCode => layer.hashCode ^ corners.hashCode;
+  int get hashCode => layer.hashCode ^ lines.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -89,20 +86,30 @@ class BridgeWireLayer {
       other is BridgeWireLayer &&
           runtimeType == other.runtimeType &&
           layer == other.layer &&
-          corners == other.corners;
+          lines == other.lines;
 }
 
+/// A light: where it is, for its mark, and its lines. A spot has its cone
+/// (the edge and where the feather starts, as two rings) and the line it
+/// shines along, out to its point of interest when it has one; a parallel
+/// light has the line its rays run along, and an area light its rectangle.
+/// An ambient light has no place, so none is drawn.
 class BridgeWireLight {
   final UuidValue layer;
+  final BridgeWireLightKind kind;
   final BridgeWirePoint at;
+  final Float64List lines;
 
   const BridgeWireLight({
     required this.layer,
+    required this.kind,
     required this.at,
+    required this.lines,
   });
 
   @override
-  int get hashCode => layer.hashCode ^ at.hashCode;
+  int get hashCode =>
+      layer.hashCode ^ kind.hashCode ^ at.hashCode ^ lines.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -110,7 +117,16 @@ class BridgeWireLight {
       other is BridgeWireLight &&
           runtimeType == other.runtimeType &&
           layer == other.layer &&
-          at == other.at;
+          kind == other.kind &&
+          at == other.at &&
+          lines == other.lines;
+}
+
+enum BridgeWireLightKind {
+  point,
+  spot,
+  area,
+  ;
 }
 
 /// A comp-space point taken through the view: where it lands in comp pixels,
@@ -145,14 +161,35 @@ class BridgeWireframes {
   final List<BridgeWireCamera> cameras;
   final List<BridgeWireLight> lights;
 
+  /// The ground grid, and a line from each camera, light and Null drawn
+  /// down to it: five numbers a line, the fifth how strongly it is drawn,
+  /// 0 to 1, fading out with distance from the middle.
+  final Float64List ground;
+
+  /// The comp's own frame at its 1:1 depth, four numbers a line.
+  final Float64List frame;
+
+  /// x, y and z from the world origin, five numbers a line, the fifth the
+  /// axis (0, 1 or 2).
+  final Float64List axes;
+
   const BridgeWireframes({
     required this.layers,
     required this.cameras,
     required this.lights,
+    required this.ground,
+    required this.frame,
+    required this.axes,
   });
 
   @override
-  int get hashCode => layers.hashCode ^ cameras.hashCode ^ lights.hashCode;
+  int get hashCode =>
+      layers.hashCode ^
+      cameras.hashCode ^
+      lights.hashCode ^
+      ground.hashCode ^
+      frame.hashCode ^
+      axes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -161,5 +198,8 @@ class BridgeWireframes {
           runtimeType == other.runtimeType &&
           layers == other.layers &&
           cameras == other.cameras &&
-          lights == other.lights;
+          lights == other.lights &&
+          ground == other.ground &&
+          frame == other.frame &&
+          axes == other.axes;
 }

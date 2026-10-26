@@ -16,6 +16,7 @@ import 'graph_channels.dart';
 import 'graph_edits.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 
 // ---------------------------------------------------------------------------
 // The keyframe clipboard (docs/07 §5.3).
@@ -207,18 +208,22 @@ bool copyChannels({
 LumitClipGroup _transformClipGroup(
     GraphChannel lead, List<GraphClipChannel> axes, double fps) {
   final (name, unit) = switch (lead.prop!) {
-    BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => (
-        l10n.transformAnchorPoint,
-        l10n.unitPixels
-      ),
+    BridgeTransformProp.anchorX ||
+    BridgeTransformProp.anchorY ||
+    BridgeTransformProp.anchorZ =>
+      (l10n.transformAnchorPoint, l10n.unitPixels),
     BridgeTransformProp.positionX ||
     BridgeTransformProp.positionY ||
     BridgeTransformProp.positionZ =>
       (l10n.transformPosition, l10n.unitPixels),
-    BridgeTransformProp.scaleX || BridgeTransformProp.scaleY => (
-        l10n.transformScale,
-        l10n.unitPercent
-      ),
+    BridgeTransformProp.scaleX ||
+    BridgeTransformProp.scaleY ||
+    BridgeTransformProp.scaleZ =>
+      (l10n.transformScale, l10n.unitPercent),
+    BridgeTransformProp.orientationX ||
+    BridgeTransformProp.orientationY ||
+    BridgeTransformProp.orientationZ =>
+      (l10n.transformOrientation, l10n.unitDegrees),
     BridgeTransformProp.rotation => (l10n.transformRotation, l10n.unitDegrees),
     BridgeTransformProp.rotationX => (
         l10n.transformRotationX,
@@ -241,6 +246,50 @@ LumitClipGroup _transformClipGroup(
     BridgeTransformProp.aperture => (l10n.cameraAperture, l10n.unitPixels),
     BridgeTransformProp.blurLevel => (
         l10n.cameraBlurLevel,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.lightIntensity => (
+        l10n.lightIntensity,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.lightColourR ||
+    BridgeTransformProp.lightColourG ||
+    BridgeTransformProp.lightColourB =>
+      (l10n.lightColour, ''),
+    BridgeTransformProp.coneAngle => (l10n.lightConeAngle, l10n.unitDegrees),
+    BridgeTransformProp.coneFeather => (
+        l10n.lightConeFeather,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.lightRadius => (l10n.lightRadius, l10n.unitPixels),
+    BridgeTransformProp.falloffDistance => (
+        l10n.lightFalloffDistance,
+        l10n.unitPixels
+      ),
+    BridgeTransformProp.lightWidth ||
+    BridgeTransformProp.lightHeight =>
+      (l10n.size, l10n.unitPixels),
+    BridgeTransformProp.ambient => (l10n.materialAmbient, l10n.unitPercent),
+    BridgeTransformProp.diffuse => (l10n.materialDiffuse, l10n.unitPercent),
+    BridgeTransformProp.specular => (
+        l10n.materialSpecular,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.shininess => (
+        l10n.materialShininess,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.metal => (l10n.materialMetal, l10n.unitPercent),
+    BridgeTransformProp.shadowDarkness => (
+        l10n.lightShadowDarkness,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.shadowDiffusion => (
+        l10n.lightShadowDiffusion,
+        l10n.unitPixels
+      ),
+    BridgeTransformProp.lightTransmission => (
+        l10n.materialLightTransmission,
         l10n.unitPercent
       ),
   };
@@ -462,8 +511,11 @@ void _matchOnLayer(
           '${mask.id}');
     } else if (source.shape case final item?) {
       swaps['${item.id}'] ??= _sameItem(
-          [for (final s in info.shapeContents) (s.name, '${s.id}')],
-          [for (final s in entry.info.shapeContents) (s.name, '${s.id}')],
+          [for (final s in info.shapeContents.items) (s.name, '${s.id}')],
+          [
+            for (final s in entry.info.shapeContents.items)
+              (s.name, '${s.id}')
+          ],
           '${item.id}');
     }
   }
@@ -588,7 +640,7 @@ class _Paste {
   void put(GraphChannel channel, int i, {bool fresh = false}) {
     // A shape is not a number, so it only goes onto another shape.
     final clip = clips?[i];
-    if (channel.isMaskPath || (clip?.source.isMaskPath ?? false)) {
+    if (channel.isPath || (clip?.source.isPath ?? false)) {
       if (channel.isMaskPath && clip != null && clip.source.isMaskPath) {
         putPath(channel.entry.layer, channel.path, channel.mask!.id,
             channel.keys, i);

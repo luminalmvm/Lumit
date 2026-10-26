@@ -244,6 +244,10 @@ pub struct HeadlessRenderer {
     /// and the export renderer — which nobody calls this on — always draws
     /// the backdrop.
     transparent_background: bool,
+    /// A 3D viewport's ground colour, linear, or `None` for no ground. Like
+    /// the backdrop above it is a way of looking, which the export renderer
+    /// is never given.
+    ground: Option<crate::realise::ViewGround>,
     /// The read-back buffer an export's last frame gave back, for its next
     /// ([`Self::finish_preview`]). Never set on the Viewer's renderer.
     spare_readback: Option<lumit_gpu::SpareReadback>,
@@ -812,6 +816,7 @@ impl HeadlessRenderer {
             colour_view: None,
             colour_output: None,
             transparent_background: false,
+            ground: None,
             spare_readback: None,
             region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
@@ -1054,6 +1059,17 @@ impl HeadlessRenderer {
         self.transparent_background = transparent;
     }
 
+    /// Draw a 3D viewport's ground into the frame, or no ground with `None`.
+    /// Folded into the frame's name like the backdrop, so a frame with the
+    /// floor is never served without it.
+    pub fn set_ground(&mut self, ground: Option<crate::realise::ViewGround>) {
+        self.ground = ground.filter(|g| {
+            g.colour.iter().all(|v| v.is_finite())
+                && [g.middle, g.floor, g.step].iter().all(|v| v.is_finite())
+                && g.step > 0.0
+        });
+    }
+
     /// Composite only a sub-rectangle of the fronted comp — the Viewer's
     /// **region of interest** (docs/07 §2.2). Given as fractions of the
     /// comp (`[u0, v0, u1, v1]`, top-left to bottom-right) so the caller never
@@ -1113,6 +1129,7 @@ impl HeadlessRenderer {
         let colour_id = self.colour.frame_identity();
         if self.view.is_neutral()
             && !self.transparent_background
+            && self.ground.is_none()
             && self.region.is_none()
             && colour_id == 0
             && self.colour_view.is_none()
@@ -1151,6 +1168,13 @@ impl HeadlessRenderer {
         if let Some(r) = self.region {
             h.update(b"roi/");
             for v in r {
+                h.update(&v.to_bits().to_le_bytes());
+            }
+        }
+        if let Some(g) = self.ground {
+            h.update(b"ground/");
+            let [r, gr, b, a] = g.colour;
+            for v in [r, gr, b, a, g.middle, g.floor, g.step] {
                 h.update(&v.to_bits().to_le_bytes());
             }
         }
@@ -1501,13 +1525,19 @@ impl HeadlessRenderer {
             // everything downstream sees one shape.
             let roi = self.region_px(cw, ch);
             let linear = realiser.realise_region(
-                crate::track::camera_pose(doc, comp, t),
+                Some(crate::track::camera_pose(doc, comp, t)),
                 cw,
                 ch,
                 background,
                 &draws,
                 roi,
+                self.ground,
             );
+            // Asked to stop while compositing: a trail may have stopped short,
+            // so the picture is never shown.
+            if crate::cancel::requested() {
+                break 'frame Err(crate::cancel::CANCELLED.to_string());
+            }
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
                     crop_texture(&self.gpu, &linear, r, realiser.render_scale, (cw, ch))
@@ -4417,6 +4447,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -4513,6 +4544,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -4616,6 +4648,7 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -6881,16 +6914,67 @@ mod tests {
         assert_eq!(frames[0], frames[1], "the parent moved the adjustment");
     }
 
+    /// Depth of field pro on an adjustment layer, its Depth row pointed at
+    /// itself, reads how far the 3D layers below are: two white cards at two
+    /// distances show as two greys in its Depth display.
+    #[test]
+    fn an_adjustment_layer_reads_the_depth_of_the_3d_layers_below() {
+        use lumit_core::model::EffectValue;
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (w, h) = (64u32, 32u32);
+        let (mut doc, comp_id, solid) = matrix_base(w, h, LinearColour([1.0, 1.0, 1.0, 1.0]));
+        let card = |x: f64, z: f64| {
+            let mut l = matrix_layer("Card", LayerKind::Solid { def: solid }, w, h);
+            l.switches.three_d = true;
+            l.transform.scale_x = Property::fixed(20.0);
+            l.transform.scale_y = Property::fixed(40.0);
+            l.transform.position_x = Property::fixed(x);
+            l.transform.position_z = Property::fixed(z);
+            l
+        };
+        let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
+        let mut dof = lumit_core::fx::builtins::instantiate("dof_pro").unwrap();
+        for (id, value) in [
+            ("depth", EffectValue::Layer(Some(adj.id))),
+            ("display", EffectValue::Choice(1)),
+            ("near_m", EffectValue::Float(Property::fixed(0.05))),
+            ("far_m", EffectValue::Float(Property::fixed(0.5))),
+        ] {
+            if let Some(p) = dof.params.iter_mut().find(|p| p.id == id) {
+                p.value = value;
+            }
+        }
+        adj.effects.push(dof);
+        let comp = doc.comp_mut(comp_id).unwrap();
+        // The far card lands at x = 48 through the default camera.
+        comp.layers = vec![adj, card(16.0, 0.0), card(66.0, 100.0)];
+        let doc = DocumentStore::new(doc).snapshot();
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let grey = |x: u32| i32::from(rgba[((h / 2 * w + x) * 4) as usize]);
+        assert!(
+            (grey(16) - grey(48)).abs() > 20,
+            "the near card reads {} and the far one {}",
+            grey(16),
+            grey(48)
+        );
+    }
+
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile
     /// shown twice: once on the focus plane and once at twice the distance.
-    /// Then a bare solid at the far depth, whose only edge is its outline.
     ///
     /// The far tile draws at half size, so a pixel or two of its edge is
     /// intermediate however sharp it is; the gate is the width of the ramp, not
-    /// its presence. And the aperture is in the frame's name, or a frame banked
-    /// at one aperture would be handed back at another.
+    /// its presence. A bare solid's outline blurs too, as wide as After Effects
+    /// blurs it. And the aperture is in the frame's name, or a frame banked at
+    /// one aperture would be handed back at another.
     #[test]
     fn depth_of_field_softens_the_layer_off_the_focus_plane() {
         let mut r = match HeadlessRenderer::shared() {
@@ -6929,7 +7013,7 @@ mod tests {
                 correction_base: None,
                 options: Box::new(lumit_core::model::CameraOptions {
                     depth_of_field: true,
-                    aperture: Property::fixed(16.0),
+                    aperture: Property::fixed(105.0),
                     ..lumit_core::model::CameraOptions::fresh(
                         ZOOM,
                         (f64::from(cw) * 0.5, f64::from(ch) * 0.5, 0.0),
@@ -6979,69 +7063,128 @@ mod tests {
             "the layer at twice the focus distance came out with a {soft}-pixel edge"
         );
 
-        // A bare solid at twice the distance blurs at its outline, straight
-        // in the scene and inside a collapsed precomp. Its left edge is at
-        // x 68 on screen, and the blur's reach there is 4 px.
+        // A tile turned away from the camera about its square's left edge,
+        // which is on the focus plane: that edge stays sharp and the far one
+        // goes soft.
+        let mut turned_doc = (*doc).clone();
+        let scene = turned_doc.comp_mut(comp_id).unwrap();
+        if let LayerKind::Camera { options, .. } = &mut scene.layers[0].kind {
+            options.aperture = Property::fixed(1050.0);
+        }
+        scene.layers.truncate(1);
+        let mut turned = at(40.0, 0.0);
+        turned.transform.anchor_x = Property::fixed(12.0);
+        turned.transform.rotation_y = Property::fixed(60.0);
+        scene.layers.push(turned);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(turned_doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let ramp = |from: u32, to: u32| {
+            (from..to)
+                .filter(|x| (25..230).contains(&rgba[((ch / 2 * w + x) * 4) as usize]))
+                .count()
+        };
+        let (near, far) = (ramp(30, 46), ramp(46, 64));
+        assert!(
+            near <= 2 && far >= 4,
+            "a turned layer came out {near} pixels soft at its near edge and {far} at its far one"
+        );
+
+        // A floor whose far edge is on the focus plane and which runs on under
+        // the camera: the bottom of the frame, nearest the eye, goes soft.
+        let mut under_doc = (*doc).clone();
+        let scene = under_doc.comp_mut(comp_id).unwrap();
+        scene.layers.truncate(1);
+        let mut floor = at(f64::from(cw) * 0.5, 0.0);
+        floor.transform.position_y = Property::fixed(f64::from(ch) * 0.5 + 8.0);
+        floor.transform.anchor_y = Property::fixed(0.0);
+        floor.transform.scale_x = Property::fixed(50.0);
+        floor.transform.scale_y = Property::fixed(1000.0);
+        floor.transform.rotation_x = Property::fixed(-90.0);
+        scene.layers.push(floor);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(under_doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let soft = (0..cw / 2)
+            .filter(|x| (25..230).contains(&rgba[(((ch - 4) * w + x) * 4) as usize]))
+            .count();
+        assert!(
+            soft >= 6,
+            "a floor running under the camera came out {soft} pixels soft near the eye"
+        );
+
+        // A bare solid, which has no edge inside its own picture. After Effects
+        // blurs one 36.37 px either side with a box at zoom 1200, focus 600,
+        // aperture 400 and depth 2200; this is that camera a sixth the size,
+        // and its softer edge has to spread about as far.
         let mut bare_doc = (*doc).clone();
         let big = Uuid::now_v7();
         bare_doc.items.push(ProjectItem::Solid(SolidDef {
             id: big,
             name: "Square".into(),
             colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 48,
-            height: 48,
+            width: 96,
+            height: 96,
             extra: serde_json::Map::new(),
         }));
-        let mut bare = matrix_layer("Square", LayerKind::Solid { def: big }, 48, 48);
+        let scene = bare_doc.comp_mut(comp_id).unwrap();
+        scene.background = LinearColour([0.0; 4]);
+        if let LayerKind::Camera { options, .. } = &mut scene.layers[0].kind {
+            options.aperture = Property::fixed(400.0 / 6.0);
+            options.focus_distance = Property::fixed(ZOOM / 2.0);
+        }
+        scene.layers.truncate(1);
+        let mut bare = matrix_layer("Square", LayerKind::Solid { def: big }, 96, 96);
         bare.switches.three_d = true;
-        bare.transform.position_x = Property::fixed(96.0);
+        bare.transform.position_x = Property::fixed(f64::from(cw) * 0.5);
         bare.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
-        bare.transform.position_z = Property::fixed(ZOOM);
-        let inner = push_comp(&mut bare_doc, "Inner", cw, ch);
-        bare_doc.comp_mut(inner).unwrap().layers.push(bare.clone());
+        bare.transform.position_z = Property::fixed(2200.0 / 6.0 - ZOOM);
+        // The same solid inside a collapsed precomp, seen through this camera.
+        let mut nested_doc = bare_doc.clone();
+        let inner = push_comp(&mut nested_doc, "Inner", cw, ch);
+        nested_doc
+            .comp_mut(inner)
+            .unwrap()
+            .layers
+            .push(bare.clone());
         let mut collapsed = matrix_layer("Inner", LayerKind::Precomp { comp: inner }, cw, ch);
         collapsed.switches.three_d = true;
         collapsed.switches.collapse = true;
-        let scene = bare_doc.comp_mut(comp_id).unwrap();
-        scene.background = LinearColour([0.0; 4]);
-        scene.layers.truncate(1);
-        let mut nested_doc = bare_doc.clone();
-        bare_doc.comp_mut(comp_id).unwrap().layers.push(bare);
         nested_doc.comp_mut(comp_id).unwrap().layers.push(collapsed);
+        bare_doc.comp_mut(comp_id).unwrap().layers.push(bare);
         for (how, d) in [("straight", bare_doc), ("collapsed", nested_doc)] {
             let (lin, w, _) = r
                 .render_preview_linear(&Arc::new(d), comp_id, 0, Quality::default())
                 .expect("a frame");
-            let alpha = |x: u32| lin[((ch / 2 * w + x) * 4 + 3) as usize];
-            // Where the coverage crosses a half, and how far the ramp spreads.
-            let half = (56..80)
-                .find(|&x| alpha(x + 1) >= 0.5)
-                .map(|x| x as f32 + (0.5 - alpha(x)) / (alpha(x + 1) - alpha(x)).max(1e-6) + 0.5);
-            let rise: Vec<f32> = (56..80)
-                .map(|x| (alpha(x + 1) - alpha(x)).max(0.0))
+            // The left edge's ramp along the middle row: where it is, and how
+            // wide, read as the box with the same spread.
+            let lit = |x: u32| f64::from(lin[((ch / 2 * w + x) * 4 + 3) as usize]);
+            let rise: Vec<f64> = (0..cw / 2)
+                .map(|x| (lit(x + 1) - lit(x)).max(0.0))
                 .collect();
-            let total: f32 = rise.iter().sum();
+            let total: f64 = rise.iter().sum();
             let mean = rise
                 .iter()
                 .enumerate()
-                .map(|(x, d)| x as f32 * d)
-                .sum::<f32>()
+                .map(|(x, d)| x as f64 * d)
+                .sum::<f64>()
                 / total;
-            let spread = (rise
+            let spread = rise
                 .iter()
                 .enumerate()
-                .map(|(x, d)| (x as f32 - mean).powi(2) * d)
-                .sum::<f32>()
-                / total)
-                .sqrt();
+                .map(|(x, d)| (x as f64 - mean).powi(2) * d)
+                .sum::<f64>()
+                / total;
+            let half_width = (12.0 * spread).sqrt() / 2.0;
+            let edge = mean + 1.0;
             assert!(
-                half.is_some_and(|x| (x - 68.0).abs() <= 1.0),
-                "a bare solid {how} had its edge at {half:?}, not 68"
+                (edge - (64.0 - 48.0 * ZOOM * 6.0 / 2200.0)).abs() < 1.0,
+                "a bare solid {how} had its edge at {edge}"
             );
-            // A gaussian cut off at its reach, 2 sigma, spreads 0.88 sigma.
             assert!(
-                (spread / (0.88 * 2.0) - 1.0).abs() < 0.2,
-                "a bare solid {how} blurred {spread} px, not 1.76"
+                (half_width / (36.37 / 6.0) - 1.0).abs() < 0.1,
+                "a bare solid {how} blurred {half_width} px either side, not After Effects' {}",
+                36.37 / 6.0
             );
         }
 
@@ -7052,7 +7195,7 @@ mod tests {
         if let LayerKind::Camera { options, .. } =
             &mut narrower.comp_mut(comp_id).unwrap().layers[0].kind
         {
-            options.aperture = Property::fixed(4.0);
+            options.aperture = Property::fixed(26.0);
         }
         assert_ne!(
             wide,
@@ -7060,6 +7203,548 @@ mod tests {
                 .expect("still nameable"),
             "a different aperture is a different picture and takes a different name"
         );
+    }
+
+    /// A 64 px comp seen through the default camera, holding 32 px 3D cards
+    /// at its centre, the first given at the top of the stack, all at
+    /// `opacity`. Each card is a colour, a z, a turn about y in degrees, and
+    /// whether it is only the card's right half, turning about its left edge.
+    fn cards_scene(cards: &[([f32; 4], f64, f64, bool)], opacity: f64) -> (Arc<Document>, Uuid) {
+        const ZOOM: f64 = 128.0;
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Cards", 64, 64);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(ZOOM),
+                solve_link: None,
+                correction_base: None,
+                options: Default::default(),
+            },
+            64,
+            64,
+        );
+        camera.transform.position_z = Property::fixed(-ZOOM);
+        let mut layers = vec![camera];
+        for &(colour, z, turn, half) in cards {
+            let def = Uuid::now_v7();
+            let width = if half { 16 } else { 32 };
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Card".into(),
+                colour: LinearColour(colour),
+                width,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            let mut card = matrix_layer("Card", LayerKind::Solid { def }, width, 32);
+            card.switches.three_d = true;
+            if half {
+                card.transform.anchor_x = Property::fixed(0.0);
+            }
+            card.transform.opacity = Property::fixed(opacity);
+            card.transform.position_x = Property::fixed(32.0);
+            card.transform.position_y = Property::fixed(32.0);
+            card.transform.position_z = Property::fixed(z);
+            card.transform.rotation_y = Property::fixed(turn);
+            layers.push(card);
+        }
+        doc.comp_mut(comp_id).unwrap().layers = layers;
+        (Arc::new(doc), comp_id)
+    }
+
+    /// **A 2D layer inside a collapsed 3D precomp is seen by the camera**, on
+    /// the precomp's plane, and like any 2D layer it keeps its stack order, as
+    /// in After Effects. Pushed back to twice the camera's distance, the red
+    /// 32 px solid shows at 16 px, where drawn flat it filled 32. It stays over
+    /// the blue 3D card below it inside, though the card is nearer.
+    #[test]
+    fn a_2d_layer_in_a_collapsed_3d_precomp_is_seen_by_the_camera() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (base, _) = cards_scene(&[], 100.0);
+        let mut doc = (*base).clone();
+        let comp_id = doc
+            .items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Composition(c) => Some(c.id),
+                _ => None,
+            })
+            .unwrap();
+        let mut solid = |colour: [f32; 4]| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Solid".into(),
+                colour: LinearColour(colour),
+                width: 32,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            matrix_layer("Solid", LayerKind::Solid { def }, 32, 32)
+        };
+        let flat = solid([1.0, 0.0, 0.0, 1.0]);
+        let mut card = solid([0.0, 0.0, 1.0, 1.0]);
+        card.switches.three_d = true;
+        card.transform.position_z = Property::fixed(-64.0);
+        let inner = push_comp(&mut doc, "Inner", 32, 32);
+        doc.comp_mut(inner).unwrap().layers = vec![flat, card];
+        let mut nested = matrix_layer("Nested", LayerKind::Precomp { comp: inner }, 32, 32);
+        nested.switches.three_d = true;
+        nested.switches.collapse = true;
+        nested.transform.position_x = Property::fixed(32.0);
+        nested.transform.position_y = Property::fixed(32.0);
+        nested.transform.position_z = Property::fixed(128.0);
+        doc.comp_mut(comp_id).unwrap().layers.push(nested);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let at = |x: u32| &rgba[((32 * w + x) * 4) as usize..][..3];
+        assert!(
+            at(32)[0] > 200 && at(41)[2] > 200 && at(44)[2] < 50,
+            "the red solid should show 16 px wide over the blue card, got {:?} {:?} {:?}",
+            at(32),
+            at(41),
+            at(44)
+        );
+    }
+
+    /// **The nearer 3D layer covers the farther one, wherever they sit in the
+    /// stack**, as in After Effects. Red is at the bottom but nearer the
+    /// camera. Drawn in stack order, blue would cover it.
+    #[test]
+    fn a_nearer_3d_layer_lower_in_the_stack_draws_in_front() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (doc, comp_id) = cards_scene(
+            &[
+                ([0.0, 0.0, 1.0, 1.0], 40.0, 0.0, false),
+                ([1.0, 0.0, 0.0, 1.0], -40.0, 0.0, false),
+            ],
+            100.0,
+        );
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let i = ((32 * w + 32) * 4) as usize;
+        assert!(
+            rgba[i] > 200 && rgba[i + 2] < 50,
+            "the centre should be the near red card, got {:?}",
+            &rgba[i..i + 4]
+        );
+    }
+
+    /// **3D layers that pass through each other cut where they meet**, as in
+    /// After Effects, and come out right at any opacity. Three see-through
+    /// cards crossing on one axis, which no order of the three can draw, must
+    /// match the same star built from six half cards that only touch.
+    #[test]
+    fn crossing_3d_layers_cut_through_each_other() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let colours = [
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+        ];
+        let turn = |k: usize| -40.0 + 40.0 * (k % 3) as f64;
+        let whole: Vec<_> = (0..3).map(|k| (colours[k], 0.0, turn(k), false)).collect();
+        let halves: Vec<_> = (0..6)
+            .map(|k| (colours[k % 3], 0.0, turn(k) + 180.0 * (k / 3) as f64, true))
+            .collect();
+        let mut frame = |cards: &[([f32; 4], f64, f64, bool)]| {
+            let (doc, comp_id) = cards_scene(cards, 60.0);
+            r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0
+        };
+        let (star, truth) = (frame(&whole), frame(&halves));
+        let worst = star
+            .iter()
+            .zip(&truth)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            worst <= 2,
+            "the cut star is {worst} levels off the one made of halves"
+        );
+    }
+
+    /// **With no camera, 3D layers are seen through After Effects' default
+    /// camera**: pushed back, turned and cutting through each other exactly as
+    /// through a fresh camera layer.
+    #[test]
+    fn no_camera_draws_like_a_fresh_camera() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (doc, comp_id) = cards_scene(
+            &[
+                ([0.0, 0.0, 1.0, 1.0], 0.0, 0.0, false),
+                ([1.0, 0.0, 0.0, 1.0], 0.0, 50.0, false),
+                ([0.0, 1.0, 0.0, 1.0], 300.0, 0.0, false),
+            ],
+            100.0,
+        );
+        let mut fresh = (*doc).clone();
+        let zoom = lumit_core::camera::default_zoom(64.0);
+        let camera = &mut fresh.comp_mut(comp_id).unwrap().layers[0];
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(zoom),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(lumit_core::model::CameraOptions::fresh(
+                zoom,
+                (32.0, 32.0, 0.0),
+            )),
+        };
+        camera.transform.position_z = Property::fixed(-zoom);
+        let mut none = fresh.clone();
+        none.comp_mut(comp_id).unwrap().layers.remove(0);
+        let mut frame = |doc: Document| {
+            let doc = Arc::new(doc);
+            r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0
+        };
+        let seen = frame(fresh);
+        assert_eq!(frame(none), seen);
+    }
+
+    /// **A camera and a light follow their parent**, the After Effects rig of
+    /// a camera on a turned 3D null.
+    ///
+    /// The same scene is drawn through a camera and a light parented to the
+    /// null, then through an unparented pair holding the poses the null puts
+    /// them at, worked out here with the compositor's own matrices. The two
+    /// pictures match. Dropping the parent changes the picture, so a camera
+    /// that ignored its parent would fail. A two-node camera aims at its point
+    /// of interest read in the null's space too. The null is turned by an
+    /// expression on time, as a handheld rig's wiggle is, and placed by one
+    /// reading another layer, as a null linked to a scene marker is.
+    #[test]
+    fn a_camera_and_a_light_on_a_turned_null_see_what_their_poses_say() {
+        use lumit_core::model::{CameraOptions, LightDef, LightKind};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (128u32, 64u32);
+        let place = |l: &lumit_core::model::Layer| {
+            let tr = &l.transform;
+            let v = |p: &Property| p.value_at(0.0) as f32;
+            glam::Mat4::from_cols_array_2d(&lumit_gpu::composite::place_matrix(
+                (v(&tr.position_x), v(&tr.position_y)),
+                (v(&tr.anchor_x), v(&tr.anchor_y)),
+                (v(&tr.scale_x), v(&tr.scale_y)),
+                v(&tr.rotation),
+                v(&tr.position_z),
+                v(&tr.rotation_x),
+                v(&tr.rotation_y),
+            ))
+        };
+
+        for two_node in [false, true] {
+            let mut doc = Document::new();
+            let comp_id = push_comp(&mut doc, "Scene", cw, ch);
+            let mut solids = Vec::new();
+            for (colour, (w, h), at, turn) in [
+                ([0.25, 0.25, 0.25], (60, 40), (40.0, 32.0, 0.0), 20.0),
+                ([0.05, 0.1, 0.3], (40, 40), (90.0, 30.0, 80.0), -30.0),
+            ] {
+                let id = Uuid::now_v7();
+                doc.items.push(ProjectItem::Solid(SolidDef {
+                    id,
+                    name: "Card".into(),
+                    colour: LinearColour([colour[0], colour[1], colour[2], 1.0]),
+                    width: w,
+                    height: h,
+                    extra: serde_json::Map::new(),
+                }));
+                let mut l = matrix_layer("Card", LayerKind::Solid { def: id }, w, h);
+                l.switches.three_d = true;
+                l.transform.position_x = Property::fixed(at.0);
+                l.transform.position_y = Property::fixed(at.1);
+                l.transform.position_z = Property::fixed(at.2);
+                l.transform.rotation_y = Property::fixed(turn);
+                solids.push(l);
+            }
+
+            // A 100 px null, anchored in its middle as After Effects makes one.
+            let mut null = matrix_layer("Null", LayerKind::Null, 100, 100);
+            null.switches.three_d = true;
+            // Placed by another layer, as a null is linked to a scene marker.
+            null.transform.position_x = Property {
+                animation: lumit_core::anim::Animation::Expression("layer(\"Marker\").x".into()),
+                ..Property::fixed(0.0)
+            };
+            let mut marker = matrix_layer("Marker", LayerKind::Null, 100, 100);
+            marker.transform.position_x = Property::fixed(64.0);
+            null.transform.position_y = Property::fixed(32.0);
+            null.transform.position_z = Property::fixed(10.0);
+            null.transform.rotation_x = Property::fixed(10.0);
+            null.transform.rotation_y = Property {
+                animation: lumit_core::anim::Animation::Expression("-35.0 + time * 30.0".into()),
+                ..Property::fixed(0.0)
+            };
+            null.transform.rotation = Property::fixed(15.0);
+            // The null at the frame drawn, half a second in.
+            let mut still = null.clone();
+            still.transform.rotation_y = Property::fixed(-20.0);
+            still.transform.position_x = Property::fixed(64.0);
+
+            // Keyed like a game camera export: the three rows and the eye.
+            let mut camera = matrix_layer(
+                "Camera",
+                LayerKind::Camera {
+                    zoom: Property::fixed(150.0),
+                    solve_link: None,
+                    correction_base: None,
+                    options: Box::new(CameraOptions {
+                        two_node,
+                        ..CameraOptions::fresh(150.0, (55.0, 45.0, 0.0))
+                    }),
+                },
+                cw,
+                ch,
+            );
+            camera.transform = TransformGroup::default();
+            camera.transform.position_x = ramp(50.0, 60.0, 5);
+            camera.transform.position_y = Property::fixed(50.0);
+            camera.transform.position_z = Property::fixed(-150.0);
+            camera.transform.rotation_x = Property::fixed(3.0);
+            camera.transform.rotation_y = Property::fixed(-4.0);
+            camera.transform.rotation = Property::fixed(6.0);
+
+            let mut light = matrix_layer(
+                "Light",
+                LayerKind::Light {
+                    light: Box::new(LightDef {
+                        kind: LightKind::Point,
+                        falloff_px: Property::fixed(160.0),
+                        ..LightDef::default()
+                    }),
+                },
+                cw,
+                ch,
+            );
+            light.transform = TransformGroup::default();
+            light.transform.position_x = Property::fixed(-10.0);
+            light.transform.position_y = Property::fixed(110.0);
+            light.transform.position_z = Property::fixed(-30.0);
+
+            // Where the null puts the two, by the compositor's matrices. The
+            // camera's local turn is its aim on a two-node camera.
+            let mut seen = camera.clone();
+            if two_node {
+                let aim = lumit_core::camera::look_at(
+                    (51.0, 50.0, -150.0),
+                    (55.0, 45.0, 0.0),
+                    (3.0, -4.0, 6.0),
+                )
+                .expect("an aim");
+                seen.transform.rotation_x = Property::fixed(aim.0);
+                seen.transform.rotation_y = Property::fixed(aim.1);
+                seen.transform.rotation = Property::fixed(aim.2);
+                if let LayerKind::Camera { options, .. } = &mut seen.kind {
+                    options.two_node = false;
+                }
+            }
+            seen.transform.position_x = Property::fixed(51.0);
+            let world = |l: &lumit_core::model::Layer| {
+                lumit_gpu::composite::unplace_matrix(
+                    (place(&still) * place(l)).to_cols_array_2d(),
+                    (0.0, 0.0),
+                )
+            };
+            let put = |l: &mut lumit_core::model::Layer, at: lumit_gpu::composite::MbSample| {
+                let tr = &mut l.transform;
+                tr.position_x = Property::fixed(f64::from(at.position.0));
+                tr.position_y = Property::fixed(f64::from(at.position.1));
+                tr.position_z = Property::fixed(f64::from(at.z));
+                tr.rotation_x = Property::fixed(f64::from(at.rotation_x_deg));
+                tr.rotation_y = Property::fixed(f64::from(at.rotation_y_deg));
+                tr.rotation = Property::fixed(f64::from(at.rotation_deg));
+            };
+            let at = world(&seen);
+            put(&mut seen, at);
+            let mut lit = light.clone();
+            let at = world(&light);
+            put(&mut lit, at);
+
+            let mut draw = |camera: &lumit_core::model::Layer, light: &lumit_core::model::Layer| {
+                let mut doc = doc.clone();
+                let scene = doc.comp_mut(comp_id).unwrap();
+                scene.layers = vec![camera.clone(), light.clone(), null.clone(), marker.clone()];
+                scene.layers.extend(solids.iter().cloned());
+                r.render_rgba(&Arc::new(doc), comp_id, 15, 1.0)
+                    .expect("a frame")
+                    .0
+            };
+            let mut on_null = (camera.clone(), light.clone());
+            on_null.0.parent = Some(null.id);
+            on_null.1.parent = Some(null.id);
+            let parented = draw(&on_null.0, &on_null.1);
+            let placed = draw(&seen, &lit);
+            let unparented = draw(&camera, &light);
+            let light_unparented = draw(&on_null.0, &light);
+
+            let worst = |a: &[u8], b: &[u8]| {
+                a.iter()
+                    .zip(b)
+                    .map(|(x, y)| x.abs_diff(*y))
+                    .max()
+                    .unwrap_or(0)
+            };
+            let off = |a: &[u8], b: &[u8]| {
+                a.chunks(4)
+                    .zip(b.chunks(4))
+                    .filter(|(x, y)| worst(x, y) > 8)
+                    .count()
+            };
+            assert!(
+                off(&placed, &unparented) > 200,
+                "two_node {two_node}: the null moves too little to tell"
+            );
+            assert!(
+                off(&parented, &light_unparented) > 100,
+                "two_node {two_node}: the light on the null lights nothing differently"
+            );
+            // Edges land within f32 noise of each other, so a few pixels of
+            // antialiasing may differ by a step or two.
+            assert!(
+                off(&parented, &placed) <= 8,
+                "two_node {two_node}: the parented camera and light drew {} pixels off \
+                 the poses their null puts them at",
+                off(&parented, &placed)
+            );
+        }
+    }
+
+    /// **A 3D viewport's ground is hidden by the layers in front of it, pixel
+    /// by pixel.** Looking down at the floor: not one pixel of the red card
+    /// standing on it changes when the ground goes in, while the blue card
+    /// lying under the floor takes lines over it, and so does open floor. A 2D
+    /// layer stacked above them all, a title, draws over the floor.
+    #[test]
+    fn a_viewport_ground_hides_behind_nearer_layers_only() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Floor", 128, 128);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(120.0),
+                solve_link: None,
+                correction_base: None,
+                options: Default::default(),
+            },
+            128,
+            128,
+        );
+        // 120 back from (64, 64, 40) on the floor, looking down at 45 degrees.
+        let back = 120.0 * std::f64::consts::FRAC_1_SQRT_2;
+        camera.transform.position_x = Property::fixed(64.0);
+        camera.transform.position_y = Property::fixed(64.0 - back);
+        camera.transform.position_z = Property::fixed(40.0 - back);
+        camera.transform.rotation_x = Property::fixed(-45.0);
+        let mut card = |colour: [f32; 4], at: (f64, f64, f64), turn: f64| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Card".into(),
+                colour: LinearColour(colour),
+                width: 40,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            let mut l = matrix_layer("Card", LayerKind::Solid { def }, 40, 32);
+            l.switches.three_d = true;
+            l.transform.position_x = Property::fixed(at.0);
+            l.transform.position_y = Property::fixed(at.1);
+            l.transform.position_z = Property::fixed(at.2);
+            l.transform.rotation_x = Property::fixed(turn);
+            l
+        };
+        // Standing on the floor at half the comp's height, and lying flat
+        // under it.
+        let standing = card([1.0, 0.0, 0.0, 1.0], (40.0, 48.0, 40.0), 0.0);
+        let under = card([0.0, 0.0, 1.0, 1.0], (88.0, 84.0, 40.0), 90.0);
+        let mut title = card([1.0, 1.0, 0.0, 1.0], (64.0, 112.0, 0.0), 0.0);
+        title.switches.three_d = false;
+        doc.comp_mut(comp_id).unwrap().layers = vec![title, camera, standing, under];
+        let doc = Arc::new(doc);
+        let bare = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0;
+        r.set_ground(Some(crate::realise::ViewGround {
+            colour: [1.0, 1.0, 1.0, 1.0],
+            middle: 64.0,
+            floor: 64.0,
+            step: 20.0,
+        }));
+        let floored = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0;
+        r.set_ground(None);
+
+        // Inside a card: the pixel and its four neighbours are all its colour.
+        let px = |i: usize| &bare[i * 4..i * 4 + 3];
+        let inside = |i: usize, rgb: [u8; 3]| {
+            let (x, y) = (i % 128, i / 128);
+            x > 0
+                && y > 0
+                && x < 127
+                && y < 127
+                && [i, i - 1, i + 1, i - 128, i + 128]
+                    .iter()
+                    .all(|&j| px(j) == rgb)
+        };
+        let changed = |i: usize| bare[i * 4..i * 4 + 4] != floored[i * 4..i * 4 + 4];
+        let (mut red, mut red_changed, mut blue_changed, mut open_changed) = (0, 0, 0, 0);
+        let (mut title_px, mut title_changed) = (0, 0);
+        for i in 0..128 * 128 {
+            if inside(i, [255, 255, 0]) {
+                title_px += 1;
+                title_changed += usize::from(changed(i));
+            } else if inside(i, [255, 0, 0]) {
+                red += 1;
+                red_changed += usize::from(changed(i));
+            } else if inside(i, [0, 0, 255]) {
+                blue_changed += usize::from(changed(i));
+            } else if px(i) == [0, 0, 0] {
+                open_changed += usize::from(changed(i));
+            }
+        }
+        assert!(red > 100, "the standing card is in view ({red} pixels)");
+        assert_eq!(
+            red_changed, 0,
+            "the ground shows through the card in front of it"
+        );
+        assert!(blue_changed > 0, "the card under the floor is drawn over");
+        assert!(open_changed > 0, "the open floor has lines");
+        assert!(title_px > 100, "the title is in view ({title_px} pixels)");
+        assert_eq!(title_changed, 0, "the ground is drawn over a 2D title");
     }
 
     /// **A wire reaches the picture.**
@@ -7284,6 +7969,7 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7429,6 +8115,7 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7745,6 +8432,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7770,6 +8458,7 @@ mod tests {
         Composition {
             graph: Some(graph),
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -8895,6 +9584,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

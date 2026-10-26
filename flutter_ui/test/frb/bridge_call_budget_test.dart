@@ -33,10 +33,10 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/dock.dart' show Panel;
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -1227,6 +1227,210 @@ void main() {
       );
     });
 
+    /// **3D boxes ask for the camera once a frame, and never on a pan or a
+    /// hover.** The camera's rows are held per Viewer against the frame, the
+    /// document and the view, and asked for only once a 3D box is drawn. The
+    /// selected light's wireframe is held the same way.
+    testWidgets('3D boxes ask for the camera once a frame and no more',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layers = [
+        for (var i = 0; i < 3; i++)
+          comp.addSolidLayer()
+            ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true),
+      ];
+      comp.addCameraLayer();
+      final light = comp.addLightLayer(kind: 1);
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layers.first, light]);
+      p.uiState.tools.select(ToolMode.hand);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      const rows = 'composition_reference_view_projection';
+
+      final centre = tester.getCenter(find.byType(ViewerPanelFrb));
+      final pan = await tester.startGesture(centre);
+      await settleFrb(tester, minRounds: 4);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await pan.moveBy(const Offset(3, 2));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await pan.up();
+      p.uiState.tools.select(ToolMode.select);
+      await tester.pump();
+      final hover = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await hover.addPointer(location: centre);
+      for (var i = 0; i < 20; i++) {
+        await hover.moveBy(const Offset(4, 3));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await hover.removePointer();
+      counter.counting = false;
+      expect(counter.calls[rows] ?? 0, 0,
+          reason: 'a pan or a hover asked for the camera:\n'
+              '${counter.ranking()}');
+      expect(counter.calls['composition_reference_wireframes'] ?? 0, 0,
+          reason: 'a pan or a hover asked for the wireframes:\n'
+              '${counter.ranking()}');
+
+      counter
+        ..reset()
+        ..counting = true;
+      for (var frame = 1; frame <= 5; frame++) {
+        p.uiState.playheadFrame.value = frame;
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      // At least once, or the selected box was never drawn through the
+      // camera, and no more than once a frame.
+      expect(counter.calls[rows] ?? 0, inInclusiveRange(1, 5),
+          reason: 'five frame steps asked for the camera:\n'
+              '${counter.ranking()}');
+      expect(counter.calls['composition_reference_wireframes'] ?? 0,
+          inInclusiveRange(1, 5),
+          reason: 'five frame steps asked for the wireframes:\n'
+              '${counter.ranking()}');
+    });
+
+    /// **A 3D arrow drag asks for no camera and writes once.** The arrows are
+    /// worked out from the rows the boxes already hold, so a drag costs a
+    /// throttled preview and one op on release, however far it goes.
+    testWidgets('a 3D arrow drag writes once and asks for no camera',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer()
+        ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layer]);
+      p.uiState.tools.select(ToolMode.select);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      // Pressed on the X arrow, where the gizmo drew it.
+      final gizmo = find.byKey(const ValueKey('viewer-gizmo'));
+      final painter = tester.widget<CustomPaint>(gizmo).painter as dynamic;
+      final arrows = (painter.handles3d as List).single.gizmo;
+      final box = tester.renderObject<RenderBox>(gizmo);
+      final from = box.localToGlobal(Offset.lerp(
+          arrows.centre as Offset, arrows.tips[0] as Offset, 0.7)!);
+      double x() =>
+          sampledScalar(layer.getTransform().positionX, timeOfFrame(comp, 0));
+      final was = x();
+      final drag =
+          await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await drag.moveBy(const Offset(4, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      const rows = 'composition_reference_view_projection';
+      expect(counter.calls[rows] ?? 0, 0,
+          reason: 'the drag asked for the camera:\n${counter.ranking()}');
+      expect(counter.calls['layer_reference_set_transforms'] ?? 0, 0,
+          reason: 'the drag wrote before it was let go');
+      final previews = counter.calls[
+              'composition_reference_render_frame_with_transform_preview'] ??
+          0;
+      expect(previews, inInclusiveRange(1, 20),
+          reason: 'the drag previewed more than once a move:\n'
+              '${counter.ranking()}');
+      // Measured at nothing else: the stage rebuilds per move from what it
+      // holds.
+      expect(counter.total - previews, lessThanOrEqualTo(1),
+          reason: 'the drag re-read the document:\n${counter.ranking()}');
+
+      counter
+        ..reset()
+        ..counting = true;
+      await drag.up();
+      await tester.pump();
+      counter.counting = false;
+      expect(counter.calls['layer_reference_set_transforms'], 1);
+      expect(x(), greaterThan(was + 40),
+          reason: 'the arrow moved the layer along x');
+    });
+
+    /// **Nor does a ring drag.** The Rotation tool's rings are measured on
+    /// the same held rows, and the turn is written once.
+    testWidgets('a 3D ring drag writes once and asks for no camera',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer()
+        ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layer]);
+      p.uiState.tools.select(ToolMode.rotate);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      // Round the Z ring, which faces the camera, where the tool drew it.
+      final paint = find.byWidgetPredicate((w) =>
+          w is CustomPaint &&
+          w.painter.runtimeType.toString() == '_RotateCursorPainter');
+      final rings =
+          (tester.widget<CustomPaint>(paint).painter as dynamic).rings;
+      final ring = (rings.rings[2] as List).first as List<Offset>;
+      final box = tester.renderObject<RenderBox>(paint);
+      // Away from where the edge-on X and Y rings cross it.
+      final drag = await tester.startGesture(box.localToGlobal(ring[8]),
+          kind: PointerDeviceKind.mouse);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var k = 9; k <= 24; k++) {
+        await drag.moveTo(box.localToGlobal(ring[k]));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      expect(counter.calls['composition_reference_view_projection'] ?? 0, 0,
+          reason: 'the turn asked for the camera:\n${counter.ranking()}');
+      expect(counter.calls['layer_reference_set_transforms'] ?? 0, 0,
+          reason: 'the turn wrote before it was let go');
+
+      counter
+        ..reset()
+        ..counting = true;
+      await drag.up();
+      await tester.pump();
+      counter.counting = false;
+      expect(counter.calls['layer_reference_set_transforms'], 1);
+      // The Rotation tool turns the Orientation, as After Effects' does.
+      expect(
+          sampledScalar(layer.getTransform().depth!.orientationZ,
+              timeOfFrame(comp, 0)),
+          isNot(0),
+          reason: 'the ring turned the layer');
+    });
+
     /// **Nor must a pick drag** (docs/07 §6.1). A window is 129 pixels a side
     /// and the magnifier's 9×9 is cut out of it in Dart, so a sweep across the
     /// picture is meant to cost the engine *nothing at all* until the pointer
@@ -1335,25 +1539,101 @@ void main() {
       await mouse.moveTo(centre);
       await tester.pump();
 
+      // Orbiting round the scene walks the boxes for its mark, once, and
+      // then holds it like the camera.
+      for (final pivot in [CameraPivot.cursor, CameraPivot.scene]) {
+        p.uiState.tools.cameraPivot = pivot;
+        await mouse.moveTo(centre + const Offset(1, 1));
+        await tester.pump(const Duration(milliseconds: 16));
+        counter
+          ..reset()
+          ..counting = true;
+        for (var i = 0; i < 20; i++) {
+          await mouse.moveTo(centre + Offset(i * 3.0, i * 2.0));
+          // Real frames, with time between them — see the note in the pan
+          // test above. Without it this test measured zero while the tool was
+          // asking the engine for the document's revision on every frame.
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        counter.counting = false;
+
+        // ignore: avoid_print
+        print('CAMERA HOVER COST ($pivot) ${counter.total} calls\n'
+            '${counter.ranking()}');
+        expect(
+          counter.total,
+          0,
+          reason: 'hovering re-found the camera:\n${counter.ranking()}',
+        );
+      }
+    });
+
+    /// **A 3D viewport moves with the mouse and no tool, and costs what a
+    /// view's own camera drag costs.** Hovering it asks nothing, and a right
+    /// button orbit asks for the new view and its outlines, not the world.
+    testWidgets('a 3D viewport asks nothing on hover and little to orbit',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp
+          .addSolidLayer()
+          .setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.views.viewportPanes.add((panel: Panel.viewer, instance: 0));
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      expect(p.uiState.viewOf(p.uiState.activeViewId), ViewerView.free);
+
+      final centre = tester.getCenter(find.byType(ViewerPanelFrb));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: centre);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(centre + const Offset(1, 1));
+      await tester.pump(const Duration(milliseconds: 16));
       counter
         ..reset()
         ..counting = true;
       for (var i = 0; i < 20; i++) {
         await mouse.moveTo(centre + Offset(i * 3.0, i * 2.0));
-        // Real frames, with time between them — see the note in the pan test
-        // above. Without it this test measured zero while the tool was asking
-        // the engine for the document's revision on every single frame.
         await tester.pump(const Duration(milliseconds: 16));
       }
       counter.counting = false;
-
       // ignore: avoid_print
-      print('CAMERA HOVER COST ${counter.total} calls\n${counter.ranking()}');
-      expect(
-        counter.total,
-        0,
-        reason: 'hovering re-found the camera:\n${counter.ranking()}',
-      );
+      print('VIEWPORT HOVER COST ${counter.total} calls\n${counter.ranking()}');
+      expect(counter.total, 0,
+          reason: 'hovering a viewport asked the engine:\n${counter.ranking()}');
+
+      final right = await tester.createGesture(
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
+      await mouse.removePointer();
+      await right.addPointer(location: centre);
+      await right.down(centre);
+      await tester.pump(const Duration(milliseconds: 16));
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await right.moveBy(const Offset(4, 1));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await right.up();
+      await tester.pump(const Duration(milliseconds: 16));
+      counter.counting = false;
+      await right.removePointer();
+      await mouse.addPointer(location: centre);
+      // ignore: avoid_print
+      print('VIEWPORT ORBIT COST ${counter.total} calls\n${counter.ranking()}');
+      // About 75 for twenty moves when this was written.
+      expect(counter.total, lessThanOrEqualTo(90),
+          reason: 'an orbit asked too much:\n${counter.ranking()}');
     });
 
     /// **Nor must fronting a composition, while nobody is looking through
@@ -1437,13 +1717,14 @@ void main() {
                   x: 400, y: 400, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
             ],
             closed: true,
-            fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(1),
+                b: BridgeScalar.static_(1),
+                a: BridgeScalar.static_(1)),
             stroke: null,
-            strokeWidth: 0,
-            opacity: 100,
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: const BridgeScalar.static_(100),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
             gradient: 0,
@@ -1457,17 +1738,6 @@ void main() {
             gradientStops: const [],
             combine: 0,
             pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

@@ -3,11 +3,11 @@
 //! In After Effects a shape layer holds groups, each with its own transform,
 //! and inside them paths and the operators that act on the paths above them:
 //! a fill or a stroke paints them, Trim Paths cuts them and a repeater copies
-//! everything above it. Lumit keeps one item per painted path, with its trim and
-//! its repeater as fields. So the tree is walked once, every path is carried to
-//! layer space through the transforms of the groups it sits in, and each paint
-//! makes one item for each path above it. An item higher in After Effects' list
-//! draws on top, so the list is turned round at the end.
+//! everything above it. Lumit keeps one item per painted path, each followed by
+//! the modifiers that act on it. So the tree is walked once, every path is
+//! carried to layer space through the transforms of the groups it sits in, and
+//! each paint makes one item for each path above it. An item higher in After
+//! Effects' list draws on top, so the list is turned round at the end.
 //!
 //! A path whose size, place or group transform moves is sampled a frame at a
 //! time across the keys that move it, so it lands where After Effects draws it
@@ -16,6 +16,10 @@
 use lumit_core::anim::{Animation, Property as LumProperty};
 use lumit_core::mask::{BezierPath, PathKeyframe, Vertex};
 use lumit_core::model::LinearColour;
+use lumit_core::shape::colour;
+use lumit_core::shape::modifier::{
+    Deform, ModifierKind, Offset, Repeater, ShapeEntry, ShapeGroup, ShapeModifier, Trim,
+};
 use lumit_core::shape::ShapeItem;
 use lumit_core::time::Rational;
 
@@ -27,16 +31,65 @@ use super::shape_paths::{ellipse, rect, star, Bake, Op};
 use super::{linear_colour, Conv};
 
 /// A shape layer's contents, ready to draw.
-pub(super) fn contents(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Vec<ShapeItem> {
+pub(super) fn contents(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    props: &[Property],
+) -> Vec<ShapeEntry> {
     let root = child(props, "ADBE Root Vectors Group").map_or(&[][..], Property::children);
     let mut items = walk(conv, path, root, &[]).items;
     items.reverse();
-    items
+    entries(items)
+}
+
+/// An item and the modifiers that act on it, in the order they apply.
+struct Art {
+    item: ShapeItem,
+    mods: Vec<ModifierKind>,
+}
+
+/// The items as entries. A run combined into one shape takes its first item's
+/// modifiers, after the run so they act on all of it. A run with modifiers
+/// below other art goes in a group of its own, so they reach nothing else.
+fn entries(items: Vec<Art>) -> Vec<ShapeEntry> {
+    let mut runs: Vec<Vec<Art>> = Vec::new();
+    for art in items {
+        match runs.last_mut() {
+            Some(run) if art.item.combine != 0 => run.push(art),
+            _ => runs.push(vec![art]),
+        }
+    }
+    let mut out = Vec::new();
+    for mut run in runs {
+        let mods = std::mem::take(&mut run[0].mods);
+        let name = run[0].item.name.clone();
+        let mut entries: Vec<ShapeEntry> = run
+            .into_iter()
+            .map(|art| ShapeEntry::Item(art.item))
+            .collect();
+        if mods.is_empty() {
+            out.append(&mut entries);
+            continue;
+        }
+        entries.extend(mods.into_iter().map(|kind| {
+            ShapeEntry::Modifier(ShapeModifier {
+                id: uuid::Uuid::now_v7(),
+                name: kind.label().into(),
+                kind,
+            })
+        }));
+        if out.is_empty() {
+            out.append(&mut entries);
+        } else {
+            out.push(ShapeEntry::Group(ShapeGroup::new(name, entries)));
+        }
+    }
+    out
 }
 
 /// How far the layer's origin moves: After Effects measures a shape layer
 /// from its own zero and Lumit from its art's top-left corner.
-pub(super) fn origin(contents: &[ShapeItem]) -> Option<(f64, f64)> {
+pub(super) fn origin(contents: &[ShapeEntry]) -> Option<(f64, f64)> {
     let (x, y, ..) = lumit_core::shape::contents_bounds(contents, 0.0)?;
     Some((-x, -y))
 }
@@ -44,8 +97,9 @@ pub(super) fn origin(contents: &[ShapeItem]) -> Option<(f64, f64)> {
 /// Art that moves takes its top-left corner with it, so the anchor follows the
 /// corner on every frame the art is keyed on, and the art stays where After
 /// Effects draws it.
-pub(super) fn follow(contents: &[ShapeItem], transform: &mut lumit_core::model::TransformGroup) {
-    let span = contents
+pub(super) fn follow(contents: &[ShapeEntry], transform: &mut lumit_core::model::TransformGroup) {
+    let items = lumit_core::shape::modifier::items(contents);
+    let span = items
         .iter()
         .filter_map(|item| Some((item.path_keys.first()?.time, item.path_keys.last()?.time)))
         .reduce(|a, b| (a.0.min(b.0), a.1.max(b.1)));
@@ -54,7 +108,7 @@ pub(super) fn follow(contents: &[ShapeItem], transform: &mut lumit_core::model::
     else {
         return;
     };
-    let mut times: Vec<Rational> = contents
+    let mut times: Vec<Rational> = items
         .iter()
         .flat_map(|item| item.path_keys.iter().map(|k| k.time))
         .collect();
@@ -104,7 +158,7 @@ struct Drawn {
     bakes: Vec<(usize, Bake)>,
     merge: Option<u32>,
     offset: Option<LumProperty>,
-    wiggle: Option<lumit_core::shape::Deform>,
+    wiggle: Option<Deform>,
 }
 
 /// What makes a path.
@@ -143,14 +197,14 @@ pub(super) struct Star {
 /// Effects' order.
 struct Walked {
     drawn: Vec<(usize, Drawn)>,
-    items: Vec<ShapeItem>,
+    items: Vec<Art>,
 }
 
 fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) -> Walked {
     // Each entry's place in the list, which is what decides what an operator
     // reaches: everything above it.
     let mut drawn: Vec<(usize, Drawn)> = Vec::new();
-    let mut items: Vec<(usize, ShapeItem)> = Vec::new();
+    let mut items: Vec<(usize, Art)> = Vec::new();
     let mut paints: Vec<(usize, &Property)> = Vec::new();
     let mut repeaters: Vec<(usize, &Property)> = Vec::new();
     for (at, node) in nodes.iter().enumerate() {
@@ -171,8 +225,9 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
                 let mut walked = walk(conv, &here, contents, &inner);
                 let opacity = still_value(transform, "ADBE Vector Group Opacity", 100.0);
                 if !keyed(transform, "ADBE Vector Group Opacity") {
-                    for item in &mut walked.items {
-                        item.opacity *= opacity / 100.0;
+                    for art in &mut walked.items {
+                        let own = art.item.opacity.value_at(0.0);
+                        art.item.opacity = LumProperty::fixed(own * opacity / 100.0);
                     }
                 } else {
                     kept_still(conv, &here);
@@ -345,9 +400,9 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
         for (_, d) in drawn.iter().filter(|(above, _)| *above < at) {
             match (paint(conv, node, d), d.merge) {
                 (Some(item), None) => items.push((at, item)),
-                (Some(mut item), Some(mode)) => {
-                    item.combine = if merged.is_empty() { 0 } else { mode };
-                    merged.push(item);
+                (Some(mut art), Some(mode)) => {
+                    art.item.combine = if merged.is_empty() { 0 } else { mode };
+                    merged.push(art);
                 }
                 (None, _) => {}
             }
@@ -358,8 +413,9 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
     }
     for (at, node) in repeaters {
         let here = path.property(display_name(node, match_name_of(node)));
-        for (_, item) in items.iter_mut().filter(|(above, _)| *above < at) {
-            repeat(conv, &here, node.children(), item);
+        for (_, art) in items.iter_mut().filter(|(above, _)| *above < at) {
+            let copies = repeat(conv, &here, node.children());
+            art.mods.push(ModifierKind::Repeat(copies));
         }
     }
     // After Effects' order, top of the list first. A stable sort keeps a
@@ -372,7 +428,7 @@ fn walk(conv: &mut Conv<'_>, path: &ItemPath, nodes: &[Property], chain: &[Xf]) 
 }
 
 /// One item: the path under one fill or stroke.
-fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeItem> {
+fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<Art> {
     let props = node.children();
     let kind = match_name_of(node);
     let stroke = kind.ends_with("Stroke");
@@ -395,12 +451,13 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeIte
     let mut item = ShapeItem::filled(drawn.name.clone(), still, linear_colour(Some(&colour)));
     item.name = drawn.name.clone();
     item.path_keys = keys;
-    item.opacity = still_value(props, opacity_name, 100.0);
+    item.opacity = LumProperty::fixed(still_value(props, opacity_name, 100.0));
     if stroke {
         item.stroke = item.fill.take();
         // A group's scale thickens the outline in After Effects too.
-        item.stroke_width =
-            still_value(props, "ADBE Vector Stroke Width", 2.0) * chain_scale(&drawn.chain);
+        item.stroke_width = LumProperty::fixed(
+            still_value(props, "ADBE Vector Stroke Width", 2.0) * chain_scale(&drawn.chain),
+        );
     }
     // A file leaves out a gradient at After Effects' own white to black.
     let ramp = child(props, "ADBE Vector Grad Colors")
@@ -409,10 +466,10 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeIte
         .unwrap_or_else(Ramp::white_to_black);
     if gradient && stroke {
         // Lumit's outlines are one colour, so a gradient one takes its first.
-        item.stroke = Some(ramp.colour_at(0.0));
+        item.stroke = Some(colour::still(ramp.colour_at(0.0)));
     }
     if gradient && !stroke {
-        item.fill = Some(ramp.colour_at(0.0));
+        item.fill = Some(colour::still(ramp.colour_at(0.0)));
         item.gradient_colour = Some(ramp.colour_at(1.0));
         item.gradient_start_opacity = LumProperty::fixed(ramp.alpha_at(0.0) * 100.0);
         item.gradient_end_opacity = LumProperty::fixed(ramp.alpha_at(1.0) * 100.0);
@@ -445,24 +502,34 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<ShapeIte
         item.gradient_end_x = LumProperty::fixed(end.0);
         item.gradient_end_y = LumProperty::fixed(end.1);
     }
+    // In the order Lumit's shape items always took them.
+    let mut mods = Vec::new();
+    if let Some(deform) = drawn.wiggle.clone() {
+        mods.push(ModifierKind::Deform(deform));
+    }
     if let Some(amount) = drawn.offset.clone() {
-        item.offset_amount = amount;
+        mods.push(ModifierKind::Offset(Offset {
+            amount,
+            extra: serde_json::Map::new(),
+        }));
     }
-    item.deform = drawn.wiggle.clone();
     if let Some([start, end, offset]) = drawn.trim.clone() {
-        item.trim_start = start;
-        item.trim_end = end;
-        item.trim_offset = offset;
+        mods.push(ModifierKind::Trim(Trim {
+            start,
+            end,
+            offset,
+            extra: serde_json::Map::new(),
+        }));
     }
-    (!item.path.vertices.is_empty()).then_some(item)
+    (!item.path.vertices.is_empty()).then_some(Art { item, mods })
 }
 
-/// The repeater's copies, on an item above it.
-fn repeat(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property], item: &mut ShapeItem) {
+/// The repeater, for an item above it.
+fn repeat(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Repeater {
     let transform =
         child(props, "ADBE Vector Repeater Transform").map_or(&[][..], Property::children);
-    item.repeat_copies = one(conv, path, props, "ADBE Vector Repeater Copies", 3.0);
-    item.repeat_offset = one(conv, path, props, "ADBE Vector Repeater Offset", 0.0);
+    let copies = one(conv, path, props, "ADBE Vector Repeater Copies", 3.0);
+    let offset = one(conv, path, props, "ADBE Vector Repeater Offset", 0.0);
     let [ax, ay] = pair(
         conv,
         path,
@@ -479,26 +546,31 @@ fn repeat(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property], item: &mut S
         // written into the file, so it arrives anyway.
         [0.0, 0.0],
     );
-    item.repeat_anchor_x = ax;
-    item.repeat_anchor_y = ay;
-    item.repeat_position_x = px;
-    item.repeat_position_y = py;
-    item.repeat_rotation = one(conv, path, transform, "ADBE Vector Repeater Rotation", 0.0);
-    item.repeat_scale = one(conv, path, transform, "ADBE Vector Repeater Scale", 100.0);
-    item.repeat_start_opacity = one(
-        conv,
-        path,
-        transform,
-        "ADBE Vector Repeater Opacity 1",
-        100.0,
-    );
-    item.repeat_end_opacity = one(
-        conv,
-        path,
-        transform,
-        "ADBE Vector Repeater Opacity 2",
-        100.0,
-    );
+    Repeater {
+        copies,
+        offset,
+        anchor_x: ax,
+        anchor_y: ay,
+        position_x: px,
+        position_y: py,
+        rotation: one(conv, path, transform, "ADBE Vector Repeater Rotation", 0.0),
+        scale: one(conv, path, transform, "ADBE Vector Repeater Scale", 100.0),
+        start_opacity: one(
+            conv,
+            path,
+            transform,
+            "ADBE Vector Repeater Opacity 1",
+            100.0,
+        ),
+        end_opacity: one(
+            conv,
+            path,
+            transform,
+            "ADBE Vector Repeater Opacity 2",
+            100.0,
+        ),
+        extra: serde_json::Map::new(),
+    }
 }
 
 /// The path at the start, and, where anything that shapes or places it moves,

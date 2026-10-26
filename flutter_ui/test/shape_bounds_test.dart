@@ -9,9 +9,9 @@
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:uuid/uuid.dart';
 
@@ -19,28 +19,32 @@ void main() {
   BridgeVertex corner(double x, double y) =>
       BridgeVertex(x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
 
-  BridgeShapeItem item(
+  BridgeShapeEntry item(
     List<BridgeVertex> vertices, {
     double strokeWidth = 0,
     bool stroked = false,
-    double copies = 1,
-    double stepX = 0,
-    double copyOffset = 0,
-    double offset = 0,
   }) =>
-      BridgeShapeItem(
+      BridgeShapeEntry(
+          depth: 0,
+          kind: BridgeShapeEntryKind.item(BridgeShapeItem(
         id: UuidValue.fromString(const Uuid().v4()),
         name: 'Rectangle',
         vertices: vertices,
         closed: true,
-        fill: const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
-        stroke:
-            stroked ? const BridgeColourRgba(r: 0, g: 0, b: 0, a: 1) : null,
-        strokeWidth: strokeWidth,
-        opacity: 100,
-        trimStart: const BridgeScalar.static_(0),
-        trimEnd: const BridgeScalar.static_(100),
-        trimOffset: const BridgeScalar.static_(0),
+        fill: const BridgeColour(
+            r: BridgeScalar.static_(1),
+            g: BridgeScalar.static_(1),
+            b: BridgeScalar.static_(1),
+            a: BridgeScalar.static_(1)),
+        stroke: stroked
+            ? const BridgeColour(
+                r: BridgeScalar.static_(0),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1))
+            : null,
+        strokeWidth: BridgeScalar.static_(strokeWidth),
+        opacity: const BridgeScalar.static_(100),
         dashes: const [],
         dashOffset: const BridgeScalar.static_(0),
         gradient: 0,
@@ -54,18 +58,28 @@ void main() {
         gradientStops: const [],
         combine: 0,
         pathKeys: const [],
-        offsetAmount: BridgeScalar.static_(offset),
-        repeatCopies: BridgeScalar.static_(copies),
-        repeatOffset: BridgeScalar.static_(copyOffset),
-        repeatAnchorX: const BridgeScalar.static_(0),
-        repeatAnchorY: const BridgeScalar.static_(0),
-        repeatPositionX: BridgeScalar.static_(stepX),
-        repeatPositionY: const BridgeScalar.static_(0),
-        repeatRotation: const BridgeScalar.static_(0),
-        repeatScale: const BridgeScalar.static_(100),
-        repeatStartOpacity: const BridgeScalar.static_(100),
-        repeatEndOpacity: const BridgeScalar.static_(100),
-      );
+        taper: null,
+      )));
+
+  /// A repeater entry stepping [copies] times by [stepX].
+  BridgeShapeEntry repeater(double copies, double stepX) => BridgeShapeEntry(
+      depth: 0,
+      kind: BridgeShapeEntryKind.modifier(BridgeShapeModifier(
+        id: UuidValue.fromString(const Uuid().v4()),
+        name: 'Repeater',
+        kind: BridgeShapeModifierKind.repeat(BridgeShapeRepeater(
+          copies: BridgeScalar.static_(copies),
+          offset: const BridgeScalar.static_(0),
+          anchorX: const BridgeScalar.static_(0),
+          anchorY: const BridgeScalar.static_(0),
+          positionX: BridgeScalar.static_(stepX),
+          positionY: const BridgeScalar.static_(0),
+          rotation: const BridgeScalar.static_(0),
+          scale: const BridgeScalar.static_(100),
+          startOpacity: const BridgeScalar.static_(100),
+          endOpacity: const BridgeScalar.static_(100),
+        )),
+      )));
 
   test('the art\'s own box is the layer\'s size', () {
     final size = shapeContentsBounds([
@@ -85,5 +99,19 @@ void main() {
       ]),
     ]);
     expect(size!.height, 30, reason: 'the handle reaches 20 above the art');
+  });
+
+  test('a repeater below the art grows the box, and two of them multiply',
+      () {
+    final square = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
+    expect(shapeContentsBounds([item(square), repeater(3, 20)]),
+        const Size(50, 10));
+    // The second repeater repeats the copies of the first: a grid.
+    expect(
+        shapeContentsBounds([item(square), repeater(3, 20), repeater(2, 0)]),
+        const Size(50, 10));
+    // Above the art, it acts on nothing.
+    expect(shapeContentsBounds([repeater(3, 20), item(square)]),
+        const Size(10, 10));
   });
 }

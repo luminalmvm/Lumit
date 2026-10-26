@@ -34,6 +34,7 @@ mod comp;
 mod layer;
 mod math;
 pub mod script;
+pub(crate) mod space;
 
 use script::{Language, Slot, SLOT_KEY};
 
@@ -213,6 +214,9 @@ fn eval_dynamic(
         apply_context_to_scope(&mut scope, context);
     }
 
+    // A Rhai expression shares the JavaScript budget, so what it asks of the
+    // engine (`to_comp` and the like) is counted as well.
+    let _running = script::interp::Running::begin();
     with_engine(|engine| {
         if let Some(context) = context {
             engine.set_default_tag(Dynamic::from(context));
@@ -323,16 +327,28 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         return Slot::default();
     };
     let tr = &layer.transform;
+    let camera = match &layer.kind {
+        crate::model::LayerKind::Camera { zoom, options, .. } => {
+            let [x, y, z] = &options.point_of_interest;
+            vec![x, y, z, zoom]
+        }
+        _ => Vec::new(),
+    };
     let transform = [
         &tr.anchor_x,
         &tr.anchor_y,
         &tr.position_x,
         &tr.position_y,
+        &tr.position_z,
         &tr.scale_x,
         &tr.scale_y,
         &tr.rotation,
+        &tr.rotation_x,
+        &tr.rotation_y,
         &tr.opacity,
-    ];
+    ]
+    .into_iter()
+    .chain(camera);
     let params = layer.effects.iter().flat_map(|effect| {
         effect.params.iter().flat_map(|param| {
             let parts: Vec<&Property> = match &param.value {
@@ -345,10 +361,158 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         })
     });
     transform
-        .into_iter()
         .chain(params)
         .find(|property| carries(property))
         .map_or_else(Slot::default, |property| Slot::read(&property.extra))
+}
+
+/// A row an expression can sit on: a transform property, or an effect
+/// parameter by the effect's id and its own. An effect's point is the pair
+/// of rows its schema names `<stem>_x` and `<stem>_y`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Row<'a> {
+    Transform(crate::model::TransformProp),
+    Effect { effect: Uuid, param: &'a str },
+}
+
+/// The properties of the point `row` is one number of on `layer`, in order,
+/// and which of them it is.
+fn point_of_row<'l>(
+    layer: &'l crate::model::Layer,
+    row: Row<'_>,
+) -> Option<(Vec<&'l crate::anim::Property>, usize)> {
+    use crate::model::EffectValue;
+    match row {
+        Row::Transform(prop) => {
+            let (rows, axis) = layer.point_rows(prop);
+            let props = rows
+                .iter()
+                .map(|r| layer.prop(*r))
+                .collect::<Option<Vec<_>>>()?;
+            Some((props, axis))
+        }
+        Row::Effect { effect, param } => {
+            let inst = layer.effects.iter().find(|e| e.id == effect)?;
+            let float = |id: &str| match inst.params.iter().find(|p| p.id == id)?.value {
+                EffectValue::Float(ref p) => Some(p),
+                _ => None,
+            };
+            let pair = crate::fx::builtins::schema(&inst.effect.match_name)
+                .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param));
+            if let Some(pair) = pair {
+                if let (Some(x), Some(y)) = (float(pair.x), float(pair.y)) {
+                    return Some((vec![x, y], usize::from(pair.y == param)));
+                }
+            }
+            Some((vec![float(param)?], 0))
+        }
+    }
+}
+
+/// What `value` reads on a property: the number under its expression, or
+/// what it holds at nought.
+#[must_use]
+pub fn underlying_value(property: &crate::anim::Property) -> f64 {
+    match &property.animation {
+        crate::anim::Animation::Expression(_) => Slot::read(&property.extra).own().unwrap_or(0.0),
+        _ => property.value_at(0.0),
+    }
+}
+
+/// Note on `property`, whose expression was only just put on, the point it
+/// is number `axis` of, as an import does. `value` then reads the point, and
+/// a list the expression answers with gives this row its own number. A row
+/// shown on its own passes only its own number, and `value` is that.
+pub fn note_point(property: &mut crate::anim::Property, point: &[f64], axis: usize) {
+    if !matches!(property.animation, crate::anim::Animation::Expression(_))
+        || axis == 0 && point.len() < 2
+    {
+        return;
+    }
+    let kept = Slot::read(&property.extra);
+    Slot::new(point, axis, kept.seed)
+        .in_language(kept.language)
+        .write(&mut property.extra);
+}
+
+/// [`note_point`] for the row `prop` of `layer`, given that row's new state.
+pub fn note_transform_point(
+    layer: &crate::model::Layer,
+    prop: crate::model::TransformProp,
+    next: &mut crate::anim::Property,
+) {
+    let (rows, axis) = layer.point_rows(prop);
+    if layer.separated(prop) {
+        note_point(next, &[underlying_value(next)], axis);
+        return;
+    }
+    let point: Vec<f64> = rows
+        .iter()
+        .map(|r| match r {
+            r if *r == prop => underlying_value(next),
+            r => layer.prop(*r).map_or(0.0, underlying_value),
+        })
+        .collect();
+    note_point(next, &point, axis);
+}
+
+/// [`note_point`] for the parameter `param` of `inst`, when it is half of a
+/// pair and its expression was only just put on.
+pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
+    use crate::model::EffectValue;
+    let Some(pair) = crate::fx::builtins::schema(&inst.effect.match_name)
+        .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param))
+    else {
+        return;
+    };
+    let held = |id: &str| match inst.params.iter().find(|p| p.id == id).map(|p| &p.value) {
+        Some(EffectValue::Float(p)) => Some(underlying_value(p)),
+        _ => None,
+    };
+    let (Some(x), Some(y)) = (held(pair.x), held(pair.y)) else {
+        return;
+    };
+    let axis = usize::from(pair.y == param);
+    if let Some(EffectValue::Float(p)) = inst
+        .params
+        .iter_mut()
+        .find(|p| p.id == param)
+        .map(|p| &mut p.value)
+    {
+        note_point(p, &[x, y], axis);
+    }
+}
+
+/// What an expression on `row` of the context's layer is told about its
+/// property. `own` is the number the row shows while it is not an expression
+/// yet, and the slot is then the one putting one on would write.
+#[must_use]
+pub fn slot_of_row(context: &ExpressionContext, row: Row<'_>, own: Option<f64>) -> Slot {
+    let layer = context.comp.zip(context.layer).and_then(|(comp, layer)| {
+        let comp = context.document.comp(comp)?;
+        comp.layers.iter().find(|l| l.id == layer)
+    });
+    let Some(layer) = layer else {
+        return Slot::default();
+    };
+    let Some((props, axis)) = point_of_row(layer, row) else {
+        return Slot::default();
+    };
+    let Some(this) = props.get(axis) else {
+        return Slot::default();
+    };
+    if own.is_none() && this.extra.contains_key(SLOT_KEY) {
+        return Slot::read(&this.extra);
+    }
+    let own = own.unwrap_or_else(|| underlying_value(this));
+    if matches!(row, Row::Transform(prop) if layer.separated(prop)) {
+        return Slot::new(&[own], axis, 0);
+    }
+    let mut point: Vec<f64> = props.iter().map(|p| underlying_value(p)).collect();
+    if let Some(at) = point.get_mut(axis) {
+        *at = own;
+    }
+    Slot::new(&point, axis, 0)
 }
 
 /// Whether this text is a Rhai expression Lumit can actually run — it parses,
@@ -483,6 +647,9 @@ pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) 
 /// An expression that does not compile yields **no samples at all**, not a row
 /// of zeroes: the graph has nothing truthful to draw for a line that is still
 /// being typed, and a flat curve at zero would read as a real answer.
+///
+/// `slot` is what the row the curve is drawn for knows about its property
+/// ([`slot_of_row`]), and the one carrying the text is found when it is left out.
 pub fn evaluate_range(
     language: Language,
     expression: &str,
@@ -490,6 +657,7 @@ pub fn evaluate_range(
     start: f64,
     end: f64,
     samples: i64,
+    slot: Option<Slot>,
 ) -> Vec<f64> {
     // A curve is a few hundred samples. More than a screen is wide draws
     // nothing new, and the number comes from outside.
@@ -498,7 +666,9 @@ pub fn evaluate_range(
         if program_for(expression).is_err() {
             return Vec::new();
         }
-        let slot = context.map_or_else(Slot::default, |context| slot_on_layer(context, expression));
+        let slot = slot.unwrap_or_else(|| {
+            context.map_or_else(Slot::default, |context| slot_on_layer(context, expression))
+        });
         let delta = (end - start) / (samples as f64);
         return (0..samples)
             .map(|i| {
@@ -778,6 +948,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -1222,6 +1393,26 @@ mod tests {
             1000.0
         );
         assert_eq!(driven(shaken, Slot::new(&[960.0, 540.0], 1, 5), 2.0), 541.0);
+        // One put on a point's y row in the app reads the whole point, as an
+        // import gives it, so the row neither jumps nor takes the x.
+        let mut layer = driven_layer("Pin", "0");
+        layer.transform.position_x = Property::fixed(960.0);
+        layer.transform.position_y = Property::fixed(540.0);
+        let mut y = layer.transform.position_y.clone();
+        y.set_animation(Animation::Expression("value + [0, 10]".into()));
+        y.set_expression_language(Language::JavaScript);
+        note_transform_point(&layer, crate::model::TransformProp::PositionY, &mut y);
+        assert_eq!(y.value_at_with_context(0.0, on_rig(&rig, 0.0)), 550.0);
+        // A separated y row is a number of its own, as in After Effects, and
+        // still takes its own number of a list.
+        layer.transform.axis_modes.position = crate::model::AxisMode::Separated;
+        for (text, want) in [("value + 10", 550.0), ("[1, 2]", 2.0)] {
+            let mut y = layer.transform.position_y.clone();
+            y.set_animation(Animation::Expression(text.into()));
+            y.set_expression_language(Language::JavaScript);
+            note_transform_point(&layer, crate::model::TransformProp::PositionY, &mut y);
+            assert_eq!(y.value_at_with_context(0.0, on_rig(&rig, 0.0)), want);
+        }
         assert_eq!(
             driven(
                 "value.length > 1 ? value[1] : value",
@@ -1294,12 +1485,20 @@ mod tests {
         let js = Language::JavaScript;
         assert_eq!(evaluate_in(js, "value + 5", Some(on_rig(&rig, 0.0))), 35.0);
         assert_eq!(
-            evaluate_range(js, "value + 5", Some(&*on_rig(&rig, 0.0)), 0.0, 1.0, 3),
+            evaluate_range(
+                js,
+                "value + 5",
+                Some(&*on_rig(&rig, 0.0)),
+                0.0,
+                1.0,
+                3,
+                None
+            ),
             [35.0, 35.0, 35.0]
         );
         // A line still being typed has no curve to draw, in either language.
-        assert!(evaluate_range(js, "value +", None, 0.0, 1.0, 3).is_empty());
-        assert!(evaluate_range(Language::Rhai, "time +", None, 0.0, 1.0, 3).is_empty());
+        assert!(evaluate_range(js, "value +", None, 0.0, 1.0, 3, None).is_empty());
+        assert!(evaluate_range(Language::Rhai, "time +", None, 0.0, 1.0, 3, None).is_empty());
     }
 
     /// **An expression is run by the language it was given, never by a guess.**
@@ -1404,5 +1603,185 @@ mod tests {
             "five of anything is nothing"
         );
         assert!(value("[1, \"two\"]").is_err(), "a pair holding a word");
+    }
+
+    /// A camera turned a little, a 3D null turned more, a 3D card parented to
+    /// it, and a 2D layer and a 3D one with the same flat transform.
+    fn staged() -> (Arc<Document>, Uuid, Vec<(String, Uuid)>) {
+        use crate::anim::Property;
+        use crate::model::{CameraOptions, LayerKind};
+
+        let mut flat = driven_layer("Flat", "0");
+        let tr = &mut flat.transform;
+        (tr.position_x, tr.position_y) = (Property::fixed(100.0), Property::fixed(50.0));
+        tr.anchor_x = Property::fixed(10.0);
+        tr.scale_x = Property::fixed(200.0);
+        let mut plate = flat.clone();
+        (plate.id, plate.name) = (Uuid::now_v7(), "Plate".into());
+        plate.switches.three_d = true;
+
+        let zoom = crate::camera::default_zoom(1920.0);
+        let mut camera = driven_layer("Camera", "0");
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(zoom),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(CameraOptions::fresh(zoom, (960.0, 540.0, 0.0))),
+        };
+        let tr = &mut camera.transform;
+        (tr.position_x, tr.position_y) = (Property::fixed(900.0), Property::fixed(500.0));
+        tr.position_z = Property::fixed(-zoom);
+        (tr.rotation_x, tr.rotation_y) = (Property::fixed(-5.0), Property::fixed(10.0));
+
+        let mut null = driven_layer("Null", "0");
+        null.switches.three_d = true;
+        let tr = &mut null.transform;
+        (tr.position_x, tr.position_y) = (Property::fixed(960.0), Property::fixed(540.0));
+        tr.position_z = Property::fixed(100.0);
+        tr.rotation_y = Property::fixed(30.0);
+        let mut card = driven_layer("Card", "0");
+        card.switches.three_d = true;
+        card.parent = Some(null.id);
+        let tr = &mut card.transform;
+        (tr.position_x, tr.position_z) = (Property::fixed(100.0), Property::fixed(200.0));
+        (tr.anchor_x, tr.anchor_y) = (Property::fixed(50.0), Property::fixed(50.0));
+        (tr.scale_x, tr.scale_y) = (Property::fixed(50.0), Property::fixed(50.0));
+        tr.rotation = Property::fixed(15.0);
+
+        let layers = vec![camera, null, card, flat, plate];
+        let names = layers.iter().map(|l| (l.name.clone(), l.id)).collect();
+        let (document, comp) = doc_with(layers);
+        (document, comp, names)
+    }
+
+    /// **A point crosses between a layer's spaces and back, in both
+    /// languages.** On the picture a 2D layer is its flat placement, a 3D one
+    /// is that placement seen through the camera, and every way there has a
+    /// way back that lands on the point it started from.
+    #[test]
+    fn a_point_crosses_a_layers_spaces_and_back_in_both_languages() {
+        let (document, comp, names) = staged();
+        let on = |name: &str| {
+            let layer = names.iter().find(|(n, _)| n == name).map(|(_, id)| *id);
+            Arc::new(ExpressionContext {
+                document: document.clone(),
+                comp: Some(comp),
+                layer,
+                comp_time: 0.0,
+                current_depth: 0,
+                inputs: None,
+            })
+        };
+        let js = |source: &str| evaluate_in(Language::JavaScript, source, Some(on("Flat")));
+        let rhai = |source: &str| evaluate_in(Language::Rhai, source, Some(on("Flat")));
+
+        // The 2D layer is never seen through the camera, and keeps as many
+        // numbers as it was given.
+        assert_eq!(js("toComp([5, 5])[0] * 1000 + toComp([5, 5])[1]"), 90_055.0);
+        assert_eq!(
+            js("toComp([5, 5, 7]).length * 10 + toComp([5, 5, 7])[2]"),
+            30.0
+        );
+        assert_eq!(js("fromComp([90, 55])[0] + fromComp([90, 55])[1]"), 10.0);
+        assert_eq!(rhai("layer().to_comp([5.0, 5.0])[0]"), 90.0);
+        // The 3D one with the same transform is in the same place in the
+        // comp's space, and on the picture where the camera puts that.
+        assert_eq!(js("thisComp.layer('Plate').toWorld([5, 5])[0]"), 90.0);
+        let pose = document.comp(comp).and_then(|c| c.camera_pose(0.0));
+        let (x, y, depth) = crate::camera::project_depth(
+            &pose.expect("a camera"),
+            1920.0,
+            1080.0,
+            (90.0, 55.0, 0.0),
+        );
+        for (axis, want) in [x, y, depth].into_iter().enumerate() {
+            let got = js(&format!(
+                "thisComp.layer('Plate').toComp([5, 5, 0])[{axis}]"
+            ));
+            assert!((got - want).abs() < 1e-9, "{axis}: {got} against {want}");
+        }
+
+        // Every way and its way back, at a time given and at the time now.
+        // Not toCompVec through a camera: After Effects' fromCompVec isn't
+        // quite its inverse, and the render tests hold both to its numbers.
+        let ways = [
+            ("toComp", "fromComp", "to_comp", "from_comp"),
+            ("toWorld", "fromWorld", "to_world", "from_world"),
+            (
+                "toWorldVec",
+                "fromWorldVec",
+                "to_world_vec",
+                "from_world_vec",
+            ),
+        ];
+        for (to, from, to_r, from_r) in ways {
+            let off = js(&format!(
+                "var L = thisComp.layer('Card'); var q = L.{from}(L.{to}([3, 4, 5], 1)); \
+                 1000 + Math.abs(q[0] - 3) + Math.abs(q[1] - 4) + Math.abs(q[2] - 5)"
+            ));
+            assert!(
+                (off - 1000.0).abs() < 1e-6,
+                "{to} and {from} in JavaScript: {off}"
+            );
+            // Rhai takes an expression rather than statements, so the
+            // card is named each time.
+            let card = "layer(\"Card\")";
+            for back in [
+                format!("{card}.{from_r}({card}.{to_r}([3.0, 4.0, 5.0]), 1.0)"),
+                format!("{card}.{from_r}({card}.{to_r}([3.0, 4.0, 5.0], 1.0))"),
+            ] {
+                let off = rhai(&format!(
+                    "1000.0 + abs({back}[0] - 3.0) + abs({back}[1] - 4.0) + abs({back}[2] - 5.0)"
+                ));
+                assert!((off - 1000.0).abs() < 1e-6, "{back} in Rhai: {off}");
+            }
+        }
+        // A point on the picture meets the card's own plane where it showed.
+        let off = js(
+            "var L = thisComp.layer('Card'); var q = L.fromCompToSurface(L.toComp([7, 8, 0])); \
+             q.length * 100 + Math.abs(q[0] - 7) + Math.abs(q[1] - 8)",
+        );
+        assert!((off - 200.0).abs() < 1e-6, "{off}");
+        let back = "layer(\"Card\").from_comp_to_surface(layer(\"Card\").to_comp([7.0, 8.0, 0.0]))";
+        let off = rhai(&format!(
+            "1000.0 + abs({back}[0] - 7.0) + abs({back}[1] - 8.0)"
+        ));
+        assert!((off - 1000.0).abs() < 1e-6, "{off}");
+        let at = rhai("layer(\"Card\").from_comp_to_surface([960.0, 540.0], 1.0).len()");
+        assert_eq!(at, 2.0);
+
+        // A 3D layer's points have a z, its turn is in the three rotations,
+        // and the camera answers for its own rows.
+        let zoom = crate::camera::default_zoom(1920.0);
+        assert_eq!(js("thisComp.layer('Card').position.length"), 3.0);
+        assert_eq!(js("thisComp.layer('Card').transform.position[2]"), 200.0);
+        assert_eq!(
+            js("thisComp.layer('Card').anchorPoint[2] + thisComp.layer('Card').scale[2]"),
+            100.0
+        );
+        assert_eq!(
+            js("thisComp.layer('Null').yRotation + thisComp.layer('Card').zRotation"),
+            45.0
+        );
+        assert_eq!(
+            js("thisComp.layer('Camera').xRotation + thisComp.layer('Card').orientation[1]"),
+            -5.0
+        );
+        assert_eq!(js("thisComp.activeCamera.zoom"), zoom);
+        assert_eq!(
+            js("thisComp.activeCamera.cameraOption.pointOfInterest[0]"),
+            960.0
+        );
+        assert_eq!(
+            rhai("layer(\"Card\").z + layer(\"Null\").rotation_y + layer(\"Card\").rotation_z"),
+            245.0
+        );
+        assert_eq!(
+            rhai("layer(\"Camera\").rotation_x + layer(\"Card\").orientation[2]"),
+            -5.0
+        );
+        assert_eq!(rhai("comp().active_camera.zoom"), zoom);
+        assert_eq!(rhai("comp().active_camera.point_of_interest[1]"), 540.0);
+        assert_eq!(rhai("layer(\"Card\").zoom"), -1.0, "a card has no zoom");
     }
 }

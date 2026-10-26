@@ -72,6 +72,13 @@ enum Panel {
   /// order a stagger drag follows.
   stagger,
 
+  /// One text area for the project, kept in the `.lum`.
+  notes,
+
+  /// Moves the selected layers' anchors to a point of their boxes, or lines
+  /// that point up with the same point of the composition.
+  align,
+
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
@@ -96,6 +103,8 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.notes => l10n.panelNotes,
+        Panel.align => l10n.panelAlign,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };
@@ -346,10 +355,10 @@ class DockSplit extends DockNode {
 /// The default workspace (docs/07 §1.6 "Edit"): a vertical root (upper band
 /// 0.68, Timeline 0.32 across the full width); the upper band horizontal
 /// (left tab group 0.22, Viewer 0.58, right group 0.20). The left group
-/// tabs Project (fronted) and Effect controls; the right group is a **stack**:
-/// Effects & presets twirled open, with Scopes, Text and Paragraph shut
-/// beneath it, each one click away. Viewer and Timeline sit alone and render
-/// bare.
+/// tabs Project (fronted), Effect controls and Notes; the right group is a
+/// **stack**: Effects & presets twirled open, with Text, Paragraph, Align and
+/// Stagger shut beneath it, each one click away. Viewer and Timeline sit
+/// alone and render bare. Scopes is Colour's and Effects', not Edit's.
 ///
 /// **The Debug panel is in no shipped arrangement either**: it is a
 /// developer's readout, and the owner took it out of every default when the
@@ -369,14 +378,16 @@ DockSplit defaultLayout() => DockSplit(
             DockTabs([
               DockPane(Panel.project),
               DockPane(Panel.effectControls),
+              DockPane(Panel.notes),
             ]),
             DockPane(Panel.viewer),
             DockTabs(
               [
                 DockPane(Panel.effectsAndPresets),
-                DockPane(Panel.scopes),
                 DockPane(Panel.text),
                 DockPane(Panel.paragraph),
+                DockPane(Panel.align),
+                DockPane(Panel.stagger),
               ],
               stacked: true,
               open: {Panel.effectsAndPresets.pane()},
@@ -392,12 +403,13 @@ DockSplit defaultLayout() => DockSplit(
 /// The shipped workspace presets (docs/07 §1.6): much the same panel
 /// inventory, arranged for different work. Structure only, per the spec.
 ///
-/// Retiming, Nodes and Audio are the presets that change the inventory rather
-/// than only the arrangement (the AudioWorkspace board): the
-/// Easing panel is in no other arrangement, and neither are the Graph, Node,
-/// Mixer and Audio panels, because a panel nobody asked for should not appear
-/// in an arrangement they already know. Hierarchy is in none of them at all,
-/// for the same reason.
+/// Each one carries the panels its work reaches for, and the ones it reaches
+/// for less sit shut in a stack rather than being left out: a shut panel
+/// costs one header line. Project and Effect controls stay full height, tabbed
+/// on the left, wherever a workspace has a left column. Easing is Effects' and
+/// Retiming's, Graph and Node are Nodes', and the Audio panel is Audio's.
+/// Hierarchy is in none of them, as it is a thing you go and look at rather
+/// than work beside.
 ///
 /// The order is the strip's order, which is the drawing's: Nodes sits third,
 /// beside Effects, because both are about what an effect does rather than
@@ -430,12 +442,13 @@ enum WorkspacePreset {
 DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Edit is the default arrangement.
       WorkspacePreset.edit => defaultLayout(),
-      // Effect controls promoted to its own column beside the Project panel;
-      // Effects & presets on the right with Scopes tabbed behind. The
+      // Project and Effect controls (fronted) tabbed on the left; the Easing
+      // panel full height beside the Viewer; then a stack at the right edge
+      // with Effects & presets open, and Expressions and Scopes shut. The
       // Timeline is Edit's height exactly: the owner asked for one
       // timeline height across Edit, Effects, Nodes and Colour, so that
       // changing workspace does not move the lanes under the pointer. The
-      // right column is the owner's own measured width — wide enough to work
+      // stack is the owner's own measured width — wide enough to work
       // in rather than as narrow as an exactly 16:9 Viewer would need.
       WorkspacePreset.effects => DockSplit(
           DockAxis.vertical,
@@ -443,15 +456,23 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockSplit(
               DockAxis.horizontal,
               [
-                DockPane(Panel.project),
-                DockPane(Panel.effectControls),
-                DockPane(Panel.viewer),
                 DockTabs([
-                  DockPane(Panel.effectsAndPresets),
-                  DockPane(Panel.scopes),
-                ]),
+                  DockPane(Panel.project),
+                  DockPane(Panel.effectControls),
+                ], active: 1),
+                DockPane(Panel.viewer),
+                DockPane(Panel.easing),
+                DockTabs(
+                  [
+                    DockPane(Panel.effectsAndPresets),
+                    DockPane(Panel.expressions),
+                    DockPane(Panel.scopes),
+                  ],
+                  stacked: true,
+                  open: {Panel.effectsAndPresets.pane()},
+                ),
               ],
-              [0.16, 0.20, 0.5088, 0.1312],
+              [0.20, 0.5088, 0.16, 0.1312],
             ),
             DockPane(Panel.timeline),
           ],
@@ -465,8 +486,9 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // drawing's: 0.76/0.24 across; the graph column 0.68/0.32, so
       // the Timeline stands at the height every other arrangement gives it
       // rather than the drawing's short strip; the right column 0.32 Viewer —
-      // whole bar kept — to 0.68 Node panel, the parameter rows being what
-      // this workspace is for.
+      // whole bar kept — to 0.68 for a stack with the Node panel open, the
+      // parameter rows being what this workspace is for, and Effects &
+      // presets and Expressions shut under it, one click from the graph.
       WorkspacePreset.nodes => DockSplit(
           DockAxis.horizontal,
           [
@@ -477,16 +499,26 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             ),
             DockSplit(
               DockAxis.vertical,
-              [DockPane(Panel.viewer), DockPane(Panel.node)],
+              [
+                DockPane(Panel.viewer),
+                DockTabs(
+                  [
+                    DockPane(Panel.node),
+                    DockPane(Panel.effectsAndPresets),
+                    DockPane(Panel.expressions),
+                  ],
+                  stacked: true,
+                  open: {Panel.node.pane()},
+                ),
+              ],
               [0.3169, 0.6831],
             ),
           ],
           [0.76, 0.24],
         ),
-      // Scopes given a wide right-hand column outright, no longer tabbed
-      // over the Debug panel; the left group Project, Effect controls
-      // (fronted) and Effects & presets; Viewer centre-dominant; the Timeline
-      // at the one height.
+      // Project and Effect controls (fronted) tabbed on the left; Viewer
+      // centre-dominant; a wide right-hand column with Scopes open and
+      // Effects & presets shut under it; the Timeline at the one height.
       WorkspacePreset.colour => DockSplit(
           DockAxis.vertical,
           [
@@ -496,10 +528,16 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockTabs([
                   DockPane(Panel.project),
                   DockPane(Panel.effectControls),
-                  DockPane(Panel.effectsAndPresets),
                 ], active: 1),
                 DockPane(Panel.viewer),
-                DockPane(Panel.scopes),
+                DockTabs(
+                  [
+                    DockPane(Panel.scopes),
+                    DockPane(Panel.effectsAndPresets),
+                  ],
+                  stacked: true,
+                  open: {Panel.scopes.pane()},
+                ),
               ],
               [0.18, 0.52, 0.30],
             ),
@@ -508,8 +546,8 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           [0.68, 0.32],
         ),
       // Audio (the approved AudioWorkspace board): the Mixer fronting the
-      // left column over Project and Effect controls, the Audio panel taking
-      // the right column outright with Effects & presets tabbed behind, the
+      // left column over Project and Effect controls, the Audio panel open in
+      // a stack on the right with Effects & presets shut under it, the
       // Viewer reduced between them, and the **Audio timeline** across the
       // bottom where every other arrangement puts the Timeline - the sound
       // table, with a row per audible layer. Shares are the board's own
@@ -527,10 +565,14 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                   DockPane(Panel.effectControls),
                 ]),
                 DockPane(Panel.viewer),
-                DockTabs([
-                  DockPane(Panel.audio),
-                  DockPane(Panel.effectsAndPresets),
-                ]),
+                DockTabs(
+                  [
+                    DockPane(Panel.audio),
+                    DockPane(Panel.effectsAndPresets),
+                  ],
+                  stacked: true,
+                  open: {Panel.audio.pane()},
+                ),
               ],
               [0.18, 0.58, 0.24],
             ),
@@ -539,12 +581,13 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           [0.53, 0.47],
         ),
       // Retiming: the arrangement for shaping movement. The **Easing**
-      // panel takes the right-hand column outright rather than tabbing behind
-      // Scopes — the whole point of the panel over the popup is that it stays
-      // on screen while the selection changes underneath it, and a panel behind
-      // a tab is a panel you have to keep fetching. The Timeline is as tall as
-      // Audio's, because retiming is timeline work: the graph editor is where
-      // the eye is, and the shape is drawn beside it.
+      // panel stays open at the top of the right-hand column rather than
+      // behind a tab — the whole point of the panel over the popup is that it
+      // stays on screen while the selection changes underneath it. Stagger
+      // and Expressions sit shut under it: the curve and a key's fields want
+      // the column's whole height. The Timeline is as tall as Audio's,
+      // because retiming is timeline work: the graph editor is where the eye
+      // is, and the shape is drawn beside it.
       WorkspacePreset.retiming => DockSplit(
           DockAxis.vertical,
           [
@@ -557,7 +600,15 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                   DockPane(Panel.effectsAndPresets),
                 ]),
                 DockPane(Panel.viewer),
-                DockPane(Panel.easing),
+                DockTabs(
+                  [
+                    DockPane(Panel.easing),
+                    DockPane(Panel.stagger),
+                    DockPane(Panel.expressions),
+                  ],
+                  stacked: true,
+                  open: {Panel.easing.pane()},
+                ),
               ],
               [0.20, 0.58, 0.22],
             ),
@@ -565,10 +616,12 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.55, 0.45],
         ),
-      // Cut: Project and Effect controls tabbed down the left, the Viewer
-      // taking the rest of the top band (the Source view is a second view
-      // inside it, so one pane serves), and the **Cut timeline** across the
-      // bottom at the Audio arrangement's proportions. The Project column is
+      // Cut: Project, Effect controls, Effects & presets and Notes tabbed
+      // down the left, each full height. The Viewer
+      // takes the rest of the top band (the Source view is a second view
+      // inside it, so one pane serves), and the **Cut timeline** runs across
+      // the bottom at the Audio arrangement's proportions, with the Mixer at
+      // its right for levels and faders while cutting. The Project column is
       // a little wider than elsewhere, so its Duration column has room on a
       // 1920 screen.
       WorkspacePreset.cut => DockSplit(
@@ -580,12 +633,18 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockTabs([
                   DockPane(Panel.project),
                   DockPane(Panel.effectControls),
+                  DockPane(Panel.effectsAndPresets),
+                  DockPane(Panel.notes),
                 ]),
                 DockPane(Panel.viewer),
               ],
               [0.24, 0.76],
             ),
-            DockPane(Panel.cutTimeline),
+            DockSplit(
+              DockAxis.horizontal,
+              [DockPane(Panel.cutTimeline), DockPane(Panel.mixer)],
+              [0.86, 0.14],
+            ),
           ],
           [0.53, 0.47],
         ),

@@ -191,8 +191,8 @@ pub fn resolve_drivers_in(
 /// comp's camera (the draw builder, from `lumit_gpu`'s own matrices), and
 /// handed down as plain numbers; nothing in this crate derives a camera.
 ///
-/// `Projection::FLAT` — what plain [`resolve_drivers`] passes — is a 2D layer,
-/// a comp with no camera, and every caller that is not placing layers.
+/// `Projection::FLAT` — what plain [`resolve_drivers`] passes — is a 2D layer
+/// and every caller that is not placing layers.
 #[must_use]
 pub fn resolve_drivers_projected(
     graph: &LayerGraph,
@@ -686,9 +686,9 @@ impl Eval<'_> {
     }
 
     /// Particulate's particles at layer time `t` on `layer`, walked from the
-    /// in point against `target` ([`points::stepped`]). Each step is a fresh
-    /// walk of the wires at that step's own time, so nothing this walk has
-    /// kept for `t` is read at another.
+    /// in point against `target`, if any ([`points::stepped`]). Each step is
+    /// a fresh walk of the wires at that step's own time, so nothing this walk
+    /// has kept for `t` is read at another.
     #[allow(clippy::too_many_arguments)]
     fn stepped(
         &self,
@@ -696,7 +696,7 @@ impl Eval<'_> {
         inst: &EffectInstance,
         def: &'static dyn super::registry::EffectDef,
         layer: &crate::model::Layer,
-        target: &crate::model::Layer,
+        target: Option<&crate::model::Layer>,
         t: f64,
         depth: u32,
     ) -> Option<PointsStream> {
@@ -749,7 +749,8 @@ impl Eval<'_> {
                 .map_or([comp.width as f32, comp.height as f32], |r| {
                     [(r[2] - r[0]) as f32, (r[3] - r[1]) as f32]
                 });
-            let collider = Collider::of(doc, comp, layer, target, tc, &context);
+            let collider =
+                target.map(|target| Collider::of(doc, comp, layer, target, tc, &context));
             Some(Inputs::new(rows, frame, path, collider))
         };
         stream_at(definition(doc, comp, layer, inst, target), t, dt, &at)
@@ -1113,12 +1114,10 @@ impl Eval<'_> {
             return None;
         }
 
-        // **Particulate with a collider walks** instead, each step reading
-        // its rows and wires at its own time.
-        if let Some((layer, target)) = layer
-            .filter(|_| inst.effect.match_name == "particulate")
-            .and_then(|l| Some((l, points::stepped::target(comp, inst)?)))
-        {
+        // **Particulate with a collider, a flock or sparks walks** instead,
+        // each step reading its rows and wires at its own time.
+        if let Some(layer) = layer.filter(|_| points::stepped::wanted(comp, inst)) {
+            let target = points::stepped::target(comp, inst);
             let mut stream = self.stepped(effect, inst, def, layer, target, t, depth)?;
             stream.projection = self.projection;
             let stream = Rc::new(stream);
@@ -1244,11 +1243,14 @@ impl Eval<'_> {
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     // Births that follow a Density layer depend on a
-                    // picture, so they fall out with Scatter's below.
-                    if matches!(
-                        inst.param("density_layer"),
-                        Some(crate::model::EffectValue::Layer(Some(_)))
-                    ) {
+                    // picture, so they fall out with Scatter's below. Trails
+                    // draw from this stream, so they leave the layer unread.
+                    if !points::stepped::trails(comp, inst)
+                        && matches!(
+                            inst.param("density_layer"),
+                            Some(crate::model::EffectValue::Layer(Some(_)))
+                        )
+                    {
                         return None;
                     }
                     Some(Producer::Particulate {
@@ -2193,6 +2195,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2701,6 +2704,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

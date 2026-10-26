@@ -224,6 +224,11 @@ pub enum LayerInputDraw {
     /// so a Lens flare added to one finds the lights in the footage beneath
     /// it without being pointed anywhere.
     ThisLayer,
+    /// A Depth row on an adjustment layer pointed at itself, with 3D layers
+    /// below it: how far the layers below are from the camera, metres, as the
+    /// comp draws them. Made beside the composite below, so only an effect that
+    /// asks for it pays. Carries the comp's pixels per metre.
+    Below(f64),
     /// The picture an effect above this one in the same stack made, wired into
     /// this one's Matte. `run_ops` keeps it from when that effect ran.
     EffectOutput(uuid::Uuid),
@@ -363,6 +368,9 @@ pub enum GraphStep {
         /// was made from the file's frame, so it is laid in the graph's frame
         /// exactly where the file's picture is.
         baked_from: Option<usize>,
+        /// A points box's birth schedule or wired streams, as a layer's points
+        /// effects are handed theirs. Empty for every other box.
+        points: Vec<lumit_core::fx::points::PointsSchedule>,
     },
     /// Picture A laid over picture B, the node a layer stack has no word for.
     Merge {
@@ -529,6 +537,10 @@ pub struct CompLayerDraw {
     pub rotation_x_deg: f32,
     pub rotation_y_deg: f32,
     pub three_d: bool,
+    /// A 2D layer of a collapsed 3D precomp: drawn through the camera on the
+    /// precomp's plane, but like any 2D layer it ends a run of 3D layers, as
+    /// in After Effects.
+    pub ends_run: bool,
     pub matte: Option<MatteDraw>,
     pub blend: lumit_gpu::composite::Blend,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for
@@ -700,6 +712,9 @@ pub struct CompLayerDraw {
     /// lighting pass never runs, which is how a comp without lights renders
     /// byte-for-byte as it did before lighting existed.
     pub lights: Vec<lumit_gpu::fx::lighting::LightingLight>,
+    /// How this layer takes those lights, its Material options. The realiser
+    /// puts the eye in.
+    pub material: lumit_gpu::fx::lighting::LightingMaterial,
     /// The below-stack re-rendered at a held time for a temporal adjustment
     /// (Posterize Time, docs/08 §3.25). Some only on an adjustment
     /// [`DrawSource::Adjust`] draw whose stack holds a Posterize Time effect

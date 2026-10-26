@@ -130,6 +130,15 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         &["collide_with", "on_contact", "bounciness", "friction"],
     ),
     group(
+        "Flock",
+        &["separation", "alignment", "cohesion", "flock_radius"],
+    ),
+    group(
+        "Sparks",
+        &["sparks", "spark_speed", "spark_life", "spark_size"],
+    ),
+    group("Trails", &["persistence", "zoom", "turn"]),
+    group(
         "Render",
         &[
             "mode",
@@ -193,8 +202,85 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "path_from",
         cond: EnabledCond::ChoiceIsNot(1),
     },
-    // The step reads no pictures, so a collider leaves births even, and its
-    // particles are drawn over the picture one by one.
+    // The step reads no pictures, so a collider, a flock or sparks leave
+    // births even, and their particles are drawn over the picture one by one.
+    EnabledWhen {
+        param: "particle_blend",
+        on: "separation",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "alignment",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "cohesion",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "sparks",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "separation",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "alignment",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "cohesion",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "sparks",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "separation",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "alignment",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "cohesion",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "sparks",
+        cond: EnabledCond::Nought,
+    },
+    // A kept picture is drawn from the driver walk's stream, which reads no
+    // pictures either.
+    EnabledWhen {
+        param: "particle_blend",
+        on: "persistence",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "persistence",
+        cond: EnabledCond::Nought,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "persistence",
+        cond: EnabledCond::Nought,
+    },
     EnabledWhen {
         param: "particle_blend",
         on: "collide_with",
@@ -649,6 +735,122 @@ pub struct Particulate {
         unit = Percent
     )]
     pub friction: f32,
+
+    /// How strongly a particle steers away from neighbours that are close,
+    /// per cent. Above nought, as with a collider, each frame is worked out
+    /// from the frame before ([`points::stepped`]).
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub separation: f32,
+
+    /// How strongly a particle steers to go the way its neighbours go, per
+    /// cent.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub alignment: f32,
+
+    /// How strongly a particle steers towards the middle of its neighbours,
+    /// per cent.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub cohesion: f32,
+
+    /// How far off another particle still counts as a neighbour, px@comp.
+    #[slider(
+        label = "Flock radius",
+        min = 0.0,
+        max = 500.0,
+        default = 50.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub flock_radius: f32,
+
+    /// How many sparks a particle throws out as it dies. Above nought, each
+    /// frame is worked out from the frame before. Sparks throw out none.
+    #[slider(
+        min = 0.0,
+        max = 50.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 50.0,
+        unit = Raw
+    )]
+    pub sparks: f32,
+
+    /// How fast sparks fly out, px@comp per second.
+    #[slider(
+        label = "Spark speed",
+        min = 0.0,
+        max = 2000.0,
+        default = 200.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub spark_speed: f32,
+
+    /// How long a spark lasts, seconds.
+    #[slider(
+        label = "Spark life",
+        min = 0.1,
+        max = 5.0,
+        default = 0.5,
+        hard_min = 0.0,
+        unit = Seconds
+    )]
+    pub spark_life: f32,
+
+    /// How big a spark is, per cent of the particle it came from.
+    #[slider(
+        label = "Spark size",
+        min = 0.0,
+        max = 100.0,
+        default = 50.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub spark_size: f32,
+
+    /// How much of the picture Particulate keeps is left after one second,
+    /// per cent. Above nought each frame's particles are drawn over what the
+    /// frames before left ([`points::Trails`]). Nought keeps nothing.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub persistence: f32,
+
+    /// How much the kept picture grows each second, per cent, about the
+    /// emitter's position. Below nought it shrinks.
+    #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0, unit = Percent)]
+    pub zoom: f32,
+
+    /// How far the kept picture turns each second, degrees, about the
+    /// emitter's position.
+    #[slider(min = -360.0, max = 360.0, default = 0.0, unit = Degrees)]
+    pub turn: f32,
 
     /// What a particle is drawn as. All three are the same instanced quad with
     /// a different coverage inside it ([`points::RenderMode`]).

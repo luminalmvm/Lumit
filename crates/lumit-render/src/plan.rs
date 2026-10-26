@@ -1653,6 +1653,7 @@ mod tests {
         let comp = |layers: Vec<Layer>| Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -1789,6 +1790,7 @@ mod tests {
         let comp = |layers: Vec<Layer>| Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -1971,6 +1973,7 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2118,6 +2121,7 @@ mod tests {
         let comp_of = |layers: Vec<Layer>, graph: Option<CompGraph>| Composition {
             graph,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

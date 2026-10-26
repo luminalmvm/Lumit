@@ -4,7 +4,7 @@
 // (§3.4) dispatches through this same kernel. Mirrors
 // lumit_core::fx::cpu::transform op-for-op (§1.6: the CPU is the oracle):
 // each output pixel centre samples the input through the host-computed
-// inverse affine (lumit_core::fx::transform_inverse — the kernel never runs
+// inverse affine (lumit_core::fx::maths::transform_inverse — the kernel never runs
 // its own trigonometry), one bilinear tap, the revealed border handled by
 // the `edge` policy (0 Transparent / 1 Repeat / 2 Mirror — the shared blur
 // convention, == cpu::edge_index), premultiplied throughout, opacity

@@ -1,0 +1,54 @@
+---
+title: Repeat start
+description: "Marks where the boxes that run several times begin."
+---
+
+Repeat start is a **Compositing** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Repeat start marks the first of the boxes a [Repeat end](/effects/compositing/repeat-end/)
+runs several times. It is a box in a [node graph composition](/use/node-graphs/) and is
+not offered on a layer's stack. Its picture is what each time starts from, and its
+**Index**, **Count**, **Normalised** and **Random** sockets hand each time numbers of its
+own. A Repeat start with no Repeat end hands its picture on.
+
+With the Repeat end's **For** on **Each point**, the boxes run once for each point wired into
+**Points**. On **Each path**, once for each path wired into **Shapes** from a Read box of a
+composition.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Index**: which time it is, counting from 0.
+- **Count**: how many times there are.
+- **Normalised**: how far through the times it is, 0 the first time and 1 the last.
+- **Random**: a number from 0 to 1 of each time's own.
+- **X** and **Y**: where this time's point or path is, in the graph's pixels. A path's is
+  the middle of the box round it.
+- **Size**: the point's size, or the longer side of the box round the path.
+- **Rotation**: the point's rotation, in degrees. Nought for a path.
+- **Colour**: the point's colour. White for a path.
+- **Seed**: which numbers Random gives.
+
+## Related
+
+- [Repeat end](/effects/compositing/repeat-end/)
+- [Node graph compositions](/use/node-graphs/)
+- [Compositing](/effects/#compositing)
+- [Effects](/use/effects/)

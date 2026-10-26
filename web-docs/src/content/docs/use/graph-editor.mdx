@@ -1,6 +1,6 @@
 ---
 title: The graph editor
-description: Edit the curve between keyframes, by value or by speed.
+description: Edit the curve between keyframes, by value, speed or acceleration.
 sidebar:
   order: 6
 ---
@@ -11,15 +11,16 @@ The graph editor draws a property as a line of value, or rate of change, against
 
 <Shot file="graph-editor.png" caption="The graph editor, showing the value graph." eager/>
 
-## The two views
+## The three views
 
 | View | Shows |
 | --- | --- |
 | **Value graph** | The value against time. |
 | **Speed graph** | The rate of change against time. |
+| **Acceleration graph** | How fast the speed changes, in the property's unit per second squared. |
 
-Both views show the same underlying data. Editing either affects the other. **Value** and
-**Speed** at the bottom of the graph editor switch between them.
+All three show the same underlying data. Editing one affects the others. **Value**,
+**Speed** and **Acceleration** at the bottom of the graph editor switch between them.
 
 The scope button at the bottom steps through **Selected curves**, **Layer curves** and
 **Composition curves**: the selected properties, every animated property of the selected
@@ -43,11 +44,22 @@ To change a keyframe to linear, easy ease, or hold, press **Linear**, **Easy eas
 **Easing…**, on the value graph only, opens the easing editor. **Auto**, **Clamp** and
 **Free** set the selected keyframes' tangents.
 
+In the easing editor, a click on a shape applies it. Once a shape is saved, the shapes sit
+in two tabs, **Built in** and **Yours**. Drag the two handles and press **Apply** for a
+shape of your own: `Shift` snaps a handle, `Alt` mirrors the other one. The buttons under
+the curve are **Read from keys**, which takes the shape of two selected keyframes,
+**Reverse**, **Apply as you shape**, **Save…**, and **More** for **Import easings…** and
+**Export easings…**. Right-click the curve to copy it as `cubic-bezier()` or paste one.
+
 Right-click a keyframe for **Linear**, **Easy ease**, **Hold**, **Keyframe speed…**, **Copy
 ease**, **Paste ease**, **Join handles** and **Delete key**. Paste ease is listed once an ease
 has been copied.
 
 **Edit ▸ Settings ▸ Shortcuts ▸ Dragging** changes `Alt` to `Ctrl`.
+
+In the acceleration graph each keyframe has an in dot and an out dot. Dragging a dot up or
+down changes that side's influence and keeps its speed, as far as the influence can reach.
+Dragging it sideways moves the keyframe in time.
 
 ## Retime in the graph editor
 

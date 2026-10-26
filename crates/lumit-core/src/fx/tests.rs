@@ -2801,6 +2801,7 @@ fn marker_rig(
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -3182,6 +3183,64 @@ fn cpu_scanlines_darken_a_periodic_band() {
     assert_eq!(red_at(&inter, 6), 1.0, "period 1 flips: bright second");
     assert_eq!(red_at(&inter, 8), 1.0, "period 2 (even) unflipped again");
     assert_eq!(red_at(&inter, 10), 0.5, "period 2 (even) unflipped again");
+}
+
+/// Vector blur follows its map. A map pushing straight right smears a lit
+/// pixel along its row and never off it, Forwards trails it to the right only,
+/// and the slope of a vertical edge smears along the edge, up and down.
+#[test]
+fn cpu_vector_blur_streaks_along_the_map() {
+    use super::effects::vector_blur::VectorBlur;
+    let (w, h) = (16u32, 16u32);
+    let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+    let mut dot = vec![0.0f32; (w * h * 4) as usize];
+    dot[at(8, 8)..at(8, 8) + 4].copy_from_slice(&[1.0; 4]);
+    let lit = |img: &[f32]| -> Vec<(u32, u32)> {
+        (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .filter(|&(x, y)| img[at(x, y)] > 1e-4)
+            .collect()
+    };
+
+    // Red full and green mid-grey: every vector points right.
+    let right: Vec<f32> = (0..w * h).flat_map(|_| [1.0, 0.5, 0.5, 1.0]).collect();
+    let mut v = VectorBlur::read(Params::EMPTY);
+    v.vectors_from = 1;
+    v.length = 6.0;
+    for (follow, direction) in [(false, 0), (true, 0), (true, 1)] {
+        v.follow_vectors = follow;
+        v.direction = direction;
+        let mut out = dot.clone();
+        cpu::vector_blur(&mut out, w, h, &v.packed(), &right, false);
+        let px = lit(&out);
+        assert!(
+            px.len() > 1,
+            "follow {follow} direction {direction}: {px:?}"
+        );
+        assert!(px.iter().all(|&(_, y)| y == 8), "stays on its row: {px:?}");
+        if direction == 1 {
+            assert!(px.iter().all(|&(x, _)| x >= 8), "trails forwards: {px:?}");
+        }
+    }
+
+    // Dark left of x = 8 and light right of it: the contour runs up and down.
+    let edge: Vec<f32> = (0..h)
+        .flat_map(|_| {
+            (0..w).flat_map(|x| {
+                let k = if x < 8 { 0.0 } else { 1.0 };
+                [k, k, k, 1.0]
+            })
+        })
+        .collect();
+    let mut s = VectorBlur::read(Params::EMPTY);
+    s.length = 6.0;
+    s.map_softness = 2.0;
+    s.falloff = 50.0;
+    let mut out = dot.clone();
+    cpu::vector_blur(&mut out, w, h, &s.packed(), &edge, false);
+    let px = lit(&out);
+    assert!(px.len() > 1, "{px:?}");
+    assert!(px.iter().all(|&(x, _)| x == 8), "stays on the edge: {px:?}");
 }
 
 // ---------------------------------------------------------------------------
@@ -5026,6 +5085,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -5052,7 +5112,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             kind: LayerKind::Light {
                 light: Box::new(LightDef {
                     kind,
-                    half_size: [Property::fixed(half), Property::fixed(half * 0.5)],
+                    size: [Property::fixed(half * 2.0), Property::fixed(half)],
                     ..LightDef::default()
                 }),
             },
@@ -5094,7 +5154,16 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     light_layer(LightKind::Point, 900.0, 80.0, true);
     light_layer(LightKind::Area, 1500.0, 40.0, false);
 
-    let lights = comp.lights_at(1.0);
+    let read = |at: f64| {
+        let context = crate::model::timed_context(&comp, at);
+        move |l: &Layer, p: &crate::anim::Property| {
+            p.value_at_with_context(
+                crate::time::layer_time(at, l.start_offset.0),
+                context.clone(),
+            )
+        }
+    };
+    let lights = comp.lights_at(1.0, &read(1.0), None);
     assert_eq!(lights.len(), 2, "a light switched off is not a light");
 
     // Top of the stack first — the order the effects that read lights take
@@ -5115,7 +5184,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     );
 
     // Outside every span there are no lights at all.
-    assert!(comp.lights_at(99.0).is_empty());
+    assert!(comp.lights_at(99.0, &read(99.0), None).is_empty());
 
     // A default light is white at full intensity — a fresh one should light
     // something rather than land as a black source nobody can see.
@@ -5249,6 +5318,12 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
                 EnabledCond::LayerSet | EnabledCond::LayerUnset => assert!(
                     matches!(on, ParamKind::Layer { .. }),
                     "{}: `{}` is read as a Layer reference but is not one",
+                    s.match_name,
+                    rule.on
+                ),
+                EnabledCond::Nought => assert!(
+                    on.port_type() == Some(PortType::Number),
+                    "{}: `{}` is read as a number but is not one",
                     s.match_name,
                     rule.on
                 ),
@@ -5976,6 +6051,7 @@ fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -6001,7 +6077,7 @@ fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
             kind: LayerKind::Light {
                 light: Box::new(LightDef {
                     kind: LightKind::Area,
-                    half_size: [Property::fixed(80.0), Property::fixed(40.0)],
+                    size: [Property::fixed(160.0), Property::fixed(80.0)],
                     ..LightDef::default()
                 }),
             },
@@ -6447,6 +6523,8 @@ fn every_parameter_declares_a_unit() {
             ("channel_blur", "green"),
             ("channel_blur", "blue"),
             ("channel_blur", "alpha"),
+            ("vector_blur", "length"),
+            ("vector_blur", "map_softness"),
             ("transform", "anchor_x"),
             ("transform", "anchor_y"),
             ("transform", "position_x"),
@@ -6588,10 +6666,13 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
             ("particulate", "edge_margin"),
+            ("particulate", "flock_radius"),
+            ("particulate", "spark_speed"),
             // Grid: every length in a lattice — the gaps between
             // cells, where its centre sits, how far a cell may wander, and the
-            // disc a point is drawn as. The three counts and the per cents are
-            // not lengths and are not here.
+            // disc a point is drawn as, and Lines' grid size, corner and line
+            // width. The counts and the per cents are not lengths and are not
+            // here.
             ("grid", "spacing_x"),
             ("grid", "spacing_y"),
             ("grid", "spacing_z"),
@@ -6604,6 +6685,11 @@ fn every_parameter_declares_a_unit() {
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
             ("grid", "inner_radius"),
+            ("grid", "grid_size_x"),
+            ("grid", "grid_size_y"),
+            ("grid", "corner_x"),
+            ("grid", "corner_y"),
+            ("grid", "line_width"),
             ("grid", "size"),
             // Scatter: the disc a point is drawn as. Density is a count
             // per composition area and rescales nowhere — it is measured
@@ -7452,6 +7538,7 @@ fn every_effect_carries_a_matte_row() {
                 | "glow"
                 | "turbulent_displace"
                 | "displacement_map"
+                | "vector_blur"
                 | "directional_blur"
                 | "radial_blur"
                 | "sharpen"
@@ -7567,15 +7654,15 @@ fn every_effect_carries_a_matte_row() {
             s.match_name
         );
         // The Channel choice rides beside the injected pair on every
-        // effect that does not pick its matte's channels itself. The four that
+        // effect that does not pick its matte's channels itself. The five that
         // do — Depth of field (`depth_channel`), Displacement map (its two
-        // channel choices), the Lens flare (source detection) and Scatter,
-        // which reads **alpha and only alpha** — carry none, and the
-        // seam leaves their matte raw. Set matte used to be a fifth, and
-        // carries no Matte row at all now.
+        // channel choices), Vector blur (its three), the Lens flare (source
+        // detection) and Scatter, which reads **alpha and only alpha** — carry
+        // none, and the seam leaves their matte raw. Set matte used to be one
+        // more, and carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(
@@ -10751,28 +10838,28 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
 
 /// **A collider's walk lands in one place however it is reached**: a frame
 /// stepped to from a kept state is the frame walked from the in point, which
-/// is what lets an export match the Viewer. And the floor holds.
+/// is what lets an export match the Viewer, and so is one told to stop part
+/// way and asked again. And the floor holds. A flock and sparks land in one
+/// place too.
 #[test]
 fn a_stepped_frame_is_the_walk_from_the_start() {
-    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
+    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME, SPARK_ID};
+    use std::sync::atomic::{AtomicU32, Ordering};
     let e = particulate(&[
         ("gravity", fixed(900.0)),
         ("emit_rate", fixed(400.0)),
         ("turbulence_amount", fixed(30.0)),
     ]);
     let floor = 700.0f32;
-    let at = |lt: f64| {
+    let inputs = |e: &EffectInstance, lt: f64, floor: Option<f32>| {
         let bag = resolve_bag(
-            std::slice::from_ref(&e),
+            std::slice::from_ref(e),
             lt,
             1000.0,
             1.0,
             &MarkerContext::NONE,
         );
-        let collider = Collider::new(
-            vec![[[0.0, floor], [1920.0, floor]]],
-            crate::shape::Affine::IDENTITY,
-        );
+        let collider = floor.map(|y| Collider::new(vec![[[0.0, y], [1920.0, y]]], SAME, false));
         Some(Inputs::new(
             Particulate::read(Params::new(&bag)),
             [1920.0, 1080.0],
@@ -10780,6 +10867,7 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
             collider,
         ))
     };
+    let at = |lt: f64| inputs(&e, lt, Some(floor));
     let dt = 1.0 / 30.0;
     let key = |n: u8| [n; 32];
     // Walked whole, under a name nothing else uses.
@@ -10789,8 +10877,158 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
     let resumed = stream_at(key(202), 43.0 * dt, dt, &at).expect("a walk");
     assert!(!whole.is_empty(), "nothing was born");
     assert_eq!(whole, resumed, "a kept walk landed somewhere else");
+    // Stopped after ten steps, then asked again.
+    static ASKED: AtomicU32 = AtomicU32::new(0);
+    fn tenth() -> bool {
+        ASKED.fetch_add(1, Ordering::Relaxed) >= 10
+    }
+    let before = stop_when(Some(tenth));
+    let stopped = stream_at(key(203), 43.0 * dt, dt, &at);
+    stop_when(before);
+    assert!(stopped.is_none(), "a walk told to stop carried on");
+    let again = stream_at(key(203), 43.0 * dt, dt, &at).expect("a walk");
+    assert_eq!(whole, again, "a stopped walk went on somewhere else");
     assert!(
         whole.position.iter().all(|p| p[1] <= floor + 0.01),
+        "a particle went through the floor"
+    );
+
+    // A flock with nothing to hit, and sparks off a floor that kills.
+    let rows = [("emit_rate", fixed(400.0)), ("initial_speed", fixed(150.0))];
+    let flock = particulate(
+        &[
+            &rows[..],
+            &[
+                ("separation", fixed(60.0)),
+                ("alignment", fixed(50.0)),
+                ("cohesion", fixed(40.0)),
+            ],
+        ]
+        .concat(),
+    );
+    let sparks = particulate(&[
+        ("gravity", fixed(900.0)),
+        ("emit_rate", fixed(400.0)),
+        ("on_contact", EffectValue::Choice(3)),
+        ("sparks", fixed(8.0)),
+    ]);
+    let plain = particulate(&rows);
+    let walk = |e: &EffectInstance, floor: Option<f32>, n: u8| {
+        let at = |lt: f64| inputs(e, lt, floor);
+        let whole = stream_at(key(n), 43.0 * dt, dt, &at).expect("a walk");
+        stream_at(key(n + 1), 45.0 * dt, dt, &at).expect("a walk");
+        let resumed = stream_at(key(n + 1), 43.0 * dt, dt, &at).expect("a walk");
+        assert_eq!(whole, resumed, "a kept walk landed somewhere else");
+        whole
+    };
+    let flocked = walk(&flock, None, 204);
+    assert_ne!(
+        flocked,
+        walk(&plain, None, 206),
+        "the flock steered nothing"
+    );
+    let sparked = walk(&sparks, Some(floor), 208);
+    assert!(
+        sparked.id.iter().any(|&id| id & SPARK_ID != 0),
+        "nothing threw sparks"
+    );
+}
+
+/// **A collider turned against the particles in 3D is a surface**: a floor
+/// tilted flat under them holds them up, and one facing the way they do is
+/// walls.
+#[test]
+fn a_collider_turned_in_3d_is_a_surface() {
+    use crate::anim::Property;
+    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
+    use crate::model::*;
+    use crate::time::{Duration, FrameRate, Rational};
+
+    let solid = SolidDef {
+        id: uuid::Uuid::now_v7(),
+        name: "Solid".into(),
+        colour: LinearColour::BLACK,
+        width: 1920,
+        height: 1080,
+        extra: serde_json::Map::new(),
+    };
+    let item = ProjectItem::Solid(solid.clone());
+    let mut comp = Composition {
+        graph: None,
+        master_volume_db: 0.0,
+        lighting: Default::default(),
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: uuid::Uuid::now_v7(),
+        name: "Scene".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(30, 1).unwrap(),
+        duration: Duration(Rational::new(5, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: MotionBlur::default(),
+        extra: serde_json::Map::new(),
+    };
+    let layer = |comp: &Composition| {
+        let mut l = crate::comp_graph::read_layer(uuid::Uuid::now_v7(), &item, comp).unwrap();
+        l.switches.three_d = true;
+        l
+    };
+    let owner = layer(&comp);
+    let facing = layer(&comp);
+    // Laid flat, a little below the emitter.
+    let mut floor = layer(&comp);
+    floor.transform.rotation_x = Property::fixed(-90.0);
+    floor.transform.position_y = Property::fixed(800.0);
+    comp.layers = vec![owner.clone(), facing.clone(), floor.clone()];
+    let mut doc = Document::new();
+    doc.items.push(item.clone());
+    doc.items.push(ProjectItem::Composition(comp.clone()));
+    let context = ExpressionContext {
+        document: Arc::new(doc.clone()),
+        comp: Some(comp.id),
+        layer: Some(owner.id),
+        comp_time: 0.0,
+        current_depth: 0,
+        inputs: None,
+    };
+    let walls = Collider::of(&doc, &comp, &owner, &facing, 0.0, &context);
+    let surface = Collider::of(&doc, &comp, &owner, &floor, 0.0, &context);
+    assert!(format!("{walls:?}").contains("surface: false"));
+    assert!(format!("{surface:?}").contains("surface: true"));
+
+    let e = particulate(&[
+        ("gravity", fixed(900.0)),
+        ("emit_rate", fixed(300.0)),
+        ("position_y", fixed(500.0)),
+        ("turbulence_amount", fixed(0.0)),
+    ]);
+    // Trails off, and the walk is the collider's alone.
+    assert!(!crate::fx::points::stepped::trails(&comp, &e));
+    let at = |lt: f64| {
+        let bag = resolve_bag(
+            std::slice::from_ref(&e),
+            lt,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+        );
+        Some(Inputs::new(
+            Particulate::read(Params::new(&bag)),
+            [1920.0, 1080.0],
+            MaskPolyline::default(),
+            Some(surface.clone()),
+        ))
+    };
+    let dt = 1.0 / 30.0;
+    let held = stream_at([231; 32], 40.0 * dt, dt, &at).expect("a walk");
+    assert!(!held.is_empty(), "nothing was born");
+    assert!(
+        held.position.iter().all(|p| p[1] <= 800.01),
         "a particle went through the floor"
     );
 }

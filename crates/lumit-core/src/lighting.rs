@@ -49,18 +49,47 @@ pub struct ShadingLight {
     pub corners: [[f32; 3]; 4],
     /// Scene-linear RGB, intensity already folded in.
     pub colour: [f32; 3],
-    /// Comp pixels at which the light has fallen to nothing; 0 means it never
-    /// does. The rectangle integral already dims with distance on its own —
-    /// this is the artistic dial on top, and the only distance term a point
-    /// light has at all.
+    pub kind: ShadingKind,
+    /// How the light weakens with distance from its centre. The rectangle
+    /// integral already dims with distance on its own; this is the artistic
+    /// dial on top, and the only distance term a point light has at all.
+    pub falloff: crate::model::LightFalloff,
+    /// Comp pixels of full strength before any falloff starts.
+    pub radius_px: f32,
+    /// How far past the radius a smooth falloff takes to reach nothing.
     pub falloff_px: f32,
-    /// True for an area light: use the rectangle integral. False: cosine law.
-    pub is_area: bool,
+    /// A light from before it had rows: its smooth falloff is the old squared
+    /// ramp rather than After Effects' S-curve, and a distance of nought is
+    /// no falloff.
+    pub legacy: bool,
     /// Cosine of a spot's half-angle. Anything below -1 means "not a spot",
     /// which is how a point light says it shines everywhere.
     pub cone_cos: f32,
-    /// Unit vector a spot is aimed along.
+    /// Cosine of the angle inside which the cone is at full strength: the
+    /// feather runs between this and `cone_cos`.
+    pub cone_inner: f32,
+    /// Unit vector a spot is aimed along, and the way a parallel light's rays
+    /// run.
     pub axis: [f32; 3],
+    /// How much of its light the shadows it casts take away, 0..1. Nought
+    /// casts none.
+    pub shadow_darkness: f32,
+    /// How soft those shadows are, as the light's size in comp pixels: the
+    /// further a caster stands from its shadow, the softer the edge.
+    pub shadow_diffusion: f32,
+}
+
+/// Which law shades a [`ShadingLight`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadingKind {
+    /// A point or a spot: the cosine law from its centre.
+    Point,
+    /// A rectangle: the form factor integral.
+    Area,
+    /// Rays all running along the axis, with no distance to fall off over.
+    Parallel,
+    /// Light from everywhere: adds its colour whatever way a surface faces.
+    Ambient,
 }
 
 impl ShadingLight {
@@ -89,6 +118,60 @@ pub struct ShadingSurface {
     pub dv: [f32; 3],
     /// Unit normal of the plane, facing the side the light must come from.
     pub normal: [f32; 3],
+}
+
+/// How a layer takes light, its Material options as fractions, and where it
+/// is seen from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadingMaterial {
+    /// What a pixel's light starts from: 1 where light adds to the picture,
+    /// 0 where it lights the layer from black, as in After Effects.
+    pub base: f32,
+    pub ambient: f32,
+    /// What the light reaching a pixel is multiplied by. Twice the Diffuse
+    /// option where light adds, so its default half lights a layer as these
+    /// lights always have.
+    pub diffuse: f32,
+    pub specular: f32,
+    /// The highlight's Blinn-Phong exponent.
+    pub exponent: f32,
+    pub metal: f32,
+    /// The eye, comp pixels.
+    pub eye: [f32; 3],
+    /// Light the display-encoded picture, as an After Effects project without
+    /// Linearize working space does. The lights' colours are then display
+    /// encoded too, which is the caller's to do.
+    pub encoded: bool,
+    /// Whether shadows fall on it, and Only to show nothing but them.
+    pub accepts_shadows: crate::model::ShadowMode,
+    /// Accepts lights off: the lights leave it as it is, but their shadows
+    /// still darken it, as in After Effects.
+    pub unlit: bool,
+}
+
+impl ShadingMaterial {
+    /// What every layer had before materials: the lights as they were, and no
+    /// highlight.
+    pub const PLAIN: Self = Self {
+        base: 1.0,
+        ambient: 1.0,
+        diffuse: 1.0,
+        specular: 0.0,
+        exponent: 1.0,
+        metal: 1.0,
+        eye: [0.0, 0.0, 0.0],
+        encoded: false,
+        accepts_shadows: crate::model::ShadowMode::Off,
+        unlit: false,
+    };
+
+    /// After Effects' Specular shininess, a percentage, as the exponent. It
+    /// is the exponent itself there, so nought spreads the highlight over the
+    /// whole layer.
+    #[must_use]
+    pub fn exponent_for(shininess_pct: f64) -> f32 {
+        shininess_pct.max(0.0) as f32
+    }
 }
 
 const INV_TWO_PI: f32 = 0.159_154_94;
@@ -189,51 +272,141 @@ pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f3
     (sum * INV_TWO_PI).abs().min(1.0)
 }
 
-/// How much of `light` reaches a point `p` on a surface facing `n`, in 0..1.
-#[must_use]
-pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
+/// Which way `light` arrives at `p` from, and how much of it is left there
+/// after its falloff and its cone, as the two factors. `None` where none of it
+/// arrives, and for an ambient light, which comes from nowhere.
+fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
     let centre = light.centre();
-    let to_light = sub(centre, p);
+    let to_light = match light.kind {
+        ShadingKind::Ambient => return None,
+        // Every ray runs the same way, so the light arrives from straight
+        // back up the axis wherever the point is.
+        ShadingKind::Parallel => [-light.axis[0], -light.axis[1], -light.axis[2]],
+        _ => sub(centre, p),
+    };
 
-    // Distance falloff. Squared so it eases out rather than ending on a crease.
-    let reach = if light.falloff_px > 0.0 {
-        let t = (1.0 - length(to_light) / light.falloff_px).clamp(0.0, 1.0);
-        t * t
-    } else {
+    let reach = if light.kind == ShadingKind::Parallel {
         1.0
+    } else {
+        reach(length(to_light), light)
     };
     if reach <= 0.0 {
-        return 0.0;
+        return None;
     }
 
-    // A spot's cone, softened over the outer tenth so the edge is not a
-    // stencil. `cone_cos < -1` is the "not a spot" sentinel.
-    let cone = if light.cone_cos < -1.0 {
+    // A spot's cone, softened over its feather so the edge is not a stencil.
+    // `cone_cos < -1` is the "not a spot" sentinel.
+    let cone = if light.cone_cos < -1.0 || light.kind == ShadingKind::Parallel {
         1.0
     } else {
-        let Some(dir) = normalise(sub(p, centre)) else {
-            return 0.0;
-        };
-        let inner = light.cone_cos + (1.0 - light.cone_cos) * 0.1;
-        smoothstep(light.cone_cos, inner, dot(dir, light.axis))
+        smoothstep(
+            light.cone_cos,
+            light.cone_inner,
+            dot(normalise(sub(p, centre))?, light.axis),
+        )
     };
     if cone <= 0.0 {
-        return 0.0;
+        return None;
     }
+    Some((to_light, reach, cone))
+}
 
-    let e = if light.is_area {
+/// How much of `light` reaches a point `p` on a surface facing `n`, in 0..1.
+/// An ambient light has no direction to arrive from, so it is not counted
+/// here; [`shade`] adds it whole.
+#[must_use]
+pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
+    let Some((to_light, reach, cone)) = arrival(p, light) else {
+        return 0.0;
+    };
+    let e = if light.kind == ShadingKind::Area {
         rect_form_factor(p, n, &light.corners)
     } else {
         // The cosine law: a point light's brightness is how squarely the
-        // surface faces it, and nothing else. Distance is the falloff dial
-        // above — an inverse square measured in pixels is a number with no
-        // meaning, and a compositor would only have to fight it.
+        // surface faces it, and nothing else. Distance is the falloff above.
         match normalise(to_light) {
             Some(dir) => dot(n, dir).max(0.0),
             None => 0.0,
         }
     };
     e * reach * cone
+}
+
+/// The highlight `light` puts on `p` for an eye at `eye`, in 0..1: Blinn-Phong,
+/// the way After Effects' Classic 3D draws it, with `exponent` for how tight
+/// it is. An area light is taken from its centre. Nothing where the light or
+/// the eye is behind the surface.
+#[must_use]
+pub fn highlight(
+    p: [f32; 3],
+    n: [f32; 3],
+    light: &ShadingLight,
+    eye: [f32; 3],
+    exponent: f32,
+) -> f32 {
+    let Some((to_light, reach, cone)) = arrival(p, light) else {
+        return 0.0;
+    };
+    let (Some(l), Some(v)) = (normalise(to_light), normalise(sub(eye, p))) else {
+        return 0.0;
+    };
+    if dot(n, l) <= 0.0 || dot(n, v) <= 0.0 {
+        return 0.0;
+    }
+    let Some(half) = normalise([l[0] + v[0], l[1] + v[1], l[2] + v[2]]) else {
+        return 0.0;
+    };
+    dot(n, half).max(0.0).powf(exponent) * reach * cone
+}
+
+/// How much of a light is left at `d` comp pixels from it, After Effects'
+/// way: full strength out to the radius, then the chosen falloff.
+fn reach(d: f32, light: &ShadingLight) -> f32 {
+    use crate::model::LightFalloff;
+    let r = light.radius_px;
+    match light.falloff {
+        LightFalloff::None => 1.0,
+        _ if d <= r => 1.0,
+        LightFalloff::Smooth if light.falloff_px <= 0.0 => {
+            if light.legacy && r <= 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        LightFalloff::Smooth => {
+            let t = (1.0 - (d - r) / light.falloff_px).clamp(0.0, 1.0);
+            if light.legacy {
+                t * t
+            } else {
+                // After Effects eases both ends: an S from the radius out.
+                t * t * (3.0 - 2.0 * t)
+            }
+        }
+        LightFalloff::InverseSquareClamped => (r / d) * (r / d),
+    }
+}
+
+/// The sRGB curve, carried through nought so a negative light stays negative.
+#[must_use]
+pub fn encode(x: f32) -> f32 {
+    let v = x.abs();
+    let e = if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    };
+    e.copysign(x)
+}
+
+fn decode(x: f32) -> f32 {
+    let v = x.abs();
+    let d = if v <= 0.040_45 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    };
+    d.copysign(x)
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -244,6 +417,293 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// How many layers cast shadows in one frame. Beyond this the rest cast
+/// none: a budget, as the lights' is.
+pub const MAX_SHADOW_CASTERS: usize = 16;
+
+/// Rays closer to the surface than this many comp pixels meet nothing, so a
+/// card lying on a floor does not shade the floor it sits in.
+const SHADOW_GAP: f32 = 0.5;
+
+/// Once this little of a light is left, the casters further on change nothing.
+const SHADOW_OPAQUE: f32 = 1e-3;
+
+/// How wide a shadow's soft edge is on its caster, comp pixels for each pixel
+/// of Shadow diffusion, were the caster right at the light. Nearer its shadow
+/// it is less. Set against After Effects' Classic 3D renders of a card on the
+/// floor; held 250 px up it comes out about a fifth harder than theirs.
+pub const DIFFUSION_SPREAD: f32 = 0.85;
+
+/// How many times longer one way than the other a soft edge on a caster gets
+/// when the caster is turned well away from the light.
+pub const MAX_STRETCH: f32 = 2.0;
+
+/// A layer that casts shadows, as the lights see it: its plane in comp
+/// pixels, how much light passes through it, and its picture shrunk into a
+/// square with each smaller level averaged from the one before.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShadowCaster {
+    /// Where the picture's top-left corner sits.
+    pub origin: [f32; 3],
+    /// Its full width and height as edges in comp space.
+    pub u: [f32; 3],
+    pub v: [f32; 3],
+    /// After Effects' Light transmission, 0..1: how much of the light passing
+    /// through takes the layer's colour rather than stopping.
+    pub transmission: f32,
+    /// Where the picture sits in its square, as shares of the side: the
+    /// corner, then the width and height. See [`caster_box`].
+    pub place: [f32; 4],
+    /// Premultiplied RGBA, the first `size` texels square, each next half.
+    pub levels: Vec<Vec<f32>>,
+    pub size: u32,
+}
+
+/// How many levels a caster square of `size` has: down to a single texel.
+#[must_use]
+pub fn caster_levels(size: u32) -> u32 {
+    size.max(1).ilog2() + 1
+}
+
+/// Where a caster's picture sits in its square of `size`, in texels: the
+/// corner, then the width and height. The longer side fills three quarters,
+/// less where `spread`, the widest soft edge any light gives it in comp
+/// pixels, needs a wider empty margin to spread into. The shorter side keeps
+/// the plane's shape, so a texel is square in comp pixels.
+#[must_use]
+pub fn caster_box(size: u32, u_len: f32, v_len: f32, spread: f32) -> [u32; 4] {
+    let long = u_len.max(v_len).max(1e-6);
+    let share = (1.0 / (1.0 + 2.5 * spread.max(0.0) / long)).min(0.75);
+    let fill = size as f32 * share;
+    let w = ((fill * u_len / long).round() as u32).clamp(1, size);
+    let h = ((fill * v_len / long).round() as u32).clamp(1, size);
+    [(size - w) / 2, (size - h) / 2, w, h]
+}
+
+/// A caster's picture shrunk into `place` in its square, as the GPU stores
+/// it: eight bits a channel, `opacity` already applied, the colour display
+/// encoded where the comp lights an encoded picture, and the smaller levels.
+#[must_use]
+pub fn caster_square(
+    rgba: &[f32],
+    w: u32,
+    h: u32,
+    opacity: f32,
+    size: u32,
+    place: [u32; 4],
+    encoded: bool,
+) -> Vec<Vec<f32>> {
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() / 255.0;
+    let [x0, y0, cw, ch] = place;
+    let texel = |x: i64, y: i64| -> [f32; 4] {
+        let x = x.clamp(0, i64::from(w) - 1) as usize;
+        let y = y.clamp(0, i64::from(h) - 1) as usize;
+        let i = (y * w as usize + x) * 4;
+        rgba.get(i..i + 4)
+            .map_or([0.0; 4], |p| [p[0], p[1], p[2], p[3]])
+    };
+    let mut first = vec![0.0f32; (size * size * 4) as usize];
+    if w > 0 && h > 0 {
+        for y in y0..(y0 + ch).min(size) {
+            for x in x0..(x0 + cw).min(size) {
+                let u = (x - x0) as f32 + 0.5;
+                let v = (y - y0) as f32 + 0.5;
+                let mut s = bilinear(&texel, u / cw as f32 * w as f32, v / ch as f32 * h as f32);
+                for c in &mut s {
+                    *c *= opacity;
+                }
+                if encoded && s[3] > 0.0 {
+                    for k in 0..3 {
+                        s[k] = encode(s[k] / s[3]) * s[3];
+                    }
+                }
+                let i = ((y * size + x) * 4) as usize;
+                for k in 0..4 {
+                    first[i + k] = q(s[k]);
+                }
+            }
+        }
+    }
+    let mut levels = vec![first];
+    let mut n = size;
+    for _ in 1..caster_levels(size) {
+        let half = (n / 2).max(1);
+        let Some(prev) = levels.last() else { break };
+        let mut next = vec![0.0f32; (half * half * 4) as usize];
+        for y in 0..half {
+            for x in 0..half {
+                for k in 0..4 {
+                    let at = |dx: u32, dy: u32| {
+                        prev.get((((y * 2 + dy) * n + x * 2 + dx) * 4) as usize + k)
+                            .copied()
+                            .unwrap_or(0.0)
+                    };
+                    next[((y * half + x) * 4) as usize + k] =
+                        q((at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1)) * 0.25);
+                }
+            }
+        }
+        levels.push(next);
+        n = half;
+    }
+    levels
+}
+
+/// Bilinear between texel centres at `(x, y)` in texels, the edges held.
+fn bilinear(texel: &impl Fn(i64, i64) -> [f32; 4], x: f32, y: f32) -> [f32; 4] {
+    let (x, y) = (x - 0.5, y - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let (x0, y0) = (x0 as i64, y0 as i64);
+    let (a, b, c, d) = (
+        texel(x0, y0),
+        texel(x0 + 1, y0),
+        texel(x0, y0 + 1),
+        texel(x0 + 1, y0 + 1),
+    );
+    let mut out = [0.0; 4];
+    for k in 0..4 {
+        let top = a[k] + (b[k] - a[k]) * fx;
+        let bottom = c[k] + (d[k] - c[k]) * fx;
+        out[k] = top + (bottom - top) * fy;
+    }
+    out
+}
+
+impl ShadowCaster {
+    /// The square at `uv` (0..1 across it) and level `lod`, blending the two
+    /// levels either side and holding the edges, as a GPU's trilinear
+    /// sampler does. The edges are the empty margin, so off the square is
+    /// nothing.
+    fn sample(&self, uv: [f32; 2], lod: f32) -> [f32; 4] {
+        let last = self.levels.len().saturating_sub(1);
+        let lod = lod.clamp(0.0, last as f32);
+        let k0 = lod.floor() as usize;
+        let k1 = (k0 + 1).min(last);
+        let at = |k: usize| {
+            let n = (self.size >> k).max(1);
+            let level = self.levels.get(k);
+            let texel = |x: i64, y: i64| -> [f32; 4] {
+                let x = x.clamp(0, i64::from(n) - 1) as usize;
+                let y = y.clamp(0, i64::from(n) - 1) as usize;
+                let i = (y * n as usize + x) * 4;
+                level
+                    .and_then(|l| l.get(i..i + 4))
+                    .map_or([0.0; 4], |p| [p[0], p[1], p[2], p[3]])
+            };
+            bilinear(&texel, uv[0] * n as f32, uv[1] * n as f32)
+        };
+        let (a, b) = (at(k0), at(k1));
+        let f = lod - k0 as f32;
+        [0, 1, 2, 3].map(|k| a[k] + (b[k] - a[k]) * f)
+    }
+}
+
+/// How much of `light` gets past the casters to `p`, per channel, before the
+/// shadow's darkness. `own` is the layer being shaded, which never shades
+/// itself.
+fn transmitted(
+    p: [f32; 3],
+    light: &ShadingLight,
+    casters: &[ShadowCaster],
+    own: Option<usize>,
+) -> [f32; 3] {
+    let mut through = [1.0f32; 3];
+    // Towards the light: as far as its centre, or for a parallel light back
+    // up its rays with no end.
+    let (dir, bounded) = match light.kind {
+        ShadingKind::Ambient => return through,
+        ShadingKind::Parallel => ([-light.axis[0], -light.axis[1], -light.axis[2]], false),
+        _ => (sub(light.centre(), p), true),
+    };
+    let reach = length(dir);
+    if reach < 1e-6 {
+        return through;
+    }
+    for (i, c) in casters.iter().enumerate().take(MAX_SHADOW_CASTERS) {
+        if own == Some(i) {
+            continue;
+        }
+        let n = cross(c.u, c.v);
+        let den = dot(dir, n);
+        if den.abs() < 1e-12 {
+            continue;
+        }
+        let t = dot(sub(c.origin, p), n) / den;
+        if t * reach <= SHADOW_GAP || (bounded && t >= 1.0) {
+            continue;
+        }
+        let rel = sub(
+            [p[0] + dir[0] * t, p[1] + dir[1] * t, p[2] + dir[2] * t],
+            c.origin,
+        );
+        let (cu, cv) = (cross(c.v, n), cross(n, c.u));
+        let (du, dv) = (dot(c.u, cu), dot(c.v, cv));
+        if du.abs() < 1e-12 || dv.abs() < 1e-12 {
+            continue;
+        }
+        let uv = [dot(rel, cu) / du, dot(rel, cv) / dv];
+        let at = [
+            c.place[0] + uv[0] * c.place[2],
+            c.place[1] + uv[1] * c.place[3],
+        ];
+        // The diffusion is the light's size, so the edge is as soft as the
+        // caster is far along from here to the light: a card standing on the
+        // floor keeps a hard foot, as in After Effects. A parallel light is
+        // taken to be as far off as it is placed.
+        let along = if bounded {
+            t
+        } else {
+            (t / length(sub(light.centre(), p)).max(1.0)).min(1.0)
+        };
+        let spread = light.shadow_diffusion * DIFFUSION_SPREAD * along;
+        // The edge is as wide every way as the light sees it, so on a caster
+        // turned from the light it stretches the way the caster turns.
+        let facing = (den / (reach * length(n))).abs().max(1e-3);
+        let stretch = |axis: [f32; 3]| {
+            let k = dot(dir, axis) / (reach * length(axis).max(1e-6) * facing);
+            (1.0 + k * k).sqrt().min(MAX_STRETCH)
+        };
+        let (su, sv) = (stretch(c.u), stretch(c.v));
+        // A texel is square in comp pixels, so one count serves both ways.
+        let size = c.size as f32;
+        let texels = spread * c.place[2] * size / length(c.u).max(1e-6);
+        let edge = [texels * su / size, texels * sv / size];
+        if (0..2).any(|k| at[k] < -edge[k] || at[k] > 1.0 + edge[k]) {
+            continue;
+        }
+        let s = if texels * su.max(sv) < 0.5 {
+            c.sample(at, 0.0)
+        } else {
+            // Four taps a radius apart, each from the level that averages a
+            // radius' worth, so the edge is soft without being blocky. Never
+            // further apart than a texel of that level, or each would be a
+            // copy of the shadow of its own. The level is for the radius
+            // between the two ways, the taps for each way's own.
+            let g = (su * sv).sqrt();
+            let lod = (texels * g).log2();
+            let last = c.levels.len().saturating_sub(1) as f32;
+            let off = (texels * g).min(lod.min(last).exp2()) * 0.5 / (g * size);
+            let (ou, ov) = (off * su, off * sv);
+            let mut sum = [0.0f32; 4];
+            for (ox, oy) in [(-ou, -ov), (ou, -ov), (-ou, ov), (ou, ov)] {
+                let tap = c.sample([at[0] + ox, at[1] + oy], lod);
+                for k in 0..4 {
+                    sum[k] += tap[k] * 0.25;
+                }
+            }
+            sum
+        };
+        for k in 0..3 {
+            through[k] *= (1.0 - s[3] + c.transmission * s[k]).clamp(0.0, 1.0);
+        }
+        if through.iter().all(|t| *t < SHADOW_OPAQUE) {
+            break;
+        }
+    }
+    through
+}
+
 /// The reference implementation of the lighting pass (docs/06): shade one
 /// layer's premultiplied linear RGBA in place. The WGSL twin mirrors this
 /// op-for-op, and the GPU test compares them (docs/08 §1.6's rule, applied to
@@ -251,10 +711,41 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 ///
 /// An empty `lights` returns without touching a byte — the no-op that keeps a
 /// comp without lights rendering exactly as it always did.
-pub fn shade(rgba: &mut [f32], w: u32, h: u32, s: &ShadingSurface, lights: &[ShadingLight]) {
+///
+/// The highlight is added on top of the light: a metal one tints by the
+/// picture's own colour, the rest of it by the light's alone, held to the
+/// pixel's coverage so it stays premultiplied.
+pub fn shade(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &ShadingSurface,
+    m: &ShadingMaterial,
+    lights: &[ShadingLight],
+) {
+    shade_with_shadows(rgba, w, h, s, m, lights, &[], None);
+}
+
+/// [`shade`] with the frame's shadow casters, `own` being this layer's place
+/// among them if it casts too. A light that casts shadows is dimmed by what
+/// stands between it and each pixel, and a layer that shows only shadows
+/// comes out as just them, in the colour a caster lets through.
+#[allow(clippy::too_many_arguments)]
+pub fn shade_with_shadows(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &ShadingSurface,
+    m: &ShadingMaterial,
+    lights: &[ShadingLight],
+    casters: &[ShadowCaster],
+    own: Option<usize>,
+) {
+    use crate::model::ShadowMode;
     if lights.is_empty() {
         return;
     }
+    let takes = m.accepts_shadows != ShadowMode::Off && !casters.is_empty();
     for y in 0..h {
         for x in 0..w {
             let Some(px) = rgba
@@ -270,15 +761,87 @@ pub fn shade(rgba: &mut [f32], w: u32, h: u32, s: &ShadingSurface, lights: &[Sha
                 s.origin[1] + s.du[1] * fx + s.dv[1] * fy,
                 s.origin[2] + s.du[2] * fx + s.dv[2] * fy,
             ];
-            let mut gain = [1.0f32; 3];
+            let a = px[3];
+            if m.unlit || m.accepts_shadows == ShadowMode::Only {
+                // Unlit, or showing only its shadows, so only the shadows touch
+                // it: each light that falls here dims it by what its casters
+                // stopped.
+                let mut dim = [1.0f32; 3];
+                for l in lights.iter().take(MAX_LIT_LIGHTS) {
+                    if !takes || l.shadow_darkness <= 0.0 || irradiance(p, s.normal, l) <= 0.0 {
+                        continue;
+                    }
+                    let t = transmitted(p, l, casters, own);
+                    for (d, t) in dim.iter_mut().zip(t) {
+                        *d *= 1.0 - l.shadow_darkness * (1.0 - t);
+                    }
+                }
+                if m.accepts_shadows == ShadowMode::Only {
+                    // Just the shadow, in the colour a caster lets through:
+                    // multiplied in, it leaves the light that got here.
+                    let d = if m.encoded { dim.map(decode) } else { dim };
+                    let lo = d[0].min(d[1]).min(d[2]).clamp(0.0, 1.0);
+                    px.copy_from_slice(&[
+                        (d[0] - lo) * a,
+                        (d[1] - lo) * a,
+                        (d[2] - lo) * a,
+                        (1.0 - lo) * a,
+                    ]);
+                } else if m.encoded && a > 0.0 {
+                    for (ch, d) in px[..3].iter_mut().zip(dim) {
+                        *ch = decode(encode(*ch / a) * d) * a;
+                    }
+                } else if !m.encoded {
+                    for (ch, d) in px[..3].iter_mut().zip(dim) {
+                        *ch *= d;
+                    }
+                }
+                continue;
+            }
+            let mut gain = [m.base; 3];
+            let mut shine = [0.0f32; 3];
+            let diffuse = m.diffuse;
             for l in lights.iter().take(MAX_LIT_LIGHTS) {
-                let e = irradiance(p, s.normal, l);
-                for (g, c) in gain.iter_mut().zip(l.colour) {
-                    *g += e * c;
+                let colour = l.colour;
+                if l.kind == ShadingKind::Ambient {
+                    for (g, c) in gain.iter_mut().zip(colour) {
+                        *g += m.ambient * c;
+                    }
+                    continue;
+                }
+                let lit = irradiance(p, s.normal, l);
+                let e = diffuse * lit;
+                // What the shadow leaves of this light: all of it, less the
+                // darkness's share of what the casters stopped.
+                let left = if takes && l.shadow_darkness > 0.0 && lit > 0.0 {
+                    transmitted(p, l, casters, own).map(|t| 1.0 - l.shadow_darkness * (1.0 - t))
+                } else {
+                    [1.0; 3]
+                };
+                for ((g, c), k) in gain.iter_mut().zip(colour).zip(left) {
+                    *g += e * c * k;
+                }
+                if m.specular > 0.0 {
+                    let k = m.specular * highlight(p, s.normal, l, m.eye, m.exponent);
+                    for ((sh, c), f) in shine.iter_mut().zip(colour).zip(left) {
+                        *sh += k * c * f;
+                    }
                 }
             }
-            for (ch, g) in px[..3].iter_mut().zip(gain) {
-                *ch *= g;
+            if m.encoded && a <= 0.0 {
+                continue;
+            }
+            for ((ch, g), sh) in px[..3].iter_mut().zip(gain).zip(shine) {
+                // A negative light can take a pixel to black but no further.
+                let sh = sh.max(0.0);
+                if m.encoded {
+                    // Out of premultiplied linear and into what After Effects
+                    // would have lit, and back.
+                    let v = encode(*ch / a) * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh;
+                    *ch = decode(v) * a;
+                } else {
+                    *ch = *ch * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh * a;
+                }
             }
         }
     }
@@ -342,7 +905,7 @@ mod tests {
         };
 
         let mut untouched = base.clone();
-        shade(&mut untouched, 4, 4, &surface, &[]);
+        shade(&mut untouched, 4, 4, &surface, &ShadingMaterial::PLAIN, &[]);
         assert_eq!(untouched, base, "no lights is a bit-exact no-op");
 
         let light = ShadingLight {
@@ -353,13 +916,19 @@ mod tests {
                 [-50.0, 50.0, -100.0],
             ],
             colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Area,
+            falloff: crate::model::LightFalloff::None,
+            radius_px: 0.0,
             falloff_px: 0.0,
-            is_area: true,
+            legacy: false,
             cone_cos: -2.0,
+            cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let mut lit = base.clone();
-        shade(&mut lit, 4, 4, &surface, &[light]);
+        shade(&mut lit, 4, 4, &surface, &ShadingMaterial::PLAIN, &[light]);
         for (i, (a, b)) in base.iter().zip(&lit).enumerate() {
             if i % 4 == 3 {
                 assert_eq!(a, b, "alpha is untouched at {i}");
@@ -379,10 +948,16 @@ mod tests {
         let at = |x: f32, y: f32, z: f32| ShadingLight {
             corners: [[x, y, z]; 4],
             colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: crate::model::LightFalloff::None,
+            radius_px: 0.0,
             falloff_px: 0.0,
-            is_area: false,
+            legacy: false,
             cone_cos: -2.0,
+            cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let overhead = irradiance([0.0, 0.0, 0.0], n, &at(0.0, 0.0, -100.0));
         let oblique = irradiance([0.0, 0.0, 0.0], n, &at(100.0, 0.0, -100.0));
@@ -404,9 +979,398 @@ mod tests {
         // well outside it.
         let mut spot = at(0.0, 0.0, -100.0);
         spot.cone_cos = 20f32.to_radians().cos();
+        spot.cone_inner = spot.cone_cos + (1.0 - spot.cone_cos) * 0.1;
         let under = irradiance([0.0, 0.0, 0.0], n, &spot);
         let aside = irradiance([500.0, 0.0, 0.0], n, &spot);
         assert!(under > 0.0, "under the spot is lit, got {under}");
         assert_eq!(aside, 0.0, "outside the cone is dark, got {aside}");
+    }
+
+    /// The terms the light rows brought, each against the plain light it
+    /// refines: the feather, the two falloffs with their radius, the parallel
+    /// light and the ambient one.
+    #[test]
+    fn feather_falloff_parallel_and_ambient_shade_as_after_effects_does() {
+        use crate::model::LightFalloff;
+        let n = [0.0, 0.0, -1.0];
+        let plain = ShadingLight {
+            corners: [[0.0, 0.0, -100.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            legacy: false,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+
+        // A 30 degree spot seen 25 degrees off its axis: no feather is full
+        // strength there, all feather has started to fade.
+        let cos30 = 30f32.to_radians().cos();
+        let off_axis = [100.0 * 25f32.to_radians().tan(), 0.0, 0.0];
+        let hard = ShadingLight {
+            cone_cos: cos30,
+            cone_inner: cos30,
+            ..plain
+        };
+        let soft = ShadingLight {
+            cone_inner: 1.0,
+            ..hard
+        };
+        let (h, s) = (
+            irradiance(off_axis, n, &hard),
+            irradiance(off_axis, n, &soft),
+        );
+        assert!(s > 0.0 && s < h * 0.5, "the feather fades: {s} vs {h}");
+
+        // 100 pixels away: inside a 150 radius is full strength, a smooth
+        // falloff halfway out is a half, and the inverse square from a radius
+        // of 50 is a quarter.
+        let below = [0.0, 0.0, 0.0];
+        let smooth = |radius_px, falloff_px| ShadingLight {
+            falloff: LightFalloff::Smooth,
+            radius_px,
+            falloff_px,
+            ..plain
+        };
+        assert!(close(irradiance(below, n, &smooth(150.0, 50.0)), 1.0));
+        assert!(close(irradiance(below, n, &smooth(50.0, 100.0)), 0.5));
+        // After Effects' own, read off its render of a spot falling off from
+        // 350 over 350, at 362, 512, 637 and 687 pixels from the light.
+        for (d, ae) in [(362.0, 0.995), (512.0, 0.554), (637.0, 0.086), (687.0, 0.0)] {
+            let reach = irradiance(
+                below,
+                n,
+                &ShadingLight {
+                    corners: [[0.0, 0.0, -d]; 4],
+                    ..smooth(350.0, 350.0)
+                },
+            );
+            assert!(
+                (reach - ae).abs() < 0.01,
+                "{d} px: {reach}, After Effects {ae}"
+            );
+        }
+        // An old light keeps the eased ramp it had, and a distance of nought
+        // there is no falloff at all.
+        let old = |radius_px, falloff_px| ShadingLight {
+            legacy: true,
+            ..smooth(radius_px, falloff_px)
+        };
+        assert!(close(irradiance(below, n, &old(50.0, 100.0)), 0.25));
+        assert!(close(irradiance(below, n, &old(0.0, 0.0)), 1.0));
+        let inverse = ShadingLight {
+            falloff: LightFalloff::InverseSquareClamped,
+            radius_px: 50.0,
+            ..plain
+        };
+        assert!(close(irradiance(below, n, &inverse), 0.25));
+
+        // A parallel light shining straight in lights every point fully,
+        // however far from its layer.
+        let sun = ShadingLight {
+            kind: ShadingKind::Parallel,
+            ..plain
+        };
+        assert!(close(irradiance([5000.0, -3000.0, 0.0], n, &sun), 1.0));
+
+        // An ambient light lifts a surface facing anywhere by its colour.
+        let ambient = ShadingLight {
+            kind: ShadingKind::Ambient,
+            colour: [0.5, 0.25, 0.0],
+            ..plain
+        };
+        let surface = ShadingSurface {
+            origin: [0.0, 0.0, 0.0],
+            du: [1.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        };
+        let mut px = vec![0.4, 0.4, 0.4, 1.0];
+        shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[ambient]);
+        assert!(close(px[0], 0.6) && close(px[1], 0.5) && close(px[2], 0.4));
+
+        // A negative light takes light away, down to black and no further.
+        let dark = ShadingLight {
+            colour: [-0.5, -3.0, 0.0],
+            ..ambient
+        };
+        let mut px = vec![0.4, 0.4, 0.4, 1.0];
+        shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[dark]);
+        assert!(close(px[0], 0.2) && px[1] == 0.0 && close(px[2], 0.4));
+    }
+
+    /// The Material options: Diffuse scales the light, with a half the light
+    /// as it always was, and Specular adds a highlight under a light and an eye
+    /// straight overhead that fades away from them, tinted by the picture when
+    /// metal and by the light when not.
+    #[test]
+    fn diffuse_scales_the_light_and_specular_adds_a_highlight() {
+        use crate::model::LightFalloff;
+        let n = [0.0, 0.0, -1.0];
+        let light = ShadingLight {
+            corners: [[0.0, 0.0, -100.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            legacy: false,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
+        };
+        let eye = [0.0, 0.0, -1000.0];
+        let under = highlight([0.0, 0.0, 0.0], n, &light, eye, 6.0);
+        let aside = highlight([150.0, 0.0, 0.0], n, &light, eye, 6.0);
+        assert!((under - 1.0).abs() < 1e-4, "dead on is full, got {under}");
+        assert!(aside > 0.0 && aside < under * 0.5, "it fades: {aside}");
+        assert!(highlight([150.0, 0.0, 0.0], n, &light, eye, 60.0) < aside);
+        // After Effects' own, from its render of a light at (420, 120, -300)
+        // on a card at Shininess 0 seen from (320, 180, -888.89). Specular and
+        // Diffuse are both 50 there, so a pixel over the same pixel with no
+        // Specular is 1 + highlight / irradiance.
+        let lamp = ShadingLight {
+            corners: [[420.0, 120.0, -300.0]; 4],
+            ..light
+        };
+        let ae_eye = [320.0, 180.0, -888.89];
+        let exponent = ShadingMaterial::exponent_for(0.0);
+        for (x, y, ae) in [(0.5, 359.5, 1.882), (60.5, 300.5, 1.684)] {
+            let p = [x, y, 0.0];
+            let ratio = highlight(p, n, &lamp, ae_eye, exponent) / irradiance(p, n, &lamp);
+            assert!(
+                (ratio - ae).abs() < 0.02,
+                "({x}, {y}): {ratio}, After Effects {ae}"
+            );
+        }
+
+        let surface = ShadingSurface {
+            origin: [0.0, 0.0, 0.0],
+            du: [1.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: n,
+        };
+        let shaded = |m: ShadingMaterial, px: [f32; 4]| {
+            let mut px = px.to_vec();
+            shade(&mut px, 1, 1, &surface, &m, &[light]);
+            px
+        };
+        let grey = [0.25, 0.25, 0.25, 1.0];
+        let plain = ShadingMaterial {
+            eye,
+            ..ShadingMaterial::PLAIN
+        };
+        let full = shaded(
+            ShadingMaterial {
+                diffuse: 2.0,
+                ..plain
+            },
+            grey,
+        );
+        let half = shaded(plain, grey);
+        assert!(full[0] > half[0], "more diffuse, more light");
+        assert!(
+            shaded(
+                ShadingMaterial {
+                    diffuse: 0.0,
+                    ..plain
+                },
+                grey
+            ) == grey,
+            "no diffuse takes no light"
+        );
+        // After Effects' way lights the layer from black: a light straight
+        // on at a Diffuse of a half gives half the picture.
+        let ae = shaded(
+            ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                ..plain
+            },
+            grey,
+        );
+        assert!((ae[0] - 0.125).abs() < 1e-4, "{ae:?}");
+        // And without Linearize working space it lights what the screen
+        // shows: half the encoded grey, decoded again.
+        let shown = shaded(
+            ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                encoded: true,
+                ..plain
+            },
+            grey,
+        );
+        let want = decode(encode(0.25) * 0.5);
+        assert!((shown[0] - want).abs() < 1e-4, "{shown:?} vs {want}");
+
+        // A black pixel has no colour of its own for a metal highlight to
+        // take, so only the light's own highlight shows on it.
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let shiny = ShadingMaterial {
+            specular: 0.5,
+            exponent: 6.0,
+            ..plain
+        };
+        assert_eq!(shaded(shiny, black)[0], 0.0);
+        let plastic = shaded(
+            ShadingMaterial {
+                metal: 0.0,
+                ..shiny
+            },
+            black,
+        );
+        assert!(plastic[0] > 0.0 && plastic[3] == 1.0, "{plastic:?}");
+        assert!(shaded(shiny, grey)[0] > half[0], "the highlight adds");
+    }
+
+    /// A card halfway between a light and a floor shades the floor under it
+    /// and nowhere else, by its darkness. A red card letting light through
+    /// tints it red, the card never shades itself, a floor showing only
+    /// shadows is black under the card, red under the red one, and clear
+    /// beside it, and an unlit one is only darkened. Diffusion leaves the
+    /// shadow of a card just off the floor hard and softens one further up,
+    /// as in After Effects.
+    #[test]
+    fn a_card_casts_its_shadow_on_the_floor_beneath_it() {
+        use crate::model::{LightFalloff, ShadowMode};
+        let light = ShadingLight {
+            corners: [[0.0, 0.0, -200.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            legacy: false,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 1.0,
+            shadow_diffusion: 0.0,
+        };
+        let place = caster_box(64, 40.0, 40.0, 0.0);
+        let card = |rgb: [f32; 3], transmission: f32| ShadowCaster {
+            origin: [-20.0, -20.0, -100.0],
+            u: [40.0, 0.0, 0.0],
+            v: [0.0, 40.0, 0.0],
+            transmission,
+            place: place.map(|t| t as f32 / 64.0),
+            levels: caster_square(
+                &[rgb[0], rgb[1], rgb[2], 1.0].repeat(16),
+                4,
+                4,
+                1.0,
+                64,
+                place,
+                false,
+            ),
+            size: 64,
+        };
+        let white = card([1.0, 1.0, 1.0], 0.0);
+        // Two floor texels: one under the card, one well to the side.
+        let floor = ShadingSurface {
+            origin: [-50.0, -0.5, 0.0],
+            du: [100.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+        };
+        let m = ShadingMaterial {
+            base: 0.0,
+            accepts_shadows: ShadowMode::On,
+            ..ShadingMaterial::PLAIN
+        };
+        let lit = |m: &ShadingMaterial, l: &ShadingLight, c: &[ShadowCaster], own| {
+            let mut px = [0.5, 0.5, 0.5, 1.0].repeat(2);
+            shade_with_shadows(&mut px, 2, 1, &floor, m, &[*l], c, own);
+            px
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let px = lit(&m, &light, std::slice::from_ref(&white), None);
+        assert!(close(px[0], 0.0), "under the card is dark: {px:?}");
+        assert!(px[4] > 0.4, "beside it is lit: {px:?}");
+
+        let half = ShadingLight {
+            shadow_darkness: 0.5,
+            ..light
+        };
+        let px = lit(&m, &half, std::slice::from_ref(&white), None);
+        assert!(close(px[0], 0.25), "half as dark: {px:?}");
+
+        let red = card([1.0, 0.0, 0.0], 1.0);
+        let px = lit(&m, &light, &[red], None);
+        assert!(
+            close(px[0], 0.5) && close(px[1], 0.0),
+            "red gets through: {px:?}"
+        );
+
+        let px = lit(&m, &light, std::slice::from_ref(&white), Some(0));
+        assert!(close(px[0], 0.5), "its own card is not in its way: {px:?}");
+
+        let only = ShadingMaterial {
+            accepts_shadows: ShadowMode::Only,
+            ..m
+        };
+        let px = lit(&only, &light, std::slice::from_ref(&white), None);
+        assert_eq!(
+            px,
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "only the shadow"
+        );
+        let red = card([1.0, 0.0, 0.0], 1.0);
+        let px = lit(&only, &light, &[red], None);
+        assert_eq!(&px[..4], &[1.0, 0.0, 0.0, 1.0], "red gets through");
+
+        // Accepts lights off: left as it is, but still in the shadow.
+        let unlit = ShadingMaterial { unlit: true, ..m };
+        let px = lit(&unlit, &light, &[white], None);
+        assert!(
+            close(px[0], 0.0) && px[4] == 0.5,
+            "shadowed, not lit: {px:?}"
+        );
+
+        // A row of floor across the shadow's edge, and how many of its pixels
+        // are neither lit nor in shadow.
+        let soft = ShadingLight {
+            shadow_diffusion: 20.0,
+            ..light
+        };
+        let edge = |z: f32| {
+            let spread = 20.0 * DIFFUSION_SPREAD * MAX_STRETCH;
+            let place = caster_box(64, 40.0, 40.0, spread);
+            let card = ShadowCaster {
+                origin: [-20.0, -20.0, z],
+                u: [40.0, 0.0, 0.0],
+                v: [0.0, 40.0, 0.0],
+                transmission: 0.0,
+                place: place.map(|t| t as f32 / 64.0),
+                levels: caster_square(&[1.0; 64], 4, 4, 1.0, 64, place, false),
+                size: 64,
+            };
+            let row = ShadingSurface {
+                origin: [0.0, -0.5, 0.0],
+                du: [1.0, 0.0, 0.0],
+                dv: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+            };
+            let mut px = [0.5, 0.5, 0.5, 1.0].repeat(80);
+            let mut full = px.clone();
+            shade_with_shadows(&mut px, 80, 1, &row, &m, &[soft], &[card], None);
+            shade(&mut full, 80, 1, &row, &m, &[soft]);
+            px.chunks(4)
+                .zip(full.chunks(4))
+                .filter(|(p, f)| p[0] > 0.05 * f[0] && p[0] < 0.95 * f[0])
+                .count()
+        };
+        let (foot, high) = (edge(-1.0), edge(-100.0));
+        assert!(foot <= 2, "hard where it stands on the floor: {foot}");
+        assert!(high >= 10, "soft where it is held up: {high}");
     }
 }

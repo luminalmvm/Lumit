@@ -22,7 +22,7 @@
 
 use flutter_rust_bridge::frb;
 
-use crate::api::layer::BridgeAudioPeaks;
+use crate::api::layer::{BridgeAudioPeaks, LayerReference};
 use crate::api::{composition::CompositionReference, BridgeError};
 
 /// Where playback is, as the transport needs to know it.
@@ -129,6 +129,38 @@ impl CompositionReference {
         #[cfg(not(feature = "media"))]
         let _ = (document, start_seconds, end_seconds, buckets);
         Ok(BridgeAudioPeaks::empty())
+    }
+
+    /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
+    /// so there is somewhere to put them. One undo step.
+    #[frb(sync)]
+    pub fn add_empty_audio_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let mut layer = crate::edits::base_layer(
+            "Audio".into(),
+            lumit_core::model::LayerKind::Sequence { clips: Vec::new() },
+            comp.duration.0,
+            crate::edits::centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            ),
+        );
+        layer.audio_only = true;
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
+        let id = layer.id;
+        let state = self.project()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(lumit_core::ops::Op::AddLayer {
+                comp: self.id,
+                index: crate::api::composition::insert_row(row, comp.layers.len()),
+                layer: Box::new(layer),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(LayerReference::new(self.project, self.id, id))
     }
 
     /// The document as it stands, for the mix to be built from.

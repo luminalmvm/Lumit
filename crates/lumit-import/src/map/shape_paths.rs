@@ -29,7 +29,7 @@ pub(super) enum Op {
     /// the same: Lumit's corners are always round, and it draws no copies.
     Offset(LumProperty, bool),
     /// Lumit's deform, standing in for Wiggle Paths.
-    Wiggle(lumit_core::shape::Deform),
+    Wiggle(lumit_core::shape::modifier::Deform),
 }
 
 #[derive(Clone)]
@@ -100,7 +100,7 @@ pub(super) fn read(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opt
                 interp_in: SideInterp::Linear,
                 interp_out: SideInterp::Linear,
             };
-            Op::Wiggle(lumit_core::shape::Deform {
+            Op::Wiggle(lumit_core::shape::modifier::Deform {
                 mode: 0,
                 amount: one(conv, "ADBE Vector Roughen Size", 10.0),
                 // Detail is After Effects' points to an inch.
@@ -111,6 +111,7 @@ pub(super) fn read(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opt
                 },
                 seed: LumProperty::fixed(still("ADBE Vector Random Seed", 0.0)),
                 detail: one(conv, "ADBE Vector Roughen Detail", 10.0),
+                extra: serde_json::Map::new(),
             })
         }
         _ => return None,

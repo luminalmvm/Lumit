@@ -1223,7 +1223,25 @@ class _OutlineRowState extends State<OutlineRow> {
       } catch (_) {}
     }
     final several = streams?.several ?? false;
-    final picked = await showMenuAt<String>(
+    // Create ▸, the Layer menu's own submenu, with the rows this layer has
+    // something to make of.
+    final kind = widget.entry.info.kind;
+    final typed = kind == BridgeLayerKind.text;
+    var vector = false;
+    if (kind == BridgeLayerKind.footage && !locked) {
+      try {
+        vector = widget.entry.layer.isVectorLayer();
+      } catch (_) {}
+    }
+    final creates = [
+      if (typed) ('shapes-from-text', l10n.menuCreateShapesFromText),
+      if (vector) ('shapes-from-vector', l10n.menuCreateShapesFromVector),
+      if (typed || vector || kind == BridgeLayerKind.shape)
+        ('split-shapes', l10n.menuSplitIntoShapeLayers),
+      if (typed) ('points-from-text', l10n.menuCreatePointsFromText),
+    ];
+    String? created;
+    final chosen = await showMenuAt<String>(
       context: context,
       position: position,
       width: 190,
@@ -1338,6 +1356,30 @@ class _OutlineRowState extends State<OutlineRow> {
                 onPressed: () => close('freeze'),
                 child: Text(l10n.menuFreezeFrame)),
           ],
+          if (creates.isNotEmpty)
+            SubmenuRow(
+              key: const ValueKey('tl-row-create'),
+              closeParent: () => close(null),
+              submenu: (dismiss) => FloatSurface(
+                width: 190,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (id, label) in creates)
+                      MenuRow(
+                        key: ValueKey('tl-row-$id'),
+                        onPressed: () {
+                          created = id;
+                          dismiss();
+                        },
+                        child: Text(label),
+                      ),
+                  ],
+                ),
+              ),
+              child: Text(l10n.menuCreate),
+            ),
           // The Layer menu's own Pre-compose…, where the hand already is. It
           // opens the same dialogue, so the two questions get asked here too.
           MenuRow(
@@ -1383,6 +1425,7 @@ class _OutlineRowState extends State<OutlineRow> {
     // refusal - a lock, a kind that cannot do it, a row of several clips -
     // leaves the rest of the batch standing.
     final targets = _menuTargets();
+    final picked = chosen ?? created;
     switch (picked) {
       case 'duplicate':
         // Offered on a locked layer too: copying is not editing.
@@ -1560,6 +1603,36 @@ class _OutlineRowState extends State<OutlineRow> {
         // The dialogue refreshes the document itself, and by now this row may
         // be inside the new comp.
         return;
+      case 'shapes-from-text' || 'shapes-from-vector' || 'split-shapes':
+        if (!mounted) return;
+        final frame = Provider.of<LumitUiState>(this.context, listen: false)
+            .playheadFrame
+            .value;
+        final kinds = switch (picked) {
+          'shapes-from-text' => {BridgeLayerKind.text},
+          'shapes-from-vector' => {BridgeLayerKind.footage},
+          _ => {
+              BridgeLayerKind.text,
+              BridgeLayerKind.footage,
+              BridgeLayerKind.shape
+            },
+        };
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          if (!kinds.contains(target.info.kind)) continue;
+          try {
+            await target.layer.createShapes(
+                frame: frame, apart: picked == 'split-shapes');
+          } catch (_) {}
+        }
+      case 'points-from-text':
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          if (target.info.kind != BridgeLayerKind.text) continue;
+          try {
+            target.layer.createPointsFromText();
+          } catch (_) {}
+        }
       case 'stagger':
         if (!mounted) return;
         showStaggerPanel(

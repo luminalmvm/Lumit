@@ -1248,6 +1248,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function(BridgeEnabledCond_ChoiceIsNot value)? choiceIsNot,
     TResult Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
+    TResult Function(BridgeEnabledCond_Nought value)? nought,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1262,6 +1263,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought(_that);
       case _:
         return orElse();
     }
@@ -1287,6 +1290,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function(BridgeEnabledCond_ChoiceIsNot value) choiceIsNot,
     required TResult Function(BridgeEnabledCond_LayerSet value) layerSet,
     required TResult Function(BridgeEnabledCond_LayerUnset value) layerUnset,
+    required TResult Function(BridgeEnabledCond_Nought value) nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1300,6 +1304,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset():
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought():
+        return nought(_that);
     }
   }
 
@@ -1322,6 +1328,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function(BridgeEnabledCond_ChoiceIsNot value)? choiceIsNot,
     TResult? Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult? Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
+    TResult? Function(BridgeEnabledCond_Nought value)? nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1335,6 +1342,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet(_that);
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset(_that);
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought(_that);
       case _:
         return null;
     }
@@ -1359,6 +1368,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function(int field0)? choiceIsNot,
     TResult Function()? layerSet,
     TResult Function()? layerUnset,
+    TResult Function()? nought,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1373,6 +1383,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset();
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought();
       case _:
         return orElse();
     }
@@ -1398,6 +1410,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function(int field0) choiceIsNot,
     required TResult Function() layerSet,
     required TResult Function() layerUnset,
+    required TResult Function() nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1411,6 +1424,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset():
         return layerUnset();
+      case BridgeEnabledCond_Nought():
+        return nought();
     }
   }
 
@@ -1433,6 +1448,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function(int field0)? choiceIsNot,
     TResult? Function()? layerSet,
     TResult? Function()? layerUnset,
+    TResult? Function()? nought,
   }) {
     final _that = this;
     switch (_that) {
@@ -1446,6 +1462,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerSet();
       case BridgeEnabledCond_LayerUnset() when layerUnset != null:
         return layerUnset();
+      case BridgeEnabledCond_Nought() when nought != null:
+        return nought();
       case _:
         return null;
     }
@@ -1688,6 +1706,360 @@ class BridgeEnabledCond_LayerUnset extends BridgeEnabledCond {
   @override
   String toString() {
     return 'BridgeEnabledCond.layerUnset()';
+  }
+}
+
+/// @nodoc
+
+class BridgeEnabledCond_Nought extends BridgeEnabledCond {
+  const BridgeEnabledCond_Nought() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeEnabledCond_Nought);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeEnabledCond.nought()';
+  }
+}
+
+/// @nodoc
+mixin _$BridgeExpressionRow {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeExpressionRow);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeExpressionRow()';
+  }
+}
+
+/// @nodoc
+class $BridgeExpressionRowCopyWith<$Res> {
+  $BridgeExpressionRowCopyWith(
+      BridgeExpressionRow _, $Res Function(BridgeExpressionRow) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeExpressionRow].
+extension BridgeExpressionRowPatterns on BridgeExpressionRow {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeExpressionRow_Transform value)? transform,
+    TResult Function(BridgeExpressionRow_Effect value)? effect,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform() when transform != null:
+        return transform(_that);
+      case BridgeExpressionRow_Effect() when effect != null:
+        return effect(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeExpressionRow_Transform value) transform,
+    required TResult Function(BridgeExpressionRow_Effect value) effect,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform():
+        return transform(_that);
+      case BridgeExpressionRow_Effect():
+        return effect(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeExpressionRow_Transform value)? transform,
+    TResult? Function(BridgeExpressionRow_Effect value)? effect,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform() when transform != null:
+        return transform(_that);
+      case BridgeExpressionRow_Effect() when effect != null:
+        return effect(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function(BridgeTransformProp field0)? transform,
+    TResult Function(UuidValue effect, String param)? effect,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform() when transform != null:
+        return transform(_that.field0);
+      case BridgeExpressionRow_Effect() when effect != null:
+        return effect(_that.effect, _that.param);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function(BridgeTransformProp field0) transform,
+    required TResult Function(UuidValue effect, String param) effect,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform():
+        return transform(_that.field0);
+      case BridgeExpressionRow_Effect():
+        return effect(_that.effect, _that.param);
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function(BridgeTransformProp field0)? transform,
+    TResult? Function(UuidValue effect, String param)? effect,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExpressionRow_Transform() when transform != null:
+        return transform(_that.field0);
+      case BridgeExpressionRow_Effect() when effect != null:
+        return effect(_that.effect, _that.param);
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeExpressionRow_Transform extends BridgeExpressionRow {
+  const BridgeExpressionRow_Transform(this.field0) : super._();
+
+  final BridgeTransformProp field0;
+
+  /// Create a copy of BridgeExpressionRow
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeExpressionRow_TransformCopyWith<BridgeExpressionRow_Transform>
+      get copyWith => _$BridgeExpressionRow_TransformCopyWithImpl<
+          BridgeExpressionRow_Transform>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeExpressionRow_Transform &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  @override
+  String toString() {
+    return 'BridgeExpressionRow.transform(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeExpressionRow_TransformCopyWith<$Res>
+    implements $BridgeExpressionRowCopyWith<$Res> {
+  factory $BridgeExpressionRow_TransformCopyWith(
+          BridgeExpressionRow_Transform value,
+          $Res Function(BridgeExpressionRow_Transform) _then) =
+      _$BridgeExpressionRow_TransformCopyWithImpl;
+  @useResult
+  $Res call({BridgeTransformProp field0});
+}
+
+/// @nodoc
+class _$BridgeExpressionRow_TransformCopyWithImpl<$Res>
+    implements $BridgeExpressionRow_TransformCopyWith<$Res> {
+  _$BridgeExpressionRow_TransformCopyWithImpl(this._self, this._then);
+
+  final BridgeExpressionRow_Transform _self;
+  final $Res Function(BridgeExpressionRow_Transform) _then;
+
+  /// Create a copy of BridgeExpressionRow
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = null,
+  }) {
+    return _then(BridgeExpressionRow_Transform(
+      null == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as BridgeTransformProp,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeExpressionRow_Effect extends BridgeExpressionRow {
+  const BridgeExpressionRow_Effect({required this.effect, required this.param})
+      : super._();
+
+  final UuidValue effect;
+  final String param;
+
+  /// Create a copy of BridgeExpressionRow
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeExpressionRow_EffectCopyWith<BridgeExpressionRow_Effect>
+      get copyWith =>
+          _$BridgeExpressionRow_EffectCopyWithImpl<BridgeExpressionRow_Effect>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeExpressionRow_Effect &&
+            (identical(other.effect, effect) || other.effect == effect) &&
+            (identical(other.param, param) || other.param == param));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, effect, param);
+
+  @override
+  String toString() {
+    return 'BridgeExpressionRow.effect(effect: $effect, param: $param)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeExpressionRow_EffectCopyWith<$Res>
+    implements $BridgeExpressionRowCopyWith<$Res> {
+  factory $BridgeExpressionRow_EffectCopyWith(BridgeExpressionRow_Effect value,
+          $Res Function(BridgeExpressionRow_Effect) _then) =
+      _$BridgeExpressionRow_EffectCopyWithImpl;
+  @useResult
+  $Res call({UuidValue effect, String param});
+}
+
+/// @nodoc
+class _$BridgeExpressionRow_EffectCopyWithImpl<$Res>
+    implements $BridgeExpressionRow_EffectCopyWith<$Res> {
+  _$BridgeExpressionRow_EffectCopyWithImpl(this._self, this._then);
+
+  final BridgeExpressionRow_Effect _self;
+  final $Res Function(BridgeExpressionRow_Effect) _then;
+
+  /// Create a copy of BridgeExpressionRow
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? effect = null,
+    Object? param = null,
+  }) {
+    return _then(BridgeExpressionRow_Effect(
+      effect: null == effect
+          ? _self.effect
+          : effect // ignore: cast_nullable_to_non_nullable
+              as UuidValue,
+      param: null == param
+          ? _self.param
+          : param // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 

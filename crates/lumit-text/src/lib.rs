@@ -182,34 +182,55 @@ pub fn rasterise_along(
     }
 }
 
-/// The shape items a Type layer converts to, styled or not.
+/// The shape art a Type layer converts to, styled or not: a group for each
+/// letter, as After Effects makes one.
+///
+/// **A letter's counter is a hole because its contours are combined `Xor`**,
+/// which is the even-odd rule, so the ring of an `o` comes out hollow. Each
+/// letter starts a run of its own, so two that overlap union rather than
+/// cancel. An outline drawn under the fill is a second run below it.
 #[must_use]
 pub fn shape_items(
     block: &TextBlock<'_>,
     path: Option<&MaskPolyline>,
     offset: f32,
-) -> Vec<lumit_core::shape::ShapeItem> {
-    if block.plain() {
-        return shape_items_for(block.text, block.size, block.fill, path, offset);
-    }
+) -> Vec<lumit_core::shape::modifier::ShapeEntry> {
+    use lumit_core::shape::modifier::{ShapeEntry, ShapeGroup};
+    let glyphs = if block.plain() {
+        glyph_outlines(block.text, block.size, path, offset)
+    } else {
+        styled::outlines(block, path, offset)
+    };
     let style = block.style;
-    let mut items = Vec::new();
-    for glyph in styled::outlines(block, path, offset) {
-        for (i, contour) in glyph.contours.into_iter().enumerate() {
-            let mut item =
-                lumit_core::shape::ShapeItem::filled(glyph.ch.to_string(), contour, block.fill);
-            if !style.fill_on {
+    let stroked = style.stroke_on && style.stroke_width > 0.0;
+    let under = stroked && style.fill_on && !style.stroke_over;
+    let run = |glyph: &GlyphOutline, fill: bool, stroke: bool| {
+        let items = glyph.contours.iter().enumerate().map(|(i, contour)| {
+            let name = glyph.ch.to_string();
+            let mut item = lumit_core::shape::ShapeItem::filled(name, contour.clone(), block.fill);
+            if !fill {
                 item.fill = None;
             }
-            if style.stroke_on && style.stroke_width > 0.0 {
-                item.stroke = Some(style.stroke);
-                item.stroke_width = style.stroke_width;
+            if stroke {
+                item.stroke = Some(lumit_core::shape::colour::still(style.stroke));
+                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width);
             }
             item.combine = u32::from(i > 0) * 4;
-            items.push(item);
+            ShapeEntry::Item(item)
+        });
+        items.collect::<Vec<_>>()
+    };
+    let mut groups = Vec::new();
+    for glyph in glyphs {
+        let mut items: Vec<ShapeEntry> = Vec::new();
+        if under {
+            items.extend(run(&glyph, false, true));
         }
+        items.extend(run(&glyph, style.fill_on, stroked && !under));
+        let name = glyph.ch.to_string();
+        groups.push(ShapeEntry::Group(ShapeGroup::new(name, items)));
     }
-    items
+    groups
 }
 
 /// The measuring walk for a straight line: each glyph's pen position, and how
@@ -1108,34 +1129,6 @@ impl<P: Fn(f32, f32) -> (f64, f64)> ttf_parser::OutlineBuilder for Outliner<P> {
     }
 }
 
-/// The shape items a Type layer converts to: its glyph outlines, in the
-/// layer's own pixels, painted with the layer's fill.
-///
-/// **A letter's counter is a hole because the contours are combined `Xor`.**
-/// This crate's rasteriser fills by the even-odd rule, and `Xor` *is* even-odd,
-/// so the ring of an `o` comes out hollow with no winding rule to reason about
-/// and no per-glyph special case. Each glyph starts a run of its own, so two
-/// letters that happen to overlap union rather than cancel.
-#[must_use]
-pub fn shape_items_for(
-    text: &str,
-    size: f32,
-    fill: lumit_core::model::LinearColour,
-    path: Option<&MaskPolyline>,
-    offset: f32,
-) -> Vec<lumit_core::shape::ShapeItem> {
-    let mut items = Vec::new();
-    for glyph in glyph_outlines(text, size, path, offset) {
-        for (i, contour) in glyph.contours.into_iter().enumerate() {
-            let mut item =
-                lumit_core::shape::ShapeItem::filled(glyph.ch.to_string(), contour, fill);
-            item.combine = u32::from(i > 0) * 4;
-            items.push(item);
-        }
-    }
-    items
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -1281,6 +1274,23 @@ mit",
 
     // ---- Glyph outlines --------------------------------------------------
 
+    /// A plain line's shape items, out of their groups.
+    fn plain_items(text: &str, size: f32) -> Vec<lumit_core::shape::ShapeItem> {
+        let (style, paragraph) = (TextStyle::default(), ParagraphStyle::default());
+        let block = TextBlock {
+            text,
+            size,
+            fill: white(),
+            style: &style,
+            paragraph: &paragraph,
+        };
+        let groups = shape_items(&block, None, 0.0);
+        lumit_core::shape::modifier::items(&groups)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
     /// **The outlines land where the ink lands.** A converted layer that sat a
     /// few pixels off the words it came from would be useless, so the two are
     /// measured against each other: the same line, rasterised twice — once as
@@ -1293,20 +1303,19 @@ mit",
     fn the_outlines_land_where_the_ink_lands() {
         let (text, size) = ("Lumit", 96.0f32);
         let raster = rasterise_line(text, size, [255, 255, 255]);
-        let items = shape_items_for(
-            text,
-            size,
-            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
-            None,
-            0.0,
-        );
+        let items = plain_items(text, size);
         assert!(!items.is_empty(), "no outlines came back");
 
         // Draw the art into the raster's own box, so the two are comparable
         // pixel for pixel.
         let (w, h) = (raster.width, raster.height);
+        let entries: Vec<_> = items
+            .iter()
+            .cloned()
+            .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            .collect();
         let art = lumit_core::shape::rasterise_contents(
-            &items,
+            &entries,
             w,
             h,
             0.0,
@@ -1348,31 +1357,24 @@ mit",
     /// to reason about.
     #[test]
     fn a_letter_with_a_counter_is_two_rings_and_a_hole() {
-        let items = shape_items_for(
-            "o",
-            96.0,
-            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
-            None,
-            0.0,
-        );
+        let items = plain_items("o", 96.0);
         assert_eq!(items.len(), 2, "an o is an outer ring and a counter");
         assert_eq!(items[0].combine, 0, "the first ring starts a run");
         assert_eq!(items[1].combine, 4, "the counter cuts by even-odd");
 
         // And the middle of the drawn `o` really is empty.
+        let entries: Vec<_> = items
+            .iter()
+            .cloned()
+            .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            .collect();
         let art =
-            lumit_core::shape::rasterise_contents(&items, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
+            lumit_core::shape::rasterise_contents(&entries, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
         let centre = ((50 * 100 + 50) * 4 + 3) as usize;
         assert_eq!(art[centre], 0, "the counter filled in");
 
         // Two letters do not cancel each other: each starts a run of its own.
-        let pair = shape_items_for(
-            "oo",
-            96.0,
-            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
-            None,
-            0.0,
-        );
+        let pair = plain_items("oo", 96.0);
         assert_eq!(
             pair.iter().filter(|i| i.combine == 0).count(),
             2,

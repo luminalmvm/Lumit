@@ -20,7 +20,15 @@ work in the Viewer with the tools and the selected layer's gizmo.
 | **Position** | Where the anchor point sits within the composition. |
 | **Scale** | Size, as a percentage. |
 | **Rotation** | Angle, in degrees. |
+| **Orientation** | A 3D layer's turn, as in After Effects: three angles outside X, Y and Z Rotation, moving between keys by the shortest turn. |
 | **Opacity** | How opaque a layer is, as a percentage. |
+
+On a 3D layer Anchor point and Scale have a z too. Scale z stretches what is parented to the
+layer along its depth, and how far Anchor point z pushes the layer itself.
+
+Right-click a 3D layer's rotation rows for **After Effects rotation order**: X, Y and Z
+Rotation turn in After Effects' order, as an imported layer's do. Changing it keeps the layer
+where it is.
 
 Every property can be animated. See [Keyframes](/use/keyframes/).
 
@@ -36,7 +44,8 @@ linked, one edit scales both by the same factor; unlinked, each box is edited on
 ## Move the anchor point
 
 Use the anchor point tool in the Viewer to move it without moving the layer, or drag the
-anchor point directly with the selection tool.
+anchor point directly with the selection tool. The [Align panel](/panels/align/) puts it on
+a corner, an edge or the centre of the layer.
 
 ## The gizmo
 
@@ -50,7 +59,8 @@ selected layers one pixel, or ten with `Shift`. See [the Viewer](/panels/viewer/
 
 Parent a layer to another and it follows the parent's transform. Its own values then read
 as offsets from the parent. Parenting or unparenting a layer does not move it on the
-current frame.
+current frame. A 3D layer, camera or light keeps its X, Y and Z Rotation; the turn goes on
+its Orientation.
 
 The Viewer draws a parented layer's outline, handles and motion path through the whole parent
 chain. Drags, nudges and **Align** move its Position in the parent's space.

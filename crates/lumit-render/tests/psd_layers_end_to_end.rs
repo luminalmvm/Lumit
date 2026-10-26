@@ -98,6 +98,7 @@ fn comp_of(path: &str, records: &[u32]) -> (Arc<Document>, Uuid) {
     doc.items.push(ProjectItem::Composition(Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

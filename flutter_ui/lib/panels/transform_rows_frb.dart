@@ -35,11 +35,13 @@ import '../state/comp_time.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/angle_dial.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'graph_editor_frb.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'light_rows_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -55,6 +57,10 @@ class TransformAxis {
   final double max;
   final int decimals;
   final double speed;
+
+  /// A rotation counts whole turns beside its degrees; an angle that is not
+  /// a turn, a cone's, does not.
+  final bool turns;
   const TransformAxis(
     this.prop, {
     this.suffix,
@@ -62,8 +68,14 @@ class TransformAxis {
     this.max = 100000,
     this.decimals = 1,
     this.speed = 1,
+    this.turns = true,
   });
 }
+
+/// Which heading a transform row sits under in the fold-out: the Transform
+/// group itself, one of the option groups a camera or a light has inside it,
+/// or a 3D layer's Material options beside it.
+enum TransformSection { transform, camera, light, material }
 
 /// One row: its label, the axes it edits, and — on the three properties that
 /// have more than one axis — which pair it belongs to and how that pair is
@@ -80,17 +92,22 @@ class TransformGroup {
   /// it; [BridgeAxisMode.linked] means the row draws one box for two axes.
   final BridgeAxisMode mode;
 
-  /// One of a camera's lens numbers rather than its placement
-  /// (docs/impl/camera.md §1), so the fold-out can put the Camera options
-  /// heading in front of them.
-  final bool cameraOption;
+  /// The heading the row sits under: a camera's lens numbers and a light's
+  /// own are options rather than placement (docs/impl/camera.md §1), so the
+  /// fold-out puts their own heading in front of them.
+  final TransformSection section;
+
+  /// Three axes that are one colour, drawn as a swatch rather than as three
+  /// numbers.
+  final bool colour;
 
   const TransformGroup(
     this.label,
     this.axes, {
     this.pair,
     this.mode = BridgeAxisMode.combined,
-    this.cameraOption = false,
+    this.section = TransformSection.transform,
+    this.colour = false,
   });
 
   /// A linked row draws one box and carries the other axis with it.
@@ -133,12 +150,15 @@ bool hasVisibilitySwitch(BridgeLayerKind kind, {required bool hasPicture}) =>
 /// whatever the 3D switch says, because being three-dimensional is what they
 /// are (docs/impl/camera.md §1). A camera adds its point of interest when it
 /// is two-node, and the four lens numbers the fold-out heads with Camera
-/// options.
+/// options. A light adds its point of interest when it is aimed, and the
+/// numbers its kind has under Light options.
 List<TransformGroup> transformGroups({
   required bool threeD,
   required BridgeAxisModes modes,
   BridgeLayerKind kind = BridgeLayerKind.footage,
   bool twoNode = false,
+  BridgeLightSettings? light,
+  BridgeMaterialSettings? material,
 }) {
   List<TransformGroup> pairRows(
     BridgeTransformPair pair,
@@ -160,6 +180,16 @@ List<TransformGroup> transformGroups({
     ];
   }
 
+  // After Effects' Orientation: three angles on one row, turning as one.
+  final orientation = TransformGroup(l10n.transformOrientation, const [
+    TransformAxis(BridgeTransformProp.orientationX,
+        suffix: '°', speed: 0.5, turns: false),
+    TransformAxis(BridgeTransformProp.orientationY,
+        suffix: '°', speed: 0.5, turns: false),
+    TransformAxis(BridgeTransformProp.orientationZ,
+        suffix: '°', speed: 0.5, turns: false),
+  ]);
+
   // The placement a viewpoint has: where it stands, and which way it faces.
   List<TransformGroup> placement() => [
         ...pairRows(
@@ -176,6 +206,7 @@ List<TransformGroup> transformGroups({
             TransformAxis(BridgeTransformProp.positionZ),
           ],
         ),
+        orientation,
         TransformGroup(l10n.transformRotationX, const [
           TransformAxis(BridgeTransformProp.rotationX, suffix: '°', speed: 0.5),
         ]),
@@ -201,30 +232,98 @@ List<TransformGroup> transformGroups({
       TransformGroup(l10n.sourceZoom, const [
         TransformAxis(BridgeTransformProp.zoom,
             min: 1, decimals: 0, speed: 4),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraFocusDistance, const [
         TransformAxis(BridgeTransformProp.focusDistance,
             min: 1, decimals: 0, speed: 4),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraAperture, const [
         TransformAxis(BridgeTransformProp.aperture, min: 0),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraBlurLevel, const [
         TransformAxis(BridgeTransformProp.blurLevel,
             suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
     ];
   }
-  if (kind == BridgeLayerKind.light) return placement();
+  if (kind == BridgeLayerKind.light) {
+    final s = light ?? plainLight;
+    const option = TransformSection.light;
+    return [
+      // The point it is aimed at, while it is aimed and has a way to face.
+      if (s.twoNode && lightAims(s.kind))
+        TransformGroup(l10n.transformPointOfInterest, const [
+          TransformAxis(BridgeTransformProp.poiX),
+          TransformAxis(BridgeTransformProp.poiY),
+          TransformAxis(BridgeTransformProp.poiZ),
+        ]),
+      ...placement(),
+      TransformGroup(l10n.lightIntensity, const [
+        TransformAxis(BridgeTransformProp.lightIntensity,
+            suffix: '%', decimals: 0, speed: 0.5),
+      ], section: option),
+      TransformGroup(
+          l10n.lightColour,
+          const [
+            TransformAxis(BridgeTransformProp.lightColourR, min: 0),
+            TransformAxis(BridgeTransformProp.lightColourG, min: 0),
+            TransformAxis(BridgeTransformProp.lightColourB, min: 0),
+          ],
+          section: option,
+          colour: true),
+      if (s.kind == BridgeLightKind.spot) ...[
+        TransformGroup(l10n.lightConeAngle, const [
+          TransformAxis(BridgeTransformProp.coneAngle,
+              suffix: '°', min: 0, max: 180, speed: 0.5, turns: false),
+        ], section: option),
+        TransformGroup(l10n.lightConeFeather, const [
+          TransformAxis(BridgeTransformProp.coneFeather,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+      if (s.kind == BridgeLightKind.area)
+        TransformGroup(l10n.size, [
+          TransformAxis(BridgeTransformProp.lightWidth,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0),
+          TransformAxis(BridgeTransformProp.lightHeight,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0),
+        ], section: option),
+      if (lightFallsOff(s.kind) && s.falloff != BridgeLightFalloff.none)
+        TransformGroup(l10n.lightRadius, [
+          TransformAxis(BridgeTransformProp.lightRadius,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
+        ], section: option),
+      if (lightFallsOff(s.kind) && s.falloff == BridgeLightFalloff.smooth)
+        TransformGroup(l10n.lightFalloffDistance, [
+          TransformAxis(BridgeTransformProp.falloffDistance,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
+        ], section: option),
+      if (s.castsShadows && s.kind != BridgeLightKind.ambient) ...[
+        TransformGroup(l10n.lightShadowDarkness, const [
+          TransformAxis(BridgeTransformProp.shadowDarkness,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightShadowDiffusion, [
+          TransformAxis(BridgeTransformProp.shadowDiffusion,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+    ];
+  }
 
   return [
     ...pairRows(
       BridgeTransformPair.anchor,
       l10n.transformAnchorPoint,
-      [l10n.transformAnchorPointX, l10n.transformAnchorPointY],
-      const [
-        TransformAxis(BridgeTransformProp.anchorX),
-        TransformAxis(BridgeTransformProp.anchorY),
+      [
+        l10n.transformAnchorPointX,
+        l10n.transformAnchorPointY,
+        if (threeD) l10n.transformAnchorPointZ,
+      ],
+      [
+        const TransformAxis(BridgeTransformProp.anchorX),
+        const TransformAxis(BridgeTransformProp.anchorY),
+        if (threeD) const TransformAxis(BridgeTransformProp.anchorZ),
       ],
     ),
     ...pairRows(
@@ -244,12 +343,19 @@ List<TransformGroup> transformGroups({
     ...pairRows(
       BridgeTransformPair.scale,
       l10n.transformScale,
-      [l10n.transformScaleX, l10n.transformScaleY],
-      const [
-        TransformAxis(BridgeTransformProp.scaleX, suffix: '%'),
-        TransformAxis(BridgeTransformProp.scaleY, suffix: '%'),
+      [
+        l10n.transformScaleX,
+        l10n.transformScaleY,
+        if (threeD) l10n.transformScaleZ,
+      ],
+      [
+        const TransformAxis(BridgeTransformProp.scaleX, suffix: '%'),
+        const TransformAxis(BridgeTransformProp.scaleY, suffix: '%'),
+        if (threeD)
+          const TransformAxis(BridgeTransformProp.scaleZ, suffix: '%'),
       ],
     ),
+    if (threeD) orientation,
     TransformGroup(l10n.transformRotation, const [
       TransformAxis(BridgeTransformProp.rotation, suffix: '°', speed: 0.5),
     ]),
@@ -265,6 +371,23 @@ List<TransformGroup> transformGroups({
       TransformAxis(BridgeTransformProp.opacity,
           suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
     ]),
+    // How a 3D layer takes the comp's lights, as After Effects has it. A null
+    // has no picture to light.
+    if (threeD && kind != BridgeLayerKind.nullLayer)
+      for (final (label, prop) in [
+        // Light passes through a layer only where it casts a shadow.
+        if (material?.castsShadows != BridgeShadowMode.off)
+          (l10n.materialLightTransmission, BridgeTransformProp.lightTransmission),
+        (l10n.materialAmbient, BridgeTransformProp.ambient),
+        (l10n.materialDiffuse, BridgeTransformProp.diffuse),
+        (l10n.materialSpecular, BridgeTransformProp.specular),
+        (l10n.materialShininess, BridgeTransformProp.shininess),
+        (l10n.materialMetal, BridgeTransformProp.metal),
+      ])
+        TransformGroup(label, [
+          TransformAxis(prop,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: TransformSection.material),
   ];
 }
 
@@ -283,9 +406,15 @@ class TransformRowsFrb extends StatelessWidget {
   final bool threeD;
 
   /// What the layer is, and - on a camera - how it aims: the two other things
-  /// that decide which rows there are.
+  /// that decide which rows there are. A light's settings decide its own.
   final BridgeLayerKind kind;
   final bool twoNode;
+  final BridgeLightSettings? light;
+
+  /// The layer's Accepts lights switch and its shadow settings, for the
+  /// Material options' own rows.
+  final bool acceptsLights;
+  final BridgeMaterialSettings? material;
 
   /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
@@ -315,6 +444,9 @@ class TransformRowsFrb extends StatelessWidget {
     required this.threeD,
     this.kind = BridgeLayerKind.footage,
     this.twoNode = false,
+    this.light,
+    this.acceptsLights = true,
+    this.material,
     required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
@@ -326,30 +458,87 @@ class TransformRowsFrb extends StatelessWidget {
   });
 
   /// One widget per transform row — for a caller that has to put each row in its
-  /// own chrome (the Effect controls panel's hairline-separated rows).
-  List<Widget> rows(BuildContext context) => [
-        for (final group in transformGroups(
-            threeD: threeD, modes: axisModes, kind: kind, twoNode: twoNode))
-          TransformRowFrb(
-            comp: comp,
+  /// own chrome (the Effect controls panel's hairline-separated rows). A
+  /// section's choice rows come first in it, as they do in the fold-out.
+  List<Widget> rows(BuildContext context) {
+    final settings = layerSettings(kind: kind, light: light, threeD: threeD);
+    final out = <Widget>[];
+    TransformSection? last;
+    for (final group in transformGroups(
+        threeD: threeD,
+        modes: axisModes,
+        kind: kind,
+        twoNode: twoNode,
+        light: light,
+        material: material)) {
+      if (group.section != last) {
+        last = group.section;
+        // The Effect controls card names each options group as the
+        // Timeline's headings do.
+        final heading = switch (group.section) {
+          TransformSection.transform => null,
+          TransformSection.camera => l10n.cameraOptions,
+          TransformSection.light => l10n.lightOptions,
+          TransformSection.material => l10n.materialOptions,
+        };
+        if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
+        for (final setting in settings) {
+          if (setting.section != last) continue;
+          out.add(LayerSettingRowFrb(
             layer: layer,
-            transform: transform,
-            group: group,
-            playheadFrame: playheadFrame,
-            onSeek: onSeek,
+            setting: setting,
+            light: light,
+            material: material,
+            acceptsLights: acceptsLights,
             onChanged: onChanged,
             keyPrefix: keyPrefix,
-            rowHeight: rowHeight,
-            rowPadding: rowPadding,
-            twoColumn: twoColumn,
-          ),
-      ];
+          ));
+        }
+      }
+      out.add(TransformRowFrb(
+        comp: comp,
+        layer: layer,
+        transform: transform,
+        group: group,
+        playheadFrame: playheadFrame,
+        onSeek: onSeek,
+        onChanged: onChanged,
+        keyPrefix: keyPrefix,
+        rowHeight: rowHeight,
+        rowPadding: rowPadding,
+        twoColumn: twoColumn,
+      ));
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: rows(context),
       );
+}
+
+/// The name over a camera's, a light's or a layer's option rows in the Effect
+/// controls card, in the label column.
+class _OptionsHeading extends StatelessWidget {
+  final String label;
+  const _OptionsHeading(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return SizedBox(
+      height: fxRowHeight(t),
+      child: Padding(
+        padding: const EdgeInsets.only(left: fxKeyColumnWidth + 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(t.kickerCase(label), style: t.kicker),
+        ),
+      ),
+    );
+  }
 }
 
 /// One transform property group as a row.
@@ -426,19 +615,19 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// so the pointer's last position always reaches the picture.
   final PreviewThrottle _throttle = PreviewThrottle();
 
-  /// A linked row's y:x ratio, taken once per gesture. Once, because
-  /// re-reading it every tick would read the value the tick before had just
-  /// written — the ratio would hold trivially and the link would do nothing —
-  /// and because sampling costs a crossing the drag does not need to pay
-  /// sixty times a second.
-  double? _linkRatio;
+  /// A linked row's ratio of each other axis to x, taken once per gesture.
+  /// Once, because re-reading it every tick would read the value the tick
+  /// before had just written — the ratio would hold trivially and the link
+  /// would do nothing — and because sampling costs a crossing the drag does
+  /// not need to pay sixty times a second.
+  final Map<BridgeTransformProp, double> _linkRatios = {};
 
   /// The partner axis's value for `value` on the leading one, holding the
-  /// ratio the pair already had. A leading axis sitting at zero has no ratio to
+  /// ratio the axes already had. A leading axis sitting at zero has no ratio to
   /// keep, so the partner simply matches it.
   double _linked(BridgeTransformProp lead, BridgeTransformProp partner,
       double value, int frame) {
-    final ratio = _linkRatio ??= () {
+    final ratio = _linkRatios[partner] ??= () {
       final time = timeOfFrame(widget.comp, frame);
       final x = sampledScalar(read(widget.transform, lead), time);
       final y = sampledScalar(read(widget.transform, partner), time);
@@ -511,8 +700,12 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     final t = ThemeScope.of(context).theme;
     // A linked row draws one box for two axes: the second follows the
     // first through [_ratio], so a box for it would be a box that can only ever
-    // be told what it already knows. The stopwatch above still covers both.
-    final cells = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
+    // be told what it already knows. The stopwatch above still covers both. A
+    // 3D layer's linked Scale shows all three, as After Effects does, so a z
+    // off the others' ratio can be seen and typed.
+    final cells = (group.isLinked && group.axes.length < 3) || group.colour
+        ? group.axes.sublist(0, 1)
+        : group.axes;
     // One stopwatch, every axis in the row — and one undo step, because
     // `setTransforms` commits them as a batch.
     final keyframes = KeyframeControlsFrb(
@@ -524,6 +717,17 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       // fold-out draws the same rows against its own column group and keeps
       // the loose layout.
       fixedColumns: widget.twoColumn && widget.valueColumn == null,
+      // An Orientation keys the turn shown, not each angle off its own curve.
+      valuesAt: _isOrientation(group.axes.first.prop)
+          ? (time) {
+              final d = transform.depth;
+              final o = d == null
+                  ? null
+                  : sampledOrientation(
+                      d.orientationX, d.orientationY, d.orientationZ, time);
+              return o == null ? null : [o.$1, o.$2, o.$3];
+            }
+          : null,
       onWrite: (next) {
         widget.layer.setTransforms(
           props: [for (final axis in group.axes) axis.prop],
@@ -542,9 +746,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
-      onSecondaryTapUp: group.pair == null
-          ? null
-          : (details) => _axisMenu(context, details.globalPosition, group),
+      onSecondaryTapUp: group.pair != null
+          ? (details) => _axisMenu(context, details.globalPosition, group)
+          : _turnsIn3d(group)
+              ? (details) => _orderMenu(context, details.globalPosition)
+              : null,
       child: Row(
         children: [
           ...flatGroupPrefix(t, widget.nameGroup),
@@ -670,9 +876,14 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   Widget _cell(BridgeTransform transform, TransformAxis axis, int frame,
       {bool fixed = true, required TransformGroup group}) {
+    if (group.colour) return _swatch(transform, group, frame);
     final scalar = read(transform, axis.prop);
-    // The axis this box drags along with it, or null when it drags alone.
-    final partner = group.isLinked ? group.axes[1].prop : null;
+    // The axes this box drags along with it, none when it drags alone.
+    final partners = [
+      if (group.isLinked)
+        for (final other in group.axes)
+          if (other.prop != axis.prop) other.prop
+    ];
 
     // An animated property stays editable (docs/07 §4.3): the field shows the
     // value under the playhead, and a change writes it into the key sitting
@@ -685,6 +896,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     if (scalar case BridgeScalar_Expression scalar) {
       return EffectParamRowExpression(
           value: scalar,
+          row: BridgeExpressionRow.transform(axis.prop),
           set: (value) {
             final field = (value as BridgeEffectValue_Float).field0;
 
@@ -709,7 +921,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // and 390° are the same picture but not the same animation, and a single
     // box cannot say which of the two a key holds. The value written is still
     // the one angle — see `TurnsAndDegreesField`.
-    final isRotation = axis.suffix == '°';
+    final isRotation = axis.suffix == '°' && axis.turns;
 
     if (scalar is! BridgeScalar_Keyframed) {
       final static_ = (scalar as BridgeScalar_Static).field0;
@@ -735,13 +947,14 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           speed: axis.speed,
           decimals: axis.decimals,
           suffix: axis.suffix,
-          onChanged: (v) => _commit(axis.prop, v.toDouble(), partner, frame),
+          onChanged: (v) => _commit(axis.prop, v.toDouble(), partners, frame),
           onChangeStart: () => _staged = transform,
-          onChangeLive: (v) => _live(axis.prop, v.toDouble(), partner, frame),
-          onChangeEnd: (v) => _commit(axis.prop, v.toDouble(), partner, frame),
+          onChangeLive: (v) => _live(axis.prop, v.toDouble(), partners, frame),
+          onChangeEnd: (v) =>
+              _commit(axis.prop, v.toDouble(), partners, frame),
           onDragCancel: () {
             _clearLive();
-            _linkRatio = null;
+            _linkRatios.clear();
             setState(() => _staged = null);
           },
           setExpression: () {
@@ -754,7 +967,21 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       );
     }
 
-    final sampled = sampledScalar(scalar, timeOfFrame(widget.comp, frame));
+    final time = timeOfFrame(widget.comp, frame);
+    var sampled = sampledScalar(scalar, time);
+    // An Orientation turns from key to key as one, so its angles read off
+    // that turn rather than each off its own curve.
+    if (transform.depth case final d? when _isOrientation(axis.prop)) {
+      final o = sampledOrientation(
+          d.orientationX, d.orientationY, d.orientationZ, time);
+      if (o != null) {
+        sampled = switch (axis.prop) {
+          BridgeTransformProp.orientationX => o.$1,
+          BridgeTransformProp.orientationY => o.$2,
+          _ => o.$3,
+        };
+      }
+    }
     // No live preview mid-drag: staging a keyframed transform through the
     // static-preview path would lie about the curve. The release commits one
     // op — the key at the playhead updated or planted.
@@ -762,7 +989,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       return TurnsAndDegreesField(
         keyName: '${widget.keyPrefix}-${axis.prop.name}',
         degrees: sampled,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partner),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners),
       );
     }
     return SizedBox(
@@ -775,9 +1002,60 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         speed: axis.speed,
         decimals: axis.decimals,
         suffix: axis.suffix,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partner),
-        onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame, partner),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners),
+        onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame, partners),
         onStart: () => _keyOnDragStart(axis.prop, scalar, sampled, frame),
+      ),
+    );
+  }
+
+  /// A colour row's one cell: a swatch showing the colour under the playhead,
+  /// which writes all three channels as one step, into the keys at the
+  /// playhead when they are animated.
+  Widget _swatch(BridgeTransform transform, TransformGroup group, int frame) {
+    final time = timeOfFrame(widget.comp, frame);
+    final rgb = [
+      for (final axis in group.axes)
+        sampledScalar(read(transform, axis.prop), time)
+    ];
+    List<BridgeScalar> values(PickedColour p) => [
+          for (final (i, v) in [p.r, p.g, p.b].indexed)
+            scalarWithValueAt(
+                read(transform, group.axes[i].prop), v, widget.comp, frame),
+        ];
+    final exact = PickedColour(rgb[0], rgb[1], rgb[2]);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ColourSwatchButton(
+        key: ValueKey<String>(
+            '${widget.keyPrefix}-${group.axes.first.prop.name}'),
+        colour: exact.clipped,
+        // The exact numbers, so an over-white light or an imported value is
+        // not rounded to what a screen shows.
+        initial: exact,
+        scale: ColourScale.unit,
+        max: 64,
+        onPreview: (p) {
+          var staged = transform;
+          for (final (i, v) in values(p).indexed) {
+            staged = writeScalar(staged, group.axes[i].prop, v);
+          }
+          final ui = _ui;
+          _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
+                frame: BigInt.from(ui.playheadFrame.value),
+                scale: ui.viewerScale,
+                layer: widget.layer,
+                transform: staged,
+              ));
+        },
+        onPicked: (p) {
+          _throttle.cancel();
+          widget.layer.setTransforms(
+            props: [for (final axis in group.axes) axis.prop],
+            values: values(p),
+          );
+          widget.onChanged();
+        },
       ),
     );
   }
@@ -807,7 +1085,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// — without writing it. The same patched-clone door a static drag
   /// uses, carrying a whole animation instead of one number.
   void _liveKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
-      int frame, BridgeTransformProp? partner) {
+      int frame, List<BridgeTransformProp> partners) {
     final written = scalarWithValueAt(scalar, value, widget.comp, frame);
     rowValueDrag.value = RowValueDrag(
       layer: widget.layer.internallayerId.toString(),
@@ -817,9 +1095,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       keys: (written as BridgeScalar_Keyframed).field0,
     );
     var staged = writeScalar(widget.transform, prop, written);
-    // A linked row previews both axes, or the release would move the picture
-    // one last time on a drag that looked finished.
-    if (partner != null) {
+    // A linked row previews every axis, or the release would move the
+    // picture one last time on a drag that looked finished.
+    for (final partner in partners) {
       staged = writeScalar(
         staged,
         partner,
@@ -846,34 +1124,35 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// axis in the same breath, and `setTransforms` batches the pair so it stays
   /// one step.
   void _commitKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
-      int frame, BridgeTransformProp? partner) {
+      int frame, List<BridgeTransformProp> partners) {
     // The write is the last word: a held preview tick after it would put the
     // provisional picture back, and the graph reads the document again.
     _throttle.cancel();
     _clearLive();
     rowValueDrag.value = null;
     final written = scalarWithValueAt(scalar, value, widget.comp, frame);
-    if (partner == null) {
+    if (partners.isEmpty) {
       widget.layer.setTransform(prop: prop, value: written);
     } else {
       widget.layer.setTransforms(props: [
         prop,
-        partner
+        ...partners
       ], values: [
         written,
-        scalarWithValueAt(read(widget.transform, partner),
-            _linked(prop, partner, value, frame), widget.comp, frame),
+        for (final partner in partners)
+          scalarWithValueAt(read(widget.transform, partner),
+              _linked(prop, partner, value, frame), widget.comp, frame),
       ]);
     }
-    _linkRatio = null;
+    _linkRatios.clear();
     widget.onChanged();
   }
 
   /// A drag tick: hold the new value locally and render it, without committing.
   void _live(BridgeTransformProp prop, double value,
-      [BridgeTransformProp? partner, int frame = 0]) {
+      [List<BridgeTransformProp> partners = const [], int frame = 0]) {
     var staged = write(_staged ?? widget.transform, prop, value);
-    if (partner != null) {
+    for (final partner in partners) {
       staged = write(staged, partner, _linked(prop, partner, value, frame));
     }
     setState(() => _staged = staged);
@@ -907,23 +1186,24 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// Release, or a typed value: one op for the one property that changed — or,
   /// on a linked row, one batch for the pair, which is still one step.
   void _commit(BridgeTransformProp prop, double value,
-      [BridgeTransformProp? partner, int frame = 0]) {
+      [List<BridgeTransformProp> partners = const [], int frame = 0]) {
     // The commit is the last word on this gesture: a held preview tick after it
     // would put the provisional picture back.
     _throttle.cancel();
     _clearLive();
-    if (partner == null) {
+    if (partners.isEmpty) {
       widget.layer.setTransform(prop: prop, value: BridgeScalar.static_(value));
     } else {
       widget.layer.setTransforms(props: [
         prop,
-        partner
+        ...partners
       ], values: [
         BridgeScalar.static_(value),
-        BridgeScalar.static_(_linked(prop, partner, value, frame)),
+        for (final partner in partners)
+          BridgeScalar.static_(_linked(prop, partner, value, frame)),
       ]);
     }
-    _linkRatio = null;
+    _linkRatios.clear();
     setState(() => _staged = null);
     widget.onChanged();
   }
@@ -977,6 +1257,46 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     );
   }
 
+  /// Whether [group] is one of X, Y and Z Rotation on a layer that turns in
+  /// 3D, which has a rotation order to choose.
+  bool _turnsIn3d(TransformGroup group) =>
+      widget.transform.depth != null &&
+      const {
+        BridgeTransformProp.rotation,
+        BridgeTransformProp.rotationX,
+        BridgeTransformProp.rotationY,
+      }.contains(group.axes.first.prop);
+
+  /// The rotation rows' menu: After Effects' rotation order, ticked while the
+  /// layer turns in it. A change keeps the pose and is one undo step.
+  void _orderMenu(BuildContext context, Offset at) {
+    final on = widget.transform.depth?.afterEffectsOrder ?? false;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: ValueKey<String>('${widget.keyPrefix}-rotation-order'),
+          onPressed: () {
+            close(null);
+            try {
+              widget.layer.setAfterEffectsOrder(on_: !on);
+            } catch (_) {
+              // An expression drives a rotation, so there is no pose to keep.
+              return;
+            }
+            widget.onChanged();
+          },
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            menuTick(on),
+            const SizedBox(width: 6),
+            Text(l10n.transformAfterEffectsOrder),
+          ]),
+        ),
+      ],
+    );
+  }
+
   void _commitExpression(BridgeTransformProp prop, BridgeScalar value) {
     // The commit is the last word on this gesture: a held preview tick after it
     // would put the provisional picture back.
@@ -988,10 +1308,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 }
 
-/// What a camera channel reads on a transform that carries none - every layer
-/// but a camera. A still zero rather than a throw: the rows are built from the
-/// kind, so nothing asks unless there is something to answer with.
+/// What a camera or light channel reads on a transform that carries none -
+/// every layer but a camera or a light. A still zero rather than a throw: the
+/// rows are built from the kind, so nothing asks unless there is something to
+/// answer with.
 const BridgeScalar _noChannel = BridgeScalar.static_(0);
+
+bool _isOrientation(BridgeTransformProp prop) =>
+    prop == BridgeTransformProp.orientationX ||
+    prop == BridgeTransformProp.orientationY ||
+    prop == BridgeTransformProp.orientationZ;
 
 /// One property out of a transform.
 BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
@@ -1007,14 +1333,45 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.rotationX => tf.rotationX,
       BridgeTransformProp.rotationY => tf.rotationY,
       BridgeTransformProp.opacity => tf.opacity,
-      BridgeTransformProp.poiX => tf.camera?.poiX ?? _noChannel,
-      BridgeTransformProp.poiY => tf.camera?.poiY ?? _noChannel,
-      BridgeTransformProp.poiZ => tf.camera?.poiZ ?? _noChannel,
+      BridgeTransformProp.orientationX => tf.depth?.orientationX ?? _noChannel,
+      BridgeTransformProp.orientationY => tf.depth?.orientationY ?? _noChannel,
+      BridgeTransformProp.orientationZ => tf.depth?.orientationZ ?? _noChannel,
+      BridgeTransformProp.anchorZ => tf.depth?.anchorZ ?? _noChannel,
+      BridgeTransformProp.scaleZ =>
+        tf.depth?.scaleZ ?? const BridgeScalar.static_(100),
+      BridgeTransformProp.poiX =>
+        tf.camera?.poiX ?? tf.light?.poiX ?? _noChannel,
+      BridgeTransformProp.poiY =>
+        tf.camera?.poiY ?? tf.light?.poiY ?? _noChannel,
+      BridgeTransformProp.poiZ =>
+        tf.camera?.poiZ ?? tf.light?.poiZ ?? _noChannel,
       BridgeTransformProp.zoom => tf.camera?.zoom ?? _noChannel,
       BridgeTransformProp.focusDistance =>
         tf.camera?.focusDistance ?? _noChannel,
       BridgeTransformProp.aperture => tf.camera?.aperture ?? _noChannel,
       BridgeTransformProp.blurLevel => tf.camera?.blurLevel ?? _noChannel,
+      BridgeTransformProp.lightIntensity => tf.light?.intensity ?? _noChannel,
+      BridgeTransformProp.lightColourR => tf.light?.colourR ?? _noChannel,
+      BridgeTransformProp.lightColourG => tf.light?.colourG ?? _noChannel,
+      BridgeTransformProp.lightColourB => tf.light?.colourB ?? _noChannel,
+      BridgeTransformProp.coneAngle => tf.light?.coneAngle ?? _noChannel,
+      BridgeTransformProp.coneFeather => tf.light?.coneFeather ?? _noChannel,
+      BridgeTransformProp.lightRadius => tf.light?.radius ?? _noChannel,
+      BridgeTransformProp.falloffDistance =>
+        tf.light?.falloffDistance ?? _noChannel,
+      BridgeTransformProp.lightWidth => tf.light?.width ?? _noChannel,
+      BridgeTransformProp.lightHeight => tf.light?.height ?? _noChannel,
+      BridgeTransformProp.shadowDarkness =>
+        tf.light?.shadowDarkness ?? _noChannel,
+      BridgeTransformProp.shadowDiffusion =>
+        tf.light?.shadowDiffusion ?? _noChannel,
+      BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
+      BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
+      BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
+      BridgeTransformProp.shininess => tf.material?.shininess ?? _noChannel,
+      BridgeTransformProp.metal => tf.material?.metal ?? _noChannel,
+      BridgeTransformProp.lightTransmission =>
+        tf.material?.lightTransmission ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1033,6 +1390,9 @@ BridgeTransform writeScalar(
       p == prop ? replacement : current;
 
   final camera = tf.camera;
+  final light = tf.light;
+  final material = tf.material;
+  final depth = tf.depth;
   return BridgeTransform(
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
@@ -1058,6 +1418,53 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.focusDistance, camera.focusDistance),
             aperture: pick(BridgeTransformProp.aperture, camera.aperture),
             blurLevel: pick(BridgeTransformProp.blurLevel, camera.blurLevel),
+          ),
+    light: light == null
+        ? null
+        : BridgeLightChannels(
+            poiX: pick(BridgeTransformProp.poiX, light.poiX),
+            poiY: pick(BridgeTransformProp.poiY, light.poiY),
+            poiZ: pick(BridgeTransformProp.poiZ, light.poiZ),
+            intensity: pick(BridgeTransformProp.lightIntensity, light.intensity),
+            colourR: pick(BridgeTransformProp.lightColourR, light.colourR),
+            colourG: pick(BridgeTransformProp.lightColourG, light.colourG),
+            colourB: pick(BridgeTransformProp.lightColourB, light.colourB),
+            coneAngle: pick(BridgeTransformProp.coneAngle, light.coneAngle),
+            coneFeather:
+                pick(BridgeTransformProp.coneFeather, light.coneFeather),
+            radius: pick(BridgeTransformProp.lightRadius, light.radius),
+            falloffDistance:
+                pick(BridgeTransformProp.falloffDistance, light.falloffDistance),
+            width: pick(BridgeTransformProp.lightWidth, light.width),
+            height: pick(BridgeTransformProp.lightHeight, light.height),
+            shadowDarkness:
+                pick(BridgeTransformProp.shadowDarkness, light.shadowDarkness),
+            shadowDiffusion:
+                pick(BridgeTransformProp.shadowDiffusion, light.shadowDiffusion),
+          ),
+    material: material == null
+        ? null
+        : BridgeMaterialChannels(
+            ambient: pick(BridgeTransformProp.ambient, material.ambient),
+            diffuse: pick(BridgeTransformProp.diffuse, material.diffuse),
+            specular: pick(BridgeTransformProp.specular, material.specular),
+            shininess: pick(BridgeTransformProp.shininess, material.shininess),
+            metal: pick(BridgeTransformProp.metal, material.metal),
+            lightTransmission: pick(BridgeTransformProp.lightTransmission,
+                material.lightTransmission),
+          ),
+    depth: depth == null
+        ? null
+        : BridgeDepthChannels(
+            orientationX:
+                pick(BridgeTransformProp.orientationX, depth.orientationX),
+            orientationY:
+                pick(BridgeTransformProp.orientationY, depth.orientationY),
+            orientationZ:
+                pick(BridgeTransformProp.orientationZ, depth.orientationZ),
+            anchorZ: pick(BridgeTransformProp.anchorZ, depth.anchorZ),
+            scaleZ: pick(BridgeTransformProp.scaleZ, depth.scaleZ),
+            afterEffectsOrder: depth.afterEffectsOrder,
           ),
   );
 }

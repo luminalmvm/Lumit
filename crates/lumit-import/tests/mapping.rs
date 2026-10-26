@@ -402,18 +402,17 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
 ///
 /// The camera every tracker writes â€” HLAE, SynthEyes, a 3D application's
 /// exporter â€” keys three things and only three: Position, Orientation and
-/// Zoom. Two of them used to be lost. Orientation had nowhere to go, because
-/// Lumit turns a layer by its X/Y/Z rotations and After Effects turns it by
-/// *both* those and an orientation; and the whole lot was thrown away
-/// wholesale whenever the exporter had also hung an expression on the
-/// property, which is how a time-remapped camera is written.
+/// Zoom. The whole lot used to be thrown away wholesale whenever the exporter
+/// had also hung an expression on the property, which is how a time-remapped
+/// camera is written.
 ///
 /// So this is the shape of a real tracked camera, keyframe for keyframe: the
-/// orientation onto the rotation lanes in Lumit's order, the zoom out of
-/// the options group, and the After Effects expression switched off with its
-/// text kept, so what drives the camera is the motion that was tracked.
+/// orientation on its own lanes, turning between keys as After Effects turns
+/// it, the zoom out of the options group, and the After Effects expression
+/// switched off with its text kept, so what drives the camera is the motion
+/// that was tracked.
 #[test]
-fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
+fn a_tracked_cameras_keyframes_arrive_on_the_orientation_lanes_and_the_zoom() {
     let (doc, report) = map_capture(&camera_capture());
     let camera = layer(comp(&doc, "Track"), "Camera");
 
@@ -423,25 +422,27 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
     assert_eq!(keys(&camera.transform.position_x)[1].value, 20.0);
     assert_eq!(keys(&camera.transform.position_z)[2].value, 300.0);
 
-    // Orientation, onto the rotation lanes. It turns on both X and Y, so the
-    // angles are rewritten in Lumit's order and the turn matches at every key.
+    // Orientation, on its own lanes, angle for angle, and the turn matches at
+    // every key.
     let orientation = [[10.0, 40.0, 1.0], [20.0, 45.0, 2.0], [30.0, 50.0, 3.0]];
+    let [ox, oy, oz] = camera.transform.orientation.each_ref().map(keys);
     for (n, o) in orientation.into_iter().enumerate() {
-        let turn = lumit_turn(camera, keys(&camera.transform.rotation_x)[n].time.to_f64());
+        assert_eq!([ox[n].value, oy[n].value, oz[n].value], o, "key {n}");
+        let turn = lumit_turn(camera, ox[n].time.to_f64());
         assert!(same_turn(turn, ae_turn(o, [0.0; 3])), "key {n}");
     }
-    let pitch = keys(&camera.transform.rotation_x);
-    assert_eq!(pitch.len(), 3);
-    assert_eq!(pitch[0].interp_out, SideInterp::Linear);
-    assert!(reported(&report, |r| matches!(
-        r,
-        Reason::RotationOrderConverted
-    )));
+    assert_eq!(ox[0].interp_out, SideInterp::Linear);
+    assert!(is_still_zero(&camera.transform.rotation_x));
+    // Between keys it takes the one shortest turn, as After Effects does,
+    // halfway round at halfway.
+    let at = |t: f64| camera.transform.orientation_at(t, &|p| p.value_at(t));
+    let between = lumit_core::camera::turn_between_deg;
+    let (a, mid, b) = (at(0.0), at(0.5), at(1.0));
+    assert!((between(a, mid) - between(a, b) / 2.0).abs() < 1e-6);
+    assert!((between(mid, b) - between(a, b) / 2.0).abs() < 1e-6);
     // The middle key is held in After Effects, and held here.
-    assert_eq!(
-        keys(&camera.transform.rotation_y)[1].interp_out,
-        SideInterp::Hold
-    );
+    assert_eq!(oy[1].interp_out, SideInterp::Hold);
+    assert_eq!(at(1.5), at(1.0));
 
     // Zoom, out of the options group rather than the transform.
     let LayerKind::Camera { zoom, .. } = &camera.kind else {
@@ -474,9 +475,9 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
 /// **A 3D layer turned on both X and Y faces where After Effects faces it.**
 ///
 /// After Effects turns by `Rx · Ry · Rz`, with Orientation outside that, and
-/// Lumit by `Ry · Rx · Rz`, so the angles copied straight across pointed such a
-/// layer the wrong way. The matrix is the check, X at a quarter turn included,
-/// where Y and Z become one turn.
+/// Lumit by `Ry · Rx · Rz`. An imported layer turns in After Effects' order,
+/// so its angles come across as they are. The matrix is the check, X at a
+/// quarter turn included, where Lumit's own Y and Z would be one turn.
 #[test]
 fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
     let turned = |index: u32, orientation: [f64; 3], [x, y, z]: [f64; 3]| {
@@ -491,6 +492,8 @@ fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
             "properties": [{
                 "match_name": "ADBE Transform Group",
                 "group": [
+                    { "match_name": "ADBE Anchor Point", "value_type": "point3", "value": [5.0, 6.0, 7.0] },
+                    { "match_name": "ADBE Scale", "value_type": "point3", "value": [100.0, 100.0, 50.0] },
                     { "match_name": "ADBE Orientation", "value_type": "point3", "value": orientation },
                     float("ADBE Rotate X", x),
                     float("ADBE Rotate Y", y),
@@ -516,19 +519,24 @@ fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
     }))
     .expect("the capture parses");
 
-    let (doc, report) = map_capture(&capture);
+    let (doc, _) = map_capture(&capture);
     for (i, (o, r)) in (1..).zip(cases) {
         let turned = layer(comp(&doc, "Turns"), &format!("Turned {i}"));
         assert!(
             same_turn(lumit_turn(turned, 0.0), ae_turn(o, r)),
             "orientation {o:?}, rotation {r:?}"
         );
+        // Orientation, the rotations, Anchor Z and Scale Z arrive as they are.
+        let tr = &turned.transform;
+        assert!(tr.after_effects_order);
+        assert_eq!(tr.orientation.each_ref().map(|p| p.value_at(0.0)), o);
+        let rows = [&tr.rotation_x, &tr.rotation_y, &tr.rotation].map(|p| p.value_at(0.0));
+        assert_eq!(rows, r);
+        assert_eq!(
+            (tr.anchor_z.value_at(0.0), tr.scale_z.value_at(0.0)),
+            (7.0, 50.0)
+        );
     }
-    // Still angles convert exactly, so there is nothing to report.
-    assert!(!reported(&report, |r| matches!(
-        r,
-        Reason::RotationOrderConverted | Reason::OrientationNotCarried
-    )));
 }
 
 type Mat3 = lumit_core::camera::Mat3;
@@ -554,14 +562,23 @@ fn ae_turn(orientation: [f64; 3], rotation: [f64; 3]) -> Mat3 {
     mul(xyz(orientation), xyz(rotation))
 }
 
-/// The turn a layer's rotation lanes make at `t`, in Lumit's own order.
+/// The turn a layer's Orientation and rotation lanes make at `t`.
 fn lumit_turn(layer: &Layer, t: f64) -> Mat3 {
     let tr = &layer.transform;
-    lumit_core::camera::rotation((
-        tr.rotation_x.value_at(t),
-        tr.rotation_y.value_at(t),
-        tr.rotation.value_at(t),
+    let orientation = tr.orientation_at(t, &|p| p.value_at(t));
+    lumit_core::camera::rotation(lumit_core::camera::oriented(
+        orientation,
+        (
+            tr.rotation_x.value_at(t),
+            tr.rotation_y.value_at(t),
+            tr.rotation.value_at(t),
+        ),
+        tr.after_effects_order,
     ))
+}
+
+fn is_still_zero(p: &lumit_core::anim::Property) -> bool {
+    p.animation == lumit_core::anim::Animation::Static(0.0)
 }
 
 fn same_turn(a: Mat3, b: Mat3) -> bool {
@@ -702,4 +719,35 @@ fn a_motion_tile_is_measured_against_its_own_layer_not_the_composition() {
     assert_eq!(at("output_width"), 3200.0);
     // And the untouched Output Height is the layer's own, whole.
     assert_eq!(at("output_height"), 1088.0);
+}
+
+/// **An ambient light arrives as one, its keys with it.**
+///
+/// Light options used to come across as their still value alone, and an
+/// ambient light as a point. Its intensity's keys arrive as Lumit's own
+/// percentages, and its colour's in scene-linear light.
+#[test]
+fn an_ambient_light_keeps_its_kind_and_its_keyframes() {
+    let (doc, report) = mapped("edges.lum-bundle");
+    let LayerKind::Light { light } = &layer(comp(&doc, "Edges"), "Key light").kind else {
+        panic!("a light");
+    };
+    assert_eq!(light.kind, lumit_core::model::LightKind::Ambient);
+    assert_eq!(
+        comp(&doc, "Edges").lighting,
+        lumit_core::model::CompLighting::AfterEffects { linear: false },
+        "lit as After Effects lights it"
+    );
+    assert_eq!(keys(&light.intensity).len(), 2);
+    assert_eq!(light.intensity.value_at(2.0), 150.0);
+    let green = keys(&light.colour[1]);
+    assert_eq!(green.len(), 2);
+    assert!(
+        (green[1].value - 0.214).abs() < 1e-3,
+        "half grey, made linear"
+    );
+    assert!(!reported(&report, |r| matches!(
+        r,
+        Reason::LightKindApproximated { .. }
+    )));
 }

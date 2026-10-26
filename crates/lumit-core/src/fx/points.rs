@@ -88,10 +88,9 @@ pub const CAP_HARD: i64 = 1_000_000;
 /// `1/W` of the size it would have had on the plane.
 ///
 /// [`FLAT`](Self::FLAT) is the identity: `(x, y, 1)` for any `z`, which is a
-/// 2D layer, a composition with no camera, and every project saved before the
-/// axis existed. It is applied without a branch and lands on exactly the bits
-/// it was handed, which is what makes that compatibility guarantee arithmetic
-/// rather than a promise.
+/// 2D layer and every project saved before the axis existed. It is applied
+/// without a branch and lands on exactly the bits it was handed, which is what
+/// makes that compatibility guarantee arithmetic rather than a promise.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Projection {
     /// Row-major 3×4: `[x, y, z, 1] → (X, Y, W)`, in the units the particle
@@ -115,7 +114,7 @@ impl Projection {
         ],
     };
 
-    /// Whether this is the identity — a 2D layer, or a comp with no camera.
+    /// Whether this is the identity: a 2D layer.
     #[must_use]
     pub fn is_flat(&self) -> bool {
         *self == Projection::FLAT
@@ -1711,10 +1710,28 @@ pub struct PointsSchedule {
     /// distance in. Only the points effects a stack ends on are given any,
     /// and it is nought on every other layer.
     pub grow: [u32; 2],
-    /// The particles a Particulate with a Collide with layer walked to, in
-    /// px@comp ([`stepped`]). The card draws these instead of working its own
+    /// The particles a Particulate that walks got to, in px@comp
+    /// ([`stepped`]). The card draws these instead of working its own
     /// out from `schedule`. `None` everywhere else.
     pub stepped: Option<PointsStream>,
+    /// What a Particulate with Trails on draws its kept picture from. `None`
+    /// everywhere else.
+    pub trails: Option<Trails>,
+}
+
+/// A Particulate with Persistence above nought: the card draws every frame
+/// from the in point again, each from the document at its own time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trails {
+    /// The walk's [`stepped::definition`], which names the kept pictures.
+    pub key: [u8; 32],
+    pub doc: std::sync::Arc<crate::model::Document>,
+    pub comp: uuid::Uuid,
+    pub layer: uuid::Uuid,
+    /// Which clone this is, as the driver walk reads it.
+    pub clone: (u32, u32),
+    /// How far the room round the art moves the points in, px@comp.
+    pub inset: [f32; 2],
 }
 
 /// One letter of a Text layer as it is laid out, in the layer's own px. A

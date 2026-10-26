@@ -26,7 +26,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraView;
 /// only view that is not a pose of the panel's own. The six fixed ones look at
 /// the comp centre from far enough away to be orthographic to the pixel, and
 /// the three custom ones start from a three-quarter view and keep whatever the
-/// camera tools do to them until the comp is closed.
+/// camera tools do to them until the comp is closed. **Free** is a 3D
+/// viewport's own, moved without a tool and kept with the session.
 enum ViewerView {
   activeCamera,
   front,
@@ -37,7 +38,8 @@ enum ViewerView {
   bottom,
   custom1,
   custom2,
-  custom3;
+  custom3,
+  free;
 
   /// The view the engine builds this one's starting pose from, or null for the
   /// active camera, which has no pose of its own.
@@ -51,16 +53,19 @@ enum ViewerView {
         ViewerView.bottom => BridgeCameraView.bottom,
         ViewerView.custom1 ||
         ViewerView.custom2 ||
-        ViewerView.custom3 =>
+        ViewerView.custom3 ||
+        ViewerView.free =>
           BridgeCameraView.custom,
       };
 
-  /// Whether the camera tools move this view. Only the custom three: a Front
-  /// view that could be dragged off square would not be a front view.
-  bool get movable =>
+  /// Whether the camera tools can orbit this view. Only the custom three: a
+  /// Front view turned off square would not be a front view. The fixed ones
+  /// still track and dolly.
+  bool get orbits =>
       this == ViewerView.custom1 ||
       this == ViewerView.custom2 ||
-      this == ViewerView.custom3;
+      this == ViewerView.custom3 ||
+      this == ViewerView.free;
 
   /// What the picker's row reads.
   String get title => switch (this) {
@@ -74,6 +79,43 @@ enum ViewerView {
         ViewerView.custom1 => l10n.viewerViewCustom1,
         ViewerView.custom2 => l10n.viewerViewCustom2,
         ViewerView.custom3 => l10n.viewerViewCustom3,
+        ViewerView.free => l10n.viewerViewFree,
+      };
+}
+
+/// The 3D view shortcuts a Viewer view starts with, F10 to F12 in turn, as
+/// After Effects sets them.
+const List<ViewerView> defaultViewSlots = [
+  ViewerView.front,
+  ViewerView.custom1,
+  ViewerView.activeCamera,
+];
+
+/// What the View menu and the keyboard ask a Viewer's 3D view to do. The
+/// Viewer answers, since it holds the layers' boxes and the camera tools'
+/// way of writing a camera.
+enum ViewerCameraCommand {
+  lookAtSelected,
+  lookAtAll,
+  reset,
+
+  /// Put the selected layers on the layer or Null under the pointer.
+  placeOnSurface;
+
+  /// The keymap action id this command answers.
+  String get action => switch (this) {
+        ViewerCameraCommand.lookAtSelected => 'viewer.3d.look.selected',
+        ViewerCameraCommand.lookAtAll => 'viewer.3d.look.all',
+        ViewerCameraCommand.reset => 'viewer.3d.reset',
+        ViewerCameraCommand.placeOnSurface => 'viewer.3d.place',
+      };
+
+  /// What the View menu's row reads.
+  String get title => switch (this) {
+        ViewerCameraCommand.lookAtSelected => l10n.menuLookAtSelectedLayers,
+        ViewerCameraCommand.lookAtAll => l10n.menuLookAtAllLayers,
+        ViewerCameraCommand.reset => l10n.menuReset3dView,
+        ViewerCameraCommand.placeOnSurface => l10n.menuPlaceOnSurface,
       };
 }
 

@@ -123,6 +123,8 @@ pub struct BridgeTextStyle {
     pub stroke_width: f64,
     /// The outline is drawn over the fill. Off puts the fill on top.
     pub stroke_over: bool,
+    /// Every fill, then every outline (or the other way round), not letter by letter.
+    pub strokes_together: bool,
 }
 
 /// How the lines of a text layer are laid out against each other. All px.
@@ -436,103 +438,6 @@ impl LayerReference {
         self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
-    /// **Text to shapes**: a copy of this Type layer beside it, whose
-    /// picture is the glyph outlines as vector art.
-    ///
-    /// The original is kept and untouched, which is After Effects' convention
-    /// and the only one that survives a mistake: the words are still typeable,
-    /// still keyed, still expression-driven, and the copy is a drawing.
-    ///
-    /// Converted **at `frame`**, because a line the words of which come from an
-    /// expression says something different at every frame and the honest answer
-    /// is what it says at the moment the command is used. A line on a path
-    /// converts curved: the outlines are placed by the same walk the rasteriser
-    /// uses, so the copy lands on top of the layer it came from rather than
-    /// near it.
-    ///
-    /// One `Op`, so one undo step — the whole layer arrives at once.
-    #[frb(sync)]
-    pub fn create_shapes_from_text(&self, frame: i64) -> Result<LayerReference, BridgeError> {
-        let comp = self.composition()?;
-        let layer = self.item()?;
-        let lumit_core::model::LayerKind::Text { document } = &layer.kind else {
-            return Err(BridgeError::NotText);
-        };
-        let index = comp
-            .layers
-            .iter()
-            .position(|l| l.id == self.layer_id)
-            .ok_or(BridgeError::InvalidLayer)?;
-        let t = comp
-            .frame_rate
-            .time_of_frame(frame)
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let lt = lumit_core::time::layer_time(t.0.to_f64(), layer.start_offset.0);
-
-        // The words at this frame, through the one resolver the rasteriser and
-        // the frame key read, so a converted caption says what it was saying.
-        let doc = {
-            let project = self.project()?;
-            let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
-            project.store.snapshot()
-        };
-        let words = document
-            .resolved_text(std::sync::Arc::new(
-                lumit_core::expression::ExpressionContext {
-                    document: doc,
-                    comp: Some(self.comp_id),
-                    layer: Some(self.layer_id),
-                    comp_time: t.0.to_f64(),
-                    current_depth: 0,
-                    inputs: None,
-                },
-            ))
-            .into_owned();
-        let spine = document
-            .path
-            .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
-            .filter(|p| !p.is_empty());
-        let contents = lumit_text::shape_items(
-            &lumit_text::TextBlock::of(document, &words),
-            spine.as_ref(),
-            document.path_offset.value_at(lt) as f32,
-        );
-        if contents.is_empty() {
-            return Err(BridgeError::NothingToConvert);
-        }
-
-        let mut copy = layer.clone();
-        copy.id = Uuid::now_v7();
-        copy.name = format!("{} outlines", layer.name);
-        for effect in &mut copy.effects {
-            effect.id = Uuid::now_v7();
-        }
-        // **The masks and the paint do not come across.** Both are drawn in
-        // layer pixels measured from the layer's box corner, and a shape
-        // layer's corner is its *art's* bounding box rather than the origin —
-        // so a mask carried over would land somewhere else. The path mask has
-        // already done its work: the curve is in the outlines.
-        copy.masks.clear();
-        copy.paint.clear();
-        // Which is also why the anchor moves by that corner: the art's box
-        // starts at the first glyph's left bearing, not at zero, and without
-        // this the copy would sit a few pixels off the line it came from.
-        if let Some((x0, y0, _, _)) = lumit_core::shape::contents_bounds(&contents, lt) {
-            shift_property(&mut copy.transform.anchor_x, -x0);
-            shift_property(&mut copy.transform.anchor_y, -y0);
-        }
-        copy.kind = lumit_core::model::LayerKind::Shape { contents };
-        crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
-
-        let new_id = copy.id;
-        self.commit(lumit_core::ops::Op::AddLayer {
-            comp: self.comp_id,
-            index,
-            layer: Box::new(copy),
-        })?;
-        Ok(LayerReference::new(self.project_id, self.comp_id, new_id))
-    }
-
     /// **Text to points**: a copy of this Type layer beside it, fitted
     /// with **Emit from image**, so the words become a points stream in the
     /// shape of themselves.
@@ -643,15 +548,172 @@ impl LayerReference {
         })
     }
 
-    /// This camera's evaluated placement at `frame`: the eye, the effective
-    /// rotation with a two-node camera's aim already in it, and the zoom, with
-    /// a solve link followed (docs/impl/camera.md §2). What the camera tools
-    /// start a drag from. `None` on any other kind.
+    /// Replace whether a layer casts and accepts shadows, as one undo step.
     #[frb(sync)]
-    pub fn camera_pose_at(
+    pub fn set_material_settings(
+        &self,
+        settings: crate::api::layer::BridgeMaterialSettings,
+    ) -> Result<(), BridgeError> {
+        self.commit(lumit_core::ops::Op::SetMaterialSettings {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            settings: settings.core(),
+        })
+    }
+
+    /// Replace a light's kind, falloff, aim and shadows as one undo step.
+    /// Refused on any other kind of layer.
+    #[frb(sync)]
+    pub fn set_light_settings(
+        &self,
+        settings: crate::api::layer::BridgeLightSettings,
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let was = match &layer.kind {
+            lumit_core::model::LayerKind::Light { light } => light.settings(),
+            _ => return Err(BridgeError::InvalidLayer),
+        };
+        let mut settings = settings.core(was.legacy_shape);
+        // A new falloff on an old light takes After Effects' curves with it.
+        if settings.falloff != was.falloff {
+            settings.legacy_shape = false;
+        }
+        self.commit(lumit_core::ops::Op::SetLightSettings {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            settings,
+        })
+    }
+
+    /// This camera's evaluated placement in the comp at `frame`: the eye, the
+    /// effective rotation with a two-node camera's aim already in it, and the
+    /// zoom, with a solve link and its parents followed (docs/impl/camera.md
+    /// §2). The point of interest comes out of the parent's space the same way.
+    /// What the camera tools start a drag from. `None` on any other kind.
+    #[frb(sync)]
+    pub fn camera_aim_at(
+        &self,
+        frame: u64,
+    ) -> Result<Option<crate::api::layer::BridgeCameraAim>, BridgeError> {
+        self.with_camera_at(frame, |doc, comp, layer, t| {
+            let pose = lumit_core::track::camera_pose_of(
+                doc,
+                comp,
+                layer,
+                t,
+                &lumit_render::track::Store,
+            )?;
+            let context = lumit_core::model::comp_context(doc, comp, t);
+            let read = lumit_core::model::context_reader(&context, t);
+            let solves = lumit_render::track::solves_for(doc);
+            let poi = lumit_core::model::point_of_interest(comp, layer, t, &read, solves)?;
+            Some(crate::api::layer::BridgeCameraAim {
+                pose: crate::api::layer::BridgeCameraPose::of(pose.pose),
+                poi_x: poi.0,
+                poi_y: poi.1,
+                poi_z: poi.2,
+            })
+        })
+    }
+
+    /// This camera's own placement at `frame`, inside its parents: its eye, and
+    /// its turn with a two-node camera's aim and a solve link in it. What a
+    /// layer parented to it is placed by. `None` on any other kind.
+    #[frb(sync)]
+    pub fn camera_own_pose_at(
         &self,
         frame: u64,
     ) -> Result<Option<crate::api::layer::BridgeCameraPose>, BridgeError> {
+        self.with_camera_at(frame, |doc, comp, layer, t| {
+            let own = lumit_core::track::own_camera_pose_of(
+                doc,
+                comp,
+                layer,
+                t,
+                &lumit_render::track::Store,
+            )?;
+            Some(crate::api::layer::BridgeCameraPose::of(own.pose))
+        })
+    }
+
+    /// The camera's own values that put it at `aim` in the comp at `frame`:
+    /// the eye, the rotation rows and the point of interest carried back into
+    /// its parent's space, and the camera's Orientation taken off the rows.
+    /// What a camera drag writes, so a parented camera lands where the drag
+    /// put it. `aim` comes back as it is with no parent and no Orientation.
+    #[frb(sync)]
+    pub fn camera_own_aim(
+        &self,
+        frame: u64,
+        aim: crate::api::layer::BridgeCameraAim,
+    ) -> Result<crate::api::layer::BridgeCameraAim, BridgeError> {
+        let own = self.with_camera_at(frame, |doc, comp, layer, t| {
+            let context = lumit_core::model::comp_context(doc, comp, t);
+            let read = lumit_core::model::context_reader(&context, t);
+            let solves = lumit_render::track::solves_for(doc);
+            let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+            let orientation = layer.transform.orientation_at(lt, &|p| read(layer, p));
+            let back = match lumit_core::model::parent_space(comp, layer, t, &read, solves) {
+                Some(space) => Some(space.invert()?),
+                None if orientation == (0.0, 0.0, 0.0) && !layer.transform.after_effects_order => {
+                    return None
+                }
+                None => None,
+            };
+            let p = aim.pose;
+            let mut eye = lumit_core::camera::Eye {
+                position: (p.x, p.y, p.z),
+                rotation_deg: (p.rotation_x, p.rotation_y, p.rotation_z),
+                point_of_interest: None,
+            };
+            let mut poi = (aim.poi_x, aim.poi_y, aim.poi_z);
+            if let Some(back) = back {
+                eye = back.carry(eye);
+                poi = back.point(poi);
+            }
+            let tr = &layer.transform;
+            let rows = (
+                read(layer, &tr.rotation_x),
+                read(layer, &tr.rotation_y),
+                read(layer, &tr.rotation),
+            );
+            eye.rotation_deg = lumit_core::camera::unoriented(
+                orientation,
+                eye.rotation_deg,
+                tr.after_effects_order,
+                rows,
+            );
+            Some(crate::api::layer::BridgeCameraAim {
+                pose: crate::api::layer::BridgeCameraPose {
+                    x: eye.position.0,
+                    y: eye.position.1,
+                    z: eye.position.2,
+                    rotation_x: eye.rotation_deg.0,
+                    rotation_y: eye.rotation_deg.1,
+                    rotation_z: eye.rotation_deg.2,
+                    ..p
+                },
+                poi_x: poi.0,
+                poi_y: poi.1,
+                poi_z: poi.2,
+            })
+        })?;
+        Ok(own.unwrap_or(aim))
+    }
+
+    /// `read` on the document, this layer and comp time `frame`. `None` for a
+    /// frame the comp's rate cannot place.
+    #[frb(ignore)]
+    fn with_camera_at<T>(
+        &self,
+        frame: u64,
+        read: impl FnOnce(
+            &std::sync::Arc<lumit_core::model::Document>,
+            &lumit_core::model::Composition,
+            &lumit_core::model::Layer,
+            f64,
+        ) -> Option<T>,
+    ) -> Result<Option<T>, BridgeError> {
         let doc = {
             let proj = self.project()?;
             let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -667,14 +729,7 @@ impl LayerReference {
         else {
             return Ok(None);
         };
-        Ok(lumit_core::track::camera_pose_of(
-            &doc,
-            comp,
-            layer,
-            t.0.to_f64(),
-            &lumit_render::track::Store,
-        )
-        .map(|p| crate::api::layer::BridgeCameraPose::of(p.pose)))
+        Ok(read(&doc, comp, layer, t.0.to_f64()))
     }
 }
 
@@ -826,6 +881,7 @@ fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
         stroke: colour_of(style.stroke),
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
+        strokes_together: style.strokes_together,
     }
 }
 
@@ -861,6 +917,7 @@ fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
         stroke: linear_of(style.stroke),
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
+        strokes_together: style.strokes_together,
         extra: serde_json::Map::new(),
     }
 }

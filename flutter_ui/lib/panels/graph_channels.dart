@@ -6,11 +6,13 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 
 import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -74,8 +76,9 @@ class RowValueDrag {
   }
 }
 
-/// Which reading of the curve is on screen (docs/07 §5.1).
-enum GraphLens { value, speed }
+/// Which reading of the curve is on screen (docs/07 §5.1): the value, how
+/// fast it changes, or how fast that changes.
+enum GraphLens { value, speed, acceleration }
 
 /// Whose curves the graph draws: the picked properties, every animated one
 /// of the picked layers, or every animated one in the composition.
@@ -137,8 +140,10 @@ class GraphChannel {
   final TextAnimatorValue? animatorValue;
 
   /// Set for one of a shape item's numbers: the item, which number, and
-  /// which gradient stop when it is a stop's.
+  /// which gradient stop when it is a stop's. A modifier entry's number
+  /// names the modifier instead.
   final BridgeShapeItem? shape;
+  final BridgeShapeModifier? shapeModifier;
   final ShapeValue? shapeValue;
   final int shapeStop;
 
@@ -148,6 +153,22 @@ class GraphChannel {
   /// at. That is the one honest curve a path has, and it is what After Effects
   /// draws for a mask path.
   bool get isMaskPath => maskValue == MaskValue.path;
+
+  /// True for a shape item's outline, which keys whole paths as a mask does.
+  bool get isShapePath => shapeValue == ShapeValue.path;
+
+  /// Either kind of path: keys that hold a shape rather than a number.
+  bool get isPath => isMaskPath || isShapePath;
+
+  /// The row an expression on this channel sits on, so it reads its own
+  /// number of a point. Null for a channel that is neither a transform
+  /// property nor an effect parameter.
+  BridgeExpressionRow? get expressionRow => switch ((prop, effect, param)) {
+        (final prop?, _, _) => BridgeExpressionRow.transform(prop),
+        (null, final effect?, final param?) =>
+          BridgeExpressionRow.effect(effect: effect.id, param: param.id),
+        _ => null,
+      };
 
   const GraphChannel({
     required this.path,
@@ -169,6 +190,7 @@ class GraphChannel {
     this.animator = -1,
     this.animatorValue,
     this.shape,
+    this.shapeModifier,
     this.shapeValue,
     this.shapeStop = 0,
   });
@@ -289,6 +311,8 @@ List<GraphChannel> graphChannels({
         modes: entry.info.axisModes,
         kind: entry.info.kind,
         twoNode: entry.info.camera?.twoNode ?? false,
+        light: entry.info.light,
+        material: entry.info.material,
       )) {
         if (group.axes.first.prop.name != lead) continue;
         // A linked pair is one curve, as it is one box on the row. The lead
@@ -403,9 +427,9 @@ List<GraphChannel> graphChannels({
       continue;
     }
 
-    // A shape item's numbers, off the read model as a mask's are. Its outline
-    // keys as whole paths, so like a mask's it has no curve here. A stop's
-    // rows carry the stop after the name: `.../gradientStopPosition2`.
+    // A shape item's numbers, off the read model as a mask's are, its outline
+    // included the way a mask's shape is. A stop's rows carry the stop after
+    // the name: `.../gradientStopPosition2`.
     if (path.startsWith('${contentsPath(layerId)}/')) {
       final rest = path.substring(contentsPath(layerId).length + 1);
       final slash = rest.indexOf('/');
@@ -414,16 +438,54 @@ List<GraphChannel> graphChannels({
       final name = raw.replaceFirst(RegExp(r'\d+$'), '');
       final stop = int.tryParse(raw.substring(name.length)) ?? 0;
       final value = ShapeValue.values.where((v) => v.name == name).firstOrNull;
-      if (value == null || value == ShapeValue.path) continue;
-      for (final item in entry.info.shapeContents) {
-        if (item.id.toString() != rest.substring(0, slash)) continue;
+      if (value == null) continue;
+      final owner = rest.substring(0, slash);
+      // A modifier entry's numbers, off the same read model.
+      for (final modifier in entry.info.shapeContents.modifiers) {
+        if (modifier.id.toString() != owner) continue;
+        out.add(GraphChannel(
+          path: path,
+          id: path,
+          label: '${entry.info.name} · ${modifier.name} · '
+              '${shapeValueLabel(value)}',
+          colourIndex: out.length,
+          scalar: modifierScalarOf(modifier, value),
+          entry: entry,
+          shapeModifier: modifier,
+          shapeValue: value,
+        ));
+      }
+      for (final item in entry.info.shapeContents.items) {
+        if (item.id.toString() != owner) continue;
+        if (value == ShapeValue.path && item.pathKeys.isEmpty) break;
+        // A colour is three curves under the row's one stopwatch, one for
+        // each channel, the way a position is one for each axis.
+        if (isColourValue(value)) {
+          for (final (channel, letter) in const ['R', 'G', 'B'].indexed) {
+            out.add(GraphChannel(
+              path: path,
+              id: '$path#$channel',
+              label: '${entry.info.name} · ${item.name} · '
+                  '${shapeValueLabel(value)} $letter',
+              colourIndex: out.length,
+              scalar: shapeScalarOf(item, value, stop: channel),
+              entry: entry,
+              shape: item,
+              shapeValue: value,
+              shapeStop: channel,
+            ));
+          }
+          break;
+        }
         out.add(GraphChannel(
           path: path,
           id: path,
           label: '${entry.info.name} · ${item.name} · '
               '${shapeValueLabel(value, stop: stop)}',
           colourIndex: out.length,
-          scalar: shapeScalarOf(item, value, stop: stop),
+          scalar: value == ShapeValue.path
+              ? BridgeScalar.keyframed(item.pathKeys)
+              : shapeScalarOf(item, value, stop: stop),
           entry: entry,
           shape: item,
           shapeValue: value,
@@ -515,8 +577,9 @@ String graphNumberText(double v) =>
 ///
 /// An effect parameter's unit is its **declaration's**, never its id.
 /// A transform axis has no declaration to ask, so it is read off the property
-/// itself: the two scales and opacity are per cent, the three rotations are
-/// degrees, and everything else is a distance - pixels at composition size.
+/// itself: the scales and opacity are per cent, the rotations and the
+/// Orientation are degrees, and everything else is a distance - pixels at
+/// composition size.
 String? graphChannelUnit(GraphChannel channel) {
   if (channel.param case final param?) return unitRiderText(param.unit);
   if (channel.retime) return l10n.unitSymbolSeconds;
@@ -535,11 +598,15 @@ String? graphChannelUnit(GraphChannel channel) {
     null => null,
     BridgeTransformProp.opacity ||
     BridgeTransformProp.scaleX ||
-    BridgeTransformProp.scaleY =>
+    BridgeTransformProp.scaleY ||
+    BridgeTransformProp.scaleZ =>
       l10n.unitSymbolPercent,
     BridgeTransformProp.rotation ||
     BridgeTransformProp.rotationX ||
-    BridgeTransformProp.rotationY =>
+    BridgeTransformProp.rotationY ||
+    BridgeTransformProp.orientationX ||
+    BridgeTransformProp.orientationY ||
+    BridgeTransformProp.orientationZ =>
       l10n.unitSymbolDegrees,
     _ => l10n.unitSymbolPx,
   };

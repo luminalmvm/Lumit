@@ -522,8 +522,8 @@ void main() {
     await gesture.up();
     await settleFrb(tester, minRounds: 4);
 
-    expect(p.top.getClips(), isEmpty,
-        reason: 'the clip left the row it was on');
+    expect(p.ui.model.layers.length, 1,
+        reason: 'the clip left its row, and the emptied row went with it');
     expect(p.bottom.getClips().length, 2,
         reason: 'and landed on the one below, over what was already there');
   });
@@ -590,8 +590,9 @@ void main() {
     await tester.pump();
     expect(p.ui.deleteClaim?.call() ?? false, isTrue);
     await settleFrb(tester, minRounds: 2);
-    expect(p.top.getClips(), isEmpty,
-        reason: 'the picked clip goes when this panel holds the keys');
+    expect(p.ui.model.layers.length, 1,
+        reason: 'the picked clip goes when this panel holds the keys, and '
+            'its row with it, as it was the only clip there');
   });
 
   group('Budgets', () {

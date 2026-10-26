@@ -10,6 +10,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
+import 'package:lumit_flutter/panels/viewer_camera.dart'
+    show cameraFromView, cameraToView, isFlyKey;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
@@ -19,8 +21,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
-import 'package:lumit_flutter/shell/layer_settings_frb.dart'
-    show showLayerSettingsFrb;
+import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -44,11 +45,13 @@ import 'package:lumit_flutter/src/rust/api/composition.dart'
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/keymap.dart' show chordText;
 import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/share.dart';
+import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/theme/motion.dart';
@@ -206,6 +209,17 @@ class _BootGateState extends State<BootGate> {
     // are asked about, and the scripts chosen in Settings run.
     installUnsavedQuestion(context);
     installEventScripts(context);
+    // Something asked for while the welcome screen is up, a double-clicked
+    // package above all, stands it down. The shell takes it as it starts.
+    if (_welcoming) noticeOpenRequests(_standDown);
+  }
+
+  void _standDown() {
+    if (!mounted || !_welcoming) return;
+    setState(() {
+      _welcoming = false;
+      _handovers++;
+    });
   }
 
   /// How many times the window has changed hands: welcome to shell. The first
@@ -230,15 +244,7 @@ class _BootGateState extends State<BootGate> {
     if (_welcoming) {
       return WindowDragStrip(
         theme: theme,
-        child: WelcomeScreenFrb(
-          onDone: () {
-            if (!mounted) return;
-            setState(() {
-              _welcoming = false;
-              _handovers++;
-            });
-          },
-        ),
+        child: WelcomeScreenFrb(onDone: _standDown),
       );
     }
     return const LumitAppView();
@@ -255,6 +261,9 @@ class LumitAppView extends StatefulWidget {
 class _LumitAppViewState extends State<LumitAppView> {
   /// Lets go of this view's Escape claim (the maximised pane).
   VoidCallback? _escapeRelease;
+
+  /// And of its claim on the lowest rung, the Viewer's last 3D view.
+  VoidCallback? _viewEscapeRelease;
 
   @override
   void initState() {
@@ -274,6 +283,23 @@ class _LumitAppViewState extends State<LumitAppView> {
       if (ui.maximisedPane.value == null) return false;
       ui.maximisedPane.value = null;
       return true;
+    });
+    // Escape switches the Viewer back to its last 3D view, After Effects'
+    // key, on the lowest rung: a menu, a drag or a selection takes it first,
+    // and a field being typed in keeps it.
+    _viewEscapeRelease = EscapeLadder.register(EscapeRung.view, () {
+      final ui = context.read<LumitUiState>();
+      final focused = FocusManager.instance.primaryFocus?.context;
+      if (ui.activePanel != Panel.viewer ||
+          lumitModalOpen ||
+          ui.keymap.rawChordFor('viewer.3d.last') != 'Escape' ||
+          (focused != null &&
+              (focused.widget is EditableText ||
+                  focused.findAncestorWidgetOfExactType<EditableText>() !=
+                      null))) {
+        return false;
+      }
+      return ui.switchToLastView();
     });
     // The pointer is tracked the same way — globally, not through the widget
     // tree. The Ctrl+Space console opens its ring at the mouse, and a
@@ -342,9 +368,9 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   /// A project or an extension package double-clicked, or an invite link
   /// clicked in a browser, while Lumit is running. On macOS all three come to
-  /// this Lumit, and elsewhere when it is kept running in the background.
-  /// They are opened as File ▸ Open, the install window and the Shared
-  /// project window would.
+  /// this Lumit. Elsewhere a package always does, and the others when it is
+  /// kept running in the background. They are opened as File ▸ Open, the
+  /// install window and the Shared project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -396,6 +422,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
     _escapeRelease?.call();
+    _viewEscapeRelease?.call();
     _clipboardWatch?.dispose();
     super.dispose();
   }
@@ -415,6 +442,9 @@ class _LumitAppViewState extends State<LumitAppView> {
     // the document being replaced has nothing left to run against, and one
     // aimed at a document being worked on would race the job doing it.
     final app = context.read<LumitState>();
+    // A camera's wheel run still open is closed before any command can
+    // land inside it.
+    if (event is KeyDownEvent) app.settleHistory();
     if (app.opening.value || app.busy.value != null) return true;
     return _onKey(
             context.read<LumitState>(), context.read<LumitUiState>(), event) ==
@@ -525,6 +555,22 @@ class _LumitAppViewState extends State<LumitAppView> {
         _ => BridgeKeyContext.global,
       };
 
+  /// A camera tool in hand over the Viewer gets After Effects' F and
+  /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere, and so
+  /// does a 3D viewport in front, which also frames everything on Shift+F.
+  String? _cameraLook(LumitUiState ui, KeyEvent event) {
+    final viewport = ui.isViewport(ui.activeViewId);
+    if ((ui.tools.tool.group != ToolGroup.camera && !viewport) ||
+        ui.activePanel != Panel.viewer) {
+      return null;
+    }
+    final look = ui.keymap.actionFor(BridgeKeyContext.tools, event);
+    if (look == 'viewer.3d.frame.all') {
+      return viewport ? 'viewer.3d.look.all' : null;
+    }
+    return look != null && look.startsWith('viewer.3d.look.') ? look : null;
+  }
+
   /// The keyboard shortcuts, restored from the shell the port replaced.
   ///
   /// Only the ones whose engine calls exist on this bridge; the rest are on the
@@ -533,6 +579,11 @@ class _LumitAppViewState extends State<LumitAppView> {
   KeyEventResult _onKey(LumitState state, LumitUiState ui, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
+    // A 3D viewport in flight has the keys to itself, and the fly keys are
+    // its while the right button is down in one.
+    if (ui.cameraFlying || (ui.flyKeysArmed && isFlyKey(event.physicalKey))) {
+      return KeyEventResult.handled;
     }
     // A modal surface is up — a dialogue, or the FX console: its keys
     // are its own, exactly as the panels' handlers already treat it.
@@ -566,7 +617,8 @@ class _LumitAppViewState extends State<LumitAppView> {
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
     // what the dock last fronted, which is what a user would call "where I am".)
-    var action = ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
+    var action = _cameraLook(ui, event) ??
+        ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
     if (action == null) {
       // The Tools context is a context no panel *is* (docs/07 §15 scopes it to
       // the toolbar, not to a pane), so it is asked for separately and only
@@ -607,9 +659,11 @@ class _LumitAppViewState extends State<LumitAppView> {
     var handled = true;
     switch (action) {
       case 'edit.redo':
+        state.settleHistory();
         project?.redo();
         state.notifyDocumentChanged();
       case 'edit.undo':
+        state.settleHistory();
         project?.undo();
         state.notifyDocumentChanged();
       case 'playback.toggle':
@@ -743,10 +797,29 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // Layer ▸ New from the keyboard: the same engine call the menu row
       // makes, on the fronted composition.
+      // A light asks for its settings first, as the menu row does.
+      case 'layer.new.light.point':
+        if (comp == null) {
+          handled = false;
+        } else {
+          newLightFrb(
+            context: context,
+            comp: comp,
+            row: newLayerRow(ui, comp),
+            onDone: state.notifyDocumentChanged,
+          );
+        }
+      // An empty row for clips, picture or sound.
+      case 'layer.new.audio' || 'layer.new.sequence':
+        if (comp == null) {
+          handled = false;
+        } else {
+          insertEmptyLayer(ui, comp, action);
+          state.notifyDocumentChanged();
+        }
       case 'layer.new.solid' ||
             'layer.new.text' ||
             'layer.new.camera' ||
-            'layer.new.light.point' ||
             'layer.new.adjustment' ||
             'layer.new.null':
         if (comp == null) {
@@ -761,8 +834,6 @@ class _LumitAppViewState extends State<LumitAppView> {
               comp.addTextLayer(row: row);
             case 'layer.new.camera':
               comp.addCameraLayer(row: row);
-            case 'layer.new.light.point':
-              comp.addLightLayer(kind: 0, row: row);
             case 'layer.new.adjustment':
               comp.addAdjustmentLayer(row: row);
             case 'layer.new.null':
@@ -800,6 +871,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // arrangement when the focus is somewhere else.
       case 'viewer.new':
         ui.addViewerPanel();
+      case 'viewer.new.viewport':
+        ui.addViewportPanel();
       case 'viewer.view.next':
         ui.views.cycle(1);
         ui.frontView(ui.views.activeId ?? '');
@@ -827,6 +900,32 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = ui.toggleCompare();
       case 'viewer.preview.always':
         ui.toggleAlwaysPreview();
+      // The 3D view shortcuts, After Effects' F10 to F12, and Shift to set
+      // one to the view in front.
+      case 'viewer.3d.slot.1' || 'viewer.3d.slot.2' || 'viewer.3d.slot.3':
+        handled = ui.recallViewSlot(int.parse(action[action.length - 1]) - 1);
+      case 'viewer.3d.assign.1' ||
+            'viewer.3d.assign.2' ||
+            'viewer.3d.assign.3':
+        handled = ui.assignViewSlot(int.parse(action[action.length - 1]) - 1);
+      // Plain Escape is the ladder's lowest rung (initState), so it only
+      // acts once nothing else wanted the press. Any other chord acts here.
+      case 'viewer.3d.last':
+        handled = chordText(event) != 'Escape' && ui.switchToLastView();
+      case 'viewer.3d.camera':
+        handled = ui.backToActiveCamera();
+      case 'viewer.3d.look.selected':
+        ui.requestViewerCamera(ViewerCameraCommand.lookAtSelected);
+      case 'viewer.3d.look.all':
+        ui.requestViewerCamera(ViewerCameraCommand.lookAtAll);
+      case 'viewer.3d.reset':
+        ui.requestViewerCamera(ViewerCameraCommand.reset);
+      case 'viewer.3d.camera.new':
+        handled = cameraFromView(state, ui);
+      case 'viewer.3d.camera.move':
+        handled = cameraToView(state, ui);
+      case 'viewer.3d.place':
+        ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.
@@ -1140,9 +1239,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (layer == null) {
           handled = false;
         } else {
-          showLayerSettingsFrb(context: context, layer: layer).then((changed) {
-            if (changed) state.notifyDocumentChanged();
-          });
+          layerSettingsOf(context, state, ui, layer);
         }
       // Up and down the stack with the selection, and along the Timeline
       // with the layers themselves. Keyboard only, like the frame steps.

@@ -22,6 +22,7 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../shell/light_settings_dialog.dart';
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
 import 'graph_maths.dart';
@@ -470,9 +471,10 @@ Future<void> _showLayerMenu(
         (l10n.menuSolid, comp.addSolidLayer),
         (l10n.menuText, comp.addTextLayer),
         (l10n.menuCamera, comp.addCameraLayer),
-        (l10n.menuPointLight, () => comp.addLightLayer(kind: 0)),
-        (l10n.menuSpotLight, () => comp.addLightLayer(kind: 1)),
-        (l10n.menuAreaLight, () => comp.addLightLayer(kind: 2)),
+        (
+          l10n.menuLight,
+          () => newLightFrb(context: context, comp: comp, onDone: onChanged)
+        ),
         (l10n.menuAdjustment, comp.addAdjustmentLayer),
         (l10n.menuNull, comp.addNullLayer),
         (l10n.menuSequence, comp.addSequenceLayer),
@@ -734,6 +736,11 @@ class KeyCommandStrip extends StatelessWidget {
                   keep: true,
                   on: lens == GraphLens.speed,
                   onPressed: () => onLens?.call(GraphLens.speed)),
+              wordItem('graph-lens-acceleration', l10n.graphAcceleration,
+                  l10n.tipAccelerationGraph,
+                  keep: true,
+                  on: lens == GraphLens.acceleration,
+                  onPressed: () => onLens?.call(GraphLens.acceleration)),
               // The selected keys' easing, one click each — the F9 family's
               // buttons (docs/07 §5.3).
               wordItem('graph-interp-linear', l10n.easeLinear,

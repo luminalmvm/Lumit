@@ -27,6 +27,7 @@ import 'timeline_extras_frb.dart';
 import 'effect_param_row_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'light_rows_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'flow_rows_frb.dart';
@@ -534,6 +535,16 @@ class FoldRow extends StatelessWidget {
           onLabelTap: () => onSelectProperty(path),
           graphColours: graphColours[path],
         ),
+      FoldSettingRow(:final setting, :final info) => LayerSettingRowFrb(
+          layer: layer,
+          setting: setting,
+          light: info.light,
+          material: info.material,
+          acceptsLights: info.switches.acceptsLights,
+          valueColumn: valueColumn,
+          keyPrefix: 'tl-tf',
+          onChanged: onChanged,
+        ),
       FoldEffectParamRow() => _TimelineParamRow(
           comp: comp,
           layer: layer,
@@ -618,19 +629,41 @@ class FoldRow extends StatelessWidget {
           onChanged: onChanged,
           open: open,
           onToggle: () => onToggle(path),
+          onLabelTap: () => onSelectProperty(path),
         ),
-      FoldShapePaintRow(:final item, :final which) => ShapePaintRow(
+      FoldShapeModifierRow(:final modifier, :final open) => ShapeModifierRow(
+          layer: layer,
+          modifier: modifier,
+          valueColumn: valueColumn,
+          onChanged: onChanged,
+          open: open,
+          onToggle: () => onToggle(path),
+          onLabelTap: () => onSelectProperty(path),
+        ),
+      FoldShapeGroupRow(:final group, :final open) => ShapeGroupRow(
+          layer: layer,
+          group: group,
+          valueColumn: valueColumn,
+          onChanged: onChanged,
+          open: open,
+          onToggle: () => onToggle(path),
+          onLabelTap: () => onSelectProperty(path),
+        ),
+      FoldShapePaintRow(:final item, :final modifier, :final which) =>
+        ShapePaintRow(
           layer: layer,
           item: item,
+          modifier: modifier,
           which: which,
           valueColumn: valueColumn,
           onChanged: onChanged,
         ),
-      FoldShapeValueRow(:final item, :final value, :final stop) =>
+      FoldShapeValueRow(:final item, :final modifier, :final value, :final stop) =>
         ShapeValueRow(
           comp: comp,
           layer: layer,
           item: item,
+          modifier: modifier,
           value: value,
           stop: stop,
           valueColumn: valueColumn,

@@ -15,12 +15,13 @@ use super::interp::{fail, to_number, Interp, Res, Value};
 use super::parse::Binary;
 use super::Slot;
 use crate::anim::{Animation, Property};
+use crate::expression::space::{self, Way};
 use crate::expression::ExpressionContext;
 use crate::fx::noise;
-use crate::model::{Composition, EffectInstance, EffectValue, Layer, ProjectItem};
+use crate::model::{Composition, EffectInstance, EffectValue, Layer, LayerKind, ProjectItem};
 
 /// The values an expression can name with no dot in front.
-const VALUES: [&str; 28] = [
+const VALUES: [&str; 32] = [
     "time",
     "value",
     "thisComp",
@@ -44,6 +45,10 @@ const VALUES: [&str; 28] = [
     "anchorPoint",
     "scale",
     "rotation",
+    "xRotation",
+    "yRotation",
+    "zRotation",
+    "orientation",
     "opacity",
     "numKeys",
     "velocity",
@@ -52,7 +57,7 @@ const VALUES: [&str; 28] = [
 ];
 
 /// The functions an expression can call with no dot in front.
-const FUNCTIONS: [&str; 44] = [
+const FUNCTIONS: [&str; 54] = [
     "wiggle",
     "seedRandom",
     "random",
@@ -71,6 +76,7 @@ const FUNCTIONS: [&str; 44] = [
     "normalize",
     "dot",
     "cross",
+    "lookAt",
     "degreesToRadians",
     "radiansToDegrees",
     "timeToFrames",
@@ -88,6 +94,15 @@ const FUNCTIONS: [&str; 44] = [
     "comp",
     "effect",
     "sourceRectAtTime",
+    "toComp",
+    "fromComp",
+    "toWorld",
+    "fromWorld",
+    "toCompVec",
+    "fromCompVec",
+    "toWorldVec",
+    "fromWorldVec",
+    "fromCompToSurface",
     "rgbToHsl",
     "hslToRgb",
     "parseFloat",
@@ -97,6 +112,19 @@ const FUNCTIONS: [&str; 44] = [
     "Number",
     "String",
     "Boolean",
+];
+
+/// What a layer answers to that carries a point between its spaces.
+const CONVERSIONS: [&str; 9] = [
+    "toComp",
+    "fromComp",
+    "toWorld",
+    "fromWorld",
+    "toCompVec",
+    "fromCompVec",
+    "toWorldVec",
+    "fromWorldVec",
+    "fromCompToSurface",
 ];
 
 /// What a property answers to besides its value.
@@ -126,7 +154,12 @@ pub(super) enum Tr {
     Anchor,
     Scale,
     Rotation,
+    RotationX,
+    RotationY,
     Opacity,
+    Orientation,
+    PointOfInterest,
+    Zoom,
 }
 
 pub(super) enum PropRef {
@@ -307,12 +340,41 @@ impl<'a> Ae<'a> {
             PropRef::Transform { comp, layer, which } => {
                 let found = self.layer(*comp, *layer)?;
                 let tr = &found.transform;
+                let camera = match &found.kind {
+                    LayerKind::Camera { zoom, options, .. } => Some((zoom, options)),
+                    _ => None,
+                };
+                // A 3D layer's points have a z.
+                let three_d = found.is_3d();
+                let three = |x, y, z| Parts {
+                    props: [Some(x), Some(y), Some(z), None],
+                    tail: [None; 3],
+                };
                 let parts = match which {
+                    Tr::Position if three_d => {
+                        three(&tr.position_x, &tr.position_y, &tr.position_z)
+                    }
                     Tr::Position => Parts::two(&tr.position_x, &tr.position_y),
+                    Tr::Anchor if three_d => three(&tr.anchor_x, &tr.anchor_y, &tr.anchor_z),
                     Tr::Anchor => Parts::two(&tr.anchor_x, &tr.anchor_y),
+                    Tr::Scale if three_d => three(&tr.scale_x, &tr.scale_y, &tr.scale_z),
                     Tr::Scale => Parts::two(&tr.scale_x, &tr.scale_y),
                     Tr::Rotation => Parts::one(&tr.rotation),
+                    Tr::RotationX => Parts::one(&tr.rotation_x),
+                    Tr::RotationY => Parts::one(&tr.rotation_y),
                     Tr::Opacity => Parts::one(&tr.opacity),
+                    Tr::Orientation => {
+                        let [x, y, z] = &tr.orientation;
+                        three(x, y, z)
+                    }
+                    Tr::PointOfInterest => {
+                        let [x, y, z] = &camera?.1.point_of_interest;
+                        Parts {
+                            props: [Some(x), Some(y), Some(z), None],
+                            tail: [None; 3],
+                        }
+                    }
+                    Tr::Zoom => Parts::one(camera?.0),
                 };
                 Some((*comp, found, parts))
             }
@@ -337,7 +399,7 @@ impl<'a> Ae<'a> {
                     EffectValue::Point(x, y) => Parts::two(x, y),
                     EffectValue::Colour(c) => Parts {
                         props: [c.first(), c.get(1), c.get(2), c.get(3)],
-                        fixed: None,
+                        tail: [None; 3],
                     },
                     EffectValue::Bool(on) => Parts::fixed(f64::from(u8::from(*on))),
                     // A menu counts from one in After Effects, and an
@@ -363,15 +425,26 @@ impl<'a> Ae<'a> {
         let Some((comp, layer, parts)) = self.parts(prop) else {
             return fail("a property that is no longer there");
         };
-        Ok(match parts.fixed {
-            Some(fixed) => vec![fixed],
-            None => parts
-                .props
-                .iter()
-                .flatten()
-                .map(|p| self.sample(comp, layer, p, t))
-                .collect(),
-        })
+        // Orientation turns from key to key as one, not number by number.
+        if matches!(
+            prop,
+            PropRef::Transform {
+                which: Tr::Orientation,
+                ..
+            }
+        ) {
+            let local = t - layer.start_offset.0.to_f64();
+            let read = |p: &Property| self.sample(comp, layer, p, t);
+            let (x, y, z) = layer.transform.orientation_at(local, &read);
+            return Ok(vec![x, y, z]);
+        }
+        Ok(parts
+            .props
+            .iter()
+            .flatten()
+            .map(|p| self.sample(comp, layer, p, t))
+            .chain(parts.tail.iter().flatten().copied())
+            .collect())
     }
 
     /// When a property's keyframes fall, in comp time.
@@ -403,34 +476,52 @@ impl<'a> Ae<'a> {
     }
 }
 
-/// Up to four properties (a colour's channels), or one number that does not
-/// animate (a checkbox, a menu).
+/// Up to four properties (a colour's channels), then numbers that do not
+/// animate: a checkbox or a menu.
 struct Parts<'a> {
     props: [Option<&'a Property>; 4],
-    fixed: Option<f64>,
+    tail: [Option<f64>; 3],
 }
 
 impl<'a> Parts<'a> {
     fn one(p: &'a Property) -> Self {
         Parts {
             props: [Some(p), None, None, None],
-            fixed: None,
+            tail: [None; 3],
         }
     }
 
     fn two(x: &'a Property, y: &'a Property) -> Self {
         Parts {
             props: [Some(x), Some(y), None, None],
-            fixed: None,
+            tail: [None; 3],
         }
     }
 
     fn fixed(value: f64) -> Self {
         Parts {
             props: [None; 4],
-            fixed: Some(value),
+            tail: [Some(value), None, None],
         }
     }
+}
+
+/// The transform property After Effects calls `name`, where `layer` has it.
+fn transform_name(layer: &Layer, name: &str) -> Option<Tr> {
+    let camera = matches!(layer.kind, LayerKind::Camera { .. });
+    Some(match name {
+        "position" => Tr::Position,
+        "anchorPoint" => Tr::Anchor,
+        "scale" => Tr::Scale,
+        "rotation" | "zRotation" => Tr::Rotation,
+        "xRotation" => Tr::RotationX,
+        "yRotation" => Tr::RotationY,
+        "opacity" => Tr::Opacity,
+        "orientation" => Tr::Orientation,
+        "pointOfInterest" if camera => Tr::PointOfInterest,
+        "zoom" if camera => Tr::Zoom,
+        _ => return None,
+    })
 }
 
 /// The name an effect goes by: the user's own for it, or the effect's.
@@ -608,6 +699,10 @@ impl<'a> Interp<'a> {
                     "numLayers" => Value::Num(comp.layers.len() as f64),
                     "pixelAspect" => Value::Num(1.0),
                     "displayStartTime" => Value::Num(0.0),
+                    "activeCamera" => match comp.active_camera(ae.time) {
+                        Some(camera) => Value::Host(Host::Layer(*id, camera.id)),
+                        None => return fail("this composition has no camera"),
+                    },
                     _ => return Ok(None),
                 }
             }
@@ -645,23 +740,24 @@ impl<'a> Interp<'a> {
                         None => Value::Null,
                     },
                     "active" | "enabled" => Value::Bool(layer.switches.visible),
-                    "transform" => Value::Host(Host::Transform(*comp_id, *layer_id)),
-                    "position" => transform(Tr::Position),
-                    "anchorPoint" => transform(Tr::Anchor),
-                    "scale" => transform(Tr::Scale),
-                    "rotation" => transform(Tr::Rotation),
-                    "opacity" => transform(Tr::Opacity),
-                    _ => return Ok(None),
+                    // A camera's options are its own rows here, so the group
+                    // After Effects keeps them in is the transform, which
+                    // also lets `cameraOption.position` through.
+                    "transform" | "cameraOption" => {
+                        Value::Host(Host::Transform(*comp_id, *layer_id))
+                    }
+                    _ => match transform_name(layer, name) {
+                        Some(which) => transform(which),
+                        None => return Ok(None),
+                    },
                 }
             }
             Host::Transform(comp, layer) => {
-                let which = match name {
-                    "position" => Tr::Position,
-                    "anchorPoint" => Tr::Anchor,
-                    "scale" => Tr::Scale,
-                    "rotation" | "zRotation" => Tr::Rotation,
-                    "opacity" => Tr::Opacity,
-                    _ => return Ok(None),
+                let Some(which) = ae
+                    .layer(*comp, *layer)
+                    .and_then(|found| transform_name(found, name))
+                else {
+                    return Ok(None);
                 };
                 Self::host_prop(PropRef::Transform {
                     comp: *comp,
@@ -770,6 +866,9 @@ impl<'a> Interp<'a> {
                 if name == "sourceRectAtTime" {
                     return self.source_rect(*comp, *layer, &args);
                 }
+                if CONVERSIONS.contains(&name) {
+                    return self.convert(*comp, *layer, name, &args);
+                }
                 if name != "effect" {
                     return fail(format!("'{name}' is not available on a layer yet"));
                 }
@@ -857,6 +956,45 @@ impl<'a> Interp<'a> {
             (Rc::from("width"), Value::Num(right - left)),
             (Rc::from("height"), Value::Num(bottom - top)),
         ]))
+    }
+
+    /// `toComp(point, t = time)` and the eight like it, on one layer.
+    fn convert(&mut self, comp: Uuid, layer: Uuid, name: &str, args: &[Value]) -> Res<Value> {
+        let Some(point) = args.first() else {
+            return fail(format!("'{name}' needs a point"));
+        };
+        let point = self.vector(point)?;
+        let t = match self.arg(args, 1)? {
+            t if t.is_finite() => t,
+            _ => self.ae.time,
+        };
+        let at = |i: usize| point.get(i).copied().unwrap_or(0.0);
+        let p = (at(0), at(1), at(2));
+        let ae = &self.ae;
+        let (Some(found_comp), Some(found)) = (ae.comp(comp), ae.layer(comp, layer)) else {
+            return fail("a layer that is no longer there");
+        };
+        // Read as the expression reads any property, so a position asking
+        // where its own layer is reads itself as it was before the expression.
+        let read = |l: &Layer, property: &Property| ae.sample(comp, l, property, t);
+        let space = space::space(&ae.context.document, found_comp, found, t, &read);
+        // Each layer placed reads nine properties.
+        self.spend(space.cost as usize * 9)?;
+        let way = match name {
+            "toComp" => Way::ToComp,
+            "fromComp" => Way::FromComp,
+            "toWorld" => Way::ToWorld,
+            "fromWorld" => Way::FromWorld,
+            "toCompVec" => Way::ToCompVec,
+            "fromCompVec" => Way::FromCompVec,
+            "toWorldVec" => Way::ToWorldVec,
+            "fromWorldVec" => Way::FromWorldVec,
+            _ => Way::FromCompToSurface,
+        };
+        match space.carry(way, p, point.len()) {
+            Some(out) => self.numbers(&out),
+            None => fail("a layer scaled to nothing or seen edge on has no way back"),
+        }
     }
 
     fn prop_method(&mut self, prop: &PropRef, name: &str, args: &[Value]) -> Res<Value> {
@@ -1195,6 +1333,15 @@ impl<'a> Interp<'a> {
                     at(&a, 0) * at(&b, 1) - at(&a, 1) * at(&b, 0),
                 ])?
             }
+            "lookAt" => {
+                let (a, b) = (self.vector(&first)?, self.vector(&second)?);
+                let at = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(0.0);
+                let (x, y, z) = crate::camera::look_at_orientation(
+                    (at(&a, 0), at(&a, 1), at(&a, 2)),
+                    (at(&b, 0), at(&b, 1), at(&b, 2)),
+                );
+                self.numbers(&[x, y, z])?
+            }
             "degreesToRadians" => Value::Num(to_number(&first).to_radians()),
             "radiansToDegrees" => Value::Num(to_number(&first).to_degrees()),
             "timeToFrames" => {
@@ -1244,6 +1391,10 @@ impl<'a> Interp<'a> {
             "effect" | "sourceRectAtTime" => {
                 let (comp, layer) = self.this_layer()?;
                 return self.host_method(Host::Layer(comp, layer), name, args.to_vec());
+            }
+            _ if CONVERSIONS.contains(&name) => {
+                let (comp, layer) = self.this_layer()?;
+                return self.convert(comp, layer, name, args);
             }
             "rgbToHsl" => {
                 let c = self.vector(&first)?;

@@ -1,0 +1,29 @@
+---
+title: The Align panel
+description: Moves the selected layers' anchor points, or lines the layers up with the composition.
+sidebar:
+  order: 11
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The **Align** panel holds two grids of nine dots, one for each corner, edge middle and the
+centre of a layer's box. **Window ▸ Align** opens it.
+
+<Shot file="align.png" caption="The Align panel, with a layer selected." eager/>
+
+| Grid | A dot does |
+| --- | --- |
+| **Anchor point** | Moves each selected layer's anchor point to that point of its box. The picture stays where it is. |
+| **Composition** | Moves each selected layer so that point of its box meets the same point of the composition: top left to top left, centre to centre. |
+
+- A click is one undo step for the whole selection.
+- A layer whose Anchor point or Position is keyed keeps its anchor point, and a notice says so.
+- A layer whose Position is keyed stays put under **Composition**.
+- The grids are greyed with nothing selected, or only cameras, lights and audio layers.
+- Nothing moves unless a Viewer showing the composition is open.
+
+## Related
+
+- [Transform](/use/transform/)
+- [The Viewer](/panels/viewer/)

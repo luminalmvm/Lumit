@@ -77,6 +77,17 @@ A particle system.
 | **On contact** | Dropdown | Bounce · Slide · Stick · Kill | Bounce | - |
 | **Bounciness** | Slider | 0 to 100 | 60 | Per cent |
 | **Friction** | Slider | 0 to 100 | 10 | Per cent |
+| **Separation** | Slider | 0 to 100 | 0 | Per cent |
+| **Alignment** | Slider | 0 to 100 | 0 | Per cent |
+| **Cohesion** | Slider | 0 to 100 | 0 | Per cent |
+| **Flock radius** | Slider | 0 to 500; higher | 50 | Pixels at composition size |
+| **Sparks** | Slider | 0 to 50 | 0 | - |
+| **Spark speed** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
+| **Spark life** | Slider | 0.1 to 5; down to 0 and higher | 0.5 | Seconds |
+| **Spark size** | Slider | 0 to 100; higher | 50 | Per cent |
+| **Persistence** | Slider | 0 to 100 | 0 | Per cent |
+| **Zoom** | Slider | -100 to 100; higher | 0 | Per cent |
+| **Turn** | Slider | -360 to 360; any value by typing | 0 | Degrees |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
@@ -99,6 +110,9 @@ In the Effect Controls panel:
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
 - **Collide** groups **Collide with**, **On contact**, **Bounciness**, **Friction**.
+- **Flock** groups **Separation**, **Alignment**, **Cohesion**, **Flock radius**.
+- **Sparks** groups **Sparks**, **Spark speed**, **Spark life**, **Spark size**.
+- **Trails** groups **Persistence**, **Zoom**, **Turn**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
@@ -108,6 +122,21 @@ In the Effect Controls panel:
 - **Trigger** is editable while **Burst** is set to On trigger.
 - **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
+- **Particle blend** is editable while **Separation** is 0.
+- **Particle blend** is editable while **Alignment** is 0.
+- **Particle blend** is editable while **Cohesion** is 0.
+- **Particle blend** is editable while **Sparks** is 0.
+- **Density layer** is editable while **Separation** is 0.
+- **Density layer** is editable while **Alignment** is 0.
+- **Density layer** is editable while **Cohesion** is 0.
+- **Density layer** is editable while **Sparks** is 0.
+- **Map placement** is editable while **Separation** is 0.
+- **Map placement** is editable while **Alignment** is 0.
+- **Map placement** is editable while **Cohesion** is 0.
+- **Map placement** is editable while **Sparks** is 0.
+- **Particle blend** is editable while **Persistence** is 0.
+- **Density layer** is editable while **Persistence** is 0.
+- **Map placement** is editable while **Persistence** is 0.
 - **Particle blend** is editable while **Collide with** names no layer.
 - **Density layer** is editable while **Collide with** names no layer.
 - **Map placement** is editable while **Collide with** names no layer.
@@ -214,7 +243,44 @@ The **Collide** group, what particles hit:
 - **Bounciness**: how much of its speed a particle keeps as it bounces.
 - **Friction**: how much a particle slows along the surface.
 
-Particles hit shapes across and down. Depth does not change what they hit.
+A layer facing the same way as this one is hit across and down, at every depth. One turned
+against it in 3D is hit where particles pass through its shapes.
+
+The **Flock** group, particles steering by their neighbours:
+
+- **Separation**: how strongly a particle steers away from neighbours that are close.
+- **Alignment**: how strongly it steers to go the way its neighbours go.
+- **Cohesion**: how strongly it steers towards the middle of its neighbours.
+- **Flock radius**: how far away another particle can be and still count as a neighbour.
+
+A particle stuck to a layer neither steers nor is steered by.
+
+The **Sparks** group, small particles thrown out where one dies:
+
+- **Sparks**: how many sparks a particle throws out when its life ends, Edge kills it or
+  it is killed on contact. Sparks throw out none.
+- **Spark speed**: how fast they fly out, every way at once.
+- **Spark life**: how long a spark lasts.
+- **Spark size**: how big a spark is, against the particle it came from.
+
+Sparks fade and change colour by the Particle group's rows, over their own life.
+
+With Separation, Alignment, Cohesion or Sparks above nought, each frame's particles are
+worked out from the frame before, as with Collide with, and Density layer and Particle
+blend are not read. A row that is keyframed, has an expression or is wired counts as above
+nought.
+
+The **Trails** group, a picture kept from frame to frame:
+
+- **Persistence**: how much of the kept picture is left after one second.
+- **Zoom**: how much the kept picture grows each second, about the emitter's position.
+- **Turn**: how far the kept picture turns each second, about the emitter's position.
+
+With Persistence above nought, each frame's particles are drawn over the picture kept from
+the frame before, after it is faded, zoomed and turned, and that picture goes over the layer.
+Every frame from the layer's in point goes into it. Density layer and Particle blend are
+not read, Streak draws its tail back along each particle's speed, and the Sprite layer's
+picture at the current frame is stamped on every earlier frame.
 
 The **Render** group, how they are drawn:
 

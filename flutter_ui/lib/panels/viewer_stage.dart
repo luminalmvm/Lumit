@@ -10,14 +10,17 @@
 // a local of that name would shadow the prefix where it is needed.
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as dartui;
 
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -25,22 +28,34 @@ import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart'
-    show sampledExpression, sampledScalar, timeOfFrame;
-import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
+    show sampledExpression, sampledOrientation, sampledScalar, timeOfFrame;
+import '../state/layer_bounds.dart'
+    show shapeContentsBounds, shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
+import '../state/view_projection.dart' show flatView;
 import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith;
+import 'shape_entries.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
+import 'viewer_gizmo_3d.dart'
+    show
+        Vec3,
+        gizmoAxisColours,
+        mul3,
+        rowsTurn,
+        transpose3,
+        turnOf,
+        turnOfAe;
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
@@ -82,6 +97,12 @@ class ViewerStage extends StatelessWidget {
   final int viewId;
 
   final Rect fitted;
+
+  /// Where the picture is drawn, when it reaches past the comp: a 3D
+  /// viewport's fills its pane. Null is [fitted]. A viewport drawn as lines
+  /// only has no picture at all.
+  final Rect? pictureRect;
+  final bool showPicture;
   final bool grid;
 
   /// Which of the guides menu's marks are drawn over the picture: the grid, the
@@ -128,6 +149,8 @@ class ViewerStage extends StatelessWidget {
     required this.viewId,
     required this.uiState,
     required this.fitted,
+    this.pictureRect,
+    this.showPicture = true,
     required this.grid,
     required this.overlays,
     required this.pictureKey,
@@ -199,6 +222,10 @@ class ViewerStage extends StatelessWidget {
     return null;
   }
 
+  /// The pose this Viewer is looked at through, null for the comp's own
+  /// camera. The one place the overlays read it.
+  BridgeCameraPose? _viewPose() => uiState.viewPoseOf(viewId);
+
   /// Every layer of the comp with its box, top of the stack first — what the
   /// gizmo hit-tests, outlines and drags.
   ///
@@ -215,7 +242,7 @@ class ViewerStage extends StatelessWidget {
   /// where the picture has it and can be picked there. The sampler holds its
   /// answers per frame and per document, so a hover still asks nothing; only
   /// a playhead move or an edit costs the one crossing the rows already make.
-  List<LayerBox> _boxes() {
+  List<LayerBox> _boxes({bool locked = false}) {
     if (fitted.isEmpty) return const [];
     final model = uiState.model;
     // The held copy, not a checked one: this runs on every rebuild, and
@@ -245,8 +272,7 @@ class ViewerStage extends StatelessWidget {
       anyAnimated: model.heldLayers.any((entry) =>
           outlined.contains(entry.layer.internallayerId.toString()) &&
           (entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty) ||
-              entry.info.shapeContents
-                  .any((item) => item.pathKeys.isNotEmpty))),
+              entry.info.shapeContents.items.any(shapeMoves))),
     );
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     // Where the playhead is in seconds, which is the clock a shape item's keys
@@ -257,85 +283,118 @@ class ViewerStage extends StatelessWidget {
     // The exact comp time, asked for only once a keyed channel needs it: a
     // comp with nothing animated pays for no frame conversion at all.
     late final at = timeOfFrame(comp, uiState.playheadFrame.value);
-    double read(BridgeScalar s, LayerReference layer) => switch (s) {
+    double read(BridgeScalar s, LayerReference layer,
+            BridgeTransformProp prop) =>
+        switch (s) {
           BridgeScalar_Static(:final field0) => field0,
-          // An expression needs the layer it runs on, or the box stays behind
-          // while the picture moves.
-          BridgeScalar_Expression() =>
-            sampledExpression(s, at, layer, revision),
+          // An expression needs the layer and the row it runs on, or the box
+          // stays behind while the picture moves.
+          BridgeScalar_Expression() => sampledExpression(s, at, layer, revision,
+              row: BridgeExpressionRow.transform(prop)),
           _ => sampledScalar(s, at),
         };
 
     final byId = {
       for (final entry in model.heldLayers) entry.layer.internallayerId: entry
     };
+    // How the picture sees the comp's 3D space. Asked of the engine only once
+    // a 3D box is drawn or aimed at, and held until the frame, the document
+    // or the view moves.
+    List<double> rows() => uiState.viewProjections.of(
+          comp: comp,
+          viewId: viewId,
+          frame: uiState.playheadFrame.value,
+          revision: revision,
+          generation: uiState.solveLanded.value,
+          view: _viewPose(),
+        );
+    BridgeTransform transformOf(BridgeLayerEntry a) =>
+        uiState.liveTransforms.value[a.layer.internallayerId] ??
+        a.info.transform;
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
       // Nor does a layer that only makes a sound: a box the size of the comp
       // round nothing, and a click on the picture that picked it.
       if (!_drawsPicture(entry)) continue;
-      if (!entry.info.switches.visible || entry.info.switches.locked) continue;
+      if (!entry.info.switches.visible) continue;
+      if (entry.info.switches.locked && !locked) continue;
       // A value scrub in the property rows previews the picture at a
       // provisional transform while the document still holds the old one, so
       // the box is drawn from that same provisional value and the two move
       // together (the reasoning [LumitUiState.liveRotations] sets out, for the
       // rows rather than the on-picture tools). Absent whenever nothing is
       // being dragged, which is nearly always.
-      final tf = uiState.liveTransforms.value[entry.layer.internallayerId] ??
-          entry.info.transform;
+      final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
-      final rotation = read(tf.rotation, entry.layer);
+      final light = entry.info.kind == BridgeLayerKind.light;
+      final map = layerMapOf(entry, byId, transformOf, read,
+          origin: fitted.topLeft,
+          viewScale: viewScale,
+          view: rows,
+          time: () => at,
+          cameraPose: (camera) => uiState.cameraPoses.ownOf(camera.layer,
+              id: camera.layer.internallayerId,
+              frame: uiState.playheadFrame.value,
+              revision: revision,
+              generation: uiState.solveLanded.value));
+      final rotation =
+          read(tf.rotation, entry.layer, BridgeTransformProp.rotation);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
       // A keyed shape path is drawn where the picture has it, as a mask is.
       final art = [
-        for (final item in entry.info.shapeContents)
-          switch (uiState.animatedMaskPaths.pathOf(id, item.id)) {
-            final keyed? => shapeItemWith(item, vertices: keyed),
-            _ => item,
+        for (final e in entry.info.shapeContents)
+          switch (e.kind) {
+            BridgeShapeEntryKind_Item(:final field0) => switch (
+                  uiState.animatedMaskPaths.pathOf(id, field0.id)) {
+                final keyed? => BridgeShapeEntry(
+                    depth: e.depth,
+                    kind: BridgeShapeEntryKind.item(
+                        shapeItemWith(field0, vertices: keyed))),
+                _ => e,
+              },
+            _ => e,
           }
       ];
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
-        map: ViewerLayerMap.of(
-          positionX: read(tf.positionX, entry.layer),
-          positionY: read(tf.positionY, entry.layer),
-          anchorX: read(tf.anchorX, entry.layer),
-          anchorY: read(tf.anchorY, entry.layer),
-          scaleXPercent: read(tf.scaleX, entry.layer),
-          scaleYPercent: read(tf.scaleY, entry.layer),
-          rotationDegrees: rotation,
-          origin: fitted.topLeft,
-          viewScale: viewScale,
-          parent: parentPlacement(
-            entry,
-            byId,
-            (a) =>
-                uiState.liveTransforms.value[a.layer.internallayerId] ??
-                a.info.transform,
-            read,
-          ),
-        ),
+        map: map,
         // A line being typed measures what is being typed: the
         // document holds the old one until the edit ends, so a box measured
         // from it would not grow with the words.
-        bounds: live == null
-            ? uiState.layerBounds.boundsOf(entry,
-                compSize: compSize, revision: revision, t: playheadSeconds)
-            : textLayerBounds(live),
+        // A shape layer whose shape moves is measured where the picture has
+        // it, from the same art its points are drawn from.
+        bounds: live != null
+            ? textLayerBounds(live)
+            : (entry.info.shapeContents.items.any(shapeMoves)
+                    ? shapeContentsBounds(art, t: playheadSeconds)
+                    : null) ??
+                uiState.layerBounds.boundsOf(entry,
+                    compSize: compSize, revision: revision, t: playheadSeconds),
         // A keyed position has no one value for a body drag to add to; its
         // keys are dragged on the motion path instead. Keyed scale or
-        // rotation likewise grows no handles.
-        draggable: positionStill,
-        scalable: isStill(tf.scaleX) &&
+        // rotation likewise grows no handles. A 3D layer keys at the playhead
+        // instead, as its 3D handles do, unless an expression drives it.
+        draggable: positionStill ||
+            (map.projected &&
+                tf.positionX is! BridgeScalar_Expression &&
+                tf.positionY is! BridgeScalar_Expression),
+        // A light is a place, with nothing to scale or turn on the picture.
+        scalable: !light &&
+            isStill(tf.scaleX) &&
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
+        marker: light,
+        transform: tf,
         // The path a keyed position follows, for the layers whose outline is
-        // drawn: asked once per layer per document revision and held.
-        motionPath: !positionStill && outlined.contains(id.toString())
+        // drawn: asked once per layer per document revision and held. A 3D
+        // layer moving only in depth has one too.
+        motionPath: (!positionStill ||
+                    (map.projected && !isStill(tf.positionZ))) &&
+                outlined.contains(id.toString())
             ? uiState.motionPaths
                 .pathOf(entry.layer, revision: revision)
             : null,
@@ -358,6 +417,122 @@ class ViewerStage extends StatelessWidget {
         // The pins the puppet tools draw and aim at, from the same read
         // as everything else on the box.
         puppet: entry.info.puppet,
+      ));
+    }
+    return out;
+  }
+
+  /// The selected cameras, each as a mark at its eye for the 3D handles,
+  /// turned the way the engine has it aimed. A parented camera's mark is its
+  /// own values inside its parents, so a drag writes its own values.
+  List<LayerBox> _cameraBoxes() {
+    final ids = uiState.selectedLayerIds;
+    // Only the Selection and Rotation tools draw them, so nothing else asks
+    // for the pose.
+    if (fitted.isEmpty ||
+        ids.isEmpty ||
+        !wireframes ||
+        !const {ToolGroup.select, ToolGroup.rotate}
+            .contains(uiState.tools.tool.group)) {
+      return const [];
+    }
+    final model = uiState.model;
+    final frame = uiState.playheadFrame.value;
+    late final at = timeOfFrame(comp, frame);
+    double read(BridgeScalar s) => switch (s) {
+          BridgeScalar_Static(:final field0) => field0,
+          _ => sampledScalar(s, at),
+        };
+    late final byId = {
+      for (final entry in model.heldLayers) entry.layer.internallayerId: entry
+    };
+    BridgeCameraPose? poseOf(BridgeLayerEntry camera) =>
+        uiState.cameraPoses.of(camera.layer,
+            id: camera.layer.internallayerId,
+            frame: frame,
+            revision: model.heldRevision,
+            generation: uiState.solveLanded.value);
+    BridgeCameraPose? ownOf(BridgeLayerEntry camera) =>
+        uiState.cameraPoses.ownOf(camera.layer,
+            id: camera.layer.internallayerId,
+            frame: frame,
+            revision: model.heldRevision,
+            generation: uiState.solveLanded.value);
+    final out = <LayerBox>[];
+    for (final entry in model.heldLayers) {
+      final id = entry.layer.internallayerId;
+      if (entry.info.kind != BridgeLayerKind.camera || !ids.contains(id)) {
+        continue;
+      }
+      final tf = uiState.liveTransforms.value[id] ?? entry.info.transform;
+      final pose = poseOf(entry);
+      final aim = tf.camera;
+      if (pose == null || aim == null) continue;
+      // Under a parent the mark sits in the parent's space, turned by the
+      // camera's own turn, aim and solve included.
+      final parent = entry.info.parent == null
+          ? null
+          : parentMatrix(
+              entry,
+              byId,
+              (a) =>
+                  uiState.liveTransforms.value[a.layer.internallayerId] ??
+                  a.info.transform,
+              (s, _, __) => read(s),
+              cameraPose: ownOf,
+              time: () => at,
+            );
+      final own = parent == null ? pose : (ownOf(entry) ?? pose);
+      final Vec3 turn = (own.rotationX, own.rotationY, own.rotationZ);
+      // The mark is turned by the camera's own rows, and whatever else its
+      // turn has, its aim and its Orientation, outside them.
+      final Vec3 rows =
+          (read(tf.rotationX), read(tf.rotationY), read(tf.rotation));
+      final outside = mul3(turnOf(turn), transpose3(rowsTurnOf(tf, rows)));
+      final m = parent?.storage;
+      out.add(LayerBox(
+        layer: entry.layer,
+        id: id,
+        map: ViewerLayerMap.of(
+          positionX: read(tf.positionX),
+          positionY: read(tf.positionY),
+          anchorX: 0,
+          anchorY: 0,
+          scaleXPercent: 100,
+          scaleYPercent: 100,
+          rotationDegrees: rows.$3,
+          origin: fitted.topLeft,
+          viewScale:
+              compSize.width == 0 ? 1.0 : fitted.width / compSize.width,
+          parent: m == null
+              ? null
+              : (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]),
+          depth: ViewerDepth(
+            parent: parent,
+            view: () => uiState.viewProjections.of(
+              comp: comp,
+              viewId: viewId,
+              frame: frame,
+              revision: model.heldRevision,
+              generation: uiState.solveLanded.value,
+              view: _viewPose(),
+            ),
+            z: read(tf.positionZ),
+            rotationX: rows.$1,
+            rotationY: rows.$2,
+            outside: outside,
+            aeOrder: tf.depth?.afterEffectsOrder ?? false,
+          ),
+        ),
+        bounds: Size.zero,
+        draggable: false,
+        scalable: false,
+        rotationDegrees: rows.$3,
+        marker: true,
+        transform: tf,
+        aim: (entry.info.camera?.twoNode ?? false)
+            ? (read(aim.poiX), read(aim.poiY), read(aim.poiZ))
+            : null,
       ));
     }
     return out;
@@ -470,7 +645,8 @@ class ViewerStage extends StatelessWidget {
             // and painting an 8-pixel grid over it meant half a million
             // rectangles for the few thousand actually on screen. That, and not
             // the rendering, is what made zooming in seize the whole window.
-            if (grid)
+            // A viewport's lines only have the plain surround behind them.
+            if (grid && showPicture)
               Positioned.fill(
                 // Its own layer, so the marks over the picture do not draw
                 // every square again as they move.
@@ -479,26 +655,27 @@ class ViewerStage extends StatelessWidget {
                     // Thousands of squares that rarely change: kept as one
                     // picture instead of being drawn square by square.
                     isComplex: true,
-                    painter: _CheckerPainter(t, fitted),
+                    painter: _CheckerPainter(t, pictureRect ?? fitted),
                   ),
                 ),
               ),
             // The picture, inside the boundary a snapshot is taken of.
             // Everything below in this stack is a sibling of it, so the
             // photograph is the picture and not the marks over it.
-            Positioned.fromRect(
-              rect: fitted,
-              child: RepaintBoundary(
-                key: pictureKey,
-                child: _Picture(
-                  uiState: uiState,
-                  channel: channel,
-                  viewId: viewId,
-                  shownScale:
-                      compSize.width == 0 ? 1 : fitted.width / compSize.width,
+            if (showPicture)
+              Positioned.fromRect(
+                rect: pictureRect ?? fitted,
+                child: RepaintBoundary(
+                  key: pictureKey,
+                  child: _Picture(
+                    uiState: uiState,
+                    channel: channel,
+                    viewId: viewId,
+                    shownScale:
+                        compSize.width == 0 ? 1 : fitted.width / compSize.width,
+                  ),
                 ),
               ),
-            ),
             // Why there is no picture, on a machine where the runner had to
             // refuse it. Over the picture's place and under everything else.
             const Positioned.fill(child: ViewerGpuMismatchNotice()),
@@ -544,34 +721,99 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
-            // The wireframes, in every view but the composition's own camera
-            // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
-            // that shows where the cameras and the lights actually are, and
-            // nothing in the picture says that by itself.
-            if (uiState.viewerViewPose case final view?)
-              Positioned.fill(
-                key: const ValueKey('viewer-wireframes'),
-                child: IgnorePointer(
-                  child: ViewerWireframeLayer(
-                    comp: comp,
-                    view: view,
-                    frame: uiState.playheadFrame.value,
-                    revision: uiState.model.heldRevision,
-                    mediaSizes: uiState.layerBounds.mediaSizes,
-                    fitted: fitted,
-                    compSize: Size(
-                      compSize.width.toDouble(),
-                      compSize.height.toDouble(),
-                    ),
-                    layerLine: t.textPrimary,
-                    cameraLine: t.layer.camera,
-                    // The theme names no light colour, so the accent stands
-                    // for one: a light is the other thing in the scene you
-                    // place by hand.
-                    lightLine: t.accent,
-                  ),
+            // The wireframes (docs/impl/camera.md §6). A 3D view outlines the
+            // whole scene: a scene is arranged from a viewpoint that shows
+            // where the cameras and the lights actually are, and nothing in
+            // the picture says that by itself. Through the comp's own camera
+            // only the selected cameras and lights are outlined, as After
+            // Effects does (a selected layer's box is the layer controls'),
+            // and the layer controls' switch hides them all. The ground and
+            // the corner axes are this view's own switches.
+            Positioned.fill(
+              key: const ValueKey('viewer-wireframes'),
+              child: IgnorePointer(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([
+                    uiState.selectedLayers,
+                    uiState.model,
+                    uiState.playheadFrame,
+                    uiState.solveLanded,
+                  ]),
+                  builder: (context, _) {
+                    final view = _viewPose();
+                    final aids = uiState.viewerAidsOf(viewId);
+                    // A 3D viewport's picture has the ground's lines drawn
+                    // in, and its axes are the ones in its corner.
+                    final viewport = uiState.isViewport(viewId);
+                    final selected = uiState.selectedLayerIds;
+                    final layers = uiState.model.heldLayers;
+                    final List<UuidValue>? only = !wireframes
+                        ? const []
+                        : view == null
+                            ? [
+                                for (final e in layers)
+                                  if ((e.info.kind == BridgeLayerKind.camera ||
+                                          e.info.kind ==
+                                              BridgeLayerKind.light) &&
+                                      selected
+                                          .contains(e.layer.internallayerId))
+                                    e.layer.internallayerId,
+                              ]
+                            : null;
+                    final ask = aids.ground || only == null || only.isNotEmpty;
+                    // The corner axes come from the rows the outlines hold,
+                    // so on their own they cost no call. With no camera and a
+                    // view that can't orbit they'd only ever point straight
+                    // across and down, so they stay hidden.
+                    final turns = uiState.viewOf(viewId).orbits ||
+                        layers.any(
+                            (e) => e.info.kind == BridgeLayerKind.camera);
+                    final axes = aids.axes && !viewport && turns
+                        ? viewAxes(
+                            uiState.viewProjections.of(
+                              comp: comp,
+                              viewId: viewId,
+                              frame: uiState.playheadFrame.value,
+                              revision: uiState.model.heldRevision,
+                              generation: uiState.solveLanded.value,
+                              view: view,
+                            ),
+                            Size(compSize.width.toDouble(),
+                                compSize.height.toDouble()),
+                          )
+                        : null;
+                    if (!ask && axes == null) return const SizedBox.shrink();
+                    return ViewerWireframeLayer(
+                      comp: comp,
+                      view: view,
+                      ask: ask,
+                      ground: aids.ground,
+                      grid: !viewport || uiState.viewportWireframe(viewId),
+                      axes: axes,
+                      only: only,
+                      frame: uiState.playheadFrame.value,
+                      revision: uiState.model.heldRevision,
+                      mediaSizes: uiState.layerBounds.mediaSizes,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      selected: selected,
+                      layerLine: t.textSecondary,
+                      selectedLine: t.animated,
+                      cameraLine: t.layer.camera,
+                      // The theme names no light colour, so the accent stands
+                      // for one: a light is the other thing in the scene you
+                      // place by hand.
+                      lightLine: t.accent,
+                      groundLine: t.textMuted,
+                      frameLine: t.textMuted,
+                    );
+                  },
                 ),
               ),
+            ),
             _missingSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
@@ -596,6 +838,8 @@ class ViewerStage extends StatelessWidget {
                   uiState.liveRotations,
                   uiState.liveText,
                   uiState.liveTransforms,
+                  // A solve landing moves a camera that follows it.
+                  uiState.solveLanded,
                   // The box picked on a node graph's canvas is what the Roto
                   // tools stroke on there.
                   uiState.compGraphNode,
@@ -613,6 +857,7 @@ class ViewerStage extends StatelessWidget {
                         comp: comp,
                         uiState: uiState,
                         boxes: boxes,
+                        cameras: _cameraBoxes(),
                         showControls: wireframes,
                         tool: uiState.tools.tool,
                         // The pivot, while the tool that turns about it is in
@@ -701,7 +946,7 @@ class ViewerStage extends StatelessWidget {
                           target: _roto(),
                           // A node graph has no layers: the brush is the box
                           // picked on its canvas.
-                          graph: uiState.model.isNodeGraph ? comp : null,
+                          graph: uiState.model.heldIsNodeGraph ? comp : null,
                           graphBox: uiState.compGraphNode.value?.id,
                           origin: fitted.topLeft,
                           compSize: Size(compSize.width.toDouble(),
@@ -745,7 +990,8 @@ class ViewerStage extends StatelessWidget {
                         active: uiState.tools.tool.group == ToolGroup.rotate,
                         comp: comp,
                         uiState: uiState,
-                        boxes: boxes,
+                        // A selected camera turns on its rings too.
+                        boxes: [...boxes, ..._cameraBoxes()],
                         mark: t.textPrimary,
                         outline: t.surface0,
                         onChanged: onChanged,
@@ -759,8 +1005,10 @@ class ViewerStage extends StatelessWidget {
             // active camera.
             ViewerCameraLayer(
               active: uiState.tools.tool.group == ToolGroup.camera,
+              viewport: uiState.isViewport(viewId),
               tool: uiState.tools.tool,
               comp: comp,
+              viewId: viewId,
               state: Provider.of<LumitState>(context, listen: false),
               uiState: uiState,
               fitted: fitted,
@@ -768,6 +1016,9 @@ class ViewerStage extends StatelessWidget {
                 compSize.width.toDouble(),
                 compSize.height.toDouble(),
               ),
+              // Locked layers too: they are still there to be looked at
+              // and orbited round.
+              boxes: () => _boxes(locked: true),
               mark: t.textPrimary,
               outline: t.surface0,
               accent: t.accent,
@@ -966,42 +1217,207 @@ class ViewerStage extends StatelessWidget {
   }
 }
 
-/// Where [entry]'s parents put its Position space in the comp, null when it
-/// has none: the engine's `parent_world_placement`, each ancestor placed as
-/// `place_matrix` places it, flattened to the picture. Without it a parented
-/// layer's box stays behind while its picture follows the parent.
-ParentPlacement? parentPlacement(
+/// Whether [entry] is seen through the comp's camera: a 3D layer, or a light,
+/// which is always somewhere in the scene.
+bool _seenInDepth(BridgeLayerEntry entry) =>
+    entry.info.switches.threeD || entry.info.kind == BridgeLayerKind.light;
+
+/// [entry]'s map onto a picture whose corner is at [origin] and drawn
+/// [viewScale] screen pixels a comp pixel. A 3D layer or a light goes through
+/// [view], the engine's rows for whatever the picture is looked at through,
+/// asked for only when the map is first used. A 2D one is flat. [time] gives
+/// the comp time [read] reads at, which only a keyed Orientation asks for.
+ViewerLayerMap layerMapOf(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
   BridgeTransform Function(BridgeLayerEntry) transformOf,
-  double Function(BridgeScalar, LayerReference) read,
-) {
+  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
+  required Offset origin,
+  required double viewScale,
+  required List<double> Function() view,
+  BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
+  BridgeRational Function()? time,
+}) {
+  final tf = transformOf(entry);
+  double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
+  final parent = parentMatrix(entry, byId, transformOf, read,
+      cameraPose: cameraPose, time: time);
+  final m = parent?.storage;
+  return ViewerLayerMap.of(
+    positionX: at(tf.positionX, BridgeTransformProp.positionX),
+    positionY: at(tf.positionY, BridgeTransformProp.positionY),
+    anchorX: at(tf.anchorX, BridgeTransformProp.anchorX),
+    anchorY: at(tf.anchorY, BridgeTransformProp.anchorY),
+    scaleXPercent: at(tf.scaleX, BridgeTransformProp.scaleX),
+    scaleYPercent: at(tf.scaleY, BridgeTransformProp.scaleY),
+    rotationDegrees: at(tf.rotation, BridgeTransformProp.rotation),
+    origin: origin,
+    viewScale: viewScale,
+    parent: m == null
+        ? null
+        : (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]),
+    depth: _seenInDepth(entry)
+        ? ViewerDepth(
+            view: view,
+            parent: parent,
+            z: at(tf.positionZ, BridgeTransformProp.positionZ),
+            rotationX: at(tf.rotationX, BridgeTransformProp.rotationX),
+            rotationY: at(tf.rotationY, BridgeTransformProp.rotationY),
+            outside: _outsideOf(
+                entry, tf, at, outsideOf(orientationOf(tf, at, time))),
+            anchorZ: _depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
+            scaleZ: _depthAt(tf, at, BridgeTransformProp.scaleZ, 100),
+            aeOrder: tf.depth?.afterEffectsOrder ?? false,
+          )
+        : null,
+  );
+}
+
+/// [tf]'s Orientation, each angle read by [at], and turning from key to key as
+/// one at the comp time [time] gives. Nought on a 2D layer, which has none.
+Vec3 orientationOf(
+    BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    BridgeRational Function()? time) {
+  final d = tf.depth;
+  if (d == null) return (0, 0, 0);
+  final keyed = time == null ||
+          ![d.orientationX, d.orientationY, d.orientationZ]
+              .any((s) => s is BridgeScalar_Keyframed)
+      ? null
+      : sampledOrientation(
+          d.orientationX, d.orientationY, d.orientationZ, time());
+  return keyed ??
+      (
+        at(d.orientationX, BridgeTransformProp.orientationX),
+        at(d.orientationY, BridgeTransformProp.orientationY),
+        at(d.orientationZ, BridgeTransformProp.orientationZ),
+      );
+}
+
+/// [outside] with an aimed light's aim at its point of interest outside it,
+/// as the engine places the light. Anything else comes back as it is.
+List<double>? _outsideOf(
+    BridgeLayerEntry entry,
+    BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    List<double>? outside) {
+  final light = tf.light;
+  if (!(entry.info.light?.twoNode ?? false) || light == null) return outside;
+  final d = (
+    at(light.poiX, BridgeTransformProp.poiX) -
+        at(tf.positionX, BridgeTransformProp.positionX),
+    at(light.poiY, BridgeTransformProp.poiY) -
+        at(tf.positionY, BridgeTransformProp.positionY),
+    at(light.poiZ, BridgeTransformProp.poiZ) -
+        at(tf.positionZ, BridgeTransformProp.positionZ),
+  );
+  final len = math.sqrt(d.$1 * d.$1 + d.$2 * d.$2 + d.$3 * d.$3);
+  if (len < 1e-9) return outside;
+  // `lumit_core::camera::look_at`, with no turn of its own on top.
+  final look = turnOf((
+    math.asin((-d.$2 / len).clamp(-1.0, 1.0)) * 180 / math.pi,
+    math.atan2(d.$1, d.$3) * 180 / math.pi,
+    0,
+  ));
+  return outside == null ? look : mul3(look, outside);
+}
+
+/// [rows]' turn, row by row, in the order [tf]'s layer turns in.
+List<double> rowsTurnOf(BridgeTransform tf, Vec3 rows) =>
+    rowsTurn(rows, ae: tf.depth?.afterEffectsOrder ?? false);
+
+/// The turn an Orientation makes, row by row, null for none.
+List<double>? outsideOf(Vec3 orientation) =>
+    orientation == (0.0, 0.0, 0.0) ? null : turnOfAe(orientation);
+
+/// Anchor Z or Scale Z, [none] on a layer that has neither.
+double _depthAt(BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    BridgeTransformProp prop, double none) {
+  final d = tf.depth;
+  if (d == null) return none;
+  return at(prop == BridgeTransformProp.anchorZ ? d.anchorZ : d.scaleZ, prop);
+}
+
+/// Where [entry]'s parents put its Position space in the comp, null when it
+/// has none: the engine's `parent_world_placement`, each ancestor placed as
+/// `place_matrix` places it, and a 2D ancestor placed flat. Without it a
+/// parented layer's box stays behind while its picture follows the parent. A
+/// 2D layer is drawn flat, so it takes this flattened to the picture.
+///
+/// A camera or a light has no anchor or scale of its own. A camera parent is
+/// placed by [cameraPose], the engine's own placement for it with its aim and
+/// solve in, and an aimed light parent faces its point of interest.
+Matrix4? parentMatrix(
+  BridgeLayerEntry entry,
+  Map<UuidValue, BridgeLayerEntry> byId,
+  BridgeTransform Function(BridgeLayerEntry) transformOf,
+  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
+  BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
+  BridgeRational Function()? time,
+}) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
   for (var id = entry.info.parent; id != null && seen.add(id);) {
     final up = byId[id];
     if (up == null) break;
+    final eye = up.info.kind == BridgeLayerKind.camera ||
+        up.info.kind == BridgeLayerKind.light;
+    final pose = up.info.kind == BridgeLayerKind.camera
+        ? cameraPose?.call(up)
+        : null;
+    if (pose != null) {
+      final placed = Matrix4.translationValues(pose.x, pose.y, pose.z)
+        ..rotateY(pose.rotationY * math.pi / 180)
+        ..rotateX(pose.rotationX * math.pi / 180)
+        ..rotateZ(pose.rotationZ * math.pi / 180);
+      world = world == null ? placed : placed.multiplied(world);
+      id = up.info.parent;
+      continue;
+    }
     final tf = transformOf(up);
-    double at(BridgeScalar s) => read(s, up.layer);
-    double turn(BridgeScalar s) => at(s) * math.pi / 180;
+    double at(BridgeScalar s, BridgeTransformProp p) => read(s, up.layer, p);
     // A 2D parent's hidden z and X/Y rotation count as 0, as the engine
     // places it. Cameras and lights have no 3D switch, so theirs count.
     final flat = !up.info.switches.threeD &&
         up.info.kind != BridgeLayerKind.camera &&
         up.info.kind != BridgeLayerKind.light;
-    final own = Matrix4.translationValues(
-        at(tf.positionX), at(tf.positionY), flat ? 0 : at(tf.positionZ))
-      ..rotateY(flat ? 0 : turn(tf.rotationY))
-      ..rotateX(flat ? 0 : turn(tf.rotationX))
-      ..rotateZ(turn(tf.rotation))
-      ..scaleByDouble(at(tf.scaleX) / 100, at(tf.scaleY) / 100, 1, 1)
-      ..translateByDouble(-at(tf.anchorX), -at(tf.anchorY), 0, 1);
+    final position = (
+      at(tf.positionX, BridgeTransformProp.positionX),
+      at(tf.positionY, BridgeTransformProp.positionY),
+      flat ? 0.0 : at(tf.positionZ, BridgeTransformProp.positionZ),
+    );
+    final Vec3 rows = (
+      flat ? 0.0 : at(tf.rotationX, BridgeTransformProp.rotationX),
+      flat ? 0.0 : at(tf.rotationY, BridgeTransformProp.rotationY),
+      at(tf.rotation, BridgeTransformProp.rotation),
+    );
+    // An aimed light's aim, then the Orientation, outside the rotations.
+    final outside =
+        flat ? null : _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time)));
+    final r = rowsTurnOf(tf, rows);
+    final m = outside == null ? r : mul3(outside, r);
+    final own = Matrix4.translationValues(position.$1, position.$2, position.$3)
+      ..multiply(Matrix4(m[0], m[3], m[6], 0, m[1], m[4], m[7], 0, m[2], m[5],
+          m[8], 0, 0, 0, 0, 1));
+    if (!eye) {
+      own
+        ..scaleByDouble(
+            at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
+            at(tf.scaleY, BridgeTransformProp.scaleY) / 100,
+            flat ? 1 : _depthAt(tf, at, BridgeTransformProp.scaleZ, 100) / 100,
+            1)
+        ..translateByDouble(
+            -at(tf.anchorX, BridgeTransformProp.anchorX),
+            -at(tf.anchorY, BridgeTransformProp.anchorY),
+            flat ? 0 : -_depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
+            1);
+    }
     world = world == null ? own : own.multiplied(world);
     id = up.info.parent;
   }
-  final m = world?.storage;
-  if (m == null) return null;
-  return (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]);
+  return world;
 }
 
 /// Footage layers already asked whether they have a picture, by layer.
@@ -1046,10 +1462,11 @@ BridgeLayerEntry? layerAtCompPoint(
   final revision = comp.documentRevision();
   final time = timeOfFrame(comp, frame);
   final seconds = frame / (model.fps > 0 ? model.fps : 60.0);
-  double read(BridgeScalar s, LayerReference layer) => switch (s) {
+  double read(BridgeScalar s, LayerReference layer, BridgeTransformProp prop) =>
+      switch (s) {
         BridgeScalar_Static(:final field0) => field0,
-        BridgeScalar_Expression() =>
-          sampledExpression(s, time, layer, revision),
+        BridgeScalar_Expression() => sampledExpression(s, time, layer, revision,
+            row: BridgeExpressionRow.transform(prop)),
         _ => sampledScalar(s, time),
       };
   const pictureless = {
@@ -1062,37 +1479,47 @@ BridgeLayerEntry? layerAtCompPoint(
   final byId = {
     for (final entry in model.layers) entry.layer.internallayerId: entry
   };
+  // What a pin points at was seen through the comp's own camera.
+  late final List<double> rows = () {
+    try {
+      return comp.viewProjection(frame: BigInt.from(frame), view: null);
+    } catch (_) {
+      return flatView;
+    }
+  }();
+  final boxes = <LayerBox>[];
+  final entries = <UuidValue, BridgeLayerEntry>{};
   for (final entry in model.layers) {
     final info = entry.info;
     if (pictureless.contains(info.kind) || !info.switches.visible) continue;
     if (frame < info.inFrame || frame >= info.outFrame) continue;
-    final tf = info.transform;
-    final rotation = read(tf.rotation, entry.layer);
-    final box = LayerBox(
+    final id = entry.layer.internallayerId;
+    entries[id] = entry;
+    boxes.add(LayerBox(
       layer: entry.layer,
-      id: entry.layer.internallayerId,
+      id: id,
       // No fitting and no pan: a "screen" pixel here is a composition pixel.
-      map: ViewerLayerMap.of(
-        positionX: read(tf.positionX, entry.layer),
-        positionY: read(tf.positionY, entry.layer),
-        anchorX: read(tf.anchorX, entry.layer),
-        anchorY: read(tf.anchorY, entry.layer),
-        scaleXPercent: read(tf.scaleX, entry.layer),
-        scaleYPercent: read(tf.scaleY, entry.layer),
-        rotationDegrees: rotation,
-        origin: Offset.zero,
-        viewScale: 1,
-        parent: parentPlacement(entry, byId, (a) => a.info.transform, read),
-      ),
+      map: layerMapOf(entry, byId, (a) => a.info.transform, read,
+          origin: Offset.zero,
+          viewScale: 1,
+          view: () => rows,
+          time: () => time,
+          cameraPose: (camera) {
+            try {
+              return camera.layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+            } catch (_) {
+              return null;
+            }
+          }),
       bounds: uiState.layerBounds.boundsOf(entry,
           compSize: size, revision: revision, t: seconds),
       draggable: false,
       scalable: false,
-      rotationDegrees: rotation,
-    );
-    if (box.contains(at)) return entry;
+      rotationDegrees: read(info.transform.rotation, entry.layer,
+          BridgeTransformProp.rotation),
+    ));
   }
-  return null;
+  return entries[layerAtPoint(boxes, at)?.id];
 }
 
 /// The badge that appears only once a probe has actually found a file gone.
@@ -1382,18 +1809,36 @@ Rect snapToDevicePixels(Rect rect, double dpr) {
 }
 
 /// The wireframes over the picture in a 3D view (docs/impl/camera.md §6): every
-/// 3D layer's rectangle, every camera's frustum, and every light.
+/// 3D layer's rectangle, every camera's frustum, every light, and the ground,
+/// the comp's frame and the axes.
 ///
 /// **Asked for once per change, never in a build.** The engine gathers them and
 /// projects them through the view's own matrix, which is a walk of the whole
-/// composition; three things can change the answer - the frame, the document
-/// and the view - and this asks when one of them does and holds the reply.
+/// composition; the frame, the document, the view and what is asked for can
+/// change the answer, and this asks when one of them does and holds the reply.
 class ViewerWireframeLayer extends StatefulWidget {
   final CompositionReference comp;
 
   /// The pose the picture is being drawn through, which is also the pose the
-  /// wireframes are projected through.
-  final BridgeCameraPose view;
+  /// wireframes are projected through. Null for the comp's own camera.
+  final BridgeCameraPose? view;
+
+  /// Whether the engine is asked at all: the corner axes alone need nothing
+  /// from it.
+  final bool ask;
+
+  /// Whether the ground, with the comp's frame and the axes from the origin,
+  /// is drawn, and whether the ground's own lines are, which a 3D viewport's
+  /// picture already has.
+  final bool ground;
+  final bool grid;
+
+  /// The corner axes, as [viewAxes] reads them, or null for none.
+  final List<double>? axes;
+
+  /// The cameras and lights to outline and nothing else, or null for
+  /// everything.
+  final List<UuidValue>? only;
 
   final int frame;
   final BigInt? revision;
@@ -1408,22 +1853,36 @@ class ViewerWireframeLayer extends StatefulWidget {
   final Rect fitted;
   final Size compSize;
 
+  final Set<UuidValue> selected;
+
   final Color layerLine;
+  final Color selectedLine;
   final Color cameraLine;
   final Color lightLine;
+  final Color groundLine;
+  final Color frameLine;
 
   const ViewerWireframeLayer({
     super.key,
     required this.comp,
     required this.view,
+    required this.ask,
+    required this.ground,
+    this.grid = true,
+    required this.axes,
+    required this.only,
     required this.frame,
     required this.revision,
     required this.mediaSizes,
     required this.fitted,
     required this.compSize,
+    required this.selected,
     required this.layerLine,
+    required this.selectedLine,
     required this.cameraLine,
     required this.lightLine,
+    required this.groundLine,
+    required this.frameLine,
   });
 
   @override
@@ -1442,10 +1901,15 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
   @override
   void didUpdateWidget(ViewerWireframeLayer old) {
     super.didUpdateWidget(old);
-    // The rectangle and the colours move with the panel and the theme, and
-    // neither changes what the engine would answer.
+    // The rectangle, the selection and the colours move with the panel, the
+    // Timeline and the theme, and none of them changes what the engine would
+    // answer.
     if (old.comp != widget.comp ||
         old.view != widget.view ||
+        old.ask != widget.ask ||
+        old.ground != widget.ground ||
+        old.grid != widget.grid ||
+        !listEquals(old.only, widget.only) ||
         old.frame != widget.frame ||
         old.revision != widget.revision) {
       _fetch();
@@ -1455,10 +1919,17 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
   /// Assigned rather than set: this runs from [initState] and
   /// [didUpdateWidget], both of which are followed by a build anyway.
   void _fetch() {
+    if (!widget.ask) {
+      _wires = null;
+      return;
+    }
     try {
       _wires = widget.comp.wireframes(
         frame: BigInt.from(widget.frame),
         view: widget.view,
+        ground: widget.ground,
+        grid: widget.grid,
+        only: widget.only,
         mediaSizes: widget.mediaSizes,
       );
     } catch (_) {
@@ -1473,94 +1944,156 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
           wires: _wires,
           fitted: widget.fitted,
           compSize: widget.compSize,
+          selected: widget.selected,
+          ground: widget.ground,
+          axes: widget.axes,
           layerLine: widget.layerLine,
+          selectedLine: widget.selectedLine,
           cameraLine: widget.cameraLine,
           lightLine: widget.lightLine,
+          groundLine: widget.groundLine,
+          frameLine: widget.frameLine,
         ),
       );
 }
 
+/// Which way the world's x, y and z point as the view with [rows] sees them,
+/// three numbers each: across, down, and away from the eye. Each is a column
+/// of the view's turn, read off the rows `ViewProjections` holds.
+List<double> viewAxes(List<double> rows, Size comp) => [
+      for (var k = 0; k < 3; k++) ...() {
+        final x = rows[k] - comp.width / 2 * rows[8 + k];
+        final y = rows[4 + k] - comp.height / 2 * rows[8 + k];
+        return [
+          x,
+          y,
+          rows[8 + k].sign * math.sqrt(math.max(0.0, 1 - x * x - y * y)),
+        ];
+      }(),
+    ];
+
+/// How far in from the panel's bottom left corner the corner axes' middle
+/// sits, and how long their arms are, in screen pixels.
+const double _triadInset = 30;
+const double _triadArm = 18;
+
 /// The wireframes themselves, in comp pixels taken through the picture's own
-/// rectangle. A point behind the view's eye carries a number that means
-/// nothing, so any line with an end behind is left out.
+/// rectangle. The engine has already cut every line at the eye.
 class ViewerWireframePainter extends CustomPainter {
   final BridgeWireframes? wires;
   final Rect fitted;
   final Size compSize;
+  final Set<UuidValue> selected;
+  final bool ground;
+  final List<double>? axes;
   final Color layerLine;
+  final Color selectedLine;
   final Color cameraLine;
   final Color lightLine;
+  final Color groundLine;
+  final Color frameLine;
 
   const ViewerWireframePainter({
     required this.wires,
     required this.fitted,
     required this.compSize,
+    required this.selected,
+    required this.ground,
+    required this.axes,
     required this.layerLine,
+    required this.selectedLine,
     required this.cameraLine,
     required this.lightLine,
+    required this.groundLine,
+    required this.frameLine,
   });
 
-  Offset _at(BridgeWirePoint p) => Offset(
-        fitted.left +
-            (compSize.width == 0 ? 0 : p.x / compSize.width * fitted.width),
-        fitted.top +
-            (compSize.height == 0 ? 0 : p.y / compSize.height * fitted.height),
-      );
+  double get _sx => compSize.width == 0 ? 0 : fitted.width / compSize.width;
+  double get _sy => compSize.height == 0 ? 0 : fitted.height / compSize.height;
 
-  void _line(Canvas canvas, BridgeWirePoint a, BridgeWirePoint b, Paint paint) {
-    if (!a.inFront || !b.inFront) return;
-    canvas.drawLine(_at(a), _at(b), paint);
-  }
+  Offset _at(double x, double y) =>
+      Offset(fitted.left + x * _sx, fitted.top + y * _sy);
 
-  /// A closed outline round [corners], each edge drawn on its own so one
-  /// corner behind the eye costs that edge and not the whole shape.
-  void _loop(Canvas canvas, List<BridgeWirePoint> corners, Paint paint) {
-    for (var i = 0; i < corners.length; i++) {
-      _line(canvas, corners[i], corners[(i + 1) % corners.length], paint);
+  /// Every line in [lines], [stride] numbers to a line, the first four its
+  /// two ends.
+  void _lines(Canvas canvas, Float64List lines, Paint paint, {int stride = 4}) {
+    for (var i = 0; i + 3 < lines.length; i += stride) {
+      canvas.drawLine(_at(lines[i], lines[i + 1]),
+          _at(lines[i + 2], lines[i + 3]), paint);
     }
   }
+
+  Paint _stroke(Color colour, [double width = 1]) => Paint()
+    ..color = colour
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = width;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (axes case final axes?) _triad(canvas, size, axes);
     final wires = this.wires;
     if (wires == null) return;
-    Paint stroke(Color colour) => Paint()
-      ..color = colour
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
 
-    final layers = stroke(layerLine);
+    if (ground) {
+      // Each square of the ground fades on its own, so the floor thins out
+      // towards its edge rather than stopping at a hard line.
+      final g = wires.ground;
+      final paint = _stroke(groundLine);
+      for (var i = 0; i + 4 < g.length; i += 5) {
+        paint.color = groundLine.withValues(alpha: groundLine.a * g[i + 4]);
+        canvas.drawLine(_at(g[i], g[i + 1]), _at(g[i + 2], g[i + 3]), paint);
+      }
+      _lines(canvas, wires.frame, _stroke(frameLine));
+      final a = wires.axes;
+      for (var i = 0; i + 4 < a.length; i += 5) {
+        canvas.drawLine(_at(a[i], a[i + 1]), _at(a[i + 2], a[i + 3]),
+            _stroke(gizmoAxisColours[a[i + 4].round().clamp(0, 2)], 1.5));
+      }
+    }
+
+    Color colour(UuidValue id, Color quiet) =>
+        selected.contains(id) ? selectedLine : quiet;
     for (final layer in wires.layers) {
-      _loop(canvas, layer.corners, layers);
+      _lines(canvas, layer.lines, _stroke(colour(layer.layer, layerLine)));
     }
-
-    final cameras = stroke(cameraLine);
     for (final camera in wires.cameras) {
-      _loop(canvas, camera.corners, cameras);
-      for (final corner in camera.corners) {
-        _line(canvas, camera.eye, corner, cameras);
-      }
-      if (camera.pointOfInterest case final poi?) {
-        _line(canvas, camera.eye, poi, cameras);
+      _lines(canvas, camera.lines, _stroke(colour(camera.layer, cameraLine)));
+    }
+    for (final light in wires.lights) {
+      final paint = _stroke(colour(light.layer, lightLine));
+      _lines(canvas, light.lines, paint);
+      // A selected light already wears the layer controls' mark.
+      if (light.at.inFront && !selected.contains(light.layer)) {
+        _lightMark(canvas, _at(light.at.x, light.at.y), light.kind, paint);
       }
     }
+  }
 
-    final lights = stroke(lightLine);
-    for (final light in wires.lights) {
-      if (!light.at.inFront) continue;
-      // A small diamond: a light has no shape of its own to draw, and a mark
-      // that is not a rectangle tells itself apart from everything that has.
-      const reach = 6.0;
-      final at = _at(light.at);
-      canvas.drawPath(
-        Path()
-          ..moveTo(at.dx, at.dy - reach)
-          ..lineTo(at.dx + reach, at.dy)
-          ..lineTo(at.dx, at.dy + reach)
-          ..lineTo(at.dx - reach, at.dy)
-          ..close(),
-        lights,
-      );
+  /// A light's own mark at its place: a bulb with rays for a point light, a
+  /// plain ring where the cone or the rectangle already says what it is.
+  void _lightMark(
+      Canvas canvas, Offset at, BridgeWireLightKind kind, Paint paint) {
+    canvas.drawCircle(at, 3.5, paint);
+    if (kind != BridgeWireLightKind.point) return;
+    for (var i = 0; i < 8; i++) {
+      final d = Offset(math.cos(i * math.pi / 4), math.sin(i * math.pi / 4));
+      canvas.drawLine(at + d * 6, at + d * 9, paint);
+    }
+  }
+
+  /// The view's axes as a small triad in the panel's corner, the far ones
+  /// first and fainter so the near ones read on top.
+  void _triad(Canvas canvas, Size size, List<double> o) {
+    if (o.length < 9) return;
+    final centre = Offset(_triadInset, size.height - _triadInset);
+    final order = [0, 1, 2]..sort((a, b) => o[b * 3 + 2].compareTo(o[a * 3 + 2]));
+    for (final k in order) {
+      final end = centre + Offset(o[k * 3], o[k * 3 + 1]) * _triadArm;
+      final colour = o[k * 3 + 2] > 0
+          ? gizmoAxisColours[k].withValues(alpha: 0.5)
+          : gizmoAxisColours[k];
+      canvas.drawLine(centre, end, _stroke(colour, 2));
+      canvas.drawCircle(end, 2.5, Paint()..color = colour);
     }
   }
 
@@ -1569,9 +2102,15 @@ class ViewerWireframePainter extends CustomPainter {
       old.wires != wires ||
       old.fitted != fitted ||
       old.compSize != compSize ||
+      !setEquals(old.selected, selected) ||
+      old.ground != ground ||
+      !listEquals(old.axes, axes) ||
       old.layerLine != layerLine ||
+      old.selectedLine != selectedLine ||
       old.cameraLine != cameraLine ||
-      old.lightLine != lightLine;
+      old.lightLine != lightLine ||
+      old.groundLine != groundLine ||
+      old.frameLine != frameLine;
 }
 
 /// Where the other people in a shared project are pointing over [comp]'s

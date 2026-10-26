@@ -792,8 +792,7 @@ class _FaderState extends State<_Fader> with TickerProviderStateMixin {
                 painter: _FaderPainter(
                   fraction: _faderFraction(widget.db),
                   rail: t.surface3,
-                  knob: Color.lerp(
-                      t.textSecondary, t.textPrimary, _glow.light)!,
+                  knob: Color.lerp(t.accent, t.textPrimary, _glow.light * 0.3)!,
                   tick: t.textMuted,
                   label: t.mono.copyWith(fontSize: 7, color: t.textMuted),
                 ),
@@ -909,7 +908,7 @@ class PanPot extends StatelessWidget {
             painter: _PotPainter(
               fraction: (value + 100) / 200,
               ring: Color.lerp(t.hairlineStrong, t.textSecondary, lit)!,
-              mark: Color.lerp(t.textSecondary, t.textPrimary, lit)!,
+              mark: Color.lerp(t.accent, t.textPrimary, lit * 0.3)!,
             ),
           ),
         ),

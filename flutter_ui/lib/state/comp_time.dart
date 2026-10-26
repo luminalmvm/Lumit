@@ -165,50 +165,95 @@ BridgeRational? _hotTime;
 double sampledScalar(BridgeScalar scalar, BridgeRational time) {
   if (_scalarSamples.length >= 8192) _scalarSamples.clear();
   final held = _scalarSamples[(scalar, time)];
-  if (held != null) {
-    _markHot(scalar, time);
-    return held;
+  if (held == null) _sampleHot(time, scalar: scalar);
+  _markHot(scalar, time);
+  return _scalarSamples[(scalar, time)] ?? 0;
+}
+
+/// What the keyed Orientation [x], [y], [z] reads at [time], null when none
+/// of the three is keyed and each reads as it is. Between keys the three turn
+/// round together, as the render turns them, so it is asked of the engine in
+/// the same one call a frame as the rows.
+(double, double, double)? sampledOrientation(
+    BridgeScalar x, BridgeScalar y, BridgeScalar z, BridgeRational time) {
+  if (![x, y, z].any((s) => s is BridgeScalar_Keyframed)) return null;
+  if (_orientationSamples.length >= 2048) _orientationSamples.clear();
+  final turn = (x, y, z);
+  if (!_orientationSamples.containsKey((turn, time))) {
+    _sampleHot(time, turn: turn);
   }
-  // The miss, and everything the last frame wanted that this one has not been
-  // asked for yet: one call for the lot.
+  _markHot(null, time, turn: turn);
+  return _orientationSamples[(turn, time)] ?? (0.0, 0.0, 0.0);
+}
+
+typedef _Turn = (BridgeScalar, BridgeScalar, BridgeScalar);
+
+final Map<(_Turn, BridgeRational), (double, double, double)>
+    _orientationSamples = {};
+
+/// The Orientations asked for at [_hotTime], as [_hot] is for the rows.
+Set<_Turn> _hotTurns = {};
+
+/// The miss, and everything the last frame wanted that this one has not been
+/// asked for yet: one call for the lot.
+void _sampleHot(BridgeRational time, {BridgeScalar? scalar, _Turn? turn}) {
   final wanted = <BridgeScalar>[
-    scalar,
+    if (scalar != null) scalar,
     for (final other in _hot)
       if (other != scalar && !_scalarSamples.containsKey((other, time))) other,
   ];
-  final values = sampleScalars(scalars: wanted, time: time);
+  final turns = <_Turn>[
+    if (turn != null) turn,
+    for (final other in _hotTurns)
+      if (other != turn && !_orientationSamples.containsKey((other, time)))
+        other,
+  ];
+  final values = sampleScalarsAndTurns(
+    scalars: wanted,
+    turns: [for (final (x, y, z) in turns) ...[x, y, z]],
+    time: time,
+  );
   for (var i = 0; i < wanted.length && i < values.length; i++) {
     _scalarSamples[(wanted[i], time)] = values[i];
   }
-  _markHot(scalar, time);
-  return values.isEmpty ? 0 : values.first;
+  for (var i = 0; i < turns.length; i++) {
+    final at = wanted.length + i * 3;
+    if (at + 2 >= values.length) break;
+    _orientationSamples[(turns[i], time)] =
+        (values[at], values[at + 1], values[at + 2]);
+  }
 }
 
-/// What an expression on [layer] reads at [time]. An expression can read
-/// anything in the document, so its answers are only held until [revision]
-/// moves.
+/// What an expression on [row] of [layer] reads at [time]. An expression can
+/// read anything in the document, so its answers are only held until
+/// [revision] moves. The halves of a point carry the same text and each
+/// reads its own number, so the row is part of what is held.
 double sampledExpression(BridgeScalar scalar, BridgeRational time,
-    LayerReference layer, BigInt? revision) {
+    LayerReference layer, BigInt? revision,
+    {BridgeExpressionRow? row}) {
   if (_expressionRevision != revision || _expressionSamples.length >= 2048) {
     _expressionSamples.clear();
     _expressionRevision = revision;
   }
-  return _expressionSamples[(scalar, layer.internallayerId, time)] ??=
-      sampleScalarWithContext(scalar: scalar, time: time, layer: layer);
+  return _expressionSamples[(scalar, layer.internallayerId, row, time)] ??=
+      sampleScalarWithContext(
+          scalar: scalar, time: time, layer: layer, row: row);
 }
 
-final Map<(BridgeScalar, Object, BridgeRational), double> _expressionSamples =
-    {};
+final Map<(BridgeScalar, Object, BridgeExpressionRow?, BridgeRational), double>
+    _expressionSamples = {};
 BigInt? _expressionRevision;
 
-/// Note that [scalar] was wanted at [time], starting the set over when the time
-/// has moved on.
-void _markHot(BridgeScalar scalar, BridgeRational time) {
+/// Note that [scalar] or [turn] was wanted at [time], starting the sets over
+/// when the time has moved on.
+void _markHot(BridgeScalar? scalar, BridgeRational time, {_Turn? turn}) {
   if (_hotTime != time) {
     _hotTime = time;
     _hot = {};
+    _hotTurns = {};
   }
-  _hot.add(scalar);
+  if (scalar != null) _hot.add(scalar);
+  if (turn != null) _hotTurns.add(turn);
 }
 
 /// Forget everything. Called on every committed engine change.
@@ -233,6 +278,7 @@ void clearCompTimeCache({bool rate = true}) {
   _markers.clear();
   _beatGrids.clear();
   _scalarSamples.clear();
+  _orientationSamples.clear();
   // [_hot] deliberately survives: it is not an answer that can go stale, only
   // the list of curves something drew last. Emptying it would cost the next
   // frame its batch — an edited scalar in it is sampled once for nothing and
