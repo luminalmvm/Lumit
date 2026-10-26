@@ -86,14 +86,24 @@ A shape group's **Path** row has no curve in the [graph editor](/panels/graph-ed
 number on a shape item has one.
 :::
 
-## Shape operations
+## Modifiers
 
-Right-click a shape group in the Timeline for **Add** and **Remove**, which list the
-operations it can be given and the ones it has. An operation's rows appear under the group
-once it is added. Every row is animatable.
+A shape layer's contents is an ordered list: shapes, modifiers and groups. A modifier acts
+on every shape above it in its group, in list order. Two modifiers of one kind stack: a
+repeater under a repeater repeats the copies.
 
-They apply in a fixed order: smooth, twist, deform, then offset, trim and the repeater. The
-stroke taper narrows the outline last.
+Right-click a row in the Timeline for **Add**, which lists **Repeater**, **Trim paths**,
+**Offset paths**, **Twist**, **Deform**, **Smooth**, **Stroke taper** and **Group**. A
+modifier is added under the row and acts on it; on a group it is added inside the group. A
+modifier's rows sit under its own twirl, and every row is animatable. **Move up** and
+**Move down** reorder an entry; **Delete modifier** takes one off.
+
+The stroke taper is a setting of the shape itself, offered under **Add** and **Remove**.
+
+### Groups
+
+**Add ▸ Group** puts the row inside a new group. A modifier inside a group acts on the
+shapes inside it and on nothing outside. **Ungroup** opens a group out in place.
 
 ### Smooth
 
@@ -149,9 +159,9 @@ falls.
 
 ## Trim paths
 
-Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**
-and **Trim offset**. Start and end are a percentage of the path's own length; offset
-slides that piece along the path in degrees, and 360 is one full lap of a closed shape.
+A **Trim paths** entry carries **Trim start**, **Trim end** and **Trim offset**. Start and
+end are a percentage of the path's own length; offset slides that piece along the path in
+degrees, and 360 is one full lap of a closed shape.
 
 The fill is trimmed with the outline, and an end below the start draws nothing.
 
@@ -164,26 +174,34 @@ the path.
 
 ## Offset paths
 
-The first row under a shape group is **Offset path**, one number in pixels. Positive
-pushes the outline outwards; negative pulls it in. Corners come out round.
+An **Offset paths** entry carries one **Amount**, in pixels. Positive pushes the outline
+outwards; negative pulls it in. Corners come out round.
 
 Pull the outline in by more than the shape is thick somewhere and it can cross itself,
 leaving a small loop.
 
 ## The repeater
 
-Every shape group carries a **Copies** row. Turn it above one and the group is drawn
-that many times, each copy one more step along than the last, and nine more rows
-appear to describe the step: **Repeater position x** and **y**, **Repeater rotation**,
-**Repeater scale**, the **Repeater anchor** the turn and the scale happen about, and
-**Start opacity** and **End opacity**, which the copies fade evenly between.
+A **Repeater** entry draws the shapes above it **Copies** times, each copy one more step
+along than the last. Nine rows describe the step: **Repeater position x** and **y**,
+**Repeater rotation**, **Repeater scale**, the **Repeater anchor** the turn and the scale
+happen about, and **Start opacity** and **End opacity**, which the copies fade evenly
+between.
 
 **Copy offset** says which copy the original art is, so a negative number puts copies
-behind it. A copy is a scaled drawing, not a scaled path — halve the scale and the outline
+behind it. A copy is a scaled drawing, not a scaled path: halve the scale and the outline
 and the dashes halve with it.
 
 The layer's box grows to hold the copies, and the layer's position stays pinned to that
-box's corner. The count stops at 100 copies.
+box's corner. One repeater stops at 100 copies, and stacked repeaters at 1,000 between them.
+
+### Expand copies
+
+Right-click a Repeater for **Expand copies**. **Into this layer** replaces the repeater with
+its copies as shapes of their own, named after the original. **Into layers** keeps the first
+copy here and makes one shape layer per further copy, below this one. **Expand all copies**
+on a shape layer's row does the same for every repeater it has. Both read keyed values at
+the playhead, and each is one undo step.
 
 ## Related
 
