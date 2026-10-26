@@ -124,6 +124,24 @@ Future<String?> pickExportSaveLocation(
   );
 }
 
+XTypeGroup _easingsGroup() =>
+    XTypeGroup(label: l10n.fileTypeEasings, extensions: const ['json']);
+
+/// Pick a file of easing shapes to import, or null when cancelled.
+Future<String?> pickEasingsToOpen() async =>
+    (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;
+
+/// Where to export the saved easing shapes, or null when cancelled.
+Future<String?> pickEasingsSaveLocation() async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [_easingsGroup()],
+    suggestedName: 'easings.json',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.json')) return path;
+  return '$path.json';
+}
+
 /// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's
 /// preset filter (`crates/lumit-ui`'s `preset.rs`).
 XTypeGroup _presetGroup() =>

@@ -17,7 +17,8 @@
 
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
-import 'graph_maths.dart' show minTangentReach;
+import 'graph_maths.dart'
+    show minTangentReach, rationalSeconds, sideInfluence, sideSpeedAtKey;
 
 /// How far past the unit box a control point may reach vertically, in box
 /// heights — so y lives in −0.5 … 1.5.
@@ -115,6 +116,26 @@ class EasingCurve {
     return 3 * v * v * u * x1 + 3 * v * u * u * x2 + u * u * u;
   }
 
+  /// How far along the value is at [x] of the time: the curve solved for x,
+  /// for the editor's preview. Bisection is safe because the curve never
+  /// doubles back in x (see the class note).
+  double valueAt(double x) {
+    var lo = 0.0;
+    var hi = 1.0;
+    for (var i = 0; i < 24; i++) {
+      final mid = (lo + hi) / 2;
+      if (xAt(mid) < x) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    return yAt((lo + hi) / 2);
+  }
+
+  /// The same shape played backwards: a slow start becomes a slow finish.
+  EasingCurve get reversed => EasingCurve(1 - x2, 1 - y2, 1 - x1, 1 - y1);
+
   @override
   bool operator ==(Object other) =>
       other is EasingCurve &&
@@ -128,6 +149,29 @@ class EasingCurve {
 
   @override
   String toString() => 'EasingCurve($x1, $y1, $x2, $y2)';
+}
+
+/// The shape the span from `keys[index]` to the key after it is drawn in:
+/// [EasingCurve.sidesFor] run backwards, for the panel's Read. Null where
+/// there is no shape to take, a held span, two keys on one frame, or two at
+/// the same value, whose speeds say nothing against no travel at all.
+EasingCurve? easingCurveOfSpan(List<BridgeKeyframe> keys, int index) {
+  if (index < 0 || index + 1 >= keys.length) return null;
+  final a = keys[index];
+  final b = keys[index + 1];
+  if (a.interpOut is BridgeSideInterp_Hold) return null;
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
+  final dv = b.value - a.value;
+  if (dt <= 0 || dv == 0) return null;
+  final slope = dv / dt;
+  final out = sideInfluence(a.interpOut);
+  final inReach = sideInfluence(b.interpIn);
+  return EasingCurve(
+    out,
+    sideSpeedAtKey(keys, index, isOut: true) * out / slope,
+    1 - inReach,
+    1 - sideSpeedAtKey(keys, index + 1, isOut: false) * inReach / slope,
+  );
 }
 
 /// A preset shape and the id its name is looked up by. The name itself lives in

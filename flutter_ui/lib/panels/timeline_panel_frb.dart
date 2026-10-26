@@ -2835,9 +2835,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
       }
     }
-    if (next == ui.easingKey.value) return;
+    EasingCurve? span;
+    if (selection.length > 1) {
+      for (final channel in channels) {
+        for (var i = 0; span == null && i + 1 < channel.keys.length; i++) {
+          if (selection.contains('${channel.id}#$i') &&
+              selection.contains('${channel.id}#${i + 1}')) {
+            span = easingCurveOfSpan(channel.keys, i);
+          }
+        }
+        if (span != null) break;
+      }
+    }
+    if (next == ui.easingKey.value && span == ui.easingSpan.value) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ui.easingKey.value = next;
+      if (!mounted) return;
+      ui.easingKey.value = next;
+      ui.easingSpan.value = span;
     });
   }
 
@@ -3429,6 +3443,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.easingKey.value?.apply == _applyKeyEase) {
       _ui!.easingKey.value = null;
     }
+    // A second Timeline publishes its own again on its next build.
+    _ui?.easingSpan.value = null;
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);
