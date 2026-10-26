@@ -3964,8 +3964,9 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
 }
 
 /// **Text to shapes and Text to points**: each makes a copy beside the
-/// original, and the original is untouched — the layer is still a Type layer
+/// original, and the original is kept — the layer is still a Type layer
 /// still saying what it said, which is what makes the commands safe to try.
+/// Shapes from text switches it off, as After Effects does.
 #[test]
 fn converting_a_text_layer_leaves_the_original_where_it_was() {
     use crate::api::assets::{BridgeColourRgba, BridgeTextDocument};
@@ -3992,16 +3993,17 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     .expect("set");
     let before = comp.get_layers().expect("layers").len();
 
-    let shapes = text.create_shapes_from_text(0).expect("outlines");
-    assert!(
-        !shapes.get_shape_contents().expect("contents").is_empty(),
-        "the copy has no art"
-    );
+    let shapes = text.create_shapes(0, false).expect("outlines");
+    let lumit_core::model::LayerKind::Shape { contents } = shapes.item().expect("copy").kind else {
+        panic!("the copy is not a shape layer");
+    };
+    assert_eq!(contents.len(), 5, "a group for each letter");
     assert_eq!(
         text.get_text().expect("text").expect("still text").text,
         "Lumit",
         "the original was converted rather than copied"
     );
+    assert!(!text.item().expect("text").switches.visible);
     assert_eq!(comp.get_layers().expect("layers").len(), before + 1);
 
     let points = text.create_points_from_text().expect("points");
@@ -4016,6 +4018,9 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
         "the copy emits nothing: {names:?}"
     );
     assert_eq!(comp.get_layers().expect("layers").len(), before + 2);
+    // Split into shape layers makes one for each letter.
+    text.create_shapes(0, true).expect("letters");
+    assert_eq!(comp.get_layers().expect("layers").len(), before + 7);
 
     // A line with no ink has no art to make, and says so rather than leaving
     // an empty layer behind.
@@ -4037,14 +4042,14 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     })
     .expect("set");
     assert!(matches!(
-        text.create_shapes_from_text(0),
+        text.create_shapes(0, false),
         Err(BridgeError::NothingToConvert)
     ));
 
-    // And neither command is offered anything but a Type layer.
+    // And neither has anything to make of an Adjustment layer.
     assert!(matches!(
-        layer.create_shapes_from_text(0),
-        Err(BridgeError::NotText)
+        layer.create_shapes(0, false),
+        Err(BridgeError::NothingToConvert)
     ));
     assert!(matches!(
         layer.create_points_from_text(),

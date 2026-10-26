@@ -55,6 +55,19 @@ pub struct ShapeGroup {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+impl ShapeGroup {
+    /// A new group holding `entries`.
+    #[must_use]
+    pub fn new(name: impl Into<String>, entries: Vec<ShapeEntry>) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            name: name.into(),
+            entries,
+            extra: serde_json::Map::new(),
+        }
+    }
+}
+
 /// A modifier entry: what it is, and what it is called in the Timeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapeModifier {
