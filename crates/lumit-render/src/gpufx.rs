@@ -5011,6 +5011,9 @@ impl GpuEffect for Grid {
     ) -> Tex {
         use lumit_core::fx::effects::grid::Grid as G;
         let inst = G::read(p);
+        if inst.kind == 1 {
+            return crate::grid_lines::draw(fx, ctx, tex, w, h, &inst, G::px_scale_of(p));
+        }
         let style = inst.draw_style();
         // The camera, in the raster this frame is drawn at.
         let projection = aux
@@ -6536,6 +6539,7 @@ mod tests {
             colour: [0.8, 0.4, 0.9, 1.0],
             max_points: 20_000,
             mix: 100.0,
+            ..lumit_core::fx::effects::grid::Grid::read(Params::EMPTY)
         }
     }
 

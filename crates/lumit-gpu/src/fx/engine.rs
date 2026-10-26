@@ -369,6 +369,7 @@ impl FxEngine {
         let beam_mod = module(include_str!("../fx_beam.wgsl"), "fx-beam");
         let lightning_mod = module(include_str!("../fx_lightning.wgsl"), "fx-lightning");
         let radio_waves_mod = module(include_str!("../fx_radiowaves.wgsl"), "fx-radio-waves");
+        let grid_lines_mod = module(include_str!("../fx_gridlines.wgsl"), "fx-grid-lines");
         let vegas_mod = module(include_str!("../fx_vegas.wgsl"), "fx-vegas");
         // Scribble's waver is the shared lattice read as a displacement, so
         // the noise core is prepended exactly as Fractal noise's is.
@@ -532,6 +533,7 @@ impl FxEngine {
         let beam = pipeline(&beam_mod, "fx-beam", "beam");
         let lightning = pipeline(&lightning_mod, "fx-lightning", "lightning");
         let radio_waves = pipeline(&radio_waves_mod, "fx-radio-waves", "radio_waves");
+        let grid_lines = pipeline(&grid_lines_mod, "fx-grid-lines", "grid_lines");
         let vegas = pipeline(&vegas_mod, "fx-vegas", "vegas");
         let path_draw = pipeline(&path_draw_mod, "fx-path-draw", "path_draw");
         let add_grain = pipeline(&add_grain_mod, "fx-add-grain", "add_grain");
@@ -692,6 +694,7 @@ impl FxEngine {
             beam: beam.wait(),
             lightning: lightning.wait(),
             radio_waves: radio_waves.wait(),
+            grid_lines: grid_lines.wait(),
             vegas: vegas.wait(),
             path_draw: path_draw.wait(),
             add_grain: add_grain.wait(),

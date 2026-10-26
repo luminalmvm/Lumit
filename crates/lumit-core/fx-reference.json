@@ -11267,6 +11267,18 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "kind",
+          "label": "Type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Points",
+            "Lines"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "layout",
           "label": "Layout",
           "kind": "choice",
@@ -11459,6 +11471,177 @@
           "hard_min": 0.0
         },
         {
+          "id": "size_from",
+          "label": "Size from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Grid size",
+            "Corner point"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "boxes_across",
+          "label": "Boxes x",
+          "kind": "int",
+          "unit": "raw",
+          "default": 24,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "boxes_down",
+          "label": "Boxes y",
+          "kind": "int",
+          "unit": "raw",
+          "default": 16,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "grid_size_x",
+          "label": "Grid size x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1920.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "grid_size_y",
+          "label": "Grid size y",
+          "kind": "float",
+          "unit": "px",
+          "default": 1440.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "corner_x",
+          "label": "Corner x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1152.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "corner_y",
+          "label": "Corner y",
+          "kind": "float",
+          "unit": "px",
+          "default": 648.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "line_width",
+          "label": "Line width",
+          "kind": "float",
+          "unit": "px",
+          "default": 2.5,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "h_line_rel_width",
+          "label": "H line rel width",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "v_line_rel_width",
+          "label": "V line rel width",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "major_line_spacing",
+          "label": "Major line spacing",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "major_line_width",
+          "label": "Major line width",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.5,
+          "slider_min": 1.0,
+          "slider_max": 10.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "latitude",
+          "label": "Latitude",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -89.0,
+          "slider_max": 89.0,
+          "hard_min": -89.0,
+          "hard_max": 89.0
+        },
+        {
+          "id": "swing",
+          "label": "Swing",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "roll",
+          "label": "Roll",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "z_dist",
+          "label": "Z dist",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "tele_lens_width",
+          "label": "Tele lens width",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.2,
+          "slider_max": 3.0,
+          "hard_min": 0.2,
+          "hard_max": 3.0
+        },
+        {
           "id": "size",
           "label": "Size",
           "kind": "float",
@@ -11591,6 +11774,7 @@
         {
           "label": "Grid",
           "params": [
+            "kind",
             "layout",
             "columns",
             "rows",
@@ -11626,6 +11810,47 @@
           }
         },
         {
+          "label": "Lines",
+          "params": [
+            "size_from",
+            "boxes_across",
+            "boxes_down",
+            "grid_size_x",
+            "grid_size_y",
+            "corner_x",
+            "corner_y",
+            "line_width",
+            "h_line_rel_width",
+            "v_line_rel_width",
+            "major_line_spacing",
+            "major_line_width"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "kind",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "Transform",
+          "params": [
+            "latitude",
+            "swing",
+            "roll",
+            "z_dist",
+            "tele_lens_width"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "kind",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
           "label": "Point",
           "params": [
             "size",
@@ -11637,6 +11862,42 @@
         }
       ],
       "enabled_when": [
+        {
+          "param": "boxes_across",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "boxes_down",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "grid_size_x",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "grid_size_y",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "corner_x",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "corner_y",
+          "on": "size_from",
+          "cond": "choice_is",
+          "value": 1
+        },
         {
           "param": "spacing_x",
           "on": "fit",

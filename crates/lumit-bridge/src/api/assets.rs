@@ -123,6 +123,8 @@ pub struct BridgeTextStyle {
     pub stroke_width: f64,
     /// The outline is drawn over the fill. Off puts the fill on top.
     pub stroke_over: bool,
+    /// Every fill, then every outline (or the other way round), not letter by letter.
+    pub strokes_together: bool,
 }
 
 /// How the lines of a text layer are laid out against each other. All px.
@@ -979,6 +981,7 @@ fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
         stroke: colour_of(style.stroke),
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
+        strokes_together: style.strokes_together,
     }
 }
 
@@ -1014,6 +1017,7 @@ fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
         stroke: linear_of(style.stroke),
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
+        strokes_together: style.strokes_together,
         extra: serde_json::Map::new(),
     }
 }

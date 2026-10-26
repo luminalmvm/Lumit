@@ -798,6 +798,14 @@ class _LumitAppViewState extends State<LumitAppView> {
             onDone: state.notifyDocumentChanged,
           );
         }
+      // An empty row for clips, picture or sound.
+      case 'layer.new.audio' || 'layer.new.sequence':
+        if (comp == null) {
+          handled = false;
+        } else {
+          insertEmptyLayer(ui, comp, action);
+          state.notifyDocumentChanged();
+        }
       case 'layer.new.solid' ||
             'layer.new.text' ||
             'layer.new.camera' ||

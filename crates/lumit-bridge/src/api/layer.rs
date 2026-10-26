@@ -8313,12 +8313,30 @@ impl LayerReference {
             (Some(p), BridgeRevealKind::Animated) => animated(p),
         };
 
+        // A text animator qualifies the way an effect does.
+        let animators: Vec<u32> = match &layer.kind {
+            lumit_core::model::LayerKind::Text { document } => (0u32..)
+                .zip(&document.animators)
+                .filter(|(_, a)| {
+                    kind == BridgeRevealKind::Modified
+                        || [&a.selector.start, &a.selector.end, &a.selector.offset]
+                            .into_iter()
+                            .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
+                            .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
+                            .any(animated)
+                })
+                .map(|(i, _)| i)
+                .collect(),
+            _ => Vec::new(),
+        };
+
         Ok(BridgeRevealGroups {
             transform,
             audio,
             retime,
-            any: transform || audio || retime || !effects.is_empty(),
+            any: transform || audio || retime || !effects.is_empty() || !animators.is_empty(),
             effects,
+            animators,
         })
     }
 }
@@ -8370,6 +8388,8 @@ pub struct BridgeRevealGroups {
     pub retime: bool,
     /// The qualifying effects' ids, as text — the same form the fold paths use.
     pub effects: Vec<String>,
+    /// The qualifying text animators, by their place on the layer.
+    pub animators: Vec<u32>,
     /// Whether anything qualified at all. The panel leaves the layer's own
     /// twirl shut when nothing did, rather than opening onto an empty list.
     pub any: bool,

@@ -315,6 +315,32 @@ class _TextPanelFrbState extends State<TextPanelFrb>
           ),
         ),
       ]),
+      // After Effects' four, in its order: stroke over, then all together.
+      textCell(
+        t,
+        l10n.textFillAndStroke,
+        BareDropdown<(bool, bool)>(
+          key: const ValueKey('text-stroke-order'),
+          value: (style.strokeOver, style.strokesTogether),
+          options: const [
+            (false, false),
+            (true, false),
+            (false, true),
+            (true, true),
+          ],
+          label: (o) => switch (o) {
+            (false, false) => l10n.textFillOverStroke,
+            (true, false) => l10n.textStrokeOver,
+            (false, true) => l10n.textAllFillsOverAllStrokes,
+            (true, true) => l10n.textAllStrokesOverAllFills,
+          },
+          onChanged: (o) => commitText(
+              ui,
+              target,
+              restyle(
+                  (s) => s.copyWith(strokeOver: o.$1, strokesTogether: o.$2))),
+        ),
+      ),
       Padding(
         padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
         child: Wrap(
@@ -384,12 +410,6 @@ class _TextPanelFrbState extends State<TextPanelFrb>
         label: l10n.textLigatures,
         on: style.ligatures,
         set: (s, v) => s.copyWith(ligatures: v),
-      ),
-      tick(
-        keyName: 'text-stroke-over',
-        label: l10n.textStrokeOver,
-        on: style.strokeOver,
-        set: (s, v) => s.copyWith(strokeOver: v),
       ),
       tick(
         keyName: 'text-leading-auto',
@@ -473,6 +493,10 @@ class _TextPanelFrbState extends State<TextPanelFrb>
       value: names.indexOf(family),
       options: labels,
       hint: l10n.textFontSearch,
+      // Each family is listed in its own face. The built-in one is the Inter
+      // the app carries, and a missing one has no face to show.
+      familyOf: (i) =>
+          i == 0 ? 'Inter' : (i <= installed.length ? names[i] : null),
       // A new family starts on its regular face, since the old family's face
       // may not exist in it.
       onChanged: (i) => commitText(

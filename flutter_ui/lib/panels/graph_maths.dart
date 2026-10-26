@@ -15,6 +15,8 @@
 // pinned by the impl note on both sides, and the golden tests hold the two
 // implementations together.
 
+import 'dart:math' as math;
+
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 /// A rational time as plain seconds — the evaluation domain (docs/14 §2:
@@ -133,6 +135,19 @@ class CubicSpan {
     final u = solveU(t);
     final dx = _bezierDeriv(x, u);
     return _bezierDeriv(y, u) / (dx < 1e-12 ? 1e-12 : dx);
+  }
+
+  static double _bezierDeriv2(List<double> p, double u) =>
+      6.0 * (1.0 - u) * (p[2] - 2.0 * p[1] + p[0]) +
+      6.0 * u * (p[3] - 2.0 * p[2] + p[1]);
+
+  /// How fast the speed is changing at curve parameter `u`: the derivative
+  /// of y′/x′, floored the way [speedAt] is.
+  double accelerationAtU(double u) {
+    final dx = _bezierDeriv(x, u);
+    final d = dx < 1e-12 ? 1e-12 : dx;
+    return (_bezierDeriv2(y, u) * d - _bezierDeriv(y, u) * _bezierDeriv2(x, u)) /
+        (d * d * d);
   }
 }
 
@@ -322,6 +337,71 @@ double evaluateKeysSpeed(List<BridgeKeyframe> keys, double t) {
     return (b.value - a.value) / dt;
   }
   return _cubicOf(keys, i).speedAt(t);
+}
+
+/// d²v/dt² at `t` seconds, the acceleration graph's line: 0 wherever the speed
+/// is flat (outside the keys, a hold, a straight span), the exact second
+/// derivative on a bezier span.
+double evaluateKeysAcceleration(List<BridgeKeyframe> keys, double t) {
+  if (keys.isEmpty) return 0;
+  if (t <= rationalSeconds(keys.first.time) ||
+      t >= rationalSeconds(keys.last.time)) {
+    return 0;
+  }
+  final (i, _, _, _, _) = _spanAt(keys, t);
+  final cubic = _shapedSpan(keys, i);
+  return cubic == null ? 0 : cubic.accelerationAtU(cubic.solveU(t));
+}
+
+/// The acceleration one side of a key reads *at the key*, where the
+/// acceleration graph draws its dot. The in side ends the span before the
+/// key and the out side starts the one after, so the two usually differ.
+double sideAccelerationAtKey(List<BridgeKeyframe> keys, int index,
+    {required bool isOut}) {
+  final span = isOut ? index : index - 1;
+  if (span < 0 || span + 1 >= keys.length) return 0;
+  final cubic = _shapedSpan(keys, span);
+  return cubic == null ? 0 : cubic.accelerationAtU(isOut ? 0 : 1);
+}
+
+/// The cubic of the span leaving `keys[i]`, or null where the span has no
+/// curve to it: no length, a hold, or straight on both sides.
+CubicSpan? _shapedSpan(List<BridgeKeyframe> keys, int i) {
+  final a = keys[i], b = keys[i + 1];
+  if (rationalSeconds(b.time) <= rationalSeconds(a.time)) return null;
+  if (a.interpOut is BridgeSideInterp_Hold) return null;
+  if (a.interpOut is BridgeSideInterp_Linear &&
+      b.interpIn is BridgeSideInterp_Linear) {
+    return null;
+  }
+  return _cubicOf(keys, i);
+}
+
+/// The influence that gives one side of `keys[index]` the acceleration
+/// [target] at the key, keeping its speed, or null where the side has no
+/// curve to shape.
+///
+/// At the key a side's acceleration is 2k / (3 · b² · Δt), with b its
+/// influence and k fixed by the two speeds and the far side's influence. So
+/// the influence reaches any acceleration with the sign of k, down to the
+/// one full influence gives. Asked for the other sign, it stops at full.
+double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
+    {required bool isOut, required double target}) {
+  final span = isOut ? index : index - 1;
+  if (span < 0 || span + 1 >= keys.length) return null;
+  final a = keys[span], b = keys[span + 1];
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
+  if (dt <= 0 || a.interpOut is BridgeSideInterp_Hold) return null;
+  final chord = (b.value - a.value) / dt;
+  final (s1, b1) =
+      sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
+  final (s2, b2) =
+      sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
+  final k = isOut ? chord - s1 - b2 * (s2 - s1) : s2 - chord + b1 * (s1 - s2);
+  if (k.abs() < 1e-12) return null;
+  final squared = 2 * k / (3 * target * dt);
+  if (!(squared > 0)) return 1.0;
+  return math.sqrt(squared).clamp(1e-3, 1.0).toDouble();
 }
 
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
@@ -596,7 +676,18 @@ const double minTangentReach = 1e-3;
 /// The same framing for the speed lens: every span side's speed at its keys,
 /// plus dense samples of the derivative (a bezier span's speed peaks between
 /// keys), padded 15% and always including 0 so the axis has its floor.
-(double, double) fitSpeedRange(List<List<BridgeKeyframe>> channels) {
+(double, double) fitSpeedRange(List<List<BridgeKeyframe>> channels) =>
+    _fitRate(channels, sideSpeedAtKey, evaluateKeysSpeed);
+
+/// The same again for the acceleration lens.
+(double, double) fitAccelerationRange(List<List<BridgeKeyframe>> channels) =>
+    _fitRate(channels, sideAccelerationAtKey, evaluateKeysAcceleration);
+
+(double, double) _fitRate(
+  List<List<BridgeKeyframe>> channels,
+  double Function(List<BridgeKeyframe>, int, {required bool isOut}) atKey,
+  double Function(List<BridgeKeyframe>, double) along,
+) {
   var lo = 0.0, hi = 0.0;
   void grow(double v) {
     if (v < lo) lo = v;
@@ -605,14 +696,14 @@ const double minTangentReach = 1e-3;
 
   for (final keys in channels) {
     for (var i = 0; i < keys.length; i++) {
-      grow(sideSpeedAtKey(keys, i, isOut: true));
-      grow(sideSpeedAtKey(keys, i, isOut: false));
+      grow(atKey(keys, i, isOut: true));
+      grow(atKey(keys, i, isOut: false));
     }
     if (keys.length >= 2) {
       final t0 = rationalSeconds(keys.first.time);
       final t1 = rationalSeconds(keys.last.time);
       for (var s = 0; s <= 64; s++) {
-        grow(evaluateKeysSpeed(keys, t0 + (t1 - t0) * s / 64));
+        grow(along(keys, t0 + (t1 - t0) * s / 64));
       }
     }
   }

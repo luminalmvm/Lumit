@@ -5930,8 +5930,8 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
 }
 
 /// The preset library listing: real presets appear under their saved name (or
-/// their file's stem when saved without one), sorted case-insensitively, and
-/// strays — non-JSON, JSON that is not a preset, other extensions — are simply
+/// their file's stem when saved without one), sorted case-insensitively, with
+/// the group each sits in, and strays — non-JSON, JSON that is not a preset, other extensions — are simply
 /// not listed. The folder is the user's; a stray file there is not a fault.
 #[test]
 fn the_preset_library_lists_presets_and_skips_strays() {
@@ -5951,14 +5951,21 @@ fn the_preset_library_lists_presets_and_skips_strays() {
     write("notes.txt", "not a preset");
     write("broken.lumfx", "{ this is not json");
     write("shaped.lumfx", r#"{"name":"no effects list here"}"#);
+    std::fs::create_dir_all(dir.path().join("Shakes/Big")).expect("mkdir");
+    write(
+        "Shakes/Big/hard.lumfx",
+        r#"{"format":1,"name":"Hard shake","effects":[]}"#,
+    );
 
     let listed = crate::api::effect::presets_in(dir.path(), "lumfx");
     let names: Vec<&str> = listed.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(
         names,
-        vec!["anon", "bright", "Zeta look"],
+        vec!["anon", "bright", "Hard shake", "Zeta look"],
         "named presets by name, nameless by stem, sorted, strays skipped"
     );
+    let groups: Vec<&str> = listed.iter().map(|p| p.group.as_str()).collect();
+    assert_eq!(groups, vec!["", "", "Shakes/Big", ""], "found in its group");
     assert!(
         listed
             .iter()
@@ -6012,7 +6019,7 @@ fn an_ffx_import_leaves_out_presets_with_no_effects() {
     .expect("write");
     std::fs::write(from.path().join("notes.txt"), "not a preset").expect("write");
 
-    let done = crate::api::effect::import_ffx_into(from.path(), library.path());
+    let done = crate::api::presets::import_ffx_into(from.path(), library.path());
     assert_eq!((done.imported, done.skipped), (0, 1));
     assert_eq!(std::fs::read_dir(library.path()).expect("read").count(), 0);
 }

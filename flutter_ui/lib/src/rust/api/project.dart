@@ -724,6 +724,11 @@ class ProjectReference {
         that: this,
       );
 
+  /// The project's notes, empty when it has none.
+  String notes() => BridgeLib.instance.api.crateApiProjectProjectReferenceNotes(
+        that: this,
+      );
+
   /// Every footage item of a project kept online, with what Lumit's
   /// server files it under and where it is on this machine. The interface
   /// holds this against what the server has (`GET
@@ -938,6 +943,11 @@ class ProjectReference {
   /// ordinary op, so it is undoable and saved in the `.lum`.
   void setGraphRoom({required int frames}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetGraphRoom(that: this, frames: frames);
+
+  /// Replace the project's notes. An ordinary op, so it is undoable, shared
+  /// and saved in the `.lum`. The same text again is no edit.
+  void setNotes({required String notes}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceSetNotes(that: this, notes: notes);
 
   /// Replace the colour shelf whole — which is how a colour is kept and how
   /// one is forgotten (`Op::SetProjectSwatches`).
