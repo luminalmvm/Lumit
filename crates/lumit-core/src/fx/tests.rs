@@ -6665,8 +6665,9 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "spark_speed"),
             // Grid: every length in a lattice — the gaps between
             // cells, where its centre sits, how far a cell may wander, and the
-            // disc a point is drawn as. The three counts and the per cents are
-            // not lengths and are not here.
+            // disc a point is drawn as, and Lines' grid size, corner and line
+            // width. The counts and the per cents are not lengths and are not
+            // here.
             ("grid", "spacing_x"),
             ("grid", "spacing_y"),
             ("grid", "spacing_z"),
@@ -6679,6 +6680,11 @@ fn every_parameter_declares_a_unit() {
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
             ("grid", "inner_radius"),
+            ("grid", "grid_size_x"),
+            ("grid", "grid_size_y"),
+            ("grid", "corner_x"),
+            ("grid", "corner_y"),
+            ("grid", "line_width"),
             ("grid", "size"),
             // Scatter: the disc a point is drawn as. Density is a count
             // per composition area and rescales nowhere — it is measured

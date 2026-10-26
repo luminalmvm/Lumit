@@ -5596,6 +5596,14 @@
   "@keyNewNullLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewSequenceLayer": "New Sequence layer",
+  "@keyNewSequenceLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewAudioLayer": "New Audio layer",
+  "@keyNewAudioLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyNewProject": "New project",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7850,6 +7858,28 @@
   "@savedPresets": {
     "description": "Heading over the user's own saved effect stacks."
   },
+  "presetNewGroup": "New group",
+  "@presetNewGroup": {
+    "description": "Effects & presets panel: right-click menu row on the Saved presets heading or on a group of presets that makes a new group inside it, and the title of the window asking for its name. A group is a folder of saved presets."
+  },
+  "presetMoveTo": "Move to",
+  "@presetMoveTo": {
+    "description": "Effects & presets panel: right-click menu row on a saved preset that opens the list of groups it can be moved into."
+  },
+  "presetDeleteGroup": "{count, plural, =1{Delete “{name}” and the preset in it?} other{Delete “{name}” and the {count} presets in it?}}",
+  "@presetDeleteGroup": {
+    "description": "Effects & presets panel: asked before a group of saved presets is deleted with the presets in it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Shakes"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "savedTo": "Saved to {path}",
   "@savedTo": {
     "description": "Bottom-strip notice after a successful save. {path} is a file path.",
@@ -10012,6 +10042,10 @@
   "@panelStagger": {
     "description": "Name of the panel that starts the selected layers one after another, a set number of frames apart, and sets the order a stagger drag on layer bars or keyframes follows. Shown on its tab and in the Window menu."
   },
+  "panelNotes": "Notes",
+  "@panelNotes": {
+    "description": "Name of the panel holding one free text area for the project, saved inside the project file. Shown on its tab and in the Window menu."
+  },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
     "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."
@@ -10886,6 +10920,18 @@
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
+  },
+  "insertAudioLayer": "Insert audio layer",
+  "@insertAudioLayer": {
+    "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."
+  },
+  "insertVideoLayer": "Insert video layer",
+  "@insertVideoLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an empty Sequence layer for picture clips."
+  },
+  "insertAdjustmentLayer": "Insert adjustment layer",
+  "@insertAdjustmentLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an Adjustment layer."
   },
   "cutCloseGap": "Close gap",
   "@cutCloseGap": {
@@ -15482,6 +15528,10 @@
   "@histEditSwatches": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histEditNotes": "Edit notes",
+  "@histEditNotes": {
+    "description": "A row of the Edit > History window: the name of one edit that was made, here a change to the text of the Notes panel. Sent by the engine as English and looked up here."
+  },
   "histSetColourManagement": "Set colour management",
   "@histSetColourManagement": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
@@ -15749,6 +15799,23 @@
         "type": "String"
       }
     }
+  },
+  "unitPerSecondSquared": "{unit}/s²",
+  "@unitPerSecondSquared": {
+    "description": "The unit shown after an acceleration in the graph editor: the property's own unit, then per second squared — 'px/s²', '%/s²', '°/s²'. The unit may be empty, giving '/s²' alone.",
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "graphAcceleration": "Acceleration",
+  "@graphAcceleration": {
+    "description": "Graph editor: the view showing how fast the speed of a value changes, beside 'Value' and 'Speed'. Lumit says 'speed', never 'velocity'."
+  },
+  "tipAccelerationGraph": "Acceleration graph",
+  "@tipAccelerationGraph": {
+    "description": "Tooltip: show how fast the speed changes. One or two words."
   },
   "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
   "@easingHandleNumbers": {
@@ -16665,9 +16732,25 @@
   "@textStrokeWidth": {
     "description": "Text panel: label beside how wide the outline round the letters is, in pixels."
   },
+  "textFillAndStroke": "Fill and stroke",
+  "@textFillAndStroke": {
+    "description": "Text panel: label beside the choice of whether the letters' fill or their outline is drawn on top. After Effects calls this Fill & Stroke."
+  },
+  "textFillOverStroke": "Fill over stroke",
+  "@textFillOverStroke": {
+    "description": "Text panel, Fill and stroke choice: each letter's fill is drawn on top of its own outline, one letter at a time. After Effects' name for it."
+  },
   "textStrokeOver": "Stroke over fill",
   "@textStrokeOver": {
-    "description": "Text panel: tick box. On draws the outline on top of the letters, off puts the letters on top of it."
+    "description": "Text panel, Fill and stroke choice: each letter's outline is drawn on top of its own fill, one letter at a time. After Effects' name for it."
+  },
+  "textAllFillsOverAllStrokes": "All fills over all strokes",
+  "@textAllFillsOverAllStrokes": {
+    "description": "Text panel, Fill and stroke choice: every letter's outline is drawn first and every fill on top, so a wide outline never covers a neighbouring letter. After Effects' name for it."
+  },
+  "textAllStrokesOverAllFills": "All strokes over all fills",
+  "@textAllStrokesOverAllFills": {
+    "description": "Text panel, Fill and stroke choice: every letter's fill is drawn first and every outline on top. After Effects' name for it."
   },
   "textScaleY": "Vertical scale",
   "@textScaleY": {
@@ -21457,5 +21540,85 @@
   "fxMapSoftness": "Map softness",
   "@fxMapSoftness": {
     "description": "Vector blur parameter label in the Effect Controls panel — how much the map is blurred before the streak directions are read from it."
+  },
+  "fxLines": "Lines",
+  "@fxLines": {
+    "description": "Grid's Type option that draws a line grid rather than points."
+  },
+  "fxSizeFrom": "Size from",
+  "@fxSizeFrom": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a dropdown choosing how a cell's size is set, as After Effects' Grid names it."
+  },
+  "fxGridSize": "Grid size",
+  "@fxGridSize": {
+    "description": "A Size from option on Grid: the grid's own size is shared out between its boxes, as Sapphire's S_Grid names it. Also the paired Grid size x and y row."
+  },
+  "fxCornerPoint": "Corner point",
+  "@fxCornerPoint": {
+    "description": "A Size from option on Grid: Position and Corner mark two corners of one cell, as After Effects' Grid names it."
+  },
+  "fxBoxesX": "Boxes x",
+  "@fxBoxesX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells across, as Sapphire's S_Grid names it."
+  },
+  "fxBoxesY": "Boxes y",
+  "@fxBoxesY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how many cells down, as Sapphire's S_Grid names it."
+  },
+  "fxGridSizeX": "Grid size x",
+  "@fxGridSizeX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how wide the whole grid is."
+  },
+  "fxGridSizeY": "Grid size y",
+  "@fxGridSizeY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how tall the whole grid is."
+  },
+  "fxCornerX": "Corner x",
+  "@fxCornerX": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: across position of a cell's far corner."
+  },
+  "fxCornerY": "Corner y",
+  "@fxCornerY": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: down position of a cell's far corner."
+  },
+  "fxLineWidth": "Line width",
+  "@fxLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how thick each line is."
+  },
+  "fxHLineRelWidth": "H line rel width",
+  "@fxHLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the horizontal lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxVLineRelWidth": "V line rel width",
+  "@fxVLineRelWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: the vertical lines' width relative to Line width, as Sapphire's S_Grid names it."
+  },
+  "fxMajorLineSpacing": "Major line spacing",
+  "@fxMajorLineSpacing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: every this many lines is drawn thicker."
+  },
+  "fxMajorLineWidth": "Major line width",
+  "@fxMajorLineWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how much thicker the major lines are."
+  },
+  "fxLatitude": "Latitude",
+  "@fxLatitude": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: tilts the grid back in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxSwing": "Swing",
+  "@fxSwing": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the grid on its own plane in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxRoll": "Roll",
+  "@fxRoll": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: turns the tilted grid about the view in degrees, as Sapphire's S_Grid names it."
+  },
+  "fxZDist": "Z dist",
+  "@fxZDist": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: how far away the grid is, as Sapphire's S_Grid names it."
+  },
+  "fxTeleLensWidth": "Tele lens width",
+  "@fxTeleLensWidth": {
+    "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a longer or shorter lens, changing the perspective, as Sapphire's S_Grid names it."
   }
 }

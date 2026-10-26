@@ -612,9 +612,12 @@ pub fn plugin_messages() -> Vec<String> {
 pub struct BridgePresetInfo {
     pub name: String,
     pub path: String,
+    /// The group it is filed in, with `/` between nested groups. Empty at the
+    /// top of the library.
+    pub group: String,
 }
 
-/// Every `.lumfx` in the preset library folder, sorted by name — what the
+/// Every `.lumfx` in the preset library and its groups, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
 /// or not preset JSON) is simply not listed; the folder is the user's to put
 /// things in, and a stray file there is not a fault.
@@ -732,74 +735,17 @@ pub struct BridgeFfxImport {
 
 /// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
 /// into a `.lumfx` in the preset library, where the Effects & presets panel
-/// lists it. A preset already in the library is never written over.
+/// lists it in the same groups. A preset already in the library is never
+/// written over.
 ///
 /// Not sync: a folder of presets can be a few hundred files.
 pub fn import_ffx_presets(folder: String) -> Result<BridgeFfxImport, BridgeError> {
     let library = lumit_project::presets_dir().ok_or(BridgeError::InvalidPreset)?;
     std::fs::create_dir_all(&library).map_err(|_| BridgeError::InvalidPreset)?;
-    Ok(import_ffx_into(std::path::Path::new(&folder), &library))
-}
-
-/// [`import_ffx_presets`] on any library folder, so it is testable without
-/// the user's own.
-#[frb(ignore)]
-pub(crate) fn import_ffx_into(
-    folder: &std::path::Path,
-    library: &std::path::Path,
-) -> BridgeFfxImport {
-    let mut done = BridgeFfxImport {
-        imported: 0,
-        skipped: 0,
-    };
-    let mut folders = vec![folder.to_path_buf()];
-    while let Some(dir) = folders.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for path in entries.flatten().map(|entry| entry.path()) {
-            if path.is_dir() {
-                folders.push(path);
-                continue;
-            }
-            let is_ffx = path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("ffx"));
-            if !is_ffx {
-                continue;
-            }
-            if write_ffx_as_lumfx(&path, library) {
-                done.imported += 1;
-            } else {
-                done.skipped += 1;
-            }
-        }
-    }
-    done
-}
-
-/// One `.ffx` into the library under its own name. False when it is left out.
-fn write_ffx_as_lumfx(ffx: &std::path::Path, library: &std::path::Path) -> bool {
-    let Some(name) = ffx
-        .file_stem()
-        .map(|stem| stem.to_string_lossy().into_owned())
-    else {
-        return false;
-    };
-    let to = library.join(format!("{name}.{}", lumit_core::preset::PRESET_EXTENSION));
-    if to.exists() {
-        return false;
-    }
-    let Ok((effects, _report)) = lumit_import::open_ffx(ffx) else {
-        return false;
-    };
-    // A preset of text animators or a transform alone has nothing Lumit reads.
-    if effects.is_empty() {
-        return false;
-    }
-    lumit_core::preset::to_json(&name, &effects)
-        .ok()
-        .is_some_and(|text| std::fs::write(&to, text).is_ok())
+    Ok(crate::api::presets::import_ffx_into(
+        std::path::Path::new(&folder),
+        &library,
+    ))
 }
 
 /// Where the preset library lives, created on first ask — the save dialogue's
@@ -827,11 +773,15 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
         effects: Option<serde_json::Value>,
         nodes: Option<serde_json::Value>,
     }
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut out: Vec<BridgePresetInfo> = entries
-        .filter_map(|entry| {
+    let mut out: Vec<BridgePresetInfo> = Vec::new();
+    for folder in crate::api::presets::folders_under(dir) {
+        let Some(group) = crate::api::presets::group_of(dir, &folder) else {
+            continue;
+        };
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        out.extend(entries.filter_map(|entry| {
             let path = entry.ok()?.path();
             if !path
                 .extension()
@@ -858,9 +808,10 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
             Some(BridgePresetInfo {
                 name,
                 path: path.to_string_lossy().into_owned(),
+                group: group.clone(),
             })
-        })
-        .collect();
+        }));
+    }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     out
 }

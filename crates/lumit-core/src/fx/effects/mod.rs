@@ -62,6 +62,7 @@ pub mod gamma;
 pub mod glow;
 pub mod gradient;
 pub mod grid;
+pub mod grid_lines;
 pub mod hue_saturation;
 pub mod hue_shift;
 pub mod invert;

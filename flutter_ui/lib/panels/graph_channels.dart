@@ -76,8 +76,9 @@ class RowValueDrag {
   }
 }
 
-/// Which reading of the curve is on screen (docs/07 §5.1).
-enum GraphLens { value, speed }
+/// Which reading of the curve is on screen (docs/07 §5.1): the value, how
+/// fast it changes, or how fast that changes.
+enum GraphLens { value, speed, acceleration }
 
 /// Whose curves the graph draws: the picked properties, every animated one
 /// of the picked layers, or every animated one in the composition.

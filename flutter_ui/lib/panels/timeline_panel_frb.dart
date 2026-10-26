@@ -2770,7 +2770,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// a re-dock while it is up would otherwise land an Apply on a dead State.
   void _applyEasing(EasingCurve curve) {
     if (!mounted) return;
-    if (_graph && _graphLens == GraphLens.speed) return;
+    if (_graph && _graphLens != GraphLens.value) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final channels = _selectionChannels(ui);
     final selection = _actionKeySelection(channels);
@@ -2791,13 +2791,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Publish — or withdraw — the shell's easing claim.
   ///
   /// Withdrawn in exactly the case [_applyEasing] refuses: the graph showing
-  /// the speed lens. Called from the four places `_graph` and `_graphLens`
+  /// any lens but value. Called from the four places `_graph` and `_graphLens`
   /// move, and from [initState] and [dispose]; a notifier write inside a
   /// `setState` callback is fine, one during `build` would not be, which is why
   /// this is not simply read off in the tree.
   void _publishEasingClaim() {
     _ui?.easingApply.value =
-        _graph && _graphLens == GraphLens.speed ? null : _applyEasing;
+        _graph && _graphLens != GraphLens.value ? null : _applyEasing;
   }
 
   /// Publish the one selected key's speed and influence to the shell
@@ -3252,6 +3252,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           }
         }
         if (groups.audio) _open.add(audioPath(id));
+        if (groups.animators.isNotEmpty) {
+          _open.add(animatorsPath(id));
+          for (final i in groups.animators) {
+            _open.add(animatorPath(id, i));
+          }
+        }
         // Retime needs no path of its own: the row sits above Transform on
         // any open layer that has one, and `groups.any` already counts it, so
         // a layer whose only animation is its Retime opens for `U` here.

@@ -802,6 +802,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 
+        // The Notes panel rereads on this. No item or layer changed.
+        Op::SetNotes { .. } => (None, None, false),
+
         // A batch is as broad as its members: the item flag is the union, and
         // the reference scope widens to "no one subtree" rather than picking a
         // member's comp and leaving the others unrefreshed.

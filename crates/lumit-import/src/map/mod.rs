@@ -36,6 +36,7 @@ mod curves;
 mod effects;
 mod fx_colour;
 mod fx_distort;
+mod fx_grid;
 mod layers;
 mod props;
 mod styles;
