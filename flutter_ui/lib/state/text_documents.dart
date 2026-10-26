@@ -29,6 +29,7 @@ const BridgeTextStyle plainTextStyle = BridgeTextStyle(
   stroke: BridgeColourRgba(r: 0, g: 0, b: 0, a: 1),
   strokeWidth: 1,
   strokeOver: true,
+  strokesTogether: false,
 );
 
 /// The paragraph of a layer nobody has styled, held the same way.
@@ -93,6 +94,7 @@ extension TextStyleCopy on BridgeTextStyle {
     BridgeColourRgba? stroke,
     double? strokeWidth,
     bool? strokeOver,
+    bool? strokesTogether,
   }) =>
       BridgeTextStyle(
         family: family ?? this.family,
@@ -113,6 +115,7 @@ extension TextStyleCopy on BridgeTextStyle {
         stroke: stroke ?? this.stroke,
         strokeWidth: strokeWidth ?? this.strokeWidth,
         strokeOver: strokeOver ?? this.strokeOver,
+        strokesTogether: strokesTogether ?? this.strokesTogether,
       );
 }
 

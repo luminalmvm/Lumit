@@ -554,6 +554,12 @@ pub struct TextStyle {
     /// hides the inner half of the outline.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub stroke_over: bool,
+    /// Every letter's lower half of that pair goes down before any letter's
+    /// upper half, After Effects' All fills over all strokes and All strokes
+    /// over all fills. Off goes letter by letter, so a wide outline can cover
+    /// the letter beside it.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub strokes_together: bool,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -579,6 +585,7 @@ impl Default for TextStyle {
             stroke: crate::model::LinearColour::BLACK,
             stroke_width: 1.0,
             stroke_over: true,
+            strokes_together: false,
             extra: serde_json::Map::new(),
         }
     }

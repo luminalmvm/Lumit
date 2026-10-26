@@ -727,71 +727,65 @@ fn draw(
     let stroke_colour = lumit_core::pixels::solid_rgba(style.stroke);
     let stroke_width = finite(style.stroke_width).max(0.0);
 
-    for (i, matrix, x) in placements(laid, run, xforms, style.faux_italic) {
-        let Some(glyph) = laid.glyphs.get(i) else {
-            continue;
-        };
-        let path = paths.entry(glyph.glyph).or_insert_with(|| {
-            let mut pen = Path(Vec::new());
-            if let Some(outline) = outlines.get(skrifa::GlyphId::new(glyph.glyph)) {
-                // A glyph that fails to draw is left out, the frame carries on.
-                let _ = outline.draw(DrawSettings::unhinted(Size::unscaled(), location), &mut pen);
-            }
-            pen.0
-        });
-        if path.is_empty() {
-            continue; // a space carries advance and no ink
-        }
-        let fill = {
-            let tinted = LinearColour([
-                block.fill.0[0] + x.fill[0],
-                block.fill.0[1] + x.fill[1],
-                block.fill.0[2] + x.fill[2],
-                block.fill.0[3],
-            ]);
-            lumit_core::pixels::solid_rgba(tinted)
-        };
-        let mut outline = Stroke::new(stroke_width);
-        outline.join(Join::Miter).miter_limit(4.0).scale(false);
-        let mut bold = Stroke::new(laid.size * FAUX_BOLD);
-        bold.join(Join::Round).scale(false);
+    let mut outline = Stroke::new(stroke_width);
+    outline.join(Join::Miter).miter_limit(4.0).scale(false);
+    let mut bold = Stroke::new(laid.size * FAUX_BOLD);
+    bold.join(Join::Round).scale(false);
+    let stroked = style.stroke_on && stroke_width > 0.0;
+    // Letter by letter, each letter's fill and outline go down together. All
+    // together is two passes: every letter's lower one, then every upper one.
+    let passes: &[(bool, bool)] = if style.strokes_together {
+        &[(true, false), (false, true)]
+    } else {
+        &[(true, true)]
+    };
 
-        let stroked = style.stroke_on && stroke_width > 0.0;
-        if stroked && !style.stroke_over {
-            paint(
-                &mut rgba,
-                (w, h),
-                path,
-                matrix,
-                outline,
-                stroke_colour,
-                x.opacity,
-            );
-        }
-        if style.fill_on {
-            if style.faux_bold {
-                paint(&mut rgba, (w, h), path, matrix, bold, fill, x.opacity);
+    for &(lower, upper) in passes {
+        let (fill_now, stroke_now) = if style.stroke_over {
+            (lower, upper)
+        } else {
+            (upper, lower)
+        };
+        for (i, matrix, x) in placements(laid, run, xforms, style.faux_italic) {
+            let Some(glyph) = laid.glyphs.get(i) else {
+                continue;
+            };
+            let path = paths.entry(glyph.glyph).or_insert_with(|| {
+                let mut pen = Path(Vec::new());
+                if let Some(outline) = outlines.get(skrifa::GlyphId::new(glyph.glyph)) {
+                    // A glyph that fails to draw is left out, the frame carries on.
+                    let _ =
+                        outline.draw(DrawSettings::unhinted(Size::unscaled(), location), &mut pen);
+                }
+                pen.0
+            });
+            if path.is_empty() {
+                continue; // a space carries advance and no ink
             }
-            paint(
-                &mut rgba,
-                (w, h),
-                path,
-                matrix,
-                Fill::NonZero,
-                fill,
-                x.opacity,
-            );
-        }
-        if stroked && style.stroke_over {
-            paint(
-                &mut rgba,
-                (w, h),
-                path,
-                matrix,
-                outline,
-                stroke_colour,
-                x.opacity,
-            );
+            let fill = {
+                let tinted = LinearColour([
+                    block.fill.0[0] + x.fill[0],
+                    block.fill.0[1] + x.fill[1],
+                    block.fill.0[2] + x.fill[2],
+                    block.fill.0[3],
+                ]);
+                lumit_core::pixels::solid_rgba(tinted)
+            };
+            let ink = |rgba: &mut [u8], how: zeno::Style<'static>, colour: [u8; 4]| {
+                paint(rgba, (w, h), path, matrix, how, colour, x.opacity);
+            };
+            if stroked && stroke_now && !style.stroke_over {
+                ink(&mut rgba, outline.into(), stroke_colour);
+            }
+            if style.fill_on && fill_now {
+                if style.faux_bold {
+                    ink(&mut rgba, bold.into(), fill);
+                }
+                ink(&mut rgba, Fill::NonZero.into(), fill);
+            }
+            if stroked && stroke_now && style.stroke_over {
+                ink(&mut rgba, outline.into(), stroke_colour);
+            }
         }
     }
     rgba

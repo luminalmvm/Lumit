@@ -496,6 +496,9 @@ class BridgeTextStyle {
   /// The outline is drawn over the fill. Off puts the fill on top.
   final bool strokeOver;
 
+  /// Every fill, then every outline (or the other way round), not letter by letter.
+  final bool strokesTogether;
+
   const BridgeTextStyle({
     required this.family,
     required this.face,
@@ -515,6 +518,7 @@ class BridgeTextStyle {
     required this.stroke,
     required this.strokeWidth,
     required this.strokeOver,
+    required this.strokesTogether,
   });
 
   @override
@@ -536,7 +540,8 @@ class BridgeTextStyle {
       strokeOn.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
-      strokeOver.hashCode;
+      strokeOver.hashCode ^
+      strokesTogether.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -560,5 +565,6 @@ class BridgeTextStyle {
           strokeOn == other.strokeOn &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
-          strokeOver == other.strokeOver;
+          strokeOver == other.strokeOver &&
+          strokesTogether == other.strokesTogether;
 }

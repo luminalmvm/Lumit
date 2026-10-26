@@ -235,6 +235,20 @@ fn an_outline_adds_ink_and_room_for_it() {
         .rgba
         .chunks_exact(4)
         .any(|p| p[3] == 255 && p[0] == 255 && p[1] == 0));
+    // Letter by letter, a wide outline covers the next letter's fill. All
+    // fills over all strokes leaves every fill whole.
+    let white = |r: &RasterText| r.rgba.chunks_exact(4).filter(|p| p == &[255; 4]).count();
+    let [apart, together] = [false, true].map(|strokes_together| {
+        let wide = TextStyle {
+            stroke_over: false,
+            stroke_width: 30.0,
+            strokes_together,
+            ..outlined.clone()
+        };
+        white(&rasterise(&block("Lumit", &wide, &paragraph), &[]))
+    });
+    assert_eq!(together, white(&plain));
+    assert!(apart < together, "{apart} {together}");
 
     let hollow = TextStyle {
         fill_on: false,

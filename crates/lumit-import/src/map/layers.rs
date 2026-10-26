@@ -432,6 +432,11 @@ fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> TextDocumen
         );
     }
 
+    // More Options' Fill & Stroke: 2 is All fills over all strokes, 3 All
+    // strokes over all fills, and 1 leaves it to the Character panel's choice.
+    let together = still(parts, "ADBE Text Render Order", 0)
+        .map(|v| v.round() as i64)
+        .filter(|o| matches!(o, 2 | 3));
     TextDocument {
         text: word("text"),
         expression: None,
@@ -471,7 +476,8 @@ fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> TextDocumen
             stroke_on: on("applyStroke").unwrap_or(false),
             stroke: colour("strokeColor").unwrap_or(lumit_core::model::LinearColour::BLACK),
             stroke_width: number("strokeWidth").unwrap_or(1.0),
-            stroke_over: on("strokeOverFill").unwrap_or(true),
+            stroke_over: together.map_or_else(|| on("strokeOverFill").unwrap_or(true), |o| o == 3),
+            strokes_together: together.is_some(),
             ..TextStyle::default()
         }),
         paragraph: ParagraphStyle {

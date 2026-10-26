@@ -26464,8 +26464,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTextStyle dco_decode_bridge_text_style(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return BridgeTextStyle(
       family: dco_decode_String(arr[0]),
       face: dco_decode_String(arr[1]),
@@ -26485,6 +26485,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       stroke: dco_decode_bridge_colour_rgba(arr[15]),
       strokeWidth: dco_decode_f_64(arr[16]),
       strokeOver: dco_decode_bool(arr[17]),
+      strokesTogether: dco_decode_bool(arr[18]),
     );
   }
 
@@ -33742,6 +33743,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_stroke = sse_decode_bridge_colour_rgba(deserializer);
     var var_strokeWidth = sse_decode_f_64(deserializer);
     var var_strokeOver = sse_decode_bool(deserializer);
+    var var_strokesTogether = sse_decode_bool(deserializer);
     return BridgeTextStyle(
         family: var_family,
         face: var_face,
@@ -33760,7 +33762,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         strokeOn: var_strokeOn,
         stroke: var_stroke,
         strokeWidth: var_strokeWidth,
-        strokeOver: var_strokeOver);
+        strokeOver: var_strokeOver,
+        strokesTogether: var_strokesTogether);
   }
 
   @protected
@@ -41035,6 +41038,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_colour_rgba(self.stroke, serializer);
     sse_encode_f_64(self.strokeWidth, serializer);
     sse_encode_bool(self.strokeOver, serializer);
+    sse_encode_bool(self.strokesTogether, serializer);
   }
 
   @protected

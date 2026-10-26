@@ -16609,9 +16609,25 @@
   "@textStrokeWidth": {
     "description": "Text panel: label beside how wide the outline round the letters is, in pixels."
   },
+  "textFillAndStroke": "Fill and stroke",
+  "@textFillAndStroke": {
+    "description": "Text panel: label beside the choice of whether the letters' fill or their outline is drawn on top. After Effects calls this Fill & Stroke."
+  },
+  "textFillOverStroke": "Fill over stroke",
+  "@textFillOverStroke": {
+    "description": "Text panel, Fill and stroke choice: each letter's fill is drawn on top of its own outline, one letter at a time. After Effects' name for it."
+  },
   "textStrokeOver": "Stroke over fill",
   "@textStrokeOver": {
-    "description": "Text panel: tick box. On draws the outline on top of the letters, off puts the letters on top of it."
+    "description": "Text panel, Fill and stroke choice: each letter's outline is drawn on top of its own fill, one letter at a time. After Effects' name for it."
+  },
+  "textAllFillsOverAllStrokes": "All fills over all strokes",
+  "@textAllFillsOverAllStrokes": {
+    "description": "Text panel, Fill and stroke choice: every letter's outline is drawn first and every fill on top, so a wide outline never covers a neighbouring letter. After Effects' name for it."
+  },
+  "textAllStrokesOverAllFills": "All strokes over all fills",
+  "@textAllStrokesOverAllFills": {
+    "description": "Text panel, Fill and stroke choice: every letter's fill is drawn first and every outline on top. After Effects' name for it."
   },
   "textScaleY": "Vertical scale",
   "@textScaleY": {
