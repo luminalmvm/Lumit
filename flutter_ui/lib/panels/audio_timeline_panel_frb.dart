@@ -39,7 +39,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/menu_bar_frb.dart' show exportFrb, showInsertLayerMenu;
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
@@ -1480,14 +1480,18 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                         // Only the blocks in view are built; the rest are two
                         // blanks holding the stack open, so the outline costs
                         // what is on screen rather than what the comp has.
-                        child: LazyBlocks(
-                          key: const ValueKey<String>('atl-outline-blocks'),
-                          controller: _vOutline,
-                          heights: heights,
-                          viewport: box.maxHeight,
-                          builder: (context, i) => _outlineBlock(
-                              t, ui, comp, tracks[i], i,
-                              playhead: playhead),
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (e) => _groundDown(e, heights),
+                          child: LazyBlocks(
+                            key: const ValueKey<String>('atl-outline-blocks'),
+                            controller: _vOutline,
+                            heights: heights,
+                            viewport: box.maxHeight,
+                            builder: (context, i) => _outlineBlock(
+                                t, ui, comp, tracks[i], i,
+                                playhead: playhead),
+                          ),
                         ),
                       ),
                     ),
@@ -1734,8 +1738,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final onward = index == null || _lastTracks[index].id == track.id
         ? null
         : _lastTracks[index].entry.layer;
-    // Below the last track: a track of the clip's own, which is how clips are
-    // spread out again without a button for an empty one.
+    // Below the last track: a track of the clip's own.
     final toNewTrack = edit.grab == BarGrab.move &&
         index == null &&
         at != null &&
@@ -1933,6 +1936,19 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       },
     );
     _afterWrite();
+  }
+
+  /// A right click on the ground under the last track: a new empty one.
+  void _groundDown(PointerDownEvent e, List<double> heights) {
+    final ui = _ui;
+    final comp = ui?.selectedComp;
+    if (ui == null || comp == null) return;
+    if (e.buttons != kSecondaryMouseButton ||
+        e.localPosition.dy < heights.fold<double>(0, (a, b) => a + b)) {
+      return;
+    }
+    showInsertLayerMenu(context, ui, comp, e.position,
+        picture: false, onDone: _afterWrite);
   }
 
   /// The fade menu: a right click on a fade, or anywhere in an overlap. The
@@ -2291,6 +2307,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                       // Innermost, so the pointer-signal resolver hands it the
                       // wheel before the scrollables do.
                       child: Listener(
+                        onPointerDown: (e) => _groundDown(e, heights),
                         onPointerMove: (event) {
                           if (event.buttons == kMiddleMouseButton) {
                             _panLanes(event.delta);

@@ -1994,6 +1994,47 @@ void insertEmptyLayer(
   }
 }
 
+/// The right-click menu on the empty ground under the Cut and Audio
+/// timelines' rows, Vegas's own three. The Audio timeline holds sound only,
+/// so it offers the Audio layer alone.
+Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
+    CompositionReference comp, Offset position,
+    {required bool picture, required VoidCallback onDone}) {
+  final t = ThemeScope.of(context).theme;
+  final rows = [
+    ('layer.new.audio', l10n.insertAudioLayer),
+    if (picture) ...[
+      ('layer.new.sequence', l10n.insertVideoLayer),
+      ('layer.new.adjustment', l10n.insertAdjustmentLayer),
+    ],
+  ];
+  return showMenuAt<void>(
+    context: context,
+    position: position,
+    width: 230,
+    rows: (close) => [
+      for (final (action, label) in rows)
+        MenuRow(
+          key: ValueKey<String>('insert-$action'),
+          onPressed: () {
+            close(null);
+            insertEmptyLayer(ui, comp, action);
+            onDone();
+          },
+          child: Row(children: [
+            Expanded(child: Text(label)),
+            if (ui.keymap.chordFor(action) case final chord?)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child:
+                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+              ),
+          ]),
+        ),
+    ],
+  );
+}
+
 /// Whether this layer can carry a Retime at all. A row of clips cannot: its
 /// clips each have one of their own, and an audio row is such a one even
 /// though it answers Audio (docs/impl/audio-timeline.md §8).

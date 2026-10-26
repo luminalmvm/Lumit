@@ -10839,6 +10839,18 @@
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
   },
+  "insertAudioLayer": "Insert audio layer",
+  "@insertAudioLayer": {
+    "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."
+  },
+  "insertVideoLayer": "Insert video layer",
+  "@insertVideoLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an empty Sequence layer for picture clips."
+  },
+  "insertAdjustmentLayer": "Insert adjustment layer",
+  "@insertAdjustmentLayer": {
+    "description": "Cut timeline, right-click on the empty ground below the rows: adds an Adjustment layer."
+  },
   "cutCloseGap": "Close gap",
   "@cutCloseGap": {
     "description": "Cut timeline, right-click on empty room between clips: everything after the gap moves earlier to close it."
