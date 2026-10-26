@@ -1872,6 +1872,9 @@ class BridgeRevealGroups {
   /// The qualifying effects' ids, as text — the same form the fold paths use.
   final List<String> effects;
 
+  /// The qualifying text animators, by their place on the layer.
+  final Uint32List animators;
+
   /// Whether anything qualified at all. The panel leaves the layer's own
   /// twirl shut when nothing did, rather than opening onto an empty list.
   final bool any;
@@ -1881,6 +1884,7 @@ class BridgeRevealGroups {
     required this.audio,
     required this.retime,
     required this.effects,
+    required this.animators,
     required this.any,
   });
 
@@ -1890,6 +1894,7 @@ class BridgeRevealGroups {
       audio.hashCode ^
       retime.hashCode ^
       effects.hashCode ^
+      animators.hashCode ^
       any.hashCode;
 
   @override
@@ -1901,6 +1906,7 @@ class BridgeRevealGroups {
           audio == other.audio &&
           retime == other.retime &&
           effects == other.effects &&
+          animators == other.animators &&
           any == other.any;
 }
 

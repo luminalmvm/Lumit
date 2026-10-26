@@ -736,6 +736,11 @@ class KeyCommandStrip extends StatelessWidget {
                   keep: true,
                   on: lens == GraphLens.speed,
                   onPressed: () => onLens?.call(GraphLens.speed)),
+              wordItem('graph-lens-acceleration', l10n.graphAcceleration,
+                  l10n.tipAccelerationGraph,
+                  keep: true,
+                  on: lens == GraphLens.acceleration,
+                  onPressed: () => onLens?.call(GraphLens.acceleration)),
               // The selected keys' easing, one click each — the F9 family's
               // buttons (docs/07 §5.3).
               wordItem('graph-interp-linear', l10n.easeLinear,
