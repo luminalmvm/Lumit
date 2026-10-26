@@ -7842,6 +7842,28 @@
   "@savedPresets": {
     "description": "Heading over the user's own saved effect stacks."
   },
+  "presetNewGroup": "New group",
+  "@presetNewGroup": {
+    "description": "Effects & presets panel: right-click menu row on the Saved presets heading or on a group of presets that makes a new group inside it, and the title of the window asking for its name. A group is a folder of saved presets."
+  },
+  "presetMoveTo": "Move to",
+  "@presetMoveTo": {
+    "description": "Effects & presets panel: right-click menu row on a saved preset that opens the list of groups it can be moved into."
+  },
+  "presetDeleteGroup": "{count, plural, =1{Delete “{name}” and the preset in it?} other{Delete “{name}” and the {count} presets in it?}}",
+  "@presetDeleteGroup": {
+    "description": "Effects & presets panel: asked before a group of saved presets is deleted with the presets in it.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Shakes"
+      },
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
   "savedTo": "Saved to {path}",
   "@savedTo": {
     "description": "Bottom-strip notice after a successful save. {path} is a file path.",
