@@ -15657,9 +15657,9 @@
   "@statusHintRazor": {
     "description": "Right-hand end of the status bar while the Razor tool is armed: one quiet line saying what a click and a Shift-click do in the Timeline. The parts are separated by a middle dot."
   },
-  "statusHintShape": "Draws a mask on the selected layer, or a shape layer with nothing selected · Shift keeps the width and height equal",
+  "statusHintShape": "Draws a shape on a selected shape layer, a mask on any other, or a shape layer with nothing selected · Alt draws a mask · Shift keeps the width and height equal",
   "@statusHintShape": {
-    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Shift key does to it. The parts are separated by a middle dot."
+    "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Alt and Shift keys do to it. The parts are separated by a middle dot."
   },
   "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
   "@statusHintPen": {

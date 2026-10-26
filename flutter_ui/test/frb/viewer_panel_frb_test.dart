@@ -1763,8 +1763,22 @@ void main() {
       expect(still(shape.getTransform().positionX),
           closeTo(size.width / 2, size.width * 0.02));
 
-      // And the new layer is what is selected, so the next drag masks it.
+      // And the new layer is what is selected, so the next drag adds a shape
+      // to it rather than a mask, as After Effects does.
       expect(p.uiState.selectedLayerIds, contains(shape.internallayerId));
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      final again = await tester.startGesture(fitted.center);
+      await tester.pump();
+      await again.moveBy(const Offset(-40, -30));
+      await tester.pump();
+      await again.moveBy(const Offset(-40, -30));
+      await tester.pump();
+      await again.up();
+      await tester.pumpAndSettle();
+      expect(p.comp.getLayers().length, before + 1);
+      expect(shape.getShapeContents().items, hasLength(2));
+      expect(shape.getMasks(), isEmpty);
     });
 
     /// The camera tools: a drag moves the composition's active camera,
