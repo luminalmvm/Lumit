@@ -29,11 +29,14 @@ import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/custom_easings.dart';
+import '../state/file_dialogs.dart'
+    show pickEasingsSaveLocation, pickEasingsToOpen;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'easing_curve.dart';
 import 'easing_painters.dart';
 import 'graph_maths.dart' show minTangentReach;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// A preset's shown name. Kept beside the editor rather than in
 /// `easing_curve.dart` so the maths stays free of the locale.
@@ -561,6 +564,15 @@ class _EasingEditorState extends State<EasingEditor>
             tip: l10n.easingSaveEllipsis,
             onPressed: () => _startNaming(''),
           ),
+          Builder(
+            builder: (button) => _iconButton(
+              t,
+              key: 'easing-more',
+              glyph: LumitIcons.more,
+              tip: l10n.easingMore,
+              onPressed: () => _showMore(t, button),
+            ),
+          ),
           const Spacer(),
           if (widget.onClose != null) ...[
             HouseButton(
@@ -599,6 +611,37 @@ class _EasingEditorState extends State<EasingEditor>
       ],
       const SizedBox(height: _gap),
     ];
+  }
+
+  /// Import and export: a collection of shapes is a file to pass round.
+  void _showMore(LumitTheme t, BuildContext button) {
+    final box = button.findRenderObject();
+    if (box is! RenderBox) return;
+    Widget row(String label, Future<void> Function() run, VoidCallback close) =>
+        MenuRow(
+          onPressed: () {
+            close();
+            run();
+          },
+          child: Text(label, style: t.small),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height)),
+      rows: (close) => [
+        row(l10n.easingImport, () async {
+          final path = await pickEasingsToOpen();
+          if (path != null && CustomEasings.importFrom(path) > 0 && mounted) {
+            setState(() => _yours = true);
+          }
+        }, () => close(null)),
+        if (CustomEasings.all.isNotEmpty)
+          row(l10n.easingExport, () async {
+            final path = await pickEasingsSaveLocation();
+            if (path != null) CustomEasings.exportTo(path);
+          }, () => close(null)),
+      ],
+    );
   }
 
   Widget _maybeTip(String? tip, Widget child) =>

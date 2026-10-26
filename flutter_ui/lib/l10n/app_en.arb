@@ -21683,6 +21683,22 @@
   "@easingYours": {
     "description": "Easing panel library: the tab showing the easing shapes the user has saved, beside the Built in tab. Very short."
   },
+  "easingImport": "Import easings…",
+  "@easingImport": {
+    "description": "Easing panel: menu row that adds easing shapes from a file someone shared. The ellipsis marks that it opens a file picker."
+  },
+  "easingExport": "Export easings…",
+  "@easingExport": {
+    "description": "Easing panel: menu row that writes the user's saved easing shapes to a file to share. The ellipsis marks that it opens a file picker."
+  },
+  "easingMore": "More",
+  "@easingMore": {
+    "description": "Easing panel: tooltip on the button that opens a menu with Import easings and Export easings."
+  },
+  "fileTypeEasings": "Easings",
+  "@fileTypeEasings": {
+    "description": "File picker: the label of the file type filter for a file of saved easing shapes."
+  },
   "easingBuiltIn": "Built in",
   "@easingBuiltIn": {
     "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
