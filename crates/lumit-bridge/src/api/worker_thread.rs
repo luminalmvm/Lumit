@@ -215,9 +215,13 @@ impl WorkerState {
         self.camera_views.get(&self.view_id()).copied()
     }
 
-    /// The view the user is working in: the one the last active render or the
-    /// playback named, or the one being served before either has.
+    /// The view the user is working in: the playing one, else the one the
+    /// last active render named, or the one being served before either has.
+    /// A click in another pane mid-run does not take the run's look away.
     fn active_view(&self) -> u32 {
+        if let Some(playback) = &self.playback {
+            return playback.view;
+        }
         self.last_shown
             .as_ref()
             .map_or_else(|| self.view_id(), |shown| shown.0)
