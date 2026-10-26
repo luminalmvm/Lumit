@@ -28,6 +28,7 @@ pub mod interpret;
 pub mod keymap;
 pub mod layer;
 pub mod lens;
+pub mod notes;
 pub mod planes;
 pub mod project;
 pub mod project_item;

@@ -4436,6 +4436,10 @@ pub struct Document {
     /// existed (docs/10 §1.1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub swatches: Vec<Swatch>,
+    /// The Notes panel's text: whatever the user wants to keep with the
+    /// project. Nothing draws from it. Absent from the file when empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (docs/10-FILE-FORMAT.md §1.2).
@@ -4783,6 +4787,7 @@ impl Document {
             cache_location: None,
             colour: ColourManagement::default(),
             swatches: Vec::new(),
+            notes: String::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }
