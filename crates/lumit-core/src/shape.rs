@@ -664,12 +664,13 @@ pub fn rasterise_contents(
 
 mod bend;
 pub mod colour;
+pub mod expand;
 pub mod geometry;
 pub mod modifier;
-mod raster;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod modifier_tests;
+mod raster;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;

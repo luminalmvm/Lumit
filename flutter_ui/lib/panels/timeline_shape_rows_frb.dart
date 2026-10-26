@@ -327,11 +327,64 @@ class ShapeModifierRow extends StatelessWidget {
         // Added under this one, so the two stack.
         shapeAddSubmenu(close, modifier.id, adds,
             (add) => _write((e) => addedToShape(e, modifier.id, add))),
+        if (modifier.kind is BridgeShapeModifierKind_Repeat)
+          shapeExpandSubmenu(
+              close, 'tl-shape-expand-${modifier.id}', l10n.shapeExpandCopies,
+              (intoLayers) => expandShapeCopies(
+                  ui, layer, onChanged, modifier.id, intoLayers)),
         ...shapeMoveRows(close, modifier.id, _write),
       ],
     );
   }
 }
+
+/// Make a repeater's copies real: [repeater]'s, or every repeater's when
+/// null. Keyed numbers are read at the playhead. One op, one undo step.
+void expandShapeCopies(LumitUiState ui, LayerReference layer,
+    VoidCallback onChanged, UuidValue? repeater, bool intoLayers) {
+  final comp = ui.selectedComp;
+  if (comp == null) return;
+  try {
+    layer.expandShapeCopies(
+      repeater: repeater,
+      time: comp.timeOfFrame(frame: ui.playheadFrame.value),
+      intoLayers: intoLayers,
+    );
+    onChanged();
+  } catch (_) {
+    // The repeater or its layer went away between the draw and the click.
+  }
+}
+
+/// Expand copies ▸ Into this layer, Into layers.
+Widget shapeExpandSubmenu(VoidCallback close, String key, String label,
+        void Function(bool intoLayers) pick) =>
+    SubmenuRow(
+      key: ValueKey<String>(key),
+      closeParent: close,
+      submenu: (dismiss) => FloatSurface(
+        width: 150,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (intoLayers, row) in [
+              (false, l10n.shapeExpandIntoLayer),
+              (true, l10n.shapeExpandIntoLayers),
+            ])
+              MenuRow(
+                key: ValueKey<String>('$key-${intoLayers ? 'layers' : 'layer'}'),
+                onPressed: () {
+                  dismiss();
+                  pick(intoLayers);
+                },
+                child: Text(row),
+              ),
+          ],
+        ),
+      ),
+      child: Text(label),
+    );
 
 /// A group in the Timeline, on the shared [ItemOpacityRow]: its entries sit
 /// under it, one deeper, and a modifier inside it acts inside it alone.

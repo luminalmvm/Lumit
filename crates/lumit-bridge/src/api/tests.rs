@@ -3497,6 +3497,99 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     );
 }
 
+/// Expanding a repeater draws its copies out as items, in the layer or as
+/// layers below it, and either way the art's box is the one the copies drew,
+/// in one undo step.
+#[test]
+fn expanding_a_repeater_makes_its_copies_real() {
+    use crate::api::shape::{
+        BridgeShapeEntry, BridgeShapeEntryKind, BridgeShapeModifier, BridgeShapeModifierKind,
+        BridgeShapeRepeater,
+    };
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+    let mut contents = shape.get_shape_contents().expect("contents");
+    let repeater = Uuid::now_v7();
+    contents.push(BridgeShapeEntry {
+        depth: 0,
+        kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+            id: repeater,
+            name: "Repeater".into(),
+            kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
+                copies: BridgeScalar::Static(3.0),
+                offset: BridgeScalar::Static(0.0),
+                anchor_x: BridgeScalar::Static(0.0),
+                anchor_y: BridgeScalar::Static(0.0),
+                position_x: BridgeScalar::Static(20.0),
+                position_y: BridgeScalar::Static(0.0),
+                rotation: BridgeScalar::Static(0.0),
+                scale: BridgeScalar::Static(100.0),
+                start_opacity: BridgeScalar::Static(100.0),
+                end_opacity: BridgeScalar::Static(50.0),
+            }),
+        }),
+    });
+    shape.set_shape_contents(contents, None).expect("set");
+    let box_of = |l: &LayerReference| {
+        let entries = crate::api::shape::write_entries(
+            &l.get_shape_contents().expect("contents"),
+            &[],
+            lumit_core::time::Rational::ZERO,
+            None,
+        )
+        .expect("entries");
+        lumit_core::shape::contents_bounds(&entries, 0.0).expect("a box")
+    };
+    let before = box_of(&shape);
+    assert_eq!(before, (0.0, 0.0, 50.0, 10.0), "three copies, 20 apart");
+
+    let at = BridgeRational { num: 0, den: 1 };
+    shape
+        .expand_shape_copies(Some(repeater), at, false)
+        .expect("expanded");
+    let contents = shape.get_shape_contents().expect("contents");
+    let items = shape_items(&contents);
+    assert_eq!(items.len(), 3, "a copy each, and no repeater");
+    assert_eq!(contents.len(), 3);
+    assert_eq!(
+        items[0].name, "Rectangle 3",
+        "the far copy first, drawn under"
+    );
+    assert_eq!(items[2].name, "Rectangle", "the original on top");
+    assert_eq!(items[0].vertices[0].x, 40.0);
+    assert_eq!(
+        items[0].opacity,
+        BridgeScalar::Static(50.0),
+        "faded as it was"
+    );
+    assert_eq!(box_of(&shape), before, "the same box");
+    project.undo().expect("undone");
+    assert_eq!(shape.get_shape_contents().expect("contents").len(), 2);
+
+    let layers_before = comp.get_layers().expect("layers").len();
+    shape
+        .expand_shape_copies(Some(repeater), at, true)
+        .expect("into layers");
+    let layers = comp.get_layers().expect("layers");
+    assert_eq!(
+        layers.len(),
+        layers_before + 2,
+        "one layer per further copy"
+    );
+    assert_eq!(
+        shape_items(&shape.get_shape_contents().expect("contents")).len(),
+        1
+    );
+    let second = &layers[1];
+    assert_eq!(second.get_name().expect("name"), "Art 2");
+    assert_eq!(box_of(second), (20.0, 0.0, 30.0, 10.0));
+    project.undo().expect("undone");
+    assert_eq!(comp.get_layers().expect("layers").len(), layers_before);
+}
+
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
 /// it, every point nobody touched would slide the other way.

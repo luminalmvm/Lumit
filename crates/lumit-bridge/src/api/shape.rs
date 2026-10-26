@@ -16,7 +16,9 @@ use lumit_core::time::Rational;
 use uuid::Uuid;
 
 use crate::api::effect::BridgeScalar;
-use crate::api::layer::{clamped_property, BridgeShapeDeform, BridgeShapeItem, BridgeShapeTwist};
+use crate::api::layer::{
+    clamped_property, BridgeShapeDeform, BridgeShapeItem, BridgeShapeTwist, LayerReference,
+};
 use crate::api::BridgeError;
 
 /// One entry of a shape layer's contents, and how deep it sits: 0 at the top
@@ -374,4 +376,86 @@ pub(crate) fn write_entries(
         push(&mut open, &mut root, ShapeEntry::Group(group));
     }
     Ok(root)
+}
+
+impl LayerReference {
+    /// Make a repeater's copies real: `repeater`'s, or every repeater's on
+    /// the layer when `None`. Each copy becomes a shape of its own, placed
+    /// where the copy was drawn and faded as it was faded, and the repeater
+    /// goes. `time` is composition time, the playhead, where keyed numbers
+    /// are read.
+    ///
+    /// Into this layer, the copies take the repeater's place in the
+    /// contents. Into layers, the first copy stays here and each further
+    /// copy becomes a shape layer of its own directly below this one, a copy
+    /// of this layer holding only the repeated art and what acted on it
+    /// after the repeater. Either way one `Batch`, so one undo step.
+    #[frb(sync)]
+    pub fn expand_shape_copies(
+        &self,
+        repeater: Option<Uuid>,
+        time: crate::api::effect::BridgeRational,
+        into_layers: bool,
+    ) -> Result<(), BridgeError> {
+        use lumit_core::shape::expand;
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
+            return Err(BridgeError::NotShape);
+        };
+        let t = Rational::new(time.num, time.den)
+            .map_err(|_| BridgeError::InvalidKeyframes)?
+            .checked_sub(layer.start_offset.0)
+            .map_err(|_| BridgeError::InvalidKeyframes)?
+            .to_f64();
+        if !into_layers {
+            let after = match repeater {
+                Some(id) => expand::expanded(before, id, t).ok_or(BridgeError::InvalidItem)?,
+                None => expand::all_expanded(before, t),
+            };
+            return self.commit_shape_items(&layer, before, after);
+        }
+        let parts = match repeater {
+            Some(id) => expand::split(before, id, t).ok_or(BridgeError::InvalidItem)?,
+            None => expand::split_all(before, t),
+        };
+        let comp = self.composition()?;
+        let index = comp
+            .layers
+            .iter()
+            .position(|l| l.id == self.layer_id)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let mut parts = parts.into_iter();
+        let kept = parts.next().unwrap_or_default();
+        let mut ops = self.shape_ops(&layer, before, kept);
+        for (n, part) in parts.enumerate() {
+            let mut copy = layer.clone();
+            copy.id = Uuid::now_v7();
+            copy.name = format!("{} {}", layer.name, n + 2);
+            for effect in &mut copy.effects {
+                effect.id = Uuid::now_v7();
+            }
+            // The new layer's picture is its own art's box, so its position
+            // follows that box's corner from the one the art was drawn in.
+            if let (Some((x0, y0, _, _)), Some((x1, y1, _, _))) = (
+                lumit_core::shape::contents_bounds(before, 0.0),
+                lumit_core::shape::contents_bounds(&part, 0.0),
+            ) {
+                for (property, delta) in [
+                    (&mut copy.transform.position_x, x1 - x0),
+                    (&mut copy.transform.position_y, y1 - y0),
+                ] {
+                    if let lumit_core::anim::Animation::Static(value) = property.animation {
+                        property.animation = lumit_core::anim::Animation::Static(value + delta);
+                    }
+                }
+            }
+            copy.kind = lumit_core::model::LayerKind::Shape { contents: part };
+            ops.push(lumit_core::Op::AddLayer {
+                comp: self.comp_id,
+                index: index + n + 1,
+                layer: Box::new(copy),
+            });
+        }
+        self.commit(lumit_core::Op::Batch { ops })
+    }
 }

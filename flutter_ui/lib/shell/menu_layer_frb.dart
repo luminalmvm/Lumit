@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/engine_labels.dart';
@@ -289,6 +290,38 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   }
 
   return [MenuEntry(l10n.menuTogglePathKey, toggle())];
+}
+
+/// Layer ▸ Expand all copies: every repeater on the selected shape layer made
+/// real, into the layer or into layers. Dead until one shape layer with a
+/// repeater is selected.
+List<MenuEntry> expandAllCopiesRows(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  final selected = ui.selectedLayers.value;
+  final layer = selected.length == 1 ? selected.single : null;
+  final repeats = layer != null &&
+      ui.model.layers.any((entry) =>
+          entry.layer.internallayerId == layer.internallayerId &&
+          entry.info.shapeContents.modifiers
+              .any((m) => m.kind is BridgeShapeModifierKind_Repeat));
+  VoidCallback? expand(bool intoLayers) {
+    if (comp == null || layer == null || !repeats) return null;
+    return () {
+      try {
+        layer.expandShapeCopies(
+          repeater: null,
+          time: comp.timeOfFrame(frame: ui.playheadFrame.value),
+          intoLayers: intoLayers,
+        );
+        app.notifyDocumentChanged();
+      } catch (_) {}
+    };
+  }
+
+  return [
+    MenuEntry(l10n.shapeExpandIntoLayer, expand(false)),
+    MenuEntry(l10n.shapeExpandIntoLayers, expand(true)),
+  ];
 }
 
 // ---------------------------------------------------------------------------

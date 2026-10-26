@@ -4171,13 +4171,31 @@ impl LayerReference {
     /// keying, re-timing and un-keying a morphing path move the layer exactly
     /// as dragging one of its points does.
     #[frb(ignore)]
-    fn commit_shape_items(
+    pub(crate) fn commit_shape_items(
         &self,
         layer: &lumit_core::model::Layer,
         before: &[lumit_core::shape::modifier::ShapeEntry],
         items: Vec<lumit_core::shape::modifier::ShapeEntry>,
     ) -> Result<(), BridgeError> {
-        // Both boxes on the same clock — the head of the layer — so the delta
+        let mut ops = self.shape_ops(layer, before, items);
+        let op = if ops.len() == 1 {
+            ops.remove(0)
+        } else {
+            lumit_core::Op::Batch { ops }
+        };
+        self.commit(op)
+    }
+
+    /// The ops [`Self::commit_shape_items`] commits: the contents, and the
+    /// position following the art's corner where it has to.
+    #[frb(ignore)]
+    pub(crate) fn shape_ops(
+        &self,
+        layer: &lumit_core::model::Layer,
+        before: &[lumit_core::shape::modifier::ShapeEntry],
+        items: Vec<lumit_core::shape::modifier::ShapeEntry>,
+    ) -> Vec<lumit_core::Op> {
+        // Both boxes on the same clock, the head of the layer, so the delta
         // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
             lumit_core::shape::contents_bounds(before, 0.0),
@@ -4221,12 +4239,7 @@ impl LayerReference {
                 animation: lumit_core::anim::Animation::Static(value + delta),
             });
         }
-        let op = if ops.len() == 1 {
-            ops.remove(0)
-        } else {
-            lumit_core::Op::Batch { ops }
-        };
-        self.commit(op)
+        ops
     }
 
     /// Add one piece of art on top of this shape layer's stack.

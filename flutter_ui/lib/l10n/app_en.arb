@@ -9872,6 +9872,22 @@
   "@deleteShapeGroup": {
     "description": "Context-menu item on a group in a shape layer's contents: the group and everything in it go."
   },
+  "shapeExpandCopies": "Expand copies",
+  "@shapeExpandCopies": {
+    "description": "Submenu in the right-click menu of a Repeater entry in a shape layer's contents: turn its copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandAllCopies": "Expand all copies",
+  "@shapeExpandAllCopies": {
+    "description": "Submenu in the Layer menu, for a selected shape layer: turn every Repeater's copies into real shapes. Opens the two rows below."
+  },
+  "shapeExpandIntoLayer": "Into this layer",
+  "@shapeExpandIntoLayer": {
+    "description": "Row under Expand copies: the copies become shapes in the same layer, and the Repeater goes."
+  },
+  "shapeExpandIntoLayers": "Into layers",
+  "@shapeExpandIntoLayers": {
+    "description": "Row under Expand copies: the first copy stays in this layer and each further copy becomes a shape layer of its own, below it."
+  },
   "shapeTwist": "Twist",
   "@shapeTwist": {
     "description": "Shape operation, in the Add and Remove menus of a shape layer's art: spins the shape about an axis and flattens it, so a circle becomes a figure eight."

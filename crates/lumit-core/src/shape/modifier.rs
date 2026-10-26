@@ -287,7 +287,7 @@ impl Repeater {
     /// The copies this repeater draws at `t`, each with its transform and the
     /// share of opacity to draw it at (0..1). One copy, identity, full
     /// opacity, for a count of one.
-    fn copies_at(&self, t: f64) -> Vec<(Affine, f64)> {
+    pub(super) fn copies_at(&self, t: f64) -> Vec<(Affine, f64)> {
         let copies = self
             .copies
             .value_at(t)
