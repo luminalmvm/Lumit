@@ -27801,12 +27801,14 @@ impl SseDecode for crate::api::layer::BridgeRevealGroups {
         let mut var_audio = <bool>::sse_decode(deserializer);
         let mut var_retime = <bool>::sse_decode(deserializer);
         let mut var_effects = <Vec<String>>::sse_decode(deserializer);
+        let mut var_animators = <Vec<u32>>::sse_decode(deserializer);
         let mut var_any = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeRevealGroups {
             transform: var_transform,
             audio: var_audio,
             retime: var_retime,
             effects: var_effects,
+            animators: var_animators,
             any: var_any,
         };
     }
@@ -39113,6 +39115,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeRevealGroups {
             self.audio.into_into_dart().into_dart(),
             self.retime.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
+            self.animators.into_into_dart().into_dart(),
             self.any.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -45151,6 +45154,7 @@ impl SseEncode for crate::api::layer::BridgeRevealGroups {
         <bool>::sse_encode(self.audio, serializer);
         <bool>::sse_encode(self.retime, serializer);
         <Vec<String>>::sse_encode(self.effects, serializer);
+        <Vec<u32>>::sse_encode(self.animators, serializer);
         <bool>::sse_encode(self.any, serializer);
     }
 }

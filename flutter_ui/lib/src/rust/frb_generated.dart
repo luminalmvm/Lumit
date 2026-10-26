@@ -25394,14 +25394,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeRevealGroups dco_decode_bridge_reveal_groups(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BridgeRevealGroups(
       transform: dco_decode_bool(arr[0]),
       audio: dco_decode_bool(arr[1]),
       retime: dco_decode_bool(arr[2]),
       effects: dco_decode_list_String(arr[3]),
-      any: dco_decode_bool(arr[4]),
+      animators: dco_decode_list_prim_u_32_strict(arr[4]),
+      any: dco_decode_bool(arr[5]),
     );
   }
 
@@ -32542,12 +32543,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_audio = sse_decode_bool(deserializer);
     var var_retime = sse_decode_bool(deserializer);
     var var_effects = sse_decode_list_String(deserializer);
+    var var_animators = sse_decode_list_prim_u_32_strict(deserializer);
     var var_any = sse_decode_bool(deserializer);
     return BridgeRevealGroups(
         transform: var_transform,
         audio: var_audio,
         retime: var_retime,
         effects: var_effects,
+        animators: var_animators,
         any: var_any);
   }
 
@@ -40140,6 +40143,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.audio, serializer);
     sse_encode_bool(self.retime, serializer);
     sse_encode_list_String(self.effects, serializer);
+    sse_encode_list_prim_u_32_strict(self.animators, serializer);
     sse_encode_bool(self.any, serializer);
   }
 
