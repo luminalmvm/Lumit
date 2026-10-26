@@ -18,6 +18,7 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
 import 'roto.dart';
+import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
@@ -828,10 +829,11 @@ class BridgeLayerInfo {
   /// Viewer needs to know a layer is puppeted without asking per frame.
   final BridgePuppet? puppet;
 
-  /// A shape layer's art, bottom first; empty on every other kind.
-  /// Carried for the same reason again — and for one more: the art *is* the
-  /// layer's size, so the Viewer's wireframe reads it here.
-  final List<BridgeShapeItem> shapeContents;
+  /// A shape layer's contents, bottom first and flat
+  /// (`crate::api::shape`); empty on every other kind. Carried for the
+  /// same reason again, and for one more: the art *is* the layer's size,
+  /// so the Viewer's wireframe reads it here.
+  final List<BridgeShapeEntry> shapeContents;
 
   /// The layer's own markers, and the comp frame each falls on — the
   /// marker's layer-local time carried out by the layer's start offset — so
@@ -1966,7 +1968,8 @@ class BridgeShapeDeform {
 }
 
 /// One piece of vector art on a shape layer: a path, and how it is
-/// painted.
+/// painted. What is done to the path is an entry after it in the contents
+/// (`crate::api::shape::BridgeShapeModifier`).
 ///
 /// The path is `BridgeVertex`, the same vertices a mask crosses with: one path
 /// type in the document, drawn by two things.
@@ -1986,15 +1989,6 @@ class BridgeShapeItem {
 
   /// 0..100.
   final BridgeScalar opacity;
-
-  /// **Trim paths**: where along the path's own length the art begins
-  /// and ends, as a per cent, and how far the pair is slid along it in
-  /// degrees. Animatable on the layer's own clock, exactly as a
-  /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
-  /// the same diamonds.
-  final BridgeScalar trimStart;
-  final BridgeScalar trimEnd;
-  final BridgeScalar trimOffset;
 
   /// **Dashes**: the outline's dash and gap lengths in layer pixels,
   /// alternating — dash, gap, dash, gap. Empty is a solid outline.
@@ -2039,40 +2033,6 @@ class BridgeShapeItem {
   /// shape is changing at, which is the one curve a path can honestly draw.
   final List<BridgeKeyframe> pathKeys;
 
-  /// **Offset paths**: how far the outline is pushed out of the path,
-  /// in layer pixels; negative pulls it in and zero is the path itself.
-  final BridgeScalar offsetAmount;
-
-  /// **The repeater**: how many copies of the item are drawn, which
-  /// copy the original is (`repeat_offset`), and the transform each copy is
-  /// one more step of — moved by `repeat_position_*` layer pixels, turned by
-  /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
-  /// about `repeat_anchor_*`. The copies fade evenly from
-  /// `repeat_start_opacity` to `repeat_end_opacity`.
-  ///
-  /// A still count of one is no repeater at all, which is what every shape is
-  /// until somebody asks for more.
-  final BridgeScalar repeatCopies;
-  final BridgeScalar repeatOffset;
-  final BridgeScalar repeatAnchorX;
-  final BridgeScalar repeatAnchorY;
-  final BridgeScalar repeatPositionX;
-  final BridgeScalar repeatPositionY;
-  final BridgeScalar repeatRotation;
-  final BridgeScalar repeatScale;
-  final BridgeScalar repeatStartOpacity;
-  final BridgeScalar repeatEndOpacity;
-
-  /// **Twist**, or `None` for none.
-  final BridgeShapeTwist? twist;
-
-  /// **Deform**, or `None` for none.
-  final BridgeShapeDeform? deform;
-
-  /// **Smooth**: how far along the path each point is averaged with its
-  /// neighbours, in pixels, or `None` for no smooth.
-  final BridgeScalar? smooth;
-
   /// **Stroke taper**, or `None` for the full width all the way.
   final BridgeShapeTaper? taper;
 
@@ -2085,9 +2045,6 @@ class BridgeShapeItem {
     this.stroke,
     required this.strokeWidth,
     required this.opacity,
-    required this.trimStart,
-    required this.trimEnd,
-    required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
     required this.gradient,
@@ -2101,20 +2058,6 @@ class BridgeShapeItem {
     required this.gradientStops,
     required this.combine,
     required this.pathKeys,
-    required this.offsetAmount,
-    required this.repeatCopies,
-    required this.repeatOffset,
-    required this.repeatAnchorX,
-    required this.repeatAnchorY,
-    required this.repeatPositionX,
-    required this.repeatPositionY,
-    required this.repeatRotation,
-    required this.repeatScale,
-    required this.repeatStartOpacity,
-    required this.repeatEndOpacity,
-    this.twist,
-    this.deform,
-    this.smooth,
     this.taper,
   });
 
@@ -2128,9 +2071,6 @@ class BridgeShapeItem {
       stroke.hashCode ^
       strokeWidth.hashCode ^
       opacity.hashCode ^
-      trimStart.hashCode ^
-      trimEnd.hashCode ^
-      trimOffset.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
       gradient.hashCode ^
@@ -2144,20 +2084,6 @@ class BridgeShapeItem {
       gradientStops.hashCode ^
       combine.hashCode ^
       pathKeys.hashCode ^
-      offsetAmount.hashCode ^
-      repeatCopies.hashCode ^
-      repeatOffset.hashCode ^
-      repeatAnchorX.hashCode ^
-      repeatAnchorY.hashCode ^
-      repeatPositionX.hashCode ^
-      repeatPositionY.hashCode ^
-      repeatRotation.hashCode ^
-      repeatScale.hashCode ^
-      repeatStartOpacity.hashCode ^
-      repeatEndOpacity.hashCode ^
-      twist.hashCode ^
-      deform.hashCode ^
-      smooth.hashCode ^
       taper.hashCode;
 
   @override
@@ -2173,9 +2099,6 @@ class BridgeShapeItem {
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
           opacity == other.opacity &&
-          trimStart == other.trimStart &&
-          trimEnd == other.trimEnd &&
-          trimOffset == other.trimOffset &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
           gradient == other.gradient &&
@@ -2189,20 +2112,6 @@ class BridgeShapeItem {
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           pathKeys == other.pathKeys &&
-          offsetAmount == other.offsetAmount &&
-          repeatCopies == other.repeatCopies &&
-          repeatOffset == other.repeatOffset &&
-          repeatAnchorX == other.repeatAnchorX &&
-          repeatAnchorY == other.repeatAnchorY &&
-          repeatPositionX == other.repeatPositionX &&
-          repeatPositionY == other.repeatPositionY &&
-          repeatRotation == other.repeatRotation &&
-          repeatScale == other.repeatScale &&
-          repeatStartOpacity == other.repeatStartOpacity &&
-          repeatEndOpacity == other.repeatEndOpacity &&
-          twist == other.twist &&
-          deform == other.deform &&
-          smooth == other.smooth &&
           taper == other.taper;
 }
 
@@ -3572,11 +3481,12 @@ class LayerReference {
         that: this,
       );
 
-  /// This shape layer's contents, bottom of the stack first.
+  /// This shape layer's contents, bottom of the stack first, as one flat
+  /// list of entries with the depth each sits at (`crate::api::shape`).
   ///
   /// Empty on a layer that is not a shape, rather than an error: the Timeline
   /// asks every row what it has to list, exactly as it asks about masks.
-  List<BridgeShapeItem> getShapeContents() =>
+  List<BridgeShapeEntry> getShapeContents() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetShapeContents(
         that: this,
       );
@@ -4405,7 +4315,7 @@ class LayerReference {
   /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
   /// rename, a colour — and the keys are carried through untouched.
   void setShapeContents(
-          {required List<BridgeShapeItem> contents, BridgeRational? at}) =>
+          {required List<BridgeShapeEntry> contents, BridgeRational? at}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapeContents(
           that: this, contents: contents, at: at);
 

@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -38,6 +39,7 @@ import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith;
+import 'shape_entries.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
@@ -269,7 +271,7 @@ class ViewerStage extends StatelessWidget {
       anyAnimated: model.heldLayers.any((entry) =>
           outlined.contains(entry.layer.internallayerId.toString()) &&
           (entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty) ||
-              entry.info.shapeContents
+              entry.info.shapeContents.items
                   .any((item) => item.pathKeys.isNotEmpty))),
     );
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
@@ -342,10 +344,17 @@ class ViewerStage extends StatelessWidget {
       final id = entry.layer.internallayerId;
       // A keyed shape path is drawn where the picture has it, as a mask is.
       final art = [
-        for (final item in entry.info.shapeContents)
-          switch (uiState.animatedMaskPaths.pathOf(id, item.id)) {
-            final keyed? => shapeItemWith(item, vertices: keyed),
-            _ => item,
+        for (final e in entry.info.shapeContents)
+          switch (e.kind) {
+            BridgeShapeEntryKind_Item(:final field0) => switch (
+                  uiState.animatedMaskPaths.pathOf(id, field0.id)) {
+                final keyed? => BridgeShapeEntry(
+                    depth: e.depth,
+                    kind: BridgeShapeEntryKind.item(
+                        shapeItemWith(field0, vertices: keyed))),
+                _ => e,
+              },
+            _ => e,
           }
       ];
       out.add(LayerBox(

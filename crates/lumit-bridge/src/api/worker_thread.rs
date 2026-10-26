@@ -2765,7 +2765,7 @@ pub struct RenderCompRequestWithPreview {
     pub retime: Option<crate::api::effect::BridgeScalar>,
     /// A shape layer's whole art list, while one of its items is being dragged.
     /// The same reason as `paint` above.
-    pub contents: Option<Vec<crate::api::layer::BridgeShapeItem>>,
+    pub contents: Option<Vec<crate::api::shape::BridgeShapeEntry>>,
     /// A layer's whole mask list, while one of them is being dragged.
     /// The same reason as `paint` and `contents` above.
     pub masks: Option<Vec<crate::api::layer::BridgeMask>>,
@@ -5116,14 +5116,7 @@ fn render_comp_with_preview(
             .ok()
             .map(|t| t.0);
         if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
-            let written: Result<Vec<_>, _> = items
-                .iter()
-                .map(|i| match contents.iter().find(|p| p.id == i.id) {
-                    Some(previous) => i.write_item_over(previous, offset, at),
-                    None => i.write_item(offset),
-                })
-                .collect();
-            if let Ok(written) = written {
+            if let Ok(written) = crate::api::shape::write_entries(&items, contents, offset, at) {
                 *contents = written;
             }
         }

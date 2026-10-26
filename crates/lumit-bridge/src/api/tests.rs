@@ -3184,9 +3184,6 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         stroke: None,
         stroke_width: BridgeScalar::Static(0.0),
         opacity: BridgeScalar::Static(100.0),
-        trim_start: BridgeScalar::Static(0.0),
-        trim_end: BridgeScalar::Static(100.0),
-        trim_offset: BridgeScalar::Static(0.0),
         dashes: Vec::new(),
         dash_offset: BridgeScalar::Static(0.0),
         gradient: 0,
@@ -3200,22 +3197,35 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_stops: Vec::new(),
         combine: 0,
         path_keys: Vec::new(),
-        offset_amount: BridgeScalar::Static(0.0),
-        repeat_copies: BridgeScalar::Static(1.0),
-        repeat_offset: BridgeScalar::Static(0.0),
-        repeat_anchor_x: BridgeScalar::Static(0.0),
-        repeat_anchor_y: BridgeScalar::Static(0.0),
-        repeat_position_x: BridgeScalar::Static(0.0),
-        repeat_position_y: BridgeScalar::Static(0.0),
-        repeat_rotation: BridgeScalar::Static(0.0),
-        repeat_scale: BridgeScalar::Static(100.0),
-        repeat_start_opacity: BridgeScalar::Static(100.0),
-        repeat_end_opacity: BridgeScalar::Static(100.0),
-        twist: None,
-        deform: None,
-        smooth: None,
         taper: None,
     }
+}
+
+/// The items of a flat contents list, in order.
+fn shape_items(
+    entries: &[crate::api::shape::BridgeShapeEntry],
+) -> Vec<&crate::api::layer::BridgeShapeItem> {
+    entries
+        .iter()
+        .filter_map(|e| match &e.kind {
+            crate::api::shape::BridgeShapeEntryKind::Item(item) => Some(item),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `entries` with its first item changed.
+fn with_first_item(
+    mut entries: Vec<crate::api::shape::BridgeShapeEntry>,
+    change: impl FnOnce(&mut crate::api::layer::BridgeShapeItem),
+) -> Vec<crate::api::shape::BridgeShapeEntry> {
+    for entry in &mut entries {
+        if let crate::api::shape::BridgeShapeEntryKind::Item(item) = &mut entry.kind {
+            change(item);
+            break;
+        }
+    }
+    entries
 }
 
 /// A shape tool with nothing selected makes one of these, and it lands where
@@ -3235,8 +3245,8 @@ fn a_shape_layer_is_made_from_its_art_and_placed_where_it_was_drawn() {
     assert_eq!(shape.get_kind().expect("kind"), BridgeLayerKind::Shape);
     let contents = shape.get_shape_contents().expect("contents");
     assert_eq!(contents.len(), 1);
-    assert_eq!(contents[0].name, "Rectangle");
-    assert_eq!(contents[0].vertices.len(), 4);
+    assert_eq!(shape_items(&contents)[0].name, "Rectangle");
+    assert_eq!(shape_items(&contents)[0].vertices.len(), 4);
 
     // Anchored on the art's own corner and positioned at it, so the rectangle
     // is where it was drawn.
@@ -3254,11 +3264,15 @@ fn a_shape_layer_is_made_from_its_art_and_placed_where_it_was_drawn() {
     assert_eq!(layers.first().map(|l| l.id()), Some(shape.id()));
 }
 
-/// A shape item's Trim start, end and offset round trip, animate, and are
-/// clamped to the 0..100 they mean — every key of them.
+/// A Trim paths entry's start, end and offset round trip, animate, and are
+/// clamped to the 0..100 they mean, every key of them.
 #[test]
 fn a_shapes_trim_round_trips_and_is_clamped() {
     use crate::api::effect::{BridgeKeyframe, BridgeSideInterp};
+    use crate::api::shape::{
+        BridgeShapeEntry, BridgeShapeEntryKind, BridgeShapeModifier, BridgeShapeModifierKind,
+        BridgeShapeTrim,
+    };
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
@@ -3267,22 +3281,31 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         .expect("a shape layer");
 
     let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].trim_start = BridgeScalar::Static(-40.0);
-    contents[0].trim_offset = BridgeScalar::Static(180.0);
-    contents[0].trim_end = BridgeScalar::Keyframed(vec![
-        BridgeKeyframe {
-            time: BridgeRational { num: 0, den: 1 },
-            value: -10.0,
-            interp_in: BridgeSideInterp::Linear,
-            interp_out: BridgeSideInterp::Linear,
-        },
-        BridgeKeyframe {
-            time: BridgeRational { num: 1, den: 1 },
-            value: 400.0,
-            interp_in: BridgeSideInterp::Linear,
-            interp_out: BridgeSideInterp::Linear,
-        },
-    ]);
+    contents.push(BridgeShapeEntry {
+        depth: 0,
+        kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+            id: Uuid::now_v7(),
+            name: "Trim paths".into(),
+            kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
+                start: BridgeScalar::Static(-40.0),
+                offset: BridgeScalar::Static(180.0),
+                end: BridgeScalar::Keyframed(vec![
+                    BridgeKeyframe {
+                        time: BridgeRational { num: 0, den: 1 },
+                        value: -10.0,
+                        interp_in: BridgeSideInterp::Linear,
+                        interp_out: BridgeSideInterp::Linear,
+                    },
+                    BridgeKeyframe {
+                        time: BridgeRational { num: 1, den: 1 },
+                        value: 400.0,
+                        interp_in: BridgeSideInterp::Linear,
+                        interp_out: BridgeSideInterp::Linear,
+                    },
+                ]),
+            }),
+        }),
+    });
     // A gradient's stops keep the order they were made in, held to the ramp.
     let stop = |position: f64, opacity: f64| crate::api::layer::BridgeGradientStop {
         position: BridgeScalar::Static(position),
@@ -3294,29 +3317,39 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         },
         opacity: BridgeScalar::Static(opacity),
     };
-    contents[0].gradient = 1;
-    contents[0].gradient_end_opacity = BridgeScalar::Static(-20.0);
-    contents[0].gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
+    let contents = with_first_item(contents, |item| {
+        item.gradient = 1;
+        item.gradient_end_opacity = BridgeScalar::Static(-20.0);
+        item.gradient_stops = vec![stop(140.0, 30.0), stop(25.0, 250.0)];
+    });
     shape.set_shape_contents(contents, None).expect("set");
 
-    let got = &shape.get_shape_contents().expect("contents")[0];
+    let contents = shape.get_shape_contents().expect("contents");
+    let got = shape_items(&contents)[0];
     assert_eq!(got.gradient_end_opacity, BridgeScalar::Static(0.0));
     assert_eq!(
         got.gradient_stops,
         vec![stop(100.0, 30.0), stop(25.0, 100.0)],
         "in the order they came, and held inside the ramp"
     );
+    let BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
+        kind: BridgeShapeModifierKind::Trim(trim),
+        ..
+    }) = &contents[1].kind
+    else {
+        panic!("the trim sits after the item");
+    };
     assert_eq!(
-        got.trim_start,
+        trim.start,
         BridgeScalar::Static(0.0),
         "a Start below zero could only ever draw wrongly"
     );
     assert_eq!(
-        got.trim_offset,
+        trim.offset,
         BridgeScalar::Static(180.0),
         "the offset is degrees, and degrees wrap"
     );
-    let BridgeScalar::Keyframed(keys) = &got.trim_end else {
+    let BridgeScalar::Keyframed(keys) = &trim.end else {
         panic!("End keeps its keys");
     };
     assert_eq!(keys.len(), 2);
@@ -3338,32 +3371,33 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
     let shape = comp
         .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
         .expect("a shape layer");
-    let id = shape.get_shape_contents().expect("contents")[0].id;
+    let first = || {
+        let contents = shape.get_shape_contents().expect("contents");
+        shape_items(&contents)[0].clone()
+    };
+    let id = first().id;
     let at = |num: i64| BridgeRational { num, den: 1 };
 
     // Unkeyed until somebody keys it, and absent from the read model.
-    assert!(shape.get_shape_contents().expect("contents")[0]
-        .path_keys
-        .is_empty());
+    assert!(first().path_keys.is_empty());
 
     shape.toggle_shape_path_key(id, at(0)).expect("key at 0");
     shape.toggle_shape_path_key(id, at(2)).expect("key at 2");
-    let keys = &shape.get_shape_contents().expect("contents")[0].path_keys;
+    let keys = &first().path_keys;
     assert_eq!(keys.len(), 2);
     // Counted up, so the graph draws the rate the shape changes at.
     assert_eq!(keys[0].value, 0.0);
     assert_eq!(keys[1].value, 1.0);
 
     // A point drag at the second key moves that key's shape, not the first's.
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].vertices[0].x = -4.0;
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x = -4.0;
+    });
     shape
         .set_shape_contents(contents, Some(at(2)))
         .expect("the drag lands on the key");
     assert_eq!(
-        shape.get_shape_contents().expect("contents")[0]
-            .path_keys
-            .len(),
+        first().path_keys.len(),
         2,
         "the drag reused the key there rather than planting a third"
     );
@@ -3379,23 +3413,18 @@ fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead(
     ));
 
     // A shorter list is a delete, which is what the Delete key sends.
-    let first = shape.get_shape_contents().expect("contents")[0].path_keys[0];
+    let kept = first().path_keys[0];
     assert!(matches!(
-        shape.set_shape_path_keys(id, vec![first]),
+        shape.set_shape_path_keys(id, vec![kept]),
         Ok(true)
     ));
-    assert_eq!(
-        shape.get_shape_contents().expect("contents")[0]
-            .path_keys
-            .len(),
-        1
-    );
+    assert_eq!(first().path_keys.len(), 1);
 
     // The stopwatch off keeps the shape the playhead is over. At the first key
-    // that is the shape as drawn — which is the proof the drag touched only the
+    // that is the shape as drawn, which is the proof the drag touched only the
     // key it was on.
     shape.clear_shape_path_keys(id, at(0)).expect("clear");
-    let after = &shape.get_shape_contents().expect("contents")[0];
+    let after = first();
     assert!(after.path_keys.is_empty());
     assert_eq!(after.vertices[0].x, 0.0, "the first key never moved");
 }
@@ -3410,35 +3439,40 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
     let shape = comp
         .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
         .expect("a shape layer");
-    let id = shape.get_shape_contents().expect("contents")[0].id;
+    let first = || {
+        let contents = shape.get_shape_contents().expect("contents");
+        shape_items(&contents)[0].clone()
+    };
+    let id = first().id;
     shape
         .toggle_shape_path_key(id, BridgeRational { num: 0, den: 1 })
         .expect("key");
 
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].opacity = BridgeScalar::Static(40.0);
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.opacity = BridgeScalar::Static(40.0);
+    });
     shape
         .set_shape_contents(contents.clone(), None)
         .expect("set");
 
-    let after = &shape.get_shape_contents().expect("contents")[0];
+    let after = first();
     assert_eq!(after.opacity, BridgeScalar::Static(40.0));
     assert_eq!(after.path_keys.len(), 1, "the morph is still there");
 
     shape
         .set_shape_contents(contents, Some(BridgeRational { num: 1, den: 1 }))
         .expect("set at the playhead");
-    let after = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(
-        after.path_keys.len(),
+        first().path_keys.len(),
         1,
         "no key planted for a path nobody moved"
     );
 
     // Nor the shape showing between two keys, which is what the Viewer sends
     // for an item a point drag didn't touch.
-    let mut moved = shape.get_shape_contents().expect("contents");
-    moved[0].vertices[0].x = -4.0;
+    let moved = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x = -4.0;
+    });
     shape
         .set_shape_contents(moved, Some(BridgeRational { num: 2, den: 1 }))
         .expect("a second key");
@@ -3449,16 +3483,15 @@ fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
         .into_iter()
         .find(|p| p.mask == id)
         .expect("the shape showing");
-    let mut contents = shape.get_shape_contents().expect("contents");
-    assert_ne!(contents[0].vertices, showing.vertices, "between the keys");
-    contents[0].vertices = showing.vertices;
+    assert_ne!(first().vertices, showing.vertices, "between the keys");
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices = showing.vertices;
+    });
     shape
         .set_shape_contents(contents, Some(comp.time_of_frame(frame).expect("time")))
         .expect("set at the playhead");
     assert_eq!(
-        shape.get_shape_contents().expect("contents")[0]
-            .path_keys
-            .len(),
+        first().path_keys.len(),
         2,
         "no key planted for the shape already showing"
     );
@@ -3486,16 +3519,16 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     // into the art's box.
     let drawn_at = |index: usize| {
         let contents = shape.get_shape_contents().expect("contents");
-        let items: Vec<_> = contents
-            .iter()
-            .map(|i| {
-                i.write_item(lumit_core::time::Rational::ZERO)
-                    .expect("an item")
-            })
-            .collect();
+        let items = crate::api::shape::write_entries(
+            &contents,
+            &[],
+            lumit_core::time::Rational::ZERO,
+            None,
+        )
+        .expect("entries");
         let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items, 0.0).expect("a box");
         let tf = shape.get_transform().expect("transform");
-        let v = &contents[0].vertices[index];
+        let v = &shape_items(&contents)[0].vertices[index];
         (
             still(&tf.position_x) + v.x - x0,
             still(&tf.position_y) + v.y - y0,
@@ -3503,9 +3536,10 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     };
     let before = drawn_at(2);
 
-    let mut contents = shape.get_shape_contents().expect("contents");
-    contents[0].vertices[0].x -= 30.0;
-    contents[0].vertices[0].y -= 20.0;
+    let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
+        item.vertices[0].x -= 30.0;
+        item.vertices[0].y -= 20.0;
+    });
     shape.set_shape_contents(contents, None).expect("set");
 
     let tf = shape.get_transform().expect("transform");
@@ -3528,10 +3562,8 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
         (200.0, 100.0),
         "the art and the layer went back together, in one step"
     );
-    assert_eq!(
-        shape.get_shape_contents().expect("contents")[0].vertices[0].x,
-        200.0
-    );
+    let contents = shape.get_shape_contents().expect("contents");
+    assert_eq!(shape_items(&contents)[0].vertices[0].x, 200.0);
 }
 
 // --- Puppet: the block and its pins ---------------------------------------

@@ -21,6 +21,7 @@ import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
 import 'roto.dart';
+import 'shape.dart';
 import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
@@ -2030,7 +2031,7 @@ class CompositionReference {
           {required BigInt frame,
           required double scale,
           required LayerReference layer,
-          required List<BridgeShapeItem> contents,
+          required List<BridgeShapeEntry> contents,
           BridgeTransform? transform}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceRenderFrameWithShapePreview(

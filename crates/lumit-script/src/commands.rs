@@ -1355,13 +1355,11 @@ struct ShapeArgs {
 
 fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
     use lumit_core::model::TransformGroup;
-    use lumit_core::shape::ShapeItem;
-
     let store = host.store();
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
-    let mut contents = Vec::new();
-    for (n, mut item) in a.items.into_iter().enumerate() {
+    let mut items = a.items;
+    for (n, item) in items.iter_mut().enumerate() {
         let Some(object) = item.as_object_mut() else {
             return Err(bad("Each item is an object."));
         };
@@ -1369,12 +1367,18 @@ fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
         object
             .entry("name")
             .or_insert_with(|| json!(format!("Path {}", n + 1)));
-        let item: ShapeItem =
-            serde_json::from_value(item).map_err(|e| bad(format!("Item {}: {e}.", n + 1)))?;
+    }
+    // Read as a file's contents are, so an item written the old way, with
+    // its trim or its copies as fields, still lands as entries.
+    let contents = lumit_core::shape::modifier::read_entries(Value::Array(items))
+        .map_err(|e| bad(format!("Items: {e}.")))?;
+    for (n, item) in lumit_core::shape::modifier::items(&contents)
+        .iter()
+        .enumerate()
+    {
         if item.path.vertices.len() < 2 {
             return Err(bad(format!("Item {} needs two vertices or more.", n + 1)));
         }
-        contents.push(item);
     }
     // The art is drawn in comp pixels, so the layer sits on the art's own box
     // with its anchor at the corner, as the pen tool's layers do.

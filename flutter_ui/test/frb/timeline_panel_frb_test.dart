@@ -31,6 +31,8 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
+import 'package:lumit_flutter/panels/shape_entries.dart';
 
 import 'frb_test_support.dart';
 
@@ -654,9 +656,6 @@ void main() {
             stroke: null,
             strokeWidth: const BridgeScalar.static_(0),
             opacity: const BridgeScalar.static_(100),
-            trimStart: const BridgeScalar.static_(0),
-            trimEnd: const BridgeScalar.static_(100),
-            trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
             gradient: 0,
@@ -670,17 +669,6 @@ void main() {
             gradientStops: const [],
             combine: 0,
             pathKeys: const [],
-            offsetAmount: const BridgeScalar.static_(0),
-            repeatCopies: const BridgeScalar.static_(1),
-            repeatOffset: const BridgeScalar.static_(0),
-            repeatAnchorX: const BridgeScalar.static_(0),
-            repeatAnchorY: const BridgeScalar.static_(0),
-            repeatPositionX: const BridgeScalar.static_(0),
-            repeatPositionY: const BridgeScalar.static_(0),
-            repeatRotation: const BridgeScalar.static_(0),
-            repeatScale: const BridgeScalar.static_(100),
-            repeatStartOpacity: const BridgeScalar.static_(100),
-            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -695,41 +683,65 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Rectangle'), findsWidgets);
 
-      final item = layer.getShapeContents().single;
+      BridgeShapeItem item() => layer.getShapeContents().items.single;
+      final itemId = item().id;
 
-      // The trim's three rows sit under the item, shut until its own twirl
-      // opens it, and each writes through.
-      expect(find.text('Trim start'), findsNothing);
+      // The item's rows sit under it, shut until its own twirl opens it.
+      expect(find.text('Opacity'), findsNothing);
       await tester
-          .tap(find.byKey(ValueKey<String>('tl-shape-twirl-${item.id}')));
+          .tap(find.byKey(ValueKey<String>('tl-shape-twirl-$itemId')));
       await tester.pumpAndSettle();
-      expect(find.text('Trim start'), findsOneWidget);
-      expect(find.text('Trim end'), findsOneWidget);
-      expect(find.text('Trim offset'), findsOneWidget);
 
-      // The opacity is a row under the item too, and writes through.
+      // The opacity is a row under the item, and writes through.
       final opacity =
-          find.byKey(ValueKey<String>('tl-shape-opacity-${item.id}'));
+          find.byKey(ValueKey<String>('tl-shape-opacity-$itemId'));
       await tester.tap(opacity);
       await tester.pumpAndSettle();
       await tester.enterText(opacity, '30');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(layer.getShapeContents().single.opacity,
-          const BridgeScalar.static_(30));
-      final field = find.byKey(ValueKey<String>('tl-shape-trimEnd-${item.id}'));
+      expect(item().opacity, const BridgeScalar.static_(30));
+
+      // A trim is an entry of its own, added from the item's menu, with its
+      // three rows under its own twirl.
+      Future<void> addFromMenu(String add) async {
+        await tester.tapAt(
+            tester.getCenter(find.byKey(ValueKey<String>('tl-shape-name-$itemId'))),
+            buttons: kSecondaryButton);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey<String>('tl-shape-add-$itemId')));
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.byKey(ValueKey<String>('tl-shape-add-$add-$itemId')));
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('Trim start'), findsNothing);
+      await addFromMenu('trim');
+      final trim = layer.getShapeContents().modifiers.single;
+      expect(trim.name, 'Trim paths');
+      await tester.tap(find.byKey(ValueKey<String>('tl-shape-twirl-${trim.id}')));
+      await tester.pumpAndSettle();
+      expect(find.text('Trim start'), findsOneWidget);
+      expect(find.text('Trim end'), findsOneWidget);
+      expect(find.text('Trim offset'), findsOneWidget);
+      BridgeScalar trimEnd() => switch (
+              layer.getShapeContents().modifiers.first.kind) {
+            BridgeShapeModifierKind_Trim(:final field0) => field0.end,
+            _ => throw StateError('the trim is first'),
+          };
+      final field = find.byKey(ValueKey<String>('tl-shape-trimEnd-${trim.id}'));
       await tester.tap(field);
       await tester.pumpAndSettle();
       await tester.enterText(field, '40');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(layer.getShapeContents().single.trimEnd,
-          const BridgeScalar.static_(40));
+      expect(trimEnd(), const BridgeScalar.static_(40));
 
       // Keyed, an edit after the playhead moves adds a key there and leaves
       // the first one alone.
       await tester.tap(find.byKey(
-          ValueKey<String>('kf-stopwatch-tl-shape-trimEnd-${item.id}')));
+          ValueKey<String>('kf-stopwatch-tl-shape-trimEnd-${trim.id}')));
       await tester.pumpAndSettle();
       p.uiState.scrubTo(60);
       await tester.pumpAndSettle();
@@ -739,7 +751,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(
-          switch (layer.getShapeContents().single.trimEnd) {
+          switch (trimEnd()) {
             BridgeScalar_Keyframed(:final field0) => [
                 for (final k in field0) k.value
               ],
@@ -750,27 +762,34 @@ void main() {
       // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
 
-      // The offset applies before the trim, and reads as one length.
-      expect(find.text('Offset path'), findsOneWidget);
-      final offset =
-          find.byKey(ValueKey<String>('tl-shape-offsetPath-${item.id}'));
-      await tester.tap(offset);
+      // An offset is another entry, after the item and before the trim it
+      // was added before, and reads as one length.
+      await addFromMenu('offset');
+      final offset = layer.getShapeContents().modifiers.first;
+      expect(offset.name, 'Offset paths');
+      expect(layer.getShapeContents().modifiers.last.id, trim.id,
+          reason: 'added under the item, above the trim');
+      await tester.tap(find.byKey(ValueKey<String>('tl-shape-twirl-${offset.id}')));
       await tester.pumpAndSettle();
-      await tester.enterText(offset, '-4');
+      final amount =
+          find.byKey(ValueKey<String>('tl-shape-offsetPath-${offset.id}'));
+      await tester.tap(amount);
+      await tester.pumpAndSettle();
+      await tester.enterText(amount, '-4');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(layer.getShapeContents().single.offsetAmount,
-          const BridgeScalar.static_(-4));
+      expect(layer.getShapeContents().modifiers.first.kind,
+          const BridgeShapeModifierKind.offset(BridgeScalar.static_(-4)));
 
       // A gradient stop keyed on its own row keeps its keys when the editor
       // writes the stops back with another one added.
       await tester
-          .tap(find.byKey(ValueKey<String>('tl-shape-gradient-${item.id}')));
+          .tap(find.byKey(ValueKey<String>('tl-shape-gradient-$itemId')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Linear').last);
       await tester.pumpAndSettle();
       final ramp =
-          find.byKey(ValueKey<String>('tl-shape-gradientStops-${item.id}'));
+          find.byKey(ValueKey<String>('tl-shape-gradientStops-$itemId'));
       const bar = ValueKey<String>('grad-ramp');
       await tester.ensureVisible(ramp);
       await tester.tap(ramp);
@@ -780,7 +799,7 @@ void main() {
       closeLumitPopups();
       await tester.pumpAndSettle();
       final stopwatch = find.byKey(ValueKey<String>(
-          'kf-stopwatch-tl-shape-gradientStopPosition-${item.id}-0'));
+          'kf-stopwatch-tl-shape-gradientStopPosition-$itemId-0'));
       await tester.ensureVisible(stopwatch);
       await tester.tap(stopwatch);
       await tester.pumpAndSettle();
@@ -792,7 +811,7 @@ void main() {
       await tester.pumpAndSettle();
       closeLumitPopups();
       await tester.pumpAndSettle();
-      final stops = layer.getShapeContents().single.gradientStops;
+      final stops = item().gradientStops;
       expect(stops, hasLength(2));
       expect(stops.first.position, isA<BridgeScalar_Keyframed>());
     });

@@ -28,12 +28,14 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'light_rows_frb.dart';
+import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -202,13 +204,32 @@ final class FoldShapeRow extends LayerFoldRow {
       : super(depth);
 }
 
-/// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries.
-/// The trim's three are the first of them.
+/// A modifier entry in a shape layer's contents: a repeater, a trim, an
+/// offset, a twist, a deform or a smooth, acting on the art above it.
+final class FoldShapeModifierRow extends LayerFoldRow {
+  final BridgeShapeModifier modifier;
+
+  /// Whether its own twirl is down, showing the rows under it.
+  final bool open;
+  const FoldShapeModifierRow(this.modifier,
+      {required this.open, required int depth})
+      : super(depth);
+}
+
+/// A group in a shape layer's contents, folding the entries under it.
+final class FoldShapeGroupRow extends LayerFoldRow {
+  final BridgeShapeGroup group;
+  final bool open;
+  const FoldShapeGroupRow(this.group, {required this.open, required int depth})
+      : super(depth);
+}
+
+/// Which animatable number a [FoldShapeValueRow] carries: one of an item's
+/// own, or one of a modifier entry's.
 /// [dash] and [gap] are the first pair of the item's dash list, which
 /// is where a dashed outline is set from: writing either into an item that has
 /// no list makes one. The repeater's ten are the count, which copy the
-/// original is, and the step every copy is one more of. [offsetPath] is
-/// first because it applies first: it makes the outline the rest work on.
+/// original is, and the step every copy is one more of.
 enum ShapeValue {
   /// How opaque each end of the ramp is. First, so the two rows sit straight
   /// under the colours they fade.
@@ -313,48 +334,66 @@ BridgeColour stillColour(BridgeColourRgba c) => BridgeColour(
       a: BridgeScalar.static_(c.a),
     );
 
-/// The operations a shape item can be given from its menu. Each is absent
-/// until it is added, and its rows with it.
-enum ShapeOp { twist, deform, smooth, taper }
+/// What the Add menu on a shape row offers: a modifier entry below the row,
+/// the item's own stroke taper, or a group round the row.
+enum ShapeAdd { repeater, trim, offset, twist, deform, smooth, taper, group }
 
-/// Whether [item] has [op].
-bool hasShapeOp(BridgeShapeItem item, ShapeOp op) => switch (op) {
-      ShapeOp.twist => item.twist != null,
-      ShapeOp.deform => item.deform != null,
-      ShapeOp.smooth => item.smooth != null,
-      ShapeOp.taper => item.taper != null,
+/// What [add] is called in the menu, and what a new entry of it is named.
+String shapeAddLabel(ShapeAdd add) => switch (add) {
+      ShapeAdd.repeater => l10n.shapeRepeater,
+      ShapeAdd.trim => l10n.shapeTrimPaths,
+      ShapeAdd.offset => l10n.shapeOffsetPaths,
+      ShapeAdd.twist => l10n.shapeTwist,
+      ShapeAdd.deform => l10n.shapeDeform,
+      ShapeAdd.smooth => l10n.shapeSmooth,
+      ShapeAdd.taper => l10n.shapeTaper,
+      ShapeAdd.group => l10n.shapeGroup,
     };
 
-/// What [op] is called in the item's menu.
-String shapeOpLabel(ShapeOp op) => switch (op) {
-      ShapeOp.twist => l10n.shapeTwist,
-      ShapeOp.deform => l10n.shapeDeform,
-      ShapeOp.smooth => l10n.shapeSmooth,
-      ShapeOp.taper => l10n.shapeTaper,
-    };
-
-/// The operation [value] belongs to, or null for a number every item has.
-ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
-      ShapeValue.smoothAmount => ShapeOp.smooth,
+/// The modifier kind [value] belongs to, or null for a number on the item
+/// itself.
+ShapeAdd? shapeModifierOf(ShapeValue value) => switch (value) {
+      ShapeValue.smoothAmount => ShapeAdd.smooth,
       ShapeValue.twistAngle ||
       ShapeValue.twistRotation ||
       ShapeValue.twistAxis ||
       ShapeValue.twistCentreX ||
       ShapeValue.twistCentreY =>
-        ShapeOp.twist,
+        ShapeAdd.twist,
       ShapeValue.deformAmount ||
       ShapeValue.deformScale ||
       ShapeValue.deformEvolution ||
       ShapeValue.deformSeed ||
       ShapeValue.deformDetail =>
-        ShapeOp.deform,
+        ShapeAdd.deform,
+      ShapeValue.offsetPath => ShapeAdd.offset,
+      ShapeValue.trimStart ||
+      ShapeValue.trimEnd ||
+      ShapeValue.trimOffset =>
+        ShapeAdd.trim,
+      ShapeValue.repeatCopies ||
+      ShapeValue.repeatOffset ||
+      ShapeValue.repeatAnchorX ||
+      ShapeValue.repeatAnchorY ||
+      ShapeValue.repeatPositionX ||
+      ShapeValue.repeatPositionY ||
+      ShapeValue.repeatRotation ||
+      ShapeValue.repeatScale ||
+      ShapeValue.repeatStartOpacity ||
+      ShapeValue.repeatEndOpacity =>
+        ShapeAdd.repeater,
+      _ => null,
+    };
+
+/// Which of a shape item's numbers are its stroke taper's.
+bool isTaperValue(ShapeValue value) => switch (value) {
       ShapeValue.taperStart ||
       ShapeValue.taperEnd ||
       ShapeValue.taperStartLength ||
       ShapeValue.taperEndLength ||
       ShapeValue.taperEase =>
-        ShapeOp.taper,
-      _ => null,
+        true,
+      _ => false,
     };
 
 /// Which of a shape item's numbers are the dashes' — shown only under an item
@@ -390,45 +429,60 @@ bool isGradientValue(ShapeValue value) => switch (value) {
       _ => false,
     };
 
-/// Which of a shape item's numbers describe the **step** the repeater takes —
-/// everything but the count itself, which is the row that turns the
-/// repeater on and so is always there to find.
+/// Which of a repeater's numbers describe the **step** it takes: everything
+/// but the count itself, which is the row that is always there to find.
 bool isRepeatStepValue(ShapeValue value) =>
-    shapeOpOf(value) == null &&
-    switch (value) {
-      ShapeValue.path ||
-      ShapeValue.gradientStartOpacity ||
-      ShapeValue.gradientEndOpacity ||
-      ShapeValue.gradientStopPosition ||
-      ShapeValue.gradientStopOpacity ||
-      ShapeValue.gradientStartX ||
-      ShapeValue.gradientStartY ||
-      ShapeValue.gradientEndX ||
-      ShapeValue.gradientEndY ||
-      ShapeValue.offsetPath ||
-      ShapeValue.trimStart ||
-      ShapeValue.trimEnd ||
-      ShapeValue.trimOffset ||
-      ShapeValue.dash ||
-      ShapeValue.gap ||
-      ShapeValue.dashOffset ||
-      ShapeValue.repeatCopies ||
-      ShapeValue.fillColour ||
-      ShapeValue.strokeColour ||
-      ShapeValue.strokeWidth ||
-      ShapeValue.opacity =>
-        false,
-      _ => true,
-    };
+    shapeModifierOf(value) == ShapeAdd.repeater &&
+    value != ShapeValue.repeatCopies;
 
-/// True once the item is drawn more than once — a still count of one is no
-/// repeater at all, which is what every shape is until somebody asks for more.
-bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
+/// True once a repeater draws more than one copy. A still count of one draws
+/// the art once, and its step rows would be nine rows of nothing.
+bool isRepeated(BridgeShapeRepeater repeater) => switch (repeater.copies) {
       BridgeScalar_Static(:final field0) => field0 > 1,
       // Keyed, or driven by an expression: the count is more than one
       // somewhere in the animation, so the rows that shape it belong on
       // screen.
       _ => true,
+    };
+
+/// The value rows a modifier entry shows under it, in order.
+List<ShapeValue> modifierValues(BridgeShapeModifier modifier) =>
+    switch (modifier.kind) {
+      BridgeShapeModifierKind_Repeat(:final field0) => [
+          ShapeValue.repeatCopies,
+          if (isRepeated(field0)) ...[
+            ShapeValue.repeatOffset,
+            ShapeValue.repeatAnchorX,
+            ShapeValue.repeatAnchorY,
+            ShapeValue.repeatPositionX,
+            ShapeValue.repeatPositionY,
+            ShapeValue.repeatRotation,
+            ShapeValue.repeatScale,
+            ShapeValue.repeatStartOpacity,
+            ShapeValue.repeatEndOpacity,
+          ],
+        ],
+      BridgeShapeModifierKind_Trim() => const [
+          ShapeValue.trimStart,
+          ShapeValue.trimEnd,
+          ShapeValue.trimOffset,
+        ],
+      BridgeShapeModifierKind_Offset() => const [ShapeValue.offsetPath],
+      BridgeShapeModifierKind_Twist() => const [
+          ShapeValue.twistAngle,
+          ShapeValue.twistRotation,
+          ShapeValue.twistAxis,
+          ShapeValue.twistCentreX,
+          ShapeValue.twistCentreY,
+        ],
+      BridgeShapeModifierKind_Deform() => const [
+          ShapeValue.deformAmount,
+          ShapeValue.deformScale,
+          ShapeValue.deformEvolution,
+          ShapeValue.deformSeed,
+          ShapeValue.deformDetail,
+        ],
+      BridgeShapeModifierKind_Smooth() => const [ShapeValue.smoothAmount],
     };
 
 /// Which of a shape item's **colours and choices** a [FoldShapePaintRow]
@@ -457,11 +511,14 @@ enum ShapePaint {
 }
 
 /// A shape item's fill colour, its gradient choice, or its gradient's second
-/// colour, on a row of its own.
+/// colour, on a row of its own. A deform entry's Displace or Scale choice is
+/// the one that belongs to a [modifier] rather than to an item.
 final class FoldShapePaintRow extends LayerFoldRow {
-  final BridgeShapeItem item;
+  final BridgeShapeItem? item;
+  final BridgeShapeModifier? modifier;
   final ShapePaint which;
-  const FoldShapePaintRow(this.item, this.which, {required int depth})
+  const FoldShapePaintRow(this.item, this.which,
+      {this.modifier, required int depth})
       : super(depth);
 }
 
@@ -475,19 +532,30 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.taperScope => l10n.shapeTaperScope,
     };
 
-/// One of a shape item's numbers on a row of its own under it. A row
-/// rather than another control on the item's own row, for the reason
-/// [FoldMaskValueRow] gives: a property without a row has nowhere to put the
-/// stopwatch that animates it.
+/// One of a shape item's numbers, or one of a modifier entry's, on a row of
+/// its own under it. A row rather than another control on the entry's own
+/// row, for the reason [FoldMaskValueRow] gives: a property without a row has
+/// nowhere to put the stopwatch that animates it.
 final class FoldShapeValueRow extends LayerFoldRow {
-  final BridgeShapeItem item;
+  /// The item the number belongs to, or null for a modifier's.
+  final BridgeShapeItem? item;
+  final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
   /// Which gradient stop the row is for, on the two values a stop has.
   final int stop;
   const FoldShapeValueRow(this.item, this.value,
-      {required int depth, this.stop = 0})
+      {this.modifier, required int depth, this.stop = 0})
       : super(depth);
+
+  /// The id the row's path names: the item's or the modifier's.
+  UuidValue get ownerId => modifier?.id ?? item!.id;
+
+  /// The number itself, from whichever the row belongs to.
+  BridgeScalar get scalar => switch (modifier) {
+        final m? => modifierScalarOf(m, value),
+        null => shapeScalarOf(item!, value, stop: stop),
+      };
 }
 
 /// One paint stroke on the layer: its name, so a stroke can be found,
@@ -752,10 +820,10 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       // whole paths, and those keys carry their own eases and a counted-up
       // value, so the lane draws their diamonds and the graph
       // can draw the rate the shape is changing at.
-      FoldShapeValueRow(:final item, :final value, :final stop) =>
-        value == ShapeValue.path
+      FoldShapeValueRow(:final item, :final value) =>
+        value == ShapeValue.path && item != null
             ? item.pathKeys
-            : switch (shapeScalarOf(item, value, stop: stop)) {
+            : switch (row.scalar) {
                 BridgeScalar_Keyframed(:final field0) => field0,
                 _ => const [],
               },
@@ -880,6 +948,15 @@ List<LayerFoldRow> withHeadingsShut(
         shut.any((p) => p.endsWith('/contents/${row.item.id}'))) {
       under = row.depth;
       out.add(FoldShapeRow(row.item, open: false, depth: row.depth));
+    } else if (row is FoldShapeModifierRow &&
+        shut.any((p) => p.endsWith('/contents/${row.modifier.id}'))) {
+      under = row.depth;
+      out.add(
+          FoldShapeModifierRow(row.modifier, open: false, depth: row.depth));
+    } else if (row is FoldShapeGroupRow &&
+        shut.any((p) => p.endsWith('/contents/${row.group.id}'))) {
+      under = row.depth;
+      out.add(FoldShapeGroupRow(row.group, open: false, depth: row.depth));
     } else {
       out.add(row);
     }
@@ -929,10 +1006,8 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       FoldPuppetValueRow(:final pin, :final value) => puppetScalarOf(pin, value),
       FoldAnimatorValueRow(:final animator, :final value) =>
         textAnimatorScalarOf(animator, value),
-      FoldShapeValueRow(:final item, :final value, :final stop) =>
-        value == ShapeValue.path
-            ? null
-            : shapeScalarOf(item, value, stop: stop),
+      FoldShapeValueRow(:final value) =>
+        value == ShapeValue.path ? null : row.scalar,
       _ => null,
     };
 
@@ -981,6 +1056,8 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       FoldPuppetPinRow() ||
       FoldPuppetValueRow() ||
       FoldShapeRow() ||
+      FoldShapeModifierRow() ||
+      FoldShapeGroupRow() ||
       FoldShapeValueRow() ||
       FoldShapePaintRow() ||
       FoldAnimatorValueRow() =>
@@ -1268,7 +1345,7 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
-      ShapeValue.smoothAmount => l10n.shapeSmooth,
+      ShapeValue.smoothAmount => l10n.shapeModifierAmount,
       ShapeValue.twistAngle => l10n.shapeTwistAngle,
       ShapeValue.twistRotation => l10n.shapeTwistRotation,
       ShapeValue.twistAxis => l10n.shapeTwistAxis,
@@ -1279,7 +1356,7 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.deformEvolution => l10n.shapeDeformEvolution,
       ShapeValue.deformSeed => l10n.shapeDeformSeed,
       ShapeValue.deformDetail => l10n.shapeDeformDetail,
-      ShapeValue.offsetPath => l10n.shapeOffsetPath,
+      ShapeValue.offsetPath => l10n.shapeModifierAmount,
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
       ShapeValue.trimOffset => l10n.shapeTrimOffset,
@@ -1332,23 +1409,34 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
       ShapeValue.gradientEndY => item.gradientEndY,
-      // An operation the item does not have reads as the still zero nobody
-      // draws, as a gone stop does.
-      ShapeValue.smoothAmount => item.smooth ?? _none,
-      ShapeValue.twistAngle => item.twist?.angle ?? _none,
-      ShapeValue.twistRotation => item.twist?.rotation ?? _none,
-      ShapeValue.twistAxis => item.twist?.axis ?? _none,
-      ShapeValue.twistCentreX => item.twist?.centreX ?? _none,
-      ShapeValue.twistCentreY => item.twist?.centreY ?? _none,
-      ShapeValue.deformAmount => item.deform?.amount ?? _none,
-      ShapeValue.deformScale => item.deform?.scale ?? _none,
-      ShapeValue.deformEvolution => item.deform?.evolution ?? _none,
-      ShapeValue.deformSeed => item.deform?.seed ?? _none,
-      ShapeValue.deformDetail => item.deform?.detail ?? _none,
-      ShapeValue.offsetPath => item.offsetAmount,
-      ShapeValue.trimStart => item.trimStart,
-      ShapeValue.trimEnd => item.trimEnd,
-      ShapeValue.trimOffset => item.trimOffset,
+      // A modifier's number is on the modifier's own row; asked of the item
+      // it reads as the still zero nobody draws, as a gone stop does.
+      ShapeValue.smoothAmount ||
+      ShapeValue.twistAngle ||
+      ShapeValue.twistRotation ||
+      ShapeValue.twistAxis ||
+      ShapeValue.twistCentreX ||
+      ShapeValue.twistCentreY ||
+      ShapeValue.deformAmount ||
+      ShapeValue.deformScale ||
+      ShapeValue.deformEvolution ||
+      ShapeValue.deformSeed ||
+      ShapeValue.deformDetail ||
+      ShapeValue.offsetPath ||
+      ShapeValue.trimStart ||
+      ShapeValue.trimEnd ||
+      ShapeValue.trimOffset ||
+      ShapeValue.repeatCopies ||
+      ShapeValue.repeatOffset ||
+      ShapeValue.repeatAnchorX ||
+      ShapeValue.repeatAnchorY ||
+      ShapeValue.repeatPositionX ||
+      ShapeValue.repeatPositionY ||
+      ShapeValue.repeatRotation ||
+      ShapeValue.repeatScale ||
+      ShapeValue.repeatStartOpacity ||
+      ShapeValue.repeatEndOpacity =>
+        _none,
       ShapeValue.dash => _dashAt(item, 0),
       ShapeValue.gap => _dashAt(item, 1),
       ShapeValue.dashOffset => item.dashOffset,
@@ -1357,16 +1445,6 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.taperStartLength => item.taper?.startLength ?? _none,
       ShapeValue.taperEndLength => item.taper?.endLength ?? _none,
       ShapeValue.taperEase => item.taper?.ease ?? _none,
-      ShapeValue.repeatCopies => item.repeatCopies,
-      ShapeValue.repeatOffset => item.repeatOffset,
-      ShapeValue.repeatAnchorX => item.repeatAnchorX,
-      ShapeValue.repeatAnchorY => item.repeatAnchorY,
-      ShapeValue.repeatPositionX => item.repeatPositionX,
-      ShapeValue.repeatPositionY => item.repeatPositionY,
-      ShapeValue.repeatRotation => item.repeatRotation,
-      ShapeValue.repeatScale => item.repeatScale,
-      ShapeValue.repeatStartOpacity => item.repeatStartOpacity,
-      ShapeValue.repeatEndOpacity => item.repeatEndOpacity,
       // A colour's row reads as its red, the channel a lane shows the keys
       // of; `stop` names the others.
       ShapeValue.fillColour => switch (item.fill) {
@@ -1406,18 +1484,12 @@ BridgeShapeItem shapeItemWith(
   List<BridgeGradientStop>? gradientStops,
   int? combine,
   int stop = 0,
-  BridgeShapeTwist? twist,
-  BridgeShapeDeform? deform,
-  int? deformMode,
-  BridgeScalar? smooth,
   BridgeShapeTaper? taper,
   int? taperScope,
-  ShapeOp? remove,
+  bool removeTaper = false,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
-  final twisted = item.twist;
-  final deformed = item.deform;
   final tapered = item.taper;
   return BridgeShapeItem(
     id: item.id,
@@ -1473,10 +1545,6 @@ BridgeShapeItem shapeItemWith(
         },
     combine: combine ?? item.combine,
     pathKeys: item.pathKeys,
-    offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
-    trimStart: at(ShapeValue.trimStart, item.trimStart),
-    trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
-    trimOffset: at(ShapeValue.trimOffset, item.trimOffset),
     // Writing a dash or a gap into an item that has neither makes the pair:
     // there is no separate "add dashes" gesture, and a list of one would only
     // be read as a pair anyway.
@@ -1486,30 +1554,7 @@ BridgeShapeItem shapeItemWith(
       _ => item.dashes,
     },
     dashOffset: at(ShapeValue.dashOffset, item.dashOffset),
-    repeatCopies: at(ShapeValue.repeatCopies, item.repeatCopies),
-    repeatOffset: at(ShapeValue.repeatOffset, item.repeatOffset),
-    repeatAnchorX: at(ShapeValue.repeatAnchorX, item.repeatAnchorX),
-    repeatAnchorY: at(ShapeValue.repeatAnchorY, item.repeatAnchorY),
-    repeatPositionX: at(ShapeValue.repeatPositionX, item.repeatPositionX),
-    repeatPositionY: at(ShapeValue.repeatPositionY, item.repeatPositionY),
-    repeatRotation: at(ShapeValue.repeatRotation, item.repeatRotation),
-    repeatScale: at(ShapeValue.repeatScale, item.repeatScale),
-    repeatStartOpacity:
-        at(ShapeValue.repeatStartOpacity, item.repeatStartOpacity),
-    repeatEndOpacity: at(ShapeValue.repeatEndOpacity, item.repeatEndOpacity),
-    twist: remove == ShapeOp.twist
-        ? null
-        : twist ??
-            (twisted == null
-                ? null
-                : BridgeShapeTwist(
-                    angle: at(ShapeValue.twistAngle, twisted.angle),
-                    rotation: at(ShapeValue.twistRotation, twisted.rotation),
-                    axis: at(ShapeValue.twistAxis, twisted.axis),
-                    centreX: at(ShapeValue.twistCentreX, twisted.centreX),
-                    centreY: at(ShapeValue.twistCentreY, twisted.centreY),
-                  )),
-    taper: remove == ShapeOp.taper
+    taper: removeTaper
         ? null
         : taper ??
             (tapered == null
@@ -1523,27 +1568,6 @@ BridgeShapeItem shapeItemWith(
                     ease: at(ShapeValue.taperEase, tapered.ease),
                     scope: taperScope ?? tapered.scope,
                   )),
-    smooth: remove == ShapeOp.smooth
-        ? null
-        : smooth ??
-            switch (item.smooth) {
-              final was? => at(ShapeValue.smoothAmount, was),
-              null => null,
-            },
-    deform: remove == ShapeOp.deform
-        ? null
-        : deform ??
-            (deformed == null
-                ? null
-                : BridgeShapeDeform(
-                    mode: deformMode ?? deformed.mode,
-                    amount: at(ShapeValue.deformAmount, deformed.amount),
-                    scale: at(ShapeValue.deformScale, deformed.scale),
-                    evolution:
-                        at(ShapeValue.deformEvolution, deformed.evolution),
-                    seed: at(ShapeValue.deformSeed, deformed.seed),
-                    detail: at(ShapeValue.deformDetail, deformed.detail),
-                  )),
   );
 }
 
@@ -1552,6 +1576,154 @@ BridgeShapeItem shapeWithScalar(
         BridgeShapeItem item, ShapeValue value, BridgeScalar to,
         {int stop = 0}) =>
     shapeItemWith(item, value: value, to: to, stop: stop);
+
+/// Which of a modifier entry's numbers [value] names; the still zero for one
+/// it has not got.
+BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
+    switch ((modifier.kind, value)) {
+      (BridgeShapeModifierKind_Smooth(:final field0), ShapeValue.smoothAmount) =>
+        field0,
+      (BridgeShapeModifierKind_Offset(:final field0), ShapeValue.offsetPath) =>
+        field0,
+      (BridgeShapeModifierKind_Trim(:final field0), ShapeValue.trimStart) =>
+        field0.start,
+      (BridgeShapeModifierKind_Trim(:final field0), ShapeValue.trimEnd) =>
+        field0.end,
+      (BridgeShapeModifierKind_Trim(:final field0), ShapeValue.trimOffset) =>
+        field0.offset,
+      (BridgeShapeModifierKind_Twist(:final field0), ShapeValue.twistAngle) =>
+        field0.angle,
+      (
+        BridgeShapeModifierKind_Twist(:final field0),
+        ShapeValue.twistRotation
+      ) =>
+        field0.rotation,
+      (BridgeShapeModifierKind_Twist(:final field0), ShapeValue.twistAxis) =>
+        field0.axis,
+      (BridgeShapeModifierKind_Twist(:final field0), ShapeValue.twistCentreX) =>
+        field0.centreX,
+      (BridgeShapeModifierKind_Twist(:final field0), ShapeValue.twistCentreY) =>
+        field0.centreY,
+      (BridgeShapeModifierKind_Deform(:final field0), ShapeValue.deformAmount) =>
+        field0.amount,
+      (BridgeShapeModifierKind_Deform(:final field0), ShapeValue.deformScale) =>
+        field0.scale,
+      (
+        BridgeShapeModifierKind_Deform(:final field0),
+        ShapeValue.deformEvolution
+      ) =>
+        field0.evolution,
+      (BridgeShapeModifierKind_Deform(:final field0), ShapeValue.deformSeed) =>
+        field0.seed,
+      (BridgeShapeModifierKind_Deform(:final field0), ShapeValue.deformDetail) =>
+        field0.detail,
+      (BridgeShapeModifierKind_Repeat(:final field0), ShapeValue.repeatCopies) =>
+        field0.copies,
+      (BridgeShapeModifierKind_Repeat(:final field0), ShapeValue.repeatOffset) =>
+        field0.offset,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatAnchorX
+      ) =>
+        field0.anchorX,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatAnchorY
+      ) =>
+        field0.anchorY,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatPositionX
+      ) =>
+        field0.positionX,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatPositionY
+      ) =>
+        field0.positionY,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatRotation
+      ) =>
+        field0.rotation,
+      (BridgeShapeModifierKind_Repeat(:final field0), ShapeValue.repeatScale) =>
+        field0.scale,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatStartOpacity
+      ) =>
+        field0.startOpacity,
+      (
+        BridgeShapeModifierKind_Repeat(:final field0),
+        ShapeValue.repeatEndOpacity
+      ) =>
+        field0.endOpacity,
+      _ => _none,
+    };
+
+/// [modifier] with the one number [value] names replaced by [to], or with
+/// its deform reading set to [deformMode].
+BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
+    {ShapeValue? value, BridgeScalar? to, int? deformMode}) {
+  BridgeScalar at(ShapeValue which, BridgeScalar was) =>
+      value == which ? to! : was;
+  final kind = switch (modifier.kind) {
+    BridgeShapeModifierKind_Smooth(:final field0) =>
+      BridgeShapeModifierKind.smooth(at(ShapeValue.smoothAmount, field0)),
+    BridgeShapeModifierKind_Offset(:final field0) =>
+      BridgeShapeModifierKind.offset(at(ShapeValue.offsetPath, field0)),
+    BridgeShapeModifierKind_Trim(:final field0) =>
+      BridgeShapeModifierKind.trim(BridgeShapeTrim(
+        start: at(ShapeValue.trimStart, field0.start),
+        end: at(ShapeValue.trimEnd, field0.end),
+        offset: at(ShapeValue.trimOffset, field0.offset),
+      )),
+    BridgeShapeModifierKind_Twist(:final field0) =>
+      BridgeShapeModifierKind.twist(BridgeShapeTwist(
+        angle: at(ShapeValue.twistAngle, field0.angle),
+        rotation: at(ShapeValue.twistRotation, field0.rotation),
+        axis: at(ShapeValue.twistAxis, field0.axis),
+        centreX: at(ShapeValue.twistCentreX, field0.centreX),
+        centreY: at(ShapeValue.twistCentreY, field0.centreY),
+      )),
+    BridgeShapeModifierKind_Deform(:final field0) =>
+      BridgeShapeModifierKind.deform(BridgeShapeDeform(
+        mode: deformMode ?? field0.mode,
+        amount: at(ShapeValue.deformAmount, field0.amount),
+        scale: at(ShapeValue.deformScale, field0.scale),
+        evolution: at(ShapeValue.deformEvolution, field0.evolution),
+        seed: at(ShapeValue.deformSeed, field0.seed),
+        detail: at(ShapeValue.deformDetail, field0.detail),
+      )),
+    BridgeShapeModifierKind_Repeat(:final field0) =>
+      BridgeShapeModifierKind.repeat(BridgeShapeRepeater(
+        copies: at(ShapeValue.repeatCopies, field0.copies),
+        offset: at(ShapeValue.repeatOffset, field0.offset),
+        anchorX: at(ShapeValue.repeatAnchorX, field0.anchorX),
+        anchorY: at(ShapeValue.repeatAnchorY, field0.anchorY),
+        positionX: at(ShapeValue.repeatPositionX, field0.positionX),
+        positionY: at(ShapeValue.repeatPositionY, field0.positionY),
+        rotation: at(ShapeValue.repeatRotation, field0.rotation),
+        scale: at(ShapeValue.repeatScale, field0.scale),
+        startOpacity: at(ShapeValue.repeatStartOpacity, field0.startOpacity),
+        endOpacity: at(ShapeValue.repeatEndOpacity, field0.endOpacity),
+      )),
+  };
+  return BridgeShapeModifier(id: modifier.id, name: modifier.name, kind: kind);
+}
+
+/// The whole list with the one number [row] names replaced by [to]: on its
+/// item, or on its modifier entry.
+List<BridgeShapeEntry> shapeEntriesWithScalar(
+        List<BridgeShapeEntry> entries, FoldShapeValueRow row, BridgeScalar to) =>
+    switch (row.modifier) {
+      final m? => entries.withModifier(
+          m.id, (was) => modifierWith(was, value: row.value, to: to)),
+      null => entries.withItem(
+          row.item!.id,
+          (was) =>
+              shapeWithScalar(was, row.value, to, stop: row.stop)),
+    };
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
 /// exact time and the comp's rate so a paint never crosses the bridge for it.
@@ -1748,8 +1920,8 @@ bool moveLaneKeys({
       );
       return true;
 
-    case FoldShapeValueRow(:final item, :final value, :final stop):
-      if (value == ShapeValue.path) {
+    case FoldShapeValueRow(:final item, :final modifier, :final value, :final stop):
+      if (value == ShapeValue.path && item != null) {
         // A path key is a whole shape, so a *single* move goes to the engine
         // rather than the frontend rebuilding a list of them.
         // Several at once cannot: each move is its own write, checked against
@@ -1767,7 +1939,21 @@ bool moveLaneKeys({
         if (next == null) return false;
         return entry.layer.setShapePathKeys(id: item.id, keys: next);
       }
-      var written = item;
+      if (modifier != null) {
+        final shapeScalar = modifierScalarOf(modifier, value);
+        if (shapeScalar is! BridgeScalar_Keyframed) return false;
+        final shapeNext = moved(shapeScalar.field0);
+        if (shapeNext == null) return false;
+        entry.layer.setShapeContents(
+          contents: entry.layer.getShapeContents().withModifier(
+              modifier.id,
+              (was) => modifierWith(was,
+                  value: value, to: BridgeScalar.keyframed(shapeNext))),
+          at: null,
+        );
+        return true;
+      }
+      var written = item!;
       for (final channel in isColourValue(value) ? const [0, 1, 2] : [stop]) {
         final shapeScalar = shapeScalarOf(item, value, stop: channel);
         if (shapeScalar is! BridgeScalar_Keyframed) return false;
@@ -1778,10 +1964,8 @@ bool moveLaneKeys({
             stop: channel);
       }
       entry.layer.setShapeContents(
-        contents: [
-          for (final other in entry.layer.getShapeContents())
-            if (other.id == item.id) written else other,
-        ],
+        contents:
+            entry.layer.getShapeContents().withItem(item.id, (_) => written),
         at: null,
       );
       return true;
@@ -1865,11 +2049,14 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldPuppetValueRow(:final pin, :final value) =>
         '${puppetPath(layerId)}/${pin.id}/${value.name}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
-      FoldShapeValueRow(:final item, :final value, :final stop) =>
-        '${contentsPath(layerId)}/${item.id}/${value.name}'
+      FoldShapeModifierRow(:final modifier) =>
+        '${contentsPath(layerId)}/${modifier.id}',
+      FoldShapeGroupRow(:final group) => '${contentsPath(layerId)}/${group.id}',
+      FoldShapeValueRow(:final value, :final stop) =>
+        '${contentsPath(layerId)}/${row.ownerId}/${value.name}'
             '${isGradientStopValue(value) ? stop : ''}',
-      FoldShapePaintRow(:final item, :final which) =>
-        '${contentsPath(layerId)}/${item.id}/${which.name}',
+      FoldShapePaintRow(:final item, :final modifier, :final which) =>
+        '${contentsPath(layerId)}/${modifier?.id ?? item!.id}/${which.name}',
     };
 
 /// Whether [path] sits under [ancestor] — a property under its group, a
@@ -2242,86 +2429,115 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (contentsOpen) {
-      for (final (index, item) in info.shapeContents.indexed) {
-        // Each item has its own twirl, shut until opened, like an animator: an
-        // item carries a page of rows, and several open at once is a scroll.
-        final itemOpen = open.contains('${contentsPath(id)}/${item.id}');
-        rows.add(FoldShapeRow(item, open: itemOpen, depth: 2));
-        if (!itemOpen) continue;
-        // How this item joins the one before it. The first item of the
-        // list has nothing in front of it to join, so it has no such row.
-        if (index > 0) {
-          rows.add(FoldShapePaintRow(item, ShapePaint.combine, depth: 3));
-        }
-        // An item combined into the run in front of it lends its **path** and
-        // nothing else: the run is drawn once, with the paint and the modifiers
-        // of the item that starts it. Showing the rest of its rows would be a
-        // page of settings that change nothing, the same refusal a dash on a
-        // fill-only shape already gets.
-        if (item.combine != 0) continue;
-        // What the inside of the path is painted with comes first, because it
-        // is what the rest of the rows modify. A shape with no fill
-        // has no colour to show and nothing to ramp.
-        if (item.fill != null) {
-          rows.add(FoldShapeValueRow(item, ShapeValue.fillColour, depth: 3));
-          rows.add(FoldShapePaintRow(item, ShapePaint.gradient, depth: 3));
-          if (item.gradient != 0) {
+      final entries = info.shapeContents;
+      // The depth of a shut group whose entries are being passed over.
+      int? shutUnder;
+      for (final (index, entry) in entries.indexed) {
+        if (shutUnder != null && entry.depth > shutUnder) continue;
+        shutUnder = null;
+        // Each entry has its own twirl, shut until opened, like an animator:
+        // an entry carries a page of rows, and several open at once is a
+        // scroll. One row deeper for each group it sits in.
+        final depth = 2 + entry.depth;
+        final entryOpen =
+            open.contains('${contentsPath(id)}/${shapeEntryId(entry)}');
+        switch (entry.kind) {
+          case BridgeShapeEntryKind_Group(:final field0):
+            rows.add(FoldShapeGroupRow(field0, open: entryOpen, depth: depth));
+            if (!entryOpen) shutUnder = entry.depth;
+          case BridgeShapeEntryKind_Modifier(:final field0):
             rows.add(
-                FoldShapePaintRow(item, ShapePaint.gradientColour, depth: 3));
-            rows.add(
-                FoldShapePaintRow(item, ShapePaint.gradientStops, depth: 3));
-          }
-        }
-        if (item.stroke != null) {
-          rows.add(FoldShapeValueRow(item, ShapeValue.strokeColour, depth: 3));
-          rows.add(FoldShapeValueRow(item, ShapeValue.strokeWidth, depth: 3));
-        }
-        rows.add(FoldShapeValueRow(item, ShapeValue.opacity, depth: 3));
-        // Its numbers sit under it, the way a stroke's trim sits under the
-        // stroke, and in the order they read: where the art
-        // begins, where it ends, and how far the pair is slid along.
-        for (final value in ShapeValue.values) {
-          if (isPaintValue(value)) continue;
-          // The dashes' rows belong to the outline, so they appear only where
-          // there is one to dash — three dead rows on a fill-only shape would
-          // be three promises the item cannot keep.
-          if (isDashValue(value) && item.stroke == null) continue;
-          // The repeater's step is nine rows of nothing until there is more
-          // than one copy to step between, so Copies is the row that opens
-          // them.
-          if (isRepeatStepValue(value) && !isRepeated(item)) continue;
-          // The gradient's two points aim a ramp and its two opacities fade
-          // one; with no ramp there is nothing for them to work on.
-          if (isGradientValue(value) && item.gradient == 0) continue;
-          // An operation's rows come with it, from the item's menu.
-          final op = shapeOpOf(value);
-          if (op != null && !hasShapeOp(item, op)) continue;
-          // A taper narrows the outline, so it shows only where there is one,
-          // as the dashes do.
-          if (op == ShapeOp.taper && item.stroke == null) continue;
-          if (value == ShapeValue.taperStart) {
-            rows.add(FoldShapePaintRow(item, ShapePaint.taperScope, depth: 3));
-          }
-          // Displace or Scale heads the deform's numbers, which it decides
-          // the meaning of.
-          if (value == ShapeValue.deformAmount) {
-            rows.add(FoldShapePaintRow(item, ShapePaint.deformMode, depth: 3));
-          }
-          // A stop between the ends has two rows of its own, so these are
-          // made once for each stop rather than once for the item.
-          if (value == ShapeValue.gradientStopOpacity) continue;
-          if (value == ShapeValue.gradientStopPosition) {
-            for (var stop = 0; stop < item.gradientStops.length; stop++) {
-              for (final each in const [
-                ShapeValue.gradientStopPosition,
-                ShapeValue.gradientStopOpacity,
-              ]) {
-                rows.add(FoldShapeValueRow(item, each, depth: 3, stop: stop));
+                FoldShapeModifierRow(field0, open: entryOpen, depth: depth));
+            if (!entryOpen) continue;
+            for (final value in modifierValues(field0)) {
+              // Displace or Scale heads the deform's numbers, which it
+              // decides the meaning of.
+              if (value == ShapeValue.deformAmount) {
+                rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
+                    modifier: field0, depth: depth + 1));
+              }
+              rows.add(FoldShapeValueRow(null, value,
+                  modifier: field0, depth: depth + 1));
+            }
+          case BridgeShapeEntryKind_Item(field0: final item):
+            rows.add(FoldShapeRow(item, open: entryOpen, depth: depth));
+            if (!entryOpen) continue;
+            // How this item joins the one before it. An item with nothing
+            // directly above it to join has no such row.
+            final above = index > 0 ? entries[index - 1] : null;
+            if (above != null &&
+                above.depth == entry.depth &&
+                above.kind is BridgeShapeEntryKind_Item) {
+              rows.add(FoldShapePaintRow(item, ShapePaint.combine,
+                  depth: depth + 1));
+            }
+            // An item combined into the run in front of it lends its **path**
+            // and nothing else: the run is drawn once, with the paint of the
+            // item that starts it. Showing the rest of its rows would be a
+            // page of settings that change nothing, the same refusal a dash
+            // on a fill-only shape already gets.
+            if (item.combine != 0) continue;
+            // What the inside of the path is painted with comes first,
+            // because it is what the rest of the rows modify. A shape with no
+            // fill has no colour to show and nothing to ramp.
+            if (item.fill != null) {
+              rows.add(FoldShapeValueRow(item, ShapeValue.fillColour,
+                  depth: depth + 1));
+              rows.add(FoldShapePaintRow(item, ShapePaint.gradient,
+                  depth: depth + 1));
+              if (item.gradient != 0) {
+                rows.add(FoldShapePaintRow(item, ShapePaint.gradientColour,
+                    depth: depth + 1));
+                rows.add(FoldShapePaintRow(item, ShapePaint.gradientStops,
+                    depth: depth + 1));
               }
             }
-            continue;
-          }
-          rows.add(FoldShapeValueRow(item, value, depth: 3));
+            if (item.stroke != null) {
+              rows.add(FoldShapeValueRow(item, ShapeValue.strokeColour,
+                  depth: depth + 1));
+              rows.add(FoldShapeValueRow(item, ShapeValue.strokeWidth,
+                  depth: depth + 1));
+            }
+            rows.add(
+                FoldShapeValueRow(item, ShapeValue.opacity, depth: depth + 1));
+            for (final value in ShapeValue.values) {
+              if (isPaintValue(value) || shapeModifierOf(value) != null) {
+                continue;
+              }
+              // The dashes' rows belong to the outline, so they appear only
+              // where there is one to dash: three dead rows on a fill-only
+              // shape would be three promises the item cannot keep.
+              if (isDashValue(value) && item.stroke == null) continue;
+              // The gradient's two points aim a ramp and its two opacities
+              // fade one; with no ramp there is nothing for them to work on.
+              if (isGradientValue(value) && item.gradient == 0) continue;
+              // A taper narrows the outline, so it shows only where there is
+              // one, as the dashes do, and only once it has been added.
+              if (isTaperValue(value) &&
+                  (item.taper == null || item.stroke == null)) {
+                continue;
+              }
+              if (value == ShapeValue.taperStart) {
+                rows.add(FoldShapePaintRow(item, ShapePaint.taperScope,
+                    depth: depth + 1));
+              }
+              // A stop between the ends has two rows of its own, so these
+              // are made once for each stop rather than once for the item.
+              if (value == ShapeValue.gradientStopOpacity) continue;
+              if (value == ShapeValue.gradientStopPosition) {
+                for (var stop = 0; stop < item.gradientStops.length; stop++) {
+                  for (final each in const [
+                    ShapeValue.gradientStopPosition,
+                    ShapeValue.gradientStopOpacity,
+                  ]) {
+                    rows.add(FoldShapeValueRow(item, each,
+                        depth: depth + 1, stop: stop));
+                  }
+                }
+                continue;
+              }
+              rows.add(FoldShapeValueRow(item, value, depth: depth + 1));
+            }
         }
       }
     }

@@ -36,6 +36,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:provider/provider.dart';
@@ -60,6 +61,7 @@ import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'viewer_type.dart' show viewerTypeEditRequest;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 
 /// How big a scale handle is drawn, and how far from it a press still counts.
 ///
@@ -171,7 +173,7 @@ class LayerBox {
   /// `lumit_core::mask` — which is why the points of both can be aimed at,
   /// swept up and dragged by one piece of code. What differs is only where the
   /// edit is written back to: masks one at a time, art via `setShapeContents`.
-  final List<BridgeShapeItem> shapeContents;
+  final List<BridgeShapeEntry> shapeContents;
 
   /// The shape item picked in the Timeline, or null. While one is picked its
   /// points are the only ones offered, so one piece of the art can be worked
@@ -180,8 +182,8 @@ class LayerBox {
 
   /// The items whose points are drawn and can be aimed at.
   Iterable<BridgeShapeItem> get offeredItems => pickedItem == null
-      ? shapeContents
-      : shapeContents.where((i) => i.id == pickedItem);
+      ? shapeContents.items
+      : shapeContents.items.where((i) => i.id == pickedItem);
 
   /// Where the art's bounding box starts, in the art's own coordinates.
   ///
@@ -581,7 +583,7 @@ List<PathOnBox> pathsOf(LayerBox box, {(UuidValue, UuidValue)? only}) => [
             keyOf: (int i) => maskPointKey(box.id, mask.id, i),
             screen: box.map.toScreen,
           ),
-      for (final item in box.shapeContents)
+      for (final item in box.shapeContents.items)
         if (showsPath(box, item.id, only))
           (
             id: item.id,
@@ -1162,29 +1164,33 @@ Offset featherNormalAt(BridgeMask mask, int index) {
 ///
 /// The whole list, because that is how art is written back (`setShapeContents`):
 /// one op for a layer however many of its items a drag caught.
-List<BridgeShapeItem>? shapeContentsWithPointsMoved(
+List<BridgeShapeEntry>? shapeContentsWithPointsMoved(
   LayerBox box,
   Set<String> points,
   Offset d,
 ) =>
     shapeContentsEdited(box, _pointsMoved(points, d));
 
-/// [box]'s whole art with [edit] made to each path, or null when the edit
-/// touches none of them.
-List<BridgeShapeItem>? shapeContentsEdited(LayerBox box, VertexEdit edit) {
+/// [box]'s whole contents with [edit] made to each path, or null when the
+/// edit touches none of them. The modifiers and groups go through as they
+/// are: an edit changes geometry and nothing else.
+List<BridgeShapeEntry>? shapeContentsEdited(LayerBox box, VertexEdit edit) {
   var touched = false;
-  final contents = <BridgeShapeItem>[];
-  for (final item in box.shapeContents) {
-    final vertices = edit((i) => shapePointKey(box.id, item.id, i),
-        item.vertices, item.closed);
-    if (vertices == null) {
-      contents.add(item);
-      continue;
+  final contents = <BridgeShapeEntry>[];
+  for (final entry in box.shapeContents) {
+    if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)) {
+      final vertices = edit((i) => shapePointKey(box.id, item.id, i),
+          item.vertices, item.closed);
+      if (vertices != null) {
+        touched = true;
+        contents.add(BridgeShapeEntry(
+            depth: entry.depth,
+            kind: BridgeShapeEntryKind.item(
+                shapeItemWith(item, vertices: vertices))));
+        continue;
+      }
     }
-    touched = true;
-    // An edit changes geometry; every modifier on the item is carried
-    // over untouched.
-    contents.add(shapeItemWith(item, vertices: vertices));
+    contents.add(entry);
   }
   return touched ? contents : null;
 }
@@ -3140,7 +3146,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           landed = true;
           // A keyed shape edit shows itself in the Timeline: the row
           // the new key belongs to is the one the author now wants to see.
-          for (final item in contents) {
+          for (final item in contents.items) {
             if (item.pathKeys.isEmpty) continue;
             widget.uiState.requestSelectProperty(
               '${box.id}/contents/${item.id}/${ShapeValue.path.name}',
@@ -3303,18 +3309,25 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         }
       }
       var touched = false;
-      final contents = <BridgeShapeItem>[];
-      for (final item in box.shapeContents) {
-        final left =
-            kept(item.vertices, (i) => shapePointKey(box.id, item.id, i));
-        if (left.length == item.vertices.length) {
-          contents.add(item);
-          continue;
+      final contents = <BridgeShapeEntry>[];
+      for (final entry in box.shapeContents) {
+        if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)) {
+          final left =
+              kept(item.vertices, (i) => shapePointKey(box.id, item.id, i));
+          if (left.length != item.vertices.length) {
+            touched = true;
+            // Too few points left is no shape: the item goes, and whatever
+            // acted on it acts on the rest.
+            if (left.length >= (item.closed ? 3 : 2)) {
+              contents.add(BridgeShapeEntry(
+                  depth: entry.depth,
+                  kind: BridgeShapeEntryKind.item(
+                      shapeItemWith(item, vertices: left))));
+            }
+            continue;
+          }
         }
-        touched = true;
-        if (left.length >= (item.closed ? 3 : 2)) {
-          contents.add(shapeItemWith(item, vertices: left));
-        }
+        contents.add(entry);
       }
       if (touched) {
         try {

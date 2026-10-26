@@ -16,6 +16,7 @@ import 'graph_channels.dart';
 import 'graph_edits.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 
 // ---------------------------------------------------------------------------
 // The keyframe clipboard (docs/07 §5.3).
@@ -510,8 +511,11 @@ void _matchOnLayer(
           '${mask.id}');
     } else if (source.shape case final item?) {
       swaps['${item.id}'] ??= _sameItem(
-          [for (final s in info.shapeContents) (s.name, '${s.id}')],
-          [for (final s in entry.info.shapeContents) (s.name, '${s.id}')],
+          [for (final s in info.shapeContents.items) (s.name, '${s.id}')],
+          [
+            for (final s in entry.info.shapeContents.items)
+              (s.name, '${s.id}')
+          ],
           '${item.id}');
     }
   }

@@ -1307,9 +1307,12 @@ impl CompositionReference {
         let comp = self.composition()?;
         // A fresh layer starts at the head of the comp, so its own clock is
         // the composition's: no offset to carry.
-        let items: Vec<lumit_core::shape::ShapeItem> = contents
+        let items: Vec<lumit_core::shape::modifier::ShapeEntry> = contents
             .iter()
-            .map(|i| i.write_item(lumit_core::time::Rational::ZERO))
+            .map(|i| {
+                i.write_item(lumit_core::time::Rational::ZERO)
+                    .map(lumit_core::shape::modifier::ShapeEntry::Item)
+            })
             .collect::<Result<_, _>>()?;
         // The art's own box: the layer's natural size, and where it sits.
         let (x0, y0, _x1, _y1) =
@@ -2244,8 +2247,10 @@ impl CompositionReference {
                 }
             }
             if let lumit_core::model::LayerKind::Shape { contents } = &layer.kind {
-                for item in contents.iter().filter(|i| i.path_is_animated()) {
-                    push(item.id, &item.path_at(local.to_f64()));
+                for item in lumit_core::shape::modifier::items(contents) {
+                    if item.path_is_animated() {
+                        push(item.id, &item.path_at(local.to_f64()));
+                    }
                 }
             }
         }
@@ -3054,7 +3059,7 @@ impl CompositionReference {
         frame: u64,
         scale: f32,
         layer: LayerReference,
-        contents: Vec<crate::api::layer::BridgeShapeItem>,
+        contents: Vec<crate::api::shape::BridgeShapeEntry>,
         transform: Option<crate::api::layer::BridgeTransform>,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {

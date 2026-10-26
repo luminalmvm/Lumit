@@ -207,7 +207,8 @@ pub enum Op {
     SetShapeContents {
         comp: Uuid,
         layer: Uuid,
-        contents: Vec<crate::shape::ShapeItem>,
+        #[serde(default, deserialize_with = "crate::shape::modifier::read_entries")]
+        contents: Vec<crate::shape::modifier::ShapeEntry>,
     },
     /// Replace a layer's whole effect stack (docs/03 §8; coarse + exactly
     /// invertible like SetLayerMasks — add/remove/reorder/param edits all

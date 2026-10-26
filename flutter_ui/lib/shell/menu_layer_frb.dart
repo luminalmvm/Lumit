@@ -31,6 +31,7 @@ import '../panels/keyframe_controls_frb.dart'
 import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
+import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
@@ -147,7 +148,7 @@ VoidCallback? onSelection(
     final id = path.substring(prefix.length).split('/').first;
     for (final entry in ui.model.layers) {
       if (entry.layer.internallayerId.toString() != layerId) continue;
-      for (final item in entry.info.shapeContents) {
+      for (final item in entry.info.shapeContents.items) {
         if (item.id.toString() == id) return (layer: entry.layer, item: item);
       }
     }

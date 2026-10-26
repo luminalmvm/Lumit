@@ -2,6 +2,7 @@
 //! combine, the dashes, and the outline an effect walks.
 
 use super::geometry::{densified, dist, flatten_path, polyline_path, transform_path, Affine};
+use super::modifier::{self, Lowered, ShapeModifier};
 use super::{colour, GradientStop, ShapeItem, Taper, MAX_GRADIENT_STOPS};
 use crate::anim::Property;
 use crate::mask::BezierPath;
@@ -191,15 +192,16 @@ impl ShapeItem {
 /// The layer's contents split into the pieces that draw as **one**.
 ///
 /// An item whose [`combine`](ShapeItem::combine) is 0 starts a run of its own;
-/// each item after it that names a combine joins the run in front of it. The
-/// very first item always starts a run, whatever it says, because there is
-/// nothing before it to join. A layer nobody has combined is therefore one run
-/// per item, which is the list this crate has always walked.
-pub(super) fn runs(contents: &[ShapeItem]) -> Vec<std::ops::Range<usize>> {
+/// each item after it that names a combine joins the run in front of it, when
+/// the entry above it is an item (`Lowered::joins`). The first item of a
+/// group always starts a run, whatever it says, because there is nothing
+/// before it to join. A layer nobody has combined is therefore one run per
+/// item, which is the list this crate has always walked.
+pub(super) fn runs(items: &[Lowered]) -> Vec<std::ops::Range<usize>> {
     let mut out: Vec<std::ops::Range<usize>> = Vec::new();
-    for (i, item) in contents.iter().enumerate() {
+    for (i, art) in items.iter().enumerate() {
         match out.last_mut() {
-            Some(run) if item.combine != 0 => run.end = i + 1,
+            Some(run) if art.joins => run.end = i + 1,
             _ => out.push(i..i + 1),
         }
     }
@@ -217,7 +219,7 @@ pub(super) fn runs(contents: &[ShapeItem]) -> Vec<std::ops::Range<usize>> {
 /// Degenerate input is a **no-op** rather than a refusal: a member with fewer
 /// than three points has no area to combine, and dropping the whole run over it
 /// would make a half-drawn path erase the art it was being joined to.
-fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
+fn combined_at(run: &[Lowered], t: f64) -> Vec<Vec<(f64, f64)>> {
     use i_overlay::core::fill_rule::FillRule;
     use i_overlay::core::overlay_rule::OverlayRule;
     use i_overlay::float::single::SingleFloatOverlay;
@@ -237,11 +239,12 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
     let Some((first, rest)) = run.split_first() else {
         return Vec::new();
     };
-    let Some(subject) = polygon(first, t) else {
+    let Some(subject) = polygon(first.item, t) else {
         return Vec::new();
     };
     let mut acc: Vec<Vec<[f64; 2]>> = vec![subject];
-    for item in rest {
+    for art in rest {
+        let item = art.item;
         let rule = match item.combine {
             1 => OverlayRule::Union,
             2 => OverlayRule::Difference,
@@ -272,8 +275,10 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
 /// places it. The picture and an effect walking the outline both start here,
 /// so a combine, an offset and a trim mean the same thing to each.
 pub(super) struct Art<'a> {
-    /// The run's first item, whose paint and modifiers the whole run takes.
+    /// The run's first item, whose paint the whole run takes.
     pub(super) item: &'a ShapeItem,
+    /// The modifiers acting on that item, which the whole run is drawn through.
+    pub(super) mods: &'a [&'a ShapeModifier],
     /// The item's own shape this instant, which a keyed path moves.
     drawn: std::borrow::Cow<'a, BezierPath>,
     /// What a combine, an offset or a trim made of it. `None` is "nothing
@@ -288,22 +293,24 @@ impl<'a> Art<'a> {
     /// to nothing (the first frame of a write-on), or a combine that left no
     /// art at all.
     pub(super) fn at(
-        contents: &'a [ShapeItem],
+        items: &'a [Lowered<'a>],
         run: std::ops::Range<usize>,
         t: f64,
     ) -> Option<Self> {
-        let members = contents.get(run)?;
-        let item = members.first()?;
+        let members = items.get(run)?;
+        let first = members.first()?;
+        let (item, mods) = (first.item, first.mods.as_slice());
         let ring = members.len() > 1;
+        let drawn = item.path_at(t);
         let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
             Some(
                 combined_at(members, t)
                     .into_iter()
-                    .map(|c| item.shaped(c, true, t))
+                    .map(|c| modifier::shaped(mods, c, true, &drawn, t))
                     .collect(),
             )
         } else {
-            item.trimmed_at(t).map(|p| vec![p])
+            item.trimmed_at(mods, t).map(|p| vec![p])
         };
         let lines = match lines {
             Some(lines) => {
@@ -317,7 +324,8 @@ impl<'a> Art<'a> {
         };
         Some(Self {
             item,
-            drawn: item.path_at(t),
+            mods,
+            drawn,
             lines,
             ring,
         })
@@ -404,7 +412,7 @@ impl<'a> Art<'a> {
     /// the outline still runs through them. An offset moves it off them and a
     /// combine cuts it elsewhere, and then there are none to name.
     pub(super) fn own(&self, to_box: &Affine, t: f64) -> Option<Vec<(f64, f64)>> {
-        if self.ring || self.item.offset_amount.value_at(t) != 0.0 || self.item.reshapes_at(t) {
+        if self.ring || modifier::displaces(self.mods, t) {
             return None;
         }
         let mut own: Vec<(f64, f64)> = self

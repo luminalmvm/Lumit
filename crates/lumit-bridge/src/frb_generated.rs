@@ -7024,7 +7024,7 @@ fn wire__crate__api__composition__composition_reference_render_frame_with_shape_
             let api_scale = <f32>::sse_decode(&mut deserializer);
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_contents =
-                <Vec<crate::api::layer::BridgeShapeItem>>::sse_decode(&mut deserializer);
+                <Vec<crate::api::shape::BridgeShapeEntry>>::sse_decode(&mut deserializer);
             let api_transform =
                 <Option<crate::api::layer::BridgeTransform>>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -16675,7 +16675,7 @@ fn wire__crate__api__layer__layer_reference_set_shape_contents_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_contents =
-                <Vec<crate::api::layer::BridgeShapeItem>>::sse_decode(&mut deserializer);
+                <Vec<crate::api::shape::BridgeShapeEntry>>::sse_decode(&mut deserializer);
             let api_at =
                 <Option<crate::api::effect::BridgeRational>>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -26207,7 +26207,7 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
         let mut var_paint = <Vec<crate::api::layer::BridgeStroke>>::sse_decode(deserializer);
         let mut var_puppet = <Option<crate::api::layer::BridgePuppet>>::sse_decode(deserializer);
         let mut var_shapeContents =
-            <Vec<crate::api::layer::BridgeShapeItem>>::sse_decode(deserializer);
+            <Vec<crate::api::shape::BridgeShapeEntry>>::sse_decode(deserializer);
         let mut var_markers = <Vec<crate::api::layer::BridgeLayerMarker>>::sse_decode(deserializer);
         let mut var_flow = <bool>::sse_decode(deserializer);
         let mut var_flowInputRate = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -28307,6 +28307,56 @@ impl SseDecode for crate::api::layer::BridgeShapeDeform {
     }
 }
 
+impl SseDecode for crate::api::shape::BridgeShapeEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_depth = <u32>::sse_decode(deserializer);
+        let mut var_kind = <crate::api::shape::BridgeShapeEntryKind>::sse_decode(deserializer);
+        return crate::api::shape::BridgeShapeEntry {
+            depth: var_depth,
+            kind: var_kind,
+        };
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeEntryKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <crate::api::layer::BridgeShapeItem>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeEntryKind::Item(var_field0);
+            }
+            1 => {
+                let mut var_field0 =
+                    <crate::api::shape::BridgeShapeModifier>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeEntryKind::Modifier(var_field0);
+            }
+            2 => {
+                let mut var_field0 =
+                    <crate::api::shape::BridgeShapeGroup>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeEntryKind::Group(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeGroup {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        return crate::api::shape::BridgeShapeGroup {
+            id: var_id,
+            name: var_name,
+        };
+    }
+}
+
 impl SseDecode for crate::api::layer::BridgeShapeItem {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -28318,9 +28368,6 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_stroke = <Option<crate::api::effect::BridgeColour>>::sse_decode(deserializer);
         let mut var_strokeWidth = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_trimStart = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_trimEnd = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradient = <u32>::sse_decode(deserializer);
@@ -28338,22 +28385,6 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             <Vec<crate::api::layer::BridgeGradientStop>>::sse_decode(deserializer);
         let mut var_combine = <u32>::sse_decode(deserializer);
         let mut var_pathKeys = <Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(deserializer);
-        let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatAnchorX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatAnchorY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatPositionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatPositionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatRotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatScale = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatStartOpacity =
-            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_repeatEndOpacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_twist = <Option<crate::api::layer::BridgeShapeTwist>>::sse_decode(deserializer);
-        let mut var_deform =
-            <Option<crate::api::layer::BridgeShapeDeform>>::sse_decode(deserializer);
-        let mut var_smooth = <Option<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_taper = <Option<crate::api::layer::BridgeShapeTaper>>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
@@ -28364,9 +28395,6 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             stroke: var_stroke,
             stroke_width: var_strokeWidth,
             opacity: var_opacity,
-            trim_start: var_trimStart,
-            trim_end: var_trimEnd,
-            trim_offset: var_trimOffset,
             dashes: var_dashes,
             dash_offset: var_dashOffset,
             gradient: var_gradient,
@@ -28380,21 +28408,88 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             gradient_stops: var_gradientStops,
             combine: var_combine,
             path_keys: var_pathKeys,
-            offset_amount: var_offsetAmount,
-            repeat_copies: var_repeatCopies,
-            repeat_offset: var_repeatOffset,
-            repeat_anchor_x: var_repeatAnchorX,
-            repeat_anchor_y: var_repeatAnchorY,
-            repeat_position_x: var_repeatPositionX,
-            repeat_position_y: var_repeatPositionY,
-            repeat_rotation: var_repeatRotation,
-            repeat_scale: var_repeatScale,
-            repeat_start_opacity: var_repeatStartOpacity,
-            repeat_end_opacity: var_repeatEndOpacity,
-            twist: var_twist,
-            deform: var_deform,
-            smooth: var_smooth,
             taper: var_taper,
+        };
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeModifier {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_kind = <crate::api::shape::BridgeShapeModifierKind>::sse_decode(deserializer);
+        return crate::api::shape::BridgeShapeModifier {
+            id: var_id,
+            name: var_name,
+            kind: var_kind,
+        };
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeModifierKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 =
+                    <crate::api::shape::BridgeShapeRepeater>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Repeat(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::api::shape::BridgeShapeTrim>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Trim(var_field0);
+            }
+            2 => {
+                let mut var_field0 = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Offset(var_field0);
+            }
+            3 => {
+                let mut var_field0 =
+                    <crate::api::layer::BridgeShapeTwist>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Twist(var_field0);
+            }
+            4 => {
+                let mut var_field0 =
+                    <crate::api::layer::BridgeShapeDeform>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Deform(var_field0);
+            }
+            5 => {
+                let mut var_field0 = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+                return crate::api::shape::BridgeShapeModifierKind::Smooth(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeRepeater {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_copies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_offset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_anchorX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_anchorY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_positionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_positionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_rotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_scale = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_startOpacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_endOpacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        return crate::api::shape::BridgeShapeRepeater {
+            copies: var_copies,
+            offset: var_offset,
+            anchor_x: var_anchorX,
+            anchor_y: var_anchorY,
+            position_x: var_positionX,
+            position_y: var_positionY,
+            rotation: var_rotation,
+            scale: var_scale,
+            start_opacity: var_startOpacity,
+            end_opacity: var_endOpacity,
         };
     }
 }
@@ -28415,6 +28510,20 @@ impl SseDecode for crate::api::layer::BridgeShapeTaper {
             end_length: var_endLength,
             ease: var_ease,
             scope: var_scope,
+        };
+    }
+}
+
+impl SseDecode for crate::api::shape::BridgeShapeTrim {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_start = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_end = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_offset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        return crate::api::shape::BridgeShapeTrim {
+            start: var_start,
+            end: var_end,
+            offset: var_offset,
         };
     }
 }
@@ -30933,6 +31042,20 @@ impl SseDecode for Vec<crate::api::effect::BridgeShaderPort> {
     }
 }
 
+impl SseDecode for Vec<crate::api::shape::BridgeShapeEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::shape::BridgeShapeEntry>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::layer::BridgeShapeItem> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -32127,37 +32250,11 @@ impl SseDecode for Option<crate::api::footage::BridgeSequenceRate> {
     }
 }
 
-impl SseDecode for Option<crate::api::layer::BridgeShapeDeform> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::layer::BridgeShapeDeform>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for Option<crate::api::layer::BridgeShapeTaper> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::layer::BridgeShapeTaper>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
-impl SseDecode for Option<crate::api::layer::BridgeShapeTwist> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::layer::BridgeShapeTwist>::sse_decode(
                 deserializer,
             ));
         } else {
@@ -39834,6 +39931,78 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeShapeDeform>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeEntry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.depth.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeEntry
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeEntry>
+    for crate::api::shape::BridgeShapeEntry
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeEntry {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeEntryKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::shape::BridgeShapeEntryKind::Item(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeEntryKind::Modifier(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeEntryKind::Group(field0) => {
+                [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeEntryKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeEntryKind>
+    for crate::api::shape::BridgeShapeEntryKind
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeEntryKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeGroup {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeGroup
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeGroup>
+    for crate::api::shape::BridgeShapeGroup
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeGroup {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -39845,9 +40014,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.stroke.into_into_dart().into_dart(),
             self.stroke_width.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
-            self.trim_start.into_into_dart().into_dart(),
-            self.trim_end.into_into_dart().into_dart(),
-            self.trim_offset.into_into_dart().into_dart(),
             self.dashes.into_into_dart().into_dart(),
             self.dash_offset.into_into_dart().into_dart(),
             self.gradient.into_into_dart().into_dart(),
@@ -39861,20 +40027,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.gradient_stops.into_into_dart().into_dart(),
             self.combine.into_into_dart().into_dart(),
             self.path_keys.into_into_dart().into_dart(),
-            self.offset_amount.into_into_dart().into_dart(),
-            self.repeat_copies.into_into_dart().into_dart(),
-            self.repeat_offset.into_into_dart().into_dart(),
-            self.repeat_anchor_x.into_into_dart().into_dart(),
-            self.repeat_anchor_y.into_into_dart().into_dart(),
-            self.repeat_position_x.into_into_dart().into_dart(),
-            self.repeat_position_y.into_into_dart().into_dart(),
-            self.repeat_rotation.into_into_dart().into_dart(),
-            self.repeat_scale.into_into_dart().into_dart(),
-            self.repeat_start_opacity.into_into_dart().into_dart(),
-            self.repeat_end_opacity.into_into_dart().into_dart(),
-            self.twist.into_into_dart().into_dart(),
-            self.deform.into_into_dart().into_dart(),
-            self.smooth.into_into_dart().into_dart(),
             self.taper.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -39888,6 +40040,96 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeShapeItem>
     for crate::api::layer::BridgeShapeItem
 {
     fn into_into_dart(self) -> crate::api::layer::BridgeShapeItem {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeModifier {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeModifier
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeModifier>
+    for crate::api::shape::BridgeShapeModifier
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeModifier {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeModifierKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::shape::BridgeShapeModifierKind::Repeat(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeModifierKind::Trim(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeModifierKind::Offset(field0) => {
+                [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeModifierKind::Twist(field0) => {
+                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeModifierKind::Deform(field0) => {
+                [4.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::shape::BridgeShapeModifierKind::Smooth(field0) => {
+                [5.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeModifierKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeModifierKind>
+    for crate::api::shape::BridgeShapeModifierKind
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeModifierKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeRepeater {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.copies.into_into_dart().into_dart(),
+            self.offset.into_into_dart().into_dart(),
+            self.anchor_x.into_into_dart().into_dart(),
+            self.anchor_y.into_into_dart().into_dart(),
+            self.position_x.into_into_dart().into_dart(),
+            self.position_y.into_into_dart().into_dart(),
+            self.rotation.into_into_dart().into_dart(),
+            self.scale.into_into_dart().into_dart(),
+            self.start_opacity.into_into_dart().into_dart(),
+            self.end_opacity.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeRepeater
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeRepeater>
+    for crate::api::shape::BridgeShapeRepeater
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeRepeater {
         self
     }
 }
@@ -39913,6 +40155,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeShapeTaper>
     for crate::api::layer::BridgeShapeTaper
 {
     fn into_into_dart(self) -> crate::api::layer::BridgeShapeTaper {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeTrim {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.start.into_into_dart().into_dart(),
+            self.end.into_into_dart().into_dart(),
+            self.offset.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::shape::BridgeShapeTrim
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::shape::BridgeShapeTrim>
+    for crate::api::shape::BridgeShapeTrim
+{
+    fn into_into_dart(self) -> crate::api::shape::BridgeShapeTrim {
         self
     }
 }
@@ -43946,7 +44210,7 @@ impl SseEncode for crate::api::layer::BridgeLayerInfo {
         <Vec<crate::api::layer::BridgeMask>>::sse_encode(self.masks, serializer);
         <Vec<crate::api::layer::BridgeStroke>>::sse_encode(self.paint, serializer);
         <Option<crate::api::layer::BridgePuppet>>::sse_encode(self.puppet, serializer);
-        <Vec<crate::api::layer::BridgeShapeItem>>::sse_encode(self.shape_contents, serializer);
+        <Vec<crate::api::shape::BridgeShapeEntry>>::sse_encode(self.shape_contents, serializer);
         <Vec<crate::api::layer::BridgeLayerMarker>>::sse_encode(self.markers, serializer);
         <bool>::sse_encode(self.flow, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.flow_input_rate, serializer);
@@ -45579,6 +45843,45 @@ impl SseEncode for crate::api::layer::BridgeShapeDeform {
     }
 }
 
+impl SseEncode for crate::api::shape::BridgeShapeEntry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.depth, serializer);
+        <crate::api::shape::BridgeShapeEntryKind>::sse_encode(self.kind, serializer);
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeEntryKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::shape::BridgeShapeEntryKind::Item(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::api::layer::BridgeShapeItem>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeEntryKind::Modifier(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::api::shape::BridgeShapeModifier>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeEntryKind::Group(field0) => {
+                <i32>::sse_encode(2, serializer);
+                <crate::api::shape::BridgeShapeGroup>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeGroup {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <uuid::Uuid>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+    }
+}
+
 impl SseEncode for crate::api::layer::BridgeShapeItem {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -45590,9 +45893,6 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <Option<crate::api::effect::BridgeColour>>::sse_encode(self.stroke, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.stroke_width, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_start, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_end, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
         <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
         <u32>::sse_encode(self.gradient, serializer);
@@ -45609,21 +45909,67 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <Vec<crate::api::layer::BridgeGradientStop>>::sse_encode(self.gradient_stops, serializer);
         <u32>::sse_encode(self.combine, serializer);
         <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(self.path_keys, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_x, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_y, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_x, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_y, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_rotation, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_scale, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_start_opacity, serializer);
-        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_end_opacity, serializer);
-        <Option<crate::api::layer::BridgeShapeTwist>>::sse_encode(self.twist, serializer);
-        <Option<crate::api::layer::BridgeShapeDeform>>::sse_encode(self.deform, serializer);
-        <Option<crate::api::effect::BridgeScalar>>::sse_encode(self.smooth, serializer);
         <Option<crate::api::layer::BridgeShapeTaper>>::sse_encode(self.taper, serializer);
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeModifier {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <uuid::Uuid>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <crate::api::shape::BridgeShapeModifierKind>::sse_encode(self.kind, serializer);
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeModifierKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::shape::BridgeShapeModifierKind::Repeat(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::api::shape::BridgeShapeRepeater>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeModifierKind::Trim(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::api::shape::BridgeShapeTrim>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeModifierKind::Offset(field0) => {
+                <i32>::sse_encode(2, serializer);
+                <crate::api::effect::BridgeScalar>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeModifierKind::Twist(field0) => {
+                <i32>::sse_encode(3, serializer);
+                <crate::api::layer::BridgeShapeTwist>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeModifierKind::Deform(field0) => {
+                <i32>::sse_encode(4, serializer);
+                <crate::api::layer::BridgeShapeDeform>::sse_encode(field0, serializer);
+            }
+            crate::api::shape::BridgeShapeModifierKind::Smooth(field0) => {
+                <i32>::sse_encode(5, serializer);
+                <crate::api::effect::BridgeScalar>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeRepeater {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeScalar>::sse_encode(self.copies, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.anchor_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.anchor_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.rotation, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.scale, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.start_opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.end_opacity, serializer);
     }
 }
 
@@ -45636,6 +45982,15 @@ impl SseEncode for crate::api::layer::BridgeShapeTaper {
         <crate::api::effect::BridgeScalar>::sse_encode(self.end_length, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.ease, serializer);
         <u32>::sse_encode(self.scope, serializer);
+    }
+}
+
+impl SseEncode for crate::api::shape::BridgeShapeTrim {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeScalar>::sse_encode(self.start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.end, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.offset, serializer);
     }
 }
 
@@ -47537,6 +47892,16 @@ impl SseEncode for Vec<crate::api::effect::BridgeShaderPort> {
     }
 }
 
+impl SseEncode for Vec<crate::api::shape::BridgeShapeEntry> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::shape::BridgeShapeEntry>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::layer::BridgeShapeItem> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -48497,32 +48862,12 @@ impl SseEncode for Option<crate::api::footage::BridgeSequenceRate> {
     }
 }
 
-impl SseEncode for Option<crate::api::layer::BridgeShapeDeform> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::layer::BridgeShapeDeform>::sse_encode(value, serializer);
-        }
-    }
-}
-
 impl SseEncode for Option<crate::api::layer::BridgeShapeTaper> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::layer::BridgeShapeTaper>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<crate::api::layer::BridgeShapeTwist> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::layer::BridgeShapeTwist>::sse_encode(value, serializer);
         }
     }
 }
