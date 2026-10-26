@@ -15716,6 +15716,23 @@
       }
     }
   },
+  "unitPerSecondSquared": "{unit}/s²",
+  "@unitPerSecondSquared": {
+    "description": "The unit shown after an acceleration in the graph editor: the property's own unit, then per second squared — 'px/s²', '%/s²', '°/s²'. The unit may be empty, giving '/s²' alone.",
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "graphAcceleration": "Acceleration",
+  "@graphAcceleration": {
+    "description": "Graph editor: the view showing how fast the speed of a value changes, beside 'Value' and 'Speed'. Lumit says 'speed', never 'velocity'."
+  },
+  "tipAccelerationGraph": "Acceleration graph",
+  "@tipAccelerationGraph": {
+    "description": "Tooltip: show how fast the speed changes. One or two words."
+  },
   "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
   "@easingHandleNumbers": {
     "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
