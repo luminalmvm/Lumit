@@ -135,6 +135,8 @@ Bounce
 Bounciness
 Boundary
 Bounds
+Boxes x
+Boxes y
 Brightness
 Broadband, amber
 Broadband, blue
@@ -239,7 +241,10 @@ Copies
 Core colour
 Core radius
 Corner pin
+Corner point
 Corner radius
+Corner x
+Corner y
 Corners
 Count
 Count nested inputs
@@ -468,9 +473,13 @@ Green blur
 Green from
 Greens
 Grid
+Grid size
+Grid size x
+Grid size y
 Grit
 Group
 Group name
+H line rel width
 Hairs
 Half
 Hard
@@ -552,6 +561,7 @@ Kill
 Knee
 LUT
 Label points
+Latitude
 Layer
 Layer in to out
 Layer knocks out shadow
@@ -601,10 +611,12 @@ Limit to radius
 Limiter
 Line
 Line period
+Line width
 Linear
 Linear burn
 Linear light
 Linear wipe
+Lines
 Load from file…
 Look
 Lookahead
@@ -618,6 +630,8 @@ Luminance only
 Luminosity
 Magenta
 Magentas
+Major line spacing
+Major line width
 Makeup
 Manual
 Manual light
@@ -894,6 +908,7 @@ Rings
 Ripple
 Rise
 Robust Video Matting
+Roll
 Roll speed
 Room size
 Rotation
@@ -972,6 +987,7 @@ Single
 Single layer, straw
 Size
 Size by
+Size from
 Size from width
 Size jitter
 Size over life
@@ -1070,11 +1086,13 @@ Sub settings
 Subtract
 Super 35
 Surface
+Swing
 Switch
 Symmetric
 Sync
 Taper
 Technique
+Tele lens width
 Temperature
 Temporal
 Text
@@ -1160,6 +1178,7 @@ Use point colour
 Use point size
 Use source colour
 Utility
+V line rel width
 Value
 Variation
 Vary points
@@ -1222,6 +1241,7 @@ Y frequency
 Yellow
 Yellows
 Z amount
+Z dist
 Z frequency
 Zebra
 Zoom

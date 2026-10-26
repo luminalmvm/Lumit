@@ -19,6 +19,7 @@ mod distort;
 mod dof;
 mod engine;
 mod generate;
+pub mod grid_lines;
 mod ground;
 mod lens_blur;
 mod lens_dirt;
@@ -173,6 +174,9 @@ pub struct FxEngine {
     /// Radio waves (docs/08 §3.75): shapes emitted from a point and expanding.
     /// §3.71's sector solve, done once for a unit shape and scaled per wave.
     radio_waves: wgpu::ComputePipeline,
+    /// Grid's Lines type: a line grid on its own plane, seen through its own
+    /// camera.
+    grid_lines: wgpu::ComputePipeline,
     /// Vegas (docs/08 §3.76): marching lights along the picture's contours. The
     /// contour is a level set rather than an edge detector's output, which is
     /// what makes Width a width in pixels.
