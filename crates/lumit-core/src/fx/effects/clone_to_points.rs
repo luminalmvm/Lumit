@@ -556,17 +556,30 @@ impl CloneToPoints {
         // that many times and keeps all its stamps or none.
         let most = self.max_clones.clamp(0, points::CAP_HARD as i32) as usize;
         out.keep_newest(most / count);
-        let scale = (self.scale / 100.0).max(0.0);
-        let turn = self.rotation.to_radians();
         let tint = (self.tint / 100.0).clamp(0.0, 1.0);
-        let opacity = (self.opacity / 100.0).clamp(0.0, 1.0);
-        for s in &mut out.size {
-            *s *= scale;
+        // Scale, Rotation and Opacity, per stamp where a driver that reads
+        // the copy is wired into the row ([`drive_copies`] wrote the values),
+        // and the row's one value everywhere else.
+        let per_copy = |name: &str, row: f32| -> Vec<f32> {
+            let at = match out.column(name) {
+                Column::Named(at) => out.named.get(at),
+                _ => None,
+            };
+            (0..out.len())
+                .map(|i| at.and_then(|c| c.values.get(i)).map_or(row, |v| v[0]))
+                .collect()
+        };
+        let scales = per_copy(COPY_SCALE, self.scale);
+        let turns = per_copy(COPY_ROTATION, self.rotation);
+        let opacities = per_copy(COPY_OPACITY, self.opacity);
+        for (s, scale) in out.size.iter_mut().zip(&scales) {
+            *s *= (scale / 100.0).max(0.0);
         }
-        for r in &mut out.rotation {
-            *r += turn;
+        for (r, turn) in out.rotation.iter_mut().zip(&turns) {
+            *r += turn.to_radians();
         }
-        for c in &mut out.colour {
+        for (c, opacity) in out.colour.iter_mut().zip(&opacities) {
+            let opacity = (opacity / 100.0).clamp(0.0, 1.0);
             // Towards opaque white, which is the identity of a premultiplied
             // tint: at Tint 0 a stamp is the layer's own picture, at 100 it is
             // the picture times the point's colour and alpha.
@@ -945,6 +958,98 @@ impl CloneToPoints {
             feather: 0.0,
             streak_seconds: 0.0,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
+        }
+    }
+}
+
+/// The named columns [`drive_copies`] writes and [`CloneToPoints::stamps`]
+/// reads: Scale, Rotation and Opacity per stamp, in the rows' own units.
+pub const COPY_SCALE: &str = "siceliot:scale";
+pub const COPY_ROTATION: &str = "siceliot:rotation";
+pub const COPY_OPACITY: &str = "siceliot:opacity";
+
+/// The most points [`drive_copies`] evaluates one by one; past it the rest
+/// repeat the last value. Each point is a resolve of the layer's drivers.
+pub const COPY_DRIVE_MAX: usize = 4096;
+
+/// **Scale, Rotation and Opacity per copy** (SICELIOT, docs/siceliot/).
+///
+/// In plain terms: a Stagger, Random, Oscillator, Value noise or Clone index
+/// wired into Clone to points' own Scale, Rotation or Opacity gives every
+/// stamp its own value, as a Cavalry behaviour wired into a Duplicator does.
+/// The layer's drivers are resolved once per point, as copy `i` of `n`, and
+/// the values are written into `stream` as the [`COPY_SCALE`],
+/// [`COPY_ROTATION`] and [`COPY_OPACITY`] columns, which `stamps` reads in
+/// place of the row. The stamp is turned and sized as a whole, so nothing is
+/// cropped the way a Transform on the cloned layer crops.
+///
+/// Does nothing unless one of the three rows is wired and the layer's graph
+/// holds a driver that reads the copy ([`clone_index::present`]); every other
+/// layer keeps its one value per row, as before.
+pub fn drive_copies(
+    graph: &crate::graph::LayerGraph,
+    consumer: uuid::Uuid,
+    stream: &mut PointsStream,
+    lt: f64,
+    context: &std::sync::Arc<crate::expression::ExpressionContext>,
+    audio: Option<&dyn crate::fx::registry::AudioTap>,
+    projection: points::Projection,
+) {
+    use crate::graph::{InputRef, NodeRef};
+    const ROWS: [(&str, &str); 3] = [
+        ("scale", COPY_SCALE),
+        ("rotation", COPY_ROTATION),
+        ("opacity", COPY_OPACITY),
+    ];
+    let wired: Vec<(&str, &str)> = ROWS
+        .into_iter()
+        .filter(|(row, _)| {
+            graph
+                .wire_into(&InputRef::Param {
+                    node: NodeRef::Effect(consumer),
+                    port: (*row).to_owned(),
+                })
+                .is_some()
+        })
+        .collect();
+    if wired.is_empty() || !clone_index::present(graph) {
+        return;
+    }
+    let n = stream.len().min(COPY_DRIVE_MAX);
+    let count = u32::try_from(stream.len()).unwrap_or(u32::MAX);
+    let mut values = vec![Vec::with_capacity(n); wired.len()];
+    for i in 0..n {
+        let index = u32::try_from(i).unwrap_or(u32::MAX);
+        let resolved = crate::fx::drivers::resolve_drivers_cloned(
+            graph,
+            lt,
+            context.clone(),
+            audio,
+            projection,
+            (index, count),
+        );
+        for ((row, _), out) in wired.iter().zip(&mut values) {
+            let v = match resolved.param(NodeRef::Effect(consumer), ParamId::new(row)) {
+                Some(Value::Float(v)) => Some(v),
+                #[allow(clippy::cast_precision_loss)]
+                Some(Value::Int(v)) => Some(v as f32),
+                _ => None,
+            };
+            out.push(v);
+        }
+    }
+    for ((_, name), column) in wired.iter().zip(values) {
+        // A row the driver did not answer for keeps the column unwritten, and
+        // so its one value.
+        if column.iter().any(Option::is_none) {
+            continue;
+        }
+        let Some(cells) = stream.named_mut(name, 1) else {
+            continue;
+        };
+        let last = column.last().copied().flatten().unwrap_or(0.0);
+        for (i, cell) in cells.iter_mut().enumerate() {
+            cell[0] = column.get(i).copied().flatten().unwrap_or(last);
         }
     }
 }

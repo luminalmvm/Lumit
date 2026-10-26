@@ -1176,9 +1176,22 @@ fn points_input_in(
         }
         // No stream yet, but the wire may still name its producer: one whose
         // points depend on a picture is asked again on the card.
-        let Some(stream) = now else {
+        let Some(mut stream) = now else {
             break;
         };
+        // SICELIOT: drivers wired into Clone to points' Scale, Rotation or
+        // Opacity give each stamp its own value.
+        if consumer.effect.match_name == "clone_to_points" {
+            lumit_core::fx::effects::clone_to_points::drive_copies(
+                graph,
+                consumer.id,
+                &mut stream,
+                t,
+                context,
+                Some(audio),
+                projection,
+            );
+        }
         found.streams.push(stream);
 
         // The history, if this consumer asks for one. `Samples` counts the

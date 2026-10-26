@@ -11030,3 +11030,35 @@ fn a_collider_turned_in_3d_is_a_surface() {
         "a particle went through the floor"
     );
 }
+
+/// SICELIOT: the per-copy columns `drive_copies` writes replace Scale,
+/// Rotation and Opacity stamp by stamp, and a stream without them keeps the
+/// rows' one value. Guards each copy taking the value its driver gave it.
+#[test]
+fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
+    use crate::fx::effects::clone_to_points::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
+    let e = clone_to_points(&[
+        ("rotation", EffectValue::Float(Property::fixed(10.0))),
+        ("tint", EffectValue::Float(Property::fixed(0.0))),
+    ]);
+    let plain = clone_stamps(&e, &two_points());
+    let ten = 10f32.to_radians();
+    assert!(plain.rotation.iter().all(|r| (r - ten).abs() < 1e-5));
+
+    let mut driven = two_points();
+    driven.named_mut(COPY_ROTATION, 1).expect("room")[1][0] = 90.0;
+    driven.named_mut(COPY_SCALE, 1).expect("room")[1][0] = 50.0;
+    driven.named_mut(COPY_OPACITY, 1).expect("room")[1][0] = 25.0;
+    for (column, first) in [
+        (COPY_ROTATION, 0.0),
+        (COPY_SCALE, 100.0),
+        (COPY_OPACITY, 100.0),
+    ] {
+        driven.named_mut(column, 1).expect("room")[0][0] = first;
+    }
+    let s = clone_stamps(&e, &driven);
+    assert!(s.rotation[0].abs() < 1e-5, "copy 0 turned by its own 0");
+    assert!((s.rotation[1] - 90f32.to_radians()).abs() < 1e-5);
+    assert!((s.size[0] - 10.0).abs() < 1e-4 && (s.size[1] - 5.0).abs() < 1e-4);
+    assert!((s.colour[0][3] - 1.0).abs() < 1e-5 && (s.colour[1][3] - 0.25).abs() < 1e-5);
+}
