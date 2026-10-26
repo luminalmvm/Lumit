@@ -26,6 +26,7 @@ import 'graph_panel.dart';
 import 'hierarchy_panel_frb.dart';
 import 'mixer_panel_frb.dart';
 import 'node_panel.dart';
+import 'notes_panel_frb.dart';
 import 'project_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
@@ -49,6 +50,7 @@ const Set<Panel> _changing = {
   Panel.paragraph,
   Panel.expressions,
   Panel.stagger,
+  Panel.notes,
   Panel.align,
 };
 
@@ -102,6 +104,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.paragraph => const ParagraphPanelFrb(),
       Panel.expressions => const ExpressionsPanelFrb(),
       Panel.stagger => const StaggerPanelFrb(),
+      Panel.notes => const NotesPanelFrb(),
       Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),
       Panel.extension => ExtensionPanel(slot: pane.instance),

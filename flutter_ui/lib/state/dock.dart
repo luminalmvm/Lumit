@@ -72,6 +72,9 @@ enum Panel {
   /// order a stagger drag follows.
   stagger,
 
+  /// One text area for the project, kept in the `.lum`.
+  notes,
+
   /// Moves the selected layers' anchors to a point of their boxes, or lines
   /// that point up with the same point of the composition.
   align,
@@ -100,6 +103,7 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.notes => l10n.panelNotes,
         Panel.align => l10n.panelAlign,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,

@@ -91,6 +91,7 @@ pub fn footprint(before: &Document, after: &Document) -> BTreeSet<Key> {
         graph_room,
         colour,
         swatches,
+        notes,
         extra
     );
     keys
