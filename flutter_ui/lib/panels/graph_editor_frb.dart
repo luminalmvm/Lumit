@@ -9,7 +9,8 @@
 // re-joining the two sides. The **value** lens plots value against time; the
 // **speed** lens plots dv/dt, where each key is an in point and an out point
 // that move independently, each with a single influence handle — the AE speed
-// graph.
+// graph. The **acceleration** lens plots how fast that speed changes, with the
+// same two dots per key; a dot's height is set through its side's influence.
 //
 // **Zero bridge calls to draw**: the curves are evaluated by the Dart
 // port of the engine's own cubic (graph_maths.dart, pinned together by
@@ -310,6 +311,10 @@ class _HandleDrag {
   double partnerSpeed;
   double partnerInfluence;
 
+  /// The influence the side had when the gesture began. The acceleration lens
+  /// moves nothing else, so a side still at it has nothing to write.
+  final double startInfluence;
+
   /// How long the partner handle was **on screen**, in pixels, when the drag
   /// began. A joined partner keeps that pixel length however the dragged side
   /// swings: a handle's *value* length is meaningless to the eye — what the
@@ -382,7 +387,7 @@ class _HandleDrag {
     required this.height,
     required this.startPx,
     this.dotOnly = false,
-  });
+  }) : startInfluence = influence;
 }
 
 /// A `Shift` drag on the curve between two keys, as in After Effects: moving
@@ -778,9 +783,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   /// Which reading [channel] draws in. Everything follows the view's lens
   /// except a mask's **shape**, which has no value to plot and so
-  /// draws its rate of change in both.
+  /// draws its rate of change in the value lens.
   GraphLens lensOf(GraphChannel channel) =>
-      channel.isPath ? GraphLens.speed : widget.lens;
+      channel.isPath && widget.lens == GraphLens.value
+          ? GraphLens.speed
+          : widget.lens;
 
   /// Whether [channel] draws as the Vegas speed envelope right now —
   /// a Retime, in the speed view, with the preference on.
@@ -808,6 +815,13 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             if (c.isStatic) c.staticValue,
         ],
       );
+    }
+    // ponytail: framed on the whole curve, not the stretch on screen. The
+    // edge samples the other lenses add are straight-line keys, which would
+    // bend the acceleration they sit beside. Sample the real curve over the
+    // window if zooming in on a quiet stretch needs it.
+    if (widget.lens == GraphLens.acceleration) {
+      return fitAccelerationRange(_channelKeys);
     }
     if (!_anyEnvelope) return fitSpeedRange(keys);
     // An envelope brings its own floor and ceiling (100% down to −25%), which
@@ -883,6 +897,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
     if (isEnvelope(channel)) {
       return _yOf(envelopeSpeeds(shown)[index], range, height);
+    }
+    if (widget.lens == GraphLens.acceleration) {
+      return _yOf(
+          sideAccelerationAtKey(shown, index, isOut: isOut), range, height);
     }
     return _yOf(sideSpeedAtKey(shown, index, isOut: isOut), range, height);
   }
@@ -1040,6 +1058,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         drawn = channel.isStatic
             ? channel.staticValue
             : evaluateKeys(keys, seconds);
+      } else if (widget.lens == GraphLens.acceleration) {
+        drawn = channel.isStatic ? 0 : evaluateKeysAcceleration(keys, seconds);
       } else {
         drawn = channel.isStatic
             ? 0
@@ -1428,9 +1448,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // the dot a second time and it ran away from the pointer at twice the
     // speed. Release then committed the one move and the dot snapped back to
     // where the hand actually was — the jump that gave it away.
+    // An acceleration dot needs none of this: its height comes off the shaped
+    // keys in [shown], which is where the influence reached in the end.
     final dot = _handleDrag;
     if (dot != null &&
         dot.dotOnly &&
+        widget.lens != GraphLens.acceleration &&
         dot.channel.id == channel.id &&
         dot.index == index &&
         dot.isOut == isOut) {
@@ -1733,6 +1756,20 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         }
         return;
       }
+      if (widget.lens == GraphLens.acceleration) {
+        // The acceleration lens: a dot's height is how fast the speed changes
+        // as the curve leaves, or reaches, its key. The side's speed stays
+        // put and its influence moves, as far as an influence can go. `Shift`
+        // keeps the influence while the key moves in time.
+        drag.rawDx += dx;
+        drag.rawDy += dy;
+        drag.influence = drag._constrained && drag._horizontal
+            ? drag.startInfluence
+            : influenceForAcceleration(keys, drag.index,
+                    isOut: drag.isOut, target: pointerValue) ??
+                drag.startInfluence;
+        return;
+      }
       if (widget.lens == GraphLens.speed) {
         // The speed lens: a dot's height IS that side's speed and its sideways
         // travel moves the keyframe in time; an influence handle's reach sets
@@ -1892,6 +1929,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // As in [_commitKeyDrag]: the write is the last word, so no held preview
     // tick may land after it.
     _preview.cancel();
+    if (widget.lens == GraphLens.acceleration &&
+        drag.influence == drag.startInfluence &&
+        drag.dxPx == 0) {
+      return;
+    }
     final shown = _keysWithHandleDrags(drag, drag.channel);
 
     // Both sides keep the length they were left at: the dragged one wherever
@@ -2011,6 +2053,25 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // synced stays synced — the covenant this whole feature is built around.
     if (isEnvelope(drag.channel)) {
       return setEnvelopeSpeed(keys, drag.index, drag.speed);
+    }
+    // An acceleration dot writes its one side, and only once its influence
+    // has moved: sliding the key in time leaves both sides as they were.
+    if (widget.lens == GraphLens.acceleration) {
+      if (drag.influence == drag.startInfluence) return keys;
+      final side = sideWithInfluence(
+          keys, drag.index, drag.isOut, drag.influence * 100);
+      return [
+        for (var i = 0; i < keys.length; i++)
+          if (i == drag.index)
+            BridgeKeyframe(
+              time: keys[i].time,
+              value: keys[i].value,
+              interpIn: drag.isOut ? keys[i].interpIn : side,
+              interpOut: drag.isOut ? side : keys[i].interpOut,
+            )
+          else
+            keys[i],
+      ];
     }
     final dragged = BridgeSideInterp.bezier(
         BridgeBezierSide(speed: drag.speed, influence: drag.influence));
@@ -2845,21 +2906,34 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The speed an envelope point's drag is asking for, in the pill every
   /// drag here carries: whole per cent, or to a decimal place while `Ctrl`
   /// has the drag fine.
+  ///
+  /// An acceleration dot's drag carries one too, reading the acceleration
+  /// the side has reached in the property's unit per second squared.
   List<Widget> _speedHint((double, double) range, double height) {
     final drag = _handleDrag;
-    if (drag == null || !drag.dotOnly || !isEnvelope(drag.channel)) {
+    final accelerating = widget.lens == GraphLens.acceleration;
+    if (drag == null ||
+        !drag.dotOnly ||
+        !(accelerating || isEnvelope(drag.channel))) {
       return const [];
     }
     final point = _keyPoint(drag.channel, drag.index, range, height,
         isOut: drag.isOut);
+    final acceleration = sideAccelerationAtKey(
+        _shownKeys(drag.channel), drag.index,
+        isOut: drag.isOut);
+    final unit = graphChannelUnit(drag.channel) ?? '';
     return [
       Positioned(
         key: const ValueKey<String>('graph-speed-hint'),
         left: point.dx + 8,
         top: point.dy + 6,
         child: HintPill(
-            text: '${speedText(drag.speed, fine: drag.fine)}'
-                '${l10n.unitSymbolPercent}'),
+            text: accelerating
+                ? '${graphNumberText(acceleration)} '
+                    '${l10n.unitPerSecondSquared(unit)}'
+                : '${speedText(drag.speed, fine: drag.fine)}'
+                    '${l10n.unitSymbolPercent}'),
       ),
     ];
   }
@@ -3085,7 +3159,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         colour: chosen
                             ? t.textPrimary
                             : t.curve[channel.colourIndex % t.curve.length],
-                        speedDot: widget.lens == GraphLens.speed,
+                        speedDot: widget.lens != GraphLens.value,
                       ),
                     ),
                   ),
@@ -3188,8 +3262,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       return (e.time, e.value);
     }
     // An envelope point has no influence handle: its sides are always the
-    // chord, which is what keeps the lines between points straight.
-    if (isEnvelope(channel)) return null;
+    // chord, which is what keeps the lines between points straight. An
+    // acceleration dot is its own handle: up and down moves the influence.
+    if (isEnvelope(channel) || widget.lens == GraphLens.acceleration) {
+      return null;
+    }
     // Speed lens: the influence handle reaches horizontally from the dot.
     final keyTime = rationalSeconds(key.time);
     final dt = (rationalSeconds(nb.time) - keyTime).abs();
@@ -3296,10 +3373,11 @@ class _GraphPainter extends CustomPainter {
       // is scaled onto the same axis as its points.
       final envelope = vegas && channel.retime && lens == GraphLens.speed;
       final speedScale = envelope ? 100.0 : 1.0;
-      // **A shape draws its rate of change in both lenses**: a path has
-      // no value to plot, so the value view would otherwise be an empty pane
-      // for a property that is plainly animating.
-      final chLens = channel.isPath ? GraphLens.speed : lens;
+      // **A shape draws its rate of change in the value lens too**: a path
+      // has no value to plot, so the value view would otherwise be an empty
+      // pane for a property that is plainly animating.
+      final chLens =
+          channel.isPath && lens == GraphLens.value ? GraphLens.speed : lens;
       final paint = Paint()
         ..color = palette[channel.colourIndex % palette.length]
         ..strokeWidth = 1.4
@@ -3360,9 +3438,11 @@ class _GraphPainter extends CustomPainter {
           // The line is held inside the parameter's hard range (M28's
           // leftover, [GraphChannel.drawnValueAt]). Unbounded channels — a
           // transform, a mask value, the Retime — clamp nothing.
-          final v = chLens == GraphLens.value
-              ? channel.drawnValueAt(keys, seconds)
-              : evaluateKeysSpeed(keys, seconds) * speedScale;
+          final v = switch (chLens) {
+            GraphLens.value => channel.drawnValueAt(keys, seconds),
+            GraphLens.speed => evaluateKeysSpeed(keys, seconds) * speedScale,
+            GraphLens.acceleration => evaluateKeysAcceleration(keys, seconds),
+          };
           final point = Offset(x, _yOf(v, range, size));
           if (first || (dashed[c] && (point.dx / 6).floor().isOdd)) {
             path.moveTo(point.dx, point.dy);
@@ -3374,16 +3454,20 @@ class _GraphPainter extends CustomPainter {
       }
       canvas.drawPath(path, paint);
 
-      // Speed lens: the vertical join at each key, where in and out speed
-      // step — drawn faint so a discontinuity reads as one key, not two.
-      if (lens == GraphLens.speed && !envelope) {
+      // Speed and acceleration lenses: the vertical join at each key, where
+      // the in and out sides step — drawn faint so a discontinuity reads as
+      // one key, not two. Acceleration almost always steps at a key.
+      if (lens != GraphLens.value && !envelope) {
+        final atKey = lens == GraphLens.acceleration
+            ? sideAccelerationAtKey
+            : sideSpeedAtKey;
         final joinPaint = Paint()
           ..color = paint.color.withValues(alpha: 0.35)
           ..strokeWidth = 1;
         for (var i = 0; i < keys.length; i++) {
           final x = axis.xOf(keyFrame(keys[i], f));
-          final yIn = _yOf(sideSpeedAtKey(keys, i, isOut: false), range, size);
-          final yOut = _yOf(sideSpeedAtKey(keys, i, isOut: true), range, size);
+          final yIn = _yOf(atKey(keys, i, isOut: false), range, size);
+          final yOut = _yOf(atKey(keys, i, isOut: true), range, size);
           if ((yIn - yOut).abs() > 1) {
             canvas.drawLine(Offset(x, yIn), Offset(x, yOut), joinPaint);
           }
