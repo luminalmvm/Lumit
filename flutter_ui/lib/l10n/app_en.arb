@@ -1454,7 +1454,7 @@
   },
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
-    "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
+    "description": "Easing panel: the tooltip on a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
   },
   "easingSaveEllipsis": "Save…",
   "@easingSaveEllipsis": {
@@ -15841,24 +15841,6 @@
   "@tipAccelerationGraph": {
     "description": "Tooltip: show how fast the speed changes. One or two words."
   },
-  "easingHandleNumbers": "Out {x1}, {y1} · In {x2}, {y2}",
-  "@easingHandleNumbers": {
-    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
-    "placeholders": {
-      "x1": {
-        "type": "String"
-      },
-      "y1": {
-        "type": "String"
-      },
-      "x2": {
-        "type": "String"
-      },
-      "y2": {
-        "type": "String"
-      }
-    }
-  },
   "fxOcioColourSpaceTransform": "OCIO colour space transform",
   "@fxOcioColourSpaceTransform": {
     "description": "Effect controls - the name of an effect: converts a layer between two colour spaces of the project's OCIO config."
@@ -21644,5 +21626,81 @@
   "fxTeleLensWidth": "Tele lens width",
   "@fxTeleLensWidth": {
     "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a longer or shorter lens, changing the perspective, as Sapphire's S_Grid names it."
+  },
+  "easingRead": "Read from keys",
+  "@easingRead": {
+    "description": "Easing panel: tooltip on the eyedropper button that loads the shape of the two selected keyframes into the editor."
+  },
+  "easingReverse": "Reverse",
+  "@easingReverse": {
+    "description": "Easing panel: tooltip on the button that flips the drawn shape end for end, so a slow start becomes a slow finish."
+  },
+  "easingLiveApply": "Apply as you shape",
+  "@easingLiveApply": {
+    "description": "Easing panel: tooltip on the toggle that applies the shape to the selected keyframes each time a handle is let go or a number is typed."
+  },
+  "easingCopyCss": "Copy as cubic-bezier",
+  "@easingCopyCss": {
+    "description": "Easing panel: right-click menu row on the curve box that copies its four numbers in the CSS cubic-bezier() form. Keep 'cubic-bezier' as it is."
+  },
+  "easingFamilySine": "Sine",
+  "@easingFamilySine": {
+    "description": "Easing panel library: row label for the sine family of easing shapes."
+  },
+  "easingFamilyQuad": "Quad",
+  "@easingFamilyQuad": {
+    "description": "Easing panel library: row label for the quadratic family of easing shapes."
+  },
+  "easingFamilyCubic": "Cubic",
+  "@easingFamilyCubic": {
+    "description": "Easing panel library: row label for the cubic family of easing shapes."
+  },
+  "easingFamilyQuart": "Quart",
+  "@easingFamilyQuart": {
+    "description": "Easing panel library: row label for the quartic family of easing shapes."
+  },
+  "easingFamilyExpo": "Expo",
+  "@easingFamilyExpo": {
+    "description": "Easing panel library: row label for the exponential family of easing shapes."
+  },
+  "easingFamilyBack": "Back",
+  "@easingFamilyBack": {
+    "description": "Easing panel library: row label for the family of easing shapes that overshoot."
+  },
+  "easingColumnIn": "In",
+  "@easingColumnIn": {
+    "description": "Easing panel library: column heading over each family's slow start shape (the web's easeIn). Very short, it sits over a narrow column."
+  },
+  "easingColumnOut": "Out",
+  "@easingColumnOut": {
+    "description": "Easing panel library: column heading over each family's slow finish shape (the web's easeOut). Very short, it sits over a narrow column."
+  },
+  "easingColumnInOut": "In out",
+  "@easingColumnInOut": {
+    "description": "Easing panel library: column heading over each family's shape that is slow at both ends (the web's easeInOut). Very short, it sits over a narrow column."
+  },
+  "easingYours": "Yours",
+  "@easingYours": {
+    "description": "Easing panel library: the tab showing the easing shapes the user has saved, beside the Built in tab. Very short."
+  },
+  "easingImport": "Import easings…",
+  "@easingImport": {
+    "description": "Easing panel: menu row that adds easing shapes from a file someone shared. The ellipsis marks that it opens a file picker."
+  },
+  "easingExport": "Export easings…",
+  "@easingExport": {
+    "description": "Easing panel: menu row that writes the user's saved easing shapes to a file to share. The ellipsis marks that it opens a file picker."
+  },
+  "easingMore": "More",
+  "@easingMore": {
+    "description": "Easing panel: tooltip on the button that opens a menu with Import easings and Export easings."
+  },
+  "fileTypeEasings": "Easings",
+  "@fileTypeEasings": {
+    "description": "File picker: the label of the file type filter for a file of saved easing shapes."
+  },
+  "easingBuiltIn": "Built in",
+  "@easingBuiltIn": {
+    "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
   }
 }

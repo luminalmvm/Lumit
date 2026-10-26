@@ -748,6 +748,11 @@ class LumitUiState extends ChangeNotifier {
   /// it sends will land on.
   final ValueNotifier<KeyEaseClaim?> easingKey = ValueNotifier(null);
 
+  /// The shape of the first span the keyframe selection covers, for the
+  /// Easing panel's Read, published by the Timeline beside [easingKey]. Null
+  /// while no two neighbouring keys are selected, or their span has no shape.
+  final ValueNotifier<EasingCurve?> easingSpan = ValueNotifier(null);
+
   /// The appearance the shell is drawing in.
   ///
   /// Scheme and shape are held rather than the built theme, because the theme is

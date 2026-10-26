@@ -332,11 +332,11 @@ void main() {
       // The popup keeps the smallest layout: the overlay would offer it the
       // whole window to grow into, and the panel is where width is spent.
       expect(
-          tester.getSize(find.byKey(const ValueKey('easing-box'))).width, 210);
+          tester.getSize(find.byKey(const ValueKey('easing-box'))).width, 236);
       // A tile now applies as it loads, and the Apply press repeats
       // it — both are no-ops on a lone key.
-      await tester.ensureVisible(find.text('Slow start'));
-      await tester.tap(find.text('Slow start'));
+      await tester.ensureVisible(find.byKey(const ValueKey('easing-preset-slowStart')));
+      await tester.tap(find.byKey(const ValueKey('easing-preset-slowStart')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Apply'));
       await tester.tap(find.text('Apply'));
@@ -354,8 +354,8 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pump();
       await openEditor();
-      await tester.ensureVisible(find.text('Slow start'));
-      await tester.tap(find.text('Slow start'));
+      await tester.ensureVisible(find.byKey(const ValueKey('easing-preset-slowStart')));
+      await tester.tap(find.byKey(const ValueKey('easing-preset-slowStart')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Apply'));
       await tester.tap(find.text('Apply'));
