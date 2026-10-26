@@ -4724,6 +4724,10 @@
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxSiceliot": "SICELIOT",
+  "@fxSiceliot": {
+    "description": "Add-effect menu category heading. A proper name: keep it as it is in every language."
+  },
   "fxSize": "Size",
   "@fxSize": {
     "description": "Effect controls — a control on Turbulent displace."

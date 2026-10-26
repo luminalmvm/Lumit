@@ -359,6 +359,7 @@ pub fn fx_category_key(cat: lumit_core::fx::schema::FxCategory) -> &'static str 
         FxCategory::Temporal => "temporal",
         FxCategory::Transition => "transition",
         FxCategory::Utility => "utility",
+        FxCategory::Siceliot => "siceliot",
         // The same key a hosted audio plugin is filed under
         // (`api::effect::NAMESPACE_AUDIO`), on purpose: a built-in and a
         // plugin belong under one Audio heading, and two keys would draw two.

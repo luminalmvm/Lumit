@@ -1129,6 +1129,7 @@ Map<String, String> get _built => {
       "Shutter": l10n.fxShutter,
       "Shutter angle": l10n.fxShutterAngle,
       "Shutter phase": l10n.fxShutterPhase,
+      "SICELIOT": l10n.fxSiceliot,
       "Sine": l10n.fxSine,
       "Size": l10n.fxSize,
       "Size by": l10n.fxSizeBy,

@@ -340,6 +340,7 @@ const PICTURE_CATEGORIES: &[FxCategory] = &[
     FxCategory::Temporal,
     FxCategory::Transition,
     FxCategory::Utility,
+    FxCategory::Siceliot,
 ];
 
 /// Everything that changes the pixels, hashed.
@@ -534,6 +535,9 @@ mod tests {
             refused(|e| e.category = "Sparkles".into()),
             LfxError::UnknownCategory(_)
         ));
+        let mut siceliot = effect(TWO_PASS);
+        siceliot.category = "Siceliot".into();
+        assert_eq!(check(&siceliot), Ok(FxCategory::Siceliot));
         assert!(matches!(
             refused(|e| e.passes[1].scale = 0.5),
             LfxError::LastPassScaled(_)

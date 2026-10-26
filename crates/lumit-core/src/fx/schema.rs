@@ -687,6 +687,10 @@ pub enum FxCategory {
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
+    /// **SICELIOT**: the Cavalry-style, non-destructive picture effects of the
+    /// SICELIOT extension (docs/siceliot/). A picture family like the eight
+    /// above, kept apart so its effects are found together in one place.
+    Siceliot,
     /// The effects that process **sound** and draw nothing: Gain, EQ,
     /// Compressor, Reverb (docs/impl/audio-effects.md §2). A built-in here
     /// files under the same Audio heading a hosted plugin does, so the one
@@ -741,6 +745,7 @@ impl FxCategory {
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
+            FxCategory::Siceliot => "SICELIOT",
             FxCategory::Audio => "Audio",
             FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
@@ -766,7 +771,7 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 12] = [
+    pub const ALL: [FxCategory; 13] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -775,6 +780,8 @@ impl FxCategory {
         FxCategory::Temporal,
         FxCategory::Transition,
         FxCategory::Utility,
+        // Last of the picture families: an extension's own heading.
+        FxCategory::Siceliot,
         // After the picture's own families, because a menu opened to add a
         // blur is opened to add a blur, and the sound is a different errand.
         FxCategory::Audio,
