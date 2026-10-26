@@ -34,6 +34,7 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
     super.initState();
     _read();
     _app.addListener(_read);
+    _app.heldTyping.add(_send);
     _text.addListener(_typed);
     _focus.addListener(() {
       if (!_focus.hasFocus) _send();
@@ -42,7 +43,9 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
 
   @override
   void dispose() {
-    _send();
+    // Nothing is told: the tree is being taken down.
+    _flush();
+    _app.heldTyping.remove(_send);
     _app.removeListener(_read);
     _text.dispose();
     _focus.dispose();
@@ -76,15 +79,22 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
   }
 
   void _send() {
+    if (_flush()) _app.notifyDocumentChanged();
+  }
+
+  /// Sends the text, and says whether the project took it.
+  bool _flush() {
     _pause?.cancel();
     _pause = null;
     final text = _text.text;
-    if (text == _sent) return;
+    if (text == _sent) return false;
     _sent = text;
     try {
       _project?.setNotes(notes: text);
+      return _project != null;
     } catch (_) {
       // A project closed under the panel has nowhere to keep it.
+      return false;
     }
   }
 

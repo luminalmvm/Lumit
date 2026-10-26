@@ -224,10 +224,17 @@ class LumitState extends ChangeNotifier {
 
   bool _askingUnsaved = false;
 
+  /// Typing a panel holds until a pause, sent before anyone asks whether
+  /// there is anything unsaved.
+  final heldTyping = <VoidCallback>{};
+
   /// Whether the open project has unsaved changes somebody can be asked about.
   /// Synchronous, so a clean project is swapped without waiting a turn.
   bool get unsavedNeedsAsking {
     if (askUnsaved == null) return false;
+    for (final send in heldTyping.toList()) {
+      send();
+    }
     try {
       return project?.isDirty() ?? false;
     } catch (_) {
