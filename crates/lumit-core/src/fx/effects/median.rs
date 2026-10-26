@@ -15,7 +15,9 @@
 //! than a soft one that could be typed past — a control that silently clamps is
 //! worse than a control that stops (§3.64 decision 2).
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Median's controls.

@@ -245,13 +245,6 @@ class _BeforeYouUpdate extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             child: Text(l10n.updateNoticeTitle(version), style: t.bodyPrimary),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              l10n.updateNoticeBody(version),
-              style: t.small.copyWith(color: t.textMuted),
-            ),
-          ),
           // The notes themselves, in a box edged in the warning colour (kraft,
           // never a red alert). Capped and scrolling, so a release with a lot
           // to say does not push the buttons off the screen.

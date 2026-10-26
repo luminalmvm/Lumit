@@ -1,6 +1,8 @@
 //! Invert (docs/08 §3.22): 1 − c, on unpremultiplied colour.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Invert's controls — the Mix alone.

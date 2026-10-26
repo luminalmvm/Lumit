@@ -28,9 +28,9 @@
 //! system — the `tdgp`/`tdbs`/`tdb4` trees, static values, keyframes, effects,
 //! masks, markers and expressions. **Phase C** is the surface: [`crate::open_ae`]
 //! routes a picked path to this reader or to the bundle reader by its magic, and
-//! the File menu offers both. Two encodings are still owed after it — a text
-//! document (`btds`) and a gradient (`GCst`), which arrive named and marked
-//! unreadable rather than dropped.
+//! the File menu offers both. A text document (`btds`) is read for its words
+//! and how they are set, and a gradient (`GCst`) for its colour and opacity
+//! stops.
 //!
 //! One thing about the file is worth saying here because it shapes every
 //! number this route reports: **an `.aep` stores only what is not at its
@@ -58,7 +58,7 @@ use std::path::Path;
 use crate::capture::{
     Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Property, Switches, Unreadable,
 };
-use crate::{Bundle, BundleSource, ImportError, Manifest, Report, FORMAT};
+use crate::{capture::Manifest, capture::Report, Bundle, BundleSource, ImportError, FORMAT};
 use rifx::{
     bit, f32_at, i32_at, open_egg, rational_at, text_of, u16_at, u32_at, u8_at, Chunk, RifxError,
 };
@@ -1386,7 +1386,7 @@ mod tests {
             (Some(30.0), Some(24.0))
         );
 
-        let (doc, _) = crate::map_capture(&parsed.capture);
+        let (doc, _) = crate::map::map_capture(&parsed.capture);
         let footage = doc
             .items
             .iter()

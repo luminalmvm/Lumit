@@ -18,7 +18,7 @@
 //!
 //! The nine live in [`STYLE_DEFS`], which is deliberately **not** the effect
 //! catalogue: the Add-effect menu must never offer "Drop shadow (style)" beside
-//! the Drop shadow effect. [`crate::fx::def`] is the lookup that answers for
+//! the Drop shadow effect. [`crate::fx::builtins::def`] is the lookup that answers for
 //! both, and it is the only place the two lists meet.
 
 use crate::model::EffectInstance;

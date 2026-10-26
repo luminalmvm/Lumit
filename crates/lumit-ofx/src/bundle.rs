@@ -387,7 +387,14 @@ pub fn search_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
     paths.push(PathBuf::from("/Library/OFX/Plugins"));
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    paths.push(PathBuf::from("/usr/OFX/Plugins"));
+    {
+        paths.push(PathBuf::from("/usr/OFX/Plugins"));
+        // In the Flatpak, /usr is the runtime's. The machine's own /usr is
+        // at /run/host/usr, shared read-only by the manifest.
+        if Path::new("/.flatpak-info").exists() {
+            paths.push(PathBuf::from("/run/host/usr/OFX/Plugins"));
+        }
+    }
 
     if let Some(extra) = std::env::var_os("OFX_PLUGIN_PATH") {
         paths.extend(std::env::split_paths(&extra));

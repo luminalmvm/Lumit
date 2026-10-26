@@ -242,7 +242,7 @@ fn version() -> String {
 /// Call it at the skip site and return:
 /// ```ignore
 /// let Some(dir) = std::env::var_os("LUMIT_ML_RUNTIME_DIR").map(PathBuf::from) else {
-///     lumit_ml::no_runtime();
+///     lumit_ml::runtime::no_runtime();
 ///     return;
 /// };
 /// ```

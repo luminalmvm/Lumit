@@ -19,13 +19,13 @@ part 'effect.freezed.dart';
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
-/// truth ([`lumit_core::fx::BUILTINS`]), and the frb form of v0's `list_effects`.
+/// truth ([`lumit_core::fx::catalogue::BUILTINS`]), and the frb form of v0's `list_effects`.
 ///
 /// Stateless, so it is a free function rather than a method: the menu is
 /// available before any project is open.
 ///
 /// **The drivers are here too**, filed under Controls
-/// ([`FxCategory::grouping`](lumit_core::fx::FxCategory::grouping)): one search
+/// ([`FxCategory::grouping`](lumit_core::fx::schema::FxCategory::grouping)): one search
 /// surface offers everything a layer can be given, and applying a driver puts
 /// it on the layer's graph rather than its stack — `LayerReference::add_effect`
 /// decides that, so no caller has to. [`list_drivers`] still answers the
@@ -750,7 +750,7 @@ class BridgeColour {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 enum BridgeColourNameRole {
   space,
@@ -794,7 +794,7 @@ class BridgeEffectInfo {
   final List<BridgePort> inputs;
 
   /// The output sockets — empty for every image effect, and the declared
-  /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
+  /// [`Signature::Data`](lumit_core::fx::registry::Signature::Data) ports for a driver.
   final List<BridgePort> outputs;
 
   /// What other software calls the effects that become this one on import,
@@ -1069,7 +1069,7 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 class BridgeEnabledWhen {
   final String param;
@@ -1096,7 +1096,7 @@ class BridgeEnabledWhen {
 }
 
 /// The language an expression is written in
-/// ([`lumit_core::expression::Language`]).
+/// ([`lumit_core::expression::script::Language`]).
 ///
 /// It crosses with the text every time, in both directions. The person writing
 /// an expression picks it, and nothing works it out from the text: the same
@@ -1394,7 +1394,7 @@ sealed class BridgeParamKind with _$BridgeParamKind {
 
   /// A short text the user types, drawn as a single-line text field. The
   /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
-  /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+  /// what is set to its cap (`lumit_core::fx::params::TEXT_MAX_BYTES`).
   const factory BridgeParamKind.text({
     required String default_,
   }) = BridgeParamKind_Text;
@@ -1451,7 +1451,7 @@ sealed class BridgeParamKind with _$BridgeParamKind {
 /// the panel draws as one row of two wells with a chain between them.
 ///
 /// The convention used to be read off the ids at the seam, by whoever needed
-/// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
+/// it; [`lumit_core::fx::schema::EffectSchema::pairs`] is the declaration answering it
 /// now, so the panel, the link flag on the instance and the engine all get one
 /// answer. `stem` is the key the link flag is stored under, so it is the
 /// pair's identity rather than either half's id.
@@ -1998,7 +1998,7 @@ class BridgeStyleInfo {
 /// The unit a parameter's number is in — what the row draws as its
 /// rider beside the value, and what a point pick has to write in.
 ///
-/// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
+/// Mirrors [`lumit_core::fx::params::Unit`] with the two the seam has no use for
 /// folded away: `Unset` is a build failure engine-side, so nothing that ships
 /// can carry it, and `PctDiag` is forbidden to every parameter. Both
 /// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the

@@ -15,8 +15,8 @@ use lumit_core::interpretation::{
     AlphaMode, FieldOrder, Interpretation, LinearLight, Pulldown, StartTimecode,
 };
 use lumit_core::model::{FootageItem, ProjectItem};
+use lumit_core::ops::Op;
 use lumit_core::time::FrameRate;
-use lumit_core::Op;
 
 use crate::api::effect::BridgeRational;
 use crate::api::footage::FootageReference;
@@ -311,7 +311,7 @@ fn to_engine(
 
 /// The file's own rate, from the probe of it read plainly.
 #[cfg(feature = "media")]
-fn native_rate(src: &lumit_media::MediaSource) -> Option<FrameRate> {
+fn native_rate(src: &lumit_media::sequence::MediaSource) -> Option<FrameRate> {
     let probe = crate::probe::ensure_probed(src.raw())?;
     let video = probe.video.as_ref()?;
     FrameRate::new(
@@ -331,7 +331,7 @@ fn native_rate(src: &lumit_media::MediaSource) -> Option<FrameRate> {
 /// plainly.
 pub(crate) fn start_timecode(
     f: &FootageItem,
-    src: &lumit_media::MediaSource,
+    src: &lumit_media::sequence::MediaSource,
     shown: Option<FrameRate>,
 ) -> Option<(u64, bool)> {
     let mut start = f.interpretation.start_timecode.or_else(|| {
@@ -411,9 +411,9 @@ impl FootageReference {
             file.width = video.width;
             file.height = video.height;
             file.fields = match facts.fields {
-                lumit_media::Fields::Off => BridgeFieldOrder::Off,
-                lumit_media::Fields::Upper => BridgeFieldOrder::Upper,
-                lumit_media::Fields::Lower => BridgeFieldOrder::Lower,
+                lumit_media::interpret::Fields::Off => BridgeFieldOrder::Off,
+                lumit_media::interpret::Fields::Upper => BridgeFieldOrder::Upper,
+                lumit_media::interpret::Fields::Lower => BridgeFieldOrder::Lower,
             };
             (file.pixel_aspect_num, file.pixel_aspect_den) = facts.pixel_aspect;
             file.timecode = probe.timecode.clone();
@@ -444,9 +444,11 @@ impl FootageReference {
             };
             Ok(lumit_render::source::guess_alpha(&src).map(|alpha| {
                 let (alpha, matte) = match alpha {
-                    lumit_media::Alpha::Straight => (BridgeAlphaMode::Straight, [0; 3]),
-                    lumit_media::Alpha::Ignore => (BridgeAlphaMode::Ignore, [0; 3]),
-                    lumit_media::Alpha::Premultiplied(m) => (BridgeAlphaMode::Premultiplied, m),
+                    lumit_media::interpret::Alpha::Straight => (BridgeAlphaMode::Straight, [0; 3]),
+                    lumit_media::interpret::Alpha::Ignore => (BridgeAlphaMode::Ignore, [0; 3]),
+                    lumit_media::interpret::Alpha::Premultiplied(m) => {
+                        (BridgeAlphaMode::Premultiplied, m)
+                    }
                 };
                 BridgeAlphaGuess {
                     alpha,
@@ -469,12 +471,12 @@ impl FootageReference {
                 return Ok(None);
             };
             Ok(match lumit_render::source::guess_pulldown(&src) {
-                lumit_media::Pulldown::Off => None,
-                lumit_media::Pulldown::ThreeTwo(phase) => Some(BridgePulldownGuess {
+                lumit_media::interpret::Pulldown::Off => None,
+                lumit_media::interpret::Pulldown::ThreeTwo(phase) => Some(BridgePulldownGuess {
                     pulldown: BridgePulldown::ThreeTwo,
                     phase,
                 }),
-                lumit_media::Pulldown::Advanced(phase) => Some(BridgePulldownGuess {
+                lumit_media::interpret::Pulldown::Advanced(phase) => Some(BridgePulldownGuess {
                     pulldown: BridgePulldown::Advanced,
                     phase,
                 }),
@@ -487,7 +489,7 @@ impl FootageReference {
     /// Where this item's file is and how it is read, with the lock let go.
     #[cfg(feature = "media")]
     #[frb(ignore)]
-    fn source(&self) -> Result<Option<lumit_media::MediaSource>, BridgeError> {
+    fn source(&self) -> Result<Option<lumit_media::sequence::MediaSource>, BridgeError> {
         let state = self.project()?;
         let proj = state.read().map_err(|_| BridgeError::ReadFailed)?;
         match proj.store.snapshot().item(self.id) {
@@ -654,7 +656,7 @@ pub fn set_interpretation(
         // files while the window closes.
         #[cfg(feature = "media")]
         if let Some(src) = src {
-            reread.push(lumit_media::MediaSource {
+            reread.push(lumit_media::sequence::MediaSource {
                 sequence_fps: next.sequence_fps(),
                 render_pass: next.interpretation.render_pass.clone(),
                 interpret: lumit_render::source::interpretation(&next),

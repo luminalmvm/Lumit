@@ -9,7 +9,8 @@
 //! whole number, exactly as the hand-written resolve arm handed it over before.
 
 use crate::fx::{
-    cpu, EffectDef, EffectMetadata, EffectSchema, ParamId, Params, ResolveCx, Value, GLITCH_TICK_HZ,
+    cpu, maths::GLITCH_TICK_HZ, params::ParamId, params::Params, params::Value,
+    registry::EffectDef, registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 

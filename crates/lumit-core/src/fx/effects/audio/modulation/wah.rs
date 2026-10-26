@@ -28,7 +28,10 @@ use super::super::dsp::lfo::{Lfo, Phase, Shape};
 use super::super::dsp::smoother::Smoother;
 use super::super::dsp::svf::Svf;
 use super::{frame, put, row};
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;

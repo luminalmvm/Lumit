@@ -1034,7 +1034,7 @@ pub fn apply_masks(
 }
 
 /// [`apply_masks`] for the float frames a float source decodes to
-/// (`lumit_media::PixelFormat::LinearF32`): sixteen bytes a pixel, the alpha in
+/// (`lumit_media::decode::PixelFormat::LinearF32`): sixteen bytes a pixel, the alpha in
 /// the last four.
 ///
 /// A mask gates coverage and nothing else, so this is the same one line of
@@ -1494,7 +1494,7 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
     }
 }
 
-/// Which of `masks` a [`ParamKind::MaskPath`](crate::fx::ParamKind::MaskPath)
+/// Which of `masks` a [`ParamKind::MaskPath`](crate::fx::schema::ParamKind::MaskPath)
 /// row names: the one it names, else the first when the schema's `self_default`
 /// says an unset row means "First mask".
 ///
@@ -1570,7 +1570,7 @@ pub fn effect_path_at(
     t: f64,
 ) -> MaskPolyline {
     use crate::model::{EffectValue, LayerKind};
-    if !crate::fx::param_visible(effect, param) {
+    if !crate::fx::builtins::param_visible(effect, param) {
         return MaskPolyline::default();
     }
     // Shape greys the mask row, so it is asked before the greyed rule.
@@ -1580,7 +1580,7 @@ pub fn effect_path_at(
             _ => MaskPolyline::default(),
         };
     }
-    if !crate::fx::param_enabled(effect, param) {
+    if !crate::fx::builtins::param_enabled(effect, param) {
         return MaskPolyline::default();
     }
     let masks = layer.map_or(&[][..], |l| &l.masks);

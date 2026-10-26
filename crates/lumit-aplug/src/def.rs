@@ -38,7 +38,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use lumit_core::fx::{AudioProcessor, EffectDef, EffectSchema, ParamId};
+use lumit_core::fx::{
+    audio_chain::AudioProcessor, params::ParamId, registry::EffectDef, schema::EffectSchema,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::abi::{AnyInstance, AnyModule};

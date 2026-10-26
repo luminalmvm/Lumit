@@ -590,7 +590,7 @@ fn animate_speed_up(plate: &mut Layer) {
 /// A points producer with its rows set, and its seed pinned so the figure is
 /// the same on every run.
 fn producer(match_name: &str, rows: Vec<(&str, EffectValue)>) -> EffectInstance {
-    let mut e = lumit_core::fx::instantiate(match_name).expect("a points producer");
+    let mut e = lumit_core::fx::builtins::instantiate(match_name).expect("a points producer");
     set(&mut e, "seed", EffectValue::Seed(7));
     for (row, value) in rows {
         set(&mut e, row, value);
@@ -760,7 +760,7 @@ fn aux_layer(depth: Option<&std::path::Path>, span: Rational) -> Option<Layer> {
         ),
     };
     if depth.is_none() {
-        let mut grad = lumit_core::fx::instantiate("gradient")?;
+        let mut grad = lumit_core::fx::builtins::instantiate("gradient")?;
         set(&mut grad, "start", pt(0.0, f64::from(H) / 2.0));
         set(&mut grad, "end", pt(f64::from(W), f64::from(H) / 2.0));
         l.effects = vec![grad];
@@ -1117,7 +1117,7 @@ fn render_every_effect_example() {
             skipped.push(format!("{}: {why}", e.slug));
             continue;
         }
-        let Some(mut inst) = lumit_core::fx::instantiate(e.match_name) else {
+        let Some(mut inst) = lumit_core::fx::builtins::instantiate(e.match_name) else {
             failed.push(format!("{}: not in the registry", e.slug));
             continue;
         };

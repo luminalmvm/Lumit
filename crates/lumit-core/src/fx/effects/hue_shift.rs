@@ -1,6 +1,9 @@
 //! Hue shift (docs/08 §3.10): a rotation about the colour wheel.
 
-use crate::fx::{cpu, hue_matrix, hue_matrix_rgb, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, maths::hue_matrix, maths::hue_matrix_rgb, params::Params, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Hue shift's controls.

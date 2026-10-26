@@ -13,7 +13,7 @@
 //! This module holds the arithmetic of those decisions — the cost window and
 //! the lookahead formula — kept free of the GPU and the worker loop so they
 //! are testable on their own. The ring itself lives with the worker's
-//! `Playback` state; its entries are `lumit_render::PreparedFrame`s.
+//! `Playback` state; its entries are `lumit_render::headless::PreparedFrame`s.
 
 use std::collections::VecDeque;
 
@@ -31,7 +31,7 @@ pub(crate) const PREFETCH_AHEAD: u64 = 4;
 /// The frames whose edit points playback should ask about now, as "after this
 /// one, up to and including that one": the clips starting in there have their
 /// files opened by the decode-ahead threads
-/// ([`lumit_render::HeadlessRenderer::cut_wants`]).
+/// ([`lumit_render::headless::HeadlessRenderer::cut_wants`]).
 ///
 /// It reaches about a second past the frame being rendered. Four frames is
 /// enough warning to decode the next frame of a file that is playing and

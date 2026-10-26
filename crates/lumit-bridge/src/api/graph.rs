@@ -54,8 +54,8 @@ pub enum BridgePortType {
 
 impl BridgePortType {
     #[frb(ignore)]
-    pub(crate) fn of(ty: lumit_core::fx::PortType) -> BridgePortType {
-        use lumit_core::fx::PortType;
+    pub(crate) fn of(ty: lumit_core::fx::schema::PortType) -> BridgePortType {
+        use lumit_core::fx::schema::PortType;
         match ty {
             PortType::Image => BridgePortType::Image,
             PortType::Matte => BridgePortType::Matte,
@@ -122,7 +122,7 @@ pub struct BridgePort {
 
 impl BridgePort {
     #[frb(ignore)]
-    fn of(port: lumit_core::fx::Port, wired: bool) -> BridgePort {
+    fn of(port: lumit_core::fx::schema::Port, wired: bool) -> BridgePort {
         BridgePort {
             id: port.id.to_owned(),
             label: port.label.to_owned(),
@@ -374,7 +374,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     });
 
     for effect in &layer.effects {
-        let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name);
+        let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&effect.effect.match_name);
         let schema = def.map(|d| d.schema());
         // **Wired means "in the chain"**. A bypassed effect is not:
         // the picture goes past it, and the panel draws that by leaving its
@@ -476,7 +476,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     });
 
     for driver in &g.nodes {
-        let def = lumit_core::fx::BUILTIN_DEFS.get(&driver.effect.match_name);
+        let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&driver.effect.match_name);
         let schema = def.map(|d| d.schema());
         nodes.push(BridgeGraphNode {
             node: BridgeNodeRef::Driver(driver.id),
@@ -534,7 +534,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
 /// reference `param_ports` needs is never consulted.
 #[frb(ignore)]
 pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgePort>) {
-    let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(match_name) else {
+    let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(match_name) else {
         return (Vec::new(), Vec::new());
     };
     let inputs = param_ports(Some(def.schema()), &[], NodeRef::Source, &|_| false)
@@ -561,8 +561,8 @@ pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgeP
 /// the wires `LayerGraph::validate` accepts cannot disagree.
 #[frb(ignore)]
 fn param_ports<'a>(
-    schema: Option<&'static lumit_core::fx::EffectSchema>,
-    derived: &'static [lumit_core::fx::ParamSchema],
+    schema: Option<&'static lumit_core::fx::schema::EffectSchema>,
+    derived: &'static [lumit_core::fx::schema::ParamSchema],
     node: NodeRef,
     wired: &'a impl Fn(InputRef) -> bool,
 ) -> impl Iterator<Item = BridgePort> + 'a {

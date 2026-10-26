@@ -241,7 +241,7 @@ pub fn system_memory_bytes() -> u64 {
 ///
 /// macOS and Linux answer through the graphics API the engine already links —
 /// Metal's recommended working-set size, or the largest device-local Vulkan
-/// heap — so the answer comes from [`lumit_render::video_memory_bytes`] rather
+/// heap — so the answer comes from [`lumit_gpu::video_memory_bytes`] rather
 /// than from a second copy of that knowledge here. See it for the details and
 /// for what returns 0. Linux's answer needs an adapter, which only the renderer
 /// opens, so it is 0 until one exists; the frontend's fallback covers that
@@ -269,7 +269,7 @@ pub fn video_memory_bytes() -> u64 {
     }
     #[cfg(not(windows))]
     {
-        lumit_render::video_memory_bytes()
+        lumit_gpu::video_memory_bytes()
     }
 }
 

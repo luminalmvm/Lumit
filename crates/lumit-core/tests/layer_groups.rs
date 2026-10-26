@@ -16,7 +16,7 @@ use lumit_core::model::{
     TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-use lumit_core::{DocumentStore, Op, OpError};
+use lumit_core::{ops::Op, ops::OpError, store::DocumentStore};
 use uuid::Uuid;
 
 fn secs(n: i64) -> CompTime {
@@ -278,7 +278,7 @@ fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
         })
         .unwrap();
 
-    let blur = lumit_core::fx::instantiate("blur").expect("blur is a builtin");
+    let blur = lumit_core::fx::builtins::instantiate("blur").expect("blur is a builtin");
     let dressed = store
         .commit(Op::SetGroupEffects {
             comp,

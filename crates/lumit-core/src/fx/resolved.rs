@@ -315,7 +315,7 @@ pub fn resolve_stack_temporal(
 /// by construction.
 ///
 /// `drivers` is the layer's driver graph, already evaluated at this frame
-/// ([`resolve_drivers`](crate::fx::resolve_drivers)): a parameter a wire feeds
+/// ([`resolve_drivers`](crate::fx::drivers::resolve_drivers)): a parameter a wire feeds
 /// takes the wire's value instead of its own keyframes, substituted here, before
 /// anything packs into a uniform. [`ResolvedDrivers::NONE`] is
 /// every layer that has never opened the Graph panel.
@@ -357,7 +357,7 @@ pub fn resolve_stack_temporal_named(
         // The catalogue, then the layer styles: a style resolves through
         // this very walk, so the lookup asks for "the definition of this name"
         // rather than picking a list (`fx::def`).
-        if let Some(def) = super::def(&e.effect.match_name) {
+        if let Some(def) = super::builtins::def(&e.effect.match_name) {
             // An orchestration-only effect (Posterize time, Accumulation motion
             // blur) resolves to nothing at all: it changes *what time* the layers
             // it covers render at, which the frame walk reads straight off the
@@ -411,7 +411,7 @@ pub fn resolve_instance(
     context: Arc<ExpressionContext>,
 ) -> ResolvedStack {
     let mut out = ResolvedStack::new();
-    if let Some(def) = super::def(&e.effect.match_name) {
+    if let Some(def) = super::builtins::def(&e.effect.match_name) {
         resolve_into_arena(
             def,
             e,

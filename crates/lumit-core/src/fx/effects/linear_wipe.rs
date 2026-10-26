@@ -7,7 +7,9 @@
 //! pivots. Keyframe Completion from 0 to 100 and you have a cut made out of a
 //! move.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Linear wipe's controls.

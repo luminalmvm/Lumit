@@ -126,6 +126,7 @@ Future<void> _start(List<String> args) async {
   unawaited(ui.profiles.start());
   ui.reviews.start();
   ui.phones.start();
+  ui.friendInvites.start();
   // Closing the window into the tray, when Settings asks for it. The frames
   // held for the preview are given back meanwhile, nobody is looking at them.
   listenToRunner(hidden: () {

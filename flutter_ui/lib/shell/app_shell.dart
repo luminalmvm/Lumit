@@ -353,6 +353,17 @@ class _LumitAppViewState extends State<LumitAppView> {
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
     listenForOpenRequests(_openAsked);
+    // A friend's invite that comes while Lumit is open is said on the status
+    // line, with the way to the Multi-edit window, where it is joined.
+    context.read<LumitUiState>().friendInvites.onNew = (invite) {
+      if (!mounted) return;
+      final app = context.read<LumitState>();
+      app.postNotice(
+          l10n.friendInviteNotice(invite.from.name, invite.text.project),
+          sticky: true,
+          action: l10n.friendInviteOpen,
+          onTap: () => showShareFrb(context, app));
+    };
   }
 
   /// A project or an extension package double-clicked, or an invite link
@@ -1218,7 +1229,7 @@ class _LumitAppViewState extends State<LumitAppView> {
             'layer.order.top' ||
             'layer.order.bottom':
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
-      case 'layer.centre':
+      case 'layer.centre' || 'layer.centre.anchor':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
       case 'mask.feather' || 'mask.invert':
         handled =
@@ -1314,6 +1325,7 @@ bool _pressedOnce(String action) =>
       'layer.lock.toggle',
       'layer.unlock.all',
       'layer.centre',
+      'layer.centre.anchor',
       'layer.settings',
       'mask.feather',
       'mask.invert',

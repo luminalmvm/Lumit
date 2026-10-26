@@ -62,8 +62,8 @@ const double welcomeBlockGap = 28;
 /// drawing's 22px mono mark stood at. Its width follows the lockup.
 const double welcomeWordmarkHeight = 22;
 
-/// A start card: 14 of padding above and below a 13px title, a 4px gap and a
-/// 9px note, with the hairline counted in.
+/// A start card: the drawing's 63, hairline counted in, with its title
+/// centred.
 const double welcomeCardHeight = 63;
 const double welcomeCardGap = 10;
 const EdgeInsets welcomeCardPadding = EdgeInsets.symmetric(
@@ -116,9 +116,9 @@ const double welcomeForgetGap = 8;
 const double welcomeFooterHeight = 28;
 const double welcomeButtonHeight = 24;
 
-/// The note under a card's title, and the two sentence-case kickers beside the
-/// recents heading: the kicker face at the drawing's looser 0.06em rather than
-/// the 0.12em a container label carries.
+/// The two sentence-case kickers beside the recents heading: the kicker face
+/// at the drawing's looser 0.06em rather than the 0.12em a container label
+/// carries.
 TextStyle welcomeNote(LumitTheme t) => t.kicker.copyWith(letterSpacing: 0.54);
 
 /// A recent project's factual column — when it was last opened — mono at 10,
@@ -538,13 +538,11 @@ class StartCards extends StatelessWidget {
               ? _WelcomeCard(
                   id: 'empty-stage-import',
                   title: l10n.importFootage,
-                  note: l10n.emptyStageImportNote,
                   onTap: () => importFootageFrb(context, app),
                 )
               : _WelcomeCard(
                   id: 'welcome-card-new',
                   title: l10n.welcomeNewProject,
-                  note: l10n.welcomeNewProjectNote,
                   onTap: () => startNewProject(app, onStarted: onStarted),
                 ),
         ),
@@ -553,7 +551,6 @@ class StartCards extends StatelessWidget {
           child: _WelcomeCard(
             id: 'welcome-card-open',
             title: l10n.welcomeOpenProject,
-            note: l10n.welcomeOpenProjectNote,
             onTap: () =>
                 startOpenProject(app, picker: openPicker, onStarted: onStarted),
           ),
@@ -608,18 +605,15 @@ class EmptyStageFrb extends StatelessWidget {
   }
 }
 
-/// One start card: a title, a note under it, and the whole thing is the button
-/// — the note is as much a part of the choice as the words at the top of it.
+/// One start card: a title, and the whole thing is the button.
 class _WelcomeCard extends StatefulWidget {
   final String id;
   final String title;
-  final String note;
   final VoidCallback onTap;
 
   const _WelcomeCard({
     required this.id,
     required this.title,
-    required this.note,
     required this.onTap,
   });
 
@@ -653,24 +647,12 @@ class _WelcomeCardState extends State<_WelcomeCard> {
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.title,
-                style: t.bodyPrimary.copyWith(fontSize: 13),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.note,
-                style: welcomeNote(t),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          alignment: Alignment.centerLeft,
+          child: Text(
+            widget.title,
+            style: t.bodyPrimary.copyWith(fontSize: 13),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),

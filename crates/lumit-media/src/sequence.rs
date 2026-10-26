@@ -276,7 +276,7 @@ pub struct MediaSource {
     /// How the file's frames are read (`crate::interpret`). The probe, the
     /// index and the decoder all answer in interpreted frames, so a source
     /// with fields separated has twice the frames at twice the rate.
-    pub interpret: crate::Interpretation,
+    pub interpret: crate::interpret::Interpretation,
     /// The file's length and modification time when this was made, or `None`
     /// when nobody asked ([`Self::stamped`]). A file saved over in place is
     /// then a different source, so nothing opened on or read from the old one
@@ -306,7 +306,7 @@ impl MediaSource {
     #[must_use]
     pub fn raw(&self) -> Self {
         Self {
-            interpret: crate::Interpretation::default(),
+            interpret: crate::interpret::Interpretation::default(),
             ..self.clone()
         }
     }
@@ -548,7 +548,7 @@ mod tests {
         let index = crate::index::build_frame_index(&src).unwrap();
         assert_eq!(index.frame_count(), 6, "six files, six frames");
 
-        let mut decoder = crate::VideoDecoder::open(&src, index).unwrap();
+        let mut decoder = crate::decode::VideoDecoder::open(&src, index).unwrap();
         // Out of order on purpose: a sequence must seek as well as run forward.
         for (frame, file) in [(0usize, 1u8), (4, 5), (2, 3), (5, 6), (1, 2)] {
             let out = decoder.frame_rgba(frame, None).unwrap();
@@ -578,7 +578,7 @@ mod tests {
         let index = crate::index::build_frame_index(&src).unwrap();
         assert_eq!(index.frame_count(), 3, "the run stops at the hole");
 
-        let mut decoder = crate::VideoDecoder::open(&src, index).unwrap();
+        let mut decoder = crate::decode::VideoDecoder::open(&src, index).unwrap();
         assert_eq!(decoder.frame_rgba(2, None).unwrap().rgba.first(), Some(&3));
         assert!(
             decoder.frame_rgba(3, None).is_err(),
@@ -603,7 +603,7 @@ mod tests {
             ..Default::default()
         };
         let index = crate::index::build_frame_index(&src).unwrap();
-        let mut decoder = crate::VideoDecoder::open(&src, index).unwrap();
+        let mut decoder = crate::decode::VideoDecoder::open(&src, index).unwrap();
         let mut read = |frame: usize| decoder.frame_rgba(frame, None).unwrap().rgba[0];
         // In order, as an export reads them, then scrubbed back.
         let played: Vec<u8> = (0..6).map(&mut read).collect();

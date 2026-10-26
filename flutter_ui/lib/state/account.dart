@@ -129,6 +129,9 @@ class CloudSubscription {
 class CloudAccount {
   final String id, email, name;
 
+  /// What friends find this account by, or null until one is chosen.
+  final String? username;
+
   /// A picture's address, from whoever the person signed in with.
   final String? avatar;
   final bool pro;
@@ -153,6 +156,7 @@ class CloudAccount {
     required this.id,
     required this.email,
     required this.name,
+    this.username,
     this.avatar,
     this.pro = false,
     this.preview = false,
@@ -166,6 +170,7 @@ class CloudAccount {
         id: '${j['id']}',
         email: '${j['email']}',
         name: '${j['name']}',
+        username: j['username'] is String ? j['username'] as String : null,
         avatar: j['avatar'] is String ? j['avatar'] as String : null,
         pro: j['plan'] == 'pro',
         preview: j['preview'] == true,
@@ -183,6 +188,7 @@ class CloudAccount {
         'id': id,
         'email': email,
         'name': name,
+        'username': username,
         'avatar': avatar,
         'plan': pro ? 'pro' : 'free',
         'preview': preview,
@@ -192,6 +198,33 @@ class CloudAccount {
 
   /// Bought in the iPhone app, so changed or ended there and not at Paddle.
   bool get onIphone => store == 'apple';
+}
+
+/// Another account, by the username it is found by and the name it shows.
+typedef Friend = ({String username, String name});
+
+/// The account's friends, who has asked to be one, and whom it has asked.
+/// Free for everyone. A friend is who a preview can be sent to.
+class Friends {
+  final List<Friend> friends, asked, asking;
+  const Friends(
+      {this.friends = const [], this.asked = const [], this.asking = const []});
+
+  factory Friends.from(Map<String, dynamic> j) {
+    List<Friend> people(Object? all) => [
+          if (all case final List<dynamic> list)
+            for (final p in list)
+              if (p case {'username': final String username})
+                (
+                  username: username,
+                  name: p['name'] is String ? p['name'] as String : username
+                ),
+        ];
+    return Friends(
+        friends: people(j['friends']),
+        asked: people(j['asked']),
+        asking: people(j['asking']));
+  }
 }
 
 /// Who a person can sign in with besides a password.
@@ -274,6 +307,7 @@ class AccountState extends ChangeNotifier {
     _slot = slot;
     _access = null;
     account = null;
+    friends = const Friends();
     if (await readSecret(slot) == null) {
       notifyListeners();
       return;
@@ -281,6 +315,8 @@ class AccountState extends ChangeNotifier {
     account = remembered;
     notifyListeners();
     await refreshAccount();
+    // Read once, so the card can say who is waiting for an answer.
+    unawaited(loadFriends());
   }
 
   /// Ask the server what it offers. Kept, so the sign-in window opens with
@@ -418,6 +454,7 @@ class AccountState extends ChangeNotifier {
     final slot = _slot;
     if (slot != null) await deleteSecret(slot);
     _access = null;
+    friends = const Friends();
     if (account != null) {
       account = null;
       notifyListeners();
@@ -433,6 +470,7 @@ class AccountState extends ChangeNotifier {
     final who = signIn['account'];
     if (who is Map<String, dynamic>) account = CloudAccount.from(who);
     notifyListeners();
+    unawaited(loadFriends());
   }
 
   // --- Signing in ----------------------------------------------------------
@@ -440,10 +478,17 @@ class AccountState extends ChangeNotifier {
   /// Ask for an account under [email]. The server posts a six-digit code to
   /// it either way, and says nothing here about whether the address was
   /// already known, so nobody can use this to find out who has an account.
-  Future<void> signUp(String email, String password, String name) async {
+  /// The server checks the date of birth, [born] as YYYY-MM-DD, against the
+  /// least age and keeps none of it.
+  Future<void> signUp(
+      String email, String password, String name, String born) async {
     final key = await _keyFor(email, password);
-    await _send('POST', '/v1/auth/signup',
-        body: {'email': email.trim(), 'key': key, 'name': name.trim()});
+    await _send('POST', '/v1/auth/signup', body: {
+      'email': email.trim(),
+      'key': key,
+      'name': name.trim(),
+      'born': born,
+    });
   }
 
   /// The key last made here, and the address it was made for. Held between
@@ -515,7 +560,11 @@ class AccountState extends ChangeNotifier {
   /// process, so another program listening in on this machine gains nothing.
   /// Throws `cancelled` when [cancelSignIn] is called, and `timed_out` after
   /// five minutes of nobody coming back.
-  Future<void> signInWith(SignInWith provider) async {
+  ///
+  /// A date of birth, [born], comes from the page that creates an account.
+  /// Without one, the server says `need_birth_date` if this would make a new
+  /// account.
+  Future<void> signInWith(SignInWith provider, {String? born}) async {
     cancelSignIn();
     final verifier = _base64Url(_random(32));
     final challenge = _base64Url(sha256.convert(ascii.encode(verifier)).bytes);
@@ -529,6 +578,7 @@ class AccountState extends ChangeNotifier {
         'challenge': challenge,
         'port': '${server.port}',
         'state': state,
+        if (born != null) 'born': born,
       });
       if (!await openExternalLink('$start')) {
         throw const CloudError('no_browser');
@@ -610,6 +660,52 @@ class AccountState extends ChangeNotifier {
         await call('PATCH', '/v1/me', body: {'name': name.trim()}));
     notifyListeners();
   }
+
+  /// Choose the username friends find the account by. The server tidies it
+  /// (lower case, no leading @) and says `bad_username` or `username_taken`.
+  Future<void> setUsername(String username) async {
+    account = CloudAccount.from(
+        await call('PATCH', '/v1/me', body: {'username': username.trim()}));
+    notifyListeners();
+  }
+
+  // --- Friends -------------------------------------------------------------
+
+  /// The friends last read, cleared with the account.
+  Friends friends = const Friends();
+
+  Future<void> _friendsFrom(Future<Map<String, dynamic>> answer) async {
+    final who = account?.id;
+    final read = Friends.from(await answer);
+    // Another account by now: the answer was the last one's.
+    if (account?.id != who) return;
+    friends = read;
+    notifyListeners();
+  }
+
+  /// Read the friends again. Offline keeps what is known.
+  Future<void> loadFriends() async {
+    if (!signedIn) return;
+    try {
+      await _friendsFrom(call('GET', '/v1/friends'));
+    } on CloudError {
+      // Nothing new to show.
+    }
+  }
+
+  /// Ask [username] to be friends, or say yes if they asked first. The
+  /// server takes it with or without its @.
+  Future<void> addFriend(String username) => _friendsFrom(
+      call('POST', '/v1/friends', body: {'username': username.trim()}));
+
+  /// Stop being friends, turn an ask down, or take one back.
+  Future<void> removeFriend(String username) => _friendsFrom(
+      call('DELETE', '/v1/friends/${Uri.encodeComponent(username)}'));
+
+  /// Put the preview [id] in [username]'s Shared with you, and tell their
+  /// phone.
+  Future<void> sendToFriend(String id, String username) =>
+      call('POST', '/v1/shared', body: {'id': id, 'to': username});
 
   /// Whether the server emails the account about new comments on any of
   /// its review links.

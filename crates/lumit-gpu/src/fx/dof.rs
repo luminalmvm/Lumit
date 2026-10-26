@@ -11,7 +11,7 @@ use super::{work_texture, FxEngine};
 ///
 /// Declared here rather than imported: `lumit-core` is only a dev-dependency of
 /// this crate (the kernels take plain numbers and know nothing of the document
-/// model), so `lumit_core::fx::MAX_BLADES` is out of reach in production code.
+/// model), so `lumit_core::fx::maths::MAX_BLADES` is out of reach in production code.
 /// `max_blades_matches_the_core_constant` in `fx::tests` — where lumit-core IS
 /// available — pins the two together so they cannot drift.
 pub const MAX_BLADES: usize = 8;
@@ -58,7 +58,7 @@ pub struct DofOp {
     /// False = no depth layer: the whole frame defocuses at `far_aperture` and
     /// `depth` is never sampled, so the caller may bind any same-size texture.
     pub depth_bound: bool,
-    /// Which channel of `depth` is read, by `lumit_core::fx::CHANNEL_OPTIONS`.
+    /// Which channel of `depth` is read, by `lumit_core::fx::builtins::CHANNEL_OPTIONS`.
     pub depth_channel: u32,
     pub depth_invert: bool,
     /// When set, focus is the depth under `focus_point` and `focus` is ignored —

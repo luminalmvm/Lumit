@@ -8,7 +8,10 @@
 //! same maths backwards, so a distort and a reversed distort at the same
 //! settings give the picture back.
 
-use crate::fx::{cpu, EdgesMode, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EdgesMode,
+    schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Lens distort's controls.
@@ -81,7 +84,7 @@ pub struct LensDistort {
     /// fan reads as a fault.
     #[choice(
         label = "Edges",
-        options = *crate::fx::EDGE_OPTIONS,
+        options = *crate::fx::builtins::EDGE_OPTIONS,
         default = 0
     )]
     pub edge: u32,
@@ -137,7 +140,7 @@ impl LensDistort {
     #[must_use]
     pub fn packed_in(p: Params<'_>) -> cpu::LensDistortParams {
         let mut packed = Self::read(p).packed();
-        if let Some([_, _, w, h]) = crate::fx::frame_rect(p) {
+        if let Some([_, _, w, h]) = crate::fx::schema::frame_rect(p) {
             packed.frame = [w, h];
         }
         packed

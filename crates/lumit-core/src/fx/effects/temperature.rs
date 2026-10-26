@@ -1,6 +1,8 @@
 //! Temperature (docs/08 §3.16): the warm/cool channel gain pair.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Temperature's controls.

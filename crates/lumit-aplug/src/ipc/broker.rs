@@ -94,7 +94,7 @@ pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
 /// switched-off plugin is never created and its code never runs, and **at the
 /// top of every block batch**, so a switch flicked mid-session is honoured on
 /// the next batch rather than at the next restart. The owner of the
-/// list is whoever reads `lumit_project::PluginPrefs`; this crate only reads
+/// list is whoever reads `lumit_project::plugins::PluginPrefs`; this crate only reads
 /// what it is handed, which is what keeps the plugin host free of a dependency
 /// on the project format.
 pub type DisableList = Arc<Mutex<BTreeSet<String>>>;

@@ -10,7 +10,8 @@
 //! which is what you want when Phase is itself being driven by something else.
 
 use crate::fx::{
-    cpu, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    cpu, params::Value, registry::DriverCx, registry::EffectDef, registry::EffectMetadata,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 

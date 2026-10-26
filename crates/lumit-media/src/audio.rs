@@ -247,7 +247,7 @@ impl AudioReader {
     /// many.
     pub fn open_stream(path: &Path, stream: u32, target_rate: u32) -> Result<Self, MediaError> {
         let ordinal = stream;
-        let mut input = crate::probe::open_input(&crate::MediaSource::file(path))?;
+        let mut input = crate::probe::open_input(&crate::sequence::MediaSource::file(path))?;
         let (stream_index, par, time_base, lands, lossless, hint) = {
             let stream = input
                 .streams()

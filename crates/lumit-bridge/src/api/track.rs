@@ -22,7 +22,7 @@
 
 use flutter_rust_bridge::frb;
 use lumit_core::anim::{Animation, Property};
-use lumit_core::fx::{PressFrame, Value};
+use lumit_core::fx::{params::Value, registry::PressFrame};
 use lumit_core::model::{
     Composition, EffectNamespace, EffectValue, Fingerprint, LayerKind, ProjectItem,
 };
@@ -75,7 +75,7 @@ pub enum BridgeTrackStage {
 /// A **reason, not a sentence**: the engine's own `AnalysisError`
 /// carries English, and English crossing here would ship untranslated inside a
 /// translated window. Dart switches over this and picks the arb key, which is
-/// the shape `lumit_import::Reason` already uses for the import report.
+/// the shape `lumit_import::report::Reason` already uses for the import report.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgeTrackFailure {
@@ -229,7 +229,7 @@ pub fn track_status(layer: LayerReference) -> BridgeTrackStatus {
 
 fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_render::track::AnalysisError;
-    use lumit_track::SolveError;
+    use lumit_track::solve::SolveError;
     match why {
         AnalysisError::Unreadable => BridgeTrackFailure::Unreadable,
         // A cancelled run is reported as `Cancelled`, never as a failure, so
@@ -248,11 +248,15 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
         // it to follow reads as the same "nothing to work with" the camera
         // half calls `NoFeatures`, and a quad that is not one flat surface has
         // its own reason.
-        AnalysisError::Planar(lumit_track::PlanarError::TooFewFeatures) => {
+        AnalysisError::Planar(lumit_track::planar::PlanarError::TooFewFeatures) => {
             BridgeTrackFailure::NoFeatures
         }
-        AnalysisError::Planar(lumit_track::PlanarError::NotPlanar) => BridgeTrackFailure::NotPlanar,
-        AnalysisError::Planar(lumit_track::PlanarError::Cancelled) => BridgeTrackFailure::NoSolve,
+        AnalysisError::Planar(lumit_track::planar::PlanarError::NotPlanar) => {
+            BridgeTrackFailure::NotPlanar
+        }
+        AnalysisError::Planar(lumit_track::planar::PlanarError::Cancelled) => {
+            BridgeTrackFailure::NoSolve
+        }
     }
 }
 
@@ -543,7 +547,7 @@ fn snapshot(
 pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
-) -> Result<(lumit_render::source::MediaSource, Fingerprint), BridgeError> {
+) -> Result<(lumit_media::sequence::MediaSource, Fingerprint), BridgeError> {
     media_source_in(layer.project_id, media)
 }
 
@@ -552,7 +556,7 @@ pub(crate) fn media_source(
 pub(crate) fn media_source_in(
     project: Uuid,
     media: Uuid,
-) -> Result<(lumit_render::source::MediaSource, Fingerprint), BridgeError> {
+) -> Result<(lumit_media::sequence::MediaSource, Fingerprint), BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
     let project = projects
         .get(&project)
@@ -628,7 +632,7 @@ pub(crate) fn press_plugin_now(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
-    let def = lumit_core::fx::BUILTIN_DEFS
+    let def = lumit_core::fx::catalogue::BUILTIN_DEFS
         .get(&fx.effect.match_name)
         .ok_or(BridgeError::InvalidEffect)?;
     // The layer's own clock at the playhead, which is what its keys are on.
@@ -675,8 +679,8 @@ pub(crate) fn settle(
         if was.is_some_and(|was| was.params == fx.params) {
             continue;
         }
-        let answer =
-            lumit_core::fx::def(fx.effect.match_name.as_str()).and_then(|def| def.settle(was, fx));
+        let answer = lumit_core::fx::builtins::def(fx.effect.match_name.as_str())
+            .and_then(|def| def.settle(was, fx));
         if let Some(answer) = answer {
             keep(fx, answer, Rational::ZERO);
         }
@@ -686,7 +690,7 @@ pub(crate) fn settle(
 /// Put what a plugin wrote onto the document's copy of its instance.
 pub(crate) fn keep(
     fx: &mut lumit_core::model::EffectInstance,
-    pressed: lumit_core::fx::Pressed,
+    pressed: lumit_core::fx::registry::Pressed,
     at: Rational,
 ) {
     for (row, value) in pressed.rows {
@@ -802,7 +806,7 @@ pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, Brid
         *correction_base = base.map(Box::new);
     }
     let id = layer.id;
-    tracked.commit(lumit_core::Op::AddLayer {
+    tracked.commit(lumit_core::ops::Op::AddLayer {
         comp: tracked.comp_id,
         index: 0,
         layer: Box::new(layer),
@@ -867,7 +871,7 @@ pub fn set_camera_solve_link(
     let LayerKind::Camera { .. } = camera.item()?.kind else {
         return Err(BridgeError::NotCamera);
     };
-    camera.commit(lumit_core::Op::SetCameraSolveLink {
+    camera.commit(lumit_core::ops::Op::SetCameraSolveLink {
         comp: camera.comp_id,
         layer: camera.layer_id,
         solve_link: tracked,
@@ -959,12 +963,12 @@ pub fn add_layer_at_points(
         let name = format!("White solid {}", solids + 1);
         let added = ops
             .iter()
-            .filter(|o| matches!(o, lumit_core::Op::AddItem { .. }))
+            .filter(|o| matches!(o, lumit_core::ops::Op::AddItem { .. }))
             .count();
         // A hundred pixels square: big enough to see where the point is,
         // small enough not to cover the shot it was found in.
         let edge = 100;
-        ops.push(lumit_core::Op::AddItem {
+        ops.push(lumit_core::ops::Op::AddItem {
             index: doc.items.len() + added,
             item: Box::new(ProjectItem::Solid(SolidDef {
                 id: def,
@@ -997,12 +1001,12 @@ pub fn add_layer_at_points(
     layer.switches.three_d = true;
     crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
     let id = layer.id;
-    ops.push(lumit_core::Op::AddLayer {
+    ops.push(lumit_core::ops::Op::AddLayer {
         comp: tracked.comp_id,
         index: 0,
         layer: Box::new(layer),
     });
-    tracked.commit(lumit_core::Op::Batch { ops })?;
+    tracked.commit(lumit_core::ops::Op::Batch { ops })?;
     Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
 }
 

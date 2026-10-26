@@ -4,7 +4,7 @@
 
 use crate::GpuContext;
 
-use super::{work_texture, FxEngine, RgbSplitOp, SpectralSplitOp};
+use super::{split::RgbSplitOp, split::SpectralSplitOp, work_texture, FxEngine};
 
 /// One resolved blur, in raster pixels (the caller converts from the
 /// spec's %-of-diagonal units).

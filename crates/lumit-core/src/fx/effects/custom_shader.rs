@@ -27,7 +27,10 @@
 //! degradation ladder's CPU rung renders a Custom shader as a passthrough —
 //! exactly what an unset one renders anyway.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamId, ParamSchema, ResolveCx, Value};
+use crate::fx::{
+    params::ParamId, params::Value, registry::EffectDef, registry::EffectMetadata,
+    registry::ResolveCx, schema::EffectSchema, schema::ParamSchema,
+};
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
 
@@ -169,7 +172,7 @@ pub fn program_of(inst: &EffectInstance) -> Option<&'static crate::fx::shader::S
 
 /// The Custom shader's behaviour.
 ///
-/// It takes the **default [`Signature::Image`](crate::fx::Signature)** with
+/// It takes the **default [`Signature::Image`](crate::fx::registry::Signature)** with
 /// neither half filled: a shader is a picture operation with one picture in and
 /// one out, and its second input is an ordinary layer row rather than a data
 /// port. Declaring the default would be writing it twice.
@@ -217,7 +220,7 @@ impl EffectDef for CustomShaderDef {
 
 /// The source hash a resolved bag carries, or `None` for an op with no shader.
 #[must_use]
-pub fn hash_in(p: crate::fx::Params<'_>) -> Option<u64> {
+pub fn hash_in(p: crate::fx::params::Params<'_>) -> Option<u64> {
     let hi = p.int(HASH_HI, 0) as u32;
     let lo = p.int(HASH_LO, 0) as u32;
     let hash = (u64::from(hi) << 32) | u64::from(lo);

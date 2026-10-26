@@ -11,6 +11,11 @@
 // pushed to the right edge, which is what these rows used to do. A section is a
 // kicker over its rows with a rule and a little air above it, and no card
 // around them: the drawing separates sections with a line, not with a box.
+//
+// The one exception is a button. A row with something to report and a button
+// to change it (Settings ▸ Account) gives the button as `actions`, which sit
+// at the row's end, so a page's buttons line up in one column whatever the
+// values beside them say.
 
 import 'package:flutter/widgets.dart';
 
@@ -80,12 +85,16 @@ Widget settingsSection(
 /// pass an empty string and measure exactly [settingsRowHeight]; the help
 /// sentences these rows used to carry are gone with the drawing that had no
 /// room for them.
+///
+/// [actions] are buttons, at the row's end. [control] is then what they act
+/// on, a value read off the account or a field, and stays at the start.
 Widget settingsRow(
   LumitTheme t,
   String title,
   String description,
-  Widget control,
-) =>
+  Widget control, {
+  List<Widget> actions = const [],
+}) =>
     Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -104,6 +113,10 @@ Widget settingsRow(
                 Expanded(
                   child: Align(alignment: Alignment.centerLeft, child: control),
                 ),
+                for (final (i, action) in actions.indexed) ...[
+                  SizedBox(width: i == 0 ? settingsRowGap : 8),
+                  action,
+                ],
               ],
             ),
           ),

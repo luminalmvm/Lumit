@@ -31,7 +31,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use lumit_colour::{bake, Artefact, Chain, Direction, LoadedConfig, Op, Shaper, Stage};
+use lumit_colour::{
+    bake::bake, bake::Artefact, bake::Shaper, bake::Stage, op::Chain, op::Direction, op::Op,
+    resolve::LoadedConfig,
+};
 use lumit_core::model::{Document, WorkingSpace};
 
 /// Which transform a baked artefact is, so two of them are never confused for
@@ -103,7 +106,7 @@ pub enum OcioRequest {
 /// exactly the way a codec name is not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
-    /// `lumit_colour::ColourError::key`, or `config_unreadable` for the one
+    /// `lumit_colour::error::ColourError::key`, or `config_unreadable` for the one
     /// refusal this module raises itself: the file the document names is not
     /// there to be parsed at all.
     pub key: String,
@@ -114,7 +117,7 @@ impl Refusal {
     /// The refusal a `lumit-colour` error is, optionally noting which colour
     /// space was being resolved when it surfaced — `in_space` rather than
     /// `space`, because a refusal may already name a space of its own.
-    fn from_error(e: &lumit_colour::ColourError, in_space: Option<&str>) -> Refusal {
+    fn from_error(e: &lumit_colour::error::ColourError, in_space: Option<&str>) -> Refusal {
         let mut args: Vec<(String, String)> = e
             .args()
             .into_iter()
@@ -514,7 +517,7 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
             },
         );
     }
-    let loaded = match lumit_colour::Config::load(Path::new(path)) {
+    let loaded = match lumit_colour::config::Config::load(Path::new(path)) {
         Ok(c) => LoadedConfig::with_working(c, working == WorkingSpace::ConfigSceneLinear),
         Err(e) => return empty(e.to_string(), Refusal::from_error(&e, None)),
     };
@@ -524,7 +527,7 @@ fn load(path: &str, hash: u64, present: bool, working: WorkingSpace) -> Loaded {
     // whole file for those would lose the views people actually use, so each
     // name refuses on its own and says why where it is offered.
     let mut problems = BTreeMap::new();
-    let mut note = |item: Item, result: Result<Chain, lumit_colour::ColourError>| {
+    let mut note = |item: Item, result: Result<Chain, lumit_colour::error::ColourError>| {
         if let Err(e) = result {
             problems.insert(item, (e.to_string(), Refusal::from_error(&e, None)));
         }

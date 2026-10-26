@@ -111,7 +111,7 @@ fn convert(
         let read = super::space::reader(&context, comp_id, t);
         let space = super::space::space(&context.document, comp, layer, t, &read);
         // Each layer placed reads nine properties.
-        if !crate::expression::script::charge(space.cost.saturating_mul(9)) {
+        if !crate::expression::script::interp::charge(space.cost.saturating_mul(9)) {
             return None;
         }
         let out = space.carry(way, point_of(point), point.len())?;

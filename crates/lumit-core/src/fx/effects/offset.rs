@@ -5,7 +5,9 @@
 //! policy to choose. It is how a seamless texture is repositioned without a
 //! seam, and how a scrolling background is made out of one still.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
+use crate::fx::{
+    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Offset's controls.

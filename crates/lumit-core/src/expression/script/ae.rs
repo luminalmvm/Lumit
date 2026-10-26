@@ -527,7 +527,8 @@ fn transform_name(layer: &Layer, name: &str) -> Option<Tr> {
 /// The name an effect goes by: the user's own for it, or the effect's.
 fn effect_name(inst: &EffectInstance) -> &str {
     inst.custom_name.as_deref().unwrap_or_else(|| {
-        crate::fx::schema(&inst.effect.match_name).map_or(&inst.effect.match_name, |s| s.label)
+        crate::fx::builtins::schema(&inst.effect.match_name)
+            .map_or(&inst.effect.match_name, |s| s.label)
     })
 }
 
@@ -541,7 +542,7 @@ fn find_param(inst: &EffectInstance, name: &str) -> Option<(usize, Option<usize>
     if let Some(i) = crate::fx::effects::custom_controls::id_of(inst, name).and_then(at) {
         return Some((i, None));
     }
-    if let Some(def) = crate::fx::def(&inst.effect.match_name) {
+    if let Some(def) = crate::fx::builtins::def(&inst.effect.match_name) {
         let schema = def.schema();
         let row = schema
             .params

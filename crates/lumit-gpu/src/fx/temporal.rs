@@ -56,10 +56,10 @@ pub struct MotionBlurOp {
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
     /// Output view (FX-19): 0 Rendered, 1 Motion vectors, 2 Confidence,
-    /// 3 Dominant motion — the `lumit_core::fx::MbView::code()` integer, so the
+    /// 3 Dominant motion — the `lumit_core::fx::resolved::MbView::code()` integer, so the
     /// kernel matches the CPU oracle's `view` branch.
     pub view: i32,
-    /// Reconstruction tier: the `lumit_core::fx::MbQuality::code()` integer
+    /// Reconstruction tier: the `lumit_core::fx::resolved::MbQuality::code()` integer
     /// (0 Normal, 1 High — curved trails and half the tap spacing).
     pub quality: i32,
     /// px@raster a full **Motion vectors** channel means. Read only

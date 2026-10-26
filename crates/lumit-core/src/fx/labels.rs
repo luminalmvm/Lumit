@@ -33,9 +33,11 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     // controls panel over exactly the same seam, so the gate has to see them
     // or the seven shipped styles ship in English inside a translated
     // application.
-    let schemas = super::BUILTINS
-        .iter()
-        .chain(super::STYLE_DEFS.builtins().map(super::EffectDef::schema));
+    let schemas = super::catalogue::BUILTINS.iter().chain(
+        super::styles::STYLE_DEFS
+            .builtins()
+            .map(super::registry::EffectDef::schema),
+    );
     for schema in schemas {
         out.insert(schema.label.to_owned());
         for param in schema.params {
@@ -74,7 +76,7 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for port in crate::graph::DERIVED_PORTS {
         out.insert(port.label.to_owned());
     }
-    for def in super::BUILTIN_DEFS.iter() {
+    for def in super::catalogue::BUILTIN_DEFS.iter() {
         let signature = def.signature();
         for port in signature.inputs().iter().chain(signature.outputs()) {
             out.insert(port.label.to_owned());

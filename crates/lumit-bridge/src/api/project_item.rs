@@ -78,7 +78,7 @@ impl ItemReference {
 
     /// Commit `op` against this item's project.
     #[frb(ignore)]
-    fn commit(&self, op: lumit_core::Op) -> Result<(), BridgeError> {
+    fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -97,7 +97,7 @@ impl ItemReference {
         // Confirm the item exists before committing, so an unknown id is a calm
         // error rather than a failed op.
         self.item()?;
-        self.commit(lumit_core::Op::RenameItem {
+        self.commit(lumit_core::ops::Op::RenameItem {
             id: self.item_id(),
             name,
         })
@@ -109,7 +109,7 @@ impl ItemReference {
     #[frb(sync)]
     pub fn delete(&self) -> Result<(), BridgeError> {
         let ops = self.delete_ops()?;
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// **Duplicate**: a copy of this item under a free name ("Shot copy"),
@@ -131,11 +131,11 @@ impl ItemReference {
                 after: Vec::new(),
             };
             let copy = copier.copy(id, true).ok_or(BridgeError::InvalidItem)?;
-            let mut ops: Vec<lumit_core::Op> = copier
+            let mut ops: Vec<lumit_core::ops::Op> = copier
                 .made
                 .into_iter()
                 .enumerate()
-                .map(|(n, item)| lumit_core::Op::AddItem {
+                .map(|(n, item)| lumit_core::ops::Op::AddItem {
                     index: doc.items.len() + n,
                     item: Box::new(item),
                 })
@@ -152,14 +152,14 @@ impl ItemReference {
                     .position(|c| *c == id)
                     .map_or(children.len(), |i| i + 1);
                 children.insert(at, copy);
-                ops.push(lumit_core::Op::SetFolderChildren {
+                ops.push(lumit_core::ops::Op::SetFolderChildren {
                     folder: folder.id,
                     children,
                 });
             }
             (ops, copy)
         };
-        self.commit(lumit_core::Op::Batch { ops })?;
+        self.commit(lumit_core::ops::Op::Batch { ops })?;
         let project = self.project_id();
         Ok(match self {
             ItemReference::Footage(_) => {
@@ -180,13 +180,13 @@ impl ItemReference {
         let ops = self.delete_ops()?;
         let uses = ops
             .iter()
-            .filter(|op| !matches!(op, lumit_core::Op::RemoveItem { .. }))
+            .filter(|op| !matches!(op, lumit_core::ops::Op::RemoveItem { .. }))
             .count();
         Ok(u32::try_from(uses).unwrap_or(u32::MAX))
     }
 
     #[frb(ignore)]
-    fn delete_ops(&self) -> Result<Vec<lumit_core::Op>, BridgeError> {
+    fn delete_ops(&self) -> Result<Vec<lumit_core::ops::Op>, BridgeError> {
         let proj = self.project()?;
         let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         lumit_core::ops::delete_item_ops(&p.store.snapshot(), self.item_id())
@@ -210,7 +210,7 @@ impl ItemReference {
                 .iter()
                 .filter_map(|pi| match pi {
                     ProjectItem::Folder(f) if f.children.contains(&id) => {
-                        Some(lumit_core::Op::SetFolderChildren {
+                        Some(lumit_core::ops::Op::SetFolderChildren {
                             folder: f.id,
                             children: f.children.iter().copied().filter(|c| *c != id).collect(),
                         })
@@ -225,7 +225,7 @@ impl ItemReference {
             0 => Ok(()),
             1 => self.commit(ops.into_iter().next().ok_or(BridgeError::InvalidItem)?),
             // One undo step for the whole move, however many folders listed it.
-            _ => self.commit(lumit_core::Op::Batch { ops }),
+            _ => self.commit(lumit_core::ops::Op::Batch { ops }),
         }
     }
 
@@ -259,7 +259,7 @@ impl ItemReference {
             0 => Ok(()),
             1 => self.commit(ops.into_iter().next().ok_or(BridgeError::InvalidItem)?),
             // One undo step for the whole move, however many folders it touched.
-            _ => self.commit(lumit_core::Op::Batch { ops }),
+            _ => self.commit(lumit_core::ops::Op::Batch { ops }),
         }
     }
 
@@ -293,7 +293,7 @@ impl ItemReference {
     /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
     ///
     /// Direct placement only, deliberately, and that rule is the engine's
-    /// ([`lumit_core::Document::item_is_used`]): the badge says "a layer
+    /// ([`lumit_core::model::Document::item_is_used`]): the badge says "a layer
     /// somewhere names this", not "some render might reach it", so it does not
     /// come and go as an unrelated comp is nested elsewhere.
     #[frb(sync)]
@@ -332,7 +332,7 @@ impl ItemReference {
     #[frb(sync)]
     pub fn set_label(&self, label: u8) -> Result<(), BridgeError> {
         self.item()?;
-        self.commit(lumit_core::Op::SetItemLabel {
+        self.commit(lumit_core::ops::Op::SetItemLabel {
             id: self.item_id(),
             label,
         })
@@ -348,7 +348,7 @@ struct Copier<'a> {
     seen: Vec<Uuid>,
     made: Vec<ProjectItem>,
     /// The tags and proxies, set once the copies exist.
-    after: Vec<lumit_core::Op>,
+    after: Vec<lumit_core::ops::Op>,
 }
 
 impl Copier<'_> {
@@ -391,13 +391,13 @@ impl Copier<'_> {
             item.set_name(name);
         }
         if let Some(label) = self.doc.item_labels.get(&id) {
-            self.after.push(lumit_core::Op::SetItemLabel {
+            self.after.push(lumit_core::ops::Op::SetItemLabel {
                 id: copy,
                 label: *label,
             });
         }
         if let Some(proxy) = self.doc.proxies.get(&id) {
-            self.after.push(lumit_core::Op::SetItemProxy {
+            self.after.push(lumit_core::ops::Op::SetItemProxy {
                 id: copy,
                 proxy: Some(Box::new(proxy.clone())),
             });

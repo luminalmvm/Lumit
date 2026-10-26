@@ -297,7 +297,7 @@ class BridgeCompWiring {
   final List<BridgeInputNode> inputs;
 
   /// The one Output box's id. A graph always has exactly one, and
-  /// [`lumit_core::Op::SetCompGraph`] refuses a write that has none or two.
+  /// [`lumit_core::ops::Op::SetCompGraph`] refuses a write that has none or two.
   final UuidValue output;
   final List<BridgeCompEdge> edges;
   final List<BridgeCompNodePosition> layout;

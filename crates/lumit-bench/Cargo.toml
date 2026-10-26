@@ -22,6 +22,8 @@ default-run = "lumit-bench"
 # engine's own two threads do, and summarise a file's peaks.
 lumit-audio = { path = "../lumit-audio" }
 lumit-core = { path = "../lumit-core" }
+# The sound file a long cut's mix reads from.
+lumit-media = { path = "../lumit-media" }
 # The per-effect scenarios (B12-B14) time one pass rather than a whole comp, so
 # they build a texture and a context themselves; `no_adapter()` is also the
 # polite-skip convention the GPU oracles use.

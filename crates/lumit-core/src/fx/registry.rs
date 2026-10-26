@@ -345,7 +345,7 @@ pub trait EffectDef: Sync + Send + 'static {
     /// and laid out exactly as `rgba` is.
     ///
     /// The neighbours are the frames the stack's temporal window asked for
-    /// ([`super::stack_temporal_window`]), decoded by the same job that decoded
+    /// ([`super::temporal::stack_temporal_window`]), decoded by the same job that decoded
     /// the frame in hand. Every built-in ignores them here: Echo and the flow
     /// effects read theirs as textures in their own kernels. A **plugin** reads
     /// them on the CPU, because a motion blur or a retimer asks its input clip
@@ -382,7 +382,7 @@ pub trait EffectDef: Sync + Send + 'static {
     /// the raster exactly as a `Px`-unit declared row does.
     ///
     /// A derived id carries no declared unit, so
-    /// [`ResolvedStack::rescale_spatial`](super::ResolvedStack::rescale_spatial)
+    /// [`ResolvedStack::rescale_spatial`](super::params::ResolvedStack::rescale_spatial)
     /// cannot find one by matching the schema — which is how Scanlines' roll
     /// offset was left behind while its period moved, shifting the pattern's
     /// phase with the size of the raster it was reused on. An effect whose
@@ -583,7 +583,7 @@ pub trait EffectDef: Sync + Send + 'static {
     /// frames it names have to reach the frame key and the neighbour decode or
     /// a cached frame would outlive the frames it was sampled from.
     ///
-    /// It must stay cheap and pure: [`super::stack_temporal_window`] calls it
+    /// It must stay cheap and pure: [`super::temporal::stack_temporal_window`] calls it
     /// once per live effect per frame, from the key walk.
     fn frames_needed(&self, _inst: &EffectInstance, _frame: f64) -> Option<Vec<i32>> {
         None
@@ -824,8 +824,8 @@ impl Catalogue {
 macro_rules! catalogue {
     ($($def:expr => $decl:ty),* $(,)?) => {
         /// Every built-in effect's definition, in menu order.
-        pub static BUILTIN_DEFS: $crate::fx::Catalogue =
-            $crate::fx::Catalogue::new(&[$(&$def),*]);
+        pub static BUILTIN_DEFS: $crate::fx::registry::Catalogue =
+            $crate::fx::registry::Catalogue::new(&[$(&$def),*]);
 
         /// Every built-in effect's declaration, in the same order — the list the
         /// Add-effect menu, the command palette, the preset browser and the
@@ -835,8 +835,8 @@ macro_rules! catalogue {
         /// disagree about which effects exist or about what order they come in;
         /// until the last effect migrated this was a four-thousand-line literal
         /// held against the generated declarations by a test.
-        pub const BUILTINS: &[$crate::fx::EffectSchema] =
-            &[$(<$decl as $crate::fx::EffectMetadata>::SCHEMA),*];
+        pub const BUILTINS: &[$crate::fx::schema::EffectSchema] =
+            &[$(<$decl as $crate::fx::registry::EffectMetadata>::SCHEMA),*];
     };
 }
 

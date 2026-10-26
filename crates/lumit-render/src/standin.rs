@@ -28,11 +28,11 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use lumit_media::audio::SoundReader;
+use lumit_media::audio::SoundSource;
 use lumit_media::encode::{
     AudioCodec, AudioSettings, ColourTags, Encoder, Metadata, VideoCodec, VideoSettings,
 };
 use lumit_media::probe::STAND_IN_TAG;
-use lumit_media::SoundSource;
 
 /// How many bits a second a stand-in spends on each pixel of a frame, and
 /// the least and most it comes to. Enough to cut by and no more.

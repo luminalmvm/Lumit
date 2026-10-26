@@ -32,6 +32,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../panels/viewer_stage.dart' show layerAtCompPoint;
+import '../state/account.dart' show Friend;
 import '../state/external_links.dart';
 import '../state/reviews.dart';
 import '../state/timecode.dart';
@@ -47,6 +48,7 @@ import 'review_link_page.dart';
 import 'review_link_parts.dart';
 import 'review_send.dart';
 import 'settings_account.dart' show askBefore;
+import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 
 /// The window with its list in it, the list's own column, and how tall the
 /// two stand before they scroll. The column is as wide as a row's second
@@ -585,6 +587,11 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         l10n.reviewOpenInBrowser,
         () => unawaited(openExternalLink(review.ownerUrl)),
       ),
+      (
+        'send-friend',
+        l10n.reviewSendToFriend,
+        () => unawaited(_pickFriend(row, at, review)),
+      ),
       if (comp != null && widget.ui.account.pro)
         (
           'send-version',
@@ -601,6 +608,55 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         () => unawaited(_deleteLink(review)),
       ),
     ]);
+  }
+
+  /// A menu at [at] of the account's friends, to send [review] to. Without
+  /// a username there are none, and the menu says so, with the way to the
+  /// Account page where one is chosen and friends are added. Whoever made
+  /// the link is left out: sending it back to them does nothing.
+  Future<void> _pickFriend(BuildContext anchor, Offset at, Review review) async {
+    final account = widget.ui.account;
+    await account.loadFriends();
+    if (!mounted || !anchor.mounted) return;
+    final named = account.account?.username != null;
+    final friends = named
+        ? [
+            for (final friend in account.friends.friends)
+              if (friend.username != review.ownerUsername) friend,
+          ]
+        : const <Friend>[];
+    reviewRowMenu(anchor, at, [
+      if (!named)
+        ('friends-username', l10n.friendsNeedUsername, null)
+      else if (friends.isEmpty)
+        ('friends-none', l10n.reviewNoFriends, null)
+      else
+        for (final friend in friends)
+          (
+            'friend-${friend.username}',
+            friend.name,
+            () => unawaited(_do(() async {
+                  await account.sendToFriend(review.id, friend.username);
+                  widget.app.postNotice(l10n.reviewSentToFriend(friend.name));
+                })),
+          ),
+      if (friends.isEmpty) ...[
+        null,
+        (
+          'friends-settings',
+          l10n.profileAccountSettings,
+          () => unawaited(showSettingsWindowFrb(context,
+              initialPage: SettingsPage.account)),
+        ),
+      ],
+    ]);
+  }
+
+  /// [_pickFriend], under the button that asked.
+  void _pickFriendUnder(BuildContext button, Review review) {
+    final box = button.findRenderObject()! as RenderBox;
+    unawaited(_pickFriend(
+        button, box.localToGlobal(Offset(0, box.size.height + 2)), review));
   }
 
   void _add(Review review, ReviewVersion version) {
@@ -887,7 +943,9 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-          child: ReviewAddress(review: review),
+          child: ReviewAddress(
+              review: review,
+              onSendToFriend: (button) => _pickFriendUnder(button, review)),
         ),
         if (failure != null)
           Padding(

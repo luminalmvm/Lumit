@@ -532,7 +532,7 @@ impl CompositionReference {
             let placed = tr.placement_at(lt, !layer.is_3d(), &|p| p.value_at(lt));
             let place = |anchor: P2, scale: P2| -> Place {
                 let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
-                let own = lumit_render::place_matrix_3d(
+                let own = lumit_gpu::composite::place_matrix_3d(
                     f(placed.position),
                     f((anchor.0, anchor.1, placed.anchor.2)),
                     f((scale.0, scale.1, placed.scale.2)),
@@ -635,7 +635,7 @@ impl CompositionReference {
                         })
                         .flatten();
                     let (rx, ry, rz) = eye.rotation_deg;
-                    let m = lumit_render::place_matrix(
+                    let m = lumit_gpu::composite::place_matrix(
                         (own.0 as f32, own.1 as f32),
                         (0.0, 0.0),
                         (100.0, 100.0),

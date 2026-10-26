@@ -116,7 +116,8 @@ fn project() -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
     }));
 
-    let mut brush = lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
+    let mut brush =
+        lumit_core::fx::builtins::instantiate("roto_brush").expect("roto brush is a built-in");
     // Stroked, so the frame key stamps a chain hash and the panel would offer
     // Propagate. The strokes themselves are not read here — the matte is filed
     // directly, exactly as the bridge's own tests file a camera solve.

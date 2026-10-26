@@ -18,7 +18,7 @@ pub mod compressor;
 pub mod gate;
 pub mod limiter;
 
-use crate::fx::ParamId;
+use crate::fx::params::ParamId;
 
 /// What a row holds at this block's start, or `default` when the bake sent no
 /// number for it, which is what a saved instance older than the row looks

@@ -57,6 +57,9 @@ impl ItemPath {
     /// The same path, narrowed to one property of the layer.
     #[must_use]
     pub fn property(&self, name: &str) -> Self {
+        // A property nobody renamed has only its match name to go by, and
+        // the report reads better without After Effects' own prefix on it.
+        let name = name.strip_prefix("ADBE ").unwrap_or(name);
         Self {
             comp: self.comp.clone(),
             layer: self.layer.clone(),
@@ -186,9 +189,18 @@ pub enum Reason {
     BlendModeUnavailable { ae_mode: String },
     /// One of AE's "Classic" blend modes; imported as its modern counterpart.
     BlendModeClassic { ae_mode: String },
-    /// A shape layer: the paths, fills and strokes are a later stage, so the
-    /// layer keeps its slot, transform and parenting but draws nothing.
-    ShapeContentsNotMapped,
+    /// A shape operator Lumit has no place for, such as Merge Paths or Zig
+    /// Zag. The shape draws without it.
+    ShapeOperatorNotCarried { name: String },
+    /// A shape operator drawn with the nearest Lumit modifier: Wiggle Paths
+    /// with Deform, and Offset Paths with its corners rounded and no copies.
+    ShapeOperatorApproximated { name: String },
+    /// A fill's or stroke's colour, opacity or width, or a group's opacity, is
+    /// keyed. Lumit keeps these still, so it imports as it starts.
+    ShapePaintKeptStill,
+    /// A gradient's colours are a record neither way in reads yet, so it
+    /// imports in After Effects' own starting colours, white to black.
+    ShapeGradientColoursDefault,
     /// A text layer using something Lumit's text has no place for: animators,
     /// a path, tsume, a justified last line, or source text that changes.
     TextStylingNotMapped,
@@ -296,229 +308,123 @@ impl std::fmt::Display for Reason {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ItemUnreadable => write!(f, "the item could not be read and was skipped"),
-            Self::CompMissing => write!(f, "no composition data arrived — imported empty"),
-            Self::CompFrameRateGuessed { used } => {
-                write!(f, "no frame rate arrived — imported at {used} fps")
-            }
-            Self::CompDurationGuessed { used } => {
-                write!(f, "no duration arrived — imported {used} seconds long")
-            }
-            Self::PixelAspectIgnored { par } => write!(
-                f,
-                "pixel aspect ratio {par} has no equivalent — imported with square pixels"
-            ),
-            Self::CompStartIgnored { start } => write!(
-                f,
-                "the composition's timecode started at {start} seconds — imported starting at zero"
-            ),
+            Self::ItemUnreadable => write!(f, "The item could not be read"),
+            Self::CompMissing => write!(f, "The composition had no data"),
+            Self::CompFrameRateGuessed { used } => write!(f, "Imported at {used} fps"),
+            Self::CompDurationGuessed { used } => write!(f, "Imported {used} seconds long"),
+            Self::PixelAspectIgnored { par } => write!(f, "Pixel aspect {par} imported as square"),
+            Self::CompStartIgnored { start } => write!(f, "Starts at zero, not {start} seconds"),
             Self::NestedPreserveIgnored { fps, resolution } => {
                 let what = match (fps, resolution) {
                     (true, true) => "frame rate and resolution",
                     (true, false) => "frame rate",
                     _ => "resolution",
                 };
-                write!(
-                    f,
-                    "preserve {what} when nested has no equivalent — nested comps follow the \
-                     parent"
-                )
+                write!(f, "Preserve {what} was not carried")
             }
-            Self::ProjectBlendingDiffers { bits } => write!(
-                f,
-                "the project blended at {bits} bits without linear blending — Lumit composites in \
-                 scene-linear light, so blends can shift slightly"
-            ),
-            Self::RendererUnrecognised { renderer } => write!(
-                f,
-                "the {renderer} renderer's features do not import — layers arrive flat"
-            ),
-            Self::MediaMissing { path } => {
-                write!(f, "the file at {path} was missing in After Effects too")
+            Self::ProjectBlendingDiffers { bits } => {
+                write!(f, "{bits} bit blending imported as linear")
             }
-            Self::MediaNotFound => write!(
-                f,
-                "the file is not on this machine — imported offline, ready to relink"
-            ),
-            Self::MediaPlaceholder => write!(f, "an After Effects placeholder, not a real file"),
-            Self::ColourProfileIgnored { profile } => write!(
-                f,
-                "the {profile} colour profile has no equivalent, so the file's own colour is used"
-            ),
-            Self::OcioConfigNotFound { config } => write!(
-                f,
-                "the OCIO config {config} isn't on this machine, so Lumit's own colour is used"
-            ),
-            Self::LayerUnreadable => {
-                write!(f, "the layer had no place in the stack and was skipped")
+            Self::RendererUnrecognised { renderer } => {
+                write!(f, "The {renderer} renderer was not carried")
             }
-            Self::LayerKindUnsupported { ae_kind } => write!(
-                f,
-                "layer kind {ae_kind} has no equivalent — imported as a null so parenting survives"
-            ),
-            Self::LayerSourceMissing { id } => write!(
-                f,
-                "the source item {id} is not in the capture — imported as a null so parenting \
-                 survives"
-            ),
-            Self::LayerSpanRepaired => write!(
-                f,
-                "the layer's in and out points did not make a span — imported one frame long"
-            ),
-            Self::AudioLayerAsFootage => {
-                write!(f, "imported as a footage layer carrying its audio")
+            Self::MediaMissing { path } => write!(f, "The file at {path} was missing"),
+            Self::MediaNotFound => write!(f, "The file was not found"),
+            Self::MediaPlaceholder => write!(f, "An After Effects placeholder"),
+            Self::ColourProfileIgnored { profile } => {
+                write!(f, "The {profile} colour profile was not carried")
             }
-            Self::AudioLevelsDiffer { left, right } => write!(
-                f,
-                "audio levels {left} dB left and {right} dB right have one level in \
-                 Lumit — imported at the left"
-            ),
-            Self::PreserveTransparencyNotSupported => write!(
-                f,
-                "preserve underlying transparency has no equivalent yet — not applied"
-            ),
+            Self::OcioConfigNotFound { config } => {
+                write!(f, "The OCIO config {config} was not found")
+            }
+            Self::LayerUnreadable => write!(f, "The layer could not be read"),
+            Self::LayerKindUnsupported { ae_kind } => write!(f, "{ae_kind} imported as a null"),
+            Self::LayerSourceMissing { id } => write!(f, "Source {id} was missing"),
+            Self::LayerSpanRepaired => write!(f, "Imported one frame long"),
+            Self::AudioLayerAsFootage => write!(f, "Imported as a footage layer"),
+            Self::AudioLevelsDiffer { left, right } => {
+                write!(f, "Levels {left} and {right} dB imported as {left} dB")
+            }
+            Self::PreserveTransparencyNotSupported => {
+                write!(f, "Preserve underlying transparency was not carried")
+            }
             Self::LayerQualityIgnored { quality } => {
-                write!(
-                    f,
-                    "layer quality {quality} has no equivalent — imported at full quality"
-                )
+                write!(f, "{quality} quality imported as full")
             }
             Self::StretchAsRetime { percent } => {
-                write!(
-                    f,
-                    "time stretch {percent}% imported as the equivalent Retime"
-                )
+                write!(f, "Time stretch {percent}% imported as Retime")
             }
-            Self::FlowEngineDiffers => write!(
-                f,
-                "Pixel Motion imported as flow interpolation — a different flow engine, so \
-                 in-betweens differ"
-            ),
-            Self::ParentMissing { index } => {
-                write!(
-                    f,
-                    "the parent layer {index} is not in this composition — imported unparented"
-                )
-            }
-            Self::MatteTargetMissing { index } => {
-                write!(
-                    f,
-                    "the matte layer {index} is not in this composition — imported with no matte"
-                )
-            }
-            Self::BlendModeUnavailable { ae_mode } => {
-                write!(
-                    f,
-                    "blend mode {ae_mode} has no equivalent — imported as Normal"
-                )
-            }
+            Self::FlowEngineDiffers => write!(f, "Pixel Motion imported as flow interpolation"),
+            Self::ParentMissing { index } => write!(f, "Parent layer {index} was missing"),
+            Self::MatteTargetMissing { index } => write!(f, "Matte layer {index} was missing"),
+            Self::BlendModeUnavailable { ae_mode } => write!(f, "{ae_mode} imported as Normal"),
             Self::BlendModeClassic { ae_mode } => {
-                write!(f, "{ae_mode} imported as its modern counterpart")
+                write!(f, "{ae_mode} imported as the modern mode")
             }
-            Self::ShapeContentsNotMapped => write!(
+            Self::ShapeOperatorNotCarried { name } => write!(f, "{name} was not carried"),
+            Self::ShapeOperatorApproximated { name } => {
+                write!(f, "{name} imported as the nearest match")
+            }
+            Self::ShapePaintKeptStill => write!(f, "The paint's animation was not carried"),
+            Self::ShapeGradientColoursDefault => {
+                write!(f, "The gradient imported as white to black")
+            }
+            Self::TextStylingNotMapped => write!(
                 f,
-                "shape contents are not imported yet — the layer keeps its place and draws nothing"
+                "The text's animators, path and some styling were not carried"
             ),
-            Self::TextStylingNotMapped => {
-                write!(
-                    f,
-                    "the text imported, but not its animators, path, tsume, fully justified last \
-                     line or changing source text"
-                )
-            }
             Self::LightKindApproximated { ae_kind } => {
-                write!(
-                    f,
-                    "a {ae_kind} light has no equivalent — imported as the nearest kind"
-                )
+                write!(f, "{ae_kind} light imported as the nearest kind")
             }
-            Self::ShadowSwitchKeyed => write!(
-                f,
-                "the setting is keyframed, and Lumit keeps the first key's"
-            ),
-            Self::SpatialTangentsFlattened => write!(
-                f,
-                "the motion path's spatial tangents are not carried — each axis animates on its own"
-            ),
-            Self::ExpressionCarried => {
-                write!(
-                    f,
-                    "the expression imported as source text and drives the property"
-                )
+            Self::ShadowSwitchKeyed => write!(f, "The shadow setting kept its first key"),
+            Self::SpatialTangentsFlattened => {
+                write!(f, "The motion path's curves were not carried")
             }
+            Self::ExpressionCarried => write!(f, "The expression was imported"),
             Self::ExpressionDisabledCarried => {
-                write!(
-                    f,
-                    "a switched-off expression — its text is kept, and it drives nothing"
-                )
+                write!(f, "The expression was imported switched off")
             }
             Self::ExpressionNotRunnable { source } => write!(
                 f,
-                "the expression does not run here and was switched off — its text is kept, and \
-                 the keyframes underneath drive the property: {source}"
+                "The expression could not run and was switched off: {source}"
             ),
-            Self::ExpressionOverKeys { source } => write!(
-                f,
-                "the expression sits over keyframes, and only one of the two can drive a property \
-                 here — the keyframes do, and the expression's text is kept: {source}"
-            ),
-            Self::PropertyUnreadable { match_name } => write!(
-                f,
-                "After Effects could not read {match_name} itself, so there was nothing to import"
-            ),
-            Self::ChunkUnreadable { chunk } => write!(
-                f,
-                "a record in the project file ({chunk}) could not be read and was skipped"
-            ),
-            Self::StructureUnreadable { count } => write!(
-                f,
-                "the project's structure could not be read — only its footage references \
-                 ({count}) were imported, with no compositions or layers"
-            ),
-            Self::MaskFeatherAxesDiffer { x, y } => write!(
-                f,
-                "feather {x} × {y} has one width in Lumit — imported at their average"
-            ),
-            Self::MaskRotoBezierFlattened => write!(
-                f,
-                "a RotoBezier mask's curves are computed by After Effects — imported as its polygon"
-            ),
-            Self::EffectPlaceholder { match_name } => write!(
-                f,
-                "{match_name} imported as a placeholder — every parameter is kept and it renders \
-                 nothing"
-            ),
-            Self::EffectParamsUnreadable { count } => write!(
-                f,
-                "{count} parameters could not be read — they are kept whole and import as nothing"
-            ),
-            Self::EffectParamNotCarried { effect, param } => write!(
-                f,
-                "{effect}'s {param} has no equivalent — the effect imported without it"
-            ),
+            Self::ExpressionOverKeys { source } => {
+                write!(f, "The keyframes are used, not the expression: {source}")
+            }
+            Self::PropertyUnreadable { match_name } => write!(f, "{match_name} could not be read"),
+            Self::ChunkUnreadable { chunk } => write!(f, "A record ({chunk}) could not be read"),
+            Self::StructureUnreadable { count } => {
+                write!(f, "Only {count} footage items could be read")
+            }
+            Self::MaskFeatherAxesDiffer { x, y } => {
+                write!(f, "Feather {x} × {y} imported as the average")
+            }
+            Self::MaskRotoBezierFlattened => write!(f, "The RotoBezier mask imported as a polygon"),
+            Self::EffectPlaceholder { match_name } => {
+                write!(f, "{match_name} imported as a placeholder")
+            }
+            Self::EffectParamsUnreadable { count } => {
+                write!(f, "{count} parameters could not be read")
+            }
+            Self::EffectParamNotCarried { effect, param } => {
+                write!(f, "{effect}'s {param} was not carried")
+            }
             Self::EffectParamApproximated {
                 effect,
                 param,
                 imported_as,
             } => write!(f, "{effect}'s {param} imported as {imported_as}"),
             Self::EffectDiffers { effect, detail } => write!(f, "{effect} imported, and {detail}"),
-            Self::EffectSpeedAsKeyframes { effect, param } => write!(
-                f,
-                "{effect}'s {param} read the clock — imported as keyframes running at the same \
-                 rate"
-            ),
+            Self::EffectSpeedAsKeyframes { effect, param } => {
+                write!(f, "{effect}'s {param} imported as keyframes")
+            }
             Self::EffectSuggestion {
                 match_name,
                 instead,
-            } => write!(
-                f,
-                "{match_name} imported as a placeholder — {instead} does this job in Lumit"
-            ),
-            Self::EffectParamRebased { effect, param } => write!(
-                f,
-                "{effect}'s {param} was measured in After Effects' units — imported as the same \
-                 length in Lumit's"
-            ),
+            } => write!(f, "{match_name} imported as a placeholder, try {instead}"),
+            Self::EffectParamRebased { effect, param } => {
+                write!(f, "{effect}'s {param} converted to Lumit's units")
+            }
             Self::EffectAsPlugin {
                 match_name,
                 plugin,
@@ -526,8 +432,7 @@ impl std::fmt::Display for Reason {
                 controls,
             } => write!(
                 f,
-                "{match_name} imported as the {plugin} plug-in you have installed, which is the \
-                 same effect — {carried} of its {controls} controls carried across by name"
+                "{match_name} imported as {plugin}, {carried} of {controls} controls matched"
             ),
         }
     }

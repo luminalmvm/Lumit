@@ -20,7 +20,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_colour::op::{CdlParams, Direction, Op};
-use lumit_colour::{bake, Artefact, Chain, Shaper};
+use lumit_colour::{bake::bake, bake::Artefact, bake::Shaper, op::Chain};
 use lumit_core::anim::Property;
 use lumit_core::model::{
     Composition, Document, Layer, LayerKind, LinearColour, MediaRef, ProjectItem, SolidDef,

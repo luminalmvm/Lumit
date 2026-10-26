@@ -14,8 +14,9 @@ use crate::fx::effects::vary_points::{
 };
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, ShortText, Signature, Value,
+    params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
 
@@ -366,7 +367,11 @@ impl EffectDef for RelaxPointsDef {
         push(RelaxPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }
 
-    fn modify_points(&self, p: Params<'_>, cx: &crate::fx::ModifyCx<'_>) -> Option<PointsStream> {
+    fn modify_points(
+        &self,
+        p: Params<'_>,
+        cx: &crate::fx::registry::ModifyCx<'_>,
+    ) -> Option<PointsStream> {
         Some(RelaxPoints::read(p).apply(cx.input()?))
     }
 }

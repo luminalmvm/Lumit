@@ -10,7 +10,7 @@ pub struct FramePixels {
     pub rgba: Vec<u8>,
     /// How wide `rgba`'s samples are: eight-bit sRGB for nearly everything,
     /// scene-linear float for a float source such as OpenEXR.
-    pub format: lumit_media::PixelFormat,
+    pub format: lumit_media::decode::PixelFormat,
     pub frame: usize,
     pub item: Uuid,
 }
@@ -18,7 +18,7 @@ pub struct FramePixels {
 pub struct Request {
     pub generation: u64,
     pub item: Uuid,
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
     /// The file is missing (docs/07 §3.3): answer with the test-bar slate at
@@ -38,7 +38,7 @@ pub struct CompJob {
     pub item: Uuid,
     /// One media file, or the numbered run of stills this item is —
     /// whichever it is, the decode worker opens it the same way.
-    pub source: lumit_media::MediaSource,
+    pub source: lumit_media::sequence::MediaSource,
     pub source_frame: usize,
     pub target_width: Option<u32>,
     /// The source's native pixel size, independent of the decode width.
@@ -69,7 +69,7 @@ pub struct CompJob {
     /// deduplicated: the decode worker measures the dense motion from this frame
     /// to the neighbour at each offset (already fetched via `temporal`) and
     /// stamps them onto [`CompLayerPixels::flow_fields`]. Empty for a stack that
-    /// consumes no flow. See [`lumit_core::fx::stack_flow_neighbours`] - a list
+    /// consumes no flow. See [`lumit_core::fx::temporal::stack_flow_neighbours`] - a list
     /// rather than the one slot it used to be.
     pub flow_neighbours: Vec<i32>,
     /// The file could not be found (docs/07 §3.3): the worker synthesises the
@@ -162,7 +162,7 @@ pub struct CompLayerPixels {
     /// How wide `rgba`'s samples are, and those of every neighbour in
     /// `temporal` beside it — they come from the one decoder, so they agree.
     /// Float here is a source (OpenEXR) that kept its range and precision.
-    pub format: lumit_media::PixelFormat,
+    pub format: lumit_media::decode::PixelFormat,
     /// Native source size (see [`CompJob::natural_w`]); drives geometry.
     pub natural_w: u32,
     pub natural_h: u32,
@@ -291,7 +291,7 @@ struct CachedFrame {
     width: u32,
     height: u32,
     rgba: Vec<u8>,
-    format: lumit_media::PixelFormat,
+    format: lumit_media::decode::PixelFormat,
     /// Decoded ahead for one render, which takes it out rather than copying
     /// it ([`DecodePool::hand_over_prefetched`]).
     once: bool,
@@ -337,7 +337,7 @@ pub const MAX_OPEN_DECODERS: usize = 12;
 #[derive(Default)]
 pub struct OpenDecoders {
     /// Each decoder beside the frame it was last used for.
-    open: HashMap<Uuid, (u64, lumit_media::VideoDecoder)>,
+    open: HashMap<Uuid, (u64, lumit_media::decode::VideoDecoder)>,
     /// The frame being decoded for, counted by [`Self::next_frame`].
     frame: u64,
 }
@@ -371,8 +371,8 @@ impl OpenDecoders {
     pub fn open(
         &mut self,
         item: Uuid,
-        source: &lumit_media::MediaSource,
-    ) -> Result<&mut lumit_media::VideoDecoder, lumit_media::MediaError> {
+        source: &lumit_media::sequence::MediaSource,
+    ) -> Result<&mut lumit_media::decode::VideoDecoder, lumit_media::MediaError> {
         if !self.open.contains_key(&item) {
             self.make_room();
         }
@@ -384,7 +384,10 @@ impl OpenDecoders {
                 // index this decoder opens with, so the first frame costs a
                 // read rather than a fresh packet scan of the file.
                 let index = crate::media_index::load_or_build_index(source)?;
-                e.insert((frame, lumit_media::VideoDecoder::open(source, index)?))
+                e.insert((
+                    frame,
+                    lumit_media::decode::VideoDecoder::open(source, index)?,
+                ))
             }
         };
         slot.0 = frame;
@@ -412,7 +415,7 @@ impl OpenDecoders {
     pub fn decode_want(
         &mut self,
         want: &crate::headless::PrefetchWant,
-    ) -> Option<lumit_media::DecodedFrame> {
+    ) -> Option<lumit_media::decode::DecodedFrame> {
         let dec = self.open(want.item, &want.source).ok()?;
         let frame = want.frame.min(dec.frame_count().saturating_sub(1));
         dec.frame_rgba(frame, want.target_width).ok()
@@ -441,7 +444,7 @@ pub struct DecodePool {
     /// file for nearly all of its life, but not all: it is relinked, or a
     /// stand-in for it gives way to the original. One entry an item, and an
     /// entry is replaced when its item's file is.
-    sources: HashMap<Uuid, lumit_media::MediaSource>,
+    sources: HashMap<Uuid, lumit_media::sequence::MediaSource>,
     frame_cache: lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
@@ -457,7 +460,10 @@ pub struct DecodePool {
     /// [`synthesis_refusal`] instead. The number is the addons folder's
     /// generation when it was opened, so installing the pack is enough to get
     /// the model painting without restarting Lumit.
-    synthesis: Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     /// Whether a model that will not paint is a failure rather than a
     /// substitution. Set on the pool an export renders through: a preview is a
     /// thing you are looking at and a file is a thing you keep, so preview
@@ -710,7 +716,7 @@ impl DecodePool {
     /// When either is not what it was before, the decoder open on the old one
     /// goes, and every decoded frame with it: they are filed by item and
     /// frame, so the old reading's would be handed back as the new one's.
-    fn settle(&mut self, item: Uuid, source: &lumit_media::MediaSource, slate: bool) {
+    fn settle(&mut self, item: Uuid, source: &lumit_media::sequence::MediaSource, slate: bool) {
         if slate {
             return;
         }
@@ -756,10 +762,10 @@ impl DecodePool {
     pub fn preload(
         &mut self,
         item: Uuid,
-        source: &lumit_media::MediaSource,
+        source: &lumit_media::sequence::MediaSource,
         frame: usize,
         target_width: Option<u32>,
-        decoded: lumit_media::DecodedFrame,
+        decoded: lumit_media::decode::DecodedFrame,
     ) {
         match self.sources.get(&item) {
             Some(known) if known != source => return,
@@ -837,7 +843,7 @@ fn decode(
             rgba: lumit_media::slate::colour_bars(w, h),
             // The slate is drawn here, in bytes, whatever the missing file
             // would have been.
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             frame: req.frame,
             item: req.item,
         });
@@ -1179,7 +1185,8 @@ pub fn addon_needs(doc: &lumit_core::model::Document) -> Vec<Need> {
     if lumit_ml::synthesis::installed_identity().is_some()
         && !matches!(
             lumit_ml::runtime::status(),
-            lumit_ml::RuntimeStatus::Missing | lumit_ml::RuntimeStatus::Failed { .. }
+            lumit_ml::runtime::RuntimeStatus::Missing
+                | lumit_ml::runtime::RuntimeStatus::Failed { .. }
         )
         && machine_refusal().is_none()
     {
@@ -1228,10 +1235,10 @@ fn refusal_sentence(why: &SynthesisRefusal) -> String {
 }
 
 /// A model's own refusal as the row's.
-fn synthesis_refusal_of(why: &lumit_ml::MlError) -> SynthesisRefusal {
+fn synthesis_refusal_of(why: &lumit_ml::error::MlError) -> SynthesisRefusal {
     match why {
-        lumit_ml::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
-        lumit_ml::MlError::PackMissing(_) => SynthesisRefusal::PackMissing,
+        lumit_ml::error::MlError::RuntimeMissing => SynthesisRefusal::RuntimeMissing,
+        lumit_ml::error::MlError::PackMissing(_) => SynthesisRefusal::PackMissing,
         other => SynthesisRefusal::Failed(other.to_string()),
     }
 }
@@ -1301,7 +1308,10 @@ fn combine_pair(
     decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     refuse: bool,
     refused: &mut Option<SynthesisRefusal>,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
@@ -1328,7 +1338,7 @@ fn combine_pair(
     let b = decode(decoders, cache, &req2, false)?;
     // Both policies keep the plate's own width: a retimed OpenEXR is still an
     // OpenEXR (docs/impl/media-io.md §5a).
-    let float = a.format == lumit_media::PixelFormat::LinearF32;
+    let float = a.format == lumit_media::decode::PixelFormat::LinearF32;
     let Some(params) = flow else {
         return Ok(if float {
             lumit_core::pixels::blend_f32(&a.rgba, &b.rgba, w)
@@ -1405,7 +1415,10 @@ fn combine_pair(
 /// Installing one moves the addons folder's generation, and the next frame
 /// opens the pack that has just arrived.
 fn synthesised(
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     a: &FramePixels,
     b: &FramePixels,
     width: usize,
@@ -1420,7 +1433,7 @@ fn synthesised(
     // one the user has just pressed a button to get.
     let now = lumit_ml::store::generation();
     if synthesis.as_ref().is_none_or(|(at, _)| *at != now) {
-        *synthesis = Some((now, lumit_ml::Synthesis::open()));
+        *synthesis = Some((now, lumit_ml::synthesis::Synthesis::open()));
     }
     let (_, door) = synthesis.as_mut().ok_or(SynthesisRefusal::PackMissing)?;
     let model = door.as_mut().map_err(|why| synthesis_refusal_of(why))?;
@@ -1434,7 +1447,10 @@ fn decode_comp(
     decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
-    synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
     refuse: bool,
     flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
     gpu: Option<&lumit_gpu::GpuContext>,
@@ -1464,7 +1480,7 @@ fn decode_comp(
                 width: w,
                 height: h,
                 rgba: lumit_media::slate::colour_bars(w, h),
-                format: lumit_media::PixelFormat::Srgb8,
+                format: lumit_media::decode::PixelFormat::Srgb8,
                 frame: job.source_frame,
                 item: job.item,
             }
@@ -1720,7 +1736,7 @@ fn decode_comp(
         // clips would each have shown alone. See [`Cut::Under`] for the fit.
         if let Some((gain, below)) = under {
             use lumit_core::pixels;
-            use lumit_media::PixelFormat::{LinearF32, Srgb8};
+            use lumit_media::decode::PixelFormat::{LinearF32, Srgb8};
             let below = below.filter(|p| p.format == format).and_then(|p| {
                 if (p.width, p.height) == (width, height) {
                     Some(p.rgba)
@@ -1786,7 +1802,7 @@ mod tests {
             width: 4,
             height: 4,
             rgba: Arc::new(vec![0u8; bytes]),
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
             natural_w: 4,
             natural_h: 4,
             temporal: Vec::new(),
@@ -1892,16 +1908,16 @@ mod tests {
         lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
 
         let (layer, item) = (Uuid::now_v7(), Uuid::now_v7());
-        let frame = |value: u8| lumit_media::DecodedFrame {
+        let frame = |value: u8| lumit_media::decode::DecodedFrame {
             width: 4,
             height: 4,
             rgba: vec![value; 4 * 4 * 4],
-            format: lumit_media::PixelFormat::Srgb8,
+            format: lumit_media::decode::PixelFormat::Srgb8,
         };
         let job = || CompJob {
             layer,
             item,
-            source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
+            source: lumit_media::sequence::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
             source_frame: 0,
             target_width: None,
             natural_w: 4,
@@ -1926,7 +1942,7 @@ mod tests {
         pool.refuse_substitution();
         // Both ends of the pair handed over rather than decoded, so the test
         // needs no media and the file in the job never has to exist.
-        let read = lumit_media::MediaSource::file("clip.mov");
+        let read = lumit_media::sequence::MediaSource::file("clip.mov");
         pool.preload(item, &read, 0, None, frame(10));
         pool.preload(item, &read, 1, None, frame(200));
         let Err(why) = pool.decode_comp(Uuid::now_v7(), 0, &[job()], 0, &|_| {}) else {
@@ -1978,7 +1994,7 @@ mod tests {
             pool.decode_footage(&Request {
                 generation: 0,
                 item: Uuid::now_v7(),
-                source: lumit_media::MediaSource::file(file.clone()),
+                source: lumit_media::sequence::MediaSource::file(file.clone()),
                 frame: 40,
                 target_width: None,
                 slate: None,
@@ -2006,7 +2022,7 @@ mod tests {
         let cache = dir.path().join("media-index");
         let want = |item: Uuid, frame: usize| crate::headless::PrefetchWant {
             item,
-            source: lumit_media::MediaSource::file(file.clone()),
+            source: lumit_media::sequence::MediaSource::file(file.clone()),
             frame,
             target_width: None,
         };

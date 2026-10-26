@@ -33,14 +33,18 @@
 //! Lumit that grows the field can pick it up.
 
 mod curves;
-mod effects;
+pub mod effects;
 mod fx_colour;
 mod fx_distort;
 mod fx_grid;
 mod layers;
+mod masks;
 mod props;
+mod shape_paths;
+mod shapes;
 mod styles;
-mod table;
+pub mod table;
+mod text;
 mod time;
 
 use std::collections::{BTreeMap, HashMap};
@@ -54,9 +58,6 @@ use uuid::Uuid;
 
 use crate::capture::{Capture, Comp, Item};
 use crate::report::{ImportReport, ItemPath, Outcome, Reason};
-
-pub use effects::{map_effect, MappedEffect};
-pub use table::{ae_match_name, ae_match_name_of, other_names_of};
 
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};
@@ -764,18 +765,16 @@ fn composition(
         masks: Vec::new(),
         self_index: 0,
     };
-    let mut text_origins = BTreeMap::new();
+    let mut origins = BTreeMap::new();
     let mut layers: Vec<_> = ae
         .layers
         .iter()
-        .filter_map(|layer| {
-            layers::map_layer(&mut conv, &path, layer, items, &ids, &mut text_origins)
-        })
+        .filter_map(|layer| layers::map_layer(&mut conv, &path, layer, items, &ids, &mut origins))
         .collect();
-    // A layer parented to text sits in that text's own space, whose origin
-    // moved with its anchor.
+    // A layer parented to text or a shape sits in that layer's own space,
+    // whose origin moved with its anchor.
     for layer in &mut layers {
-        if let Some(&(x, y)) = layer.parent.and_then(|parent| text_origins.get(&parent)) {
+        if let Some(&(x, y)) = layer.parent.and_then(|parent| origins.get(&parent)) {
             layers::shift(&mut layer.transform.position_x, x);
             layers::shift(&mut layer.transform.position_y, y);
         }

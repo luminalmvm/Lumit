@@ -26,17 +26,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
-use crate::Document;
+use crate::model::Document;
 use rhai::{exported_module, Dynamic, Engine, Scope};
 use uuid::Uuid;
 
 mod comp;
 mod layer;
 mod math;
-mod script;
+pub mod script;
 pub(crate) mod space;
 
-pub use script::{Language, Slot, SLOT_KEY};
+use script::{Language, Slot, SLOT_KEY};
 
 // What one expression is allowed to build. A property wants a number, a point,
 // a colour or a line of text, so these are far above anything a real expression
@@ -216,7 +216,7 @@ fn eval_dynamic(
 
     // A Rhai expression shares the JavaScript budget, so what it asks of the
     // engine (`to_comp` and the like) is counted as well.
-    let _running = script::Running::begin();
+    let _running = script::interp::Running::begin();
     with_engine(|engine| {
         if let Some(context) = context {
             engine.set_default_tag(Dynamic::from(context));
@@ -229,7 +229,7 @@ fn eval_dynamic(
 const MAXIMUM_DEPTH: u32 = 100;
 
 /// A JavaScript text read into a program, or why it does not read.
-type Read = Result<Rc<script::Program>, Rc<str>>;
+type Read = Result<Rc<script::parse::Program>, Rc<str>>;
 
 thread_local! {
     /// JavaScript programs already read, by their text. A text that does not
@@ -397,7 +397,7 @@ fn point_of_row<'l>(
                 EffectValue::Float(ref p) => Some(p),
                 _ => None,
             };
-            let pair = crate::fx::schema(&inst.effect.match_name)
+            let pair = crate::fx::builtins::schema(&inst.effect.match_name)
                 .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param));
             if let Some(pair) = pair {
                 if let (Some(x), Some(y)) = (float(pair.x), float(pair.y)) {
@@ -460,7 +460,7 @@ pub fn note_transform_point(
 /// pair and its expression was only just put on.
 pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
     use crate::model::EffectValue;
-    let Some(pair) = crate::fx::schema(&inst.effect.match_name)
+    let Some(pair) = crate::fx::builtins::schema(&inst.effect.match_name)
         .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param))
     else {
         return;
@@ -562,7 +562,7 @@ pub const INTERFACE_STEPS: u32 = MAX_EXPRESSION_OPERATIONS as u32;
 /// its curve, on the thread that draws the window. A loop that never ends
 /// would otherwise freeze it for as long as a render lets the same loop run.
 pub fn within_steps<T>(steps: u32, work: impl FnOnce() -> T) -> T {
-    script::sparingly(steps, work)
+    script::interp::sparingly(steps, work)
 }
 
 /// Run a Rhai expression for the one number a property wants. `-1` when it
@@ -1036,7 +1036,7 @@ mod tests {
                 default: [first, 0.25, 0.5, 1.0],
                 min: 0.0,
                 max: 100.0,
-                unit: crate::fx::Unit::Raw,
+                unit: crate::fx::params::Unit::Raw,
                 preview: None,
             },
         };

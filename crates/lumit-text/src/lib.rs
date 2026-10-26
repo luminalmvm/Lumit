@@ -19,10 +19,8 @@ use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 use lumit_core::model::{LinearColour, TextDocument};
 use lumit_core::text::{GlyphXform, ParagraphStyle, TextStyle};
 
-mod fonts;
+pub mod fonts;
 mod styled;
-
-pub use fonts::{faces, families};
 
 /// Inter Regular, embedded at compile time — deterministic across machines.
 pub(crate) static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");

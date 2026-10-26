@@ -1,3 +1,14 @@
+use super::blur::*;
+use super::colour::*;
+use super::common::*;
+use super::distort::*;
+use super::generate::*;
+use super::lens_blur::*;
+use super::lens_flare::*;
+use super::split::*;
+use super::stylise::*;
+use super::temporal::*;
+use super::utility::*;
 use super::*;
 
 /// The §1.6 oracle corpus: a diagonal gradient, a hard alpha edge down
@@ -488,7 +499,7 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::rgb_split(&mut cpu, w, h, amount, angle, scale, tints, mix);
 
-        let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, angle);
+        let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount, angle);
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = RgbSplitOp {
             dx,
@@ -548,8 +559,8 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
             &mut cpu, w, h, amount, angle, radial, samples, tints, mix,
         );
 
-        let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, angle);
-        let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+        let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount, angle);
+        let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = SpectralSplitOp {
             dx,
@@ -884,7 +895,7 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
 /// exercised.
 #[test]
 fn wgsl_matte_key_matches_the_cpu_oracle() {
-    use lumit_core::fx::MatteKeyParams;
+    use lumit_core::fx::resolved::MatteKeyParams;
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
@@ -1043,7 +1054,7 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
 /// and neither mask set, the staged path is not taken at all.
 #[test]
 fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
-    use lumit_core::fx::MatteKeyParams;
+    use lumit_core::fx::resolved::MatteKeyParams;
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
@@ -1867,9 +1878,9 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
         ("rgb-mix-zero", 120.0, 0.0, false),
     ] {
         let m = if preserve {
-            lumit_core::fx::hue_matrix(deg)
+            lumit_core::fx::maths::hue_matrix(deg)
         } else {
-            lumit_core::fx::hue_matrix_rgb(deg)
+            lumit_core::fx::maths::hue_matrix_rgb(deg)
         };
         let op = HueShiftOp {
             angle_rad: 0.0,
@@ -1923,7 +1934,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             [0.0; 2],
             [1.0; 2],
             0.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             1.0,
             0u32,
@@ -1934,7 +1945,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             [2.5, -1.5],
             [1.0; 2],
             0.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             1.0,
             0,
@@ -1945,7 +1956,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             centre,
             [1.4, 1.4],
             12.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             1.0,
             0,
@@ -1956,7 +1967,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             centre,
             [-1.0, 1.0],
             0.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             0.5,
             0.8,
             0,
@@ -1967,7 +1978,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             centre,
             [0.0, 1.0],
             0.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             0.6,
             0,
@@ -1978,7 +1989,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             [5.0, -4.0],
             [1.0; 2],
             0.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             1.0,
             1,
@@ -1989,7 +2000,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
             centre,
             [1.0; 2],
             8.0,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
             1.0,
             2,
@@ -2023,7 +2034,7 @@ fn wgsl_transform_matches_the_cpu_oracle() {
         );
 
         let (m, off, opacity) =
-            lumit_core::fx::transform_op(anchor, position, scale, rotation, skew, opacity);
+            lumit_core::fx::maths::transform_op(anchor, position, scale, rotation, skew, opacity);
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = TransformOp {
             m,
@@ -2062,14 +2073,17 @@ fn wgsl_transform_matches_the_cpu_oracle() {
 /// The bag is the real thing either way: both the CPU reference and the op below
 /// are read out of it through the effect's own typed reader.
 fn shake_bag(
-    wobble: lumit_core::fx::ShakeSample,
+    wobble: lumit_core::fx::maths::ShakeSample,
     edge: u32,
     mix: f32,
-    mb: Option<[lumit_core::fx::ShakeSample; SHAKE_MB_SAMPLES]>,
-) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
+    mb: Option<[lumit_core::fx::maths::ShakeSample; SHAKE_MB_SAMPLES]>,
+) -> Vec<(
+    lumit_core::fx::params::ParamId,
+    lumit_core::fx::params::Value,
+)> {
     use lumit_core::fx::effects::shake::Shake;
-    use lumit_core::fx::Value;
-    let noise = |s: lumit_core::fx::ShakeSample| {
+    use lumit_core::fx::params::Value;
+    let noise = |s: lumit_core::fx::maths::ShakeSample| {
         Value::Vec4([s.offset_px[0], s.offset_px[1], s.rotation_deg, s.zoom - 1.0])
     };
     let mut bag = vec![
@@ -2102,7 +2116,7 @@ fn shake_bag(
 fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     // The GPU crate can't name lumit-core's const (dev-dependency only), so pin
     // the two — and the WGSL `array<Tap, 64>` literal — in agreement here.
-    assert_eq!(SHAKE_MB_SAMPLES, lumit_core::fx::SHAKE_MB_SAMPLES);
+    assert_eq!(SHAKE_MB_SAMPLES, lumit_core::fx::maths::SHAKE_MB_SAMPLES);
     assert!(
         include_str!("../fx_shake_mb.wgsl").contains(&format!("array<Tap, {SHAKE_MB_SAMPLES}>")),
         "the WGSL tap array is sized to SHAKE_MB_SAMPLES"
@@ -2119,7 +2133,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     // A realistic sub-frame set: the same sampler the resolver uses, spread
     // across the shutter, with rotation and a touch of z (depth) shake so the
     // average smears translation, rotation and zoom together.
-    let wobble = lumit_core::fx::ShakeWobble {
+    let wobble = lumit_core::fx::maths::ShakeWobble {
         seed: 7,
         amp_px: 6.0,
         x_amp: 1.0,
@@ -2132,11 +2146,11 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         z_freq: 0.7,
     };
     let base = 2.0f64;
-    let offsets = lumit_core::fx::shake_mb_offsets(0.8, SHAKE_MB_SAMPLES);
-    let mut samples = [lumit_core::fx::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
+    let offsets = lumit_core::fx::maths::shake_mb_offsets(0.8, SHAKE_MB_SAMPLES);
+    let mut samples = [lumit_core::fx::maths::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
     for (s, db) in samples.iter_mut().zip(offsets) {
         let (offset_px, rotation_deg, zoom) = wobble.at(base + db);
-        *s = lumit_core::fx::ShakeSample {
+        *s = lumit_core::fx::maths::ShakeSample {
             offset_px,
             rotation_deg,
             zoom,
@@ -2150,7 +2164,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         ("smear-mirror-mixed", 2, 0.7),
     ] {
         use lumit_core::fx::effects::shake::{Shake, ShakeDef, Shaken};
-        use lumit_core::fx::{EffectDef, EffectMetadata, Params};
+        use lumit_core::fx::{params::Params, registry::EffectDef, registry::EffectMetadata};
         let bag = shake_bag(centre, edge, mix, Some(samples));
         let p = Params::new(&bag);
         let mut cpu = img.clone();
@@ -2175,13 +2189,13 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         }; SHAKE_MB_SAMPLES];
         for (t, s) in taps.iter_mut().zip(packed_samples.iter()) {
             let (anchor, position, scale, rotation) =
-                lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-            let (m, off, _opacity) = lumit_core::fx::transform_op(
+                lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+            let (m, off, _opacity) = lumit_core::fx::maths::transform_op(
                 anchor,
                 position,
                 scale,
                 rotation,
-                lumit_core::fx::NO_SKEW,
+                lumit_core::fx::maths::NO_SKEW,
                 1.0,
             );
             *t = ShakeMbTap { m, off };
@@ -2208,14 +2222,19 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
 
     // A single tap equal to the frame wobble is the plain Shake: the averaging
     // kernel at count 1 matches the Transform kernel within the cheap bound.
-    let (anchor, position, scale, rotation) =
-        lumit_core::fx::shake_affine(w, h, centre.offset_px, centre.rotation_deg, centre.zoom);
-    let (m, off, opacity) = lumit_core::fx::transform_op(
+    let (anchor, position, scale, rotation) = lumit_core::fx::maths::shake_affine(
+        w,
+        h,
+        centre.offset_px,
+        centre.rotation_deg,
+        centre.zoom,
+    );
+    let (m, off, opacity) = lumit_core::fx::maths::transform_op(
         anchor,
         position,
         scale,
         rotation,
-        lumit_core::fx::NO_SKEW,
+        lumit_core::fx::maths::NO_SKEW,
         1.0,
     );
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -2410,7 +2429,7 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             fringe_tints: if wavelength {
                 tints
             } else {
-                lumit_core::fx::normalise_tint_columns(tints)
+                lumit_core::fx::maths::normalise_tint_columns(tints)
             },
             fringe_wavelength: wavelength,
             fringe_samples: samples,
@@ -2421,10 +2440,10 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
         let tex = upload_linear_f32(&ctx, &img, w, h);
         // Built exactly as `gpufx.rs` builds it for a real frame.
         let fringe = (chromatic_px > 0.0).then(|| {
-            let (dx, dy) = lumit_core::fx::rgb_split_offset(chromatic_px, angle);
+            let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(chromatic_px, angle);
             if wavelength {
                 let (basis, count) =
-                    lumit_core::fx::spectral_basis_uniform(samples, halo.fringe_tints);
+                    lumit_core::fx::maths::spectral_basis_uniform(samples, halo.fringe_tints);
                 GlowFringe::Spectral(SpectralSplitOp {
                     dx,
                     dy,
@@ -2689,7 +2708,7 @@ fn wgsl_dir_blur_matches_the_cpu_oracle() {
             let mut cpu = img.clone();
             lumit_core::fx::cpu::blur_directional(&mut cpu, w, h, length, angle, edge, mix);
 
-            let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, angle);
+            let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(1.0, angle);
             let tex = upload_linear_f32(&ctx, &img, w, h);
             let op = DirBlurOp {
                 dx,
@@ -3329,7 +3348,7 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     }
     let varying = (vary_u, vary_v);
 
-    use lumit_core::fx::MbView;
+    use lumit_core::fx::resolved::MbView;
     let full = vec![1.0f32; n];
     // A smoothly varying confidence (FX-19): proves the GPU scales the streak by
     // .z exactly as the CPU oracle does.
@@ -3343,12 +3362,12 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
     // oracle would tile the frame differently and every case below would fail
     // for an obscure reason. Say so plainly instead.
     assert_eq!(
-        crate::fx::MB_TILE,
+        crate::fx::temporal::MB_TILE,
         lumit_core::fx::cpu::MB_TILE,
         "the tile side must match the oracle's"
     );
 
-    use lumit_core::fx::MbQuality;
+    use lumit_core::fx::resolved::MbQuality;
     let cases = [
         (
             &constant,
@@ -3907,10 +3926,10 @@ fn wgsl_lut_matches_the_cpu_oracle() {
 ///
 /// The two sides are built from **one** value rather than from two parallel
 /// argument lists: `lumit_core::fx::cpu::DofParams` is the oracle's input and
-/// `lumit_gpu::fx::DofOp` the kernel's, field for field, so a field added to one
+/// `lumit_gpu::fx::dof::DofOp` the kernel's, field for field, so a field added to one
 /// and forgotten on the other stops compiling instead of quietly diverging.
-fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::DofOp {
-    crate::fx::DofOp {
+fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::dof::DofOp {
+    crate::fx::dof::DofOp {
         focus: p.focus,
         range: p.range,
         near_aperture: p.near_aperture,
@@ -3942,7 +3961,7 @@ fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::DofOp {
 /// The shipped defaults, resolved: the plain circle, no weighting, no tonal
 /// split — the aperture this effect gathered before it grew any of them.
 fn dof_defaults() -> lumit_core::fx::cpu::DofParams {
-    let (blade_normals, apothem2) = lumit_core::fx::aperture_blades(6, 0.0);
+    let (blade_normals, apothem2) = lumit_core::fx::maths::aperture_blades(6, 0.0);
     lumit_core::fx::cpu::DofParams {
         focus: 0.5,
         range: 0.1,
@@ -4015,7 +4034,7 @@ fn wgsl_dof_matches_the_cpu_oracle() {
     // s == 0, the aperture polygon and the tonal split are continuous in their
     // own controls, and the Depth/Focus maps are smooth — so the cheap-class
     // ≤ 2 fp16 ULP bound holds across all of them and none is excluded.
-    let star = lumit_core::fx::aperture_blades(5, 30.0);
+    let star = lumit_core::fx::maths::aperture_blades(5, 30.0);
     let cases: Vec<(&str, lumit_core::fx::cpu::DofParams)> = vec![
         ("centre-focus", dof_defaults()),
         (
@@ -4284,7 +4303,10 @@ fn wgsl_dof_matches_the_cpu_oracle() {
 /// declared twice; this is what stops the two drifting.
 #[test]
 fn max_blades_matches_the_core_constant() {
-    assert_eq!(crate::fx::MAX_BLADES, lumit_core::fx::MAX_BLADES);
+    assert_eq!(
+        crate::fx::dof::MAX_BLADES,
+        lumit_core::fx::maths::MAX_BLADES
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -4813,7 +4835,7 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -4947,7 +4969,8 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     // accident.
     fx.set_deferred_flare_bakes(false);
     let op_a = flare_op(&first, w, h);
-    let bake_a = std::sync::Arc::new(move || flare_bake_data(&first)) as crate::fx::FlareBake;
+    let bake_a =
+        std::sync::Arc::new(move || flare_bake_data(&first)) as crate::fx::lens_flare::FlareBake;
     drop(fx.lens_flare(
         &ctx,
         &tex,
@@ -4972,7 +4995,8 @@ fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
     // Now defer, and ask for a lens nothing holds.
     fx.set_deferred_flare_bakes(true);
     let op_b = flare_op(&second, w, h);
-    let bake_b = std::sync::Arc::new(move || flare_bake_data(&second)) as crate::fx::FlareBake;
+    let bake_b =
+        std::sync::Arc::new(move || flare_bake_data(&second)) as crate::fx::lens_flare::FlareBake;
     drop(fx.lens_flare(
         &ctx,
         &tex,
@@ -5087,7 +5111,8 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
             let gpu = fx.lens_flare_trace_debug(
                 &ctx,
                 &op,
-                &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+                &(std::sync::Arc::new(move || flare_bake_data(&p))
+                    as crate::fx::lens_flare::FlareBake),
                 combo_limit,
                 w,
                 h,
@@ -5337,7 +5362,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         streak_angle_deg: 12.0,
         mix: 1.0,
     };
-    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::SpriteFlareOp {
+    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::blur::SpriteFlareOp {
         light: p.light,
         intensity: p.intensity,
         tint: p.tint,
@@ -5455,7 +5480,7 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
             w,
             h,
             &bg_tex,
-            &crate::fx::LightWrapOp {
+            &crate::fx::blur::LightWrapOp {
                 width_px: width,
                 intensity,
                 mix,
@@ -5495,7 +5520,7 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
             w,
             h,
             &bg_tex,
-            &crate::fx::LightWrapOp {
+            &crate::fx::blur::LightWrapOp {
                 width_px: width,
                 intensity,
                 mix,
@@ -5608,7 +5633,8 @@ fn the_flare_renders_the_same_frame_every_time() {
                 h,
                 &op,
                 None,
-                &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+                &(std::sync::Arc::new(move || flare_bake_data(&p))
+                    as crate::fx::lens_flare::FlareBake),
                 &flare_probe(&p, w, h),
             );
             runs.push(readback_linear_f32(&ctx, &out, w, h).unwrap());
@@ -5639,7 +5665,7 @@ fn the_flare_renders_the_same_frame_every_time() {
     // stage downstream reads these ray landings.
     let p = base;
     let op = flare_op(&p, w, h);
-    let bake = std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake;
+    let bake = std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake;
     let first = fx.lens_flare_trace_debug(&ctx, &op, &bake, 8, w, h);
     assert!(!first.is_empty(), "the trace oracle hook rendered no rays");
     for i in 1..3 {
@@ -5684,7 +5710,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -5728,7 +5754,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
@@ -5751,7 +5777,8 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
             h,
             &nop,
             None,
-            &(std::sync::Arc::new(move || flare_bake_data(&neutral)) as crate::fx::FlareBake),
+            &(std::sync::Arc::new(move || flare_bake_data(&neutral))
+                as crate::fx::lens_flare::FlareBake),
             &flare_probe(&neutral, w, h),
         );
         let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
@@ -5787,7 +5814,7 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
         h,
         &flare_op(&area, w, h),
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&area)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&area)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&area, w, h),
     );
     let a_gpu = readback_linear_f32(&ctx, &a_out, w, h).unwrap();
@@ -5889,7 +5916,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &op,
         Some(&matte_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -5923,7 +5950,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &op,
         None,
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let ngpu = readback_linear_f32(&ctx, &nout, w, h).unwrap();
@@ -5966,7 +5993,8 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &flare_op(&tinted, w, h),
         Some(&matte_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&tinted)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&tinted))
+            as crate::fx::lens_flare::FlareBake),
         &flare_probe(&tinted, w, h),
     );
     let t_gpu = readback_linear_f32(&ctx, &t_out, w, h).unwrap();
@@ -6000,7 +6028,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         h,
         &inverted_op,
         Some(&complement_tex),
-        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::lens_flare::FlareBake),
         &flare_probe(&p, w, h),
     );
     let i_gpu = readback_linear_f32(&ctx, &i_out, w, h).unwrap();
@@ -6225,16 +6253,16 @@ fn lighting_op(
     m: &lumit_core::lighting::ShadingMaterial,
     lights: &[lumit_core::lighting::ShadingLight],
     own_caster: Option<usize>,
-) -> crate::fx::LightingOp {
-    use crate::fx::{LightingKind as K, LightingShadows as S};
+) -> crate::fx::lighting::LightingOp {
+    use crate::fx::lighting::{LightingKind as K, LightingShadows as S};
     use lumit_core::lighting::ShadingKind;
     use lumit_core::model::ShadowMode;
-    crate::fx::LightingOp {
+    crate::fx::lighting::LightingOp {
         origin: s.origin,
         du: s.du,
         dv: s.dv,
         normal: s.normal,
-        material: crate::fx::LightingMaterial {
+        material: crate::fx::lighting::LightingMaterial {
             base: m.base,
             ambient: m.ambient,
             diffuse: m.diffuse,
@@ -6253,7 +6281,7 @@ fn lighting_op(
         },
         lights: lights
             .iter()
-            .map(|l| crate::fx::LightingLight {
+            .map(|l| crate::fx::lighting::LightingLight {
                 corners: l.corners,
                 colour: l.colour,
                 kind: match l.kind {
@@ -6291,10 +6319,13 @@ fn wgsl_shadows_match_the_cpu_oracle() {
     use lumit_core::model::{LightFalloff, ShadowMode};
 
     assert_eq!(
-        crate::fx::DIFFUSION_SPREAD,
+        crate::fx::lighting::DIFFUSION_SPREAD,
         lumit_core::lighting::DIFFUSION_SPREAD
     );
-    assert_eq!(crate::fx::MAX_STRETCH, lumit_core::lighting::MAX_STRETCH);
+    assert_eq!(
+        crate::fx::lighting::MAX_STRETCH,
+        lumit_core::lighting::MAX_STRETCH
+    );
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
@@ -6359,7 +6390,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
             card,
             cw,
             ch,
-            crate::fx::CasterPlane {
+            crate::fx::lighting::CasterPlane {
                 origin: [40.0, 30.0, -120.0],
                 u: [80.0, 0.0, 0.0],
                 v: [0.0, 50.0, -20.0],
@@ -6371,7 +6402,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
             tint,
             4,
             4,
-            crate::fx::CasterPlane {
+            crate::fx::lighting::CasterPlane {
                 origin: [110.0, 70.0, -60.0],
                 u: [50.0, 0.0, 10.0],
                 v: [0.0, 60.0, 0.0],
@@ -6383,7 +6414,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
             bar,
             4,
             4,
-            crate::fx::CasterPlane {
+            crate::fx::lighting::CasterPlane {
                 origin: [20.0, 120.0, -90.0],
                 u: [150.0, 0.0, 0.0],
                 v: [0.0, 8.0, 0.0],
@@ -6395,7 +6426,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
             logo,
             4,
             4,
-            crate::fx::CasterPlane {
+            crate::fx::lighting::CasterPlane {
                 origin: [140.0, 10.0, -160.0],
                 u: [80.0, 0.0, 0.0],
                 v: [0.0, 80.0, 0.0],
@@ -6426,7 +6457,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         .iter()
         .map(|(rgba, cw, ch, _)| upload_linear_f32(&ctx, rgba, *cw, *ch))
         .collect();
-    let gpu_planes: Vec<(&wgpu::Texture, crate::fx::CasterPlane)> = textures
+    let gpu_planes: Vec<(&wgpu::Texture, crate::fx::lighting::CasterPlane)> = textures
         .iter()
         .zip(&planes)
         .map(|(t, p)| (t, p.3))
@@ -6586,7 +6617,7 @@ fn alpha_corpus(w: u32, h: u32) -> Vec<f32> {
 #[test]
 fn wgsl_curves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::curves::Curves;
-    use lumit_core::fx::{CurvePoints, EffectMetadata, Params};
+    use lumit_core::fx::{params::CurvePoints, params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6670,7 +6701,7 @@ fn wgsl_curves_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_levels_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::levels::Levels;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6834,7 +6865,7 @@ fn wgsl_brightness_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_hue_saturation_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::hue_saturation::HueSaturation;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6908,7 +6939,7 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_fill_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::fill::Fill;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6976,7 +7007,7 @@ fn wgsl_fill_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_gradient_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::gradient::Gradient;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7082,7 +7113,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_noise_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::noise::Noise;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7177,7 +7208,7 @@ fn wgsl_noise_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_fractal_noise_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::fractal_noise::FractalNoise;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7307,7 +7338,7 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
 #[test]
 fn fractal_noise_cycle_is_an_exact_loop() {
     use lumit_core::fx::effects::fractal_noise::FractalNoise;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let (w, h) = (24u32, 16u32);
     let flat = vec![0.0f32; (w * h * 4) as usize];
@@ -7390,7 +7421,7 @@ fn smooth_corpus(w: u32, h: u32) -> Vec<f32> {
 #[test]
 fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::turbulent_displace::TurbulentDisplace;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7526,7 +7557,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_matted_turbulent_displace_scales_the_displacement() {
     use lumit_core::fx::effects::turbulent_displace::TurbulentDisplace;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7657,7 +7688,7 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
 #[test]
 fn wgsl_tile_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::tile::Tile;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -7888,7 +7919,7 @@ fn wgsl_offset_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_mirror_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mirror::Mirror;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8016,13 +8047,13 @@ fn every_tap_outside_the_frame_reads_transparent() {
         [0.6, -(h as f32) - 2.3],
         [1000.5, 1000.5],
     ] {
-        let no_skew = lumit_core::fx::NO_SKEW;
+        let no_skew = lumit_core::fx::maths::NO_SKEW;
         let mut cpu = img.clone();
         lumit_core::fx::cpu::transform(
             &mut cpu, w, h, [0.0; 2], position, [1.0; 2], 0.0, no_skew, 0, 1.0, 1.0,
         );
         let (m, off, opacity) =
-            lumit_core::fx::transform_op([0.0; 2], position, [1.0; 2], 0.0, no_skew, 1.0);
+            lumit_core::fx::maths::transform_op([0.0; 2], position, [1.0; 2], 0.0, no_skew, 1.0);
         let op = TransformOp {
             m,
             off,
@@ -8053,7 +8084,7 @@ fn every_tap_outside_the_frame_reads_transparent() {
 #[test]
 fn wgsl_lens_distort_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::lens_distort::LensDistort;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8269,7 +8300,7 @@ fn wgsl_channel_blur_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_drop_shadow_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::drop_shadow::DropShadow;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8628,7 +8659,7 @@ fn wgsl_set_channels_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_linear_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::linear_wipe::LinearWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8740,7 +8771,7 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_radial_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::radial_wipe::RadialWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8860,7 +8891,7 @@ fn wgsl_radial_wipe_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::venetian_blinds::VenetianBlinds;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -8973,7 +9004,7 @@ fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_iris_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::iris_wipe::IrisWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9098,7 +9129,7 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_card_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::card_wipe::CardWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9262,7 +9293,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_corner_pin_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::corner_pin::CornerPin;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9382,7 +9413,7 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_displacement_map_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::displacement_map::DisplacementMap;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9553,7 +9584,8 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_vector_blur_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::vector_blur::VectorBlur;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::params::Params;
+    use lumit_core::fx::registry::EffectMetadata;
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9665,7 +9697,7 @@ fn wgsl_vector_blur_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::polar_coordinates::PolarCoordinates;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9767,7 +9799,7 @@ fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_twirl_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::twirl::Twirl;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -9895,7 +9927,7 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_spherize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::spherize::Spherize;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10015,7 +10047,7 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_ripple_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::ripple::Ripple;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10131,7 +10163,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_wave_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::wave_warp::WaveWarp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10257,7 +10289,7 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_bezier_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::bezier_warp::BezierWarp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10391,7 +10423,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::warp::Warp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10516,7 +10548,7 @@ fn disc_corpus(w: u32, h: u32) -> Vec<f32> {
 #[test]
 fn wgsl_roughen_edges_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::roughen_edges::RoughenEdges;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10647,7 +10679,7 @@ fn wgsl_roughen_edges_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_posterize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::posterize::Posterize;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10713,7 +10745,7 @@ fn wgsl_posterize_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_threshold_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::threshold::Threshold;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10780,7 +10812,7 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_tritone_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::tritone::Tritone;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10852,7 +10884,7 @@ fn wgsl_tritone_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_photo_filter_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::photo_filter::PhotoFilter;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10938,7 +10970,7 @@ fn wgsl_photo_filter_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_black_and_white_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::black_and_white::BlackAndWhite;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11036,7 +11068,7 @@ fn wgsl_black_and_white_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_shadow_highlight_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::shadow_highlight::ShadowHighlight;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11199,7 +11231,7 @@ fn speckled_corpus(w: u32, h: u32) -> Vec<f32> {
 #[test]
 fn wgsl_median_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::median::Median;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11323,7 +11355,7 @@ fn wgsl_median_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_mosaic_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mosaic::Mosaic;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11437,7 +11469,7 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_find_edges_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::find_edges::FindEdges;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11519,7 +11551,7 @@ fn wgsl_find_edges_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_emboss_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::emboss::Emboss;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11636,7 +11668,7 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_texturize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::texturize::Texturize;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11805,7 +11837,7 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_broadcast_safe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::broadcast_safe::BroadcastSafe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -11946,7 +11978,7 @@ fn the_lightning_segment_cap_matches_the_core() {
 #[test]
 fn wgsl_beam_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::beam::Beam;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -12075,7 +12107,7 @@ fn wgsl_beam_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_lightning_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::lightning::Lightning;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -12214,7 +12246,7 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_radio_waves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::radio_waves::RadioWaves;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -12363,7 +12395,7 @@ fn wgsl_radio_waves_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_vegas_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::vegas::Vegas;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -12475,7 +12507,7 @@ fn wgsl_vegas_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_add_grain_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::add_grain::AddGrain;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -12688,7 +12720,7 @@ fn oracle_squiggle(w: u32, h: u32) -> lumit_core::mask::MaskPolyline {
 fn wgsl_path_draw_matches_the_cpu_oracle() {
     use lumit_core::fx::cpu;
     use lumit_core::fx::effects::{scribble::Scribble, stroke::Stroke, vegas::Vegas};
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -13049,7 +13081,7 @@ fn the_matte_scales_the_directional_blur_length() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let (length, angle, edge, mix) = (9.5f32, 33.0f32, 1u32, 0.8f32);
-    let (dx, dy) = lumit_core::fx::rgb_split_offset(1.0, angle);
+    let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(1.0, angle);
     let op = DirBlurOp {
         dx,
         dy,
@@ -13432,9 +13464,9 @@ fn the_matte_scales_the_hue_shift_angle() {
     for preserve in [true, false] {
         let deg = 90.0f32;
         let m = if preserve {
-            lumit_core::fx::hue_matrix(f64::from(deg))
+            lumit_core::fx::maths::hue_matrix(f64::from(deg))
         } else {
-            lumit_core::fx::hue_matrix_rgb(f64::from(deg))
+            lumit_core::fx::maths::hue_matrix_rgb(f64::from(deg))
         };
         let op = HueShiftOp {
             angle_rad: deg.to_radians(),
@@ -13474,14 +13506,14 @@ fn the_matte_scales_the_hue_shift_angle() {
     let mut px = vec![1.0f32, 0.0, 0.0, 1.0];
     lumit_core::fx::cpu::hue_shift_matted(
         &mut px,
-        lumit_core::fx::hue_matrix(90.0),
+        lumit_core::fx::maths::hue_matrix(90.0),
         90f32.to_radians(),
         true,
         1.0,
         &[0.5, 0.5, 0.5, 1.0],
     );
     let mut want = vec![1.0f32, 0.0, 0.0, 1.0];
-    lumit_core::fx::cpu::hue_shift(&mut want, lumit_core::fx::hue_matrix(45.0), 1.0);
+    lumit_core::fx::cpu::hue_shift(&mut want, lumit_core::fx::maths::hue_matrix(45.0), 1.0);
     assert!(
         worst_diff(&px, &want) < 1e-5,
         "half of 90° must be the 45° turn: got {px:?}, want {want:?}"
@@ -13625,7 +13657,7 @@ fn the_matte_scales_photo_filter_density() {
 #[test]
 fn the_matte_scales_shadow_and_highlight_amounts() {
     use lumit_core::fx::effects::shadow_highlight::ShadowHighlight;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -13774,7 +13806,7 @@ fn the_matte_scales_the_rgb_split_amount() {
     let img = corpus(w, h);
     let tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let (amount, angle, scale, mix) = (4.0f32, 33.0f32, [1.0f32, 0.0, 1.0], 1.0f32);
-    let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, angle);
+    let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount, angle);
     let op = RgbSplitOp {
         dx,
         dy,
@@ -13803,7 +13835,7 @@ fn the_matte_scales_the_rgb_split_amount() {
     );
     // The Wavelength mode runs its own kernel and claims the same Amount.
     let samples = 16i32;
-    let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+    let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
     let sop = SpectralSplitOp {
         dx,
         dy,
@@ -13869,8 +13901,8 @@ fn the_matte_scales_the_chromatic_aberration_amount() {
     );
     // Its Wavelength mode is the radial spectral split.
     let samples = 16i32;
-    let (dx, dy) = lumit_core::fx::rgb_split_offset(amount, 0.0);
-    let (basis, count) = lumit_core::fx::spectral_basis_uniform(samples, tints);
+    let (dx, dy) = lumit_core::fx::maths::rgb_split_offset(amount, 0.0);
+    let (basis, count) = lumit_core::fx::maths::spectral_basis_uniform(samples, tints);
     let sop = SpectralSplitOp {
         dx,
         dy,
@@ -13914,16 +13946,27 @@ fn the_matte_scales_the_shake_displacement() {
     let img = corpus(w, h);
     // A wobble with all three parts, so the displacement the matte scales is
     // a shove, a twist and a zoom together.
-    let wobble = lumit_core::fx::ShakeSample {
+    let wobble = lumit_core::fx::maths::ShakeSample {
         offset_px: [5.0, -3.0],
         rotation_deg: 6.0,
         zoom: 1.04,
     };
     let (edge, mix) = (1u32, 1.0f32);
-    let (anchor, position, scale, rot) =
-        lumit_core::fx::shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
-    let (m, off, opacity) =
-        lumit_core::fx::transform_op(anchor, position, scale, rot, lumit_core::fx::NO_SKEW, 1.0);
+    let (anchor, position, scale, rot) = lumit_core::fx::maths::shake_affine(
+        w,
+        h,
+        wobble.offset_px,
+        wobble.rotation_deg,
+        wobble.zoom,
+    );
+    let (m, off, opacity) = lumit_core::fx::maths::transform_op(
+        anchor,
+        position,
+        scale,
+        rot,
+        lumit_core::fx::maths::NO_SKEW,
+        1.0,
+    );
     let op = TransformOp {
         m,
         off,
@@ -13947,7 +13990,7 @@ fn the_matte_scales_the_shake_displacement() {
                     position,
                     scale,
                     rot,
-                    lumit_core::fx::NO_SKEW,
+                    lumit_core::fx::maths::NO_SKEW,
                     edge,
                     1.0,
                     mix,
@@ -13963,7 +14006,7 @@ fn the_matte_scales_the_shake_displacement() {
                     position,
                     scale,
                     rot,
-                    lumit_core::fx::NO_SKEW,
+                    lumit_core::fx::maths::NO_SKEW,
                     edge,
                     1.0,
                     mix,
@@ -13977,8 +14020,8 @@ fn the_matte_scales_the_shake_displacement() {
     // picture the matte draws is the one a shake at half the Amplitude draws,
     // not a blend of the shoved picture over the still one.
     let shove = [6.0f32, 4.0];
-    let (a1, p1, s1, r1) = lumit_core::fx::shake_affine(w, h, shove, 0.0, 1.0);
-    let (a2, p2, s2, r2) = lumit_core::fx::shake_affine(w, h, [3.0, 2.0], 0.0, 1.0);
+    let (a1, p1, s1, r1) = lumit_core::fx::maths::shake_affine(w, h, shove, 0.0, 1.0);
+    let (a2, p2, s2, r2) = lumit_core::fx::maths::shake_affine(w, h, [3.0, 2.0], 0.0, 1.0);
     let n = (w * h) as usize;
     let flat: Vec<f32> = (0..n).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
     let mut matted = img.clone();
@@ -13990,7 +14033,7 @@ fn the_matte_scales_the_shake_displacement() {
         p1,
         s1,
         r1,
-        lumit_core::fx::NO_SKEW,
+        lumit_core::fx::maths::NO_SKEW,
         edge,
         1.0,
         1.0,
@@ -14005,7 +14048,7 @@ fn the_matte_scales_the_shake_displacement() {
         p2,
         s2,
         r2,
-        lumit_core::fx::NO_SKEW,
+        lumit_core::fx::maths::NO_SKEW,
         edge,
         1.0,
         1.0,
@@ -14016,10 +14059,10 @@ fn the_matte_scales_the_shake_displacement() {
     );
 
     // The shake's own motion blur: every sub-frame tap scales the same way.
-    let mut samples = [lumit_core::fx::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
+    let mut samples = [lumit_core::fx::maths::ShakeSample::IDENTITY; SHAKE_MB_SAMPLES];
     for (i, s) in samples.iter_mut().enumerate() {
         let t = i as f32 / (SHAKE_MB_SAMPLES - 1) as f32 - 0.5;
-        *s = lumit_core::fx::ShakeSample {
+        *s = lumit_core::fx::maths::ShakeSample {
             offset_px: [5.0 + 4.0 * t, -3.0 - 2.0 * t],
             rotation_deg: 6.0 * (1.0 + t),
             zoom: 1.04 + 0.02 * t,
@@ -14032,13 +14075,13 @@ fn the_matte_scales_the_shake_displacement() {
     let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
     for ((t, o), s) in taps.iter_mut().zip(ops.iter_mut()).zip(samples.iter()) {
         let (anchor, position, scale, rot) =
-            lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-        let (m, off, _opacity) = lumit_core::fx::transform_op(
+            lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
+        let (m, off, _opacity) = lumit_core::fx::maths::transform_op(
             anchor,
             position,
             scale,
             rot,
-            lumit_core::fx::NO_SKEW,
+            lumit_core::fx::maths::NO_SKEW,
             1.0,
         );
         *t = ShakeMbTap { m, off };
@@ -14242,7 +14285,7 @@ fn the_matte_scales_the_offset_shift() {
 #[test]
 fn the_matte_scales_the_lens_distortion() {
     use lumit_core::fx::effects::lens_distort::LensDistort;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14285,7 +14328,7 @@ fn the_matte_scales_the_lens_distortion() {
 #[test]
 fn the_matte_scales_the_corner_pin_pull() {
     use lumit_core::fx::effects::corner_pin::CornerPin;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14339,7 +14382,7 @@ fn the_matte_scales_the_corner_pin_pull() {
 #[test]
 fn the_matte_scales_the_bezier_warp_bend() {
     use lumit_core::fx::effects::bezier_warp::BezierWarp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14398,7 +14441,7 @@ fn the_matte_scales_the_bezier_warp_bend() {
 #[test]
 fn the_matte_scales_the_twirl_angle() {
     use lumit_core::fx::effects::twirl::Twirl;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14453,7 +14496,7 @@ fn the_matte_scales_the_twirl_angle() {
 #[test]
 fn the_matte_scales_the_spherize_bulge() {
     use lumit_core::fx::effects::spherize::Spherize;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14493,7 +14536,7 @@ fn the_matte_scales_the_spherize_bulge() {
 #[test]
 fn the_matte_scales_the_ripple_height() {
     use lumit_core::fx::effects::ripple::Ripple;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14537,7 +14580,7 @@ fn the_matte_scales_the_ripple_height() {
 #[test]
 fn the_matte_scales_the_wave_warp_height() {
     use lumit_core::fx::effects::wave_warp::WaveWarp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14579,7 +14622,7 @@ fn the_matte_scales_the_wave_warp_height() {
 #[test]
 fn the_matte_scales_the_warp_bend() {
     use lumit_core::fx::effects::warp::Warp;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14646,7 +14689,7 @@ fn quantised(img: &[f32]) -> Vec<f32> {
 #[test]
 fn the_matte_scales_the_add_grain_intensity() {
     use lumit_core::fx::effects::add_grain::AddGrain;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14687,7 +14730,7 @@ fn the_matte_scales_the_add_grain_intensity() {
 #[test]
 fn the_matte_scales_the_lightning_opacity() {
     use lumit_core::fx::effects::lightning::Lightning;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14736,7 +14779,7 @@ fn the_matte_scales_the_lightning_opacity() {
 #[test]
 fn the_matte_scales_the_radio_waves_opacity() {
     use lumit_core::fx::effects::radio_waves::RadioWaves;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14792,7 +14835,7 @@ fn the_matte_scales_the_radio_waves_opacity() {
 #[test]
 fn the_matte_scales_the_vegas_opacity() {
     use lumit_core::fx::effects::vegas::Vegas;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14850,7 +14893,7 @@ fn the_matte_scales_the_vegas_opacity() {
 fn the_matte_scales_the_path_drawing_opacity() {
     use lumit_core::fx::cpu;
     use lumit_core::fx::effects::{scribble::Scribble, stroke::Stroke};
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14914,7 +14957,7 @@ fn the_matte_scales_the_path_drawing_opacity() {
 #[test]
 fn the_matte_scales_the_drop_shadow_opacity() {
     use lumit_core::fx::effects::drop_shadow::DropShadow;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -14960,7 +15003,7 @@ fn the_matte_scales_the_drop_shadow_opacity() {
 #[test]
 fn the_matte_scales_the_roughen_edges_border() {
     use lumit_core::fx::effects::roughen_edges::RoughenEdges;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15011,7 +15054,7 @@ fn the_matte_scales_the_roughen_edges_border() {
 #[test]
 fn the_matte_scales_the_median_radius() {
     use lumit_core::fx::effects::median::Median;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15063,7 +15106,7 @@ fn the_matte_scales_the_median_radius() {
 #[test]
 fn the_matte_scales_the_emboss_relief() {
     use lumit_core::fx::effects::emboss::Emboss;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15113,7 +15156,7 @@ fn the_matte_scales_the_emboss_relief() {
 #[test]
 fn the_matte_scales_the_texturize_relief() {
     use lumit_core::fx::effects::texturize::Texturize;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15174,7 +15217,7 @@ fn the_matte_scales_the_texturize_relief() {
 #[test]
 fn the_matte_scales_the_linear_wipe_completion() {
     use lumit_core::fx::effects::linear_wipe::LinearWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15216,7 +15259,7 @@ fn the_matte_scales_the_linear_wipe_completion() {
 #[test]
 fn the_matte_scales_the_radial_wipe_completion() {
     use lumit_core::fx::effects::radial_wipe::RadialWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15259,7 +15302,7 @@ fn the_matte_scales_the_radial_wipe_completion() {
 #[test]
 fn the_matte_scales_the_venetian_blinds_completion() {
     use lumit_core::fx::effects::venetian_blinds::VenetianBlinds;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15308,7 +15351,7 @@ fn the_matte_scales_the_venetian_blinds_completion() {
 #[test]
 fn the_matte_scales_the_iris_wipe_radius() {
     use lumit_core::fx::effects::iris_wipe::IrisWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15382,7 +15425,7 @@ fn the_matte_scales_the_iris_wipe_radius() {
 #[test]
 fn the_matte_scales_the_card_wipe_completion() {
     use lumit_core::fx::effects::card_wipe::CardWipe;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15515,7 +15558,7 @@ fn the_matte_scales_the_echo_decay() {
 /// Motion blur's Shutter angle, per pixel.
 #[test]
 fn the_matte_scales_the_fast_motion_blur_shutter() {
-    use lumit_core::fx::{MbQuality, MbView};
+    use lumit_core::fx::{resolved::MbQuality, resolved::MbView};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -15627,7 +15670,7 @@ fn the_matte_scales_the_fast_motion_blur_shutter() {
 /// `cpu::motion_vectors_field`, and the blur that follows is the same blur.
 #[test]
 fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
-    use lumit_core::fx::{MbQuality, MbView};
+    use lumit_core::fx::{resolved::MbQuality, resolved::MbView};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -16059,7 +16102,7 @@ fn a_frame_hands_a_finished_work_texture_to_the_pass_after_it() {
 #[test]
 fn wgsl_mood_lighting_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mood_lighting::MoodLighting;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -16183,7 +16226,7 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
 #[test]
 fn the_matte_scales_the_mood_lighting() {
     use lumit_core::fx::effects::mood_lighting::MoodLighting;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -16265,7 +16308,7 @@ fn jumbled_corpus(w: u32, h: u32) -> Vec<f32> {
                 continue;
             }
             for c in 0..3usize {
-                let n = lumit_core::fx::lattice_hash(4242, c as u32, x as i32, y as i32, 0);
+                let n = lumit_core::fx::maths::lattice_hash(4242, c as u32, x as i32, y as i32, 0);
                 let k = (n >> 8) as f32 / 16_777_216.0;
                 let u = img[i + c] / a;
                 img[i + c] = (u + (k - 0.5) * 0.5).clamp(0.0, 3.0) * a;
@@ -16287,7 +16330,7 @@ fn jumbled_corpus(w: u32, h: u32) -> Vec<f32> {
 #[allow(clippy::too_many_lines)]
 fn wgsl_pixel_sort_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::pixel_sort::PixelSort;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -16450,7 +16493,7 @@ fn wgsl_pixel_sort_matches_the_cpu_oracle() {
 #[test]
 fn the_matte_says_where_the_pixel_sort_spans_are() {
     use lumit_core::fx::effects::pixel_sort::PixelSort;
-    use lumit_core::fx::{EffectMetadata, Params};
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();

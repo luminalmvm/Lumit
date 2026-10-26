@@ -50,10 +50,9 @@ use thiserror::Error;
 
 use crate::describe::{ParamDescription, PortInfo, Ports};
 use crate::module::{text, Module, ModuleError};
-use crate::process::{
-    input_events, output_events, to_clap, Block, Denormals, BLOCK_FRAMES, CHANNELS,
-};
-use crate::ParamEvent;
+use crate::process::ParamEvent;
+use crate::process::{input_events, output_events, to_clap, Block, BLOCK_FRAMES, CHANNELS};
+use lumit_core::fx::audio_chain::Denormals;
 
 /// Everything a plugin can refuse to do, as a value.
 ///

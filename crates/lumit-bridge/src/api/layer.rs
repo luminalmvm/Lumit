@@ -48,7 +48,7 @@ pub(crate) enum InstanceHome {
 /// A Precomp layer of a composition that holds a graph rather than a stack.
 /// That is the one layer kind a graph's Inputs mean anything on.
 #[frb(ignore)]
-pub(crate) fn placed_graph_of(doc: &lumit_core::Document, layer: &Layer) -> Option<Uuid> {
+pub(crate) fn placed_graph_of(doc: &lumit_core::model::Document, layer: &Layer) -> Option<Uuid> {
     let lumit_core::model::LayerKind::Precomp { comp } = layer.kind else {
         return None;
     };
@@ -67,7 +67,7 @@ pub(crate) fn placed_graph_of(doc: &lumit_core::Document, layer: &Layer) -> Opti
 /// a drag and its mouse-up cannot disagree about what they were handed.
 #[frb(ignore)]
 pub(crate) fn is_graph_inputs(
-    doc: &lumit_core::Document,
+    doc: &lumit_core::model::Document,
     layer: &Layer,
     instance: &EffectInstance,
 ) -> bool {
@@ -1535,7 +1535,7 @@ pub struct BridgeClip {
 #[frb(ignore)]
 pub(crate) fn clip_source_duration(
     state: &LumitBridgeState,
-    doc: &lumit_core::Document,
+    doc: &lumit_core::model::Document,
     source: lumit_core::sequence::ClipSource,
 ) -> Option<lumit_core::time::Rational> {
     match source {
@@ -1577,7 +1577,7 @@ pub(crate) fn clip_source_duration(
 #[frb(ignore)]
 fn bridge_clip(
     state: &LumitBridgeState,
-    doc: &lumit_core::Document,
+    doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
     layer: &Layer,
     clip: &lumit_core::sequence::Clip,
@@ -1995,7 +1995,7 @@ pub(crate) fn motion_path_of(
 pub(crate) fn read_layer_info(
     project: Uuid,
     state: &LumitBridgeState,
-    doc: &lumit_core::Document,
+    doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
     layer: &Layer,
 ) -> BridgeLayerInfo {
@@ -3211,7 +3211,9 @@ impl LayerReference {
     /// The whole project as it stands, for the reads that need more than this
     /// layer: a Node graph effect's rows are the graph it names.
     #[frb(ignore)]
-    pub(crate) fn document(&self) -> Result<std::sync::Arc<lumit_core::Document>, BridgeError> {
+    pub(crate) fn document(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())
@@ -3291,7 +3293,7 @@ impl LayerReference {
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
 
         proj.store
-            .commit(lumit_core::Op::RenameLayer {
+            .commit(lumit_core::ops::Op::RenameLayer {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 name,
@@ -3828,7 +3830,7 @@ impl LayerReference {
 
     #[frb(ignore)]
     fn commit_masks(&self, masks: Vec<lumit_core::mask::Mask>) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::SetLayerMasks {
+        self.commit(lumit_core::ops::Op::SetLayerMasks {
             comp: self.comp_id,
             layer: self.layer_id,
             masks,
@@ -3914,7 +3916,7 @@ impl LayerReference {
         &self,
         strokes: Vec<lumit_core::paint::PaintStroke>,
     ) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::SetLayerPaint {
+        self.commit(lumit_core::ops::Op::SetLayerPaint {
             comp: self.comp_id,
             layer: self.layer_id,
             strokes,
@@ -4139,7 +4141,7 @@ impl LayerReference {
         &self,
         puppet: Option<lumit_core::puppet::PuppetBlock>,
     ) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::SetLayerPuppet {
+        self.commit(lumit_core::ops::Op::SetLayerPuppet {
             comp: self.comp_id,
             layer: self.layer_id,
             puppet,
@@ -4224,7 +4226,7 @@ impl LayerReference {
         let op = if ops.len() == 1 {
             ops.remove(0)
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         self.commit(op)
     }
@@ -4237,7 +4239,7 @@ impl LayerReference {
         layer: &lumit_core::model::Layer,
         before: &[lumit_core::shape::modifier::ShapeEntry],
         items: Vec<lumit_core::shape::modifier::ShapeEntry>,
-    ) -> Vec<lumit_core::Op> {
+    ) -> Vec<lumit_core::ops::Op> {
         // Both boxes on the same clock, the head of the layer, so the delta
         // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
@@ -4249,7 +4251,7 @@ impl LayerReference {
             // is: there is no corner to follow.
             _ => (0.0, 0.0),
         };
-        let mut ops = vec![lumit_core::Op::SetShapeContents {
+        let mut ops = vec![lumit_core::ops::Op::SetShapeContents {
             comp: self.comp_id,
             layer: self.layer_id,
             contents: items,
@@ -4275,7 +4277,7 @@ impl LayerReference {
             let lumit_core::anim::Animation::Static(value) = &property.animation else {
                 continue;
             };
-            ops.push(lumit_core::Op::SetTransformProperty {
+            ops.push(lumit_core::ops::Op::SetTransformProperty {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 prop,
@@ -4718,7 +4720,7 @@ impl LayerReference {
         // with nothing on it to take hold of.
         let emptied = clips.is_empty();
         let mut ops = if emptied {
-            vec![lumit_core::Op::RemoveLayer {
+            vec![lumit_core::ops::Op::RemoveLayer {
                 comp: self.comp_id,
                 layer: self.layer_id,
             }]
@@ -4770,7 +4772,7 @@ impl LayerReference {
                 row.in_point = lumit_core::time::CompTime(start);
                 row.out_point = lumit_core::time::CompTime(end);
                 crate::edits::solo_on_arrival(&mut row, comp.layers.iter());
-                ops.push(lumit_core::Op::AddLayer {
+                ops.push(lumit_core::ops::Op::AddLayer {
                     comp: self.comp_id,
                     // Directly below the row it came off, where the eye looks,
                     // or in its place when that row has gone.
@@ -4779,7 +4781,7 @@ impl LayerReference {
                 });
             }
         }
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// A comp frame as a time on `layer`'s own clock, never before its zero.
@@ -4947,7 +4949,7 @@ impl LayerReference {
     /// slower. Off keeps the pitch where it was.
     #[frb(sync)]
     pub fn set_pitch_follows_speed(&self, follows: bool) -> Result<(), BridgeError> {
-        self.commit(lumit_core::Op::SetLayerPitchFollowsSpeed {
+        self.commit(lumit_core::ops::Op::SetLayerPitchFollowsSpeed {
             comp: self.comp_id,
             layer: self.layer_id,
             follows,
@@ -5103,13 +5105,13 @@ impl LayerReference {
         // clock (they are the same kind of map, so nothing converts).
         converted.retime = clip.retime.clone();
 
-        self.commit(lumit_core::Op::Batch {
+        self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
-                lumit_core::Op::RemoveLayer {
+                lumit_core::ops::Op::RemoveLayer {
                     comp: self.comp_id,
                     layer: self.layer_id,
                 },
-                lumit_core::Op::AddLayer {
+                lumit_core::ops::Op::AddLayer {
                     comp: self.comp_id,
                     index,
                     layer: Box::new(converted),
@@ -5273,7 +5275,7 @@ impl LayerReference {
         }
         tail.in_point = t;
 
-        let mut ops = vec![lumit_core::Op::SetLayerSpan {
+        let mut ops = vec![lumit_core::ops::Op::SetLayerSpan {
             comp: self.comp_id,
             layer: self.layer_id,
             in_point: layer.in_point,
@@ -5285,18 +5287,18 @@ impl LayerReference {
         // The head keeps its id, so its new map is written to it by name; the
         // tail carries its copy of the map in the layer being added.
         if head.retime != layer.retime {
-            ops.push(lumit_core::Op::SetRetimeProperty {
+            ops.push(lumit_core::ops::Op::SetRetimeProperty {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 retime: head.retime.clone(),
             });
         }
-        ops.push(lumit_core::Op::AddLayer {
+        ops.push(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
             index,
             layer: Box::new(tail),
         });
-        self.commit(lumit_core::Op::Batch { ops })?;
+        self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project_id, self.comp_id, tail_id))
     }
 
@@ -5398,13 +5400,13 @@ impl LayerReference {
             }],
         };
 
-        self.commit(lumit_core::Op::Batch {
+        self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
-                lumit_core::Op::RemoveLayer {
+                lumit_core::ops::Op::RemoveLayer {
                     comp: self.comp_id,
                     layer: self.layer_id,
                 },
-                lumit_core::Op::AddLayer {
+                lumit_core::ops::Op::AddLayer {
                     comp: self.comp_id,
                     index,
                     layer: Box::new(converted),
@@ -5447,7 +5449,7 @@ impl LayerReference {
             return Ok(());
         }
         let (comp_id, layer_id) = (self.comp_id, self.layer_id);
-        let off = lumit_core::Op::SetLayerAdjustment {
+        let off = lumit_core::ops::Op::SetLayerAdjustment {
             comp: comp_id,
             layer: layer_id,
             adjustment: on,
@@ -5462,7 +5464,7 @@ impl LayerReference {
             let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             crate::edits::white_solid_ops(&state.store.snapshot(), comp.width, comp.height)
         };
-        ops.push(lumit_core::Op::SetLayerKind {
+        ops.push(lumit_core::ops::Op::SetLayerKind {
             comp: comp_id,
             layer: layer_id,
             kind: Box::new(LayerKind::Solid { def }),
@@ -5470,7 +5472,7 @@ impl LayerReference {
         // Clears the flag too, so the layer leaves this batch as an ordinary
         // solid however it came in — one shape of "not an adjustment", not two.
         ops.push(off);
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// The clips, the index of the one under `frame`, and the layer-local time
@@ -5538,7 +5540,7 @@ impl LayerReference {
         if ops.len() == 1 {
             return self.commit(ops.remove(0));
         }
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// The ops [`Self::commit_clips_with_offset`] commits: the clip write, and
@@ -5552,7 +5554,7 @@ impl LayerReference {
         &self,
         clips: Vec<lumit_core::sequence::Clip>,
         start_offset: lumit_core::time::CompTime,
-    ) -> Result<Vec<lumit_core::Op>, BridgeError> {
+    ) -> Result<Vec<lumit_core::ops::Op>, BridgeError> {
         // The bar as it stands, read where it is: the layer is not copied
         // out, and the clips go into the op without being copied either.
         let doc = self.document()?;
@@ -5564,7 +5566,7 @@ impl LayerReference {
         // Clip places are in layer time; a span is in comp time, and the two
         // differ by the layer's own zero.
         let span = lumit_core::sequence::clips_span(&clips);
-        let set_clips = lumit_core::Op::SetSequenceClips {
+        let set_clips = lumit_core::ops::Op::SetSequenceClips {
             comp: self.comp_id,
             layer: self.layer_id,
             clips,
@@ -5582,7 +5584,7 @@ impl LayerReference {
         }
         Ok(vec![
             set_clips,
-            lumit_core::Op::SetLayerSpan {
+            lumit_core::ops::Op::SetLayerSpan {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 in_point: lumit_core::time::CompTime(in_point),
@@ -5687,57 +5689,57 @@ impl LayerReference {
     pub fn set_switch(&self, switch: BridgeLayerSwitch, on: bool) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
         self.commit(match switch {
-            BridgeLayerSwitch::Visible => lumit_core::Op::SetLayerVisible {
+            BridgeLayerSwitch::Visible => lumit_core::ops::Op::SetLayerVisible {
                 comp,
                 layer,
                 visible: on,
             },
-            BridgeLayerSwitch::Audible => lumit_core::Op::SetLayerAudible {
+            BridgeLayerSwitch::Audible => lumit_core::ops::Op::SetLayerAudible {
                 comp,
                 layer,
                 audible: on,
             },
-            BridgeLayerSwitch::Locked => lumit_core::Op::SetLayerLocked {
+            BridgeLayerSwitch::Locked => lumit_core::ops::Op::SetLayerLocked {
                 comp,
                 layer,
                 locked: on,
             },
-            BridgeLayerSwitch::Solo => lumit_core::Op::SetLayerSolo {
+            BridgeLayerSwitch::Solo => lumit_core::ops::Op::SetLayerSolo {
                 comp,
                 layer,
                 solo: on,
             },
-            BridgeLayerSwitch::ThreeD => lumit_core::Op::SetLayerThreeD {
+            BridgeLayerSwitch::ThreeD => lumit_core::ops::Op::SetLayerThreeD {
                 comp,
                 layer,
                 three_d: on,
             },
-            BridgeLayerSwitch::Fx => lumit_core::Op::SetLayerFx {
+            BridgeLayerSwitch::Fx => lumit_core::ops::Op::SetLayerFx {
                 comp,
                 layer,
                 fx: on,
             },
-            BridgeLayerSwitch::MotionBlur => lumit_core::Op::SetLayerMotionBlur {
+            BridgeLayerSwitch::MotionBlur => lumit_core::ops::Op::SetLayerMotionBlur {
                 comp,
                 layer,
                 motion_blur: on,
             },
-            BridgeLayerSwitch::Collapse => lumit_core::Op::SetLayerCollapse {
+            BridgeLayerSwitch::Collapse => lumit_core::ops::Op::SetLayerCollapse {
                 comp,
                 layer,
                 collapse: on,
             },
-            BridgeLayerSwitch::Shy => lumit_core::Op::SetLayerShy {
+            BridgeLayerSwitch::Shy => lumit_core::ops::Op::SetLayerShy {
                 comp,
                 layer,
                 shy: on,
             },
-            BridgeLayerSwitch::AcceptsLights => lumit_core::Op::SetLayerAcceptsLights {
+            BridgeLayerSwitch::AcceptsLights => lumit_core::ops::Op::SetLayerAcceptsLights {
                 comp,
                 layer,
                 accepts_lights: on,
             },
-            BridgeLayerSwitch::Guide => lumit_core::Op::SetLayerGuide {
+            BridgeLayerSwitch::Guide => lumit_core::ops::Op::SetLayerGuide {
                 comp,
                 layer,
                 guide: on,
@@ -5761,7 +5763,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn set_label(&self, label: u8) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerLabel { comp, layer, label })
+        self.commit(lumit_core::ops::Op::SetLayerLabel { comp, layer, label })
     }
 
     /// This layer's own markers (docs/03 §11), drawn on its bar rather than on
@@ -5793,7 +5795,7 @@ impl LayerReference {
             self.composition()?.frame_rate,
         )?;
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerMarkers {
+        self.commit(lumit_core::ops::Op::SetLayerMarkers {
             comp,
             layer,
             markers,
@@ -5822,7 +5824,7 @@ impl LayerReference {
     pub fn set_span(&self, span: BridgeSpan) -> Result<(), BridgeError> {
         use lumit_core::time::CompTime;
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerSpan {
+        self.commit(lumit_core::ops::Op::SetLayerSpan {
             comp,
             layer,
             in_point: CompTime(comp_time(span.in_point)?),
@@ -5847,7 +5849,7 @@ impl LayerReference {
             .get(index as usize)
             .ok_or(BridgeError::InvalidBlendMode)?;
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerBlend { comp, layer, blend })
+        self.commit(lumit_core::ops::Op::SetLayerBlend { comp, layer, blend })
     }
 
     /// The layer used as this one's matte, if any.
@@ -5870,7 +5872,7 @@ impl LayerReference {
     pub fn set_matte(&self, matte: Option<BridgeMatte>) -> Result<(), BridgeError> {
         use lumit_core::model::{LayerInputSource, MatteChannel, MatteRef};
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerMatte {
+        self.commit(lumit_core::ops::Op::SetLayerMatte {
             comp,
             layer,
             matte: matte.map(|m| MatteRef {
@@ -5916,14 +5918,14 @@ impl LayerReference {
             .0
             .to_f64();
         let ops = lumit_render::build::parent_ops(&doc, comp, layer, parent, t);
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// Move this layer to `new_index` in the stack (0 = top).
     #[frb(sync)]
     pub fn reorder(&self, new_index: usize) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::ReorderLayer {
+        self.commit(lumit_core::ops::Op::ReorderLayer {
             comp,
             layer,
             new_index,
@@ -5935,7 +5937,7 @@ impl LayerReference {
     pub fn delete(&self) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
         self.item()?;
-        self.commit(lumit_core::Op::RemoveLayer { comp, layer })
+        self.commit(lumit_core::ops::Op::RemoveLayer { comp, layer })
     }
 
     /// Copy this layer, inserting the copy directly above the original.
@@ -5962,7 +5964,7 @@ impl LayerReference {
         // inherit being pointed *at* — but it keeps what it points at itself.
         let new_id = copy.id;
 
-        self.commit(lumit_core::Op::AddLayer {
+        self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
             index,
             layer: Box::new(copy),
@@ -5988,7 +5990,7 @@ impl LayerReference {
     /// naming the same nested comp.
     ///
     /// **One undo step**: the sibling and the mute go in as a single
-    /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
+    /// [`lumit_core::ops::Op::Batch`], so one Ctrl+Z puts the row back the way it
     /// was — and a locked layer refuses the batch whole, as the lock does
     /// everywhere.
     ///
@@ -6096,15 +6098,15 @@ impl LayerReference {
         // sibling would not sound like what it was detached from.
         let new_id = sound.id;
 
-        self.commit(lumit_core::Op::Batch {
+        self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
                 // Directly below the original, where the eye looks for it.
-                lumit_core::Op::AddLayer {
+                lumit_core::ops::Op::AddLayer {
                     comp: self.comp_id,
                     index: index + 1,
                     layer: Box::new(sound),
                 },
-                lumit_core::Op::SetLayerAudible {
+                lumit_core::ops::Op::SetLayerAudible {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     audible: false,
@@ -6116,7 +6118,7 @@ impl LayerReference {
 
     /// Commit `op` against this layer's project.
     #[frb(ignore)]
-    pub(crate) fn commit(&self, op: lumit_core::Op) -> Result<(), BridgeError> {
+    pub(crate) fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -6212,7 +6214,8 @@ impl LayerReference {
                 return Ok(BridgeAudioPeaks::empty());
             };
             // The streams this layer sounds are the ones its wave is of.
-            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, layer.audio_streams.places());
             let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
@@ -6311,7 +6314,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, layer.audio_streams.places());
             let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
@@ -6401,7 +6405,8 @@ impl LayerReference {
                 return Ok(BridgeAudioPeaks::empty());
             };
             // The streams this clip sounds are the ones its wave is of.
-            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, clip.audio_streams.places());
             let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
@@ -6498,7 +6503,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let sound =
+                lumit_media::audio::SoundSource::streams_of(path, clip.audio_streams.places());
             let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
@@ -6698,7 +6704,7 @@ impl LayerReference {
             };
             Layer::identity_retime(local(layer.in_point), local(layer.out_point))
         });
-        let removal = lumit_core::Op::SetRetimeProperty {
+        let removal = lumit_core::ops::Op::SetRetimeProperty {
             comp: self.comp_id,
             layer: self.layer_id,
             retime,
@@ -6721,14 +6727,18 @@ impl LayerReference {
     /// source time, or arithmetic that would overflow): switching Retime off
     /// must always work, even when nothing can be said about the source.
     #[frb(ignore)]
-    pub(crate) fn unretime_op(&self, layer: &Layer, removal: lumit_core::Op) -> lumit_core::Op {
+    pub(crate) fn unretime_op(
+        &self,
+        layer: &Layer,
+        removal: lumit_core::ops::Op,
+    ) -> lumit_core::ops::Op {
         let Some((in_point, out_point, start_offset)) = self.reanchored_span(layer) else {
             return removal;
         };
-        lumit_core::Op::Batch {
+        lumit_core::ops::Op::Batch {
             ops: vec![
                 removal,
-                lumit_core::Op::SetLayerSpan {
+                lumit_core::ops::Op::SetLayerSpan {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     in_point,
@@ -6816,7 +6826,7 @@ impl LayerReference {
         let layer = self.item()?;
         let animation = value.animation_at(layer.start_offset.0)?;
         let mut retime = layer.retime.clone().ok_or(BridgeError::NotRetimed)?;
-        let removal = lumit_core::Op::SetRetimeProperty {
+        let removal = lumit_core::ops::Op::SetRetimeProperty {
             comp: self.comp_id,
             layer: self.layer_id,
             retime: None,
@@ -6825,7 +6835,7 @@ impl LayerReference {
             return self.commit(self.unretime_op(&layer, removal));
         }
         retime.animation = animation;
-        self.commit(lumit_core::Op::SetRetimeProperty {
+        self.commit(lumit_core::ops::Op::SetRetimeProperty {
             comp: self.comp_id,
             layer: self.layer_id,
             retime: Some(retime),
@@ -6952,16 +6962,16 @@ impl LayerReference {
         let scaled =
             lumit_core::retime::stretch_keys(keys, in_local, k).ok_or(BridgeError::InvalidTime)?;
 
-        self.commit(lumit_core::Op::Batch {
+        self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
-                lumit_core::Op::SetLayerSpan {
+                lumit_core::ops::Op::SetLayerSpan {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     in_point: slid(layer.in_point.0)?,
                     out_point,
                     start_offset,
                 },
-                lumit_core::Op::SetRetimeProperty {
+                lumit_core::ops::Op::SetRetimeProperty {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     retime: Some(Property {
@@ -7053,7 +7063,7 @@ impl LayerReference {
             }
         }
 
-        self.commit(lumit_core::Op::SetRetimeProperty {
+        self.commit(lumit_core::ops::Op::SetRetimeProperty {
             comp: self.comp_id,
             layer: self.layer_id,
             retime: Some(map),
@@ -7079,7 +7089,7 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetLayerVolume {
+            .commit(lumit_core::ops::Op::SetLayerVolume {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 animation,
@@ -7153,7 +7163,7 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetLayerVolume {
+            .commit(lumit_core::ops::Op::SetLayerVolume {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 animation: faded.animation,
@@ -7179,7 +7189,7 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetLayerPan {
+            .commit(lumit_core::ops::Op::SetLayerPan {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 animation,
@@ -7223,13 +7233,13 @@ impl LayerReference {
         let op = if ops.len() == 1 {
             ops.into_iter().next().ok_or(BridgeError::InvalidLayer)?
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         self.commit(op)
     }
 
     /// Replace one transform property's whole animation, as one
-    /// [`lumit_core::Op::SetTransformProperty`].
+    /// [`lumit_core::ops::Op::SetTransformProperty`].
     ///
     /// One property per op, not the whole group: the op is exactly invertible
     /// that way, so a nudged Position is one undo step that puts back precisely
@@ -7249,7 +7259,7 @@ impl LayerReference {
         // one step.
         let op = match ops.len() {
             1 => ops.pop().ok_or(BridgeError::InvalidLayer)?,
-            _ => lumit_core::Op::Batch { ops },
+            _ => lumit_core::ops::Op::Batch { ops },
         };
         self.commit(op)
     }
@@ -7267,20 +7277,20 @@ impl LayerReference {
             .transform
             .rotations_in_order(on)
             .ok_or(BridgeError::InvalidLayer)?;
-        let mut ops = vec![lumit_core::Op::SetRotationOrder {
+        let mut ops = vec![lumit_core::ops::Op::SetRotationOrder {
             comp: self.comp_id,
             layer: self.layer_id,
             after_effects: on,
         }];
         ops.extend(rows.into_iter().map(|(prop, animation)| {
-            lumit_core::Op::SetTransformProperty {
+            lumit_core::ops::Op::SetTransformProperty {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 prop,
                 animation,
             }
         }));
-        self.commit(lumit_core::Op::Batch { ops })
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 
     /// The ops that put `value` on one transform property
@@ -7291,7 +7301,7 @@ impl LayerReference {
         layer: &lumit_core::model::Layer,
         prop: BridgeTransformProp,
         value: &BridgeScalar,
-    ) -> Result<Vec<lumit_core::Op>, BridgeError> {
+    ) -> Result<Vec<lumit_core::ops::Op>, BridgeError> {
         let animation = value.animation_at(layer.start_offset.0)?;
         let language = match value {
             BridgeScalar::Expression(_, language) => Some(language.read()),
@@ -7316,7 +7326,7 @@ impl LayerReference {
     /// the curve already had and the spans around them are re-described, so the
     /// picture does not move — and a static axis is left static.
     ///
-    /// The whole change is one [`lumit_core::Op::Batch`], so it is one undo
+    /// The whole change is one [`lumit_core::ops::Op::Batch`], so it is one undo
     /// step whatever it had to merge. Separating merges nothing: the axes are
     /// already stored apart, which is what makes a per-axis curve possible at
     /// all.
@@ -7327,7 +7337,7 @@ impl LayerReference {
         mode: BridgeAxisMode,
     ) -> Result<(), BridgeError> {
         let core_pair = pair.core();
-        let mut ops = vec![lumit_core::Op::SetTransformAxisMode {
+        let mut ops = vec![lumit_core::ops::Op::SetTransformAxisMode {
             comp: self.comp_id,
             layer: self.layer_id,
             pair: core_pair,
@@ -7337,7 +7347,7 @@ impl LayerReference {
             let layer = self.item()?;
             if layer.transform.axis_modes.get(core_pair) == lumit_core::model::AxisMode::Separated {
                 for (prop, animation) in layer.transform.unified_axes(core_pair) {
-                    ops.push(lumit_core::Op::SetTransformProperty {
+                    ops.push(lumit_core::ops::Op::SetTransformProperty {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         prop,
@@ -7349,7 +7359,7 @@ impl LayerReference {
         let op = if ops.len() == 1 {
             ops.into_iter().next().ok_or(BridgeError::InvalidLayer)?
         } else {
-            lumit_core::Op::Batch { ops }
+            lumit_core::ops::Op::Batch { ops }
         };
         self.commit(op)
     }
@@ -7378,7 +7388,7 @@ impl LayerReference {
     }
 
     /// Read this layer's effect stack, let `edit` change a clone of it, and
-    /// commit the result as a single [`lumit_core::Op::SetLayerEffects`].
+    /// commit the result as a single [`lumit_core::ops::Op::SetLayerEffects`].
     ///
     /// The shared tail of every stack op below, exactly as v0's
     /// `edits::with_effects` is: one user action becomes one op and therefore one
@@ -7432,13 +7442,13 @@ impl LayerReference {
                 };
                 edit(&mut list)?;
                 if home == InstanceHome::Styles {
-                    lumit_core::Op::SetLayerStyles {
+                    lumit_core::ops::Op::SetLayerStyles {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         styles: list,
                     }
                 } else {
-                    lumit_core::Op::SetLayerEffects {
+                    lumit_core::ops::Op::SetLayerEffects {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         effects: list,
@@ -7454,7 +7464,7 @@ impl LayerReference {
                     .map(|g| g.effects.clone())
                     .ok_or(BridgeError::InvalidEffect)?;
                 edit(&mut list)?;
-                lumit_core::Op::SetGroupEffects {
+                lumit_core::ops::Op::SetGroupEffects {
                     comp: self.comp_id,
                     group,
                     effects: list,
@@ -7477,7 +7487,7 @@ impl LayerReference {
             InstanceHome::GraphInputs => {
                 let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
                 edit(&mut list)?;
-                lumit_core::Op::SetLayerGraphInputs {
+                lumit_core::ops::Op::SetLayerGraphInputs {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     inputs: list.into_iter().next().map(Box::new),
@@ -7559,14 +7569,14 @@ impl LayerReference {
         // do anything on a stack. Refused here rather than left out of the
         // menus alone, so every route in gets the same calm sentence
         // ([`Self::add_node_graph_effect`] is the Node graph's own door).
-        if lumit_core::fx::def(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Compositing)
-            || name == lumit_core::comp_graph::NODE_GRAPH
+        if lumit_core::fx::builtins::def(&name).is_some_and(|def| {
+            def.schema().category == lumit_core::fx::schema::FxCategory::Compositing
+        }) || name == lumit_core::comp_graph::NODE_GRAPH
         {
             return Err(BridgeError::NotAStackEffect);
         }
         let comp = self.composition()?;
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             &name,
             f64::from(comp.width),
             f64::from(comp.height),
@@ -7576,26 +7586,26 @@ impl LayerReference {
         // effect is landing on (docs/impl/layer-input.md): the Lens
         // flare's Matte source, whose natural reading is "the lights in this
         // picture" — and on an adjustment layer, the composite below.
-        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         // A blur or a glow on a shape or a line of text starts with Repeat
         // edge pixels off, so it spreads out of the art as it lands.
-        lumit_core::fx::spread_on_art(&mut instance, &self.item()?.kind);
+        lumit_core::fx::builtins::spread_on_art(&mut instance, &self.item()?.kind);
         // An Extract channels lands knowing what its layer's file holds, for
         // the same reason: the useful state is a fact about where it was
         // dropped, and making the user press Reload before the effect can do
         // anything would be making them finish the drop themselves.
         self.seed_extract_channels(&mut instance);
 
-        if lumit_core::fx::BUILTIN_DEFS
+        if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
         {
             let mut graph = self.item()?.graph;
             graph.nodes.push(instance);
             let proj = self.project()?;
             let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
             proj.store
-                .commit(lumit_core::Op::SetLayerGraph {
+                .commit(lumit_core::ops::Op::SetLayerGraph {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     graph: Box::new(graph),
@@ -7620,14 +7630,14 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::Batch {
+            .commit(lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::Op::SetLayerEffects {
+                    lumit_core::ops::Op::SetLayerEffects {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         effects,
                     },
-                    lumit_core::Op::SetLayerGraph {
+                    lumit_core::ops::Op::SetLayerGraph {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         graph: Box::new(graph),
@@ -7736,7 +7746,7 @@ impl LayerReference {
             .comp(graph.id())
             .and_then(|c| c.graph.as_ref())
             .ok_or(BridgeError::InvalidComp)?;
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             lumit_core::comp_graph::NODE_GRAPH,
             f64::from(comp.width),
             f64::from(comp.height),
@@ -7937,20 +7947,20 @@ impl LayerReference {
     /// asked for.
     #[frb(sync)]
     pub fn add_clip_effect(&self, clip: Uuid, name: String) -> Result<(), BridgeError> {
-        if lumit_core::fx::BUILTIN_DEFS
+        if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
         {
             return Err(BridgeError::UnknownEffectName);
         }
         let comp = self.composition()?;
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             &name,
             f64::from(comp.width),
             f64::from(comp.height),
         )
         .ok_or(BridgeError::UnknownEffectName)?;
-        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         self.with_instances(InstanceHome::Clip(clip), move |effects| {
             effects.push(instance);
             Ok(())
@@ -8025,10 +8035,11 @@ impl LayerReference {
     /// is refused, and nothing is committed either way.
     #[frb(sync)]
     pub fn add_style(&self, name: String) -> Result<(), BridgeError> {
-        if lumit_core::fx::style_index(&name).is_none() {
+        if lumit_core::fx::styles::style_index(&name).is_none() {
             return Err(BridgeError::UnknownEffectName);
         }
-        let instance = lumit_core::fx::instantiate(&name).ok_or(BridgeError::UnknownEffectName)?;
+        let instance =
+            lumit_core::fx::builtins::instantiate(&name).ok_or(BridgeError::UnknownEffectName)?;
         self.with_instances(InstanceHome::Styles, move |styles| {
             if styles
                 .iter()
@@ -8085,7 +8096,7 @@ impl LayerReference {
     pub fn new_driver(&self, name: String) -> Result<BridgeEffectInstance, BridgeError> {
         let layer = self.item()?;
         let comp = self.composition()?;
-        let mut instance = lumit_core::fx::instantiate_for_raster(
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
             &name,
             f64::from(comp.width),
             f64::from(comp.height),
@@ -8094,12 +8105,12 @@ impl LayerReference {
         // A `self_default` layer reference starts pointed at the layer the node
         // is landing on — Audio level's Audio, on a footage layer, is
         // the sound of the thing you are wiring.
-        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         Ok(BridgeEffectInstance::new(instance, layer.start_offset.0))
     }
 
     /// Commit a whole graph: the staged driver nodes and the edited wiring, as
-    /// one [`lumit_core::Op::SetLayerGraph`].
+    /// one [`lumit_core::ops::Op::SetLayerGraph`].
     ///
     /// The whole-graph shape is deliberate and mirrors `SetLayerEffects`. Add a
     /// driver, remove one, connect, disconnect, drag a box, toggle exposure —
@@ -8132,7 +8143,7 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetLayerGraph {
+            .commit(lumit_core::ops::Op::SetLayerGraph {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 graph: Box::new(graph),
@@ -8168,7 +8179,7 @@ impl LayerReference {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store
-            .commit(lumit_core::Op::SetLayerGraph {
+            .commit(lumit_core::ops::Op::SetLayerGraph {
                 comp: self.comp_id,
                 layer: self.layer_id,
                 graph: Box::new(graph),
@@ -8229,7 +8240,7 @@ impl LayerReference {
         graph.layout.extend(added.layout);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
-        let graph = lumit_core::Op::SetLayerGraph {
+        let graph = lumit_core::ops::Op::SetLayerGraph {
             comp: self.comp_id,
             layer: self.layer_id,
             graph: Box::new(graph),
@@ -8241,9 +8252,9 @@ impl LayerReference {
         } else {
             let mut effects = layer.effects;
             effects.extend(added.effects);
-            lumit_core::Op::Batch {
+            lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::Op::SetLayerEffects {
+                    lumit_core::ops::Op::SetLayerEffects {
                         comp: self.comp_id,
                         layer: self.layer_id,
                         effects,

@@ -305,7 +305,7 @@ impl crate::api::composition::CompositionReference {
     /// answer rather than another composition's frames.
     #[frb(sync)]
     pub fn cached_frames(&self, frames: u64, scale: f32) -> Vec<u8> {
-        let scale_q = lumit_render::preview_scale_q(crate::render::quality_for(scale));
+        let scale_q = lumit_render::headless::preview_scale_q(crate::render::quality_for(scale));
         crate::framecache::bar::read_packed(self.id, frames, scale_q)
     }
 }

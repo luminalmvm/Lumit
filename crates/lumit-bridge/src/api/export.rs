@@ -351,7 +351,7 @@ impl CompositionReference {
         // may stand the built-in engine in and say so, but a file is a thing
         // the user keeps, and docs/08 §3.1 says an export never silently
         // downgrades (docs/impl/addons.md §6.3).
-        if !lumit_render::addon_needs(&document).is_empty() {
+        if !lumit_render::decode::addon_needs(&document).is_empty() {
             return Err(BridgeError::AddonMissing);
         }
 
@@ -647,7 +647,7 @@ impl CompositionReference {
         // machine cannot run is an item that will fail whenever the queue
         // reaches it. Refusing here says so while the person who pressed the
         // button is still looking at the dialogue (docs/impl/addons.md §6.3).
-        if !lumit_render::addon_needs(&document).is_empty() {
+        if !lumit_render::decode::addon_needs(&document).is_empty() {
             return Err(BridgeError::AddonMissing);
         }
         let comp_name = self.get_settings()?.name;
@@ -675,7 +675,7 @@ impl CompositionReference {
             };
             state.store.snapshot()
         };
-        !lumit_render::addon_needs(&document).is_empty()
+        !lumit_render::decode::addon_needs(&document).is_empty()
     }
 }
 

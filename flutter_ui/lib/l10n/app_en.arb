@@ -1,9 +1,9 @@
 {
   "@@locale": "en",
   "@@x-notes": "Lumit's user-facing text, British English, the single source translation works from. Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
-  "aboutBlurb": "A motion-graphics and compositing editor. Free software under the GNU General Public Licence, version 3.",
+  "aboutBlurb": "Free software under the GNU General Public Licence, version 3.",
   "@aboutBlurb": {
-    "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
+    "description": "About window: Lumit's licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
   },
   "addAtPlayhead": "Add at playhead",
   "@addAtPlayhead": {
@@ -1764,17 +1764,13 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows the time value of the source.",
+  "firstRunAfterEffects": "Footage arrives as a layer. Retime graphs show source time.",
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
   "firstRunAfterEffectsShortcuts": "Use the After Effects shortcuts",
   "@firstRunAfterEffectsShortcuts": {
     "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
-  "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
-  "@firstRunAutoUpdate": {
-    "description": "First run: the sentence beside the automatic-updates checkbox."
   },
   "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
   "@firstRunCut": {
@@ -1788,7 +1784,7 @@
   "@firstRunTitle": {
     "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
-  "firstRunVegas": "Video arrives as a Sequence layer to cut into clips, and the Retime graph shows speed as a percentage.",
+  "firstRunVegas": "Video arrives as a Sequence layer. Retime graphs show speed.",
   "@firstRunVegas": {
     "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
   },
@@ -3455,10 +3451,6 @@
   "fxConsoleAll": "All",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
-  },
-  "fxConsoleApplies": "Enter applies to the selected layer",
-  "@fxConsoleApplies": {
-    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
   "fxConsoleCompositions": "Compositions",
   "@fxConsoleCompositions": {
@@ -5372,10 +5364,6 @@
       }
     }
   },
-  "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
-  "@settingsHelpProjectTemplate": {
-    "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
-  },
   "templateNotOpened": "The project template would not open, so the new project is empty",
   "@templateNotOpened": {
     "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
@@ -6497,6 +6485,10 @@
   "@menuCentreInView": {
     "description": "Layer ▸ Transform submenu item: moves the selected layers so each sits in the middle of the composition."
   },
+  "menuCentreAnchorPoint": "Centre anchor point",
+  "@menuCentreAnchorPoint": {
+    "description": "Layer ▸ Transform submenu item: moves each selected layer's anchor point to the middle of its content without moving the picture."
+  },
   "menuClearBeatMarkers": "Clear beat markers",
   "@menuClearBeatMarkers": {
     "description": "Menu item."
@@ -7539,22 +7531,9 @@
       }
     }
   },
-  "precomposeLeaveHelp": "Use this option to create a new intermediate composition with only '{layer}' in it. The new composition will become the source to the current layer.",
-  "@precomposeLeaveHelp": {
-    "description": "The sentence under the 'Leave all attributes' choice. {layer} is a layer's name.",
-    "placeholders": {
-      "layer": {
-        "type": "String"
-      }
-    }
-  },
   "precomposeMove": "Move all attributes into the new composition",
   "@precomposeMove": {
     "description": "Pre-compose choice."
-  },
-  "precomposeMoveHelp": "Use this option to place the currently selected layers together into a new intermediate composition.",
-  "@precomposeMoveHelp": {
-    "description": "The sentence under the 'Move all attributes' choice."
   },
   "precomposeNewName": "New composition name",
   "@precomposeNewName": {
@@ -7753,7 +7732,7 @@
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
-  "recoveryQuestion": "It looks like Lumit crashed with unsaved changes, would you like to restore them?",
+  "recoveryQuestion": "Lumit crashed with unsaved changes. Restore them?",
   "@recoveryQuestion": {
     "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
@@ -7985,10 +7964,6 @@
   "settingsGraphRoom": "Node graph overscan",
   "@settingsGraphRoom": {
     "description": "Project settings: the name of the row choosing how far past the composition's frame a node graph box keeps its picture, so a later box can bring it back."
-  },
-  "settingsGraphRoomHint": "How far past the frame each box keeps its picture. More uses more memory.",
-  "@settingsGraphRoomHint": {
-    "description": "Project settings: the line under Node graph overscan."
   },
   "graphRoomOne": "One frame",
   "@graphRoomOne": {
@@ -8592,15 +8567,6 @@
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
   },
-  "themeCopiedTo": "Copied to {name}.",
-  "@themeCopiedTo": {
-    "description": "Shown after duplicating a theme. {name} is the new theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "themeCopySuffix": "{name} copy",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -8613,15 +8579,6 @@
   "themeDefaultName": "My theme",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
-  },
-  "themeDeleted": "{name} deleted.",
-  "@themeDeleted": {
-    "description": "Shown after deleting a custom theme. {name} is its name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeEditorTitle": "Customise theme",
   "@themeEditorTitle": {
@@ -8645,50 +8602,17 @@
       }
     }
   },
-  "themeFileNoColours": "That theme file carries no colours.",
+  "themeFileNoColours": "That theme file has no colours.",
   "@themeFileNoColours": {
     "description": "Refusal when a theme file has a name but nothing to draw with."
   },
-  "themeFileNoName": "That theme file has no name, so there would be nothing to select.",
+  "themeFileNoName": "That theme file has no name.",
   "@themeFileNoName": {
     "description": "Refusal when a theme file is valid but unnamed."
   },
   "themeFileNotATheme": "That file is not a Lumit theme.",
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
-  },
-  "themeImported": "{name} imported, and selected.",
-  "@themeImported": {
-    "description": "Shown after reading a theme file in. {name} is the theme name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeImportedRenamed": "A theme was already called {wanted}, so this one came in as {name}.",
-  "@themeImportedRenamed": {
-    "description": "Shown when an imported theme collided with an existing one; an import never overwrites the user’s own.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "themeNameTaken": "A theme was already called {wanted}, so this one is {name}.",
-  "@themeNameTaken": {
-    "description": "Shown when a rename collided with an existing theme and Lumit picked a free name instead.",
-    "placeholders": {
-      "wanted": {
-        "type": "String"
-      },
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeNameTheCopy": "Name the copy",
   "@themeNameTheCopy": {
@@ -8701,15 +8625,6 @@
   "themeRenameTitle": "Rename this theme",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
-  },
-  "themeRenamedTo": "Renamed to {name}.",
-  "@themeRenamedTo": {
-    "description": "Shown after renaming a theme. {name} is the new name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
   },
   "themeSaveACopy": "Save a copy…",
   "@themeSaveACopy": {
@@ -9319,25 +9234,13 @@
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccentHelp": "The one accent: focus, the playhead, what is chosen.",
-  "@tokenAccentHelp": {
-    "description": "Theme editor: the sentence under the \"Accent\" colour, saying where it is used."
-  },
   "tokenAccenthover": "Accent hover",
   "@tokenAccenthover": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAccenthoverHelp": "The accent with the pointer on it.",
-  "@tokenAccenthoverHelp": {
-    "description": "Theme editor: the sentence under the \"Accent hover\" colour, saying where it is used."
-  },
   "tokenCachedisk": "Cache, on disk",
   "@tokenCachedisk": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenCachediskHelp": "The disk tier of the Timeline's cache bar.",
-  "@tokenCachediskHelp": {
-    "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
   "tokenCurve": "Curve {number}",
   "@tokenCurve": {
@@ -9348,17 +9251,9 @@
       }
     }
   },
-  "tokenCurveHelp": "A property's stroke in the graph editor.",
-  "@tokenCurveHelp": {
-    "description": "Theme editor: the sentence under the graph curve colours."
-  },
   "tokenError": "Error",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenErrorHelp": "Something that did not work.",
-  "@tokenErrorHelp": {
-    "description": "Theme editor: the sentence under the \"Error\" colour, saying where it is used."
   },
   "tokenGroupGraphCurves": "Graph curves",
   "@tokenGroupGraphCurves": {
@@ -9392,225 +9287,113 @@
   "@tokenHairline": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenHairlineHelp": "The line between rows and panels.",
-  "@tokenHairlineHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline\" colour, saying where it is used."
-  },
   "tokenHairlinestrong": "Hairline, strong",
   "@tokenHairlinestrong": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenHairlinestrongHelp": "The same line where it has to carry more weight.",
-  "@tokenHairlinestrongHelp": {
-    "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
   "tokenLayercamera": "Camera",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayercameraHelp": "Camera layers.",
-  "@tokenLayercameraHelp": {
-    "description": "Theme editor: the sentence under the \"Camera\" colour, saying where it is used."
-  },
   "tokenLayerfootage": "Footage",
   "@tokenLayerfootage": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayerfootageHelp": "Footage layers.",
-  "@tokenLayerfootageHelp": {
-    "description": "Theme editor: the sentence under the \"Footage\" colour, saying where it is used."
   },
   "tokenLayerprecomp": "Precomp",
   "@tokenLayerprecomp": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayerprecompHelp": "Precomp layers.",
-  "@tokenLayerprecompHelp": {
-    "description": "Theme editor: the sentence under the \"Precomp\" colour, saying where it is used."
-  },
   "tokenLayersequence": "Sequence",
   "@tokenLayersequence": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayersequenceHelp": "Sequence layers.",
-  "@tokenLayersequenceHelp": {
-    "description": "Theme editor: the sentence under the \"Sequence\" colour, saying where it is used."
   },
   "tokenLayersolid": "Solid",
   "@tokenLayersolid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenLayersolidHelp": "Solid layers.",
-  "@tokenLayersolidHelp": {
-    "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
-  },
   "tokenLayertext": "Text",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenLayertextHelp": "Text layers.",
-  "@tokenLayertextHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
   "tokenAnimated": "Animated",
   "@tokenAnimated": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenAnimatedHelp": "Keyframes, the stopwatch when it is on, a handle or value field in hand, and the work-area band.",
-  "@tokenAnimatedHelp": {
-    "description": "Theme editor: the sentence under the \"Animated\" colour, saying where it is used."
-  },
   "tokenMarker": "Marker",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenMarkerHelp": "Comp markers on the time ruler, and the box holding what one says. A grey by default — a marker says *here*, not *careful*.",
-  "@tokenMarkerHelp": {
-    "description": "Theme editor: the sentence under the \"Marker\" colour, saying where it is used."
   },
   "tokenRoom": "Room",
   "@tokenRoom": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenRoomHelp": "The ground the panes stand on when the shape is Lantern; the other shapes never draw it.",
-  "@tokenRoomHelp": {
-    "description": "Theme editor: the sentence under the \"Room\" colour, saying where it is used."
-  },
   "tokenSelectionfill": "Selected row",
   "@tokenSelectionfill": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSelectionfillHelp": "Under a selected layer or property; half as strong under a highlighted one.",
-  "@tokenSelectionfillHelp": {
-    "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
   "tokenSuccess": "Success",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSuccessHelp": "Something finished, or held in the cache.",
-  "@tokenSuccessHelp": {
-    "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
-  },
   "tokenSurface0": "Background",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface0Help": "The deepest ground — behind panels, and the app backdrop.",
-  "@tokenSurface0Help": {
-    "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
   "tokenSurface1": "Panel",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface1Help": "A panel's own ground, and the Timeline inside the work area.",
-  "@tokenSurface1Help": {
-    "description": "Theme editor: the sentence under the \"Panel\" colour, saying where it is used."
-  },
   "tokenSurface2": "Raised",
   "@tokenSurface2": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface2Help": "Rows and cards lifted off the panel.",
-  "@tokenSurface2Help": {
-    "description": "Theme editor: the sentence under the \"Raised\" colour, saying where it is used."
   },
   "tokenSurface3": "Control",
   "@tokenSurface3": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenSurface3Help": "A field or button at rest.",
-  "@tokenSurface3Help": {
-    "description": "Theme editor: the sentence under the \"Control\" colour, saying where it is used."
-  },
   "tokenSurface4": "Control hover",
   "@tokenSurface4": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenSurface4Help": "The same, with the pointer over it.",
-  "@tokenSurface4Help": {
-    "description": "Theme editor: the sentence under the \"Control hover\" colour, saying where it is used."
   },
   "tokenTextdisabled": "Text, disabled",
   "@tokenTextdisabled": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextdisabledHelp": "A control that cannot be used right now.",
-  "@tokenTextdisabledHelp": {
-    "description": "Theme editor: the sentence under the \"Text, disabled\" colour, saying where it is used."
-  },
   "tokenTextmuted": "Text, muted",
   "@tokenTextmuted": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextmutedHelp": "Hints and the lines under a setting.",
-  "@tokenTextmutedHelp": {
-    "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
   "tokenTextprimary": "Text",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTextprimaryHelp": "Names, values, anything you read first.",
-  "@tokenTextprimaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
-  },
   "tokenTextsecondary": "Text, secondary",
   "@tokenTextsecondary": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenTextsecondaryHelp": "Supporting text beside the primary.",
-  "@tokenTextsecondaryHelp": {
-    "description": "Theme editor: the sentence under the \"Text, secondary\" colour, saying where it is used."
   },
   "tokenTimelineoutofrange": "Timeline outside the work area",
   "@tokenTimelineoutofrange": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenTimelineoutofrangeHelp": "The Timeline's ground either side of the work area, so the part you are delivering reads apart from the rest.",
-  "@tokenTimelineoutofrangeHelp": {
-    "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
-  },
   "tokenWarning": "Warning",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWarningHelp": "Something worth reading before carrying on.",
-  "@tokenWarningHelp": {
-    "description": "Theme editor: the sentence under the \"Warning\" colour, saying where it is used."
   },
   "tokenWaveformhigh": "Multiwave, treble",
   "@tokenWaveformhigh": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformhighHelp": "The top band — hats, sibilance, transient edge.",
-  "@tokenWaveformhighHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, treble\" colour, saying where it is used."
-  },
   "tokenWaveformlow": "Multiwave, bass",
   "@tokenWaveformlow": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformlowHelp": "The bottom band of the multiwave stack — kicks and bass.",
-  "@tokenWaveformlowHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, bass\" colour, saying where it is used."
   },
   "tokenWaveformmid": "Multiwave, middle",
   "@tokenWaveformmid": {
     "description": "Theme editor: the name of one editable colour."
   },
-  "tokenWaveformmidHelp": "The middle band — most of a voice, a snare's body.",
-  "@tokenWaveformmidHelp": {
-    "description": "Theme editor: the sentence under the \"Multiwave, middle\" colour, saying where it is used."
-  },
   "tokenWaveformrest": "Waveform",
   "@tokenWaveformrest": {
     "description": "Theme editor: the name of one editable colour."
-  },
-  "tokenWaveformrestHelp": "The single wave a layer or a clip draws. Content, not state — never the accent.",
-  "@tokenWaveformrestHelp": {
-    "description": "Theme editor: the sentence under the \"Waveform\" colour, saying where it is used."
   },
   "toolAnchor": "Anchor point",
   "@toolAnchor": {
@@ -10338,7 +10121,7 @@
   "@transportSharedTexture": {
     "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
-  "typeVerticalNotBuilt": "Vertical type is not built yet — the engine lays out one horizontal line",
+  "typeVerticalNotBuilt": "Vertical type is not built yet",
   "@typeVerticalNotBuilt": {
     "description": "Notice when the vertical type tool is used."
   },
@@ -10471,7 +10254,7 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
-  "updateNightlyBody": "New features first, less tested. Projects saved in a nightly may not open in the stable version. Keep a copy.",
+  "updateNightlyBody": "Less tested. Projects saved in a nightly may not open in the stable version.",
   "@updateNightlyBody": {
     "description": "Body of the dialogue asking before updates switch to nightly builds."
   },
@@ -10594,15 +10377,6 @@
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
-  "updateNoticeBody": "Lumit {version} is downloaded. Before it is installed, its release notes say:",
-  "@updateNoticeBody": {
-    "description": "Body of the dialogue showing a release's warning, above the warning itself. {version} is the new version, such as 0.4.0.",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
   "updateNoticeTitle": "Before you update to Lumit {version}",
   "@updateNoticeTitle": {
     "description": "Title of the dialogue showing what a release warns about before it is installed. {version} is the new version, such as 0.4.0.",
@@ -10612,9 +10386,9 @@
       }
     }
   },
-  "updateOfferBody": "{name} is {size}. Lumit downloads it now and installs it when you restart, so you can carry on working in the meantime.",
+  "updateOfferBody": "{name} is {size}. It installs when you restart.",
   "@updateOfferBody": {
-    "description": "Body of the dialogue offering a new version: what the download costs and that work can continue. {name} is the installer's file name, {size} an amount such as 240 MB.",
+    "description": "Body of the dialogue offering a new version: what the download costs and when it installs. {name} is the installer's file name, {size} an amount such as 240 MB.",
     "placeholders": {
       "name": {
         "type": "String"
@@ -10666,7 +10440,7 @@
       }
     }
   },
-  "updateReadyInPlace": "Lumit {version} is ready. Restarting puts it in place and opens it — no installer, and nothing to answer.",
+  "updateReadyInPlace": "Lumit {version} is ready. Restart to finish.",
   "@updateReadyInPlace": {
     "description": "Update dialogue, for installs Lumit can replace by itself.",
     "placeholders": {
@@ -10675,7 +10449,7 @@
       }
     }
   },
-  "updateReadyInstaller": "Lumit {version} is downloaded. It installs while Lumit is closed, so the update finishes the next time you open it.",
+  "updateReadyInstaller": "Lumit {version} is downloaded. It installs the next time Lumit closes.",
   "@updateReadyInstaller": {
     "description": "Update dialogue, for installs that need the setup program to run.",
     "placeholders": {
@@ -11852,28 +11626,6 @@
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
-  "aeSummary": "{imported} items imported · {adjusted} adjusted · {placeholders} placeholders · {skipped} skipped",
-  "@aeSummary": {
-    "description": "Summary line at the top of the import report window. Four counts of what the import did, separated by middle dots.",
-    "placeholders": {
-      "imported": {
-        "type": "int"
-      },
-      "adjusted": {
-        "type": "int"
-      },
-      "placeholders": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
-      }
-    }
-  },
-  "aeFilterAll": "All",
-  "@aeFilterAll": {
-    "description": "Import report window — the filter button that shows rows of every outcome."
-  },
   "aeOutcomeImported": "Imported",
   "@aeOutcomeImported": {
     "description": "Import report window — an outcome grade: this came across whole."
@@ -11890,305 +11642,332 @@
   "@aeOutcomeSkipped": {
     "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
   },
-  "aeNothingToReport": "Everything came across untouched",
+  "aeItemsImported": "{count, plural, =1{1 item imported} other{{count} items imported}}",
+  "@aeItemsImported": {
+    "description": "The line under the import report's title: how many items came across from After Effects. What was changed or left out is listed below it, under headings.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aeNothingToReport": "Everything imported",
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
   },
-  "aeNoneOfThatKind": "Nothing of that kind",
-  "@aeNoneOfThatKind": {
-    "description": "Import report window — shown in place of the list when the chosen outcome filter matches no row."
-  },
-  "aeItemUnreadable": "the item could not be read and was skipped",
+  "aeItemUnreadable": "The item could not be read",
   "@aeItemUnreadable": {
     "description": "Import report row reason. Lower case: it follows the item's name on the line above. Reasons are one line each."
   },
-  "aeCompMissing": "no composition data arrived — imported empty",
+  "aeCompMissing": "The composition had no data",
   "@aeCompMissing": {
-    "description": "Import report row reason, lower case (it follows the item's name). The bundle named a composition but carried none of its contents."
+    "description": "Import report row reason. The bundle named a composition but carried none of its contents."
   },
-  "aeCompFrameRateGuessed": "no frame rate arrived — imported at {used} fps",
+  "aeCompFrameRateGuessed": "Imported at {used} fps",
   "@aeCompFrameRateGuessed": {
-    "description": "Import report row reason, lower case. The composition's frame rate was absent, so a default was used.",
+    "description": "Import report row reason. The composition's frame rate was absent, so a default was used.",
     "placeholders": {
       "used": {
         "type": "String"
       }
     }
   },
-  "aeCompDurationGuessed": "no duration arrived — imported {used} seconds long",
+  "aeCompDurationGuessed": "Imported {used} seconds long",
   "@aeCompDurationGuessed": {
-    "description": "Import report row reason, lower case. The composition's duration was absent, so a default was used.",
+    "description": "Import report row reason. The composition's duration was absent, so a default was used.",
     "placeholders": {
       "used": {
         "type": "String"
       }
     }
   },
-  "aePixelAspectIgnored": "pixel aspect ratio {par} has no equivalent — imported with square pixels",
+  "aePixelAspectIgnored": "Pixel aspect {par} imported as square",
   "@aePixelAspectIgnored": {
-    "description": "Import report row reason, lower case. Lumit compositions have square pixels; After Effects' non-square ratio is recorded but not applied.",
+    "description": "Import report row reason. Lumit compositions have square pixels; After Effects' non-square ratio is recorded but not applied.",
     "placeholders": {
       "par": {
         "type": "String"
       }
     }
   },
-  "aeCompStartIgnored": "the composition's timecode started at {start} seconds — imported starting at zero",
+  "aeCompStartIgnored": "Starts at zero, not {start} seconds",
   "@aeCompStartIgnored": {
-    "description": "Import report row reason, lower case. After Effects can start a composition's timecode somewhere other than zero; Lumit's begin at zero.",
+    "description": "Import report row reason. After Effects can start a composition's timecode somewhere other than zero; Lumit's begin at zero.",
     "placeholders": {
       "start": {
         "type": "String"
       }
     }
   },
-  "aeNestedPreserveBoth": "preserve frame rate and resolution when nested has no equivalent — nested comps follow the parent",
+  "aeNestedPreserveBoth": "Preserve frame rate and resolution was not carried",
   "@aeNestedPreserveBoth": {
-    "description": "Import report row reason, lower case. Names two After Effects composition switches Lumit does not have."
+    "description": "Import report row reason. Names two After Effects composition switches Lumit does not have."
   },
-  "aeNestedPreserveRate": "preserve frame rate when nested has no equivalent — nested comps follow the parent",
+  "aeNestedPreserveRate": "Preserve frame rate was not carried",
   "@aeNestedPreserveRate": {
-    "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
+    "description": "Import report row reason. Names an After Effects composition switch Lumit does not have."
   },
-  "aeNestedPreserveResolution": "preserve resolution when nested has no equivalent — nested comps follow the parent",
+  "aeNestedPreserveResolution": "Preserve resolution was not carried",
   "@aeNestedPreserveResolution": {
-    "description": "Import report row reason, lower case. Names an After Effects composition switch Lumit does not have."
+    "description": "Import report row reason. Names an After Effects composition switch Lumit does not have."
   },
-  "aeProjectBlendingDiffers": "the project blended at {bits} bits without linear blending — Lumit composites in scene-linear light, so blends can shift slightly",
+  "aeProjectBlendingDiffers": "{bits} bit blending imported as linear",
   "@aeProjectBlendingDiffers": {
-    "description": "Import report row reason, lower case. The After Effects project used different colour arithmetic from Lumit's.",
+    "description": "Import report row reason. The After Effects project used different colour arithmetic from Lumit's.",
     "placeholders": {
       "bits": {
         "type": "String"
       }
     }
   },
-  "aeRendererUnrecognised": "the {renderer} renderer's features do not import — layers arrive flat",
+  "aeRendererUnrecognised": "The {renderer} renderer was not carried",
   "@aeRendererUnrecognised": {
-    "description": "Import report row reason, lower case. The composition used an After Effects renderer whose extras have no Lumit counterpart.",
+    "description": "Import report row reason. The composition used an After Effects renderer whose extras have no Lumit counterpart.",
     "placeholders": {
       "renderer": {
         "type": "String"
       }
     }
   },
-  "aeMediaMissing": "the file at {path} was missing in After Effects too",
+  "aeMediaMissing": "The file at {path} was missing",
   "@aeMediaMissing": {
-    "description": "Import report row reason, lower case. After Effects itself had already lost this footage file.",
+    "description": "Import report row reason. After Effects itself had already lost this footage file.",
     "placeholders": {
       "path": {
         "type": "String"
       }
     }
   },
-  "aeMediaNotFound": "the file is not on this machine — imported offline, ready to relink",
+  "aeMediaNotFound": "The file was not found",
   "@aeMediaNotFound": {
-    "description": "Import report row reason, lower case. The footage was fine in After Effects and is not on the machine doing the import."
+    "description": "Import report row reason. The footage was fine in After Effects and is not on the machine doing the import."
   },
-  "aeMediaPlaceholder": "an After Effects placeholder, not a real file",
+  "aeMediaPlaceholder": "An After Effects placeholder",
   "@aeMediaPlaceholder": {
-    "description": "Import report row reason, lower case. The project item stood in for a file that was never chosen."
+    "description": "Import report row reason. The project item stood in for a file that was never chosen."
   },
-  "aeOcioConfigNotFound": "the OCIO config {config} isn't on this machine, so Lumit's own colour is used",
+  "aeOcioConfigNotFound": "The OCIO config {config} was not found",
   "@aeOcioConfigNotFound": {
-    "description": "Import report row reason, lower case. The After Effects project was colour managed with an OCIO config that Lumit couldn't find, either a file path or the name of a config After Effects ships.",
+    "description": "Import report row reason. The After Effects project was colour managed with an OCIO config that Lumit couldn't find, either a file path or the name of a config After Effects ships.",
     "placeholders": {
       "config": {
         "type": "String"
       }
     }
   },
-  "aeColourProfileIgnored": "the {profile} colour profile has no equivalent, so the file's own colour is used",
+  "aeColourProfileIgnored": "The {profile} colour profile was not carried",
   "@aeColourProfileIgnored": {
-    "description": "Import report row reason, lower case. After Effects read the footage through a colour profile, such as an ICC profile, that Lumit has no way to apply.",
+    "description": "Import report row reason. After Effects read the footage through a colour profile, such as an ICC profile, that Lumit has no way to apply.",
     "placeholders": {
       "profile": {
         "type": "String"
       }
     }
   },
-  "aeLayerUnreadable": "the layer had no place in the stack and was skipped",
+  "aeLayerUnreadable": "The layer could not be read",
   "@aeLayerUnreadable": {
-    "description": "Import report row reason, lower case. The capture recorded no stacking position for the layer."
+    "description": "Import report row reason. The capture recorded no stacking position for the layer."
   },
-  "aeLayerKindUnsupported": "layer kind {aeKind} has no equivalent — imported as a null so parenting survives",
+  "aeLayerKindUnsupported": "{aeKind} imported as a null",
   "@aeLayerKindUnsupported": {
-    "description": "Import report row reason, lower case. A null layer is an invisible transform-only layer; keeping one preserves anything parented to it.",
+    "description": "Import report row reason. A null layer is an invisible transform-only layer; keeping one preserves anything parented to it.",
     "placeholders": {
       "aeKind": {
         "type": "String"
       }
     }
   },
-  "aeLayerSourceMissing": "the source item {id} is not in the capture — imported as a null so parenting survives",
+  "aeLayerSourceMissing": "Source {id} was missing",
   "@aeLayerSourceMissing": {
-    "description": "Import report row reason, lower case. The layer named an After Effects item the bundle does not contain.",
+    "description": "Import report row reason. The layer named an After Effects item the bundle does not contain.",
     "placeholders": {
       "id": {
         "type": "String"
       }
     }
   },
-  "aeLayerSpanRepaired": "the layer's in and out points did not make a span — imported one frame long",
+  "aeLayerSpanRepaired": "Imported one frame long",
   "@aeLayerSpanRepaired": {
-    "description": "Import report row reason, lower case. The layer's start and end times were empty or the wrong way round."
+    "description": "Import report row reason. The layer's start and end times were empty or the wrong way round."
   },
-  "aeAudioLayerAsFootage": "imported as a footage layer carrying its audio",
+  "aeAudioLayerAsFootage": "Imported as a footage layer",
   "@aeAudioLayerAsFootage": {
-    "description": "Import report row reason, lower case. Lumit has no separate audio layer kind for this case."
+    "description": "Import report row reason. Lumit has no separate audio layer kind for this case."
   },
-  "aeAudioLevelsDiffer": "audio levels {left} dB left and {right} dB right have one level in Lumit — imported at the left",
+  "aeAudioLevelsDiffer": "Levels {left} and {right} dB imported as {left} dB",
   "@aeAudioLevelsDiffer": {
-    "description": "Import report row reason, lower case. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
+    "description": "Import report row reason. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
     "placeholders": { "left": { "type": "String" }, "right": { "type": "String" } }
   },
-  "aeGuideLayerNotSupported": "guide layers have no equivalent — imported visible",
+  "aeGuideLayerNotSupported": "The guide layer was imported visible",
   "@aeGuideLayerNotSupported": {
-    "description": "Import report row reason, lower case. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."
+    "description": "Import report row reason. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."
   },
-  "aePreserveTransparencyNotSupported": "preserve underlying transparency has no equivalent yet — not applied",
+  "aePreserveTransparencyNotSupported": "Preserve underlying transparency was not carried",
   "@aePreserveTransparencyNotSupported": {
-    "description": "Import report row reason, lower case. Names an After Effects layer switch Lumit does not have."
+    "description": "Import report row reason. Names an After Effects layer switch Lumit does not have."
   },
-  "aeLayerQualityIgnored": "layer quality {quality} has no equivalent — imported at full quality",
+  "aeLayerQualityIgnored": "{quality} quality imported as full",
   "@aeLayerQualityIgnored": {
-    "description": "Import report row reason, lower case. After Effects can draw a layer draft or wireframe; Lumit renders one quality.",
+    "description": "Import report row reason. After Effects can draw a layer draft or wireframe; Lumit renders one quality.",
     "placeholders": {
       "quality": {
         "type": "String"
       }
     }
   },
-  "aeStretchAsRetime": "time stretch {percent}% imported as the equivalent Retime",
+  "aeStretchAsRetime": "Time stretch {percent}% imported as Retime",
   "@aeStretchAsRetime": {
-    "description": "Import report row reason, lower case. Retime is Lumit's retiming system and is a product term — leave it as written.",
+    "description": "Import report row reason. Retime is Lumit's retiming system and is a product term — leave it as written.",
     "placeholders": {
       "percent": {
         "type": "String"
       }
     }
   },
-  "aeFlowEngineDiffers": "Pixel Motion imported as flow interpolation — a different flow engine, so in-betweens differ",
+  "aeFlowEngineDiffers": "Pixel Motion imported as flow interpolation",
   "@aeFlowEngineDiffers": {
-    "description": "Import report row reason, lower case. Pixel Motion is an After Effects feature name; leave it as written."
+    "description": "Import report row reason. Pixel Motion is an After Effects feature name; leave it as written."
   },
-  "aeParentMissing": "the parent layer {index} is not in this composition — imported unparented",
+  "aeParentMissing": "Parent layer {index} was missing",
   "@aeParentMissing": {
-    "description": "Import report row reason, lower case. The layer named a parent that is not in the same composition.",
+    "description": "Import report row reason. The layer named a parent that is not in the same composition.",
     "placeholders": {
       "index": {
         "type": "String"
       }
     }
   },
-  "aeMatteTargetMissing": "the matte layer {index} is not in this composition — imported with no matte",
+  "aeMatteTargetMissing": "Matte layer {index} was missing",
   "@aeMatteTargetMissing": {
-    "description": "Import report row reason, lower case. A matte gates one layer's alpha with another layer's.",
+    "description": "Import report row reason. A matte gates one layer's alpha with another layer's.",
     "placeholders": {
       "index": {
         "type": "String"
       }
     }
   },
-  "aeBlendModeUnavailable": "blend mode {aeMode} has no equivalent — imported as Normal",
+  "aeBlendModeUnavailable": "{aeMode} imported as Normal",
   "@aeBlendModeUnavailable": {
-    "description": "Import report row reason, lower case. The After Effects blend mode's own name is substituted; Normal is Lumit's plain composite.",
+    "description": "Import report row reason. The After Effects blend mode's own name is substituted; Normal is Lumit's plain composite.",
     "placeholders": {
       "aeMode": {
         "type": "String"
       }
     }
   },
-  "aeBlendModeClassic": "{aeMode} imported as its modern counterpart",
+  "aeBlendModeClassic": "{aeMode} imported as the modern mode",
   "@aeBlendModeClassic": {
-    "description": "Import report row reason, lower case. After Effects keeps older Classic versions of a few blend modes.",
+    "description": "Import report row reason. After Effects keeps older Classic versions of a few blend modes.",
     "placeholders": {
       "aeMode": {
         "type": "String"
       }
     }
   },
-  "aeShapeContentsNotMapped": "shape contents are not imported yet — the layer keeps its place and draws nothing",
-  "@aeShapeContentsNotMapped": {
-    "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
+  "aeShapeOperatorNotCarried": "{name} was not carried",
+  "@aeShapeOperatorNotCarried": {
+    "description": "Import report row reason. A shape layer operator such as Merge Paths or Zig Zag that Lumit's shapes have no place for. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
-  "aeTextStylingNotMapped": "the text imported, but not its animators, path, tsume, fully justified last line or changing source text",
+  "aeShapeOperatorApproximated": "{name} imported as the nearest match",
+  "@aeShapeOperatorApproximated": {
+    "description": "Import report row reason. A shape layer operator such as Wiggle Paths that Lumit draws with its own nearest modifier. The placeholder is the operator's name as After Effects shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aeShapePaintKeptStill": "The paint's animation was not carried",
+  "@aeShapePaintKeptStill": {
+    "description": "Import report row reason. A shape's fill or stroke colour, opacity or width was animated, and Lumit keeps these still."
+  },
+  "aeShapeGradientColoursDefault": "The gradient imported as white to black",
+  "@aeShapeGradientColoursDefault": {
+    "description": "Import report row reason. A shape's gradient fill arrived with its type and direction but in After Effects' default colours."
+  },
+  "aeTextStylingNotMapped": "The text's animators, path and some styling were not carried",
   "@aeTextStylingNotMapped": {
-    "description": "Import report row reason, lower case. A text layer arrived with its font and styling, but used at least one thing Lumit's text has no place for: text animators, text on a path, tsume, a justified last line, or source text that changes over time."
+    "description": "Import report row reason. A text layer arrived with its font and styling, but used at least one thing Lumit's text has no place for: text animators, text on a path, tsume, a justified last line, or source text that changes over time."
   },
-  "aeLightKindApproximated": "a {aeKind} light has no equivalent — imported as the nearest kind",
+  "aeLightKindApproximated": "{aeKind} light imported as the nearest kind",
   "@aeLightKindApproximated": {
-    "description": "Import report row reason, lower case. After Effects has light kinds Lumit does not.",
+    "description": "Import report row reason. After Effects has light kinds Lumit does not.",
     "placeholders": {
       "aeKind": {
         "type": "String"
       }
     }
   },
-  "aeShadowSwitchKeyed": "the setting is keyframed, and Lumit keeps the first key's",
+  "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
-    "description": "Import report row reason, lower case. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
+    "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
   },
-  "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
+  "aeSpatialTangentsFlattened": "The motion path's curves were not carried",
   "@aeSpatialTangentsFlattened": {
-    "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
+    "description": "Import report row reason. After Effects curves a position through space; Lumit animates x and y separately."
   },
-  "aeExpressionCarried": "the expression imported as source text and drives the property",
+  "aeExpressionCarried": "The expression was imported",
   "@aeExpressionCarried": {
-    "description": "Import report row reason, lower case. An expression is a small script that computes a property's value."
+    "description": "Import report row reason. An expression is a small script that computes a property's value."
   },
-  "aeExpressionDisabledCarried": "a switched-off expression — its text is kept, and it drives nothing",
+  "aeExpressionDisabledCarried": "The expression was imported switched off",
   "@aeExpressionDisabledCarried": {
-    "description": "Import report row reason, lower case. After Effects keeps a disabled expression's text, and so does the import."
+    "description": "Import report row reason. After Effects keeps a disabled expression's text, and so does the import."
   },
-  "aeExpressionNotRunnable": "the expression does not run here and was switched off — its text is kept, and the keyframes underneath drive the property: {source}",
+  "aeExpressionNotRunnable": "The expression could not run and was switched off: {source}",
   "@aeExpressionNotRunnable": {
-    "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
+    "description": "Import report row reason. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
     "placeholders": {
       "source": {
         "type": "String"
       }
     }
   },
-  "aeExpressionOverKeys": "the keyframes are used, and the expression is kept as text: {source}",
+  "aeExpressionOverKeys": "The keyframes are used, not the expression: {source}",
   "@aeExpressionOverKeys": {
-    "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
+    "description": "Import report row reason. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
       "source": {
         "type": "String"
       }
     }
   },
-  "aePropertyUnreadable": "After Effects could not read {matchName} itself, so there was nothing to import",
+  "aePropertyUnreadable": "{matchName} could not be read",
   "@aePropertyUnreadable": {
-    "description": "Import report row reason, lower case. The placeholder is an After Effects internal property name; leave it as written.",
+    "description": "Import report row reason. The placeholder is an After Effects internal property name; leave it as written.",
     "placeholders": {
       "matchName": {
         "type": "String"
       }
     }
   },
-  "aeChunkUnreadable": "a record in the project file ({chunk}) could not be read and was skipped",
+  "aeChunkUnreadable": "A record ({chunk}) could not be read",
   "@aeChunkUnreadable": {
-    "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
+    "description": "Import report row reason. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
     "placeholders": {
       "chunk": {
         "type": "String"
       }
     }
   },
-  "aeStructureUnreadable": "the project's structure could not be read — only its footage references ({count}) were imported, with no compositions or layers",
+  "aeStructureUnreadable": "Only {count} footage items could be read",
   "@aeStructureUnreadable": {
-    "description": "Import report row reason, lower case. Only the direct .aep route raises it, once per import, when the item tree cannot be walked but the footage records can. The placeholder is how many references were recovered.",
+    "description": "Import report row reason. Only the direct .aep route raises it, once per import, when the item tree cannot be walked but the footage records can. The placeholder is how many references were recovered.",
     "placeholders": {
       "count": {
         "type": "String"
       }
     }
   },
-  "aeMaskFeatherAxesDiffer": "feather {x} × {y} has one width in Lumit — imported at their average",
+  "aeMaskFeatherAxesDiffer": "Feather {x} × {y} imported as the average",
   "@aeMaskFeatherAxesDiffer": {
-    "description": "Import report row reason, lower case. After Effects softens a mask edge by different amounts horizontally and vertically.",
+    "description": "Import report row reason. After Effects softens a mask edge by different amounts horizontally and vertically.",
     "placeholders": {
       "x": {
         "type": "String"
@@ -12198,27 +11977,27 @@
       }
     }
   },
-  "aeMaskRotoBezierFlattened": "a RotoBezier mask's curves are computed by After Effects — imported as its polygon",
+  "aeMaskRotoBezierFlattened": "The RotoBezier mask imported as a polygon",
   "@aeMaskRotoBezierFlattened": {
-    "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
+    "description": "Import report row reason. RotoBezier is an After Effects mask option; leave the name as written."
   },
-  "aeEffectPlaceholder": "{matchName} imported as a placeholder — every parameter is kept and it renders nothing",
+  "aeEffectPlaceholder": "{matchName} imported as a placeholder",
   "@aeEffectPlaceholder": {
-    "description": "Import report row reason, lower case. The placeholder is the After Effects effect's internal name; leave it as written.",
+    "description": "Import report row reason. The placeholder is the After Effects effect's internal name; leave it as written.",
     "placeholders": {
       "matchName": {
         "type": "String"
       }
     }
   },
-  "aeEffectParamsUnreadable": "{count} parameters could not be read — they are kept whole and import as nothing",
+  "aeEffectParamsUnreadable": "{count} parameters could not be read",
   "@aeEffectParamsUnreadable": {
-    "description": "Import report row reason, lower case. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
+    "description": "Import report row reason. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
     "placeholders": { "count": { "type": "String" } }
   },
-  "aeEffectParamNotCarried": "{effect}'s {param} has no equivalent — the effect imported without it",
+  "aeEffectParamNotCarried": "{effect}'s {param} was not carried",
   "@aeEffectParamNotCarried": {
-    "description": "Import report row reason, lower case. Names an effect and one of its controls.",
+    "description": "Import report row reason. Names an effect and one of its controls.",
     "placeholders": {
       "effect": {
         "type": "String"
@@ -12230,7 +12009,7 @@
   },
   "aeEffectParamApproximated": "{effect}'s {param} imported as {importedAs}",
   "@aeEffectParamApproximated": {
-    "description": "Import report row reason, lower case. Names an effect, one of its controls, and the nearest thing Lumit had.",
+    "description": "Import report row reason. Names an effect, one of its controls, and the nearest thing Lumit had.",
     "placeholders": {
       "effect": {
         "type": "String"
@@ -12245,7 +12024,7 @@
   },
   "aeEffectDiffers": "{effect} imported, and {detail}",
   "@aeEffectDiffers": {
-    "description": "Import report row reason, lower case. The effect mapped whole and evaluates differently; detail is a short clause from the engine, still English.",
+    "description": "Import report row reason. The effect mapped whole and evaluates differently; detail is a short clause from the engine, still English.",
     "placeholders": {
       "effect": {
         "type": "String"
@@ -12255,9 +12034,9 @@
       }
     }
   },
-  "aeEffectSpeedAsKeyframes": "{effect}'s {param} read the clock — imported as keyframes running at the same rate",
+  "aeEffectSpeedAsKeyframes": "{effect}'s {param} imported as keyframes",
   "@aeEffectSpeedAsKeyframes": {
-    "description": "Import report row reason, lower case. A control that advanced by itself became ordinary keyframes.",
+    "description": "Import report row reason. A control that advanced by itself became ordinary keyframes.",
     "placeholders": {
       "effect": {
         "type": "String"
@@ -12267,9 +12046,9 @@
       }
     }
   },
-  "aeEffectSuggestion": "{matchName} imported as a placeholder — {instead} does this job in Lumit",
+  "aeEffectSuggestion": "{matchName} imported as a placeholder, try {instead}",
   "@aeEffectSuggestion": {
-    "description": "Import report row reason, lower case. An After Effects effect deliberately not mapped, naming the Lumit feature that replaces it.",
+    "description": "Import report row reason. An After Effects effect deliberately not mapped, naming the Lumit feature that replaces it.",
     "placeholders": {
       "matchName": {
         "type": "String"
@@ -12279,9 +12058,9 @@
       }
     }
   },
-  "aeEffectParamRebased": "{effect}'s {param} was measured in After Effects' units — imported as the same length in Lumit's",
+  "aeEffectParamRebased": "{effect}'s {param} converted to Lumit's units",
   "@aeEffectParamRebased": {
-    "description": "Import report row reason, lower case. Nothing was approximated: the same length is spelled with a different number.",
+    "description": "Import report row reason. Nothing was approximated: the same length is spelled with a different number.",
     "placeholders": {
       "effect": {
         "type": "String"
@@ -12291,9 +12070,9 @@
       }
     }
   },
-  "aeEffectAsPlugin": "{matchName} imported as the {plugin} plug-in you have installed, which is the same effect — {carried} of its {controls} controls carried across by name",
+  "aeEffectAsPlugin": "{matchName} imported as {plugin}, {carried} of {controls} controls matched",
   "@aeEffectAsPlugin": {
-    "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project is one the user also has installed as an OFX plug-in, so it imported as that plug-in rather than as Lumit's closest likeness. matchName is After Effects' internal name for the effect, plugin is the installed plug-in's own name, and the two numbers are how many of its controls carried across out of how many the After Effects effect had.",
+    "description": "Import report row reason, in the After Effects import report. Said when a third-party effect in the After Effects project is one the user also has installed as an OFX plug-in, so it imported as that plug-in rather than as Lumit's closest likeness. matchName is After Effects' internal name for the effect, plugin is the installed plug-in's own name, and the two numbers are how many of its controls carried across out of how many the After Effects effect had.",
     "placeholders": {
       "matchName": {
         "type": "String"
@@ -12532,21 +12311,9 @@
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Save later",
-  "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
-  },
   "welcomeOpenProject": "Open",
   "@welcomeOpenProject": {
     "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
-  },
-  "welcomeOpenProjectNote": ".lum file",
-  "@welcomeOpenProjectNote": {
-    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
-  },
-  "emptyStageImportNote": "Video, stills, sound",
-  "@emptyStageImportNote": {
-    "description": "Empty editor: the small note under the Import footage card that stands where the picture would be before anything is open. One line in a 180px card."
   },
   "welcomeRecent": "Recent",
   "@welcomeRecent": {
@@ -12603,10 +12370,6 @@
   "@settingsAppliesOnRelease": {
     "description": "Settings window, Appearance: a note beside the interface scale slider saying the new scale is taken when the handle is let go. Lower case on purpose — it is an aside, not a label."
   },
-  "settingsChangesApplyImmediately": "Changes apply immediately",
-  "@settingsChangesApplyImmediately": {
-    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
-  },
   "settingsGroupKeymap": "Keymap",
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
@@ -12631,7 +12394,7 @@
   "@settingsAudioSystemDefault": {
     "description": "Settings window, Audio: the first entry in the output device list — follow whatever the operating system is set to, rather than pinning one device."
   },
-  "settingsAudioDeviceMissing": "That device is not connected — playing through the system default until it is back.",
+  "settingsAudioDeviceMissing": "Not connected. Playing through the system default.",
   "@settingsAudioDeviceMissing": {
     "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },
@@ -13303,14 +13066,6 @@
   "@graphTypeAudio": {
     "description": "Graph panel legend: what a green wire carries. Lower case."
   },
-  "graphConsoleAdds": "Adds a box to the graph",
-  "@graphConsoleAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened over the node graph with no wire in hand: picking an entry (an effect, a driver or a saved group) adds that box to the canvas."
-  },
-  "graphSearchWires": "Connects the dragged wire where it fits",
-  "@graphSearchWires": {
-    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
-  },
   "graphSaveGroup": "Save group…",
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button, and a row of the menu on a group's bar: asks for a name, then writes the picked boxes to the user's library as a group that can be dropped into another graph later. Boxes that are not a group yet become one."
@@ -13662,10 +13417,6 @@
   "exportColourOcio": "No OCIO configuration",
   "@exportColourOcio": {
     "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
-  },
-  "exportColourNote": "An export asking for a space this build cannot transform to is refused rather than written wrongly.",
-  "@exportColourNote": {
-    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
   },
   "exportAudioAuto": "Auto",
   "@exportAudioAuto": {
@@ -14518,7 +14269,7 @@
       }
     }
   },
-  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} of the names are greyed out because they need things Lumit does not support yet.",
+  "projectColourLoadedPartly": "Loaded: {spaces} colour spaces, {displays} displays. {refused} are greyed out and not supported yet.",
   "@projectColourLoadedPartly": {
     "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use, but some of the colour spaces, views or looks it lists cannot be used. All three blanks are counts; a greyed-out name shows its reason on hover.",
     "placeholders": {
@@ -14533,7 +14284,7 @@
       }
     }
   },
-  "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
+  "projectColourNotInForce": "Not in force: {reason}. Using the built-in colour handling.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
     "placeholders": {
@@ -14582,7 +14333,7 @@
   "@tipExportNoMetadata": {
     "description": "Export dialog: the hover reason on the Metadata section when the chosen format has nowhere to keep any. Two words at most."
   },
-  "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
+  "exportColourConfigUntagged": "Written untagged.",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   },
@@ -14836,7 +14587,7 @@
       }
     }
   },
-  "workspaceImported": "{name} imported, and selected.",
+  "workspaceImported": "{name} imported.",
   "@workspaceImported": {
     "description": "Status-line notice after reading a workspace file in. {name} is its name.",
     "placeholders": {
@@ -15264,17 +15015,13 @@
   "@shaderPortTint": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the tint colour. Lower case: socket labels are quiet row text beside the wire dots."
   },
-  "shaderSearchAdds": "Adds a shader box",
-  "@shaderSearchAdds": {
-    "description": "Footer line of the Ctrl+Space console when it is opened inside a Custom shader's inner node graph: picking an entry adds that box to the shader's canvas."
-  },
   "shaderDetachTitle": "Detach graph",
   "@shaderDetachTitle": {
     "description": "Title of the small window offered when the user opens the text editor on a Custom shader that is built from its node graph. The graph is the master copy, so the text cannot be edited until the graph is detached."
   },
-  "shaderDetachBody": "This shader is built from its graph, so the text cannot be edited while the graph is in charge. Detaching keeps the compiled text and removes the graph. This cannot be reassembled afterwards.",
+  "shaderDetachBody": "Detaching keeps the compiled text and removes the graph for good.",
   "@shaderDetachBody": {
-    "description": "Body of the detach-graph window: explains that editing the text of a graph-built Custom shader requires detaching the graph first, that the compiled text stays, and that the boxes do not come back (undo aside)."
+    "description": "Body of the detach-graph window: the compiled text of a graph-built Custom shader stays, and the graph goes for good (undo aside)."
   },
   "shaderDetachAction": "Detach",
   "@shaderDetachAction": {
@@ -15795,7 +15542,7 @@
   "@startupFailedTitle": {
     "description": "Heading of the screen that takes the place of the whole editor when something went wrong before the window opened. Nothing else is on screen but this, the line below it, and the error itself."
   },
-  "startupFailedBody": "Something went wrong on the way up. What follows is the reason and the file the same line was written to — the useful thing to send with a bug report.",
+  "startupFailedBody": "Send this with a bug report.",
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
@@ -17098,10 +16845,6 @@
   "@firstRunSetup": {
     "description": "Title of the screen shown the first time Lumit opens, over its five questions."
   },
-  "firstRunSetupBlurb": "Customise Lumit, all of them can be later changed in Settings.",
-  "@firstRunSetupBlurb": {
-    "description": "First-run screen: the line under its title."
-  },
   "firstRunStyle": "Style",
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
@@ -17148,15 +16891,15 @@
   "@shareUnsafe": {
     "description": "Shown when a shared project is refused because the document the host sent breaks a safety limit, such as a composition far larger than Lumit composes."
   },
-  "menuSharedProject": "Shared project…",
+  "menuSharedProject": "Multi-edit…",
   "@menuSharedProject": {
-    "description": "Row in the File menu and in the command palette. Opens the Shared project window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
+    "description": "Row in the File menu and in the command palette. Opens the Multi-edit window, which shares the open project from this computer, joins somebody else's, and lists who is in it."
   },
   "shareStop": "Stop sharing",
   "@shareStop": {
     "description": "Button in the Shared project window for the host: the person sharing the project from their computer. It ends sharing for everyone, and each person keeps their own copy."
   },
-  "shareTitle": "Shared project",
+  "shareTitle": "Multi-edit",
   "@shareTitle": {
     "description": "Title of the window that shares a project, joins somebody else's and lists who is in it, drawn in capitals by the style."
   },
@@ -17239,10 +16982,6 @@
   "@shareFootageFolder": {
     "description": "Row label on the Join page of the Shared project window, beside the folder the person chose and a Choose button. Optional."
   },
-  "shareFootageHint": "Where this computer keeps the project's footage. Anything not found there can be relinked later.",
-  "@shareFootageHint": {
-    "description": "Quiet line under the Footage folder row on the Join page of the Shared project window."
-  },
   "shareJoin": "Join",
   "@shareJoin": {
     "description": "The filled button in the Shared project window's footer, on its Join page."
@@ -17267,7 +17006,7 @@
   "@shareConflictsTitle": {
     "description": "Title of the window that lists a guest's changes that collided with other people's, drawn in capitals by the style."
   },
-  "shareConflictsIntro": "These changes of yours touch something another person changed while this computer was away. Their version is in place until you choose otherwise.",
+  "shareConflictsIntro": "Someone else changed these while this computer was away. Their version is in place until you choose.",
   "@shareConflictsIntro": {
     "description": "The two lines at the top of the Conflicts window. Away means this computer had lost the host of the shared project."
   },
@@ -17326,7 +17065,7 @@
   "@shareTabJoin": {
     "description": "Page tab in the Shared project window, drawn in capitals by the style: the page where an invite to somebody else's shared project is pasted."
   },
-  "shareSameInvite": "The same invite as last time. Anyone still waiting for this project comes back by themselves.",
+  "shareSameInvite": "The same invite as last time.",
   "@shareSameInvite": {
     "description": "Quiet line under the invite in the Shared project window, shown to a host sharing a project they shared before without stopping it, for instance after restarting Lumit."
   },
@@ -17479,6 +17218,10 @@
   "@keyCentreTheLayerInTheComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyCentreTheAnchorPointInTheLayer": "Centre the anchor point in the layer",
+  "@keyCentreTheAnchorPointInTheLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keySetTheMaskSFeather": "Set the mask's feather",
   "@keySetTheMaskSFeather": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -17551,6 +17294,47 @@
   "@shareCopyLink": {
     "description": "Button in the Shared project window. Puts the invite link on the clipboard without showing it."
   },
+  "shareSendToFriend": "Send to a friend",
+  "@shareSendToFriend": {
+    "description": "Button beside Copy link in the Multi-edit window, while this computer shares a project. Opens a menu of the account's friends; picking one sends them the invite, sealed so that only their computers can open it."
+  },
+  "shareInviteSent": "Invite sent to {name}",
+  "@shareInviteSent": {
+    "description": "Status line notice after sending a multi-edit invite to a friend. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareInviteNoComputer": "{name} has no computer signed in to Lumit yet",
+  "@shareInviteNoComputer": {
+    "description": "Status line notice when a friend has no computer signed in to Lumit, so a multi-edit invite can't be sent to them. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareInviteFailed": "Couldn’t send the invite",
+  "@shareInviteFailed": {
+    "description": "Status line notice when sending a multi-edit invite to a friend failed, for example offline."
+  },
+  "shareFriendInviteFrom": "From {name}",
+  "@shareFriendInviteFrom": {
+    "description": "Row label on the Join page of the Multi-edit window, for an invite a friend sent. {name} is the friend's name.",
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "shareFriendInviteLook": "{project}, to look at",
+  "@shareFriendInviteLook": {
+    "description": "On the Join page of the Multi-edit window: a friend's invite that can only look at the project, not change it. {project} is the project's name.",
+    "placeholders": { "project": { "type": "String" } }
+  },
+  "shareFriendInviteDecline": "Turn down",
+  "@shareFriendInviteDecline": {
+    "description": "Button beside a friend's invite on the Join page of the Multi-edit window. Removes the invite from every computer of the account."
+  },
+  "friendInviteNotice": "{name} invited you to multi-edit {project}",
+  "@friendInviteNotice": {
+    "description": "Status line notice when a friend's multi-edit invite arrives. {name} is the friend, {project} the project's name.",
+    "placeholders": { "name": { "type": "String" }, "project": { "type": "String" } }
+  },
+  "friendInviteOpen": "Open",
+  "@friendInviteOpen": {
+    "description": "Action on the status line notice for a friend's multi-edit invite. Opens the Multi-edit window, where the invite is joined."
+  },
   "shareLinkCopied": "Invite link copied",
   "@shareLinkCopied": {
     "description": "Bottom-strip notice after the Copy link button is pressed."
@@ -17599,7 +17383,7 @@
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Adds this computer's VPN address to the link. Most people leave it empty.",
+  "shareAddressHint": "Adds this computer's VPN address to the link.",
   "@shareAddressHint": {
     "description": "Quiet line under the Extra address field, under Advanced, while a project is being shared. What is typed is an IP address or a host name of this computer, not a relay's."
   },
@@ -18077,7 +17861,7 @@
   "@extensionCanImport": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Open the Shared project window, see who's in a shared project, and read its invite link",
+  "extensionCanShare": "Open the Multi-edit window, see who's in a shared project, and read its invite link",
   "@extensionCanShare": {
     "description": "One line of the It can list in the extension install question."
   },
@@ -18571,6 +18355,30 @@
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
+  "signInBirthDate": "Date of birth",
+  "@signInBirthDate": {
+    "description": "Label over the day, month and year someone was born, on the page that creates an account."
+  },
+  "signInDay": "Day",
+  "@signInDay": {
+    "description": "Hint in the field for the day of the month someone was born, on the page that creates an account."
+  },
+  "signInMonth": "Month",
+  "@signInMonth": {
+    "description": "What the month list for a date of birth shows before a month is picked, on the page that creates an account."
+  },
+  "signInYearShort": "Year",
+  "@signInYearShort": {
+    "description": "Hint in the field for the year someone was born, on the page that creates an account. Four digits."
+  },
+  "signInErrorBirthDate": "Enter your date of birth.",
+  "@signInErrorBirthDate": {
+    "description": "Error when creating an account with the date of birth missing or not a real day, or after a Google, Discord or Apple sign-in that would make a new account without one."
+  },
+  "signInErrorTooYoung": "You're too young for a Lumit account.",
+  "@signInErrorTooYoung": {
+    "description": "Error when the year of birth given is under the least age for an account."
+  },
   "signInErrorProvider": "Verify your email with that account first.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
@@ -18667,6 +18475,24 @@
   "proPreviewNote": "Pro is free while we test it.",
   "@proPreviewNote": {
     "description": "Line in the Lumit Pro window while Pro is free for everyone, before it goes on sale."
+  },
+  "proRenewsMonthly": "Renews at {price} a month until you cancel.",
+  "@proRenewsMonthly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the monthly plan is picked. {price} is the written price, such as £5.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "proRenewsYearly": "Renews at {price} a year until you cancel.",
+  "@proRenewsYearly": {
+    "description": "Line under the subscribe button in the Lumit Pro window when the yearly plan is picked. {price} is the written price, such as £50.00.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
   },
   "proRenews": "Renews on {date}.",
   "@proRenews": {
@@ -19394,6 +19220,104 @@
   "@accountRenameTitle": {
     "description": "Title of the small window that asks for the name other people see on previews and replies."
   },
+  "settingsAccountUsername": "Username",
+  "@settingsAccountUsername": {
+    "description": "Row label on the Account page of Settings: the unique name friends find this account by."
+  },
+  "settingsAccountUsernameNone": "None",
+  "@settingsAccountUsernameNone": {
+    "description": "Account page of Settings: the value of the Username row while the account has not chosen one."
+  },
+  "accountUsernameChoose": "Choose…",
+  "@accountUsernameChoose": {
+    "description": "Button beside the Username row in Settings while there is no username. Opens a small window that asks for one."
+  },
+  "accountUsernameChange": "Change…",
+  "@accountUsernameChange": {
+    "description": "Button beside the Username row in Settings. Opens a small window that asks for a new username."
+  },
+  "accountUsernameTitle": "Choose a username",
+  "@accountUsernameTitle": {
+    "description": "Title of the small window that asks for the username friends find this account by."
+  },
+  "accountUsernameHint": "username",
+  "@accountUsernameHint": {
+    "description": "Placeholder of the username field. Lower case because usernames are."
+  },
+  "accountUsernameBad": "Use 3 to 20 letters, numbers, _ or .",
+  "@accountUsernameBad": {
+    "description": "Notice when a username is refused: it may only hold a to z, 0 to 9, underscore and full stop, 3 to 20 of them, and may not start or end with a full stop."
+  },
+  "accountUsernameTaken": "That username is taken.",
+  "@accountUsernameTaken": {
+    "description": "Notice when somebody else already has the username asked for."
+  },
+  "settingsFriends": "Friends",
+  "@settingsFriends": {
+    "description": "Group heading on the Account page of Settings, and a row in the profile card that opens it. Friends are other Lumit accounts, found by username, that previews can be sent to."
+  },
+  "friendsAccept": "Accept",
+  "@friendsAccept": {
+    "description": "Button beside somebody who asked to be friends."
+  },
+  "friendsDecline": "Decline",
+  "@friendsDecline": {
+    "description": "Button beside somebody who asked to be friends: turn them down. They are not told."
+  },
+  "friendsAsked": "Asked",
+  "@friendsAsked": {
+    "description": "Quiet word beside somebody this account asked to be friends, while they have not answered."
+  },
+  "friendsTakeBack": "Cancel",
+  "@friendsTakeBack": {
+    "description": "Button beside somebody this account asked to be friends: take the ask back."
+  },
+  "friendsRemove": "Remove",
+  "@friendsRemove": {
+    "description": "Button beside a friend: stop being friends."
+  },
+  "friendsRemoveAsk": "Remove {name} from your friends?",
+  "@friendsRemoveAsk": {
+    "description": "Question before a friend is removed. {name} is the name they show.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "friendsCount": "Friends · {count}",
+  "@friendsCount": {
+    "description": "Friends group of Settings: the bar the account's friends are folded under, with how many there are. A press opens or shuts it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "friendsAdd": "Add friend",
+  "@friendsAdd": {
+    "description": "Row label in the Friends group of Settings, beside the field a friend's username is typed in."
+  },
+  "friendsAddButton": "Add",
+  "@friendsAddButton": {
+    "description": "Button beside the username field in the Friends group of Settings. It asks that person to be friends."
+  },
+  "friendsNeedUsername": "Choose a username first.",
+  "@friendsNeedUsername": {
+    "description": "Shown where friends are listed, and in the Previews window, while the account has no username. Friends find each other by username."
+  },
+  "friendsNotFound": "No one has that username.",
+  "@friendsNotFound": {
+    "description": "Notice when a friend is asked for by a username nobody has."
+  },
+  "friendsNotYourself": "That's your own username.",
+  "@friendsNotYourself": {
+    "description": "Notice when somebody asks to be friends with themselves."
+  },
+  "friendsNotFriends": "You're not friends yet.",
+  "@friendsNotFriends": {
+    "description": "Notice when a preview is sent to somebody who has not accepted being friends."
+  },
   "settingsAccountDelete": "Delete account…",
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
@@ -19466,13 +19390,22 @@
   "@menuLumitPro": {
     "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
   },
-  "menuReviewLinks": "Previews…",
+  "menuReviewLinks": "Share preview…",
   "@menuReviewLinks": {
-    "description": "File menu row that opens the Previews window. A preview is an address where people watch an export in a browser and comment on it."
+    "description": "File menu row that opens the Previews window, where previews are sent and their comments read. A preview is an address where people watch an export in a browser and comment on it. Sending one needs Lumit Pro."
   },
-  "menuSendForReview": "Share a preview…",
+  "menuSendForReview": "Send as a preview…",
   "@menuSendForReview": {
     "description": "Composition menu row, and a button in the Previews window: export the selected composition and make a preview for it."
+  },
+  "menuNeedsPro": "{label} (Pro)",
+  "@menuNeedsPro": {
+    "description": "A row of the menu bar macOS draws, for something that needs Lumit Pro, to an account without it. {label} is the row's own name, such as Share preview…. Pro is short for Lumit Pro and is not translated.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
   },
   "reviewTitle": "Previews",
   "@reviewTitle": {
@@ -20146,6 +20079,23 @@
   "reviewCopyLink": "Copy link",
   "@reviewCopyLink": {
     "description": "Previews window: row in a link's menu. It copies the link's address."
+  },
+  "reviewSendToFriend": "Send to a friend",
+  "@reviewSendToFriend": {
+    "description": "Previews window: a button beside a link's address and a row in its menu. It lists the account's friends; picking one puts the preview in their Shared with you list."
+  },
+  "reviewNoFriends": "No friends yet",
+  "@reviewNoFriends": {
+    "description": "Previews window: the quiet line in the list of friends to send a preview to, when there are none."
+  },
+  "reviewSentToFriend": "Sent to {name}",
+  "@reviewSentToFriend": {
+    "description": "Notice once a preview has been sent to a friend. {name} is the name they show.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "reviewOpenInBrowser": "Open in browser",
   "@reviewOpenInBrowser": {

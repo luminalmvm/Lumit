@@ -117,7 +117,7 @@ pub struct FileFacts {
     pub float: bool,
     /// The field order the file declares, `Off` when it says progressive or
     /// nothing.
-    pub fields: crate::Fields,
+    pub fields: crate::interpret::Fields,
     /// The pixel shape the file declares, as a fraction. 1/1 when it says
     /// square or nothing.
     pub pixel_aspect: (u32, u32),
@@ -157,6 +157,36 @@ pub(crate) fn stand_in_size(
     (cw > 0 && ch > 0 && within(w, cw) && within(h, ch) && alike).then_some((w, h))
 }
 
+/// How many quarter turns clockwise the picture is shown at: the rotation a
+/// phone writes beside its frames rather than into them. 0 for a file with
+/// none.
+///
+/// ponytail: a mirrored picture, as some front cameras write, is read for its
+/// turn alone. Read the flip as well if mirrored footage ever turns up.
+#[allow(unsafe_code)]
+pub(crate) fn quarter_turns(par: &ffi::AVCodecParameters) -> u8 {
+    // SAFETY: the side data array and its count are the stream's own, read
+    // while the stream is open. A display matrix is nine 32-bit values, and
+    // its size is checked before it is read as one.
+    let degrees = unsafe {
+        let side = ffi::av_packet_side_data_get(
+            par.coded_side_data,
+            par.nb_coded_side_data,
+            ffi::AV_PKT_DATA_DISPLAYMATRIX,
+        );
+        if side.is_null() || (*side).size < 9 * std::mem::size_of::<i32>() {
+            return 0;
+        }
+        ffi::av_display_rotation_get((*side).data.cast())
+    };
+    if !degrees.is_finite() {
+        return 0;
+    }
+    // FFmpeg answers anticlockwise, which is the turn the picture needs
+    // taken back off.
+    ((-degrees / 90.0).round() as i64).rem_euclid(4) as u8
+}
+
 /// Read [`FileFacts`] off the container. Opens the file and decodes nothing.
 pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     // Lumit's own readers hand back a picture with alpha and no more to say.
@@ -185,9 +215,9 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
         out.has_alpha = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_ALPHA);
         out.float = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_FLOAT);
         out.fields = match par.field_order {
-            ffi::AV_FIELD_TT | ffi::AV_FIELD_TB => crate::Fields::Upper,
-            ffi::AV_FIELD_BB | ffi::AV_FIELD_BT => crate::Fields::Lower,
-            _ => crate::Fields::Off,
+            ffi::AV_FIELD_TT | ffi::AV_FIELD_TB => crate::interpret::Fields::Upper,
+            ffi::AV_FIELD_BB | ffi::AV_FIELD_BT => crate::interpret::Fields::Lower,
+            _ => crate::interpret::Fields::Off,
         };
         let shape = [stream.sample_aspect_ratio, par.sample_aspect_ratio]
             .into_iter()
@@ -346,6 +376,13 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
                     u32::try_from(par.width).unwrap_or(0),
                     u32::try_from(par.height).unwrap_or(0),
                 );
+                // A phone held upright is a picture on its side with a turn
+                // beside it, and the decoder hands it back turned.
+                let coded = if quarter_turns(&par) % 2 == 1 {
+                    (coded.1, coded.0)
+                } else {
+                    coded
+                };
                 let (width, height) = stand_in_size(input.metadata(), coded).unwrap_or(coded);
                 video = Some(VideoInfo {
                     width,

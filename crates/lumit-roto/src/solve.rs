@@ -3,7 +3,7 @@
 
 use crate::gdt;
 use crate::guided::{box_mean, Guided};
-use crate::{check_plane, FrameRgb, RotoError, RotoSettings, Seeds};
+use crate::{check_plane, stroke::Seeds, FrameRgb, RotoError, RotoSettings};
 
 /// Solves frames, one at a time, reusing every buffer.
 ///

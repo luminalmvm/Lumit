@@ -11,7 +11,7 @@ use lumit_core::model::{
     Switches, TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-use lumit_render::{HeadlessRenderer, Quality};
+use lumit_render::{headless::HeadlessRenderer, plan::Quality};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -142,7 +142,7 @@ fn main() {
         ("decode sequential, 480 target", Some(480u32)),
     ] {
         let index = lumit_media::index::build_frame_index(path).expect("index");
-        let mut dec = lumit_media::VideoDecoder::open(path, index).expect("open");
+        let mut dec = lumit_media::decode::VideoDecoder::open(path, index).expect("open");
         let start = Instant::now();
         for f in 0..N as usize {
             dec.frame_rgba(f, tw).expect("decode");

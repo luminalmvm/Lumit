@@ -10,7 +10,7 @@
 //! graph walk lowers each output onto a Set channels pass, so there is no kernel
 //! of its own.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
+use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
 /// Split channels has no controls: the sockets are the whole box.

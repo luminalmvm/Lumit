@@ -23,7 +23,9 @@
 //! [`crate::fx::cpu::set_matte`], exercised directly from the lumit-gpu test,
 //! which can upload a matte.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, CHANNEL_OPTIONS};
+use crate::fx::{
+    builtins::CHANNEL_OPTIONS, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// Set matte's controls.

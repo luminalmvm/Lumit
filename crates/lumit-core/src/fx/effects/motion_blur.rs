@@ -18,7 +18,8 @@
 //! lumit-gpu test, which can upload one.
 
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, MbQuality, MbView,
+    registry::EffectDef, registry::EffectMetadata, resolved::MbQuality, resolved::MbView,
+    schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
 };
 use lumit_fx_macros::Effect;
 

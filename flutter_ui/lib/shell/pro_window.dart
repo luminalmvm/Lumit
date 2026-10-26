@@ -363,6 +363,19 @@ class _ProWindowState extends State<_ProWindow>
       else
         note(config == null ? l10n.signInErrorOffline : l10n.proNotOnSale,
             warning: config == null),
+      if (!preview &&
+          onSale &&
+          config?.monthly != null &&
+          config?.yearly != null) ...[
+        const SizedBox(height: 8),
+        Text(
+            _yearly
+                ? l10n.proRenewsYearly(writtenPrice(config!.yearly!))
+                : l10n.proRenewsMonthly(writtenPrice(config!.monthly!)),
+            key: const ValueKey('pro-renews'),
+            textAlign: TextAlign.center,
+            style: t.caption.copyWith(color: t.textMuted, height: 1.4)),
+      ],
       if (_error case final error?) ...[
         const SizedBox(height: 10),
         note(error, warning: true),

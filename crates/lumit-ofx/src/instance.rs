@@ -2,7 +2,7 @@
 //!
 //! # In plain terms
 //!
-//! **Describe** ([`crate::describe`]) is the plugin saying what it *is*. An
+//! **Describe** ([`crate::describe::describe`]) is the plugin saying what it *is*. An
 //! instance is one copy of it, sitting on a layer, with a number in every
 //! control and a picture to work on. A plugin may have a hundred instances
 //! alive at once and they share nothing but the code.

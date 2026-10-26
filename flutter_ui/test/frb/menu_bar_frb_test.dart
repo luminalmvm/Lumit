@@ -24,6 +24,8 @@ import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
+import 'package:lumit_flutter/shell/profile_chip.dart' show ProBadge;
+import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -332,6 +334,39 @@ void main() {
           reason: 'Redo put it back');
     });
 
+    testWidgets('a row for Pro wears the badge, and opens',
+        (tester) async {
+      final p = await mount(tester);
+      final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
+      final row =
+          find.byKey(const ValueKey<String>('menu-row-Share preview…'));
+      Finder badge() =>
+          find.descendant(of: row, matching: find.byType(ProBadge));
+
+      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
+      await tester.pump();
+      expect(badge(), findsOneWidget);
+      // An ordinary row, not a greyed one: it opens the window, which
+      // offers Pro.
+      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+          isNot(t.textDisabled));
+      await tester.tap(row);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('pro-offer')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('review-close')));
+      await tester.pump();
+
+      // With Pro the row is an ordinary one.
+      p.uiState.account.account =
+          const CloudAccount(id: '1', email: '', name: '', pro: true);
+      await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
+      await tester.pump();
+      expect(badge(), findsNothing);
+      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+          isNot(t.textDisabled));
+      await dismiss(tester);
+    });
+
     /// On macOS the whole tree goes to the system, every row with its
     /// enablement read from the engine. It is read when something it shows
     /// changes and kept, so a rebuild of the bar asks the engine nothing: the
@@ -383,6 +418,39 @@ void main() {
         await tester.pump();
         await tester.pump();
         expect(identical(menus(), afterEdit), isFalse);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    /// The system's menu draws no badge, so there a row for Pro says so in
+    /// words, and says it no longer once the account has Pro.
+    testWidgets('a macOS row for Pro says (Pro) to an account without it',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final p = await mount(tester);
+        Iterable<String> labels(List<PlatformMenuItem> rows) =>
+            rows.expand((row) => [
+                  row.label,
+                  if (row is PlatformMenu) ...labels(row.menus),
+                  ...labels(row.members),
+                ]);
+        Iterable<String> all() => labels(
+            tester.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus);
+
+        expect(all(), contains('Share preview… (Pro)'));
+        expect(all(), isNot(contains('Share preview…')));
+
+        p.uiState.account.account =
+            const CloudAccount(id: '1', email: '', name: '', pro: true);
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        p.uiState.account.notifyListeners();
+        // Twice: the read follows the notification by a microtask.
+        await tester.pump();
+        await tester.pump();
+        expect(all(), contains('Share preview…'));
+        expect(all(), isNot(contains('Share preview… (Pro)')));
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

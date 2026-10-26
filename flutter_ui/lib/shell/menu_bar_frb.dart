@@ -81,6 +81,7 @@ import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
 import 'pro_window.dart';
+import 'profile_chip.dart' show ProBadge;
 import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
@@ -207,9 +208,10 @@ class MenuEntry {
   final String? action;
   final bool todo;
 
-  /// A word shown where the chord would be, in its place. The backup rows
-  /// say Pro there to an account that has not got it.
-  final String? aside;
+  /// A row for Lumit Pro, to an account that has not got it: an ordinary
+  /// row with the Pro badge where the chord would be. It opens, on the way
+  /// to Pro.
+  final bool needsPro;
 
   /// The tick a fixed row was built with. Null on a row that is not a toggle,
   /// and null on a [MenuEntry.toggle], which reads its own tick live.
@@ -229,7 +231,7 @@ class MenuEntry {
     this.label,
     this.onPressed, {
     this.action,
-    this.aside,
+    this.needsPro = false,
     bool? checked,
   })  : isDivider = false,
         children = null,
@@ -256,7 +258,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -278,7 +280,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -291,7 +293,7 @@ class MenuEntry {
         isDivider = true,
         action = null,
         todo = false,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -302,7 +304,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -314,7 +316,7 @@ class MenuEntry {
         children = null,
         isDivider = false,
         todo = true,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -337,7 +339,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
-        aside = null,
+        needsPro = false,
         _checked = null,
         _checkedNow = null;
 
@@ -848,7 +850,6 @@ class LumitMenuBarFrb extends StatelessWidget {
       model: FxConsoleModel(
         // The chord the keymap has for it now, as the menus read theirs.
         keyHint: ui.keymap.chordFor('console.open'),
-        footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
           // The saved presets lead, so their kicker sits first in the strip
@@ -945,9 +946,9 @@ List<MenuSection> lumitMenus(
     return () => run(layer);
   }
 
-  /// What a backup row says where its chord would be: Pro, to an account
-  /// that has not got it. Read as the menu opens.
-  String? needsPro() => ui.account.pro ? null : l10n.proTag;
+  /// Whether a row for Lumit Pro wears its badge: to an account that has
+  /// not got it. Read as the menu opens.
+  bool needsPro() => !ui.account.pro;
 
   return [
     (
@@ -965,7 +966,7 @@ List<MenuSection> lumitMenus(
                   MenuEntry(path, () => app.openProject(path)),
             ]),
             MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
-                aside: needsPro()),
+                needsPro: needsPro()),
             MenuEntry.divider(),
             // Closing a project puts an empty one in its place, because the shell
             // always has a document: the engine's `close` is what `newProject`
@@ -999,7 +1000,7 @@ List<MenuSection> lumitMenus(
                     : () => saveVersionFrb(context, app, ui,
                         picker: savePicker),
                 action: 'file.save.version',
-                aside: needsPro()),
+                needsPro: needsPro()),
             // The footage inside the `.lum`, so the one file can be handed to
             // somebody else. Read as the menu opens: a pack is a save, and
             // nothing else tells the bar that one has happened.
@@ -1069,7 +1070,10 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuSharedProject, () => showShareFrb(context, app)),
             // Exports sent out for comments, and the comments that came back.
-            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context)),
+            // Sending one is Pro's, and the window says so to an account
+            // without it.
+            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context),
+                needsPro: needsPro()),
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
@@ -1086,7 +1090,7 @@ List<MenuSection> lumitMenus(
                 projectPath == null ? null : () => _recover(context, app)),
             MenuEntry(l10n.backupMenuHistory,
                 project == null ? null : () => showProjectHistory(context),
-                aside: needsPro()),
+                needsPro: needsPro()),
           ]
     ),
     (
@@ -2681,7 +2685,8 @@ MenuEntry updateMenuEntry(
 /// system-provided Services/Hide/Quit rows and Settings — so Settings is lifted
 /// out of Edit and About out of Help on that platform alone. Ticks are drawn as
 /// a leading mark in the label, since Flutter's platform-menu API has no
-/// checked state of its own.
+/// checked state of its own. For the same reason a row for Lumit Pro, which
+/// the in-app menu marks with the Pro badge, says "(Pro)" after its name.
 ///
 /// **The tick is a character here and only here.** Flutter's platform-menu API
 /// hands macOS a label and nothing else — [PlatformMenuItem] has no checked
@@ -2722,10 +2727,12 @@ List<PlatformMenuItem> platformMenusFor(
       // [_SystemMenuBar]), so this stays in step without the in-app
       // renderer's rebuild-in-place machinery.
       final item = raw.current;
+      // The system draws no badge, so a row for Lumit Pro says so in words.
+      final text = item.needsPro ? l10n.menuNeedsPro(item.text) : item.text;
       final label = switch (item.checked) {
-        true => '✓ ${item.text}',
-        false => '  ${item.text}',
-        null => item.text,
+        true => '✓ $text',
+        false => '  $text',
+        null => text,
       };
       if (item.children case final children?) {
         group.add(PlatformMenu(label: label, menus: rows(children)));
@@ -2840,9 +2847,10 @@ class _SystemMenuBarState extends State<_SystemMenuBar> {
     super.initState();
     _watch(widget.bar.app);
     _back = AppLifecycleListener(onResume: _markStale);
-    // The selection and the updater each speak for themselves, and neither
-    // tells the shell state.
-    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+    // The selection, the updater and the account each speak for themselves,
+    // and none tells the shell state. The account is whether Pro's rows say
+    // so.
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates, _ui.account]) {
       each.addListener(_markStale);
     }
   }
@@ -2879,7 +2887,7 @@ class _SystemMenuBarState extends State<_SystemMenuBar> {
   @override
   void dispose() {
     _unwatch(widget.bar.app);
-    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates, _ui.account]) {
       each.removeListener(_markStale);
     }
     _back.dispose();
@@ -3158,7 +3166,9 @@ class _MenuListState extends State<_MenuList> {
   }
 
   /// One row's contents: the tick column where the menu has toggles, the name,
-  /// and the chord it answers to on the right.
+  /// and the chord it answers to on the right. A row for Lumit Pro, to an
+  /// account without it, has the badge in the chord's place, faded to about
+  /// the chord's weight so a menu of them doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
@@ -3166,10 +3176,10 @@ class _MenuListState extends State<_MenuList> {
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
         Expanded(child: Text(item.text, style: style)),
-        if (item.aside case final aside?)
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Text(t.kickerCase(aside), style: t.kicker),
+        if (item.needsPro)
+          const Padding(
+            padding: EdgeInsets.only(left: 16),
+            child: Opacity(opacity: 0.6, child: ProBadge()),
           )
         else if (shortcut != null)
           Padding(

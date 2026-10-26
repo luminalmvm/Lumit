@@ -1545,6 +1545,8 @@ Map<String, String> get _built => {
       "Move the layer ten frames later": l10n.keyMoveTheLayerTenFramesLater,
       "Centre the layer in the composition":
           l10n.keyCentreTheLayerInTheComposition,
+      "Centre the anchor point in the layer":
+          l10n.keyCentreTheAnchorPointInTheLayer,
       "Set the mask's feather": l10n.keySetTheMaskSFeather,
       "Invert the mask": l10n.keyInvertTheMask,
       "Show or hide the layer controls": l10n.keyShowOrHideTheLayerControls,
@@ -1739,8 +1741,14 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeBlendModeUnavailable(a('ae_mode'));
     case 'blend_mode_classic':
       return l10n.aeBlendModeClassic(a('ae_mode'));
-    case 'shape_contents_not_mapped':
-      return l10n.aeShapeContentsNotMapped;
+    case 'shape_operator_not_carried':
+      return l10n.aeShapeOperatorNotCarried(a('name'));
+    case 'shape_operator_approximated':
+      return l10n.aeShapeOperatorApproximated(a('name'));
+    case 'shape_paint_kept_still':
+      return l10n.aeShapePaintKeptStill;
+    case 'shape_gradient_colours_default':
+      return l10n.aeShapeGradientColoursDefault;
     case 'text_styling_not_mapped':
       return l10n.aeTextStylingNotMapped;
     case 'light_kind_approximated':

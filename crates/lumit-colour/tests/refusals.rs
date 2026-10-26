@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use lumit_colour::resolve::{all_views, unresolvable};
-use lumit_colour::{Config, LoadedConfig};
+use lumit_colour::{config::Config, resolve::LoadedConfig};
 
 fn corpus() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/refusals")

@@ -1568,7 +1568,7 @@ pub fn texture_bytes(format: wgpu::TextureFormat, width: u32, height: u32) -> u6
         // format makes the budget cautious rather than blind.
         _ => 16,
     };
-    lumit_budget::checked_raster_bytes(u64::from(width), u64::from(height), 1, per_texel)
+    lumit_ingress::checked_raster_bytes(u64::from(width), u64::from(height), 1, per_texel)
         // A size whose product does not fit a u64 is not a texture any card
         // will make; reporting the largest number there is refuses it at the
         // ledger rather than at the driver.
@@ -1653,7 +1653,7 @@ pub enum OcioTables {
     },
 }
 
-/// `lumit_colour::Shaper`, repeated here for the same reason [`OcioTables`] is.
+/// `lumit_colour::bake::Shaper`, repeated here for the same reason [`OcioTables`] is.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OcioShaper {
     Lg2 {
@@ -2775,7 +2775,7 @@ impl ColourEngine {
         for r in 0..size.height {
             let start = (r * padded) as usize;
             for texel in data[start..start + row as usize].chunks_exact(2) {
-                let v = crate::fx::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
+                let v = crate::fx::common::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
                 out.push((v.clamp(0.0, 1.0) * 65_535.0).round() as u16);
             }
         }
@@ -2864,7 +2864,7 @@ impl ColourEngine {
                 8 => out.extend(
                     row_bytes
                         .chunks_exact(2)
-                        .map(|b| crate::fx::f16_to_f32(u16::from_le_bytes([b[0], b[1]]))),
+                        .map(|b| crate::fx::common::f16_to_f32(u16::from_le_bytes([b[0], b[1]]))),
                 ),
                 _ => out.extend(row_bytes.iter().map(|b| f32::from(*b) / 255.0)),
             }
@@ -3342,7 +3342,7 @@ mod tests {
             let v = i as f32 / ((w * h - 1) as f32);
             linear.extend_from_slice(&[v, v, v, 1.0]);
         }
-        let src = crate::fx::upload_linear_f32(&ctx, &linear, w, h);
+        let src = crate::fx::common::upload_linear_f32(&ctx, &linear, w, h);
 
         let deep = engine.readback16(
             &ctx,
@@ -3434,9 +3434,4 @@ pub mod shared_metal;
 // through the `test-fixtures` feature, by a downstream crate's.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support;
-pub use composite::{
-    camera_frame, camera_matrix, concat_place, depth_order, invert_place, place_matrix,
-    place_matrix_3d, scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, Cut,
-    MatteInput, MbSample, Region,
-};
-pub use glam::{Mat4, Vec3};
+use composite::Compositor;

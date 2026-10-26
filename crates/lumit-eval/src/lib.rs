@@ -77,7 +77,8 @@ pub mod schedule;
 ///   field, and a plain solid under one is blurred at its own size.
 /// * 18: main's 17 meets 12 to 16.
 /// * 19: a shape whose outline crosses itself is filled where it crosses.
-pub const ALGO_VERSION: u32 = 19;
+/// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
+pub const ALGO_VERSION: u32 = 20;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -205,20 +206,18 @@ pub trait SourceStamper {
         None
     }
 
-    /// What a Roto brush whose seed row asks for a segmentation model is cut
-    /// by on this machine, and what its run holds at `frame`
-    /// (docs/impl/addons.md §6.2, §7).
+    /// What a Roto brush's run holds at `frame` on this machine, and where
+    /// `segments` says its seed row asks for a segmentation model, which pack
+    /// read the base frame (docs/impl/addons.md §6.2, §7).
     ///
-    /// The planes tier's reason again, one tier along. The pack that read the
-    /// base frame is a fact about the machine, so replacing it would otherwise
-    /// leave every frame already banked with the old matte in it named exactly
-    /// as before, and served forever; and the propagation landing changes the
-    /// picture without touching a row of the document.
+    /// The planes tier's reason again, one tier along. A propagation landing
+    /// changes the picture without touching a row of the document, so without
+    /// the run every frame banked before it would be served with no matte. The
+    /// pack is a fact about the machine, so replacing it would otherwise leave
+    /// every frame banked with the old matte in it named as before.
     ///
-    /// Asked only of a brush whose row says Segment, so a brush seeded by its
-    /// scribbles is named exactly as it was before this existed. The default
-    /// answers `None`, for a host with no such tier at all.
-    fn roto_identity(&self, _instance: Uuid, _frame: i64) -> Option<[u8; 32]> {
+    /// The default answers `None`, for a host with no such tier at all.
+    fn roto_identity(&self, _instance: Uuid, _frame: i64, _segments: bool) -> Option<[u8; 32]> {
         None
     }
 }
@@ -666,8 +665,8 @@ fn feed_comp_graph(
     // parameters are hashed by the box loop above.
     let driven = graph.edges.iter().any(|e| {
         matches!(graph.node(e.from), Some(lumit_core::comp_graph::GraphNode::Fx(inst))
-            if lumit_core::fx::def(&inst.effect.match_name)
-                .is_some_and(|d| d.schema().category == lumit_core::fx::FxCategory::Drivers))
+            if lumit_core::fx::builtins::def(&inst.effect.match_name)
+                .is_some_and(|d| d.schema().category == lumit_core::fx::schema::FxCategory::Drivers))
     });
     if driven {
         h.update(b"graph-drivers/");
@@ -822,7 +821,7 @@ fn feed_effect_stack(
         feed_f64(h, lt);
         feed_f64(
             h,
-            lumit_core::fx::temporal_window(&l.graph, lt, context.clone()),
+            lumit_core::fx::drivers::temporal_window(&l.graph, lt, context.clone()),
         );
         for edge in &l.graph.edges {
             feed_edge(h, edge);
@@ -832,13 +831,13 @@ fn feed_effect_stack(
     // The §1.4 marker context, built lazily (only marker-driven effects read
     // it) by the same shared constructor resolution uses, so the key
     // hashes exactly the beat times resolution sees.
-    let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
+    let mut mctx: Option<lumit_core::fx::markers::MarkerContext> = None;
     // **A Posterize time on this layer holds the graph it applies**
     // (docs/impl/node-graph-comp.md §5.2): the builder and the planner both
     // lower a Node graph effect at the time this stack's own ops resolve at,
     // so the name has to be read there too. Equal to `lt` for every stack that
     // carries no Posterize, which is every key ever made.
-    let graph_lt = lumit_core::fx::this_layer_effect_time(
+    let graph_lt = lumit_core::fx::temporal::this_layer_effect_time(
         effects,
         fx_on,
         lt,
@@ -1075,8 +1074,8 @@ fn feed_effect_stack(
             h.update(b"beat-trigger/");
             let _ = serde_json::to_writer(&mut *h, &e.params);
             let markers = match marker_layer {
-                Some(l) => lumit_core::fx::MarkerContext::for_layer(comp, l),
-                None => lumit_core::fx::MarkerContext::for_comp(comp),
+                Some(l) => lumit_core::fx::markers::MarkerContext::for_layer(comp, l),
+                None => lumit_core::fx::markers::MarkerContext::for_comp(comp),
             };
             for beat in &markers.beats {
                 feed_f64(h, *beat);
@@ -1094,7 +1093,7 @@ fn feed_effect_stack(
         {
             use lumit_core::fx::effects::trail::Trail;
             let declares = |id: &str| {
-                lumit_core::fx::schema(&e.effect.match_name)
+                lumit_core::fx::builtins::schema(&e.effect.match_name)
                     .is_some_and(|s| s.params.iter().any(|p| p.id == id))
             };
             if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
@@ -1280,7 +1279,7 @@ fn feed_effect_stack(
                     // effects' single row is true — reading the first row's
                     // answer for the second would key an unset hold-out as
                     // though it named the layer's first mask.
-                    let self_default = lumit_core::fx::BUILTINS
+                    let self_default = lumit_core::fx::catalogue::BUILTINS
                         .iter()
                         .find(|s| s.match_name == e.effect.match_name)
                         .and_then(|s| s.mask_paths().find(|(id, _)| *id == p.id))
@@ -1432,7 +1431,7 @@ fn feed_effect_stack(
                     // straightens it — so two point lists that draw
                     // the same curve key the same frame, and a list a hand
                     // wrote out of order does not key a second one.
-                    let curve = lumit_core::fx::CurvePoints::sanitised(points);
+                    let curve = lumit_core::fx::params::CurvePoints::sanitised(points);
                     h.update(&(curve.points().len() as u32).to_le_bytes());
                     for xy in curve.points() {
                         feed_f64(h, f64::from(xy[0]));
@@ -1457,11 +1456,11 @@ fn feed_effect_stack(
             h.update(b"ofx-time");
             feed_f64(h, lt);
             h.update(&[u8::from(
-                lumit_core::fx::schema(&e.effect.match_name).is_some(),
+                lumit_core::fx::builtins::schema(&e.effect.match_name).is_some(),
             )]);
         }
         if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
-            if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
+            if let Some(s) = lumit_core::fx::builtins::schema(&e.effect.match_name) {
                 if s.traits.seeded {
                     h.update(b"fx-time");
                     feed_f64(h, lt);
@@ -1478,10 +1477,10 @@ fn feed_effect_stack(
                 // its time-free keys — no over-invalidation.
                 if s.traits.beat_input {
                     let ctx = mctx.get_or_insert_with(|| match marker_layer {
-                        Some(l) => lumit_core::fx::MarkerContext::for_layer(comp, l),
-                        None => lumit_core::fx::MarkerContext::for_comp(comp),
+                        Some(l) => lumit_core::fx::markers::MarkerContext::for_layer(comp, l),
+                        None => lumit_core::fx::markers::MarkerContext::for_comp(comp),
                     });
-                    if let Some(w) = lumit_core::fx::marker_window(e, lt, ctx) {
+                    if let Some(w) = lumit_core::fx::markers::marker_window(e, lt, ctx) {
                         h.update(b"fx-markers");
                         feed_f64(h, lt);
                         feed_f64(h, w.fps);
@@ -1520,7 +1519,7 @@ fn feed_points_rows_at(
 ) {
     use lumit_core::model::EffectValue;
     let makes_points = |e: &&lumit_core::model::EffectInstance| {
-        lumit_core::fx::BUILTIN_DEFS
+        lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&e.effect.match_name)
             .is_some_and(|def| lumit_core::fx::points::wants_carriage(def.signature()))
     };
@@ -1775,12 +1774,12 @@ fn feed_layer(
     // retime mapping, same comp frame step). Footage layers only, matching the
     // render's neighbour decode; empty otherwise, so a plain layer's key is
     // untouched.
-    if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
+    if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
             h.update(b"temporal/");
             // Asked at the layer's frame, which is the unit a plugin counts in.
-            for o in lumit_core::fx::stack_temporal_window(
+            for o in lumit_core::fx::temporal::stack_temporal_window(
                 &layer.effects,
                 layer.switches.fx,
                 lt / comp_dt,
@@ -1808,14 +1807,18 @@ fn feed_layer(
         // are then two names.
         let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
         let window = || {
-            lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt / comp_dt)
-                .into_iter()
-                .filter(|&o| o != 0)
+            lumit_core::fx::temporal::stack_temporal_window(
+                &layer.effects,
+                layer.switches.fx,
+                lt / comp_dt,
+            )
+            .into_iter()
+            .filter(|&o| o != 0)
         };
         // And on the frame before a cut, the frame on the other side that
         // Motion blur is measured against instead.
         let turned = |crosses: &dyn Fn(i32) -> bool| {
-            lumit_core::fx::stack_flow_sides(&layer.effects, layer.switches.fx, crosses)
+            lumit_core::fx::temporal::stack_flow_sides(&layer.effects, layer.switches.fx, crosses)
                 .into_iter()
                 .filter(|(o, side)| o != side)
                 .map(|(_, side)| side)
@@ -1830,7 +1833,11 @@ fn feed_layer(
                 .position(|l| l.id == layer.id)
                 .map_or(&[][..], |i| &comp.layers[i + 1..]);
             let crosses = |o| {
-                lumit_core::fx::cut_between(under, t, lumit_core::time::frames_on(t, o, comp_dt))
+                lumit_core::fx::temporal::cut_between(
+                    under,
+                    t,
+                    lumit_core::time::frames_on(t, o, comp_dt),
+                )
             };
             for o in window().chain(turned(&crosses)) {
                 let tau = lumit_core::time::frames_on(t, o, comp_dt);
@@ -1865,8 +1872,13 @@ fn feed_layer(
                         ),
                     )
                 };
-                let crosses =
-                    |o| lumit_core::fx::cut_between(&nested.layers, nested_at(0), nested_at(o));
+                let crosses = |o| {
+                    lumit_core::fx::temporal::cut_between(
+                        &nested.layers,
+                        nested_at(0),
+                        nested_at(o),
+                    )
+                };
                 for o in window().chain(turned(&crosses)) {
                     let nt = nested_at(o);
                     visited.push(*nested_id);
@@ -2545,7 +2557,8 @@ fn wants_flow(
     interpolation: &lumit_core::retime::Interpolation,
 ) -> bool {
     matches!(interpolation, lumit_core::retime::Interpolation::Flow(_))
-        || !lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx).is_empty()
+        || !lumit_core::fx::temporal::stack_flow_neighbours(&layer.effects, layer.switches.fx)
+            .is_empty()
 }
 
 /// The policy as it will actually render: `Flow` whose engagement gate declines
@@ -2610,11 +2623,10 @@ fn flow_effective_at<'a>(
 /// Emits nothing for a layer with no stroked Roto brush on it, which is every
 /// layer of every project written before this existed.
 ///
-/// A brush whose seed row says **Segment** is cut by something the document
-/// does not contain, so it carries one more term, from the host: which pack
-/// read the base frame, and what the run holds at this frame
-/// (docs/impl/addons.md §7). Asked of that brush alone, so no project seeded
-/// by its scribbles renames a single cached frame.
+/// Every brush carries one more term, from the host: what the run holds at
+/// this frame, since a propagation landing changes the picture and no row of
+/// the document. A brush whose seed row says **Segment** also carries which
+/// pack read the base frame (docs/impl/addons.md §7).
 fn feed_roto(
     h: &mut blake3::Hasher,
     layer: &lumit_core::model::Layer,
@@ -2641,10 +2653,9 @@ fn feed_brush(
     if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
         h.update(b"roto/");
         h.update(&chain);
-        if lumit_core::roto::RotoSettings::of(fx).segments() {
-            if let Some(identity) = stamper.roto_identity(fx.id, frame) {
-                h.update(&identity);
-            }
+        let segments = lumit_core::roto::RotoSettings::of(fx).segments();
+        if let Some(identity) = stamper.roto_identity(fx.id, frame, segments) {
+            h.update(&identity);
         }
     }
 }
@@ -3011,10 +3022,10 @@ mod tests {
             panic!("no parameter {id}");
         };
 
-        let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+        let mut blur = lumit_core::fx::builtins::instantiate("blur").unwrap();
         set(&mut blur, "radius", 10.0);
         let blur_id = blur.id;
-        let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        let mut wiggle = lumit_core::fx::builtins::instantiate("wiggle").unwrap();
         set(&mut wiggle, "amount", 8.0);
         set(&mut wiggle, "frequency", 3.0);
         let wiggle_id = wiggle.id;
@@ -3110,10 +3121,10 @@ mod tests {
     /// this frame, in either language, so the picture moves with it.
     #[test]
     fn an_effect_expression_reaches_the_frame_key() {
-        use lumit_core::expression::Language;
+        use lumit_core::expression::script::Language;
         let doc = Document::new();
         for language in [Language::Rhai, Language::JavaScript] {
-            let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+            let mut blur = lumit_core::fx::builtins::instantiate("blur").unwrap();
             for p in &mut blur.params {
                 if let (true, lumit_core::model::EffectValue::Float(radius)) =
                     (p.id == "radius", &mut p.value)
@@ -3539,7 +3550,7 @@ mod tests {
 
         let shader = |source: &str, origin: Option<&str>| {
             let mut inst: EffectInstance =
-                lumit_core::fx::instantiate("custom_shader").expect("the effect exists");
+                lumit_core::fx::builtins::instantiate("custom_shader").expect("the effect exists");
             let mut block = serde_json::Map::new();
             block.insert("language".into(), "wgsl".into());
             block.insert("source".into(), source.into());
@@ -3579,9 +3590,9 @@ mod tests {
 
         // And an effect with no shader block at all keys as it always did.
         let mut empty = plain.clone();
-        empty.layers[0]
-            .effects
-            .push(lumit_core::fx::instantiate("custom_shader").expect("the effect exists"));
+        empty.layers[0].effects.push(
+            lumit_core::fx::builtins::instantiate("custom_shader").expect("the effect exists"),
+        );
         assert_ne!(base, key(&doc, &empty, 1.0));
     }
 
@@ -3817,7 +3828,7 @@ mod tests {
         depth.switches.visible = false; // depth pass: referenced, not rendered as a layer
         let depth_id = depth.id;
         let mut consumer = text_layer("c", 0.0, 10.0, 0.0);
-        let mut dof = lumit_core::fx::instantiate("dof").unwrap();
+        let mut dof = lumit_core::fx::builtins::instantiate("dof").unwrap();
         for p in &mut dof.params {
             if p.id == "depth" {
                 p.value = EffectValue::Layer(Some(depth_id));
@@ -3837,7 +3848,7 @@ mod tests {
             });
             c
         };
-        let blur = || lumit_core::fx::instantiate("blur").unwrap();
+        let blur = || lumit_core::fx::builtins::instantiate("blur").unwrap();
 
         // Depth source None (set explicitly — the default is now Effects and
         // masks): the depth is read source-only, so a blur on the hidden depth
@@ -3921,11 +3932,11 @@ mod tests {
         };
         let mut cloned = text_layer("c", 0.0, 10.0, 0.0);
         cloned.switches.visible = false;
-        let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+        let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         set(&mut darken, "stops", stops(-1.0));
         cloned.effects.push(darken);
         let mut host = text_layer("h", 0.0, 10.0, 0.0);
-        let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        let mut clone = lumit_core::fx::builtins::instantiate("clone_to_points").unwrap();
         set(
             &mut clone,
             "clone_layer",
@@ -3964,7 +3975,7 @@ mod tests {
         indexed.layers[1]
             .graph
             .nodes
-            .push(lumit_core::fx::instantiate("clone_index").unwrap());
+            .push(lumit_core::fx::builtins::instantiate("clone_index").unwrap());
         assert_ne!(
             key(&doc, &off, 2.5),
             key(&doc, &indexed, 2.5),
@@ -4004,12 +4015,12 @@ mod tests {
             port: "points".into(),
         };
         let grid = || {
-            let mut g = lumit_core::fx::instantiate("grid").unwrap();
+            let mut g = lumit_core::fx::builtins::instantiate("grid").unwrap();
             set(&mut g, "position_x", slide(50.0));
             g
         };
         let trail = |samples: f64| {
-            let mut t = lumit_core::fx::instantiate("trail").unwrap();
+            let mut t = lumit_core::fx::builtins::instantiate("trail").unwrap();
             set(&mut t, "back_samples", fixed(samples));
             set(&mut t, "back_step", fixed(0.2));
             t
@@ -4059,7 +4070,7 @@ mod tests {
         far.effects = vec![grid()];
         let mut near = text_layer("near", 0.0, 10.0, 0.0);
         let t = trail(8.0);
-        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        let mut tap = lumit_core::fx::builtins::instantiate("layer_points").unwrap();
         set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
         near.graph = LayerGraph {
             edges: vec![Edge {
@@ -4109,7 +4120,7 @@ mod tests {
             }
         };
         let particulate = || {
-            let mut p = lumit_core::fx::instantiate("particulate").unwrap();
+            let mut p = lumit_core::fx::builtins::instantiate("particulate").unwrap();
             set(&mut p, "emit_rate", rate(30.0));
             p
         };
@@ -4131,8 +4142,8 @@ mod tests {
         far.switches.visible = false;
         far.effects = vec![particulate()];
         let mut near = text_layer("near", 0.0, 10.0, 0.0);
-        let clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
-        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        let clone = lumit_core::fx::builtins::instantiate("clone_to_points").unwrap();
+        let mut tap = lumit_core::fx::builtins::instantiate("layer_points").unwrap();
         set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
         near.graph = LayerGraph {
             edges: vec![Edge {
@@ -4212,7 +4223,8 @@ mod tests {
         let with_fx = |name: &str| {
             let mut l = text_layer("x", 0.0, 10.0, 0.0);
             l.kind = LayerKind::Solid { def: def_id };
-            l.effects.push(lumit_core::fx::instantiate(name).unwrap());
+            l.effects
+                .push(lumit_core::fx::builtins::instantiate(name).unwrap());
             comp_with(vec![l])
         };
 
@@ -4276,7 +4288,7 @@ mod tests {
         let flashed = |mode: u32| {
             let mut l = text_layer("x", 0.0, 10.0, 0.0);
             l.kind = LayerKind::Solid { def: def_id };
-            let mut fx = lumit_core::fx::instantiate("flash").unwrap();
+            let mut fx = lumit_core::fx::builtins::instantiate("flash").unwrap();
             for p in &mut fx.params {
                 if p.id == "mode" {
                     p.value = EffectValue::Choice(mode);
@@ -4579,7 +4591,7 @@ mod tests {
         let item = Uuid::now_v7();
         let layer = |enabled: bool| {
             let mut l = text_layer("", 0.0, 10.0, 0.0);
-            let mut echo = lumit_core::fx::instantiate("echo").unwrap();
+            let mut echo = lumit_core::fx::builtins::instantiate("echo").unwrap();
             echo.enabled = enabled;
             l.effects.push(echo);
             l.kind = LayerKind::Footage { item };
@@ -4756,12 +4768,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 19, which renamed every frame.
+        // Pinned under ALGO_VERSION 20, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                218_405_069_353_943_390_887_733_601_060_893_478_380,
-                244_087_046_155_053_024_854_895_049_257_296_618_562
+                190_794_504_286_447_224_961_720_191_318_525_597_499,
+                129_597_391_233_871_061_469_308_816_969_221_614_058
             )
         );
 
@@ -4826,7 +4838,7 @@ mod tests {
             extra: serde_json::Map::new(),
         }));
         let (read, input, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-        let fx = lumit_core::fx::instantiate("exposure").unwrap();
+        let fx = lumit_core::fx::builtins::instantiate("exposure").unwrap();
         let fx_id = fx.id;
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
@@ -4846,7 +4858,7 @@ mod tests {
                         default: [1.0, 0.0, 0.0, 0.0],
                         min: -8.0,
                         max: 8.0,
-                        unit: lumit_core::fx::Unit::Raw,
+                        unit: lumit_core::fx::params::Unit::Raw,
                         preview: None,
                     },
                 },
@@ -4950,7 +4962,7 @@ mod tests {
         let graph = graph_comp.graph.clone().unwrap();
         doc.items.push(ProjectItem::Composition(graph_comp));
 
-        let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
+        let mut inst = lumit_core::fx::builtins::instantiate("node_graph").unwrap();
         lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
         let mut host = text_layer("host", 0.0, 5.0, 0.0);
         host.effects = vec![inst];
@@ -5097,7 +5109,7 @@ mod tests {
             ]),
             extra: serde_json::Map::new(),
         };
-        let blur = || lumit_core::fx::instantiate("motion_blur").unwrap();
+        let blur = || lumit_core::fx::builtins::instantiate("motion_blur").unwrap();
 
         let nested = comp_with(vec![mover.clone()]);
         let mut pre = precomp_layer(nested.id);

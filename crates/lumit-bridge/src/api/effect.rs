@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-pub use lumit_core::model::EffectInstance;
+use lumit_core::model::EffectInstance;
 use lumit_core::{
     anim::{Animation, Keyframe, Property, SideInterp},
     expression::ExpressionContext,
@@ -67,7 +67,7 @@ pub struct BridgeEffectInfo {
     /// always false — nothing is wired on a catalogue entry.
     pub inputs: Vec<crate::api::graph::BridgePort>,
     /// The output sockets — empty for every image effect, and the declared
-    /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
+    /// [`Signature::Data`](lumit_core::fx::registry::Signature::Data) ports for a driver.
     pub outputs: Vec<crate::api::graph::BridgePort>,
     /// What other software calls the effects that become this one on import,
     /// such as Deep Glow and S_Glow for Glow, so the effects search finds it
@@ -76,13 +76,13 @@ pub struct BridgeEffectInfo {
 }
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
-/// truth ([`lumit_core::fx::BUILTINS`]), and the frb form of v0's `list_effects`.
+/// truth ([`lumit_core::fx::catalogue::BUILTINS`]), and the frb form of v0's `list_effects`.
 ///
 /// Stateless, so it is a free function rather than a method: the menu is
 /// available before any project is open.
 ///
 /// **The drivers are here too**, filed under Controls
-/// ([`FxCategory::grouping`](lumit_core::fx::FxCategory::grouping)): one search
+/// ([`FxCategory::grouping`](lumit_core::fx::schema::FxCategory::grouping)): one search
 /// surface offers everything a layer can be given, and applying a driver puts
 /// it on the layer's graph rather than its stack — `LayerReference::add_effect`
 /// decides that, so no caller has to. [`list_drivers`] still answers the
@@ -97,7 +97,7 @@ pub struct BridgeEffectInfo {
 /// graph behind it.
 #[frb(sync)]
 pub fn list_effects() -> Vec<BridgeEffectInfo> {
-    catalogue(|category| category != lumit_core::fx::FxCategory::Compositing)
+    catalogue(|category| category != lumit_core::fx::schema::FxCategory::Compositing)
         .into_iter()
         .filter(|entry| entry.name != lumit_core::comp_graph::NODE_GRAPH)
         .collect()
@@ -118,7 +118,7 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
 /// only ever hand out the empty stream. Inside a graph the wire is the tap.
 #[frb(sync)]
 pub fn list_graph_nodes() -> Vec<BridgeEffectInfo> {
-    use lumit_core::fx::FxCategory;
+    use lumit_core::fx::schema::FxCategory;
     catalogue(|category| matches!(category, FxCategory::Drivers | FxCategory::Compositing))
         .into_iter()
         .filter(|entry| lumit_core::comp_graph::offered_in_graph(&entry.name))
@@ -146,12 +146,12 @@ pub fn list_graph_nodes() -> Vec<BridgeEffectInfo> {
 /// no provenance (all nine are Lumit's).
 #[frb(sync)]
 pub fn list_styles() -> Vec<BridgeStyleInfo> {
-    lumit_core::fx::STYLE_DEFS
+    lumit_core::fx::styles::STYLE_DEFS
         .builtins()
         .map(|def| BridgeStyleInfo {
             name: def.schema().match_name.to_owned(),
             label: def.schema().label.to_owned(),
-            offered: !lumit_core::fx::UNRENDERED_STYLES.contains(&def.schema().match_name),
+            offered: !lumit_core::fx::styles::UNRENDERED.contains(&def.schema().match_name),
         })
         .collect()
 }
@@ -183,7 +183,7 @@ pub struct BridgeStyleInfo {
 /// reads as one more Controls entry wherever it is listed.
 #[frb(sync)]
 pub fn list_drivers() -> Vec<BridgeEffectInfo> {
-    catalogue(|category| category == lumit_core::fx::FxCategory::Drivers)
+    catalogue(|category| category == lumit_core::fx::schema::FxCategory::Drivers)
 }
 
 /// An entry Lumit itself declares.
@@ -205,11 +205,11 @@ pub const NAMESPACE_AUDIO: &str = "audio";
 /// built-in audio effect has no prefix and is still sound.
 #[frb(ignore)]
 fn is_audio_match_name(match_name: &str) -> bool {
-    lumit_core::fx::audio_plugin_id(match_name).is_some()
+    lumit_core::fx::builtins::audio_plugin_id(match_name).is_some()
 }
 
 /// Whether an entry in the catalogue is **sound**: a built-in filed under
-/// [`FxCategory::Audio`](lumit_core::fx::FxCategory::Audio), or a hosted audio
+/// [`FxCategory::Audio`](lumit_core::fx::schema::FxCategory::Audio), or a hosted audio
 /// plugin.
 ///
 /// The family, not the name. A plugin still answers by its prefix because a
@@ -220,9 +220,9 @@ fn is_audio_match_name(match_name: &str) -> bool {
 #[frb(ignore)]
 pub(crate) fn is_audio_effect(match_name: &str) -> bool {
     is_audio_match_name(match_name)
-        || lumit_core::fx::BUILTIN_DEFS
+        || lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(match_name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Audio)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Audio)
 }
 
 /// The category key a plugin's own menu path becomes.
@@ -250,17 +250,17 @@ fn plugin_category_key(grouping: &str) -> String {
 /// still come first and in schema order, because that is the order the
 /// catalogue itself keeps.
 #[frb(ignore)]
-fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEffectInfo> {
-    lumit_core::fx::BUILTIN_DEFS
+fn catalogue(keep: impl Fn(lumit_core::fx::schema::FxCategory) -> bool) -> Vec<BridgeEffectInfo> {
+    lumit_core::fx::catalogue::BUILTIN_DEFS
         .iter()
-        .map(lumit_core::fx::EffectDef::schema)
+        .map(lumit_core::fx::registry::EffectDef::schema)
         .filter(|schema| keep(schema.category))
         // An LFX effect whose extension was removed keeps its def, so a
         // project naming it still opens, but it is not offered.
         .filter(|schema| {
             !schema
                 .match_name
-                .starts_with(lumit_core::fx::LFX_MATCH_PREFIX)
+                .starts_with(lumit_core::fx::builtins::LFX_MATCH_PREFIX)
                 || lumit_core::fx::lfx::is_installed(schema.match_name)
         })
         .map(|schema| {
@@ -311,14 +311,14 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 // other route, and calling that one a built-in would have the
                 // frontend offer to do built-in things to somebody else's
                 // effect.
-                namespace: if lumit_core::fx::BUILTIN_DEFS
+                namespace: if lumit_core::fx::catalogue::BUILTIN_DEFS
                     .builtins()
                     .any(|def| def.schema().match_name == schema.match_name)
                 {
                     NAMESPACE_BUILTIN
                 } else if schema
                     .match_name
-                    .starts_with(lumit_core::fx::LFX_MATCH_PREFIX)
+                    .starts_with(lumit_core::fx::builtins::LFX_MATCH_PREFIX)
                 {
                     NAMESPACE_LFX
                 } else {
@@ -327,7 +327,7 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 .to_owned(),
                 inputs,
                 outputs,
-                other_names: lumit_import::other_names_of(schema.match_name),
+                other_names: lumit_import::map::table::other_names_of(schema.match_name),
             }
         })
         .collect()
@@ -406,7 +406,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     // opened, so a project opened during the scan finds them soonest.
     say(BridgeScanStage::Extensions, "", "", 0, 1);
     let (lfx_added, lfx_skipped) = crate::api::extensions::register_effects();
-    let prefs = lumit_project::PluginPrefs::load_default();
+    let prefs = lumit_project::plugins::PluginPrefs::load_default();
     // The stored preference becomes the running one first, so a plugin
     // registered by an earlier scan and switched off since is switched off for
     // this scan's renders too, not only absent from it.
@@ -463,7 +463,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     // Written beside plugins.json so someone whose plugin is missing can send
     // us why. Only when something was turned away, so the last report stays.
     if !scan.skipped.is_empty() {
-        if let Some(dir) = lumit_project::plugin_prefs_path()
+        if let Some(dir) = lumit_project::plugins::plugin_prefs_path()
             .as_deref()
             .and_then(std::path::Path::parent)
         {
@@ -491,24 +491,24 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
 /// A machine with neither folder scans nothing, registers nothing and reports
 /// nothing, which is what a build with no audio plugins installed should cost.
 fn scan_audio_plugins(
-    prefs: &lumit_project::PluginPrefs,
+    prefs: &lumit_project::plugins::PluginPrefs,
     scan: &mut BridgePluginScan,
     file: &mut dyn FnMut(&std::path::Path, usize, usize),
 ) {
-    lumit_aplug::set_disabled(&prefs.disabled);
+    lumit_aplug::ipc::broker::set_disabled(&prefs.disabled);
     // Cached modules are offered without being opened; a cache that does not
     // read is an empty one, and everything is described again.
-    let mut cache: lumit_aplug::ScanCache =
+    let mut cache: lumit_aplug::discover::ScanCache =
         serde_json::from_value(prefs.audio_cache.clone()).unwrap_or_default();
-    let outcome = lumit_aplug::scan_brokered_reporting(
-        &lumit_aplug::search_paths(),
-        &lumit_aplug::session_disabled(),
+    let outcome = lumit_aplug::discover::scan_brokered_reporting(
+        &lumit_aplug::discover::search_paths(),
+        &lumit_aplug::ipc::broker::session_disabled(),
         None,
         &mut cache,
         file,
     );
     // Read again so a switch flicked during the scan is not overwritten.
-    let mut latest = lumit_project::PluginPrefs::load_default();
+    let mut latest = lumit_project::plugins::PluginPrefs::load_default();
     latest.audio_cache = serde_json::to_value(&cache).unwrap_or_default();
     let _ = latest.save_default();
     for found in outcome.found {
@@ -516,7 +516,7 @@ fn scan_audio_plugins(
         // anyway; asking first is what stops a rescan leaking the definition it
         // built on the way to being refused, since a catalogue entry is
         // `'static` and leaking is how that lifetime is spelled.
-        if lumit_core::fx::BUILTIN_DEFS
+        if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&found.match_name)
             .is_some()
         {
@@ -525,7 +525,7 @@ fn scan_audio_plugins(
         // The definition and the mix seam arrive together, which is what AP1
         // deliberately stopped short of: registering is what makes the layer's
         // stack able to hold one, and `open_audio` is what makes it sound.
-        if lumit_core::fx::BUILTIN_DEFS.register(found.def.leak()) {
+        if lumit_core::fx::catalogue::BUILTIN_DEFS.register(found.def.leak()) {
             scan.registered.push(found.label);
         }
     }
@@ -565,19 +565,22 @@ pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeErr
     // own prefix says which host is told, and the file is written the same way
     // whichever it was. CLAP and VST3 are one host and one switched-off list —
     // the identifier is a plugin id or a class id, and the list holds either.
-    let audio = lumit_core::fx::audio_plugin_id(&effect);
-    let identifier = match (effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX), audio) {
+    let audio = lumit_core::fx::builtins::audio_plugin_id(&effect);
+    let identifier = match (
+        effect.strip_prefix(lumit_core::fx::builtins::OFX_MATCH_PREFIX),
+        audio,
+    ) {
         (Some(ofx), _) => {
             lumit_ofx::discover::set_enabled(ofx, enabled);
             ofx
         }
         (_, Some(plugin)) => {
-            lumit_aplug::set_enabled(plugin, enabled);
+            lumit_aplug::ipc::broker::set_enabled(plugin, enabled);
             plugin
         }
         _ => return Ok(()),
     };
-    let mut prefs = lumit_project::PluginPrefs::load_default();
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     if !prefs.set_enabled(identifier, enabled) {
         return Ok(());
     }
@@ -1026,8 +1029,8 @@ fn own_slot(
     held: Option<BridgeScalar>,
     seconds: f64,
     row: Option<&BridgeExpressionRow>,
-) -> lumit_core::expression::Slot {
-    use lumit_core::expression::{slot_of_row, slot_on_layer, Slot};
+) -> lumit_core::expression::script::Slot {
+    use lumit_core::expression::{script::Slot, slot_of_row, slot_on_layer};
     // Not an expression yet, so the number it shows is what one will read.
     let own = match &held {
         Some(BridgeScalar::Expression(..)) | None => None,
@@ -1050,7 +1053,7 @@ fn own_slot(
 /// the app down for from inside an FFI call, where a panic unwinds across the
 /// language boundary rather than into a handler, so the samplers below fall
 /// back to the un-driven value instead.
-fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::Document>> {
+fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
     let projects = PROJECTS.read().ok()?;
     let project = projects.get(&layer.project_id)?.clone();
     drop(projects);
@@ -1149,7 +1152,7 @@ pub struct BridgeParamInfo {
 
 /// What kind of control a parameter wants, and the numbers that control needs.
 ///
-/// Mirrors [`lumit_core::fx::ParamKind`]. `Seed` and `Layer` carry nothing: a
+/// Mirrors [`lumit_core::fx::schema::ParamKind`]. `Seed` and `Layer` carry nothing: a
 /// seed is any `u32`, and a layer picker's options are the comp's own layers,
 /// which the panel already has.
 #[frb(non_opaque)]
@@ -1219,7 +1222,7 @@ pub enum BridgeParamKind {
     },
     /// A short text the user types, drawn as a single-line text field. The
     /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
-    /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+    /// what is set to its cap (`lumit_core::fx::params::TEXT_MAX_BYTES`).
     Text {
         default: String,
     },
@@ -1267,7 +1270,7 @@ pub enum BridgeParamKind {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1294,7 +1297,9 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
     // half alone. `def` rather than the catalogue itself, so a
     // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
-    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
+    let Some(schema) =
+        lumit_core::fx::builtins::def(&effect).map(lumit_core::fx::registry::EffectDef::schema)
+    else {
         return Vec::new();
     };
 
@@ -1308,8 +1313,8 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
 /// parameter is an ordinary `ParamSchema`, and nothing downstream of here may
 /// be able to tell the two apart.
 #[frb(ignore)]
-pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamInfo {
-    use lumit_core::fx::ParamKind;
+pub(crate) fn bridge_param(param: &lumit_core::fx::schema::ParamSchema) -> BridgeParamInfo {
+    use lumit_core::fx::schema::ParamKind;
 
     let kind = match param.kind {
         ParamKind::Float {
@@ -1375,11 +1380,11 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
         ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
         ParamKind::ColourName { role } => BridgeParamKind::ColourName {
             role: match role {
-                lumit_core::fx::ColourNameRole::Space => BridgeColourNameRole::Space,
-                lumit_core::fx::ColourNameRole::Display => BridgeColourNameRole::Display,
-                lumit_core::fx::ColourNameRole::View => BridgeColourNameRole::View,
-                lumit_core::fx::ColourNameRole::Look => BridgeColourNameRole::Look,
-                lumit_core::fx::ColourNameRole::Config => BridgeColourNameRole::Config,
+                lumit_core::fx::schema::ColourNameRole::Space => BridgeColourNameRole::Space,
+                lumit_core::fx::schema::ColourNameRole::Display => BridgeColourNameRole::Display,
+                lumit_core::fx::schema::ColourNameRole::View => BridgeColourNameRole::View,
+                lumit_core::fx::schema::ColourNameRole::Look => BridgeColourNameRole::Look,
+                lumit_core::fx::schema::ColourNameRole::Config => BridgeColourNameRole::Config,
             },
         },
         ParamKind::Text { default } => BridgeParamKind::Text {
@@ -1420,7 +1425,7 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
 /// One **derived** row, as the panel reads it: [`bridge_param`] with the flag
 /// set, and nothing else different, because nothing else is.
 #[frb(ignore)]
-pub(crate) fn bridge_derived_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamInfo {
+pub(crate) fn bridge_derived_param(param: &lumit_core::fx::schema::ParamSchema) -> BridgeParamInfo {
     BridgeParamInfo {
         derived: true,
         ..bridge_param(param)
@@ -1430,7 +1435,7 @@ pub(crate) fn bridge_derived_param(param: &lumit_core::fx::ParamSchema) -> Bridg
 /// The unit a parameter's number is in — what the row draws as its
 /// rider beside the value, and what a point pick has to write in.
 ///
-/// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
+/// Mirrors [`lumit_core::fx::params::Unit`] with the two the seam has no use for
 /// folded away: `Unset` is a build failure engine-side, so nothing that ships
 /// can carry it, and `PctDiag` is forbidden to every parameter. Both
 /// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
@@ -1451,8 +1456,8 @@ pub enum BridgeUnit {
 }
 
 #[frb(ignore)]
-pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
-    use lumit_core::fx::Unit as U;
+pub(crate) fn bridge_unit(unit: lumit_core::fx::params::Unit) -> BridgeUnit {
+    use lumit_core::fx::params::Unit as U;
     match unit {
         U::Percent => BridgeUnit::Percent,
         U::Px => BridgeUnit::Px,
@@ -1473,8 +1478,8 @@ pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
 /// Exact over the four an Input may take, `Raw`, `Px`, `Degrees` and
 /// `Percent`, so a declaration read out and written back is the one it was.
 #[frb(ignore)]
-pub(crate) fn core_unit(unit: BridgeUnit) -> lumit_core::fx::Unit {
-    use lumit_core::fx::Unit as U;
+pub(crate) fn core_unit(unit: BridgeUnit) -> lumit_core::fx::params::Unit {
+    use lumit_core::fx::params::Unit as U;
     match unit {
         BridgeUnit::Raw => U::Raw,
         BridgeUnit::Percent => U::Percent,
@@ -1489,7 +1494,7 @@ pub(crate) fn core_unit(unit: BridgeUnit) -> lumit_core::fx::Unit {
 /// the panel draws as one row of two wells with a chain between them.
 ///
 /// The convention used to be read off the ids at the seam, by whoever needed
-/// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
+/// it; [`lumit_core::fx::schema::EffectSchema::pairs`] is the declaration answering it
 /// now, so the panel, the link flag on the instance and the engine all get one
 /// answer. `stem` is the key the link flag is stored under, so it is the
 /// pair's identity rather than either half's id.
@@ -1516,7 +1521,9 @@ pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
     // half alone. `def` rather than the catalogue itself, so a
     // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
-    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
+    let Some(schema) =
+        lumit_core::fx::builtins::def(&effect).map(lumit_core::fx::registry::EffectDef::schema)
+    else {
         return Vec::new();
     };
     schema
@@ -1577,7 +1584,9 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
     // half alone. `def` rather than the catalogue itself, so a
     // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
-    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
+    let Some(schema) =
+        lumit_core::fx::builtins::def(&effect).map(lumit_core::fx::registry::EffectDef::schema)
+    else {
         return Vec::new();
     };
     schema
@@ -1622,7 +1631,7 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1633,7 +1642,7 @@ pub struct BridgeEnabledWhen {
 }
 
 /// The condition half of a [`BridgeEnabledWhen`], mirroring
-/// [`lumit_core::fx::EnabledCond`].
+/// [`lumit_core::fx::schema::EnabledCond`].
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum BridgeEnabledCond {
@@ -1656,14 +1665,16 @@ pub enum BridgeEnabledCond {
 /// carrying an effect this build does not know still opens).
 #[frb(sync)]
 pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
-    use lumit_core::fx::EnabledCond;
+    use lumit_core::fx::schema::EnabledCond;
 
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
     // half alone. `def` rather than the catalogue itself, so a
     // **layer style** answers here too: styles are a second list, and a
     // style's rows are drawn by these same widgets.
-    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
+    let Some(schema) =
+        lumit_core::fx::builtins::def(&effect).map(lumit_core::fx::registry::EffectDef::schema)
+    else {
         return Vec::new();
     };
     schema
@@ -1820,7 +1831,7 @@ impl BridgeKeyframe {
 }
 
 /// The language an expression is written in
-/// ([`lumit_core::expression::Language`]).
+/// ([`lumit_core::expression::script::Language`]).
 ///
 /// It crosses with the text every time, in both directions. The person writing
 /// an expression picks it, and nothing works it out from the text: the same
@@ -1837,18 +1848,18 @@ pub enum BridgeExpressionLanguage {
 
 impl BridgeExpressionLanguage {
     #[frb(ignore)]
-    pub(crate) fn of(language: lumit_core::expression::Language) -> Self {
+    pub(crate) fn of(language: lumit_core::expression::script::Language) -> Self {
         match language {
-            lumit_core::expression::Language::Rhai => Self::Rhai,
-            lumit_core::expression::Language::JavaScript => Self::JavaScript,
+            lumit_core::expression::script::Language::Rhai => Self::Rhai,
+            lumit_core::expression::script::Language::JavaScript => Self::JavaScript,
         }
     }
 
     #[frb(ignore)]
-    pub(crate) fn read(self) -> lumit_core::expression::Language {
+    pub(crate) fn read(self) -> lumit_core::expression::script::Language {
         match self {
-            Self::Rhai => lumit_core::expression::Language::Rhai,
-            Self::JavaScript => lumit_core::expression::Language::JavaScript,
+            Self::Rhai => lumit_core::expression::script::Language::Rhai,
+            Self::JavaScript => lumit_core::expression::script::Language::JavaScript,
         }
     }
 }
@@ -2156,10 +2167,10 @@ impl BridgeEffectValue {
 /// kind is unbounded by declaration, an `Angle` deliberately so: it winds
 /// through full turns rather than stopping at 360.
 ///
-/// [`ParamKind::Slider`]: lumit_core::fx::ParamKind::Slider
+/// [`ParamKind::Slider`]: lumit_core::fx::schema::ParamKind::Slider
 #[frb(ignore)]
-fn hard_bounds(kind: &lumit_core::fx::ParamKind) -> (Option<f64>, Option<f64>) {
-    use lumit_core::fx::ParamKind;
+fn hard_bounds(kind: &lumit_core::fx::schema::ParamKind) -> (Option<f64>, Option<f64>) {
+    use lumit_core::fx::schema::ParamKind;
     match *kind {
         ParamKind::Float { hard, .. } => hard,
         ParamKind::Int { hard, .. } => (hard.0.map(|v| v as f64), hard.1.map(|v| v as f64)),
@@ -2388,8 +2399,8 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // bake filed before the switch was flicked (AP5). The identifier is the
     // match name shorn of its prefix — exactly what `set_plugin_enabled`
     // wrote into the list.
-    if let Some(identifier) = lumit_core::fx::audio_plugin_id(name) {
-        if lumit_aplug::session_disabled()
+    if let Some(identifier) = lumit_core::fx::builtins::audio_plugin_id(name) {
+        if lumit_aplug::ipc::broker::session_disabled()
             .lock()
             .is_ok_and(|list| list.contains(identifier))
         {
@@ -2438,7 +2449,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     }
     // `def`, so a **layer style** is an instance this build knows rather than
     // one wearing the "never heard of it" badge.
-    if lumit_core::fx::def(name).is_some() {
+    if lumit_core::fx::builtins::def(name).is_some() {
         return (None, None);
     }
     // Nothing answers to that name. An `ofx:` or `clap:` one is a plugin this
@@ -2691,7 +2702,7 @@ fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option
         }
     }
     let answer: &'static Option<String> = Box::leak(Box::new(
-        lumit_render::validate_shader(&program.assembled)
+        lumit_gpu::fx::custom_shader::validate(&program.assembled)
             .err()
             .map(|message| program.remap_error(&message)),
     ));
@@ -2719,14 +2730,14 @@ fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option
 /// of its rows are offered rather than stored.
 #[frb(ignore)]
 fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
-    let Some(def) = lumit_core::fx::def(effect.effect.match_name.as_str()) else {
+    let Some(def) = lumit_core::fx::builtins::def(effect.effect.match_name.as_str()) else {
         return Vec::new();
     };
     let mut added = Vec::new();
     // `derived` answers `&'static [ParamSchema]` — a session-lived parse cache,
     // not a borrow of the instance — so the read is over before the write.
     for param in def.derived(effect) {
-        let Some(value) = lumit_core::fx::default_param_value(&param.kind) else {
+        let Some(value) = lumit_core::fx::builtins::default_param_value(&param.kind) else {
             continue; // a button has nothing to fill
         };
         if !effect.params.iter().any(|have| have.id == param.id) {
@@ -2744,7 +2755,7 @@ fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
 /// The rows an instance's own source declares, as the panel reads them.
 #[frb(ignore)]
 fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
-    lumit_core::fx::def(effect.effect.match_name.as_str())
+    lumit_core::fx::builtins::def(effect.effect.match_name.as_str())
         .map(|def| {
             def.derived(effect)
                 .iter()
@@ -2784,7 +2795,7 @@ fn animation_of(value: &lumit_core::model::EffectValue) -> (bool, bool) {
 #[frb(ignore)]
 pub(crate) fn with_live_inputs<'a>(
     effect: &'a EffectInstance,
-    doc: &lumit_core::Document,
+    doc: &lumit_core::model::Document,
 ) -> std::borrow::Cow<'a, EffectInstance> {
     let mut refreshed = std::borrow::Cow::Borrowed(effect);
     if lumit_core::fx::effects::node_graph::comp_of(effect).is_some() {
@@ -2809,13 +2820,13 @@ pub(crate) fn read_instance_info(
     // Filled on a clone, because reading may not edit the document. The value
     // lands for real when the user changes it, through the staged copy.
     let mut filled = effect.clone();
-    lumit_core::fx::backfill_builtin_params(std::slice::from_mut(&mut filled));
+    lumit_core::fx::builtins::backfill_builtin_params(std::slice::from_mut(&mut filled));
     fill_derived(&mut filled);
     let effect = &filled;
     let (badge_reason, badge_detail) = badge_of(effect);
     // What the instance's plugin has done to its own rows, or nothing for a
     // built-in.
-    let rows = lumit_core::fx::def(effect.effect.match_name.as_str())
+    let rows = lumit_core::fx::builtins::def(effect.effect.match_name.as_str())
         .map(|def| def.row_state(effect))
         .unwrap_or_default();
     let owned = |ids: Vec<&'static str>| ids.into_iter().map(str::to_owned).collect();
@@ -2881,7 +2892,7 @@ impl BridgeEffectInstance {
         // user actually made. An effect with no built-in schema (OFX, a
         // placeholder) is left exactly as it is.
         let mut effect = effect;
-        lumit_core::fx::backfill_builtin_params(std::slice::from_mut(&mut effect));
+        lumit_core::fx::builtins::backfill_builtin_params(std::slice::from_mut(&mut effect));
         // And the rows this instance's *own* source declares (§1.5), so a
         // derived control is as live as a declared one: `get_value` answers it,
         // `set_value` writes it, and the commit is the ordinary one.
@@ -2975,7 +2986,8 @@ impl BridgeEffectInstance {
     /// is the one-piece answer for a caller that has a handle and no read model.
     #[frb(sync)]
     pub fn list_parameters(&self) -> Vec<BridgeParamInfo> {
-        let Some(def) = lumit_core::fx::def(self.effect.effect.match_name.as_str()) else {
+        let Some(def) = lumit_core::fx::builtins::def(self.effect.effect.match_name.as_str())
+        else {
             return Vec::new();
         };
         def.schema()
@@ -3001,7 +3013,8 @@ impl BridgeEffectInstance {
     /// declaration to hold the stored rows against, none of them is unused.
     #[frb(sync)]
     pub fn parameter_sync(&self) -> BridgeParamSync {
-        let Some(def) = lumit_core::fx::def(self.effect.effect.match_name.as_str()) else {
+        let Some(def) = lumit_core::fx::builtins::def(self.effect.effect.match_name.as_str())
+        else {
             return BridgeParamSync::default();
         };
         let derived = def.derived(&self.effect);
@@ -3012,7 +3025,7 @@ impl BridgeEffectInstance {
         BridgeParamSync {
             adds: derived
                 .iter()
-                .filter(|p| lumit_core::fx::default_param_value(&p.kind).is_some())
+                .filter(|p| lumit_core::fx::builtins::default_param_value(&p.kind).is_some())
                 .filter(|p| {
                     !self
                         .effect
@@ -3070,14 +3083,15 @@ impl BridgeEffectInstance {
         if self.offered.is_empty() {
             return;
         }
-        let derived_now: Vec<String> = lumit_core::fx::def(self.effect.effect.match_name.as_str())
-            .map(|def| {
-                def.derived(&self.effect)
-                    .iter()
-                    .map(|p| p.id.to_owned())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let derived_now: Vec<String> =
+            lumit_core::fx::builtins::def(self.effect.effect.match_name.as_str())
+                .map(|def| {
+                    def.derived(&self.effect)
+                        .iter()
+                        .map(|p| p.id.to_owned())
+                        .collect()
+                })
+                .unwrap_or_default();
         let offered = std::mem::take(&mut self.offered);
         self.effect
             .params
@@ -3394,7 +3408,7 @@ impl BridgeEffectInstance {
         // An effect this build does not know has no schema to consult, so its
         // parameters stay unbounded rather than refused: a project carrying one
         // still opens and still edits, exactly as `list_parameters` allows.
-        let kind = lumit_core::fx::schema(&self.effect.effect.match_name)
+        let kind = lumit_core::fx::builtins::schema(&self.effect.effect.match_name)
             .and_then(|schema| schema.params.iter().find(|p| p.id == id))
             .map(|p| p.kind);
         let bounds = kind.as_ref().map_or((None, None), hard_bounds);
@@ -3409,14 +3423,14 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
-        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::SLOT_KEY));
+        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::script::SLOT_KEY));
 
         value.write_at(&mut param.value, offset, bounds)?;
         // A typed text is held to its cap here, as a number is to its range.
-        if let (Some(lumit_core::fx::ParamKind::Text { .. }), EffectValue::Text(text)) =
+        if let (Some(lumit_core::fx::schema::ParamKind::Text { .. }), EffectValue::Text(text)) =
             (kind, &mut param.value)
         {
-            text.truncate(lumit_core::fx::capped_text(text).len());
+            text.truncate(lumit_core::fx::params::capped_text(text).len());
         }
         // A new expression on half of a point reads the whole point.
         if fresh {
@@ -3453,7 +3467,7 @@ mod tests {
     /// every emitted rule is one the panel can act on.
     #[test]
     fn every_element_row_names_a_real_sibling_and_a_reachable_set() {
-        let flare = lumit_core::fx::BUILTINS
+        let flare = lumit_core::fx::catalogue::BUILTINS
             .iter()
             .find(|s| s.match_name == "lens_flare")
             .expect("the Lens flare is a builtin");

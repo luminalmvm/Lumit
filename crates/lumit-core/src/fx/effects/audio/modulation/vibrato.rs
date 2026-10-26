@@ -30,7 +30,10 @@ use super::super::dsp::delay_line::DelayLine;
 use super::super::dsp::lfo::{Lfo, Phase};
 use super::super::dsp::smoother::Smoother;
 use super::{frame, put, row, shape_of};
-use crate::fx::{AudioProcessor, EffectDef, EffectMetadata, EffectSchema, ParamId, AUDIO_CHANNELS};
+use crate::fx::{
+    audio_chain::AudioProcessor, audio_chain::AUDIO_CHANNELS, params::ParamId, registry::EffectDef,
+    registry::EffectMetadata, schema::EffectSchema,
+};
 
 /// How long a moved row takes to arrive.
 const SMOOTH_MS: f64 = 20.0;
@@ -193,7 +196,7 @@ mod tests {
         // A ramp reads the delay back directly: the line hands back the input
         // as it was `delay` frames ago, so the difference between what went in
         // and what came out is the delay itself.
-        let frames = 128 * crate::fx::AUDIO_BLOCK_FRAMES;
+        let frames = 128 * crate::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let input: Vec<f32> = (0..frames).flat_map(|n| [n as f32, n as f32]).collect();
         let values = harness::values(&AudioVibratoDef, &[("rate", 2.0), ("depth", 60.0)]);
         let out = harness::run(&*harness::open(&AudioVibratoDef, &values), &input, &values);

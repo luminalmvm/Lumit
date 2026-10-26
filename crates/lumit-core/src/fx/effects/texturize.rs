@@ -20,7 +20,10 @@
 //! [`crate::fx::cpu::texturize`], exercised directly from the lumit-gpu test,
 //! which can upload a texture.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen};
+use crate::fx::{
+    cpu, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema, schema::EnabledCond,
+    schema::EnabledWhen,
+};
 use lumit_fx_macros::Effect;
 
 /// A texture nobody has chosen has nothing to place, light or press.
