@@ -66,10 +66,6 @@
       }
     }
   },
-  "aeCastsShadowsNotCarried": "لم يُنقل إلقاء الظلال",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
-  },
   "aeChunkUnreadable": "تعذّرت قراءة سجل ({chunk})",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
@@ -385,10 +381,6 @@
       }
     }
   },
-  "aeOrientationNotCarried": "لم يُنقل الاتجاه",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
   "aeOutcomeAdjusted": "معدّل",
   "@aeOutcomeAdjusted": {
     "description": "Import report window — an outcome grade: mapped, with a difference the row explains."
@@ -457,14 +449,6 @@
   "aeReportTitle": "تقرير الاستيراد",
   "@aeReportTitle": {
     "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
-  },
-  "aeRotationOrderConverted": "تم تحويل الدوران إلى ترتيب محاور Lumit",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
-  },
-  "aeShapeContentsNotMapped": "محتويات الشكل لا تُستورد بعد — تحتفظ الطبقة بمكانها ولا ترسم شيئًا",
-  "@aeShapeContentsNotMapped": {
-    "description": "Import report row reason, lower case. A shape layer's paths, fills and strokes are a later stage of the importer."
   },
   "aeShapeGradientColoursDefault": "تم استيراد التدرج من الأبيض إلى الأسود",
   "@aeShapeGradientColoursDefault": {
@@ -1974,24 +1958,6 @@
   "easeStaggerTopDown": "من الأعلى إلى الأسفل",
   "@easeStaggerTopDown": {
     "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
-  },
-  "easingHandleNumbers": "خروج {x1}, {y1} · دخول {x2}, {y2}",
-  "@easingHandleNumbers": {
-    "description": "Easing panel: the line of small mono numbers under the shape box, giving the two handles' positions in the box. 'Out' is the handle leaving the first keyframe, 'In' the handle arriving at the second; each pair is its x (how far along the box it reaches) and y (how high it lifts), to two decimals. The middle dot separates the two handles.",
-    "placeholders": {
-      "x1": {
-        "type": "String"
-      },
-      "y1": {
-        "type": "String"
-      },
-      "x2": {
-        "type": "String"
-      },
-      "y2": {
-        "type": "String"
-      }
-    }
   },
   "easingNameYours": "سمِّ التخفيف",
   "@easingNameYours": {
@@ -6496,10 +6462,6 @@
   "@keyNewNullLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewPointLightLayer": "طبقة ضوء نقطي جديدة",
-  "@keyNewPointLightLayer": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
-  },
   "keyNewProject": "مشروع جديد",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7323,10 +7285,6 @@
   "@menuApplyAnimationPreset": {
     "description": "Menu item."
   },
-  "menuAreaLight": "ضوء مساحي",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuArrange": "ترتيب",
   "@menuArrange": {
     "description": "A row of the Layer menu that opens the rows for moving the selected layers up and down the stack."
@@ -7681,10 +7639,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "ضوء نقطي",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "إنشاء تكوين مسبق…",
   "@menuPreCompose": {
     "description": "Menu item."
@@ -7859,10 +7813,6 @@
   "menuSplitLayer": "تقسيم الطبقة",
   "@menuSplitLayer": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "ضوء موضعي",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuStretch": "تمديد…",
   "@menuStretch": {

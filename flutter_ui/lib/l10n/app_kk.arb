@@ -3859,10 +3859,6 @@
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewPointLightLayer": "Жаңа нүктелік жарық қабаты",
-  "@keyNewPointLightLayer": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
-  },
   "keyNewProject": "Жаңа проект",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
