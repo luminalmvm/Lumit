@@ -473,6 +473,10 @@ class _TextPanelFrbState extends State<TextPanelFrb>
       value: names.indexOf(family),
       options: labels,
       hint: l10n.textFontSearch,
+      // Each family is listed in its own face. The built-in one is the Inter
+      // the app carries, and a missing one has no face to show.
+      familyOf: (i) =>
+          i == 0 ? 'Inter' : (i <= installed.length ? names[i] : null),
       // A new family starts on its regular face, since the old family's face
       // may not exist in it.
       onChanged: (i) => commitText(
