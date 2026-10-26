@@ -6,3 +6,7 @@ section below, and when the release note is written the lines move into it.
 
 - A shape whose outline crosses itself is now filled where it crosses, as After Effects fills it. It used to leave a hole there.
 - A shape layer's modifiers (the repeater, the trim, the offset, the twist, the deform and the smooth) are entries in its contents, and a modifier acts on the shapes above it. Older projects open as entries and draw the same. One case differs: where shapes were combined and the first carried a repeater, an offset, a twist or a deform, the layer's box now holds the copies of the whole run, which it used to cut off at the edge.
+- 3D layers now draw nearest in front and cut through each other where they cross, as in After Effects, whatever their order in the Timeline. A 3D comp can look different.
+- 3D layers in a comp with no camera layer are now seen through a default camera, with perspective, as After Effects does.
+- A camera's depth of field now blurs each part of a 3D layer by its own distance, and as much as After Effects does, so a blurred layer can look softer or sharper than before.
+- A phone clip filmed upright now shows upright. It used to show on its side.
