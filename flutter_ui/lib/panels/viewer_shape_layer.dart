@@ -26,6 +26,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
@@ -349,17 +350,26 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     // a mask on the layer, or a new shape layer at the top of the
     // composition.
     final space = _space;
+    final square = HardwareKeyboard.instance.isShiftPressed;
     final path = shapePath(
       tool: widget.tool,
       from: space.ofScreen(from),
       to: space.ofScreen(to),
-      square: HardwareKeyboard.instance.isShiftPressed,
+      square: square,
+    );
+    // The numbers the same shape is made from, so a shape layer's art keeps
+    // its size and corners as rows that key.
+    final primitive = shapePrimitive(
+      tool: widget.tool,
+      from: space.ofScreen(from),
+      to: space.ofScreen(to),
+      square: square,
     );
     final box = _target;
     if (box == null) {
-      _commitShapeLayer(path);
+      _commitShapeLayer(path, primitive);
     } else {
-      _commit(box, path);
+      _commit(box, path, primitive);
     }
   }
 
@@ -419,12 +429,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 
   /// A new shape layer holding this art, at the top of the composition — what a
   /// shape tool or the Pen does with nothing selected.
-  void _commitShapeLayer(List<BridgeVertex> path) {
+  void _commitShapeLayer(List<BridgeVertex> path,
+      [BridgeShapePrimitive? primitive]) {
     if (path.length < 2) return;
     try {
       final layer = widget.comp.addShapeLayer(
         name: shapeMaskName(widget.tool),
-        contents: [_item(path)],
+        contents: [_item(path, primitive)],
       );
       widget.uiState.setSelection([layer]);
       widget.onChanged();
@@ -433,10 +444,11 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
   }
 
-  /// A piece of art holding [path], painted with the toolbar's fill and its
-  /// stroke when that has a width: the two swatches that had nothing to paint
-  /// until there were shape layers.
-  BridgeShapeItem _item(List<BridgeVertex> path) {
+  /// A piece of art holding [path], or the shape [primitive] makes, painted
+  /// with the toolbar's fill and its stroke when that has a width: the two
+  /// swatches that had nothing to paint until there were shape layers.
+  BridgeShapeItem _item(List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive) {
     final tools = widget.uiState.tools;
     return BridgeShapeItem(
       id: UuidValue.fromString(const Uuid().v4()),
@@ -464,13 +476,15 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       gradientStops: const [],
       combine: 0,
       pathKeys: const [],
+      primitive: primitive,
     );
   }
 
-  void _commit(LayerBox box, List<BridgeVertex> path) {
+  void _commit(LayerBox box, List<BridgeVertex> path,
+      [BridgeShapePrimitive? primitive]) {
     if (path.length < 2) return;
     if (_drawsArt) {
-      _addArt(box, path);
+      _addArt(box, path, primitive);
       return;
     }
     try {
@@ -490,8 +504,11 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// A new piece of art on top of the shape layer [box]. The path was drawn
   /// in the layer's pixels, and the art's own coordinates sit a bounding box
   /// away from those.
-  void _addArt(LayerBox box, List<BridgeVertex> path) {
+  void _addArt(LayerBox box, List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive) {
     final o = box.artOrigin;
+    BridgeScalar moved(BridgeScalar s, double by) =>
+        BridgeScalar.static_((s as BridgeScalar_Static).field0 + by);
     try {
       box.layer.addShapeItem(
         item: _item([
@@ -503,7 +520,23 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                 tanInY: v.tanInY,
                 tanOutX: v.tanOutX,
                 tanOutY: v.tanOutY),
-        ]),
+        ], switch (primitive) {
+          null => null,
+          final p => BridgeShapePrimitive(
+              kind: p.kind,
+              positionX: moved(p.positionX, o.dx),
+              positionY: moved(p.positionY, o.dy),
+              width: p.width,
+              height: p.height,
+              roundness: p.roundness,
+              points: p.points,
+              rotation: p.rotation,
+              outerRadius: p.outerRadius,
+              innerRadius: p.innerRadius,
+              outerRoundness: p.outerRoundness,
+              innerRoundness: p.innerRoundness,
+            ),
+        }),
       );
       widget.onChanged();
     } catch (_) {

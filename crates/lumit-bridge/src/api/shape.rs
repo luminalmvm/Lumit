@@ -12,6 +12,7 @@ use flutter_rust_bridge::frb;
 use lumit_core::shape::modifier::{
     self, ModifierKind, Offset, Repeater, ShapeEntry, ShapeGroup, ShapeModifier, Smooth, Trim,
 };
+use lumit_core::shape::primitive::{self, ShapePrimitive};
 use lumit_core::time::Rational;
 use uuid::Uuid;
 
@@ -99,6 +100,71 @@ pub struct BridgeShapeTrim {
     pub start: BridgeScalar,
     pub end: BridgeScalar,
     pub offset: BridgeScalar,
+}
+
+/// **A parametric shape**: `kind` 0 is a rectangle, 1 an ellipse, 2 a polygon
+/// and 3 a star. The position is its middle in the art's own coordinates. A
+/// rectangle and an ellipse use the width and height, the rectangle its
+/// corner roundness in pixels; a polygon and a star the points, the turn in
+/// degrees, the radii and the roundness of their corners per cent.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapePrimitive {
+    pub kind: u32,
+    pub position_x: BridgeScalar,
+    pub position_y: BridgeScalar,
+    pub width: BridgeScalar,
+    pub height: BridgeScalar,
+    pub roundness: BridgeScalar,
+    pub points: BridgeScalar,
+    pub rotation: BridgeScalar,
+    pub outer_radius: BridgeScalar,
+    pub inner_radius: BridgeScalar,
+    pub outer_roundness: BridgeScalar,
+    pub inner_roundness: BridgeScalar,
+}
+
+impl BridgeShapePrimitive {
+    #[frb(ignore)]
+    pub(crate) fn read_at(p: &ShapePrimitive, offset: Rational) -> Self {
+        let at = |p| BridgeScalar::read_at(p, offset);
+        Self {
+            kind: p.kind,
+            position_x: at(&p.position_x),
+            position_y: at(&p.position_y),
+            width: at(&p.width),
+            height: at(&p.height),
+            roundness: at(&p.roundness),
+            points: at(&p.points),
+            rotation: at(&p.rotation),
+            outer_radius: at(&p.outer_radius),
+            inner_radius: at(&p.inner_radius),
+            outer_roundness: at(&p.outer_roundness),
+            inner_roundness: at(&p.inner_roundness),
+        }
+    }
+
+    /// The engine's primitive, every number held to a range it can draw.
+    #[frb(ignore)]
+    pub(crate) fn write(&self, offset: Rational) -> Result<ShapePrimitive, BridgeError> {
+        let held = |p, lo, hi| clamped_property(p, offset, lo, hi);
+        let reach = 100_000.0;
+        Ok(ShapePrimitive {
+            kind: if self.kind <= 3 { self.kind } else { 0 },
+            position_x: held(&self.position_x, -reach, reach)?,
+            position_y: held(&self.position_y, -reach, reach)?,
+            width: held(&self.width, 0.0, reach)?,
+            height: held(&self.height, 0.0, reach)?,
+            roundness: held(&self.roundness, 0.0, reach)?,
+            points: held(&self.points, 3.0, primitive::MAX_POINTS)?,
+            rotation: held(&self.rotation, -360_000.0, 360_000.0)?,
+            outer_radius: held(&self.outer_radius, 0.0, reach)?,
+            inner_radius: held(&self.inner_radius, 0.0, reach)?,
+            outer_roundness: held(&self.outer_roundness, -1000.0, 1000.0)?,
+            inner_roundness: held(&self.inner_roundness, -1000.0, 1000.0)?,
+            extra: serde_json::Map::new(),
+        })
+    }
 }
 
 impl BridgeShapeModifier {
@@ -379,6 +445,20 @@ pub(crate) fn write_entries(
 }
 
 impl LayerReference {
+    /// Turn a parametric shape into a drawn path, the shape it shows at
+    /// `time` (composition time), so its points can be moved one by one.
+    #[frb(sync)]
+    pub fn convert_shape_to_path(
+        &self,
+        id: Uuid,
+        time: crate::api::effect::BridgeRational,
+    ) -> Result<(), BridgeError> {
+        self.edit_shape_item(id, time, |item, time| {
+            item.path = item.path_at(time.to_f64()).into_owned();
+            item.primitive = None;
+        })
+    }
+
     /// Make a repeater's copies real: `repeater`'s, or every repeater's on
     /// the layer when `None`. Each copy becomes a shape of its own, placed
     /// where the copy was drawn and faded as it was faded, and the repeater

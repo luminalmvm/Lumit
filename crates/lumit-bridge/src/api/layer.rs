@@ -233,6 +233,10 @@ pub struct BridgeShapeItem {
     pub path_keys: Vec<BridgeKeyframe>,
     /// **Stroke taper**, or `None` for the full width all the way.
     pub taper: Option<BridgeShapeTaper>,
+    /// **A parametric shape**, or `None` for a drawn path. While it is set
+    /// the path is made from it, and `vertices` is that path at the head of
+    /// the layer.
+    pub primitive: Option<crate::api::shape::BridgeShapePrimitive>,
 }
 
 /// A shape's stroke taper: how much of the width is gone at each end, how
@@ -337,6 +341,10 @@ impl BridgeShapeItem {
                 ease: BridgeScalar::read_at(&w.ease, offset),
                 scope: w.scope,
             }),
+            primitive: item
+                .primitive
+                .as_ref()
+                .map(|p| crate::api::shape::BridgeShapePrimitive::read_at(p, offset)),
         }
     }
 
@@ -347,13 +355,19 @@ impl BridgeShapeItem {
         &self,
         offset: Rational,
     ) -> Result<lumit_core::shape::ShapeItem, BridgeError> {
+        let primitive = match &self.primitive {
+            Some(p) => Some(p.write(offset)?),
+            None => None,
+        };
         Ok(lumit_core::shape::ShapeItem {
             id: self.id,
             name: self.name.clone(),
-            path: lumit_core::mask::BezierPath {
-                vertices: self.vertices.iter().map(BridgeVertex::write).collect(),
-                closed: self.closed,
+            // A parametric shape's path is whatever its numbers make.
+            path: match &primitive {
+                Some(p) => p.path_at(0.0),
+                None => self.sent_path(),
             },
+            primitive,
             fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
             stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
             stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,
@@ -461,6 +475,26 @@ impl BridgeShapeItem {
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };
+        // A parametric shape keeps its numbers until one of its points is
+        // dragged, which makes it a drawn path holding the dragged points.
+        if let Some(p) = &mut written.primitive {
+            if let Some(was) = &previous.primitive {
+                p.extra = was.extra.clone();
+            }
+            let sent = self.sent_path();
+            let showing = match at {
+                Some(at) => at
+                    .checked_sub(offset)
+                    .map(|at| same_shape(&sent, &previous.path_at(at.to_f64())))
+                    .unwrap_or(false),
+                None => false,
+            };
+            if !showing && !same_shape(&sent, &previous.path) {
+                written.primitive = None;
+                written.path = sent;
+            }
+            return Ok(written);
+        }
         if let (false, Some(at)) = (written.path_keys.is_empty(), at) {
             let at = at
                 .checked_sub(offset)
@@ -492,6 +526,15 @@ impl BridgeShapeItem {
             }
         }
         Ok(written)
+    }
+
+    /// The path as the frontend sent it.
+    #[frb(ignore)]
+    fn sent_path(&self) -> lumit_core::mask::BezierPath {
+        lumit_core::mask::BezierPath {
+            vertices: self.vertices.iter().map(BridgeVertex::write).collect(),
+            closed: self.closed,
+        }
     }
 }
 
@@ -4412,7 +4455,7 @@ impl LayerReference {
     /// Read this layer's art, change the one item `id` names at layer-local
     /// `time`, and commit the list — the shape of every shape-key edit.
     #[frb(ignore)]
-    fn edit_shape_item(
+    pub(crate) fn edit_shape_item(
         &self,
         id: Uuid,
         time: BridgeRational,

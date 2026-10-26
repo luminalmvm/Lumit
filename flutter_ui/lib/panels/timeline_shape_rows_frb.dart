@@ -82,7 +82,7 @@ class ShapeItemRow extends StatelessWidget {
   /// into the one above lends its path and nothing else, so it is not either.
   /// A fill or an outline is offered where the item has none, and taken away
   /// where it has one.
-  List<Widget> _opRows(VoidCallback close) {
+  List<Widget> _opRows(VoidCallback close, BuildContext context) {
     final paints = item.combine == 0;
     final tapers = item.stroke != null && paints;
     bool has(ShapeAdd add) => switch (add) {
@@ -114,10 +114,30 @@ class ShapeItemRow extends StatelessWidget {
                     removeFill: add == ShapeAdd.fill,
                     removeStroke: add == ShapeAdd.stroke)),
             remove: true),
+      if (item.primitive != null)
+        MenuRow(
+          key: ValueKey<String>('tl-shape-to-path-${item.id}'),
+          onPressed: () {
+            close();
+            _convertToPath(context);
+          },
+          child: Text(l10n.shapeConvertToPath),
+        ),
       ...shapeMoveRows(close, item.id, _writeEntries),
     ];
   }
 
+  /// The parametric shape as a drawn path, the shape it shows at the playhead.
+  void _convertToPath(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    try {
+      layer.convertShapeToPath(
+          id: item.id, time: comp.timeOfFrame(frame: ui.playheadFrame.value));
+      onChanged();
+    } catch (_) {
+      // The item or its layer went away between the draw and the click.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +156,7 @@ class ShapeItemRow extends StatelessWidget {
       onRename: (name) => _write(name: name),
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
-      menuRows: _opRows,
+      menuRows: (close) => _opRows(close, context),
     );
   }
 }
@@ -1049,6 +1069,22 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.strokeColour =>
           (0, 0, ''),
         ShapeValue.strokeWidth => (0, 1000, ' px'),
+        // A parametric shape's size and place in the art's own pixels, the
+        // corners of a polygon or a star per cent of round.
+        ShapeValue.shapeWidth ||
+        ShapeValue.shapeHeight ||
+        ShapeValue.outerRadius ||
+        ShapeValue.innerRadius ||
+        ShapeValue.roundness =>
+          (0, 10000, ' px'),
+        ShapeValue.shapePositionX ||
+        ShapeValue.shapePositionY =>
+          (-10000, 10000, ' px'),
+        ShapeValue.points => (3, 100, ''),
+        ShapeValue.shapeRotation => (-3600, 3600, '°'),
+        ShapeValue.outerRoundness ||
+        ShapeValue.innerRoundness =>
+          (-1000, 1000, '%'),
         ShapeValue.opacity => (0, 100, '%'),
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),

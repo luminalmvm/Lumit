@@ -9690,6 +9690,22 @@
   "@shapeStrokeWidth": {
     "description": "Timeline row under a shape layer's art: how wide its outline is, in pixels."
   },
+  "shapePoints": "Points",
+  "@shapePoints": {
+    "description": "Timeline row under a polygon or star in a shape layer's art: how many corners or tips it has."
+  },
+  "shapeOuterRoundness": "Outer roundness",
+  "@shapeOuterRoundness": {
+    "description": "Timeline row under a polygon or star in a shape layer's art: how rounded its outer corners are, per cent. After Effects calls it Outer Roundness."
+  },
+  "shapeInnerRoundness": "Inner roundness",
+  "@shapeInnerRoundness": {
+    "description": "Timeline row under a star in a shape layer's art: how rounded the corners between its tips are, per cent. After Effects calls it Inner Roundness."
+  },
+  "shapeConvertToPath": "Convert to path",
+  "@shapeConvertToPath": {
+    "description": "Menu row on a rectangle, ellipse, polygon or star in a shape layer's art: turns it into a drawn path whose points can be moved one by one. After Effects calls it Convert To Bezier Path."
+  },
   "shapeOpacity": "Opacity",
   "@shapeOpacity": {
     "description": "Timeline row under a shape layer's art: how opaque the whole piece of art is."

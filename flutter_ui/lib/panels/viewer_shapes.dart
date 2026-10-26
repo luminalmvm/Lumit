@@ -26,6 +26,7 @@ import 'dart:ui' show Offset, Path;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
@@ -197,39 +198,34 @@ List<BridgeVertex> shapePath({
       ];
 
     case ToolMode.shapeStar:
-      // Inscribed in the box, first point at the top — the engine's own star
-      // (`mask::Mask::star`), so the two agree about what a star is.
-      final rx = w / 2;
-      final ry = h / 2;
-      final cx = left + rx;
-      final cy = top + ry;
+      // Regular, as the engine's parametric star is, in the middle of the box
+      // and as big as fits, first point at the top.
+      final r = math.min(w, h) / 2;
+      final cx = left + w / 2;
+      final cy = top + h / 2;
       return [
         for (var i = 0; i < starPoints * 2; i++)
           () {
-            final outer = i.isEven;
-            final f = outer ? 1.0 : starInnerFraction;
+            final f = i.isEven ? 1.0 : starInnerFraction;
             final a = math.pi * i / starPoints - math.pi / 2;
             return shapeCorner(
-              cx + rx * f * math.cos(a),
-              cy + ry * f * math.sin(a),
-            );
+                cx + r * f * math.cos(a), cy + r * f * math.sin(a));
           }(),
       ];
 
     case ToolMode.shapePolygon:
-      // A regular polygon inscribed in the box, first point at the top — the
-      // star without its notches, and the same tool After Effects has. (The
+      // A regular polygon in the box, first point at the top — the star
+      // without its notches, and the same tool After Effects has. (The
       // *path-building* gesture that was briefly on this tool belongs to the
       // Pen, where After Effects puts it.)
-      final rx = w / 2;
-      final ry = h / 2;
-      final cx = left + rx;
-      final cy = top + ry;
+      final r = math.min(w, h) / 2;
+      final cx = left + w / 2;
+      final cy = top + h / 2;
       return [
         for (var i = 0; i < polygonSides; i++)
           () {
             final a = 2 * math.pi * i / polygonSides - math.pi / 2;
-            return shapeCorner(cx + rx * math.cos(a), cy + ry * math.sin(a));
+            return shapeCorner(cx + r * math.cos(a), cy + r * math.sin(a));
           }(),
       ];
 
@@ -237,6 +233,53 @@ List<BridgeVertex> shapePath({
     case _:
       return const [];
   }
+}
+
+/// The parametric shape a drag from [from] to [to] draws for [tool], the
+/// same shape [shapePath] gives, as the numbers that make it: what a shape
+/// tool commits to a shape layer, so its size and corners can be keyed. Null
+/// for the Pen, whose path is drawn rather than made.
+BridgeShapePrimitive? shapePrimitive({
+  required ToolMode tool,
+  required (double, double) from,
+  required (double, double) to,
+  bool square = false,
+}) {
+  var dx = to.$1 - from.$1;
+  var dy = to.$2 - from.$2;
+  if (square) {
+    final e = squareExtent(dx, dy);
+    dx = e.dx;
+    dy = e.dy;
+  }
+  final w = dx.abs();
+  final h = dy.abs();
+  final kind = switch (tool) {
+    ToolMode.shapeRectangle || ToolMode.shapeRoundedRectangle => 0,
+    ToolMode.shapeEllipse => 1,
+    ToolMode.shapePolygon => 2,
+    ToolMode.shapeStar => 3,
+    _ => null,
+  };
+  if (kind == null) return null;
+  final r = math.min(w, h) / 2;
+  BridgeScalar still(double v) => BridgeScalar.static_(v);
+  return BridgeShapePrimitive(
+    kind: kind,
+    positionX: still(from.$1 + dx / 2),
+    positionY: still(from.$2 + dy / 2),
+    width: still(w),
+    height: still(h),
+    roundness: still(tool == ToolMode.shapeRoundedRectangle
+        ? math.min(w, h) * roundedCornerFraction
+        : 0),
+    points: still((kind == 2 ? polygonSides : starPoints).toDouble()),
+    rotation: still(0),
+    outerRadius: still(r),
+    innerRadius: still(r * starInnerFraction),
+    outerRoundness: still(0),
+    innerRoundness: still(0),
+  );
 }
 
 /// One cubic path through [count] vertices, on whichever screen mapping the

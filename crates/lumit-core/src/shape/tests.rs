@@ -797,3 +797,53 @@ fn an_unkeyed_shape_is_absent_from_the_file() {
     assert_eq!(back.path_keys.len(), 1);
     assert_eq!(back, keyed);
 }
+
+/// A parametric rectangle draws the rectangle its numbers make, and a keyed
+/// width moves it, frame by frame.
+#[test]
+fn a_parametric_rectangle_draws_its_numbers_and_a_keyed_width_moves_it() {
+    use crate::anim::{Animation, Keyframe, SideInterp};
+    use crate::time::Rational;
+    let key = |secs: i64, value: f64| Keyframe {
+        time: Rational::new(secs, 1).unwrap(),
+        value,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    let mut made = item(square(0.0, 0.0, 1.0));
+    made.primitive = Some(primitive::ShapePrimitive {
+        kind: 0,
+        position_x: Property::fixed(50.0),
+        position_y: Property::fixed(50.0),
+        width: Property {
+            animation: Animation::Keyframed(vec![key(0, 40.0), key(1, 80.0)]),
+            extra: serde_json::Map::new(),
+        },
+        height: Property::fixed(40.0),
+        roundness: Property::zero(),
+        points: Property::fixed(5.0),
+        rotation: Property::zero(),
+        outer_radius: Property::zero(),
+        inner_radius: Property::zero(),
+        outer_roundness: Property::zero(),
+        inner_roundness: Property::zero(),
+        extra: serde_json::Map::new(),
+    });
+    let contents = entries(vec![made]);
+    assert!(modifier::items(&contents)[0].path_is_animated());
+    assert_eq!(
+        contents_bounds(&contents, 0.0),
+        Some((30.0, 30.0, 70.0, 70.0))
+    );
+    assert_eq!(
+        contents_bounds(&contents, 1.0),
+        Some((10.0, 30.0, 90.0, 70.0))
+    );
+    let drawn = |c: &[ShapeEntry]| rasterise_contents(c, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
+    assert_eq!(
+        drawn(&contents),
+        drawn(&entries(vec![item(
+            Mask::rectangle(30.0, 30.0, 40.0, 40.0).path
+        )]))
+    );
+}

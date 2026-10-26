@@ -390,6 +390,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShapeModifier dco_decode_box_autoadd_bridge_shape_modifier(dynamic raw);
 
   @protected
+  BridgeShapePrimitive dco_decode_box_autoadd_bridge_shape_primitive(
+      dynamic raw);
+
+  @protected
   BridgeShapeRepeater dco_decode_box_autoadd_bridge_shape_repeater(dynamic raw);
 
   @protected
@@ -1247,6 +1251,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShapeModifierKind dco_decode_bridge_shape_modifier_kind(dynamic raw);
 
   @protected
+  BridgeShapePrimitive dco_decode_bridge_shape_primitive(dynamic raw);
+
+  @protected
   BridgeShapeRepeater dco_decode_bridge_shape_repeater(dynamic raw);
 
   @protected
@@ -2023,6 +2030,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeShapePrimitive? dco_decode_opt_box_autoadd_bridge_shape_primitive(
+      dynamic raw);
+
+  @protected
   BridgeShapeTaper? dco_decode_opt_box_autoadd_bridge_shape_taper(dynamic raw);
 
   @protected
@@ -2512,6 +2523,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeModifier sse_decode_box_autoadd_bridge_shape_modifier(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShapePrimitive sse_decode_box_autoadd_bridge_shape_primitive(
       SseDeserializer deserializer);
 
   @protected
@@ -3509,6 +3524,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeShapePrimitive sse_decode_bridge_shape_primitive(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeShapeRepeater sse_decode_bridge_shape_repeater(
       SseDeserializer deserializer);
 
@@ -4438,6 +4457,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeShapePrimitive? sse_decode_opt_box_autoadd_bridge_shape_primitive(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeShapeTaper? sse_decode_opt_box_autoadd_bridge_shape_taper(
       SseDeserializer deserializer);
 
@@ -4940,6 +4963,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_shape_modifier(
       BridgeShapeModifier self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_shape_primitive(
+      BridgeShapePrimitive self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_shape_repeater(
@@ -6050,6 +6077,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeShapeModifierKind self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_shape_primitive(
+      BridgeShapePrimitive self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_shape_repeater(
       BridgeShapeRepeater self, SseSerializer serializer);
 
@@ -7010,6 +7041,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_sequence_rate(
       BridgeSequenceRate? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_shape_primitive(
+      BridgeShapePrimitive? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_shape_taper(

@@ -3198,6 +3198,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         combine: 0,
         path_keys: Vec::new(),
         taper: None,
+        primitive: None,
     }
 }
 

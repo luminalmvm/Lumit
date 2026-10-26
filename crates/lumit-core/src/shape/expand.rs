@@ -294,7 +294,12 @@ fn baked_item(item: &ShapeItem, (m, fade): &(Affine, f64), n: usize) -> ShapeIte
         out.id = Uuid::now_v7();
         out.name = format!("{} {}", item.name, n + 1);
     }
-    out.path = transform_path(&item.path, m);
+    // A parametric shape becomes the path it makes at the head of the layer:
+    // a turned or scaled copy is no longer a rectangle its numbers describe.
+    if let Some(p) = out.primitive.take() {
+        out.path = p.path_at(0.0);
+    }
+    out.path = transform_path(&out.path, m);
     for key in &mut out.path_keys {
         key.path = transform_path(&key.path, m);
     }

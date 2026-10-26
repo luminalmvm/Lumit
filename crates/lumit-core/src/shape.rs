@@ -29,8 +29,8 @@
 //! above it, and the run that makes is drawn once with the first item's paint.
 //! Files from before the entries read as they did; `modifier` says how.
 //!
-//! **What is deliberately not here.** Wiggle paths, line joins other than
-//! round, and a parametric rectangle or ellipse.
+//! **What is deliberately not here.** Wiggle paths, and line joins other than
+//! round.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -181,6 +181,12 @@ pub struct ShapeItem {
     /// the full width all the way along.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub taper: Option<Taper>,
+    /// **A parametric shape**: the rectangle, ellipse, polygon or star this
+    /// item's path is made from at every frame, so its size and corners key.
+    /// `None` is a drawn path. While it is set, [`path`](Self::path) holds the
+    /// shape at the head of the layer for a Lumit that reads no primitive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive: Option<primitive::ShapePrimitive>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -265,6 +271,7 @@ impl ShapeItem {
             path_keys: Vec::new(),
             combine: 0,
             taper: None,
+            primitive: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -276,12 +283,19 @@ impl ShapeItem {
     /// `t` is the **layer's** clock, the one every other number on the item is
     /// read on.
     pub fn path_at(&self, t: f64) -> std::borrow::Cow<'_, BezierPath> {
-        crate::mask::path_at(&self.path_keys, &self.path, t)
+        match &self.primitive {
+            Some(p) => std::borrow::Cow::Owned(p.path_at(t)),
+            None => crate::mask::path_at(&self.path_keys, &self.path, t),
+        }
     }
 
-    /// Whether this item's shape is keyframed.
+    /// Whether this item's shape moves: keyframed, or made from numbers that
+    /// move.
     pub fn path_is_animated(&self) -> bool {
-        !self.path_keys.is_empty()
+        match &self.primitive {
+            Some(p) => p.is_animated(),
+            None => !self.path_keys.is_empty(),
+        }
     }
 
     /// The item's art at `t` as a polyline, once `mods` have had it: `None`
@@ -670,6 +684,7 @@ pub mod modifier;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod modifier_tests;
+pub mod primitive;
 mod raster;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

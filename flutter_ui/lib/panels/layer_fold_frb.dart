@@ -244,6 +244,21 @@ enum ShapeValue {
   /// The **shape itself**. It has no number, so its row carries the
   /// stopwatch and its diamonds and nothing else; its keys are whole paths.
   path,
+
+  /// A parametric shape's numbers, in place of its path row: the size and
+  /// corners of a rectangle or an ellipse, the points and radii of a polygon
+  /// or a star.
+  shapeWidth,
+  shapeHeight,
+  shapePositionX,
+  shapePositionY,
+  roundness,
+  points,
+  shapeRotation,
+  outerRadius,
+  innerRadius,
+  outerRoundness,
+  innerRoundness,
   gradientStartX,
   gradientStartY,
   gradientEndX,
@@ -352,6 +367,32 @@ enum ShapeAdd {
 /// Which adds belong to an item itself rather than making an entry.
 bool isItemAdd(ShapeAdd add) =>
     add == ShapeAdd.fill || add == ShapeAdd.stroke || add == ShapeAdd.taper;
+
+/// The numbers a parametric shape of [kind] shows, in order: 0 a rectangle,
+/// 1 an ellipse, 2 a polygon, 3 a star.
+List<ShapeValue> primitiveValues(int kind) => switch (kind) {
+      0 || 1 => [
+          ShapeValue.shapeWidth,
+          ShapeValue.shapeHeight,
+          ShapeValue.shapePositionX,
+          ShapeValue.shapePositionY,
+          if (kind == 0) ShapeValue.roundness,
+        ],
+      _ => [
+          ShapeValue.points,
+          ShapeValue.shapePositionX,
+          ShapeValue.shapePositionY,
+          ShapeValue.shapeRotation,
+          if (kind == 3) ShapeValue.innerRadius,
+          ShapeValue.outerRadius,
+          if (kind == 3) ShapeValue.innerRoundness,
+          ShapeValue.outerRoundness,
+        ],
+    };
+
+/// Which of a shape item's values are a parametric shape's numbers.
+bool isPrimitiveValue(ShapeValue value) =>
+    primitiveValues(0).contains(value) || primitiveValues(3).contains(value);
 
 /// What [add] is called in the menu, and what a new entry of it is named.
 String shapeAddLabel(ShapeAdd add) => switch (add) {
@@ -1348,6 +1389,17 @@ BridgeStroke strokeWithScalar(
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.path => l10n.shapePath,
+      ShapeValue.shapeWidth => l10n.fxWidth,
+      ShapeValue.shapeHeight => l10n.fxHeight,
+      ShapeValue.shapePositionX => l10n.fxPositionX,
+      ShapeValue.shapePositionY => l10n.fxPositionY,
+      ShapeValue.roundness => l10n.fxRoundness,
+      ShapeValue.points => l10n.shapePoints,
+      ShapeValue.shapeRotation => l10n.fxRotation,
+      ShapeValue.outerRadius => l10n.fxOuterRadius,
+      ShapeValue.innerRadius => l10n.fxInnerRadius,
+      ShapeValue.outerRoundness => l10n.shapeOuterRoundness,
+      ShapeValue.innerRoundness => l10n.shapeInnerRoundness,
       ShapeValue.fillColour => l10n.shapeFill,
       ShapeValue.strokeColour => l10n.shapeStroke,
       ShapeValue.strokeWidth => l10n.shapeStrokeWidth,
@@ -1420,6 +1472,18 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       // The shape is not a number and asks for the still zero nobody reads,
       // exactly as a mask's path row does.
       ShapeValue.path => const BridgeScalar.static_(0),
+      // A drawn path has none of these and reads the still zero.
+      ShapeValue.shapeWidth => item.primitive?.width ?? _none,
+      ShapeValue.shapeHeight => item.primitive?.height ?? _none,
+      ShapeValue.shapePositionX => item.primitive?.positionX ?? _none,
+      ShapeValue.shapePositionY => item.primitive?.positionY ?? _none,
+      ShapeValue.roundness => item.primitive?.roundness ?? _none,
+      ShapeValue.points => item.primitive?.points ?? _none,
+      ShapeValue.shapeRotation => item.primitive?.rotation ?? _none,
+      ShapeValue.outerRadius => item.primitive?.outerRadius ?? _none,
+      ShapeValue.innerRadius => item.primitive?.innerRadius ?? _none,
+      ShapeValue.outerRoundness => item.primitive?.outerRoundness ?? _none,
+      ShapeValue.innerRoundness => item.primitive?.innerRoundness ?? _none,
       ShapeValue.gradientStartOpacity => item.gradientStartOpacity,
       ShapeValue.gradientEndOpacity => item.gradientEndOpacity,
       ShapeValue.gradientStartX => item.gradientStartX,
@@ -1510,6 +1574,7 @@ BridgeShapeItem shapeItemWith(
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final tapered = item.taper;
+  final made = item.primitive;
   return BridgeShapeItem(
     id: item.id,
     name: name ?? item.name,
@@ -1591,6 +1656,22 @@ BridgeShapeItem shapeItemWith(
                     ease: at(ShapeValue.taperEase, tapered.ease),
                     scope: taperScope ?? tapered.scope,
                   )),
+    primitive: made == null
+        ? null
+        : BridgeShapePrimitive(
+            kind: made.kind,
+            positionX: at(ShapeValue.shapePositionX, made.positionX),
+            positionY: at(ShapeValue.shapePositionY, made.positionY),
+            width: at(ShapeValue.shapeWidth, made.width),
+            height: at(ShapeValue.shapeHeight, made.height),
+            roundness: at(ShapeValue.roundness, made.roundness),
+            points: at(ShapeValue.points, made.points),
+            rotation: at(ShapeValue.shapeRotation, made.rotation),
+            outerRadius: at(ShapeValue.outerRadius, made.outerRadius),
+            innerRadius: at(ShapeValue.innerRadius, made.innerRadius),
+            outerRoundness: at(ShapeValue.outerRoundness, made.outerRoundness),
+            innerRoundness: at(ShapeValue.innerRoundness, made.innerRoundness),
+          ),
   );
 }
 
@@ -2525,6 +2606,16 @@ List<LayerFoldRow> layerFoldRows({
                 FoldShapeValueRow(item, ShapeValue.opacity, depth: depth + 1));
             for (final value in ShapeValue.values) {
               if (isPaintValue(value) || shapeModifierOf(value) != null) {
+                continue;
+              }
+              // A parametric shape shows its numbers where a path shows its
+              // shape.
+              final made = item.primitive;
+              if (isPrimitiveValue(value)) continue;
+              if (value == ShapeValue.path && made != null) {
+                for (final each in primitiveValues(made.kind)) {
+                  rows.add(FoldShapeValueRow(item, each, depth: depth + 1));
+                }
                 continue;
               }
               // The dashes' rows belong to the outline, so they appear only
