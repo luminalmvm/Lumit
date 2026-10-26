@@ -72,6 +72,9 @@ enum Panel {
   /// order a stagger drag follows.
   stagger,
 
+  /// One text area for the project, kept in the `.lum`.
+  notes,
+
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
@@ -96,6 +99,7 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.notes => l10n.panelNotes,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };
