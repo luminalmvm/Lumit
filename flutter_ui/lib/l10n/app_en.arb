@@ -6543,6 +6543,14 @@
   "@menuCreateShapesFromText": {
     "description": "Layer ▸ Create submenu item: makes a shape layer from the outlines of the selected text layer's letters, one group per letter, and switches the text layer off."
   },
+  "menuCreateShapesFromVector": "Shapes from vector layer",
+  "@menuCreateShapesFromVector": {
+    "description": "Layer ▸ Create submenu item, live on a layer of an Illustrator file: makes a shape layer from the layer's paths and switches the original off. After Effects calls it Create Shapes from Vector Layer."
+  },
+  "menuSplitIntoShapeLayers": "Split into shape layers",
+  "@menuSplitIntoShapeLayers": {
+    "description": "Layer ▸ Create submenu item: makes one shape layer for each letter of a text layer, each path group of an Illustrator layer, or each top-level group of a shape layer, each where it sat."
+  },
   "menuCut": "Cut",
   "@menuCut": {
     "description": "Menu item."

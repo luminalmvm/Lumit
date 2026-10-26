@@ -436,65 +436,6 @@ impl LayerReference {
         self.commit(lumit_core::Op::Batch { ops })
     }
 
-    /// **Text to shapes**: a shape layer above this Type layer, a group for
-    /// each letter's outlines, with this layer switched off as After Effects
-    /// does.
-    ///
-    /// Converted **at `frame`**, because a line the words of which come from an
-    /// expression says something different at every frame and the honest answer
-    /// is what it says at the moment the command is used. A line on a path
-    /// converts curved: the outlines are placed by the same walk the rasteriser
-    /// uses, so the copy lands on top of the layer it came from rather than
-    /// near it.
-    ///
-    /// One `Op`, so one undo step.
-    #[frb(sync)]
-    pub fn create_shapes_from_text(&self, frame: i64) -> Result<LayerReference, BridgeError> {
-        let comp = self.composition()?;
-        let layer = self.item()?;
-        let lumit_core::model::LayerKind::Text { document } = &layer.kind else {
-            return Err(BridgeError::NotText);
-        };
-        let t = comp
-            .frame_rate
-            .time_of_frame(frame)
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let lt = lumit_core::time::layer_time(t.0.to_f64(), layer.start_offset.0);
-
-        // The words at this frame, through the one resolver the rasteriser and
-        // the frame key read, so a converted caption says what it was saying.
-        let doc = {
-            let project = self.project()?;
-            let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
-            project.store.snapshot()
-        };
-        let words = document
-            .resolved_text(std::sync::Arc::new(
-                lumit_core::expression::ExpressionContext {
-                    document: doc,
-                    comp: Some(self.comp_id),
-                    layer: Some(self.layer_id),
-                    comp_time: t.0.to_f64(),
-                    current_depth: 0,
-                    inputs: None,
-                },
-            ))
-            .into_owned();
-        let spine = document
-            .path
-            .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
-            .filter(|p| !p.is_empty());
-        let contents = lumit_text::shape_items(
-            &lumit_text::TextBlock::of(document, &words),
-            spine.as_ref(),
-            document.path_offset.value_at(lt) as f32,
-        );
-        if contents.is_empty() {
-            return Err(BridgeError::NothingToConvert);
-        }
-        crate::outlines::add_above(self, contents, lt)
-    }
-
     /// **Text to points**: a copy of this Type layer beside it, fitted
     /// with **Emit from image**, so the words become a points stream in the
     /// shape of themselves.

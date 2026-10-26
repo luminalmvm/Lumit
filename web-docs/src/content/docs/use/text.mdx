@@ -124,17 +124,19 @@ opacities multiply.
 
 ## Convert it
 
-**Layer ▸ Create** turns a selected text layer into something else, as a **copy directly
-above it**. The original stays a text layer.
+**Layer ▸ Create**, also on a layer's right-click, turns a selected text layer into
+something else, as a **copy directly above it**. The original stays a text layer.
 
 - **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines, taken
   from the font, one group per letter, and switches the text layer off. Masks and paint do
   not come across.
+- **Split into shape layers** does the same with one shape layer per letter, each where it
+  sat.
 - **Points from text** makes a copy that emits a stream of points in the shape of the
   words, through [Emit from image](/effects/generate/emit-from-image/).
 
 :::note[Not built yet]
-Per-character layers and creating masks from text are not built.
+Creating masks from text is not built.
 :::
 
 ## Related

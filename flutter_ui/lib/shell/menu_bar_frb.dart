@@ -1413,24 +1413,18 @@ List<MenuSection> lumitMenus(
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuReveal),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
-            // was. Both rows are live only on a Type layer, said by greying out
-            // rather than by an error after the click; the copy lands directly
-            // above the original, where a duplicate goes.
+            // was. Each row greys out on a layer it has nothing to make of; the
+            // new layer lands directly above the original, where a duplicate
+            // goes.
             MenuEntry.submenu(l10n.menuCreate, [
+              MenuEntry(l10n.menuCreateShapesFromText,
+                  _typed(layer) ? onLayer(_createShapes(app, ui)) : null),
+              MenuEntry(l10n.menuCreateShapesFromVector,
+                  _vector(layer) ? onLayer(_createShapes(app, ui)) : null),
               MenuEntry(
-                  l10n.menuCreateShapesFromText,
-                  _typed(layer)
-                      ? onLayer((l) {
-                          try {
-                            l.createShapesFromText(
-                                frame: ui.playheadFrame.value);
-                            app.notifyDocumentChanged();
-                          } catch (_) {
-                            // A line with no ink has no art to make, and says so
-                            // through the status line rather than taking the
-                            // interface down.
-                          }
-                        })
+                  l10n.menuSplitIntoShapeLayers,
+                  _typed(layer) || _vector(layer) || _shaped(layer)
+                      ? onLayer(_createShapes(app, ui, apart: true))
                       : null),
               MenuEntry(
                   l10n.menuCreatePointsFromText,
@@ -1916,7 +1910,7 @@ bool _sequenced(LayerReference? layer) {
 
 /// Whether this layer can cross between footage and sequence at all. Only
 /// footage has clips to cut, and only a sequence has any to put back.
-/// Whether this is a Type layer — the one kind Create ▸ has anything to offer.
+/// Whether this is a Type layer.
 bool _typed(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1925,6 +1919,39 @@ bool _typed(LayerReference? layer) {
     return false;
   }
 }
+
+/// Whether this is a shape layer.
+bool _shaped(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.shape;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Whether this layer reads an Illustrator file.
+bool _vector(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.footage && layer.isVectorLayer();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Create ▸ Shapes from text, Shapes from vector layer and Split into shape
+/// layers, which the engine tells apart by the layer's kind.
+void Function(LayerReference) _createShapes(LumitState app, LumitUiState ui,
+        {bool apart = false}) =>
+    (layer) {
+      try {
+        layer.createShapes(frame: ui.playheadFrame.value, apart: apart);
+        app.notifyDocumentChanged();
+      } catch (_) {
+        // A line with no ink, or a file that has gone, has no art to make.
+      }
+    };
 
 bool _convertible(LayerReference? layer) {
   if (layer == null) return false;

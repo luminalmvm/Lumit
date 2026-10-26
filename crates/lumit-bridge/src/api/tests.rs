@@ -3993,7 +3993,7 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     .expect("set");
     let before = comp.get_layers().expect("layers").len();
 
-    let shapes = text.create_shapes_from_text(0).expect("outlines");
+    let shapes = text.create_shapes(0, false).expect("outlines");
     let lumit_core::model::LayerKind::Shape { contents } = shapes.item().expect("copy").kind else {
         panic!("the copy is not a shape layer");
     };
@@ -4018,6 +4018,9 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
         "the copy emits nothing: {names:?}"
     );
     assert_eq!(comp.get_layers().expect("layers").len(), before + 2);
+    // Split into shape layers makes one for each letter.
+    text.create_shapes(0, true).expect("letters");
+    assert_eq!(comp.get_layers().expect("layers").len(), before + 7);
 
     // A line with no ink has no art to make, and says so rather than leaving
     // an empty layer behind.
@@ -4039,14 +4042,14 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     })
     .expect("set");
     assert!(matches!(
-        text.create_shapes_from_text(0),
+        text.create_shapes(0, false),
         Err(BridgeError::NothingToConvert)
     ));
 
-    // And neither command is offered anything but a Type layer.
+    // And neither has anything to make of an Adjustment layer.
     assert!(matches!(
-        layer.create_shapes_from_text(0),
-        Err(BridgeError::NotText)
+        layer.create_shapes(0, false),
+        Err(BridgeError::NothingToConvert)
     ));
     assert!(matches!(
         layer.create_points_from_text(),
