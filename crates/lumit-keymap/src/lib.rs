@@ -1346,7 +1346,8 @@ pub fn after_effects_preset() -> Keymap {
 ///   crossfades. Quantise to frames is on Alt+F8 already.
 /// - **M** adds a marker, anywhere.
 /// - **Mod+Q**, **Mod+Shift+Q** and **Mod+Alt+Shift+Q** add an empty Audio,
-///   Sequence or Adjustment layer, anywhere.
+///   Sequence or Adjustment layer, anywhere. Not on a Mac, where Cmd+Q quits
+///   and Cmd+Shift+Q logs out before Lumit hears either.
 ///
 /// In the Timeline, **S** splits the layer, **I** and **O** set the work
 /// area as they do in the Cut timeline, Up and Down zoom, and `L` shuttles
@@ -1399,6 +1400,9 @@ pub fn vegas_preset() -> Keymap {
         (Global, "Mod+Alt+Shift+Q", "layer.new.adjustment"),
     ];
     for (context, chord, action) in moves {
+        if cfg!(target_os = "macos") && chord.ends_with("+Q") {
+            continue;
+        }
         if let Ok(chord) = chord.parse::<Chord>() {
             km.rebind_action(context, &action.into(), chord);
         }
