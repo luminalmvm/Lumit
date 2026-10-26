@@ -10723,7 +10723,7 @@
   "@insertAudioLayer": {
     "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."
   },
-  "insertVideoLayer": "Insert video layer",
+  "insertVideoLayer": "Insert Sequence layer",
   "@insertVideoLayer": {
     "description": "Cut timeline, right-click on the empty ground below the rows: adds an empty Sequence layer for picture clips."
   },
