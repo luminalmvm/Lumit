@@ -538,4 +538,59 @@ impl LayerReference {
         }
         self.commit(lumit_core::Op::Batch { ops })
     }
+
+    /// **Create ▸ Shapes from text, Shapes from vector layer and Split into
+    /// shape layers**: this layer's art as a shape layer directly above it,
+    /// or one for each letter or group when `apart`, with this layer switched
+    /// off as After Effects does. A Type layer gives its letters at `frame`,
+    /// a layer of an Illustrator file its paths, and a shape layer its own
+    /// groups. One undo step. Hands back the topmost new layer.
+    #[frb(sync)]
+    pub fn create_shapes(&self, frame: i64, apart: bool) -> Result<LayerReference, BridgeError> {
+        use lumit_core::model::LayerKind;
+        let comp = self.composition()?;
+        let layer = self.item()?;
+        let t = comp
+            .frame_rate
+            .time_of_frame(frame)
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0
+            .to_f64();
+        let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+        let (contents, origin) = match &layer.kind {
+            LayerKind::Text { document } => (
+                crate::outlines::text_art(self, &layer, document, t, lt)?,
+                (0.0, 0.0),
+            ),
+            LayerKind::Shape { contents } => {
+                let corner = lumit_core::shape::contents_bounds(contents, lt);
+                let (x0, y0, ..) = corner.ok_or(BridgeError::NothingToConvert)?;
+                (contents.clone(), (x0, y0))
+            }
+            #[cfg(feature = "media")]
+            LayerKind::Footage { .. } => {
+                let (path, index) = crate::outlines::vector_source(self, &layer)
+                    .ok_or(BridgeError::NothingToConvert)?;
+                let paths = lumit_media::ai::read_paths(&path, index)
+                    .map_err(|_| BridgeError::NothingToConvert)?;
+                (crate::outlines::vector_art(paths), (0.0, 0.0))
+            }
+            _ => return Err(BridgeError::NothingToConvert),
+        };
+        if contents.is_empty() {
+            return Err(BridgeError::NothingToConvert);
+        }
+        crate::outlines::add_above(self, contents, origin, apart, lt)
+    }
+
+    /// Whether this layer reads an Illustrator file, so Shapes from vector
+    /// layer can be offered.
+    #[frb(sync)]
+    pub fn is_vector_layer(&self) -> bool {
+        #[cfg(feature = "media")]
+        if let Ok(layer) = self.item() {
+            return crate::outlines::vector_source(self, &layer).is_some();
+        }
+        false
+    }
 }

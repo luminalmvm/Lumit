@@ -1289,7 +1289,12 @@ List<MenuSection> lumitMenus(
                   l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
                   action: 'layer.new.null'),
               MenuEntry(l10n.menuSequence,
-                  onComp((c) => c.addSequenceLayer(row: row(c)))),
+                  onComp((c) => c.addSequenceLayer(row: row(c))),
+                  action: 'layer.new.sequence'),
+              MenuEntry(
+                  l10n.menuAudio,
+                  onComp((c) => insertEmptyLayer(ui, c, 'layer.new.audio')),
+                  action: 'layer.new.audio'),
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
@@ -1413,24 +1418,18 @@ List<MenuSection> lumitMenus(
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuReveal),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
-            // was. Both rows are live only on a Type layer, said by greying out
-            // rather than by an error after the click; the copy lands directly
-            // above the original, where a duplicate goes.
+            // was. Each row greys out on a layer it has nothing to make of; the
+            // new layer lands directly above the original, where a duplicate
+            // goes.
             MenuEntry.submenu(l10n.menuCreate, [
+              MenuEntry(l10n.menuCreateShapesFromText,
+                  _typed(layer) ? onLayer(_createShapes(app, ui)) : null),
+              MenuEntry(l10n.menuCreateShapesFromVector,
+                  _vector(layer) ? onLayer(_createShapes(app, ui)) : null),
               MenuEntry(
-                  l10n.menuCreateShapesFromText,
-                  _typed(layer)
-                      ? onLayer((l) {
-                          try {
-                            l.createShapesFromText(
-                                frame: ui.playheadFrame.value);
-                            app.notifyDocumentChanged();
-                          } catch (_) {
-                            // A line with no ink has no art to make, and says so
-                            // through the status line rather than taking the
-                            // interface down.
-                          }
-                        })
+                  l10n.menuSplitIntoShapeLayers,
+                  _typed(layer) || _vector(layer) || _shaped(layer)
+                      ? onLayer(_createShapes(app, ui, apart: true))
                       : null),
               MenuEntry(
                   l10n.menuCreatePointsFromText,
@@ -1916,7 +1915,7 @@ bool _sequenced(LayerReference? layer) {
 
 /// Whether this layer can cross between footage and sequence at all. Only
 /// footage has clips to cut, and only a sequence has any to put back.
-/// Whether this is a Type layer — the one kind Create ▸ has anything to offer.
+/// Whether this is a Type layer.
 bool _typed(LayerReference? layer) {
   if (layer == null) return false;
   try {
@@ -1925,6 +1924,39 @@ bool _typed(LayerReference? layer) {
     return false;
   }
 }
+
+/// Whether this is a shape layer.
+bool _shaped(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.shape;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Whether this layer reads an Illustrator file.
+bool _vector(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.footage && layer.isVectorLayer();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Create ▸ Shapes from text, Shapes from vector layer and Split into shape
+/// layers, which the engine tells apart by the layer's kind.
+void Function(LayerReference) _createShapes(LumitState app, LumitUiState ui,
+        {bool apart = false}) =>
+    (layer) {
+      try {
+        layer.createShapes(frame: ui.playheadFrame.value, apart: apart);
+        app.notifyDocumentChanged();
+      } catch (_) {
+        // A line with no ink, or a file that has gone, has no art to make.
+      }
+    };
 
 bool _convertible(LayerReference? layer) {
   if (layer == null) return false;
@@ -1972,6 +2004,64 @@ int? newLayerRow(LumitUiState ui, CompositionReference comp) {
   } catch (_) {
     return null;
   }
+}
+
+/// An empty Sequence layer, an empty Audio layer or an Adjustment layer, by
+/// its keymap action, above the selected layer as every new layer lands. With
+/// nothing selected an Audio layer goes to the bottom, where sound lives, as
+/// Vegas puts it.
+void insertEmptyLayer(
+    LumitUiState ui, CompositionReference comp, String action) {
+  final row = newLayerRow(ui, comp);
+  switch (action) {
+    case 'layer.new.audio':
+      comp.addEmptyAudioLayer(row: row ?? ui.model.layers.length);
+    case 'layer.new.sequence':
+      comp.addSequenceLayer(row: row);
+    case 'layer.new.adjustment':
+      comp.addAdjustmentLayer(row: row);
+  }
+}
+
+/// The right-click menu on the empty ground under the Cut and Audio
+/// timelines' rows, Vegas's own three. The Audio timeline holds sound only,
+/// so it offers the Audio layer alone.
+Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
+    CompositionReference comp, Offset position,
+    {required bool picture, required VoidCallback onDone}) {
+  final t = ThemeScope.of(context).theme;
+  final rows = [
+    ('layer.new.audio', l10n.insertAudioLayer),
+    if (picture) ...[
+      ('layer.new.sequence', l10n.insertVideoLayer),
+      ('layer.new.adjustment', l10n.insertAdjustmentLayer),
+    ],
+  ];
+  return showMenuAt<void>(
+    context: context,
+    position: position,
+    width: 230,
+    rows: (close) => [
+      for (final (action, label) in rows)
+        MenuRow(
+          key: ValueKey<String>('insert-$action'),
+          onPressed: () {
+            close(null);
+            insertEmptyLayer(ui, comp, action);
+            onDone();
+          },
+          child: Row(children: [
+            Expanded(child: Text(label)),
+            if (ui.keymap.chordFor(action) case final chord?)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child:
+                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+              ),
+          ]),
+        ),
+    ],
+  );
 }
 
 /// Whether this layer can carry a Retime at all. A row of clips cannot: its

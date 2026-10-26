@@ -96,6 +96,7 @@ mod layered;
 mod live;
 mod media;
 mod names;
+mod outlines;
 mod packing;
 mod peaks;
 mod playback;

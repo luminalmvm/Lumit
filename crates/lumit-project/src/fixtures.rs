@@ -236,6 +236,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         // And it keeps no colours: an empty shelf writes no line, so
         // the fixture's bytes are the same as they were before swatches.
         swatches: Vec::new(),
+        notes: String::new(),
         // The fixture caches wherever the application is set to, like any
         // ordinary project.
         cache_location: None,

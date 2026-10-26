@@ -14,7 +14,7 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `import_ffx_into`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write_ffx_as_lumfx`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
@@ -145,7 +145,7 @@ void setPluginEnabled({required String effect, required bool enabled}) =>
 List<String> pluginMessages() =>
     BridgeLib.instance.api.crateApiEffectPluginMessages();
 
-/// Every `.lumfx` in the preset library folder, sorted by name — what the
+/// Every `.lumfx` in the preset library and its groups, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
 /// or not preset JSON) is simply not listed; the folder is the user's to put
 /// things in, and a stray file there is not a fault.
@@ -199,7 +199,8 @@ Future<String> readEffectPreset({required String path}) =>
 
 /// Convert every After Effects `.ffx` in `folder`, and the folders inside it,
 /// into a `.lumfx` in the preset library, where the Effects & presets panel
-/// lists it. A preset already in the library is never written over.
+/// lists it in the same groups. A preset already in the library is never
+/// written over.
 ///
 /// Not sync: a folder of presets can be a few hundred files.
 Future<BridgeFfxImport> importFfxPresets({required String folder}) =>
@@ -1595,13 +1596,18 @@ class BridgePresetInfo {
   final String name;
   final String path;
 
+  /// The group it is filed in, with `/` between nested groups. Empty at the
+  /// top of the library.
+  final String group;
+
   const BridgePresetInfo({
     required this.name,
     required this.path,
+    required this.group,
   });
 
   @override
-  int get hashCode => name.hashCode ^ path.hashCode;
+  int get hashCode => name.hashCode ^ path.hashCode ^ group.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1609,7 +1615,8 @@ class BridgePresetInfo {
       other is BridgePresetInfo &&
           runtimeType == other.runtimeType &&
           name == other.name &&
-          path == other.path;
+          path == other.path &&
+          group == other.group;
 }
 
 /// An exact rational time in seconds, as `num / den`.

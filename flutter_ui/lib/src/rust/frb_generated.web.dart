@@ -29,6 +29,7 @@ import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/lens.dart';
 import 'api/planes.dart';
+import 'api/presets.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/retime.dart';

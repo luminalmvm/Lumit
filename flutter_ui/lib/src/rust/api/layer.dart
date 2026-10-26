@@ -1874,6 +1874,9 @@ class BridgeRevealGroups {
   /// The qualifying effects' ids, as text — the same form the fold paths use.
   final List<String> effects;
 
+  /// The qualifying text animators, by their place on the layer.
+  final Uint32List animators;
+
   /// Whether anything qualified at all. The panel leaves the layer's own
   /// twirl shut when nothing did, rather than opening onto an empty list.
   final bool any;
@@ -1883,6 +1886,7 @@ class BridgeRevealGroups {
     required this.audio,
     required this.retime,
     required this.effects,
+    required this.animators,
     required this.any,
   });
 
@@ -1892,6 +1896,7 @@ class BridgeRevealGroups {
       audio.hashCode ^
       retime.hashCode ^
       effects.hashCode ^
+      animators.hashCode ^
       any.hashCode;
 
   @override
@@ -1903,6 +1908,7 @@ class BridgeRevealGroups {
           audio == other.audio &&
           retime == other.retime &&
           effects == other.effects &&
+          animators == other.animators &&
           any == other.any;
 }
 
@@ -3096,24 +3102,16 @@ class LayerReference {
         that: this,
       );
 
-  /// **Text to shapes**: a copy of this Type layer beside it, whose
-  /// picture is the glyph outlines as vector art.
-  ///
-  /// The original is kept and untouched, which is After Effects' convention
-  /// and the only one that survives a mistake: the words are still typeable,
-  /// still keyed, still expression-driven, and the copy is a drawing.
-  ///
-  /// Converted **at `frame`**, because a line the words of which come from an
-  /// expression says something different at every frame and the honest answer
-  /// is what it says at the moment the command is used. A line on a path
-  /// converts curved: the outlines are placed by the same walk the rasteriser
-  /// uses, so the copy lands on top of the layer it came from rather than
-  /// near it.
-  ///
-  /// One `Op`, so one undo step — the whole layer arrives at once.
-  LayerReference createShapesFromText({required PlatformInt64 frame}) =>
-      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapesFromText(
-          that: this, frame: frame);
+  /// **Create ▸ Shapes from text, Shapes from vector layer and Split into
+  /// shape layers**: this layer's art as a shape layer directly above it,
+  /// or one for each letter or group when `apart`, with this layer switched
+  /// off as After Effects does. A Type layer gives its letters at `frame`,
+  /// a layer of an Illustrator file its paths, and a shape layer its own
+  /// groups. One undo step. Hands back the topmost new layer.
+  LayerReference createShapes(
+          {required PlatformInt64 frame, required bool apart}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapes(
+          that: this, frame: frame, apart: apart);
 
   /// Razor: cut the clip under `frame` in two, at the playhead.
   ///
@@ -3630,6 +3628,13 @@ class LayerReference {
           {required String text, required double x, required double y}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
           that: this, text: text, x: x, y: y);
+
+  /// Whether this layer reads an Illustrator file, so Shapes from vector
+  /// layer can be offered.
+  bool isVectorLayer() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceIsVectorLayer(
+        that: this,
+      );
 
   /// Append a `.lumfx` preset's effects to this layer's stack, or with
   /// `clip` to that clip's own, as one op.

@@ -762,8 +762,13 @@ class ViewerStage extends StatelessWidget {
                             : null;
                     final ask = aids.ground || only == null || only.isNotEmpty;
                     // The corner axes come from the rows the outlines hold,
-                    // so on their own they cost no call.
-                    final axes = aids.axes && !viewport
+                    // so on their own they cost no call. With no camera and a
+                    // view that can't orbit they'd only ever point straight
+                    // across and down, so they stay hidden.
+                    final turns = uiState.viewOf(viewId).orbits ||
+                        layers.any(
+                            (e) => e.info.kind == BridgeLayerKind.camera);
+                    final axes = aids.axes && !viewport && turns
                         ? viewAxes(
                             uiState.viewProjections.of(
                               comp: comp,

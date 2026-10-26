@@ -37,7 +37,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/menu_bar_frb.dart' show exportFrb, showInsertLayerMenu;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
@@ -1679,7 +1679,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final track = index == null ? null : _tracks[index];
     var hit = track == null ? null : cutClipGrabAt(track, _laneAxis, at.dx);
     if (event.buttons == kSecondaryMouseButton) {
-      if (track != null) _menu(ui, track, hit?.clip, at, event.position);
+      if (track != null) {
+        _menu(ui, track, hit?.clip, at, event.position);
+      } else {
+        _insertMenu(ui, event.position);
+      }
       return;
     }
     if (event.buttons != kPrimaryMouseButton) return;
@@ -2272,6 +2276,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           atFrame: frame,
           linked: _linked,
         )));
+  }
+
+  /// A right click on the ground under the last track: a new empty one.
+  void _insertMenu(LumitUiState ui, Offset global) {
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    showInsertLayerMenu(context, ui, comp, global,
+        picture: true, onDone: _afterWrite);
   }
 
   /// A right click: on a clip, its delete and ripple delete; on the room
@@ -2990,13 +3002,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                     controller: _vOutline,
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minHeight: box.maxHeight),
-                      child: LazyBlocks(
-                        key: const ValueKey<String>('ctl-outline-blocks'),
-                        controller: _vOutline,
-                        heights: heights,
-                        viewport: box.maxHeight,
-                        builder: (context, i) =>
-                            _trackHead(t, ui, comp, _tracks[i], heights[i]),
+                      // A right click under the last head, as on the lanes.
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (e) {
+                          if (e.buttons == kSecondaryMouseButton &&
+                              e.localPosition.dy >= _tops.last) {
+                            _insertMenu(ui, e.position);
+                          }
+                        },
+                        child: LazyBlocks(
+                          key: const ValueKey<String>('ctl-outline-blocks'),
+                          controller: _vOutline,
+                          heights: heights,
+                          viewport: box.maxHeight,
+                          builder: (context, i) =>
+                              _trackHead(t, ui, comp, _tracks[i], heights[i]),
+                        ),
                       ),
                     ),
                   ),

@@ -25,7 +25,11 @@ use std::time::Duration;
 
 use lumit_ingress::{checked_raster_bytes, checked_usize, Budget};
 
-use super::{bad, open_here, read_layer_here, AiDocument, LIMITS, MAX_SIDE, REASONS, UNREADABLE};
+use super::paths::AiPath;
+use super::{
+    bad, open_here, read_layer_here, read_paths_here, AiDocument, LIMITS, MAX_SIDE, REASONS,
+    UNREADABLE,
+};
 use crate::decode::{DecodedFrame, PixelFormat};
 use crate::MediaError;
 
@@ -47,6 +51,10 @@ const MEMORY_CAP: u64 = 4 << 30;
 /// The longest layer list the caller takes, in bytes. Names are short, and
 /// there are never more layers than `LIMITS` counts.
 const MAX_LIST: u32 = 1 << 20;
+
+/// The longest list of paths the caller takes, in bytes: room for
+/// `paths::MAX_POINTS` and a little over.
+const MAX_PATHS: u32 = 64 << 20;
 
 /// Where the helper is: beside Lumit's own executable, which is where every
 /// packaging step puts it.
@@ -113,21 +121,26 @@ pub(super) fn read_layer(
     ask(&exe, &args, deadline, read_frame)
 }
 
+pub(super) fn read_paths(path: &Path, index: Option<u32>) -> Result<Vec<AiPath>, MediaError> {
+    let Some(exe) = broker_exe() else {
+        return without_helper(|| read_paths_here(path, index));
+    };
+    let index = index.map_or_else(|| "-".to_owned(), |n| n.to_string());
+    let args = [OsStr::new("ai-paths"), path.as_os_str(), OsStr::new(&index)];
+    ask(&exe, &args, DEADLINE, |from| listed(from, MAX_PATHS))
+}
+
 /// All the helper does: read what `args` ask for and write the answer to
-/// `out`. The arguments are `ai-open <path>`, or `ai-read <path>` with a layer
-/// index and a target width after it, each a number or `-` for none.
+/// `out`. The arguments are `ai-open <path>`, `ai-paths <path>` with a layer
+/// index after it, or `ai-read <path>` with a layer index and a target width
+/// after it, each a number or `-` for none.
 pub fn serve(args: &[OsString], out: &mut dyn Write) -> Result<(), MediaError> {
     cap_own_memory();
     let text = |at: usize| args.get(at).and_then(|arg| arg.to_str());
     let number = |at: usize| text(at).and_then(|digits| digits.parse::<u32>().ok());
     match (text(0), args.get(1)) {
-        (Some("ai-open"), Some(path)) => {
-            let doc = open_here(Path::new(path))?;
-            let list = bincode::serialize(&doc).map_err(|_| bad(UNREADABLE))?;
-            let length = u32::try_from(list.len()).map_err(|_| bad(UNREADABLE))?;
-            out.write_all(&length.to_le_bytes())?;
-            out.write_all(&list)?;
-        }
+        (Some("ai-open"), Some(path)) => list(out, &open_here(Path::new(path))?)?,
+        (Some("ai-paths"), Some(path)) => list(out, &read_paths_here(Path::new(path), number(2))?)?,
         (Some("ai-read"), Some(path)) => {
             let frame = read_layer_here(Path::new(path), number(2), number(3))?;
             out.write_all(&frame.width.to_le_bytes())?;
@@ -145,17 +158,32 @@ fn side_in_range(side: u32) -> bool {
     (1..=MAX_SIDE).contains(&side)
 }
 
-/// The layer list off the helper's output: its length, then that many bytes.
-fn read_document(from: &mut dyn Read) -> Option<AiDocument> {
+/// `value` onto the helper's output: its length, then that many bytes.
+fn list(out: &mut dyn Write, value: &impl serde::Serialize) -> Result<(), MediaError> {
+    let list = bincode::serialize(value).map_err(|_| bad(UNREADABLE))?;
+    let length = u32::try_from(list.len()).map_err(|_| bad(UNREADABLE))?;
+    out.write_all(&length.to_le_bytes())?;
+    out.write_all(&list)?;
+    Ok(())
+}
+
+/// What [`list`] wrote, off the helper's output, when it is no longer than
+/// `most` bytes.
+fn listed<T: serde::de::DeserializeOwned>(from: &mut dyn Read, most: u32) -> Option<T> {
     let mut length = [0u8; 4];
     from.read_exact(&mut length).ok()?;
     let length = u32::from_le_bytes(length);
-    if length > MAX_LIST {
+    if length > most {
         return None;
     }
     let mut list = vec![0u8; usize::try_from(length).ok()?];
     from.read_exact(&mut list).ok()?;
-    let doc: AiDocument = bincode::deserialize(&list).ok()?;
+    bincode::deserialize(&list).ok()
+}
+
+/// The layer list off the helper's output.
+fn read_document(from: &mut dyn Read) -> Option<AiDocument> {
+    let doc: AiDocument = listed(from, MAX_LIST)?;
     (side_in_range(doc.width) && side_in_range(doc.height)).then_some(doc)
 }
 
