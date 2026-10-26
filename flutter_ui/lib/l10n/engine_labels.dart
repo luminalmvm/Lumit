@@ -1414,6 +1414,8 @@ Map<String, String> get _built => {
       "New Light layer": l10n.keyNewLightLayer,
       "New Adjustment layer": l10n.keyNewAdjustmentLayer,
       "New Null layer": l10n.keyNewNullLayer,
+      "New Sequence layer": l10n.keyNewSequenceLayer,
+      "New Audio layer": l10n.keyNewAudioLayer,
       "Zoom in": l10n.keyZoomIn,
       "Zoom out": l10n.keyZoomOut,
       "Zoom to fit": l10n.keyZoomToFit,

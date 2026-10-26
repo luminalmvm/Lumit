@@ -1289,7 +1289,12 @@ List<MenuSection> lumitMenus(
                   l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
                   action: 'layer.new.null'),
               MenuEntry(l10n.menuSequence,
-                  onComp((c) => c.addSequenceLayer(row: row(c)))),
+                  onComp((c) => c.addSequenceLayer(row: row(c))),
+                  action: 'layer.new.sequence'),
+              MenuEntry(
+                  l10n.menuAudio,
+                  onComp((c) => insertEmptyLayer(ui, c, 'layer.new.audio')),
+                  action: 'layer.new.audio'),
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
@@ -1969,6 +1974,23 @@ int? newLayerRow(LumitUiState ui, CompositionReference comp) {
     return row < 0 ? null : row;
   } catch (_) {
     return null;
+  }
+}
+
+/// An empty Sequence layer, an empty Audio layer or an Adjustment layer, by
+/// its keymap action, above the selected layer as every new layer lands. With
+/// nothing selected an Audio layer goes to the bottom, where sound lives, as
+/// Vegas puts it.
+void insertEmptyLayer(
+    LumitUiState ui, CompositionReference comp, String action) {
+  final row = newLayerRow(ui, comp);
+  switch (action) {
+    case 'layer.new.audio':
+      comp.addEmptyAudioLayer(row: row ?? ui.model.layers.length);
+    case 'layer.new.sequence':
+      comp.addSequenceLayer(row: row);
+    case 'layer.new.adjustment':
+      comp.addAdjustmentLayer(row: row);
   }
 }
 

@@ -213,6 +213,8 @@ impl ActionId {
             "layer.new.light.point" => "New Light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
+            "layer.new.sequence" => "New Sequence layer",
+            "layer.new.audio" => "New Audio layer",
             "layer.settings" => "Layer settings",
             "layer.blend.next" => "Next blend mode",
             "layer.blend.prev" => "Previous blend mode",
@@ -975,14 +977,18 @@ pub fn default_keymap() -> Keymap {
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
         // Layer ▸ New. After Effects' own chords, so the rows read the way
-        // anyone arriving from there expects. Spot and Area lights and the
-        // Sequence layer have no chord there and ship without one here.
+        // anyone arriving from there expects. Spot and Area lights have no
+        // chord there and ship without one here.
         row(Global, "Mod+Y", "layer.new.solid"),
         row(Global, "Mod+Alt+Shift+T", "layer.new.text"),
         row(Global, "Mod+Alt+Shift+C", "layer.new.camera"),
         row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
         row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
         row(Global, "Mod+Alt+Shift+Y", "layer.new.null"),
+        // An empty row for clips, picture or sound. After Effects has neither,
+        // so they take the family's chord with their own initial.
+        row(Global, "Mod+Alt+Shift+S", "layer.new.sequence"),
+        row(Global, "Mod+Alt+Shift+A", "layer.new.audio"),
         // What else After Effects does to the selected layers from the
         // keyboard, on its own chords. App-wide like the ones above, since a
         // layer picked in the Viewer is as selected as one picked in the
@@ -1338,6 +1344,8 @@ pub fn after_effects_preset() -> Keymap {
 /// - **Mod+L** turns auto ripple on and off and **Mod+Shift+X** automatic
 ///   crossfades. Quantise to frames is on Alt+F8 already.
 /// - **M** adds a marker, anywhere.
+/// - **Mod+Q**, **Mod+Shift+Q** and **Mod+Alt+Shift+Q** add an empty Audio,
+///   Sequence or Adjustment layer, anywhere.
 ///
 /// In the Timeline, **S** splits the layer, **I** and **O** set the work
 /// area as they do in the Cut timeline, Up and Down zoom, and `L` shuttles
@@ -1385,6 +1393,9 @@ pub fn vegas_preset() -> Keymap {
         (Timeline, "O", "workarea.set.end"),
         (Timeline, "ArrowUp", "timeline.zoom.in"),
         (Timeline, "ArrowDown", "timeline.zoom.out"),
+        (Global, "Mod+Q", "layer.new.audio"),
+        (Global, "Mod+Shift+Q", "layer.new.sequence"),
+        (Global, "Mod+Alt+Shift+Q", "layer.new.adjustment"),
     ];
     for (context, chord, action) in moves {
         if let Ok(chord) = chord.parse::<Chord>() {

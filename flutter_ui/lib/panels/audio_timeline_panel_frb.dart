@@ -767,6 +767,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     for (final entry in layers) {
       final id = entry.layer.internallayerId.toString();
       if (_hasAudio.containsKey(id)) continue;
+      // An Audio layer is sound by what it is, even before anything is on
+      // it, so an empty one made to put clips on is listed too.
+      if (entry.info.kind == BridgeLayerKind.audio) {
+        _hasAudio[id] = true;
+        _hasPicture[id] = false;
+        continue;
+      }
       // Claim the slot first, so a rebuild mid-probe does not probe twice.
       _hasAudio[id] = false;
       _hasPicture[id] = entry.layer.hasPicture();
