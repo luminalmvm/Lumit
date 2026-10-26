@@ -546,8 +546,9 @@ impl Grid {
 ///
 /// `layer` is the layer Particulate is on and `target` the one it collides
 /// with, if any. Their tracks, masks, shapes, wires and parents are read
-/// whole, so an edit at any time renames every frame. What an expression or a
-/// tap reads from somewhere else is not, as the frame keys already treat it.
+/// whole, and so are the effects above `inst`, which can feed its Points, so
+/// an edit at any time renames every frame. What an expression or a tap reads
+/// from somewhere else is not, as the frame keys already treat it.
 #[must_use]
 pub fn definition(
     doc: &Document,
@@ -558,6 +559,9 @@ pub fn definition(
 ) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     let _ = serde_json::to_writer(&mut h, &inst.params);
+    for above in layer.effects.iter().take_while(|e| e.id != inst.id) {
+        let _ = serde_json::to_writer(&mut h, above);
+    }
     let _ = serde_json::to_writer(&mut h, &layer.graph);
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
