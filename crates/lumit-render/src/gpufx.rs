@@ -5928,35 +5928,44 @@ impl GpuEffect for LabelPoints {
         ) else {
             return tex.clone();
         };
-        let labels = inst.labels(stream, inst.template(&doc.text), px_scale);
-        let doc = label_document(doc, px_scale);
-        // Labels that read the same share one drawing. Only ever looked up,
-        // so the map's order decides nothing.
-        let mut drawn: std::collections::HashMap<&str, lumit_text::RasterText> =
+        let labels = inst.labels(stream, inst.template(&doc.text), px_scale, L::time_of(p));
+        // SICELIOT: each label has its own size, kept to steps of 5 % so a
+        // wave of sizes is a handful of drawings rather than one per label.
+        let step = |scale: f32| ((scale * 20.0).round() as i32).max(0);
+        // Labels that read the same at the same size share one drawing. Only
+        // ever looked up, so the map's order decides nothing.
+        let mut drawn: std::collections::HashMap<(&str, i32), lumit_text::RasterText> =
             std::collections::HashMap::new();
-        for (text, _) in &labels {
-            drawn.entry(text.as_str()).or_insert_with(|| {
-                lumit_text::rasterise(&lumit_text::TextBlock::of(&doc, text), &[])
+        for label in &labels {
+            let k = step(label.scale);
+            if k == 0 {
+                continue;
+            }
+            drawn.entry((label.text.as_str(), k)).or_insert_with(|| {
+                let sized = label_document(doc, px_scale * k as f32 / 20.0);
+                lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, &label.text), &[])
             });
         }
-        // Each label's top left corner on the frame, and its picture. The
-        // anchor is level with the middle of the label's height.
+        // Each label's top left corner on the frame, its picture and the
+        // colour it flashes. The anchor is level with the middle of the
+        // label's height.
         let along = inst.anchor_along();
         let whole = |v: f32| v.round().clamp(-1e9, 1e9) as i64;
-        let placed: Vec<(i64, i64, &lumit_text::RasterText)> = labels
+        let placed: Vec<(i64, i64, &lumit_text::RasterText, Option<[f32; 4]>)> = labels
             .iter()
-            .filter_map(|(text, at)| {
-                let r = drawn.get(text.as_str())?;
+            .filter_map(|label| {
+                let r = drawn.get(&(label.text.as_str(), step(label.scale)))?;
                 Some((
-                    whole(at[0] - along * r.width as f32),
-                    whole(at[1] - 0.5 * r.height as f32),
+                    whole(label.at[0] - along * r.width as f32),
+                    whole(label.at[1] - 0.5 * r.height as f32),
                     r,
+                    label.tint,
                 ))
             })
             .collect();
         // The box round every label, kept to the frame.
         let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
-        for (x, y, r) in &placed {
+        for (x, y, r, _) in &placed {
             x0 = x0.min(*x);
             y0 = y0.min(*y);
             x1 = x1.max(x + i64::from(r.width));
@@ -5972,7 +5981,7 @@ impl GpuEffect for LabelPoints {
         // is linear and premultiplied.
         let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
         let mut px = vec![0.0f32; (bw * bh * 4) as usize];
-        for (x, y, r) in &placed {
+        for (x, y, r, tint) in &placed {
             let rw = i64::from(r.width.max(1));
             for (i, texel) in r.rgba.chunks_exact(4).enumerate() {
                 let &[red, green, blue, alpha] = texel else {
@@ -5987,7 +5996,12 @@ impl GpuEffect for LabelPoints {
                     continue;
                 };
                 let a = f32::from(alpha) / 255.0;
-                let over = [red, green, blue].map(|c| linear[usize::from(c)] * a);
+                // A flashing label (SICELIOT) keeps its letters' coverage and
+                // takes the flash colour in place of the Text layer's.
+                let over = match tint {
+                    Some(c) => [c[0] * a, c[1] * a, c[2] * a],
+                    None => [red, green, blue].map(|c| linear[usize::from(c)] * a),
+                };
                 for (under, top) in under.iter_mut().zip(over.into_iter().chain([a])) {
                     *under = top + *under * (1.0 - a);
                 }

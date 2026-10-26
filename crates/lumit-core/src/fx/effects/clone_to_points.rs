@@ -968,6 +968,14 @@ pub const COPY_SCALE: &str = "siceliot:scale";
 pub const COPY_ROTATION: &str = "siceliot:rotation";
 pub const COPY_OPACITY: &str = "siceliot:opacity";
 
+/// The rows a driver can give each stamp its own value for, with the column
+/// each is written into.
+pub const COPY_ROWS: &[(&str, &str)] = &[
+    ("scale", COPY_SCALE),
+    ("rotation", COPY_ROTATION),
+    ("opacity", COPY_OPACITY),
+];
+
 /// The most points [`drive_copies`] evaluates one by one; past it the rest
 /// repeat the last value. Each point is a resolve of the layer's drivers.
 pub const COPY_DRIVE_MAX: usize = 4096;
@@ -996,14 +1004,31 @@ pub fn drive_copies(
     audio: Option<&dyn crate::fx::registry::AudioTap>,
     projection: points::Projection,
 ) {
+    drive_rows(
+        graph, consumer, stream, COPY_ROWS, lt, context, audio, projection,
+    );
+}
+
+/// [`drive_copies`] for any points consumer: each of `rows` (a row id and the
+/// named column to write) that a wire drives, on a layer whose graph holds a
+/// driver that reads the copy, gets one value per point of `stream`, the
+/// layer's drivers resolved as copy `i` of `n` standing at the point. Label
+/// points' Change and Label scale go through here as well (SICELIOT).
+#[allow(clippy::too_many_arguments)]
+pub fn drive_rows(
+    graph: &crate::graph::LayerGraph,
+    consumer: uuid::Uuid,
+    stream: &mut PointsStream,
+    rows: &[(&'static str, &'static str)],
+    lt: f64,
+    context: &std::sync::Arc<crate::expression::ExpressionContext>,
+    audio: Option<&dyn crate::fx::registry::AudioTap>,
+    projection: points::Projection,
+) {
     use crate::graph::{InputRef, NodeRef};
-    const ROWS: [(&str, &str); 3] = [
-        ("scale", COPY_SCALE),
-        ("rotation", COPY_ROTATION),
-        ("opacity", COPY_OPACITY),
-    ];
-    let wired: Vec<(&str, &str)> = ROWS
-        .into_iter()
+    let wired: Vec<(&str, &str)> = rows
+        .iter()
+        .copied()
         .filter(|(row, _)| {
             graph
                 .wire_into(&InputRef::Param {

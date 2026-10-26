@@ -1180,12 +1180,19 @@ fn points_input_in(
             break;
         };
         // SICELIOT: drivers wired into Clone to points' Scale, Rotation or
-        // Opacity give each stamp its own value.
-        if consumer.effect.match_name == "clone_to_points" {
-            lumit_core::fx::effects::clone_to_points::drive_copies(
+        // Opacity give each stamp its own value, and into Label points'
+        // Change or Label scale each label its own.
+        let driven = match consumer.effect.match_name.as_str() {
+            "clone_to_points" => Some(lumit_core::fx::effects::clone_to_points::COPY_ROWS),
+            "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
+            _ => None,
+        };
+        if let Some(rows) = driven {
+            lumit_core::fx::effects::clone_to_points::drive_rows(
                 graph,
                 consumer.id,
                 &mut stream,
+                rows,
                 t,
                 context,
                 Some(audio),

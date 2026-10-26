@@ -21,7 +21,7 @@ use crate::fx::points::{Column, PointsStream};
 use crate::fx::{
     params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
     registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
-    schema::EnabledWhen, schema::Port, schema::PortType,
+    schema::EnabledCond, schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -34,7 +34,45 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
 /// laid out and drawn by the text engine, so this is what bounds the cost.
 pub const LABELS_HARD: i64 = 2_000;
 
-pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN];
+pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
+    EnabledWhen {
+        param: "colour_a",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "colour_b",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+];
+
+/// What a label's colour does while it is in the wave.
+pub const FLASH_COLOUR: &[&str] = &["Off", "Random hue", "Two colours"];
+
+/// The rows a driver can give each label its own value for, and the named
+/// columns the render writes those values into (SICELIOT,
+/// [`crate::fx::effects::clone_to_points::drive_rows`]).
+pub const LABEL_DRIVEN_ROWS: &[(&str, &str)] = &[
+    ("change", "siceliot:change"),
+    ("label_scale", "siceliot:label_scale"),
+];
+
+/// One label: its wording, where its anchor goes, how big it is drawn (1 is
+/// the Text layer's size) and the colour it is drawn in, `None` for the Text
+/// layer's own.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Label {
+    pub text: String,
+    pub at: [f32; 2],
+    pub scale: f32,
+    pub tint: Option<[f32; 4]>,
+}
+
+/// The dice a flashing colour rolls.
+const TINT_ATTR: u32 = 95;
 
 /// Label points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -47,7 +85,10 @@ pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHO
     // A point may be anywhere, and its label reaches away from it.
     roi = FullFrame,
     premultiplied = true,
-    seeded = false,
+    // Seeded (SICELIOT): a label in the wave scrambles and flashes with the
+    // layer's clock under constant rows, so its frames cannot be shared
+    // across time.
+    seeded = true,
     enabled_when = LABEL_ENABLED_WHEN,
 )]
 pub struct LabelPoints {
@@ -120,6 +161,63 @@ pub struct LabelPoints {
         unit = Raw
     )]
     pub max_labels: i32,
+
+    /// How much a wave is at a point, per cent (SICELIOT). Wire a driver into
+    /// it, an Oscillator by Position say, and each point reads its own value.
+    #[slider(label = "Change", min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
+    pub change: f32,
+
+    /// Above this, a point is in the wave: its random text scrambles and its
+    /// colour flashes. Below it, the label rests on its own text and colour.
+    #[slider(
+        label = "Change above",
+        min = 0.0,
+        max = 100.0,
+        default = 50.0,
+        unit = Percent
+    )]
+    pub change_above: f32,
+
+    /// New random text a second while a point is in the wave. At 0 it takes
+    /// one other text for as long as the wave is there.
+    #[slider(
+        label = "Scramble rate",
+        min = 0.0,
+        max = 60.0,
+        default = 12.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub scramble_rate: f32,
+
+    /// The colour a label takes while it is in the wave, changing at Scramble
+    /// rate: none, any hue, or Colour A and Colour B in turn at random.
+    #[choice(
+        label = "Flash colour",
+        options = FLASH_COLOUR,
+        default = 0
+    )]
+    pub flash_colour: u32,
+
+    /// One of the two colours Two colours flashes between.
+    #[colour(label = "Colour A", default = [1.0, 0.2, 0.1, 1.0], max = 4.0)]
+    pub colour_a: [f32; 4],
+
+    /// The other.
+    #[colour(label = "Colour B", default = [0.1, 0.6, 1.0, 1.0], max = 4.0)]
+    pub colour_b: [f32; 4],
+
+    /// How big a label is drawn, per cent of the Text layer's size. Wire a
+    /// driver into it and each label takes its own size.
+    #[slider(
+        label = "Label scale",
+        min = 0.0,
+        max = 400.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub label_scale: f32,
 
     /// The Mix every effect ends with, per cent.
     #[slider(
@@ -252,6 +350,16 @@ impl LabelPoints {
     /// The raster factor, since a stream read off a wire is in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
+    /// The layer's time, seconds, which the scrambling text and the flashing
+    /// colour step by (SICELIOT).
+    pub const DERIVED_TIME: ParamId = ParamId::new("derived.time");
+
+    /// This instance's layer time, read back out of a resolved bag.
+    #[must_use]
+    pub fn time_of(p: Params<'_>) -> f64 {
+        f64::from(p.float(Self::DERIVED_TIME, 0.0))
+    }
+
     /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
@@ -287,7 +395,8 @@ impl LabelPoints {
         stream: &PointsStream,
         template: &str,
         px_scale: f32,
-    ) -> Vec<(String, [f32; 2])> {
+        lt: f64,
+    ) -> Vec<Label> {
         // A point behind the camera is not seen, so it has no label.
         let group = stream.group(self.apply_group.as_str());
         let (cuts, tail) = named(template, stream);
@@ -300,16 +409,30 @@ impl LabelPoints {
         let most = self.max_labels.clamp(0, LABELS_HARD as i32) as usize;
         let decimals = self.decimals.clamp(0, 4) as usize;
         let get = |v: &[f32], i: usize| v.get(i).copied().unwrap_or(0.0);
+        // Change and Label scale, per point where a driver wrote them.
+        let column_of = |name: &str| match stream.column(name) {
+            Column::Named(_) => Some(stream.column(name)),
+            _ => None,
+        };
+        let change_column = column_of(LABEL_DRIVEN_ROWS[0].1);
+        let scale_column = column_of(LABEL_DRIVEN_ROWS[1].1);
         chosen
             .iter()
             .skip(chosen.len().saturating_sub(most))
             .map(|&i| {
                 let seen = stream.projected(i);
+                let id = stream.id.get(i).copied().unwrap_or(0);
+                let change = change_column
+                    .and_then(|c| stream.read(c, i))
+                    .unwrap_or(self.change);
+                let scale = scale_column
+                    .and_then(|c| stream.read(c, i))
+                    .unwrap_or(self.label_scale);
+                let (seed, tint) = self.in_wave(change, id, lt);
                 let plain = |text: &str| {
                     if !text.contains('{') {
                         return text.to_owned();
                     }
-                    let id = stream.id.get(i).copied().unwrap_or(0);
                     let filled = text
                         .replace("{index}", &i.to_string())
                         .replace("{id}", &id.to_string())
@@ -318,7 +441,7 @@ impl LabelPoints {
                         .replace("{y}", &number(seen[1], decimals))
                         .replace("{size}", &number(get(&stream.size, i), decimals))
                         .replace("{age}", &number(get(&stream.age, i), decimals));
-                    random_text(&filled, self.seed, id)
+                    random_text(&filled, seed, id)
                 };
                 let mut text = String::new();
                 for (before, column) in &cuts {
@@ -333,10 +456,57 @@ impl LabelPoints {
                     seen[0] * px_scale + self.offset_x,
                     seen[1] * px_scale + self.offset_y,
                 ];
-                (text, at)
+                Label {
+                    text,
+                    at,
+                    scale: (scale / 100.0).max(0.0),
+                    tint,
+                }
             })
             .collect()
     }
+
+    /// Whether a point with `change` (per cent) is in the wave at layer time
+    /// `lt`, answered as the seed its random text rolls with and the colour
+    /// it flashes. At rest a point keeps its own text (the instance's Seed)
+    /// and the Text layer's colour (`None`).
+    #[must_use]
+    pub fn in_wave(self, change: f32, id: u64, lt: f64) -> (u32, Option<[f32; 4]>) {
+        if change <= self.change_above {
+            return (self.seed, None);
+        }
+        // One step per Scramble rate tick, counted from 1 so a wave always
+        // shows something other than the resting text.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let step = if self.scramble_rate > 0.0 {
+            (lt * f64::from(self.scramble_rate)).floor().max(0.0) as u32 + 1
+        } else {
+            1
+        };
+        let seed = self.seed ^ step.wrapping_mul(0x9e37_79b9);
+        let roll = crate::fx::points::draw(seed, id, TINT_ATTR);
+        let tint = match self.flash_colour {
+            1 => Some(hue(roll)),
+            2 => Some(if roll < 0.5 {
+                self.colour_a
+            } else {
+                self.colour_b
+            }),
+            _ => None,
+        };
+        (seed, tint)
+    }
+}
+
+/// A bright colour of hue `h` (0..1), scene-linear.
+fn hue(h: f32) -> [f32; 4] {
+    let k = |n: f32| {
+        let k = (n + h * 6.0) % 6.0;
+        // HSV with full saturation and value, as sRGB, then made linear.
+        let v = 1.0 - (k.min(4.0 - k).clamp(0.0, 1.0));
+        v.powf(2.2)
+    };
+    [k(5.0), k(3.0), k(1.0), 1.0]
 }
 
 /// Label points' behaviour. No CPU reference through the trait, as with the
@@ -358,13 +528,79 @@ impl EffectDef for LabelPointsDef {
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(LabelPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+        #[allow(clippy::cast_possible_truncation)]
+        push(LabelPoints::DERIVED_TIME, Value::Float(cx.lt as f32));
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::random_text;
+    use super::{random_text, LabelPoints, LABEL_DRIVEN_ROWS};
+    use crate::fx::params::Params;
+    use crate::fx::points::PointsStream;
+    use crate::fx::registry::EffectMetadata;
+
+    /// SICELIOT's wave on Label points: a point below Change above keeps its
+    /// resting text and the Text layer's colour; a point above it scrambles
+    /// with time at Scramble rate and flashes one of the two colours; Label
+    /// scale and Change are read per point from the columns the render
+    /// writes. Guards the decode effect drawing the wrong labels.
+    #[test]
+    fn labels_scramble_and_flash_only_in_the_wave() {
+        let mut l = LabelPoints::read(Params::EMPTY);
+        l.text = crate::fx::params::ShortText::new("{chars:6}");
+        l.flash_colour = 2;
+        l.scramble_rate = 10.0;
+        l.colour_a = [1.0, 0.0, 0.0, 1.0];
+        l.colour_b = [0.0, 0.0, 1.0, 1.0];
+        let mut s = PointsStream {
+            position: vec![[0.0; 3]; 3],
+            speed: vec![[0.0; 3]; 3],
+            age: vec![0.0; 3],
+            life: vec![1.0; 3],
+            size: vec![8.0; 3],
+            rotation: vec![0.0; 3],
+            colour: vec![[1.0; 4]; 3],
+            id: vec![0, 1, 2],
+            ..PointsStream::default()
+        };
+        for (k, v) in s
+            .named_mut(LABEL_DRIVEN_ROWS[0].1, 1)
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            v[0] = [0.0, 80.0, 80.0][k];
+        }
+        for (k, v) in s
+            .named_mut(LABEL_DRIVEN_ROWS[1].1, 1)
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            v[0] = [100.0, 150.0, 50.0][k];
+        }
+        let at = |lt: f64| l.labels(&s, l.template(""), 1.0, lt);
+        let (a, b) = (at(0.0), at(0.05));
+        let rest = random_text("{chars:6}", l.seed, 0);
+        assert_eq!(a[0].text, rest, "below the threshold the label rests");
+        assert_eq!(a[0].tint, None);
+        assert_eq!(a[0].text, b[0].text, "and does not scramble");
+        assert!(a[1].tint == Some(l.colour_a) || a[1].tint == Some(l.colour_b));
+        assert_ne!(
+            a[1].text,
+            random_text("{chars:6}", l.seed, 1),
+            "in the wave it is not its rest text"
+        );
+        assert_eq!(a[1].text, b[1].text, "inside one tick it holds");
+        assert_ne!(a[1].text, at(0.15)[1].text, "a tick later it has scrambled");
+        assert!(
+            (a[0].scale - 1.0).abs() < 1e-6
+                && (a[1].scale - 1.5).abs() < 1e-6
+                && (a[2].scale - 0.5).abs() < 1e-6
+        );
+    }
 
     /// SICELIOT's random text: each token is replaced, a point keeps its
     /// text, points differ, the Seed re-rolls, unknown braces stay. Guards

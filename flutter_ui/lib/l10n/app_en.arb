@@ -4748,6 +4748,30 @@
   "@fxLoop": {
     "description": "Effect controls — a checkbox on the SICELIOT Stagger driver: start again from the first copy past the last."
   },
+  "fxChangeAbove": "Change above",
+  "@fxChangeAbove": {
+    "description": "Effect controls — a control on Label points (SICELIOT): above this Change a label is in the wave and scrambles."
+  },
+  "fxScrambleRate": "Scramble rate",
+  "@fxScrambleRate": {
+    "description": "Effect controls — a control on Label points (SICELIOT): new random text a second while a label is in the wave."
+  },
+  "fxFlashColour": "Flash colour",
+  "@fxFlashColour": {
+    "description": "Effect controls — a menu on Label points (SICELIOT): the colour a label takes while it is in the wave."
+  },
+  "fxRandomHue": "Random hue",
+  "@fxRandomHue": {
+    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): any hue, at random."
+  },
+  "fxTwoColours": "Two colours",
+  "@fxTwoColours": {
+    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): Colour A or Colour B, at random."
+  },
+  "fxLabelScale": "Label scale",
+  "@fxLabelScale": {
+    "description": "Effect controls — a control on Label points (SICELIOT): how big a label is drawn, per cent of the Text layer's size."
+  },
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
     "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."

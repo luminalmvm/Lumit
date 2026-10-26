@@ -61,6 +61,13 @@ camera has no label.
 | **Offset y** | Slider | -200 to 200; any value by typing | 0 | Pixels at composition size |
 | **Anchor** | Dropdown | Left · Centre · Right | Left | - |
 | **Max labels** | Slider, whole numbers | 1 to 2000 | 300 | - |
+| **Change** | Slider | 0 to 100 | 0 | Per cent |
+| **Change above** | Slider | 0 to 100 | 50 | Per cent |
+| **Scramble rate** | Slider | 0 to 60 | 12 | - |
+| **Flash colour** | Dropdown | Off · Random hue · Two colours | Off | - |
+| **Colour A** | Colour | Each channel 0 to 4, scene-linear | 1, 0.2, 0.1, 1 | - |
+| **Colour B** | Colour | Each channel 0 to 4, scene-linear | 0.1, 0.6, 1, 1 | - |
+| **Label scale** | Slider | 0 to 400 | 100 | Per cent |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -92,6 +99,13 @@ In the Effect Controls panel:
 - **Anchor**: which part of the label sits at that offset. **Left** runs the text away to
   the right of it, and **Right** to the left.
 - **Max labels**: the most labels drawn. Past it the newest points keep theirs.
+- **Change**: how much a wave is at a point (SICELIOT). Wire a driver into it, an Oscillator
+  with Phase from on Position say, and each point reads its own value.
+- **Change above**: above it a point is in the wave: its random tokens scramble at **Scramble
+  rate** and its colour flashes as **Flash colour** says, Colour A and Colour B for Two colours.
+  Below it the label rests on its own text and the Text layer's colour.
+- **Label scale**: how big a label is drawn, per cent of the Text layer's size; wired, each
+  label takes its own, in steps of 5 %.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).

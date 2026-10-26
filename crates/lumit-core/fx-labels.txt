@@ -161,6 +161,7 @@ Centre
 Centre X
 Centre Y
 Change
+Change above
 Channel
 Channel blur
 Channel offset
@@ -411,6 +412,7 @@ Fit to size
 Flag
 Flare options
 Flash
+Flash colour
 Flip axis
 Flip direction
 Flip order
@@ -563,6 +565,7 @@ Kill
 Knee
 LUT
 Label points
+Label scale
 Latitude
 Layer
 Layer in to out
@@ -856,6 +859,7 @@ Radio waves
 Radius
 Ramp
 Random
+Random hue
 Random offset scale
 Random span offsets
 Randomness
@@ -944,6 +948,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scramble rate
 Scratches
 Screen
 Screen balance
@@ -1162,6 +1167,7 @@ Turn
 Turn points
 Twirl
 Twist
+Two colours
 Two layer, magenta
 Two points
 Two-way strike
