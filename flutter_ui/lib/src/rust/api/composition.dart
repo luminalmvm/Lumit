@@ -570,6 +570,12 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceAddCameraLayer(
           that: this, row: row);
 
+  /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
+  /// so there is somewhere to put them. One undo step.
+  LayerReference addEmptyAudioLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddEmptyAudioLayer(
+          that: this, row: row);
+
   /// Place `footage` into this composition as a new top layer.
   ///
   /// The layer's span is the media's own duration in comp frames, and its
