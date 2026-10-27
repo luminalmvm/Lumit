@@ -660,10 +660,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     () => layer.getClipEffects(clip: clip, onCompClock: true);
               }
               // Going between a layer's stack and a clip's is content
-              // arriving in a place that was already there.
+              // arriving in a place that was already there, and the stack
+              // being left goes at once.
               final reveal = ThemeScope.of(context).motion.reveal;
               return AnimatedSwitcher(
                 duration: reveal.duration,
+                reverseDuration: Duration.zero,
                 switchInCurve: reveal.curve,
                 layoutBuilder: (current, previous) => Stack(
                   fit: StackFit.expand,

@@ -455,6 +455,7 @@ class ProHero extends StatelessWidget {
                 const SizedBox(height: 18),
                 AnimatedSwitcher(
                   duration: ThemeScope.of(context).motion.swap.duration,
+                  reverseDuration: Duration.zero,
                   child: Text(
                     headline,
                     key: ValueKey<String>(headline),
