@@ -122,10 +122,11 @@ import Closing from "../components/home/Closing.astro";
       directions 45 degrees apart leave sixteen copies on two rings - the
       shape a point of light takes through an out-of-focus lens, where a
       Gaussian would only make a soft dot. The small blur first fills in
-      between the copies. The script sets every distance, so the blur can
-      open up and close down. Units are CSS pixels. The two tables either
-      side are the script's too: the picture is blurred through a curve that
-      makes its bright end count for more, and comes back through the inverse. */}
+      between the copies. The script sets every distance once, and the blur
+      is only switched on and off, since the veil over it is what fades.
+      Units are CSS pixels. The two tables either side are the script's too:
+      the picture is blurred through a curve that makes its bright end count
+      for more, and comes back through the inverse. */}
   <svg class="lens-defs" width="0" height="0" aria-hidden="true" focusable="false">
     <filter id="lens" color-interpolation-filters="sRGB">
       <feComponentTransfer in="SourceGraphic" result="lit">
@@ -363,29 +364,13 @@ import Closing from "../components/home/Closing.astro";
       Array.from({ length: 65 }, (_, i) => Math.min(1, f(i / 64) + 0.5 / 255).toFixed(4)).join(" ");
     for (const el of document.querySelectorAll("[data-lens-in]")) el.setAttribute("tableValues", table(light));
     for (const el of document.querySelectorAll("[data-lens-out]")) el.setAttribute("tableValues", table(unlight));
-    let lens = 0;
-    let lensRun = 0;
-    const setLens = (k: number) => {
-      lens = k;
-      soft.setAttribute("stdDeviation", (2.4 * k).toFixed(2));
-      for (const o of offsets) {
-        o.el.setAttribute("dx", (o.x * REACH * k).toFixed(2));
-        o.el.setAttribute("dy", (o.y * REACH * k).toFixed(2));
-      }
-      root.classList.toggle("lens", k > 0);
-    };
-    const focusTo = (to: number, ms: number) => {
-      const run = ++lensRun;
-      const from = lens;
-      const t0 = performance.now();
-      const step = (now: number) => {
-        if (run !== lensRun) return;
-        const x = still ? 1 : Math.min(1, (now - t0) / ms);
-        setLens(from + (to - from) * (1 - Math.pow(1 - x, 3)));
-        if (x < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    };
+    soft.setAttribute("stdDeviation", "2.4");
+    for (const o of offsets) {
+      o.el.setAttribute("dx", (o.x * REACH).toFixed(2));
+      o.el.setAttribute("dy", (o.y * REACH).toFixed(2));
+    }
+    // The clips behind stop while a screenshot is forward.
+    let stopped: HTMLVideoElement[] = [];
 
     // ---- the grain ----
     // The hero field's own grain (HeroField.astro, `phash`), a screen pixel at
@@ -434,10 +419,10 @@ import Closing from "../components/home/Closing.astro";
     const from = (r: Box, x = 1) =>
       `translate(${((r.left - home.left) * x).toFixed(2)}px, ${((r.top - home.top) * x).toFixed(2)}px) ` +
       `scale(${((1 + (r.width / home.width - 1) * x) * grow).toFixed(4)})`;
-    // A spring that overshoots by about a fifteenth and has settled by 640ms.
+    // A spring with a little bounce in it, settled by 450ms.
     const spring = (time: number) => {
-      const z = 0.64;
-      const w = 13;
+      const z = 0.85;
+      const w = (2 * Math.PI) / 0.45;
       const wd = w * Math.sqrt(1 - z * z);
       return 1 - Math.exp(-z * w * time) * (Math.cos(wd * time) + ((z * w) / wd) * Math.sin(wd * time));
     };
@@ -446,6 +431,11 @@ import Closing from "../components/home/Closing.astro";
       const here = shot.closest<HTMLElement>(".shot");
       const small = shot.querySelector("img");
       if (!here || !small || box.open) return;
+      // On a phone it would only grow a little, so the capture itself opens.
+      if (innerWidth < 640) {
+        location.assign(shot.dataset.zoom!);
+        return;
+      }
       panel = here;
       closing = false;
       if (!grained) {
@@ -521,15 +511,22 @@ import Closing from "../components/home/Closing.astro";
       box.classList.add("open");
       here.style.visibility = "hidden";
       hero.paused = true;
-      focusTo(1, 280);
+      root.classList.add("lens");
+      stopped = [...document.querySelectorAll<HTMLVideoElement>("[data-clip]")].filter((v) => !v.paused);
+      for (const v of stopped) v.pause();
 
-      const frames: Keyframe[] = [];
-      const STEPS = 40;
-      for (let i = 0; i <= STEPS; i++) {
-        frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.64)) });
+      // Without motion it fades in where it ends up.
+      if (still) {
+        fwd.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      } else {
+        const frames: Keyframe[] = [];
+        const STEPS = 30;
+        for (let i = 0; i <= STEPS; i++) {
+          frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.45)) });
+        }
+        frames[STEPS] = { transform: from(home) };
+        fwd.animate(frames, { duration: 450, easing: "linear" });
       }
-      frames[STEPS] = { transform: from(home) };
-      fwd.animate(frames, { duration: still ? 1 : 640, easing: "linear" });
       addEventListener("scroll", close, { passive: true, once: true });
       addEventListener("resize", close, { once: true });
     };
@@ -546,17 +543,21 @@ import Closing from "../components/home/Closing.astro";
       fwd.getAnimations().forEach((a) => a.cancel());
       const back = here.getBoundingClientRect();
       box!.classList.remove("open");
-      focusTo(0, 260);
-      const going = fwd.animate(
-        [{ transform: from(now) }, { transform: from(back) }],
-        { duration: still ? 1 : 340, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
-      );
+      const going = still
+        ? fwd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "ease-out", fill: "forwards" })
+        : fwd.animate([{ transform: from(now) }, { transform: from(back) }], {
+            duration: 340,
+            easing: "cubic-bezier(0.3, 0, 0.2, 1)",
+            fill: "forwards",
+          });
       going.onfinish = () => {
         here.style.visibility = "";
         box!.close();
         fwd.remove();
         copy = null;
-        setLens(0);
+        root.classList.remove("lens");
+        for (const v of stopped) v.play().catch(() => {});
+        stopped = [];
         hero.paused = false;
         closing = false;
       };
