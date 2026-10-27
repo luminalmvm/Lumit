@@ -21,6 +21,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
+import '../theme/style_sheet.dart';
 import '../widgets/controls.dart';
 
 /// The title strip, over its hairline.
@@ -84,28 +85,46 @@ class DialogFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
+    final style = partStyle(context, t, 'dialog');
     return SizedBox(
       width: width,
       child: Container(
-        decoration: BoxDecoration(
-          color: t.surface1,
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          boxShadow: t.floatShadow,
+        // The fill under the content and the edge over it, as before.
+        decoration: dress(
+          BoxDecoration(
+            color: t.surface1,
+            borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+            boxShadow: t.floatShadow,
+          ),
+          PartStyle(
+              background: style.background,
+              radius: style.radius,
+              shadows: style.shadows),
         ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          border: Border.all(color: t.hairline),
+        foregroundDecoration: dress(
+          BoxDecoration(
+            borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+            border: Border.all(color: t.hairline),
+          ),
+          PartStyle(
+              borderColour: style.borderColour,
+              borderWidth: style.borderWidth,
+              radius: style.radius),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          borderRadius:
+              BorderRadius.circular(style.radius ?? t.tokens.floatRadius),
           child: Entrance.content(
             spec: scope.motion.content,
             rise: scope.motion.contentRise,
             blur: scope.motion.contentBlur,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
+            child: StylePart(
+              name: 'dialog',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
             ),
           ),
         ),

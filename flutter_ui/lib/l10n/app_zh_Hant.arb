@@ -12779,10 +12779,6 @@
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
   },
-  "reloadIcons": "重新載入圖示",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
-  },
   "rememberInterpretation": "記住解譯",
   "@rememberInterpretation": {
     "description": "Project panel, a footage item's right-click menu: keep how this item is read, to give to other items."

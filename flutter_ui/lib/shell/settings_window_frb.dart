@@ -1369,7 +1369,54 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
               value: ui.workspace.themedSplash,
               set: ui.workspace.setThemedSplash),
-          _row(t, l10n.settingsShape, _shapeChips(t, ui)),
+          // The three built in, then the person's own from the styles folder.
+          _row(
+            t,
+            l10n.settingsShape,
+            _dropdown<String>(
+              key: 'settings-shape',
+              value: ui.workspace.customStyle == null
+                  ? ui.shape.name
+                  : 'style:${ui.workspace.customStyle}',
+              options: [
+                for (final shape in ThemeShape.values) shape.name,
+                for (final style in ui.workspace.styles) 'style:${style.name}',
+              ],
+              label: (v) => switch (v) {
+                'studio' => l10n.shapeStudio,
+                'desk' => l10n.shapeDesk,
+                'lantern' => l10n.shapeLantern,
+                _ => v.substring('style:'.length),
+              },
+              group: (v) =>
+                  v.startsWith('style:') ? l10n.settingsStylesFolder : null,
+              onChanged: (v) => setState(() {
+                if (v.startsWith('style:')) {
+                  ui.workspace.setCustomStyle(v.substring('style:'.length));
+                } else {
+                  ui.setShape(ThemeShape.values.byName(v));
+                }
+              }),
+            ),
+          ),
+          // A person's own styles: one file each, in the folder beside the
+          // workspace store. Read again when a file changes or the window
+          // comes back.
+          _row(
+            t,
+            l10n.settingsStylesFolder,
+            SizedBox(
+              width: 240,
+              child: Text(
+                Workspace.stylesFolder(),
+                key: const ValueKey('settings-styles-folder'),
+                style: t.small.copyWith(color: t.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            description: ui.workspace.activeStyle?.problems.firstOrNull ?? '',
+          ),
           // How labels are cased. Null is the style's own, and a file that
           // never chose stores nothing.
           _row(
@@ -1605,7 +1652,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ),
           // A person's own icons: one SVG per icon, named after it, in the
-          // folder beside the workspace store. Read at launch and on demand.
+          // folder beside the workspace store. Read at launch and whenever
+          // the window comes back.
           _row(
             t,
             l10n.settingsIconsFolder,
@@ -1613,24 +1661,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    HouseButton(
-                      key: const ValueKey('settings-icons-reload'),
-                      small: true,
-                      onPressed: () => setState(() {
-                        IconStyle.reload();
-                        ui.workspace.recompose();
-                      }),
-                      child: Text(l10n.reloadIcons),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      l10n.iconsReplaced(IconStyle.overrideCount),
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  ],
+                Text(
+                  l10n.iconsReplaced(IconStyle.overrideCount),
+                  style: t.small.copyWith(color: t.textMuted),
                 ),
                 const SizedBox(height: 4),
                 // The path is long; it takes a fixed slot and trims its end.
@@ -1737,36 +1770,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
     ]);
   }
-
-  /// Studio, Desk or Lantern, as the drawing draws it: kicker chips side by
-  /// side, the one in force outlined. Not an accent fill, because §3.1 spends
-  /// the accent on the tick beside the page name, and a second accent in the
-  /// same window would make neither of them mean anything.
-  Widget _shapeChips(LumitTheme t, LumitUiState ui) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final shape in ThemeShape.values) ...[
-            if (shape != ThemeShape.values.first) const SizedBox(width: 2),
-            SizedBox(
-              height: settingsControlHeight,
-              child: HouseButton(
-                key: ValueKey<String>('settings-shape-${shape.name}'),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                frameless: ui.shape != shape,
-                onPressed: () => setState(() => ui.setShape(shape)),
-                child: Text(
-                  t.kickerCase(switch (shape) {
-                    ThemeShape.studio => l10n.shapeStudio,
-                    ThemeShape.desk => l10n.shapeDesk,
-                    ThemeShape.lantern => l10n.shapeLantern,
-                  }),
-                  style: ui.shape == shape ? t.kickerOn : t.kicker,
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
 
   /// Puts the saved accent back while a swatch is being hovered.
   VoidCallback? _endAccentPreview;
