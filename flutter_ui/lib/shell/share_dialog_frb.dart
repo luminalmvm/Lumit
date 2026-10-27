@@ -3551,7 +3551,7 @@ class _Veil extends StatelessWidget {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: shown ? 0 : 1),
       duration: shown ? spec.duration * 2 : Duration.zero,
-      curve: Curves.easeInOut,
+      curve: spec.curve,
       builder: (context, hidden, _) => Stack(
         children: [
           builder(hidden),

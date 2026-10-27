@@ -943,6 +943,13 @@ class _ToolButtonState extends State<_ToolButton> {
         : desk
             ? toolRailWidth
             : 36.0;
+    // The armed mark moves as a mark does, the hover light as a hover does,
+    // and the glyph goes with the fill behind it.
+    final step = active
+        ? scope.motion.mark
+        : _hover
+            ? scope.motion.hoverIn
+            : scope.motion.hoverOut;
 
     return LumitTooltip(
       message: _tooltip(member),
@@ -964,8 +971,8 @@ class _ToolButtonState extends State<_ToolButton> {
               : null,
           child: AnimatedContainer(
             key: ValueKey<String>('tool-${widget.group.name}'),
-            duration: scope.motion.mark.duration,
-            curve: scope.motion.mark.curve,
+            duration: step.duration,
+            curve: step.curve,
             width: _toolButtonWidth,
             height: height,
             decoration: decoration,
@@ -973,8 +980,10 @@ class _ToolButtonState extends State<_ToolButton> {
               children: [
                 if (filled)
                   Center(
-                    child: Container(
+                    child: AnimatedContainer(
                       key: ValueKey<String>('tool-disc-${widget.group.name}'),
+                      duration: step.duration,
+                      curve: step.curve,
                       width: disc,
                       height: disc,
                       decoration: BoxDecoration(
@@ -988,8 +997,14 @@ class _ToolButtonState extends State<_ToolButton> {
                     ),
                   ),
                 Center(
-                    child:
-                        lumitIcon(member.icon, size: iconSize, color: colour)),
+                  child: TweenAnimationBuilder<Color?>(
+                    tween: ColorTween(end: colour),
+                    duration: step.duration,
+                    curve: step.curve,
+                    builder: (context, ink, _) => lumitIcon(member.icon,
+                        size: iconSize, color: ink ?? colour),
+                  ),
+                ),
                 // The corner mark that says there is more under this button —
                 // the same promise After Effects' little triangle makes.
                 if (members.length > 1)

@@ -1023,10 +1023,12 @@ class _ExportDialogState extends State<_ExportDialog> {
     });
     final target = _sectionKeys[section]?.currentContext;
     if (target == null || _fullyVisible(target)) return;
+    // A still scroll jumps there.
+    final scroll = ThemeScope.of(context).motion.scroll;
     Scrollable.ensureVisible(
       target,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: scroll.duration,
+      curve: scroll.curve,
     );
   }
 

@@ -385,6 +385,7 @@ class _CardState extends State<_Card> {
     final t = scope.theme;
     final project = widget.project;
     final head = project.head;
+    final step = _hover ? scope.motion.hoverIn : scope.motion.hoverOut;
     return GestureDetector(
       onSecondaryTapDown: (press) => widget.onMenu(press.globalPosition),
       child: MouseRegion(
@@ -395,7 +396,8 @@ class _CardState extends State<_Card> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onOpen,
           child: AnimatedContainer(
-            duration: scope.motion.hoverIn.duration,
+            duration: step.duration,
+            curve: step.curve,
             padding: const EdgeInsets.all(_inset),
             decoration: BoxDecoration(
               color: _hover ? t.surface2 : t.surface1,

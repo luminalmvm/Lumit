@@ -670,6 +670,7 @@ class _PlanState extends State<_Plan> {
             for (final _ in brandProSweep)
               _hover ? t.hairlineStrong : t.hairline,
           ];
+    final step = _hover ? scope.motion.hoverIn : scope.motion.hoverOut;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
@@ -679,7 +680,8 @@ class _PlanState extends State<_Plan> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onPick,
         child: AnimatedContainer(
-          duration: scope.motion.hoverIn.duration,
+          duration: step.duration,
+          curve: step.curve,
           padding: const EdgeInsets.all(1),
           decoration: BoxDecoration(
             borderRadius: radius,

@@ -442,7 +442,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final usual = _trackHeight;
     final settling = _settling;
     if (settling != null && settling.track == track.id) {
-      final curve = _motion?.settle.curve ?? Curves.linear;
+      final curve = _motion?.makeWay.curve ?? Curves.linear;
       return settling.from +
           (usual - settling.from) * curve.transform(_settle.value);
     }
@@ -467,7 +467,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _heightsHere?.remove(track.id);
     _ui!.rememberSession();
     if (from == _trackHeight) return;
-    final settle = _motion?.settle ?? MotionSpec.still;
+    // Every track below moves with it, so it eases in without the landing's
+    // overshoot, which wobbled them all.
+    final settle = _motion?.makeWay ?? MotionSpec.still;
     if (settle.isStill) {
       setState(() {});
       _queueRefresh();
