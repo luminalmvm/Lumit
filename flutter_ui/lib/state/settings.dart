@@ -384,6 +384,10 @@ class InterfaceSettings {
   /// is aimed at. Off gives the plain wave back, unchanged.
   bool multiwaveWaveforms;
 
+  /// Whether a style's see-through fills are drawn solid and nothing behind
+  /// a part is blurred. Off by default.
+  bool reduceTransparency;
+
   /// Whether a waveform stands on the floor of its row rather than being
   /// centred about silence.
   ///
@@ -558,6 +562,7 @@ class InterfaceSettings {
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
+    this.reduceTransparency = false,
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.easingInPopup = false,
@@ -600,6 +605,7 @@ class InterfaceSettings {
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
+        'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
@@ -681,6 +687,7 @@ class InterfaceSettings {
         // and a settings file written before this field existed should get
         // the better picture rather than be pinned to the old one.
         multiwaveWaveforms: j['multiwave_waveforms'] as bool? ?? true,
+        reduceTransparency: j['reduce_transparency'] as bool? ?? false,
         // Absent means off: centred is what a settings file written before
         // this field existed was already drawing.
         waveformsFromBottom: j['waveforms_from_bottom'] as bool? ?? false,
