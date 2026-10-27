@@ -130,6 +130,20 @@ struct Params {
 The rest of the comment is the label, or the field's name when there is none. A
 `vec3<f32>` field is refused. An annotation that cannot be read loses its own row only.
 
+`@enabled_if(…)` greys a field's rows in Effect controls while they would do nothing. Its
+terms are `input` or `!input` (whether the second input gives a picture: its row names a
+layer, or a `backdrop` effect sits on a layer with a picture of its own) and `field=N` or
+`field!=N` (a choice on option N, a toggle 0 off or 1 on). The rows stay live while any
+term holds; several `@enabled_if` must all hold. A rule with a term that cannot be read is
+dropped, and the shader is never told:
+
+```wgsl
+    /// @choice("Shape layer", "Rounded rectangle") Shape
+    shape: u32,
+    /// @enabled_if(shape != 0, !input) @unit(px) Width
+    width: f32,
+```
+
 ### When it does not draw
 
 - A shader that is refused or does not compile leaves the picture as it came in. Effect

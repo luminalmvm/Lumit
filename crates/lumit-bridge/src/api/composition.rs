@@ -597,6 +597,7 @@ impl CompositionReference {
                     crate::api::effect::read_instance_info(
                         &crate::api::effect::with_live_inputs(instance, &doc),
                         lumit_core::time::Rational::ZERO,
+                        false,
                     )
                 })
                 .collect(),
@@ -4070,7 +4071,11 @@ fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
                     .effects
                     .iter()
                     .map(|e| {
-                        crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO)
+                        crate::api::effect::read_instance_info(
+                            e,
+                            lumit_core::time::Rational::ZERO,
+                            false,
+                        )
                     })
                     .collect(),
             }

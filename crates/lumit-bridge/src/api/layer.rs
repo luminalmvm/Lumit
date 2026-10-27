@@ -1618,7 +1618,9 @@ fn bridge_clip(
         effects: clip
             .effects
             .iter()
-            .map(|e| crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO))
+            .map(|e| {
+                crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO, false)
+            })
             .collect(),
         fx: clip.fx,
         gain_db: clip.gain_db,
@@ -2052,6 +2054,7 @@ pub(crate) fn read_layer_info(
                 crate::api::effect::read_instance_info(
                     &crate::api::effect::with_live_inputs(e, doc),
                     layer.start_offset.0,
+                    !layer.is_adjustment(),
                 )
             })
             .collect(),
@@ -2062,6 +2065,7 @@ pub(crate) fn read_layer_info(
                 crate::api::effect::read_instance_info(
                     &crate::api::effect::with_live_inputs(s, doc),
                     layer.start_offset.0,
+                    !layer.is_adjustment(),
                 )
             })
             .collect(),
@@ -2069,6 +2073,7 @@ pub(crate) fn read_layer_info(
             crate::api::effect::read_instance_info(
                 &crate::api::effect::with_live_inputs(inputs, doc),
                 layer.start_offset.0,
+                !layer.is_adjustment(),
             )
         }),
         collapse_forced: lumit_core::model::collapse_state(

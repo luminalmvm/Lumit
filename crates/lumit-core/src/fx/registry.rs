@@ -436,6 +436,14 @@ pub trait EffectDef: Sync + Send + 'static {
         RowState::default()
     }
 
+    /// [`row_state`](Self::row_state) for an instance on a layer: `picture` is
+    /// whether that layer has a picture of its own, rather than being an
+    /// adjustment. An LFX effect reads it for its `@enabled_if` rows.
+    fn row_state_on(&self, inst: &EffectInstance, picture: bool) -> RowState {
+        let _ = picture;
+        self.row_state(inst)
+    }
+
     /// Let the effect react to an edit of its values, and hand back what it
     /// wrote in answer.
     ///
