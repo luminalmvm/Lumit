@@ -31,7 +31,8 @@ const hit = shots[`/src/assets/shots/${file}`];
         loading={eager ? 'eager' : 'lazy'}
         fetchpriority={eager ? 'high' : 'auto'}
         decoding={eager ? 'sync' : 'async'}
-        densities={[1, 2]}
+        widths={[720, 1440]}
+        sizes="(min-width: 50rem) 720px, 100vw"
       />
       <figcaption>{caption}</figcaption>
     </figure>

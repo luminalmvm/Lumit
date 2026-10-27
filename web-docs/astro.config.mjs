@@ -64,6 +64,8 @@ r.addEventListener("input",set);
 r.addEventListener("pointerdown",function(e){var b=r.getBoundingClientRect();r.value=(e.clientX-b.left)/b.width*100;set()});
 set()})})`,
         },
+        // The phone's bar in the page's own ground.
+        { tag: "meta", attrs: { name: "theme-color", content: "#0b0c0e" } },
       ],
       // Git-based per-page dates, shown under the title by the PageTitle
       // override. CI must clone full history or every page shows deploy day.

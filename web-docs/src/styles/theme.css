@@ -89,7 +89,7 @@
    row inside it is a `.header` too and would draw a second line. */
 header.header {
   border-bottom: 1px solid var(--sl-color-hairline);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
 }
 .social-icons {
   gap: 1.75rem;
