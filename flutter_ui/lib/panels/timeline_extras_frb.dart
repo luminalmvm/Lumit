@@ -7,6 +7,7 @@
 // once — kept together because they are all "the chrome around the tracks"
 // rather than because they share anything.
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:clock/clock.dart';
@@ -1495,21 +1496,43 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
     if (old.comp != widget.comp) _readFrames = null;
   }
 
+  /// The re-read waiting while playing, so a frame arriving sixty times a
+  /// second reads the cache four times a second.
+  Timer? _wait;
+
   @override
   void dispose() {
     widget.revision.removeListener(_invalidate);
+    _wait?.cancel();
     super.dispose();
   }
 
   /// A frame arrived (or the comp changed): read again on the next build.
+  ///
+  /// Hidden behind another tab, nothing is read until the bar is shown again.
   void _invalidate() {
     if (!mounted) return;
-    setState(() => _readFrames = null);
+    if (!TickerMode.getValuesNotifier(context).value.enabled) {
+      _readFrames = null;
+      return;
+    }
+    if (!Provider.of<LumitUiState>(context, listen: false).playing.value) {
+      _wait?.cancel();
+      _wait = null;
+      setState(() => _readFrames = null);
+      return;
+    }
+    _wait ??= Timer(const Duration(milliseconds: 250), () {
+      _wait = null;
+      if (mounted) setState(() => _readFrames = null);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Listened to, so a tab brought back to the front catches up.
+    TickerMode.valuesOf(context);
     final frames = widget.axis.frames;
     final scale = Provider.of<LumitUiState>(context, listen: false).viewerScale;
     if (_readFrames != frames || _readScale != scale) {
