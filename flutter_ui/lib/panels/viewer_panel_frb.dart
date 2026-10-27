@@ -502,7 +502,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// [from] is the magnification being left, which the caller already knows
   /// from the rectangle it measured — asking for it again here would need the
   /// constraints, which live in the layout builder.
-  void _goToZoom(double? scale, Offset pan, {required double from}) {
+  void _goToZoom(double? scale, Offset pan,
+      {required double from, bool fly = true}) {
     // From the pan on screen, as the scale is, so a zoom sent mid-flight
     // carries on from where the picture is rather than jumping.
     final at = _flightAt;
@@ -513,7 +514,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       _zoom = scale;
       _pan = pan;
     });
-    if (_zoomFlight.isStill) {
+    if (!fly || _zoomFlight.isStill) {
       _zoomMotion.value = 1;
       _boundUi?.requestFrame();
       return;
@@ -591,17 +592,21 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// pointer: there is no pointer in a menu choice, and the middle is the one
   /// point a keyboard zoom can promise to keep. That is why the pan goes back
   /// to zero — the picture is re-centred, not left where a drag had pushed it.
+  /// A zoom command from a key or a menu lands at once. Keys repeat, and a
+  /// flight on every repeat makes a held key feel late.
   void _onZoomRequest() {
     final request = _boundUi?.viewerZoomRequest.value;
     if (request == null || !mounted) return;
     final from = _shownScale;
     switch (request.$2) {
       case ViewerZoomCommand.fit:
-        _goToZoom(null, Offset.zero, from: from);
+        _goToZoom(null, Offset.zero, from: from, fly: false);
       case ViewerZoomCommand.zoomIn:
-        _goToZoom(_clampZoom(from * zoomToolStep), Offset.zero, from: from);
+        _goToZoom(_clampZoom(from * zoomToolStep), Offset.zero,
+            from: from, fly: false);
       case ViewerZoomCommand.zoomOut:
-        _goToZoom(_clampZoom(from / zoomToolStep), Offset.zero, from: from);
+        _goToZoom(_clampZoom(from / zoomToolStep), Offset.zero,
+            from: from, fly: false);
     }
   }
 

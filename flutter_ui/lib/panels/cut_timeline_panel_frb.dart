@@ -664,19 +664,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _defaultTransition(ui, comp);
       // The zoom keys, as the Timeline answers them: `=` in and `-` out
       // about the playhead, `\` between the whole composition and wherever
-      // the zoom was before.
+      // the zoom was before. They land at once, as the Timeline's do.
       case 'timeline.zoom.in' || 'timeline.zoom.out':
         _zoomBeforeFit = null;
-        _setZoom(zoomNudged(_zoomMotion.target,
-            inward: action == 'timeline.zoom.in', maxZoom: _maxZoom));
+        _setZoom(
+            zoomNudged(_zoomMotion.target,
+                inward: action == 'timeline.zoom.in', maxZoom: _maxZoom),
+            fly: false);
       case 'timeline.zoom.fit':
         final was = _zoomBeforeFit;
         if (_zoomMotion.target > 1) {
           _zoomBeforeFit = _zoomMotion.target;
-          _setZoom(1);
+          _setZoom(1, fly: false);
         } else {
           _zoomBeforeFit = null;
-          _setZoom((was ?? 1).clamp(1.0, _maxZoom));
+          _setZoom((was ?? 1).clamp(1.0, _maxZoom), fly: false);
         }
       case 'edit.point.prev' || 'edit.point.next':
         _toEditPoint(ui, before: action.endsWith('prev'));

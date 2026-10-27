@@ -2982,11 +2982,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The zoom keys (docs/07 §4.6): `=` in, `-` out, `\` between the whole
     // composition and wherever the zoom was before. They hold the **playhead**
     // still, because a key press has no pointer to zoom about — the same
-    // answer the bottom bar's slider gives.
+    // answer the bottom bar's slider gives. They land at once: keys repeat,
+    // and a flight on every repeat makes a held key feel late.
     if (action == 'timeline.zoom.in' || action == 'timeline.zoom.out') {
       _zoomBeforeFit = null;
-      _setZoom(zoomNudged(_zoomMotion.target,
-          inward: action == 'timeline.zoom.in', maxZoom: _maxZoom));
+      _setZoom(
+          zoomNudged(_zoomMotion.target,
+              inward: action == 'timeline.zoom.in', maxZoom: _maxZoom),
+          fly: false);
       return true;
     }
     if (action == 'timeline.zoom.fit') {
@@ -2995,10 +2998,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final was = _zoomBeforeFit;
       if (_zoomMotion.target > 1) {
         _zoomBeforeFit = _zoomMotion.target;
-        _setZoom(1);
+        _setZoom(1, fly: false);
       } else {
         _zoomBeforeFit = null;
-        _setZoom((was ?? 1).clamp(1.0, _maxZoom));
+        _setZoom((was ?? 1).clamp(1.0, _maxZoom), fly: false);
       }
       return true;
     }
