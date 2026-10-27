@@ -2,6 +2,7 @@
 // on, and the count that tells the panels to stand down while one is up.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
@@ -10,11 +11,13 @@ import '../../state/workspace.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
+import 'menus.dart';
 import 'motion.dart';
 
 /// Show a positioned popup and complete with the value handed to `close`.
 /// Clicking outside, or pressing Escape, dismisses with null.
-/// A centred modal on the app Overlay, with a dimmed click-to-dismiss backdrop.
+/// A centred modal on the app Overlay, with a dimmed backdrop. A click on the
+/// backdrop dismisses only a window without an [id].
 /// Completes with whatever `close` was given, or null when dismissed.
 ///
 /// **Escape closes it from the ladder's dialogue rung**. It was
@@ -40,6 +43,9 @@ import 'motion.dart';
 /// A [modeless] window is a panel that floats over the work instead: no
 /// scrim, so a click beside it reaches the panels, and neither Escape nor the
 /// keyboard is taken from them. Only its own close mark closes it.
+///
+/// A [still] window is simply there, with no entrance and no wash fading in,
+/// for one opened from the keyboard many times a day.
 Future<T?> showLumitModal<T>({
   required BuildContext context,
   required Widget Function(void Function(T?) close) builder,
@@ -48,6 +54,7 @@ Future<T?> showLumitModal<T>({
   Size minSize = const Size(320, 240),
   bool dimBackground = true,
   bool modeless = false,
+  bool still = false,
 }) {
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
@@ -81,12 +88,15 @@ Future<T?> showLumitModal<T>({
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => close(null),
+                // Only a one-question window goes on a click beside it. One
+                // with an id holds work, such as a filled-in export, which a
+                // stray click must not throw away.
+                onTap: id == null ? () => close(null) : null,
                 // The wash comes up with the window rather than cutting in
                 // ahead of it. It takes the click from its first frame either
                 // way.
                 child: Entrance.fade(
-                  spec: takesOver ? MotionSpec.still : motion.scrim,
+                  spec: takesOver || still ? MotionSpec.still : motion.scrim,
                   child: ColoredBox(
                     color: dimBackground
                         ? scope.theme.scrim
@@ -105,7 +115,7 @@ Future<T?> showLumitModal<T>({
             // was dismissed is gone, and the caller's next window never opens
             // over one still fading out.
             child: Entrance(
-              spec: motion.modal,
+              spec: still ? MotionSpec.still : motion.modal,
               rise: motion.modalRise,
               scale: motion.modalScale,
               leads: true,
@@ -151,7 +161,10 @@ int _openModals = 0;
 /// the open and close calls: a window can also leave by having the tree taken
 /// down under it, and a count only the close path decremented would stick above
 /// zero and leave the keyboard dead for the rest of the session.
-bool get lumitModalOpen => _openModals > 0;
+///
+/// Also true for the length of an arrow key or Enter pressed while a menu is
+/// up, which the menu answers, so the panels stand down for those as well.
+bool get lumitModalOpen => _openModals > 0 || menuTakesKey;
 
 /// For a modal surface that is not a [_MovableWindow] — the FX console
 /// is the one today. Counted from `initState` and `dispose`, for the
@@ -250,8 +263,11 @@ class _MovableWindowState extends State<_MovableWindow> {
   Size? _clampSize(Size? s, BoxConstraints box) => s == null
       ? null
       : Size(
-          s.width.clamp(widget.minSize.width, box.maxWidth),
-          s.height.clamp(widget.minSize.height, box.maxHeight),
+          // The window's minimum gives way to an app window smaller than it.
+          s.width.clamp(math.min(widget.minSize.width, box.maxWidth),
+              box.maxWidth),
+          s.height.clamp(math.min(widget.minSize.height, box.maxHeight),
+              box.maxHeight),
         );
 
   @override

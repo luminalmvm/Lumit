@@ -810,10 +810,13 @@ void main() {
       await makeComp(tester);
       final comp = p.uiState.selectedComp!;
 
-      // Nothing selected: the rows are there and do nothing.
+      // Nothing selected: the rows are there and do nothing, and the menu
+      // stays up.
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(comp.getLayers(), isEmpty);
+      expect(find.text('Gaussian blur'), findsOneWidget);
+      await dismiss(tester);
 
       final a = comp.addSolidLayer();
       final b = comp.addSolidLayer();

@@ -215,6 +215,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           width: _cellWidth + 60,
           child: BareLazyDropdown<UuidValue?>(
             key: const ValueKey('src-text-path'),
+            value: document.path,
             label: _pathLabel(document.path),
             options: () => [
               (null, l10n.sourceTextPathNone),
