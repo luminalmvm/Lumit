@@ -31,6 +31,8 @@ lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
 # The render thread's stop check, which is how a test cancels a frame.
 lumit-core = { path = "../lumit-core" }
 tempfile = "3"
+# Builds the Sort sample extension's plugin from its C source for its test.
+cc = "1"
 
 # A broker is the host, in another process: same C ABI, same override.
 [lints.clippy]

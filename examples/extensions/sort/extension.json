@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "sort",
+  "name": "Sort",
+  "version": "1.0.0",
+  "summary": "Sorts runs of pixels by brightness.",
+  "author": "Lumit",
+  "effects": [
+    {
+      "id": "sort",
+      "name": "Sort",
+      "category": "Stylise",
+      "version": 1,
+      "api": 1,
+      "ofx": "Sort.ofx.bundle",
+      "plugin": "com.lumitlab.sort"
+    }
+  ]
+}

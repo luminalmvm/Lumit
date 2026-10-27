@@ -2289,6 +2289,7 @@ dependencies = [
 name = "lumit-ofx-broker"
 version = "0.10.0"
 dependencies = [
+ "cc",
  "interprocess",
  "lumit-core",
  "lumit-eval",
