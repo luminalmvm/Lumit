@@ -165,9 +165,15 @@ class StyleSheet {
 
   /// The picture the room shows, from `--room: url("room.jpg")`, as a path.
   /// Relative to the style's own folder.
-  String? get roomPicture {
+  String? get roomPicture => _url('room');
+
+  /// The style's own icons, from `--icons: url("icons")`, as a folder path.
+  String? get iconFolder => _url('icons');
+
+  /// A `url(...)` variable as a path, relative to the style's own folder.
+  String? _url(String variable) {
     final m = RegExp(r'''url\(\s*["']?([^"')]+)["']?\s*\)''')
-        .firstMatch(_vars['room'] ?? '');
+        .firstMatch(_vars[variable] ?? '');
     if (m == null) return null;
     final path = m[1]!.trim();
     final absolute =

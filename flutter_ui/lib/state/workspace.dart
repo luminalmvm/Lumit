@@ -627,6 +627,9 @@ class Workspace extends ChangeNotifier {
     }
     final style = activeStyle;
     if (style != null) themeShape = style.base;
+    // Under the person's own icons: the style's.
+    IconStyle.under = [if (style?.iconFolder case final icons?) icons];
+    IconStyle.reload();
   }
 
   /// Use the person's own style called [name].
