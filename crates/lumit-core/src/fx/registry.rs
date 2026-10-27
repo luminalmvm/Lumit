@@ -513,6 +513,14 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// Whether the effect is drawn over the composite below wherever it sits,
+    /// as on an adjustment layer, with the layer's own picture as its second
+    /// input when that row picks no other layer (an LFX manifest's
+    /// `backdrop`).
+    fn backdrop(&self) -> bool {
+        false
+    }
+
     /// Whether this instance traces rays through a 3D precomp's own layers
     /// when its Depth row names the precomp it sits on.
     fn traces_scene(&self, _inst: &crate::model::EffectInstance) -> bool {

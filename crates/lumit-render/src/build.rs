@@ -306,6 +306,21 @@ pub fn parent_world_placement(
 
 /// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
 /// own pixels to comp pixels, as the compositor places it.
+/// Whether `layer` carries a live effect drawn over the composite below
+/// ([`EffectDef::backdrop`](lumit_core::fx::registry::EffectDef::backdrop)),
+/// which makes it an adjustment for this frame without being one in the
+/// project: its picture is still decoded, and is that effect's shape.
+fn backdrop_fx(layer: &lumit_core::model::Layer) -> bool {
+    layer.switches.fx
+        && layer.effects.iter().any(|e| {
+            e.enabled
+                && e.effect.namespace == lumit_core::model::EffectNamespace::Lfx
+                && lumit_core::fx::catalogue::BUILTIN_DEFS
+                    .get(&e.effect.match_name)
+                    .is_some_and(|d| d.backdrop())
+        })
+}
+
 fn world_placement(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -2877,6 +2892,49 @@ fn comp_walk(
         input.place = map_place(e, param);
         Some(input)
     };
+    // **A backdrop effect's shape**: the layer it sits on, alone and before
+    // any of its effects, placed in the comp as the layer is, since the effect
+    // runs over the comp-sized composite below. `None` on an adjustment layer,
+    // which has no picture to give.
+    let own_shape = |owner: uuid::Uuid| -> Option<DofInputDraw> {
+        let src = comp
+            .layers
+            .iter()
+            .find(|l| l.id == owner)
+            .filter(|l| !l.is_adjustment())?;
+        let context = Arc::new(ExpressionContext {
+            document: expr_doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(src.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        });
+        let place = Some(Box::new(crate::draw::MapPlace {
+            placed: Some(world_placement(comp, src, t_comp, context)),
+            ground: [0.0; 4],
+        }));
+        if let Some(mut nested) = nested_input_for(src) {
+            nested.place = place;
+            return Some(nested);
+        }
+        let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
+        Some(DofInputDraw {
+            rgba: rgba.to_vec(),
+            tex_w,
+            tex_h,
+            format,
+            fx: Default::default(),
+            colour_tables: Default::default(),
+            roto_mattes: Vec::new(),
+            planes: Vec::new(),
+            nested: None,
+            colour_space: crate::colour::footage_colour_space(doc, &src.kind),
+            natural: [natural.0, natural.1],
+            graph_fx: Vec::new(),
+            place,
+        })
+    };
     let graph_fx_for =
         |owner: Option<&lumit_core::model::Layer>,
          effects: &[lumit_core::model::EffectInstance],
@@ -3075,6 +3133,13 @@ fn comp_walk(
                     def.is_image_op().then_some((e, def, param))
                 })
                 .map(|(e, def, param)| {
+                    // A backdrop effect on a layer with a picture takes that
+                    // picture wherever its row picks no other layer.
+                    if def.backdrop() && e.layer_ref(param).is_none_or(|id| id == owner) {
+                        if let Some(d) = own_shape(owner) {
+                            return LayerInputDraw::Layer(d);
+                        }
+                    }
                     let schema = def.schema();
                     let slot = |param: &str| {
                         // A row read for its layer's shapes has no picture.
@@ -3932,8 +3997,11 @@ fn comp_walk(
         // What a Sequence layer shows where a composition is one of the clips
         // showing. `None` at every other moment, where the decoded pixels
         // are the layer's source as they always were.
+        // A layer with a backdrop effect is drawn as an adjustment is: over
+        // the composite below, its own picture handed to that effect instead.
+        let adjusts = layer.is_adjustment() || backdrop_fx(layer);
         let comp_clips = match &layer.kind {
-            LayerKind::Sequence { clips } if !layer.is_adjustment() => {
+            LayerKind::Sequence { clips } if !adjusts => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
                 let shown = lumit_core::sequence::shown_at(clips, lt);
@@ -4095,7 +4163,7 @@ fn comp_walk(
             }
             // Guarded so a Precomp acting as an adjustment falls
             // through to the adjustment arm below rather than drawing its comp.
-            LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
+            LayerKind::Precomp { comp: nested_id } if !adjusts => {
                 if visited.contains(nested_id) {
                     continue; // cycle guard
                 }
@@ -4327,7 +4395,7 @@ fn comp_walk(
             // the adjustment switch on: either way the layer's own source is
             // set aside, so there is one behaviour here and no second copy of
             // it to drift.
-            _ if layer.is_adjustment() => {
+            _ if adjusts => {
                 // A staging point, not a picture (docs/06 §1.5): realise
                 // composites everything below, runs this stack on it, and
                 // blends back by coverage — masks × opacity, placed by the
@@ -4411,7 +4479,24 @@ fn comp_walk(
                     continue;
                 }
 
-                let placed = drawn(layer, lt, &context);
+                // A layer drawn as one only for its backdrop effect covers the
+                // whole comp, unmoved: its masks and transform already shaped
+                // the picture that effect takes, and it is the effect, not
+                // the coverage, that leaves the rest of the comp as it was.
+                let native = layer.is_adjustment();
+                let placed = if native {
+                    drawn(layer, lt, &context)
+                } else {
+                    lumit_gpu::composite::MbSample {
+                        position: (0.0, 0.0),
+                        anchor: (0.0, 0.0),
+                        scale: (100.0, 100.0),
+                        rotation_deg: 0.0,
+                        z: 0.0,
+                        rotation_x_deg: 0.0,
+                        rotation_y_deg: 0.0,
+                    }
+                };
                 draws.push(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
@@ -4424,14 +4509,14 @@ fn comp_walk(
                     z: placed.z,
                     rotation_x_deg: placed.rotation_x_deg,
                     rotation_y_deg: placed.rotation_y_deg,
-                    three_d: layer.switches.three_d,
+                    three_d: native && layer.switches.three_d,
                     ends_run: false,
                     // The adjustment's own Matte gates where its stack lands,
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
                     blend: lumit_gpu::composite::Blend::Normal,
-                    mask_cov: (!layer.masks.is_empty()).then(|| {
+                    mask_cov: (native && !layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
                         // natural), same as the property panel treats them.
                         (
@@ -4447,7 +4532,11 @@ fn comp_walk(
                             comp.height,
                         )
                     }),
-                    pre: parent_world_placement(comp, layer, t_comp, context.clone()),
+                    pre: if native {
+                        parent_world_placement(comp, layer, t_comp, context.clone())
+                    } else {
+                        None
+                    },
                     fx,
                     fx_ids,
                     // Adjustment layers process the composite below, not
@@ -6761,7 +6850,7 @@ fn rebuilt_as_itself(
             return false;
         }
         // An adjustment draws the composite beneath it, whatever its kind.
-        if layer.is_adjustment() {
+        if layer.is_adjustment() || backdrop_fx(layer) {
             return true;
         }
         match &layer.kind {

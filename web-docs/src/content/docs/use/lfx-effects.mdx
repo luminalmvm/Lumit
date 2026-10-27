@@ -59,6 +59,7 @@ hold effects, a panel, or both. The other fields are as in
 | `shader` | The `.wgsl` file, inside the folder. |
 | `passes` | Optional. Up to 8, each `{name, scale}`, drawn in order. `scale` is `1`, `0.5` or `0.25`, and the last pass is `1`. With none, there is one pass called `shade`. |
 | `input` | Optional. `{label, kind}`: a second picture, as a layer row called `label`. `kind` is `image` or `depth`. A `depth` input is a Depth socket in the node graph. |
+| `backdrop` | Optional, `false` when left out. `true` runs the effect over the composite of everything below even on a layer with a picture, as on an adjustment layer: the layer is drawn as one, covering the whole frame, and its own picture, placed as it sits in the composition, is the second input wherever that row picks no other layer. Every other effect on the layer works on the composite too. For glass, lenses and other effects that bend what is behind a shape. |
 | `interface` | Optional. `{entry, width, height}`: the interface page, and the panel's opening size in pixels, 100 to 4096 each way. |
 
 A manifest with an unknown category, a higher `api`, a bad pass or a file outside the folder

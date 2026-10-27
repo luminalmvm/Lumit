@@ -134,6 +134,9 @@ pub struct ManifestEffect {
     pub passes: Vec<ManifestPass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<ManifestInput>,
+    /// Drawn over the composite below, with the layer it sits on as its shape.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backdrop: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<ManifestInterface>,
 }
@@ -199,6 +202,7 @@ fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEf
                 InputKind::Depth => LfxInputKind::Depth,
             },
         }),
+        backdrop: effect.backdrop,
         shader,
     }
 }

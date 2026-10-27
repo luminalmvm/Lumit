@@ -55,6 +55,10 @@ pub struct LfxEffect {
     /// Empty means one pass called `shade`.
     pub passes: Vec<LfxPass>,
     pub input: Option<LfxInput>,
+    /// Drawn over the composite below, as an adjustment layer is, even when
+    /// the effect sits on a layer with a picture; that picture is then the
+    /// second input wherever its row picks no other layer.
+    pub backdrop: bool,
     /// The `.wgsl` file's text.
     pub shader: String,
 }
@@ -372,6 +376,7 @@ struct ShapeKey {
     category: FxCategory,
     version: u32,
     input: Option<LfxInput>,
+    backdrop: bool,
 }
 
 struct Shape {
@@ -387,6 +392,7 @@ fn def_for(name: &str, effect: &LfxEffect, category: FxCategory) -> &'static Lfx
         category,
         version: effect.version,
         input: effect.input.clone(),
+        backdrop: effect.backdrop,
     };
     let mut defs = match DEFS.lock() {
         Ok(defs) => defs,
@@ -493,6 +499,13 @@ impl EffectDef for LfxDef {
             &[]
         }
     }
+
+    fn backdrop(&self) -> bool {
+        match self.shape.read() {
+            Ok(shape) => shape.key.backdrop,
+            Err(poisoned) => poisoned.into_inner().key.backdrop,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -518,6 +531,7 @@ mod tests {
             api: API,
             passes: vec![pass("bleed", 0.5), pass("shade", 1.0)],
             input: None,
+            backdrop: false,
             shader: shader.into(),
         }
     }
@@ -568,5 +582,12 @@ mod tests {
         assert_eq!(rows(def), ["strength"]);
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);
+
+        // A rescan that turns `backdrop` on changes the def it already has.
+        assert!(!def.backdrop());
+        let mut glass = effect(&TWO_PASS.replace("amount", "strength"));
+        glass.backdrop = true;
+        let def = install(glass).expect("with backdrop");
+        assert!(def.backdrop());
     }
 }
