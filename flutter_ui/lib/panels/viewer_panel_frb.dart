@@ -712,6 +712,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             wireframes: ui.viewerLayerControls,
             look: ui.viewerLook,
             onStops: ui.setViewerStops,
+            onStopsLive: (stops) => ui.setViewerStops(stops, live: true),
             playing: playing,
             frame: frame,
             settings: settings,

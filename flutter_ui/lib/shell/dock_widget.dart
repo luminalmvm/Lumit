@@ -296,6 +296,7 @@ class _DockWidgetState extends State<DockWidget> {
             drag: _drag,
             onClose: _closePanel,
             onChanged: _groupChanged,
+            onResized: () => setState(() {}),
           ),
         DockTabs() => _TabGroup(
             tabs: node,
@@ -333,8 +334,8 @@ class _DockWidgetState extends State<DockWidget> {
             setState(() {
               _resize(split, i, horizontal ? delta.dx : delta.dy, totalExtent);
             });
-            widget.onLayoutChanged();
           },
+          onDragEnd: widget.onLayoutChanged,
         ));
       }
     }
@@ -638,11 +639,16 @@ class _Divider extends StatefulWidget {
   final double gap;
   final void Function(Offset delta, double totalExtent) onDrag;
 
+  /// The drag let go, so the new sizes are saved once rather than on every
+  /// move.
+  final VoidCallback onDragEnd;
+
   const _Divider({
     super.key,
     required this.horizontal,
     required this.gap,
     required this.onDrag,
+    required this.onDragEnd,
   });
 
   @override
@@ -695,7 +701,10 @@ class _DividerState extends State<_Divider> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (_) => setState(() => _dragging = true),
-        onPanEnd: (_) => setState(() => _dragging = false),
+        onPanEnd: (_) {
+          setState(() => _dragging = false);
+          widget.onDragEnd();
+        },
         onPanCancel: () => setState(() => _dragging = false),
         onPanUpdate: (d) {
           final parent =
@@ -1210,6 +1219,9 @@ class _StackGroup extends StatelessWidget {
   final DockTabs tabs;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
+
+  /// A seam is being dragged: redraw, and save when it lets go.
+  final VoidCallback onResized;
   final ValueNotifier<PaneId?> activePanel;
   final _DragController drag;
   final void Function(PaneId) onClose;
@@ -1218,6 +1230,7 @@ class _StackGroup extends StatelessWidget {
     required this.tabs,
     required this.buildPanel,
     required this.onChanged,
+    required this.onResized,
     required this.activePanel,
     required this.drag,
     required this.onClose,
@@ -1309,8 +1322,9 @@ class _StackGroup extends StatelessWidget {
                     if (a < least || b < least) return;
                     tabs.shares[pane] = a;
                     tabs.shares[below] = b;
-                    onChanged();
+                    onResized();
                   },
+                  onDragEnd: onChanged,
                 ));
               }
             }

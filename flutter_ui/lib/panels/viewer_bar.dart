@@ -69,6 +69,9 @@ class ViewerBar extends StatelessWidget {
   final VoidCallback onGrid;
   final VoidCallback onWireframes;
   final ValueChanged<double> onStops;
+
+  /// The exposure while it is scrubbed: the engine is told, nothing is saved.
+  final ValueChanged<double> onStopsLive;
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
@@ -118,6 +121,7 @@ class ViewerBar extends StatelessWidget {
     required this.onGrid,
     required this.onWireframes,
     required this.onStops,
+    required this.onStopsLive,
     required this.onPlayPause,
     required this.onSeek,
     required this.hasSnapshot,
@@ -306,23 +310,8 @@ class ViewerBar extends StatelessWidget {
         // what says so while it is engaged.
         LumitTooltip(
           message: l10n.tipViewerExposure,
-          child: DragValueField(
-            key: const ValueKey('viewer-exposure'),
-            value: look.stops,
-            bare: true,
-            // Ten stops each way: past that a picture is white or black
-            // whatever is in it, so the drag has somewhere to stop.
-            min: -10,
-            max: 10,
-            speed: 0.1,
-            decimals: 1,
-            signed: true,
-            resetTo: 0,
-            // Snapped to the tenth the box actually reads, so a drag cannot
-            // leave a hair of exposure behind that shows as `+0.0` while the
-            // engine treats the view as engaged.
-            onChanged: (v) => onStops((v * 10).round() / 10),
-          ),
+          child: _ExposureField(
+              stops: look.stops, onStops: onStops, onLive: onStopsLive),
         ),
         // One edge each side of the seam rather than two: the hairline is a
         // plain rule and carries none of its own.
@@ -565,6 +554,60 @@ const double _barKeepsLooking = 400;
 
 /// Below this the clock goes and the transport stands alone.
 const double _barKeepsClock = 280;
+
+/// The exposure box. A scrub only tells the engine, so the number it shows
+/// meanwhile is held here, and the look is written down once when it lets go.
+class _ExposureField extends StatefulWidget {
+  final double stops;
+  final ValueChanged<double> onStops;
+  final ValueChanged<double> onLive;
+
+  const _ExposureField(
+      {required this.stops, required this.onStops, required this.onLive});
+
+  @override
+  State<_ExposureField> createState() => _ExposureFieldState();
+}
+
+class _ExposureFieldState extends State<_ExposureField> {
+  double? _live;
+
+  // Snapped to the tenth the box actually reads, so a drag cannot leave a
+  // hair of exposure behind that shows as `+0.0` while the engine treats the
+  // view as engaged.
+  static double _snap(num v) => (v * 10).round() / 10;
+
+  void _commit(double stops) {
+    setState(() => _live = null);
+    widget.onStops(stops);
+  }
+
+  @override
+  Widget build(BuildContext context) => DragValueField(
+        key: const ValueKey('viewer-exposure'),
+        value: _live ?? widget.stops,
+        bare: true,
+        // Ten stops each way: past that a picture is white or black whatever
+        // is in it, so the drag has somewhere to stop.
+        min: -10,
+        max: 10,
+        speed: 0.1,
+        decimals: 1,
+        signed: true,
+        resetTo: 0,
+        onChanged: (v) => _commit(_snap(v)),
+        onChangeLive: (v) {
+          final stops = _snap(v);
+          setState(() => _live = stops);
+          widget.onLive(stops);
+        },
+        onChangeEnd: (v) => _commit(_snap(v)),
+        onDragCancel: () {
+          final live = _live;
+          if (live != null) _commit(live);
+        },
+      );
+}
 
 /// The one mark the ways of looking fold into on a narrow bar.
 ///
