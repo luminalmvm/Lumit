@@ -10190,8 +10190,8 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
     // The ceiling holds a slider drag to a raster every backend can allocate.
     assert_eq!(
         cpu::tile_raster(3840, 2160, &of(5.0, 5.0, 100.0)),
-        (cpu::TILE_MAX_RASTER, cpu::TILE_MAX_RASTER),
-        "the growth stops at the guaranteed maximum texture side"
+        (8192, 8192),
+        "the growth stops at the largest picture"
     );
 
     // The margin holds picture, and the frame's own window is untouched: the

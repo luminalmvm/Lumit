@@ -2495,19 +2495,14 @@ pub struct TileParams {
     pub mix: f32,
 }
 
-/// The biggest raster Tile will grow to, per side. Output width and
-/// height reach 500 %, which on a 4K comp would be a 19 200 × 10 800 working
-/// texture — a third of a gigabyte in fp16, allocated because a slider was
-/// dragged. The growth stops here instead, and the placement follows the raster
-/// that was actually made, so the picture stays put and only the extra copies
-/// are missing.
-///
-/// 8 192 is `wgpu`'s guaranteed `max_texture_dimension_2d`, so a raster this
-/// function allows is one every backend can allocate.
-pub const TILE_MAX_RASTER: u32 = 8192;
-
 /// The raster [`tile_into`] writes for an incoming `w × h` frame (docs/08
 /// §3.39).
+///
+/// Output width and height reach 500 %, which on a 4K comp would be a
+/// 19 200 × 10 800 working texture — a third of a gigabyte in fp16, allocated
+/// because a slider was dragged. The growth stops at the largest picture
+/// instead, and the placement follows the raster that was actually made, so
+/// the picture stays put and only the extra copies are missing.
 ///
 /// An output window bigger than the frame puts copies *outside* it, so the
 /// working picture grows to hold them and every effect after Tile in the stack
@@ -2532,7 +2527,7 @@ pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
         if needed <= side {
             n
         } else {
-            (needed.round() as u32).clamp(n, TILE_MAX_RASTER.max(n))
+            crate::largest_picture::fit(needed.round() as u32).max(n)
         }
     };
     (

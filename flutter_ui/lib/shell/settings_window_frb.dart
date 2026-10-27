@@ -260,10 +260,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// "Render plugins on the graphics card", read once as the window opens.
   bool _pluginsOnCard = true;
 
+  /// The largest picture and the sizes this machine can take, read once as
+  /// the window opens.
+  int _largest = 8192;
+  List<int> _largestChoices = const [8192];
+
   @override
   void initState() {
     super.initState();
     _pluginsOnCard = pluginsOnGraphicsCard();
+    _largest = largestPicture();
+    _largestChoices = largestPictureChoices();
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -953,8 +960,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
           workspace.performance.hardwareDecode = shipped.hardwareDecode;
           setHardwareDecode(on_: shipped.hardwareDecode);
+          workspace.performance.largestPicture = null;
+          setLargestPicture(side: 8192);
+          _largest = largestPicture();
           workspace.settingsChanged();
           resetRealtime();
+          ui.requestFrame();
         });
       case SettingsPage.shortcuts:
         unawaited(_resetKeymap(ui.keymap));
@@ -3446,6 +3457,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               // Not kept, but in force until Lumit closes.
             }
           }),
+          _row(
+            t,
+            l10n.settingsLargestPicture,
+            _dropdown<int>(
+              key: 'settings-largest-picture',
+              value: _largest,
+              options: _largestChoices,
+              width: _ddWide,
+              // What one picture that size holds at 16-bit.
+              label: (side) => l10n.settingsLargestPictureSize(
+                  '$side', _bytes(BigInt.from(side * side * 8))),
+              onChanged: (side) => setState(() {
+                setLargestPicture(side: side);
+                _largest = largestPicture();
+                ui.workspace.performance.largestPicture = _largest;
+                ui.workspace.settingsChanged();
+                ui.requestFrame();
+              }),
+            ),
+          ),
           _row(
             t,
             l10n.settingsQualityTier,

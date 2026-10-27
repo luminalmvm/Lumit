@@ -213,6 +213,9 @@ pub struct BridgeSharedFrameInfoLinux {
     /// Whether that reaches as far as a box may keep, so some of the picture
     /// was cut there.
     pub reach_at_limit: bool,
+    /// Whether some of the frame was cut, or made smaller, to fit the largest
+    /// picture.
+    pub cut: bool,
 }
 
 /// The Windows zero-copy Viewer frame: an NT handle to a shared D3D12
@@ -253,6 +256,9 @@ pub struct BridgeSharedFrameInfo {
     /// Whether that reaches as far as a box may keep, so some of the picture
     /// was cut there.
     pub reach_at_limit: bool,
+    /// Whether some of the frame was cut, or made smaller, to fit the largest
+    /// picture.
+    pub cut: bool,
 }
 
 /// A small still picture as plain pixels — the thumbnail payload

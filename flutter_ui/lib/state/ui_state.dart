@@ -51,7 +51,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setAutosave,
         setDiscordStatus,
         setFullResDragPreviews,
-        setHardwareDecode;
+        setHardwareDecode,
+        setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
@@ -2734,6 +2735,8 @@ class LumitUiState extends ChangeNotifier {
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setHardwareDecode(on_: perf.hardwareDecode);
+    final largest = perf.largestPicture;
+    if (largest != null) setLargestPicture(side: largest);
     pushDiscordStatus();
     if (this.workspace.liveEndpoint) applyLiveEndpoint();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
@@ -2793,14 +2796,14 @@ class LumitUiState extends ChangeNotifier {
             previewTier.value = frame.field0.tier;
           }
           _showReach(frame.field0.view, frame.field0.reach,
-              frame.field0.reachAtLimit);
+              frame.field0.reachAtLimit, frame.field0.cut);
           _showDmabuf(frame.field0);
         case WorkerResponse_RenderedSharedTexture frame:
           if (!isViewport(frame.field0.view)) {
             previewTier.value = frame.field0.tier;
           }
           _showReach(frame.field0.view, frame.field0.reach,
-              frame.field0.reachAtLimit);
+              frame.field0.reachAtLimit, frame.field0.cut);
           _showSharedTexture(frame.field0);
         // Scope traces ride the same stream; the Scopes panel subscribes to it
         // directly, so there is nothing for the Viewer to do with one.
@@ -2906,7 +2909,14 @@ class LumitUiState extends ChangeNotifier {
   ValueNotifier<ViewerReach?> reachOf(int engineId) =>
       _viewReach.putIfAbsent(engineId, () => ValueNotifier<ViewerReach?>(null));
 
-  void _showReach(int engineId, F64Array4? rect, bool atLimit) {
+  /// Whether each view's last frame was cut to the largest picture.
+  final Map<int, ValueNotifier<bool>> _viewCut = {};
+
+  ValueNotifier<bool> cutOf(int engineId) =>
+      _viewCut.putIfAbsent(engineId, () => ValueNotifier<bool>(false));
+
+  void _showReach(int engineId, F64Array4? rect, bool atLimit, bool cut) {
+    cutOf(engineId).value = cut;
     reachOf(engineId).value = rect == null
         ? null
         : (

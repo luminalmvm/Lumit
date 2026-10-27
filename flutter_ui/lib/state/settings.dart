@@ -80,6 +80,10 @@ class PerformanceSettings {
   /// misbehaves with it.
   bool hardwareDecode;
 
+  /// The widest and tallest picture the engine makes, in pixels. Null means
+  /// the engine's default, as for [cacheBudgetBytes].
+  int? largestPicture;
+
   /// Where parked frames live, as the engine's own enum name
   /// (`appData` / `besideProject` / `custom`). Null means the engine's default.
   /// The frontend never interprets it beyond showing the choice — it hands the
@@ -106,6 +110,7 @@ class PerformanceSettings {
     this.diskCacheFolder,
     this.fullResDragPreviews = false,
     this.hardwareDecode = true,
+    this.largestPicture,
   });
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +123,7 @@ class PerformanceSettings {
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
         'full_res_drag_previews': fullResDragPreviews,
         'hardware_decode': hardwareDecode,
+        if (largestPicture != null) 'largest_picture': largestPicture,
       };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
@@ -147,6 +153,7 @@ class PerformanceSettings {
         fullResDragPreviews: j['full_res_drag_previews'] == true,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
+        largestPicture: _positiveInt(j['largest_picture']),
       );
 }
 
