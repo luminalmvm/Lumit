@@ -477,8 +477,10 @@ const watching = people.length - editing;
   .pro:hover .go {
     color: var(--color-fg);
   }
-  .pro:hover .go::after {
-    transform: translateX(3px);
+  @media (hover: hover) and (pointer: fine) {
+    .pro:hover .go::after {
+      transform: translateX(3px);
+    }
   }
   @media (min-width: 1024px) {
     .pro {

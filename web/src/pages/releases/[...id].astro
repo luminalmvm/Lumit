@@ -53,7 +53,9 @@ const { Content } = await render(release);
       transition: transform 0.2s;
     }
   }
-  .back:hover::before {
-    transform: translateX(-3px);
+  @media (hover: hover) and (pointer: fine) {
+    .back:hover::before {
+      transform: translateX(-3px);
+    }
   }
 </style>

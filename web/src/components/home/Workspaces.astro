@@ -154,9 +154,11 @@ const tabs = [
   .layer:not([aria-current]) {
     filter: brightness(0.8);
   }
-  .layer:not([aria-current]):hover {
-    border-color: var(--color-accent-2);
-    filter: none;
+  @media (hover: hover) and (pointer: fine) {
+    .layer:not([aria-current]):hover {
+      border-color: var(--color-accent-2);
+      filter: none;
+    }
   }
   .bar {
     height: 34px;

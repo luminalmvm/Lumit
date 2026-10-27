@@ -209,8 +209,11 @@
   .go::after {
     content: "\2192";
   }
-  .go:hover::after {
-    transform: translateX(3px);
+  /* Only a mouse moves things on hover: a tap leaves a hover behind. */
+  @media (hover: hover) and (pointer: fine) {
+    .go:hover::after {
+      transform: translateX(3px);
+    }
   }
 
   /* A card that lights under the pointer: its label colour runs along the top
@@ -238,15 +241,17 @@
     transition: opacity 0.3s;
     pointer-events: none;
   }
-  .lit:hover::before {
-    transform: scaleX(1);
-  }
-  .lit:hover::after {
-    opacity: 1;
+  @media (hover: hover) and (pointer: fine) {
+    .lit:hover::before {
+      transform: scaleX(1);
+    }
+    .lit:hover::after {
+      opacity: 1;
+    }
   }
 
   /* A screenshot is a button: a click brings it forward. Under the pointer it
-     grows a touch, frame and all, with a little spring in it. `scale` and not
+     grows a touch, frame and all. `scale` and not
      `transform`, which the reveal is already using on some of them. */
   .zoom {
     display: block;
@@ -267,9 +272,11 @@
       transition: scale 200ms var(--ease-out);
     }
   }
-  .shot:has(.zoom:hover),
-  .zoom.shot:hover {
-    scale: 1.015;
+  @media (hover: hover) and (pointer: fine) {
+    .shot:has(.zoom:hover),
+    .zoom.shot:hover {
+      scale: 1.015;
+    }
   }
   /* A screenshot's clip lies over it and is not seen until it is playing, so
      the picture is what stands there while the clip loads. The button it is

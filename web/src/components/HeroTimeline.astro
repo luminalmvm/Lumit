@@ -316,11 +316,16 @@ const layers = [
       transition: transform 0.12s;
     }
   }
-  .hc-key:hover::before,
   .hc-key:focus-visible::before,
   .hc-key.drag::before {
     background: #fff;
     transform: rotate(45deg) scale(1.3);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .hc-key:hover::before {
+      background: #fff;
+      transform: rotate(45deg) scale(1.3);
+    }
   }
   .hc-key:focus-visible {
     outline: none;

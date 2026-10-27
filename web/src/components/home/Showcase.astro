@@ -148,8 +148,10 @@ const [latest] = await releasesNewestFirst();
     border-color: var(--color-line-2);
     color: var(--color-fg);
   }
-  .release:hover::after {
-    transform: translateX(3px);
+  @media (hover: hover) and (pointer: fine) {
+    .release:hover::after {
+      transform: translateX(3px);
+    }
   }
   .release-v {
     padding: 4px 7px;
