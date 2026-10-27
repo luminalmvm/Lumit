@@ -3563,7 +3563,8 @@ class _Veil extends StatelessWidget {
                   amount: hidden,
                   lineHeight: lineHeight,
                   colour: theme.theme.textSecondary,
-                  still: spec.isStill,
+                  // The drift is a loop, so only Full plays it.
+                  still: !theme.motion.carries,
                 ),
               ),
             ),
