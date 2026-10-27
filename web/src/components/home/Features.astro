@@ -35,8 +35,8 @@ const features = [
   {
     art: "ofx",
     span: 2,
-    h: "OFX plugin support",
-    p: "Lumit hosts OFX plugins. Sapphire, Twixtor, and the rest are found at start-up and sit beside the built-in effects.",
+    h: "Plugin support",
+    p: "Lumit hosts OFX, CLAP, and VST3 plugins. Sapphire, Twixtor, and the rest are found at start-up and sit beside the built-in effects.",
   },
   {
     art: "import",
@@ -110,7 +110,7 @@ const cuts = [
   <SectionHead kicker="Why Lumit exists" title="Editing should not be a chore." no="05 / 07">
     <Fragment slot="lede">
       No more preview lag, frozen interfaces, or stacks of plugins slowing your
-      machine down. Lumit has what you need built in, and still runs OFX plugins if
+      machine down. Lumit has what you need built in, and still runs your plugins if
       you want them.
     </Fragment>
     <a class="go" href="https://docs.lumitlab.com/effects/">Browse the effects</a>
@@ -243,7 +243,7 @@ const cuts = [
           </div>
           <div class="p-7">
             <p class="feat-id"><i />{String(i + 1).padStart(2, "0")}</p>
-            <h3 class="mt-3 font-mono text-[15px] text-fg">{f.h}</h3>
+            <h3 class="mt-3 text-[18px] leading-[1.2] tracking-[-0.02em] text-fg">{f.h}</h3>
             <p class="mt-2.5 text-[15px] leading-[1.4] text-fg-3">{f.p}</p>
           </div>
         </article>
