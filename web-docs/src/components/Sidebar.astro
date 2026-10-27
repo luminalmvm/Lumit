@@ -38,38 +38,7 @@ const lists = Astro.locals.fullSidebar.filter((entry) => entry.type === "group")
         other.classList.toggle("starlight-sidebar-topics-current", i === j);
         other.toggleAttribute("aria-current", i === j);
       });
-      lists.forEach((list, j) => {
-        list.hidden = i !== j;
-        list.classList.add("arriving");
-      });
+      lists.forEach((list, j) => (list.hidden = i !== j));
     }),
   );
 </script>
-
-<style>
-  /* A list arriving under a tab comes in as the main site's pieces do
-     (`[data-reveal]` in web/src/styles/global.css): blurred and 12px low, its
-     groups 70ms apart. Only once a tab has been used, so a page does not open
-     on it. Being shown again is what starts it again. */
-  .arriving :global(.top-level > li) {
-    animation: topic-in 500ms ease-out both;
-  }
-  .arriving :global(.top-level > li:nth-child(2)) {
-    animation-delay: 70ms;
-  }
-  .arriving :global(.top-level > li:nth-child(n + 3)) {
-    animation-delay: 140ms;
-  }
-  @keyframes topic-in {
-    from {
-      opacity: 0;
-      filter: blur(10px);
-      transform: translateY(12px);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .arriving :global(.top-level > li) {
-      animation: none;
-    }
-  }
-</style>
