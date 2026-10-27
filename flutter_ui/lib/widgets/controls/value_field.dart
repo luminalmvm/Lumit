@@ -617,8 +617,10 @@ class _DragValueFieldState extends State<DragValueField>
               : partStyle(context, t, 'well', states: const {'focus'})),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
-          // text selected nothing.
-          child: TextSelectionGestureDetectorBuilder(delegate: this)
+          // text selected nothing. The I-beam says it can be typed in.
+          child: MouseRegion(
+            cursor: SystemMouseCursors.text,
+            child: TextSelectionGestureDetectorBuilder(delegate: this)
               .buildGestureDetector(
             child: Padding(
               // The resting face's 6 of padding **plus its 1px edge**: a
@@ -659,6 +661,7 @@ class _DragValueFieldState extends State<DragValueField>
                 ),
               ),
             ),
+          ),
           ),
         ),
       );
