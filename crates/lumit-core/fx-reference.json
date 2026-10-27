@@ -10697,7 +10697,7 @@
           "label": "Flock radius",
           "kind": "float",
           "unit": "px",
-          "default": 50.0,
+          "default": 150.0,
           "slider_min": 0.0,
           "slider_max": 500.0,
           "hard_min": 0.0

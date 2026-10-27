@@ -557,7 +557,8 @@ pub fn definition(
     inst: &EffectInstance,
     target: Option<&Layer>,
 ) -> [u8; 32] {
-    let mut h = blake3::Hasher::new();
+    // Named afresh when the walk itself moves particles differently.
+    let mut h = blake3::Hasher::new_derive_key("lumit walk 2");
     let _ = serde_json::to_writer(&mut h, &inst.params);
     for above in layer.effects.iter().take_while(|e| e.id != inst.id) {
         let _ = serde_json::to_writer(&mut h, above);
@@ -731,8 +732,12 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
             }
             return Ok(q);
         }
+        // A flock turns a particle and leaves its speed as it was.
         if let Some(a) = steer.as_ref().and_then(|all| all.get(i)) {
-            q.vel = std::array::from_fn(|k| q.vel[k] + a[k] * hf);
+            let speed = |v: [f32; 3]| v.iter().map(|c| c * c).sum::<f32>().sqrt();
+            let v: [f32; 3] = std::array::from_fn(|k| q.vel[k] + a[k] * hf);
+            let keep = Some(speed(q.vel) / speed(v)).filter(|k| *k > 0.0 && k.is_finite());
+            q.vel = v.map(|c| c * keep.unwrap_or(1.0));
         }
         let base = [
             q.pos[0] - q.drift[0],
@@ -920,13 +925,8 @@ fn sparks(s: &mut State, deaths: &mut [(u64, [f32; 3])], now: &Inputs) {
 /// all are before any of them moves, so the order of work changes nothing.
 /// `None` with the three strengths at nought.
 fn flock(particles: &[Particle], rows: &Particulate) -> Option<Vec<[f32; 3]>> {
-    let k = |v: f32| {
-        if v.is_finite() {
-            (v / 100.0).clamp(0.0, 1.0)
-        } else {
-            0.0
-        }
-    };
+    // Nought for a row that is not a number.
+    let k = |v: f32| if v > 0.0 { (v / 100.0).min(1.0) } else { 0.0 };
     let (apart, along, together) = (k(rows.separation), k(rows.alignment), k(rows.cohesion));
     let r = rows.flock_radius;
     if apart + along + together <= 0.0 || !(r > 0.0 && r.is_finite()) {
@@ -977,14 +977,14 @@ fn flock(particles: &[Particle], rows: &Particulate) -> Option<Vec<[f32; 3]>> {
         if n == 0.0 {
             return [0.0; 3];
         }
-        // Away from close ones, towards their speed and towards their middle.
-        // A spread of the others stands for all of them, so the push counts
-        // each one it looked at for those it passed over.
-        let away = every as f32 * apart * STEER * STEER * r;
+        // Away from close ones, towards their speed and towards their middle,
+        // each the mean of the ones it looked at. The pull to the middle is
+        // gentle, so a flock streams along together rather than knotting up.
+        let away = apart * STEER * STEER * r / n;
         std::array::from_fn(|a| {
             away * push[a]
-                + along * STEER * (vel[a] / n - q.vel[a])
-                + together * STEER * STEER * (mid[a] / n - q.pos[a])
+                + along * 2.0 * STEER * (vel[a] / n - q.vel[a])
+                + together * 0.1 * STEER * STEER * (mid[a] / n - q.pos[a])
         })
     };
     Some(if particles.len() < PARALLEL_FROM {
