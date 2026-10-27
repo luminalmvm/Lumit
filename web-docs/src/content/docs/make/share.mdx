@@ -1,0 +1,50 @@
+---
+title: Package and share
+description: One .lfx file that holds an extension, its effects and its looks, and how it installs.
+sidebar:
+  order: 20
+---
+
+A **package** is one `.lfx` file: an extension's folder as a zip, with `extension.json` at
+its root. It carries everything the folder does: the page, effects, styles, colour schemes,
+icons and shortcuts.
+
+## Making one
+
+**Settings ▸ Addons ▸ Extensions ▸ Make a package** takes the folder, checks it as an install
+would, and saves `<id>.lfx`. A package is held to the same limits as a folder. One holding a
+link, or a path outside its root, is refused.
+
+An extension's effects travel in its package. **Make a package** checks them as an install
+would: the category, the `api`, the passes, and that each `shader` is inside the folder.
+
+## Installing one
+
+A package installs with a double-click, by dropping it on the window, or from **Settings ▸
+Addons ▸ Extensions ▸ Install a package**. Double-clicking a package while Lumit is open
+sends it to the open Lumit.
+
+The install window lists what the package adds, as **Add effects: Blinds** or **Add a
+style**, and what it asks to be allowed. Its shortcuts replace the person's own only when
+**Use its shortcuts** is ticked.
+
+Installing a package again replaces the extension and reads its shaders again, and an open
+project draws with the new ones at once.
+
+A project that uses an effect whose extension isn't installed opens, leaves the picture
+alone and keeps every value. The effect's heading names the extension to install.
+
+## Without a package
+
+A colour scheme travels on its own as its `.lumtheme` file, read by **Settings ▸ Appearance ▸
+Your themes ▸ Import…**. A style is a `.lumstyle` file, or a folder with its pictures, put in
+the styles folder. Icons are SVG files put in the **Custom icons** folder.
+
+An extension installer of the author's own copies the folder into a folder Lumit looks in.
+See [Where extensions are found](/use/lfx-effects/#where-extensions-are-found).
+
+## Related
+
+- [Make an extension](/make/extensions/)
+- [Make a theme](/make/themes/)
+- [Extensions](/use/extensions/)

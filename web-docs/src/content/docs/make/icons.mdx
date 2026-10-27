@@ -1,0 +1,77 @@
+---
+title: Make an icon set
+description: Replace any or all of Lumit's icons with SVG files of your own.
+sidebar:
+  order: 3
+---
+
+An icon set is a folder of SVG files, one per icon, each named after the icon it replaces.
+A set can replace one icon or all of them.
+
+## Your own icons
+
+**Settings ▸ Appearance ▸ Custom icons** shows the folder: `%APPDATA%\lumit\icons` on
+Windows and `~/.config/lumit/icons` on macOS and Linux. A `razor.svg` in it replaces the
+Razor icon everywhere it appears. The row counts how many icons the folder replaces. Lumit
+reads the folder again when its window comes back to the front.
+
+## Drawing one
+
+```xml
+<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+     stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 2.5v11l9.5-5.5z"/>
+</svg>
+```
+
+- Lumit's icons are drawn on a 16 by 16 grid with a 1.5 stroke. Any `viewBox` works.
+- An icon is drawn in one colour, the colour of wherever it sits, and changes with hover
+  and selection like the words beside it.
+- **Icon set** in Settings draws the strokes thinner or heavier by changing
+  `stroke-width="1.5"`. Other widths are left as they are.
+
+Lumit's own icons are in the repository at `flutter_ui/tool/icons/glyphs.json`, each as the
+inside of a 16 by 16 SVG.
+
+:::note
+An SVG's own colours are not kept.
+:::
+
+## The names
+
+Case, spaces and hyphens are ignored: `direct-select.svg`, `directSelect.svg` and
+`Direct select.svg` replace the same icon. The older names, such as `pointer.svg` for
+`select`, still work.
+
+| Group | Names |
+| --- | --- |
+| Tools | `select`, `direct-select`, `pan`, `zoom`, `rectangle`, `ellipse`, `polygon`, `pen`, `text`, `razor`, `anchor`, `camera`, `mask`, `paint`, `point-picker`, `eyedropper`, `rotate`, `star`, `vertical-type`, `vertex-add`, `vertex-delete`, `vertex-convert`, `mask-feather`, `clone-stamp`, `eraser`, `roto-brush`, `refine-edge`, `puppet-pin`, `puppet-starch`, `puppet-overlap`, `puppet-bend`, `camera-orbit`, `camera-pan`, `camera-dolly`, `local-axes`, `world-axes`, `view-axes` |
+| Layer switches | `visible`, `hidden`, `audio`, `muted`, `solo`, `lock`, `unlocked`, `shy`, `shy-on`, `guide`, `effects-switch`, `motion-blur`, `flow`, `3d`, `adjustment`, `collapse`, `expand`, `switches`, `modes`, `parent`, `matte`, `label`, `collapse-transformations` |
+| Transport | `to-start`, `previous-frame`, `play`, `pause`, `next-frame`, `to-end`, `loop`, `work-area` |
+| Timeline and graph | `layers`, `graph`, `animated`, `all`, `value`, `speed`, `auto`, `clamp`, `free`, `linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`, `ease`, `bezier`, `fit`, `normalise`, `zoom-in`, `zoom-out`, `snap`, `render-time` |
+| Keyframes and values | `stopwatch`, `stopwatch-round`, `previous-key`, `add-key`, `next-key`, `reset`, `link`, `unlink`, `invert`, `separate-axes`, `selected-key` |
+| Effects | `add-effect`, `bypass`, `expose`, `driven`, `rename`, `delete` |
+| Viewer bar | `fit-to-view`, `actual-size`, `transparency`, `grid`, `safe-zones`, `channels`, `exposure`, `snapshot`, `colour-space`, `quality`, `scopes`, `tone-map` |
+| Project | `folder`, `new-folder`, `composition`, `new-composition`, `footage`, `still`, `sequence`, `audio-file`, `search`, `import`, `relink`, `missing`, `in-use`, `proxy`, `solid` |
+| Graph panel | `auto-wire`, `heal`, `frame-all`, `note`, `comment`, `group`, `nodes` |
+| Application | `export`, `add-to-queue`, `settings`, `undo`, `redo`, `close`, `more`, `help`, `manual`, `workspace`, `tick`, `check-for-updates`, `download-update`, `restart-to-update` |
+| Text | `align-left`, `align-centre`, `align-right`, `justify`, `faux-bold`, `faux-italic`, `all-caps`, `small-caps`, `superscript`, `subscript` |
+| Window | `window-minimise`, `window-maximise`, `window-restore`, `window-minimise-square`, `window-maximise-square`, `window-restore-square`, `window-close-square`, `window-minimise-round`, `window-maximise-round`, `window-restore-round`, `window-close-round` |
+
+Four marks are painted rather than drawn from the set, and a file replaces them too:
+`null-layer`, `rounded-rectangle`, `wireframe` and `zoom-extent`.
+
+## In a style or an extension
+
+A style names a folder of its own icons with `--icons: url("icons");`, beside the style's
+file. An [extension](/make/extensions/) carries one with `"icons": "icons"` in its
+`extension.json`, and it is chosen under **Settings ▸ Appearance ▸ Icon set ▸ From
+extensions**.
+
+Of the three, the **Custom icons** folder wins, then the set chosen from an extension, then
+the style's.
+
+## Related
+
+- [Make a theme](/make/themes/)
+- [Make Lumit yours](/tutorials/customise/#words-or-icons)

@@ -1,13 +1,16 @@
 ---
 title: Extensions
-description: Panels made by other people, how one is installed, and what its page can ask of Lumit.
+description: Panels, effects and looks made by other people, and how one is installed.
 sidebar:
   order: 9.8
 ---
 
-An **extension** is a folder somebody else made that adds a panel, effects, or both. It
-holds an `extension.json`, and Lumit shows its web page in a panel of its own. Its effects
-are [LFX effects](/use/lfx-effects/).
+import Shot from "../../../components/Shot.astro";
+
+An **extension** is a folder somebody else made that adds a panel, effects, styles, colour
+schemes, icons or shortcuts. It holds an `extension.json`, and Lumit shows its web page in a
+panel of its own. Its effects are [LFX effects](/use/lfx-effects/). To make one, see
+[Make an extension](/make/extensions/).
 
 :::note
 Extensions are installed from a folder or a package: the addon catalogue does not list
@@ -21,9 +24,15 @@ them. An extension is not signed.
 after **Install**. Installing over an extension of the same id replaces it.
 
 A package, a `.lfx` file, installs with a double-click, by dropping it on the window, or
-from **Settings ▸ Addons ▸ Extensions ▸ Install a package**. The window lists the effects
-it adds and where it goes. **Change…** puts it in another folder, which Lumit then looks in
-too.
+from **Settings ▸ Addons ▸ Extensions ▸ Install a package**. The window lists the effects,
+styles, colour schemes, icons and shortcuts it adds and where it goes. **Change…** puts it in
+another folder, which Lumit then looks in too.
+
+<Shot file="make-extension-install.jpg" caption="Installing an extension that carries a look and shortcuts."/>
+
+An extension's shortcuts replace the person's own only when **Use its shortcuts** is ticked.
+Its styles, colour schemes and icons are listed in **Settings ▸ Appearance** beside the
+person's own.
 
 Double-clicking a package while Lumit is open sends it to the open Lumit.
 
@@ -34,138 +43,9 @@ other. An extension's effects are in the Effects menu under their categories.
 **Remove** deletes the extension's folder. What its page stored is kept. An extension in the
 machine-wide folder or an added folder is left where it is.
 
-## The folder
-
-```
-my-extension/
-  extension.json
-  index.html
-  ...
-```
-
-```json
-{
-  "format": 1,
-  "id": "my-extension",
-  "name": "My extension",
-  "version": "1.0.0",
-  "summary": "One line saying what it does.",
-  "author": "Who made it",
-  "homepage": "https://example.org",
-  "requires": "0.7.0",
-  "entry": "index.html",
-  "permissions": ["project", "activity", "export", "import", "share", "edit"],
-  "hosts": ["example.org"]
-}
-```
-
-| Field | What it is |
-| --- | --- |
-| `format` | `1`. |
-| `id` | Lower-case letters, digits and hyphens, at most 64. The installed folder's name. |
-| `name`, `version` | Shown in Settings, the Window menu and the panel's tab. |
-| `summary`, `author`, `homepage` | Optional. Shown before installing. |
-| `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
-| `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
-| `effects` | Optional. The [LFX effects](/use/lfx-effects/#the-manifest) it carries. |
-| `permissions` | What the page may ask. See below. |
-| `hosts` | The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
-
-A manifest with a permission Lumit does not know, an `entry` outside the folder, or a host
-that is not a bare name is refused. A folder holds at most 4,096 files and 512 MB.
-
-## The page
-
-The page is served from `https://<id>.lumit.example/` on Windows and from
-`lumit-extension://<id>/` on macOS and Linux, so relative paths to its own scripts, styles
-and pictures work. Lumit gives it `window.lumit` before its own scripts run.
-
-The page loads its own files and `https` and `wss` addresses on `hosts`, and nothing else.
-Any other request is refused, whether it comes from `fetch`, a tag, a form or a worker. A
-WebRTC connection is not limited.
-
-```js
-const info = await lumit.call("app.info");
-const stop = lumit.on("activity.edit", (edit) => console.log(edit.step));
-```
-
-- `lumit.call(method, params)` returns a promise. A refused call rejects with an `Error`
-  whose `code` is `not-allowed`, `unknown-method`, `bad-params` or `failed`.
-- `lumit.on(event, listener)` returns a function that stops listening.
-
-A page that has gone to another site is answered nothing until **Go back** is pressed.
-The page cannot open a window.
-
-On Linux the page is a still picture while a menu, a tooltip or a dialogue is open.
-
-A page can be inspected when Lumit is started with the environment variable
-`LUMIT_EXTENSION_DEVTOOLS=1`: from Safari's **Develop** menu on macOS, from **Inspect
-Element** on the page's own menu on Linux, and on Windows from `edge://inspect` in Microsoft
-Edge, which finds it at `localhost:9222`. A port number in place of `1` is used instead of
-9222. The port takes connections from this computer only, and any program on it can use
-the page through it.
-
-## Permissions and calls
-
-| Permission | Call | What it does |
-| --- | --- | --- |
-| none | `app.info` | The API version, Lumit's version, and the extension's id, version, permissions and hosts. |
-| none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
-| none | `app.status {text}` | A line that stays on the bottom strip, after the extension's name, until `text` is `null`. One line of at most 80 characters, shown while Lumit has no notice there. It goes when the page loads again or leaves, or the panel closes. |
-| none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
-| none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
-| `project` | `project.info` | `{open, name, id, saved, dirty}`. `name` is the file's name without its folder. `id` is the project's own and stays when the file is renamed or moved. A copy of the file has the same `id`. A guest's copy of a shared project, or of a project kept online, has an `id` of its own. |
-| `export` | `export.state` | `{state}` as `idle`, `running` with `frame` and `total`, `done` with `path`, or `failed` with `error`. |
-| `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. |
-| `import` | `import.files {paths}` | Imports the files into the open project. |
-| `import` | `import.watch {folder}` | Watches a folder and imports each new file once it has stopped growing. With no `folder` the person picks one. A `folder` is accepted only if the person picked it for this extension before. Answers `{folder}`. |
-| `import` | `import.unwatch` | Stops watching. |
-| `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. |
-| `share` | `share.link` | The invite link while this computer hosts, otherwise `null`. |
-| `share` | `share.start {relay}` | Opens the **Multi-edit** window on **Share this project**, with `relay` offered if given. |
-| `share` | `share.host {password}` | Asks the person whether the extension may share the open project, and shares it with the name, relay and **Internet** choice they last used. Answers a new invite link, or `null` when they say no, it cannot start, no project is open, or this computer is a guest. While this computer hosts, the link at once. `password` is optional. |
-| `share` | `share.join {link}` | Opens the **Multi-edit** window on **Join a project** with the link in it. |
-| `share` | `share.stop` | Stops sharing, or leaves. |
-| `edit` | `edit.commands` | The commands the extension may run, as `[{name, summary, schema}]`. `schema` is a JSON Schema for the command's arguments. |
-| `edit` | `edit.<command> {...}` | Runs one of Lumit's commands on the open project, such as `edit.layer.add`, and answers what it did. |
-
-An extension never shares or joins by itself: the person presses the button.
-
-`share.host` asks whether the extension, by name, may share the project. The question says
-that the extension sends the invite to whoever it chooses, and that they can edit the
-project and copy its footage until sharing stops. **Don't share** is the default button.
-**Share** takes a press only once the question has been up for a moment. After a person
-says no, or sharing fails to start, the page is not asked again until the panel opens
-again.
-
-## Editing the project
-
-Each `edit.` call is one step in the **History** list, named after the extension, such as
-**Logo tools: Add layer**. A call made during a drag in the window waits for it to end, and
-fails after two seconds.
-
-```js
-const { comps } = await lumit.call("edit.comp.list");
-await lumit.call("edit.layer.add", { comp: comps[0].id, kind: "null", name: "Control" });
-```
-
-`project.save`, `undo`, `redo`, `comp.open` and the `export.` commands are refused.
-`footage.import` also needs `import`. A path in an answer is the file's name only, and
-`project.info` answers no `path`.
-
-## Events
-
-| Permission | Event | When |
-| --- | --- | --- |
-| `project` | `project.changed` | A project opens, saves or closes. Carries `project.info`. |
-| `activity` | `activity.edit` | An edit, undo or redo is made on this computer. Edits from others in a shared project do not count. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
-| `activity` | `activity.focus` | Lumit becomes the front window or stops being it. A press in the page leaves Lumit in front. `{focused}`. |
-| `export` | `export.started`, `export.progress`, `export.finished`, `export.failed` | Carry `export.state`. |
-| `import` | `import.added` | A watched file was imported. `{path}`. |
-| `share` | `share.changed` | Sharing starts or stops, someone joins or leaves, or the host is lost or found. Carries `share.state`. |
-
 ## Related
 
+- [Make an extension](/make/extensions/)
 - [Writing LFX effects](/use/lfx-effects/)
 - [Projects](/use/projects/#shared-projects)
 - [Plugins](/use/plugins/)
