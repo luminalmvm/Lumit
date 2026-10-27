@@ -1700,6 +1700,10 @@ class CompositionReference {
   /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
   /// keeps time by skipping frames, in either direction, and is silent.
   ///
+  /// `slow` is how many times slower than the comp's rate the leg plays,
+  /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
+  /// the sound is slowed with its pitch kept.
+  ///
   /// `until` is the frame the leg ends on, the end of the work area going
   /// forwards and its start going back. Nothing past it is composited.
   /// `None` runs to the end of the composition.
@@ -1710,6 +1714,7 @@ class CompositionReference {
           required int view,
           required bool reverse,
           required int speed,
+          required int slow,
           BigInt? until}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
           that: this,
@@ -1719,6 +1724,7 @@ class CompositionReference {
           view: view,
           reverse: reverse,
           speed: speed,
+          slow: slow,
           until: until);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,

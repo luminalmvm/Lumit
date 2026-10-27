@@ -735,6 +735,7 @@ abstract class BridgeLibApi extends BaseApi {
       required int view,
       required bool reverse,
       required int speed,
+      required int slow,
       BigInt? until});
 
   int crateApiCompositionCompositionReferencePlaybackTier(
@@ -7392,6 +7393,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required int view,
       required bool reverse,
       required int speed,
+      required int slow,
       BigInt? until}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
@@ -7403,6 +7405,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(view, serializer);
         sse_encode_bool(reverse, serializer);
         sse_encode_u_32(speed, serializer);
+        sse_encode_u_32(slow, serializer);
         sse_encode_opt_box_autoadd_u_64(until, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 170)!;
       },
@@ -7412,7 +7415,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferencePlayConstMeta,
-      argValues: [that, from, scale, mode, view, reverse, speed, until],
+      argValues: [that, from, scale, mode, view, reverse, speed, slow, until],
       apiImpl: this,
     ));
   }
@@ -7428,6 +7431,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           "view",
           "reverse",
           "speed",
+          "slow",
           "until"
         ],
       );

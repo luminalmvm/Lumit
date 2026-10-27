@@ -6532,6 +6532,7 @@ fn wire__crate__api__composition__composition_reference_play_impl(
             let api_view = <u32>::sse_decode(&mut deserializer);
             let api_reverse = <bool>::sse_decode(&mut deserializer);
             let api_speed = <u32>::sse_decode(&mut deserializer);
+            let api_slow = <u32>::sse_decode(&mut deserializer);
             let api_until = <Option<u64>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
@@ -6543,6 +6544,7 @@ fn wire__crate__api__composition__composition_reference_play_impl(
                     api_view,
                     api_reverse,
                     api_speed,
+                    api_slow,
                     api_until,
                 )?;
                 Ok(output_ok)
