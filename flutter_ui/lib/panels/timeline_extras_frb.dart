@@ -35,6 +35,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/layer_picker.dart';
 import 'timeline_metrics_frb.dart'
     show TimelineMode, laneKeyHalf, positionOf;
@@ -195,11 +196,23 @@ class CompTabsFrb extends StatelessWidget {
                     BoxDecoration(color: t.accent, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
-              Segment(
-                key: const ValueKey('tl-comp-tabs'),
-                children: _tabs(context, t, comps, selected),
+              // Scrolls sideways once the tabs outgrow the line, so the mode
+              // pill and Export always keep their place.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: EdgeFade(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Segment(
+                        key: const ValueKey('tl-comp-tabs'),
+                        children: _tabs(context, t, comps, selected),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               if (mode != null && onMode != null) ...[
                 Segment(key: const ValueKey('tl-mode-tabs'), children: [
                   for (final (keyName, label, tip, which) in [
@@ -727,6 +740,8 @@ class _CompTabState extends State<_CompTab> {
     final dropping = widget.dropping;
     final tab = Container(
           height: round ? null : compTabHeight,
+          // A long name is cut short rather than making a tab that wide.
+          constraints: const BoxConstraints(maxWidth: 200),
           padding: const EdgeInsets.only(left: 10, right: 10),
           // **The pointer says the tab is a control**. A tab that is
           // not the open one answered a hover with nothing at all, so there
@@ -772,15 +787,24 @@ class _CompTabState extends State<_CompTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                // Body, not `small`: a composition's name is the *user's* text
-                // (§7.1), and the mockup sets both states at 11. Only the colour
-                // tells the fronted tab from the rest.
-                child: Text(
-                  name,
-                  style: active
-                      ? t.bodyPrimary
-                      : t.body.copyWith(color: t.textMuted),
+              Flexible(
+                child: Center(
+                  widthFactor: 1,
+                  // Body, not `small`: a composition's name is the *user's*
+                  // text (§7.1), and the mockup sets both states at 11. Only
+                  // the colour tells the fronted tab from the rest.
+                  child: LumitTooltip(
+                    message: name,
+                    child: Text(
+                      name,
+                      style: active
+                          ? t.bodyPrimary
+                          : t.body.copyWith(color: t.textMuted),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

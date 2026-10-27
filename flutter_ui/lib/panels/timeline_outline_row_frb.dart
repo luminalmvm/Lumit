@@ -634,14 +634,17 @@ class _OutlineRowState extends State<OutlineRow> {
         ),
         const SizedBox(width: identityGap),
         // The layer number: **mono**, because it is a number (§7.1's rule has
-        // no exceptions), muted, and in the same 18px cell the header's `#`
+        // no exceptions), muted, and in the same cell the header's `#`
         // stands in. It comes **before** the label dot: the number is
         // the row's address and the dot belongs to the name it colours, which
         // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(
           width: numberCellWidth,
           child: Text('${widget.number}',
-              style: layerNumberStyle(t, 10)),
+              style: layerNumberStyle(t, 10),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible),
         ),
         const SizedBox(width: identityGap),
         LumitTooltip(

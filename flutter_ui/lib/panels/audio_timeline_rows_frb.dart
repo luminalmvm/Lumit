@@ -458,7 +458,10 @@ class AudioTrackOutlineRow extends StatelessWidget {
         SizedBox(
           width: numberCellWidth,
           child: Text('${index + 1}',
-              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible),
         ),
         const SizedBox(width: identityGap),
         // The label dot, the same 6px bullet the layer Timeline marks a row
