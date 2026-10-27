@@ -2,6 +2,8 @@
 // leading mark, and the expression autofill list.
 
 import 'package:flutter/material.dart';
+
+import '../../theme/style_sheet.dart';
 import 'package:flutter/services.dart';
 
 import '../autofill.dart';
@@ -404,7 +406,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       alignment: Alignment.centerLeft,
       decoration: widget.frameless
           ? null
-          : BoxDecoration(
+          : dress(BoxDecoration(
               color: widget.fill ?? t.surface0,
               borderRadius: wellCorners(t),
               // `animated`, not `accent`: a focused well is the one focus that
@@ -416,7 +418,8 @@ class _HouseTextFieldState extends State<HouseTextField>
               border: wellBorder(
                   t, _focus.hasFocus ? t.animated : t.hairline,
                   lit: _focus.hasFocus),
-            ),
+            ), partStyle(context, t, 'well',
+                states: {if (_focus.hasFocus) 'focus'})),
       child: _withLeading(
         leading,
         widget.leadingInteractive,

@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/ui_state.dart';
 import '../../theme/motion.dart';
+import '../../theme/style_sheet.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
 import 'motion.dart';
@@ -434,11 +435,15 @@ class _HoverTipState extends State<_HoverTip> {
                       maxWidth: widget.maxWidth ?? double.infinity),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: t.surface3,
-                    borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-                    border: Border.all(color: t.hairline),
-                    boxShadow: t.floatShadow,
+                  decoration: dress(
+                    BoxDecoration(
+                      color: t.surface3,
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.floatRadius),
+                      border: Border.all(color: t.hairline),
+                      boxShadow: t.floatShadow,
+                    ),
+                    partStyle(context, t, 'tooltip'),
                   ),
                   child: body == null
                       ? says

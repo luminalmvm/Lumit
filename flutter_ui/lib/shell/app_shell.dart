@@ -316,6 +316,8 @@ class _LumitAppViewState extends State<LumitAppView> {
     _clipboardWatch = AppLifecycleListener(
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
+      // Icons and styles edited elsewhere show when the window comes back.
+      onResume: () => context.read<LumitUiState>().workspace.refreshFromDisk(),
     );
     // The first-run questions, after the first frame so there is an
     // Overlay to put them in. They ask nothing on any later launch.

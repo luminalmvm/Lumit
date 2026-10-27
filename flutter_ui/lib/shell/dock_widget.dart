@@ -13,6 +13,7 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../panels/viewer_strips.dart' show viewerPaneCorners;
 import '../state/dock.dart';
+import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
@@ -269,6 +270,7 @@ class _DockWidgetState extends State<DockWidget> {
     }
     return DockPaneHandle(
       child: _TitleLine(
+        panel: panel.name,
         child: Text(
           t.kickerCase(paneTitle(pane)),
           key: const ValueKey('pane-title'),
@@ -729,7 +731,10 @@ class _DividerState extends State<_Divider> {
 /// `surface1`, with the accent dot at the left corner and the words centred.
 class _TitleLine extends StatelessWidget {
   final Widget child;
-  const _TitleLine({required this.child});
+
+  /// The panel it heads, or the fronted one of a group.
+  final String panel;
+  const _TitleLine({required this.panel, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -739,7 +744,8 @@ class _TitleLine extends StatelessWidget {
     return Container(
       key: const ValueKey('pane-title-line'),
       height: t.density.headerStrip,
-      color: roomed ? t.surface1 : t.surface2,
+      decoration: dress(BoxDecoration(color: roomed ? t.surface1 : t.surface2),
+          partStyle(context, t, 'header', inside: panel)),
       padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 0),
       child: Row(
         children: [
@@ -763,17 +769,26 @@ class _TitleLine extends StatelessWidget {
 
 /// The card a roomed pane stands in: `surface1`, the card radius and shadow,
 /// clipped. A flush shape hands the child back as it is.
-Widget _card(LumitTheme t, Widget child) => !t.tokens.roomed
-    ? child
-    : Container(
-        decoration: BoxDecoration(
-          color: t.surface1,
-          borderRadius: BorderRadius.circular(t.tokens.cardRadius),
-          boxShadow: t.tokens.cardShadow,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: child,
-      );
+Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
+  if (!t.tokens.roomed) return child;
+  final style = partStyle(context, t, 'pane', inside: panel);
+  final decoration = dress(
+    BoxDecoration(
+      color: t.surface1,
+      borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+      boxShadow: t.tokens.cardShadow,
+    ),
+    style.fill,
+  );
+  return Container(
+    decoration: decoration,
+    // Over the content, so the header's fill can't cover it on the curve.
+    foregroundDecoration:
+        style.edge(decoration.borderRadius as BorderRadius?),
+    clipBehavior: Clip.antiAlias,
+    child: insetShadows(style, decoration.borderRadius as BorderRadius?, child),
+  );
+}
 
 /// A tab group: the title line of tabs plus the active pane's body. Under
 /// Lantern the whole group is one card and the tabs sit on its title line.
@@ -802,12 +817,15 @@ class _TabGroup extends StatelessWidget {
     final active = tabs.children[tabs.active];
 
     return _card(
+      context,
       t,
+      active.id.panel.name,
       Column(
         children: [
           // The pill strip scrolls when the group is narrower than its
           // tabs, as egui_tiles' tab bar does.
           _TitleLine(
+            panel: active.id.panel.name,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -1015,12 +1033,17 @@ class _TabPillState extends State<_TabPill> {
     // place while the colour under the word changes.
     final pill = TweenAnimationBuilder<Decoration>(
       tween: DecorationTween(
-        end: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(round
-              ? t.tokens.actionRadius - t.tokens.pillInset
-              : t.tokens.actionRadius),
-          border: border,
+        end: dress(
+          BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(round
+                ? t.tokens.actionRadius - t.tokens.pillInset
+                : t.tokens.actionRadius),
+            border: border,
+          ),
+          partStyle(context, t, 'tab',
+              inside: widget.pane.panel.name,
+              states: {if (widget.active) 'on', if (_hover) 'hover'}),
         ),
       ),
       duration: step.duration,
@@ -1209,7 +1232,9 @@ class _StackGroup extends StatelessWidget {
     final total = open.fold<double>(0, (sum, p) => sum + tabs.shareOf(p));
 
     return _card(
+      context,
       t,
+      null,
       Container(
         // What shows under the headers when every panel is shut.
         color: t.surface1,
@@ -1460,13 +1485,23 @@ class _PaneChrome extends StatelessWidget {
         // than in each panel so a panel that has not thought about
         // narrow widths still cannot overflow, and so there is one
         // place to read the rule.
-        PanelFloor(minWidth: panelMinWidth(pane.panel), child: child),
+        PanelFloor(
+          minWidth: panelMinWidth(pane.panel),
+          child: StylePart(name: pane.panel.name, child: child),
+        ),
         Positioned.fill(child: _DropPreview(pane: pane, drag: drag)),
       ],
     );
     return ValueListenableBuilder<PaneId?>(
       valueListenable: activePanel,
-      builder: (context, active, _) => Listener(
+      builder: (context, active, _) {
+        // Inside a group's card, the card wears the style's edge.
+        final style = onRoom
+            ? PartStyle.none
+            : partStyle(context, t, 'pane',
+                inside: pane.panel.name, states: {if (active == pane) 'active'});
+        final edged = inCard && t.tokens.roomed ? style.fill : style;
+        return Listener(
         // The whole pane by name, for the tour and the screenshot sweeps.
         key: ValueKey<String>('dock-pane-${pane.panel.name}'),
         // Any press claims focus for this panel, before the content handles
@@ -1481,12 +1516,7 @@ class _PaneChrome extends StatelessWidget {
             key: drag.paneKey(pane),
             duration: scope.motion.mark.duration,
             curve: scope.motion.mark.curve,
-            decoration: BoxDecoration(
-              color: onRoom ? t.room : t.surface1,
-              borderRadius:
-                  card ? BorderRadius.circular(t.tokens.cardRadius) : null,
-              boxShadow: card ? t.tokens.cardShadow : null,
-            ),
+            decoration: _paneDecoration(context, t, onRoom, card, style),
             // The accent boundary paints over the content's edge, like the
             // egui overlay stroke at Order::Middle. It is ALWAYS supplied — an
             // inactive pane wears a fully transparent border of the same width,
@@ -1496,13 +1526,23 @@ class _PaneChrome extends StatelessWidget {
             // to discard the pane's Element subtree and rebuild it with fresh
             // State — losing scroll offsets and the gesture recogniser the
             // activating pointer-down had just armed (the first-click-drag bug).
+            //
+            // A style's own edge is drawn here too, for the same reason: over
+            // the content, a fill inside can't cover it where the corner curves.
             foregroundDecoration: BoxDecoration(
               border: Border.all(
-                color:
-                    active == pane ? t.accent : t.accent.withValues(alpha: 0),
-                width: 1,
+                color: active == pane
+                    ? t.accent
+                    : edged.borderWidth == 0
+                        ? t.accent.withValues(alpha: 0)
+                        : edged.borderColour ?? t.accent.withValues(alpha: 0),
+                width: edged.borderWidth == null || edged.borderWidth == 0
+                    ? 1
+                    : edged.borderWidth!,
               ),
-              borderRadius: edgeRadius,
+              borderRadius: edged.radius == null
+                  ? edgeRadius
+                  : BorderRadius.circular(edged.radius!),
             ),
             padding: round ? EdgeInsets.all(t.tokens.cardPadding) : null,
             // A card is cut to its corners. A pane on the room is not a card:
@@ -1523,8 +1563,30 @@ class _PaneChrome extends StatelessWidget {
             ),
           ),
         ),
-      ),
+      );
+      },
     );
+  }
+}
+
+extension on _PaneChrome {
+  /// The pane's own box, with the style's fill over it. Its edge is drawn
+  /// over the content instead. Inside a group's card the card already wears
+  /// the style, so the pane only clears its fill.
+  BoxDecoration _paneDecoration(BuildContext context, LumitTheme t,
+      bool onRoom, bool card, PartStyle style) {
+    final own = BoxDecoration(
+      color: onRoom ? t.room : t.surface1,
+      borderRadius: card ? BorderRadius.circular(t.tokens.cardRadius) : null,
+      boxShadow: card ? t.tokens.cardShadow : null,
+    );
+    if (onRoom) return own;
+    if (inCard && t.tokens.roomed) {
+      return style.background == null
+          ? own
+          : own.copyWith(color: const Color(0x00000000));
+    }
+    return dress(own, style.fill);
   }
 }
 
