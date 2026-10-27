@@ -589,7 +589,7 @@ class _HoverTipState extends State<_HoverTip> {
                       borderRadius:
                           BorderRadius.circular(t.tokens.floatRadius),
                       border: Border.all(color: t.hairline),
-                      boxShadow: t.floatShadow,
+                      boxShadow: t.tipShadow,
                     ),
                     partStyle(context, t, 'tooltip'),
                   ),

@@ -2496,10 +2496,28 @@ class LumitTheme {
       color: textSecondary,
       decoration: TextDecoration.none);
 
-  /// The float shadow (menus, dialogs): rerun's offset 0/15, blur 50.
-  List<BoxShadow> get floatShadow => const [
+  /// The float shadow (menus, dialogs): a wide soft one for the lift and a
+  /// tight one for the edge. Lighter on a light scheme, where black as strong
+  /// as a dark one's reads as a smudge.
+  List<BoxShadow> get floatShadow => [
         BoxShadow(
-            offset: Offset(0, 15), blurRadius: 50, color: Color(0x80000000)),
+            offset: const Offset(0, 8),
+            blurRadius: 24,
+            color: mode == ThemeMode2.dark
+                ? const Color(0x66000000)
+                : const Color(0x24000000)),
+        ...tipShadow,
+      ];
+
+  /// The tight one alone, for a tooltip: one line over its control, not a
+  /// menu standing off the window.
+  List<BoxShadow> get tipShadow => [
+        BoxShadow(
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+            color: mode == ThemeMode2.dark
+                ? const Color(0x40000000)
+                : const Color(0x14000000)),
       ];
 
   /// The dimmed backdrop behind a true modal (Settings, the palette).
