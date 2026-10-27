@@ -2662,6 +2662,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
   }
 
+  /// A comp dropped at [global] goes down whole as one clip, on the picture
+  /// track under the pointer or a new one.
+  void _dropComp(
+      CompositionReference comp, CompositionReference dropped, Offset global) {
+    final ui = _ui;
+    if (ui == null) return;
+    final at = _pointOnLanes(global);
+    final index = at == null ? null : cutTrackAt(_tracks, at.dy, _tops);
+    final track = index == null ? null : _tracks[index];
+    final target =
+        track?.kind == CutTrackKind.picture ? track!.entry.layer : null;
+    final frame =
+        at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    _afterCut(_cut(() =>
+        comp.cutPlaceComp(target: target, comp: dropped, atFrame: frame)));
+  }
+
   /// The clip under [global], with its track, or null on empty ground.
   ({CutTrack track, BridgeClip clip})? _clipAt(Offset global) {
     final at = _pointOnLanes(global);
@@ -2753,6 +2770,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
+                details.data is CompDragData ||
                 details.data is EffectDragData,
             // An effect in hand rings the clip it is over.
             onMove: (details) {
@@ -2764,6 +2782,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               switch (details.data) {
                 case FootageDragData(:final footage):
                   await _dropFootage(comp, footage, details.offset);
+                case CompDragData(comp: final dropped):
+                  _dropComp(comp, dropped, details.offset);
                 case final EffectDragData effect:
                   await _dropEffect(effect, details.offset);
               }
@@ -2773,11 +2793,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               // adding one only then rebuilt the lanes from nothing, which
               // lost their scroll and had two scroll views on one controller
               // for a frame.
-              // Footage lands anywhere on the table, so the table is ringed.
+              // Footage or a comp lands anywhere on the table, so the table
+              // is ringed.
               // An effect lands on one clip, and the clip is.
               foregroundDecoration: BoxDecoration(
                   border: Border.all(
-                      color: candidate.any((data) => data is FootageDragData)
+                      color: candidate.any((data) =>
+                              data is FootageDragData || data is CompDragData)
                           ? t.accent
                           : t.accent.withValues(alpha: 0),
                       width: 2)),

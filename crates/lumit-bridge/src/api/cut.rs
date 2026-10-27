@@ -895,6 +895,38 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
+    /// Put the whole of a composition down at `at_frame` as one clip, its
+    /// sound inside it, on `target` or a new picture Sequence layer at the top.
+    fn place_comp(mut self, target: Option<LayerReference>, comp: Uuid, at_frame: i64) -> Cut {
+        // A composition cannot play itself.
+        if comp == self.comp.id {
+            return Err(BridgeCutResult::WrongLayer.into());
+        }
+        let (name, length, width, height) = {
+            let doc = self.of.document()?;
+            let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
+            let size = (f64::from(inner.width), f64::from(inner.height));
+            (inner.name.clone(), inner.duration.0, size.0, size.1)
+        };
+        let at = self.time(at_frame.max(0))?;
+        let r = match target {
+            Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,
+            None => self.add_row(name, false, width, height),
+        };
+        if self.rows[r].audio_only {
+            return Err(BridgeCutResult::WrongLayer.into());
+        }
+        if self.rows[r].locked {
+            return Err(BridgeCutResult::Locked.into());
+        }
+        let clip = Clip::new(ClipSource::Comp(comp), Rational::ZERO, length, at, length);
+        let dropped = clip.id;
+        let row = &mut self.rows[r];
+        row.clips.push(clip);
+        row.clips = placed(std::mem::take(&mut row.clips), dropped, false);
+        self.commit()
+    }
+
     /// The audio streams of the file a footage item names, and the item's
     /// name. None of either for anything else.
     fn streams_of(&self, item: Uuid) -> Cut<(String, Vec<crate::streams::Stream>)> {
@@ -1969,6 +2001,20 @@ impl CompositionReference {
                 arrival,
             )
         })
+    }
+
+    /// Put the whole of `comp` down at `at_frame` as one clip, the drop of a
+    /// composition from the Project panel. `target` is the picture Sequence
+    /// layer to place on, or `None` for a new one at the top of the stack.
+    /// The clip overwrites what it lands on.
+    #[frb(sync)]
+    pub fn cut_place_comp(
+        &self,
+        target: Option<LayerReference>,
+        comp: &CompositionReference,
+        at_frame: i64,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.place_comp(target, comp.id, at_frame))
     }
 
     /// **Split audio streams**: give each audio stream these clips sound a
