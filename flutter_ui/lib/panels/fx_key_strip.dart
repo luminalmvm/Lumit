@@ -259,6 +259,10 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
   /// How far open the strip is, 0 to 1. Runs on the theme's reveal.
   late final AnimationController _open = AnimationController(vsync: this);
 
+  /// Holds the effect cards while the strip around them changes shape, so
+  /// opening and closing it moves them rather than building them again.
+  final GlobalKey _rowsKey = GlobalKey();
+
   /// The divider's travel while it is in hand, or null at rest.
   double? _dragging;
 
@@ -602,21 +606,24 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final axis = TimelineAxis(frames: widget.spanFrames, width: width);
     final inset = fxKeyStripInset(t);
     final rulerHeight = fxKeyStripRulerHeight * open;
-    final rows = FxKeyStripScope._(
-      width: width,
-      stacked: false,
-      reveal: open,
-      playhead: ui.playheadFrame,
-      axis: axis,
-      spanStart: widget.spanStart,
-      keyOffset: widget.keyOffset,
-      fps: fps,
-      fpsNum: fpsNum,
-      fpsDen: fpsDen,
-      selected: _selected,
-      stretch: _stretch,
-      host: this,
-      child: widget.child,
+    final rows = KeyedSubtree(
+      key: _rowsKey,
+      child: FxKeyStripScope._(
+        width: width,
+        stacked: false,
+        reveal: open,
+        playhead: ui.playheadFrame,
+        axis: axis,
+        spanStart: widget.spanStart,
+        keyOffset: widget.keyOffset,
+        fps: fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        selected: _selected,
+        stretch: _stretch,
+        host: this,
+        child: widget.child,
+      ),
     );
     if (width <= 0) {
       return Column(
