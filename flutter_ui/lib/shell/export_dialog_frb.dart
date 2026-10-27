@@ -66,6 +66,7 @@ import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_queue_frb.dart';
 import 'settings_window_frb.dart';
@@ -1081,12 +1082,17 @@ class _ExportDialogState extends State<_ExportDialog> {
                   _path == null ? l10n.exportNotChosen : _leaf(_path!),
                   key: const ValueKey('export-path'),
                   tone: t.textMuted,
+                  tip: _path,
                 ),
               ),
               const SizedBox(width: 6),
-              SizedBox(
-                width: exportButtonWidth,
-                height: dialogControlHeight,
+              // A floor rather than a width: a longer word for Browse grows
+              // the button instead of wrapping.
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                    minWidth: exportButtonWidth,
+                    minHeight: dialogControlHeight,
+                    maxHeight: dialogControlHeight),
                 child: HouseButton(
                   key: const ValueKey('export-choose'),
                   onPressed: _choose,
@@ -2354,7 +2360,9 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A recessed box holding something the user did not type — a chosen path,
   /// or a number this row is not offering to change.
-  Widget _well(LumitTheme t, String text, {Key? key, Color? tone}) => Container(
+  Widget _well(LumitTheme t, String text,
+          {Key? key, Color? tone, String? tip}) =>
+      Container(
         key: key,
         height: dialogControlHeight,
         alignment: Alignment.centerLeft,
@@ -2364,10 +2372,10 @@ class _ExportDialogState extends State<_ExportDialog> {
           border: Border.all(color: t.hairline),
           borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
         ),
-        child: Text(
+        child: MiddleEllipsis(
           text,
           style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
-          overflow: TextOverflow.ellipsis,
+          tip: tip,
         ),
       );
 

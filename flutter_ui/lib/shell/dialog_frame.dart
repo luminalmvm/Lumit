@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../theme/style_sheet.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 
 /// The title strip, over its hairline.
 const double dialogTitleStrip = 30;
@@ -175,11 +176,7 @@ Widget dialogTitleBar(
   );
   final about = Padding(
     padding: const EdgeInsets.only(left: 10),
-    child: Text(
-      subject,
-      style: t.body.copyWith(color: t.textMuted),
-      overflow: TextOverflow.ellipsis,
-    ),
+    child: MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
   );
   final close = LumitTooltip(
     message: l10n.close,

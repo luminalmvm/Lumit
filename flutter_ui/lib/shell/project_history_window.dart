@@ -39,6 +39,7 @@ import '../state/file_dialogs.dart';
 import '../state/project_changes.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/time_readout.dart' show monoSlotWidth;
 import 'backups_window.dart' show showBackups;
 import 'bring_composition_frb.dart';
 import 'dialog_frame.dart';
@@ -1975,6 +1976,9 @@ class _HistoryState extends State<_History> {
   /// What is known about the chosen version and what changed in it.
   Widget _detailWords(LumitTheme t, BackupVersion version, bool lastSave,
       List<(int, String)> changed) {
+    final most = changed.fold(0, (most, c) => math.max(most, c.$1));
+    final countWidth = math.max(
+        20.0, monoSlotWidth(t.mono.copyWith(fontSize: 11), '$most'.length));
     return NotificationListener<Notification>(
       // Whether there are words out of sight below, as the list of what
       // changed arrives and as it is scrolled.
@@ -2044,7 +2048,8 @@ class _HistoryState extends State<_History> {
                 const SizedBox(height: 12),
                 Text(t.kickerCase(l10n.backupChanged), style: t.kicker),
                 const SizedBox(height: 2),
-                // One change to a line: how many, then what.
+                // One change to a line: how many, then what. The counts
+                // share one column, as wide as the biggest of them.
                 Column(
                   key: const ValueKey('history-changes'),
                   children: [
@@ -2057,9 +2062,11 @@ class _HistoryState extends State<_History> {
                           textBaseline: TextBaseline.alphabetic,
                           children: [
                             SizedBox(
-                              width: 20,
+                              width: countWidth,
                               child: Text('$count',
                                   textAlign: TextAlign.right,
+                                  maxLines: 1,
+                                  softWrap: false,
                                   style: t.mono.copyWith(fontSize: 11)),
                             ),
                             const SizedBox(width: 8),

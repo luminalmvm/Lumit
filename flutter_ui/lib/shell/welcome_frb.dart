@@ -38,6 +38,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'about_window_frb.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'backups_window.dart';
 import 'menu_bar_frb.dart';
 import 'project_history_window.dart'
@@ -747,14 +748,13 @@ class _RecentRowState extends State<_RecentRow> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    MiddleEllipsis(
                       widget.detail ?? shortenHomePath(widget.path),
                       style: t.mono.copyWith(
                         fontSize: 9,
                         color: t.textDisabled,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      tip: widget.detail ?? widget.path,
                     ),
                   ],
                 ),
