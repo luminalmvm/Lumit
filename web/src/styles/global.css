@@ -305,7 +305,7 @@
   .clip.playing {
     opacity: 1;
   }
-  /* The strip a screenshot wears: what it is, and that it opens. */
+  /* The strip a screenshot wears: what it is. */
   .shot-bar {
     display: flex;
     align-items: center;
@@ -322,9 +322,6 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     white-space: nowrap;
-  }
-  .shot-bar > span:last-child {
-    color: var(--color-fg-4);
   }
 
   /* The Markdown body of a release note. The notes are plain Markdown, so every

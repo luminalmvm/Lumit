@@ -2,7 +2,6 @@
 // The last thing on the page: the same light the page opened in, and the
 // download once more. The button's words and where it points are set by the
 // hero's own platform check, which finds every [data-dl] on the page.
-const platforms = ["Windows", "macOS", "Linux"];
 ---
 
 <section class="closing grain">
@@ -31,16 +30,6 @@ const platforms = ["Windows", "macOS", "Linux"];
         if (os && label) label.textContent = "Download for " + os;
       })();
     </script>
-    <ul class="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 p-0">
-      {
-        platforms.map((p) => (
-          <li class="tag list-none">
-            <i class="key" style="--k:var(--color-accent-2)" />
-            {p}
-          </li>
-        ))
-      }
-    </ul>
   </div>
 </section>
 

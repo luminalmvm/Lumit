@@ -97,7 +97,6 @@ const tabs = [
               <span class="no">{String(i + 1).padStart(2, "0")}</span>
               {c.h}
             </span>
-            <span class="hint max-sm:hidden">Click to bring forward</span>
           </span>
           <span class="relative block">
             <Image
@@ -175,7 +174,7 @@ const tabs = [
   }
   /* Half a line of a window behind says nothing, so only the front one has
      its words. */
-  .layer:not([aria-current]) :is(.hint, .cap) {
+  .layer:not([aria-current]) .cap {
     visibility: hidden;
   }
   .cap {
