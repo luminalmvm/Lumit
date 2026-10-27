@@ -46,6 +46,7 @@ import '../main.dart';
 import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
 import '../state/tools.dart';
+import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
@@ -148,7 +149,8 @@ class LumitToolBarFrb extends StatelessWidget {
     // Lantern groups the row into three pills standing in the room; Studio
     // and Desk keep the flat strip, welded under the menu bar by a hairline.
     final pills = t.tokens.roomed;
-    return Container(
+    // Named, so a style can dress the toolbar's buttons apart from others.
+    return StylePart(name: 'toolbar', child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
         color: pills
@@ -225,7 +227,7 @@ class LumitToolBarFrb extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 }
 
@@ -1230,7 +1232,12 @@ class _StripEntry extends StatelessWidget {
                 style: t.body.copyWith(
                   fontSize: 12,
                   height: 1.0,
-                  color: active ? accentInk(t) : t.textMuted,
+                  // A style that dresses the fronted button names its ink.
+                  color: active
+                      ? partStyle(context, t, 'button', states: const {'on'})
+                              .colour ??
+                          accentInk(t)
+                      : t.textMuted,
                 ),
               ),
             ),

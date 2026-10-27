@@ -819,10 +819,15 @@ class LumitTheme {
   /// time, per the §6.4 direction.
   final WaveformColours waveform;
 
-  /// What the Graph panel's wires and sockets draw in, by port type. Fixed
-  /// rather than per-scheme, and not offered to the theme editor — see
-  /// [PortColours].
+  /// What the Graph panel's wires and sockets draw in, by port type. The
+  /// same in every scheme and not offered to the theme editor, since the
+  /// legend says which colour is which (see [PortColours]). A theme file can
+  /// still change them, and the legend follows.
   final PortColours port;
+
+  /// The layer-label palette, in picker order. A theme file can recolour the
+  /// chips but not change how many there are.
+  final List<Color> labels;
 
   /// Comp markers on the time ruler. A plain grey, not a role colour: a marker
   /// says *here*, not *good* or *careful*, and the ruler already has the accent
@@ -876,6 +881,7 @@ class LumitTheme {
     required this.curve,
     required this.layer,
     this.port = PortColours.standard,
+    this.labels = defaultLabels,
     Color? timelineOutOfRange,
     Color? selectionFill,
     Color? marker,
@@ -993,7 +999,7 @@ class LumitTheme {
   /// the theme's role colours, which were built to be quiet rather than
   /// tellable-apart. Index 0 is the neutral default; the Null layer took the
   /// ninth chip, since every one below it was already a kind's own.
-  static const _labelSet = [
+  static const defaultLabels = [
     Color(0xff8b93a3), // slate — the quiet default
     Color(0xff4aa3e0), // azure — footage
     Color(0xffe0a33c), // amber — solids
@@ -1007,14 +1013,14 @@ class LumitTheme {
 
   /// How many chips the palette holds, so the picker draws exactly the set
   /// rather than a number that has to be kept in step by hand.
-  static int get labelCount => _labelSet.length;
+  static int get labelCount => defaultLabels.length;
 
-  Color labelColour(int i) => _labelSet[i % _labelSet.length];
+  Color labelColour(int i) => labels[i % labels.length];
 
   /// The colour for a person in a shared project. [colour] counts from 1 in
   /// joining order, and the neutral first chip is skipped so nobody is grey.
   Color personColour(int colour) =>
-      _labelSet[1 + (colour - 1) % (_labelSet.length - 1)];
+      labels[1 + (colour - 1) % (labels.length - 1)];
 
   /// This theme with a user-picked accent: hover brightens by 0x12 per
   /// channel on a dark surface, darkens by the same on a light one.
@@ -1066,6 +1072,8 @@ class LumitTheme {
         cacheDisk: cacheDisk,
         curve: curve,
         layer: layer,
+        port: port,
+        labels: labels,
         waveform: waveform,
         timelineOutOfRange: timelineOutOfRange,
         selectionFill: selectionFill,

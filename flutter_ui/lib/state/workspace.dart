@@ -20,6 +20,7 @@ import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
+import '../theme/theme_tokens.dart' show applyTokens;
 import 'dock.dart';
 import 'expression_language.dart';
 import 'settings.dart';
@@ -626,6 +627,9 @@ class Workspace extends ChangeNotifier {
     }
     final style = activeStyle;
     if (style != null) themeShape = style.base;
+    // Under the person's own icons: the style's.
+    IconStyle.under = [if (style?.iconFolder case final icons?) icons];
+    IconStyle.reload();
   }
 
   /// Use the person's own style called [name].
@@ -1301,7 +1305,18 @@ class Workspace extends ChangeNotifier {
     if (!_stylesRead) _readStyles();
     final style = activeStyle;
     StyleSheet.current = style;
+    StyleSheet.solid = interface.reduceTransparency;
     final shape = style?.tokens();
+    // A style's own colours, if it sets any, go over the scheme.
+    LumitTheme dressed(LumitTheme t) {
+      if (style == null) return t;
+      final own = applyTokens(t, style.colours(t));
+      // A room picture shows through wherever the room is painted.
+      final picture = style.roomPicture;
+      return picture == null || StyleSheet.solid || !File(picture).existsSync()
+          ? own
+          : own.copyWith(room: const Color(0x00000000));
+    }
     if (_preview != null) {
       _theme =
           _withRoom(_preview!.copyWith(tokens: shape, density: density));
@@ -1318,14 +1333,14 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = _withRoom(
-          custom.build(themeShape).copyWith(tokens: shape, density: density));
+      _theme = _withRoom(dressed(
+          custom.build(themeShape).copyWith(tokens: shape, density: density)));
     } else {
-      _theme = _withRoom(LumitTheme.forScheme(
+      _theme = _withRoom(dressed(LumitTheme.forScheme(
         looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: _lookingAccent ?? accentOverride,
-      ).copyWith(tokens: shape, density: density));
+      ).copyWith(tokens: shape, density: density)));
     }
     notifyListeners();
   }

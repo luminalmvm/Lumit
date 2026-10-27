@@ -34,13 +34,24 @@ class ThemeToken {
   final Color Function(LumitTheme) read;
   final LumitTheme Function(LumitTheme, Color) write;
 
+  /// Set only in a theme file, never offered in the editor: the Viewer's
+  /// surround, the socket colours and the label chips.
+  final bool fileOnly;
+
   const ThemeToken({
     required this.key,
     required this.label,
     required this.group,
     required this.read,
     required this.write,
+    this.fileOnly = false,
   });
+
+  /// A file-only token. It has no row, so it needs no label.
+  ThemeToken.file(this.key, this.read, this.write)
+      : label = key,
+        group = '',
+        fileOnly = true;
 }
 
 /// Rebuild a theme with one field replaced. The struct has no general
@@ -73,6 +84,9 @@ LumitTheme _with(
   Color? marker,
   Color? room,
   WaveformColours? waveform,
+  Color? viewerSurround,
+  PortColours? port,
+  List<Color>? labels,
 }) =>
     LumitTheme(
       mode: t.mode,
@@ -87,7 +101,7 @@ LumitTheme _with(
       // Never a token: the Viewer's surround is strictly neutral by spec
       // (15-DESIGN §2.1/§11) because you cannot judge a grade against a
       // tinted surround. Carried through, never offered.
-      viewerSurround: t.viewerSurround,
+      viewerSurround: viewerSurround ?? t.viewerSurround,
       textPrimary: textPrimary ?? t.textPrimary,
       textSecondary: textSecondary ?? t.textSecondary,
       textMuted: textMuted ?? t.textMuted,
@@ -103,6 +117,8 @@ LumitTheme _with(
       cacheDisk: cacheDisk ?? t.cacheDisk,
       curve: curve ?? t.curve,
       layer: layer ?? t.layer,
+      port: port ?? t.port,
+      labels: labels ?? t.labels,
       timelineOutOfRange: timelineOutOfRange ?? t.timelineOutOfRange,
       selectionFill: selectionFill ?? t.selectionFill,
       marker: marker ?? t.marker,
@@ -139,6 +155,22 @@ WaveformColours _waveformWith(
       low: low ?? w.low,
       mid: mid ?? w.mid,
       high: high ?? w.high,
+    );
+
+PortColours _portWith(
+  PortColours p, {
+  Color? image,
+  Color? number,
+  Color? colour,
+  Color? geometry,
+  Color? audio,
+}) =>
+    PortColours(
+      image: image ?? p.image,
+      number: number ?? p.number,
+      colour: colour ?? p.colour,
+      geometry: geometry ?? p.geometry,
+      audio: audio ?? p.audio,
     );
 
 /// One curve stroke by index, preserving the rest of the ramp.
@@ -399,13 +431,33 @@ List<ThemeToken> get themeTokens => [
         read: (t) => t.layer.camera,
         write: (t, c) => _with(t, layer: _layerWith(t.layer, camera: c)),
       ),
+
+      // --- Only in a theme file --------------------------------------------
+      ThemeToken.file('viewerSurround', (t) => t.viewerSurround,
+          (t, c) => _with(t, viewerSurround: c)),
+      ThemeToken.file('socketImage', (t) => t.port.image,
+          (t, c) => _with(t, port: _portWith(t.port, image: c))),
+      ThemeToken.file('socketNumber', (t) => t.port.number,
+          (t, c) => _with(t, port: _portWith(t.port, number: c))),
+      ThemeToken.file('socketColour', (t) => t.port.colour,
+          (t, c) => _with(t, port: _portWith(t.port, colour: c))),
+      ThemeToken.file('socketShape', (t) => t.port.geometry,
+          (t, c) => _with(t, port: _portWith(t.port, geometry: c))),
+      ThemeToken.file('socketAudio', (t) => t.port.audio,
+          (t, c) => _with(t, port: _portWith(t.port, audio: c))),
+      for (var i = 0; i < LumitTheme.labelCount; i++)
+        ThemeToken.file(
+          'label${i + 1}',
+          (t) => t.labels[i],
+          (t, c) => _with(t, labels: List.of(t.labels)..[i] = c),
+        ),
     ];
 
-/// The token groups, in listing order and without repeats.
+/// The token groups the editor shows, in listing order and without repeats.
 List<String> get themeTokenGroups {
   final seen = <String>[];
   for (final token in themeTokens) {
-    if (!seen.contains(token.group)) seen.add(token.group);
+    if (!token.fileOnly && !seen.contains(token.group)) seen.add(token.group);
   }
   return seen;
 }
