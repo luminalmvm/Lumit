@@ -210,9 +210,9 @@ class BareDropdown<T> extends StatelessWidget {
                         message: why,
                         child: MenuRow(
                           selected: options[i] == value,
+                          enabled: false,
                           onPressed: () {},
-                          child: Text(label(options[i]),
-                              style: TextStyle(color: t.textDisabled)),
+                          child: Text(label(options[i])),
                         ),
                       )
                     else

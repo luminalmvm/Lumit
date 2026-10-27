@@ -2,6 +2,7 @@
 // hover intent, and the right-click holder.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -32,11 +33,20 @@ Widget menuTick(bool on, {Color? colour}) => SizedBox(
           : null,
     );
 
+/// How far a menu's rows stand in from its edge. A row's corner is the
+/// surface's corner less this, so the two curves run parallel.
+const double menuInset = 6;
+
 /// One row in a dropdown/menu popup.
 class MenuRow extends StatefulWidget {
   final Widget child;
   final VoidCallback onPressed;
   final bool selected;
+
+  /// Whether the row can be picked. One that cannot stays in the menu in the
+  /// disabled colour, takes no highlight and no click, and the arrow keys
+  /// pass over it.
+  final bool enabled;
 
   /// **An option row leaves the menu open**, the way a checkbox row does — for
   /// the menus whose rows change the picture in front of you: the preview
@@ -65,6 +75,7 @@ class MenuRow extends StatefulWidget {
     required this.child,
     required this.onPressed,
     this.selected = false,
+    this.enabled = true,
     this.hoverId,
     this.onEnter,
   }) : option = false;
@@ -75,6 +86,7 @@ class MenuRow extends StatefulWidget {
     required this.child,
     required this.onPressed,
     this.selected = false,
+    this.enabled = true,
     this.hoverId,
     this.onEnter,
   }) : option = true;
@@ -84,64 +96,102 @@ class MenuRow extends StatefulWidget {
 }
 
 class _MenuRowState extends State<MenuRow> {
-  bool _hover = false;
+  _FloatSurfaceState? _surface;
+
+  /// The lit row, the surface's when the row is on one: the pointer and the
+  /// arrow keys move one highlight between them.
+  ValueNotifier<Object?>? _alone;
+  ValueNotifier<Object?> get _lights =>
+      _surface?._lit ?? (_alone ??= ValueNotifier<Object?>(null));
+
+  Object get _id => widget.hoverId ?? this;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _surface = FloatSurface._of(context);
+  }
+
+  @override
+  void dispose() {
+    _alone?.dispose();
+    super.dispose();
+  }
+
+  void _press() {
+    widget.onPressed();
+    // The row stayed, so the menu now needs a way out that is not a click:
+    // the pointer leaving it.
+    if (widget.option) _surface?._optionPicked();
+  }
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    // Transparent rather than absent at rest, so the highlight has a colour
-    // to fade back to.
-    final fill = _hover
-        ? t.surface4
-        : widget.selected
-            ? t.accent.withValues(alpha: 0.5)
-            : t.surface4.withValues(alpha: 0);
-    final surface = FloatSurface._of(context);
+    final surface = _surface;
+    final enabled = widget.enabled;
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
       onEnter: (e) {
-        setState(() => _hover = true);
+        _lights.value = enabled ? _id : null;
         // Tell the surface which row the pointer is on, so a submenu that is
         // out can take itself back when the pointer moves to another row. The
         // surface may *hold* the report briefly while the pointer is inside an
         // open flyout's safe triangle — the highlight above is immediate either
         // way; only the flyout switch waits.
-        surface?._hoverRow(widget.hoverId ?? this, e.position);
-        widget.onEnter?.call();
+        surface?._hoverRow(_id, e.position);
+        if (enabled) widget.onEnter?.call();
       },
-      onHover: (e) => surface?._hoverMoved(widget.hoverId ?? this, e.position),
-      onExit: (_) => setState(() => _hover = false),
+      onHover: (e) => surface?._hoverMoved(_id, e.position),
+      onExit: (_) {
+        if (_lights.value == _id) _lights.value = null;
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          widget.onPressed();
-          // The row stayed, so the menu now needs a way out that is not a
-          // click: the pointer leaving it.
-          if (widget.option) surface?._optionPicked();
-        },
-        // The highlight arrives at once and trails off behind the pointer
-        // (docs/15 §8): a menu is read by where the highlight is, so it may
-        // never lag, and the fade is only ever on the row just left.
-        child: AnimatedContainer(
-          // Lit by the keyboard counts as lit: the command palette's
-          // highlight moves at once too, and only what it left fades.
-          duration: _hover || widget.selected
-              ? Duration.zero
-              : scope.motion.rowTrail.duration,
-          curve: scope.motion.rowTrail.curve,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: dress(
-            BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
-            partStyle(context, t, 'row', states: {
-              if (_hover) 'hover',
-              if (widget.selected) 'on',
-            }),
-          ),
-          child: DefaultTextStyle(style: t.bodyPrimary, child: widget.child),
+        onTap: enabled ? _press : null,
+        child: ValueListenableBuilder<Object?>(
+          valueListenable: _lights,
+          builder: (context, lit, _) {
+            final on = enabled && lit == _id;
+            // Over the selected row's own light fill rather than instead of
+            // it, so the chosen row still reads as chosen under the pointer.
+            // Clear rather than absent at rest, so the highlight has a colour
+            // to fade back to.
+            final tint = hoverTint(t, on ? 1 : 0);
+            final fill = widget.selected
+                ? Color.alphaBlend(tint, t.accent.withValues(alpha: 0.16))
+                : tint;
+            // The highlight arrives at once and trails off behind the pointer
+            // (docs/15 §8): a menu is read by where the highlight is, so it
+            // may never lag, and the fade is only ever on the row just left.
+            return AnimatedContainer(
+              // Lit by the keyboard counts as lit: the command palette's
+              // highlight moves at once too, and only what it left fades.
+              duration: on || widget.selected
+                  ? Duration.zero
+                  : scope.motion.rowTrail.duration,
+              curve: scope.motion.rowTrail.curve,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: dress(
+                BoxDecoration(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(
+                      math.max(0, t.tokens.floatRadius - menuInset)),
+                ),
+                partStyle(context, t, 'row', states: {
+                  if (on) 'hover',
+                  if (widget.selected) 'on',
+                  if (!enabled) 'disabled',
+                }),
+              ),
+              child: DefaultTextStyle(
+                style: enabled
+                    ? t.bodyPrimary
+                    : t.bodyPrimary.copyWith(color: t.textDisabled),
+                child: widget.child,
+              ),
+            );
+          },
         ),
       ),
     );
@@ -188,6 +238,10 @@ class FloatSurface extends StatefulWidget {
 
 class _FloatSurfaceState extends State<FloatSurface> {
   final _hovered = ValueNotifier<Object?>(null);
+
+  /// The row that is lit. Unlike [_hovered] it is never held back, and the
+  /// pointer leaving a row puts it out.
+  final _lit = ValueNotifier<Object?>(null);
 
   // --- Safe-triangle hover intent ---------------------------------------
   //
@@ -368,6 +422,7 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _removeDebugOverlay();
     _debugShape.dispose();
     _hovered.dispose();
+    _lit.dispose();
     super.dispose();
   }
 
@@ -377,7 +432,7 @@ class _FloatSurfaceState extends State<FloatSurface> {
     final t = scope.theme;
     final surface = Container(
       width: widget.width,
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(menuInset),
       decoration: dress(
         BoxDecoration(
           color: t.surface3,
@@ -526,7 +581,7 @@ class _SubmenuRowState extends State<SubmenuRow> {
       child: Row(
         children: [
           Expanded(child: widget.child),
-          Text('›', style: t.body.copyWith(color: t.textMuted)),
+          LumitIcon(LumitIcons.expand, colour: t.textMuted),
         ],
       ),
     );

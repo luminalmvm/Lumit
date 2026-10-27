@@ -1071,7 +1071,8 @@ class _ToolFlyout extends StatelessWidget {
               selected: member == armed,
               // A member that is not built is listed and does nothing when
               // clicked — the same rule the buttons follow.
-              onPressed: member.ready ? () => onPick(member) : () {},
+              enabled: member.ready,
+              onPressed: () => onPick(member),
               child: Row(
                 children: [
                   lumitIcon(member.icon,

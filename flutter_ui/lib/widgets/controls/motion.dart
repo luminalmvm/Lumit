@@ -243,7 +243,9 @@ class HoverFill extends StatefulWidget {
     super.key,
     this.faint = false,
     this.radius,
-    this.cursor = SystemMouseCursors.click,
+    // The arrow, as over a row anywhere else on Windows. Buttons keep the
+    // hand.
+    this.cursor = MouseCursor.defer,
     required this.child,
   });
 

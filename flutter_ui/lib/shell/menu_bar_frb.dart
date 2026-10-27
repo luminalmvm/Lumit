@@ -3141,6 +3141,7 @@ class _MenuListState extends State<_MenuList> {
                     builder: (context, _) {
                       final row = item.current;
                       return MenuRow(
+                        enabled: row.onPressed != null,
                         onPressed: row.onPressed ?? () {},
                         child: _label(t, row, ticks: ticks, shortcut: null),
                       );
@@ -3151,6 +3152,7 @@ class _MenuListState extends State<_MenuList> {
                     key: item.label == null
                         ? null
                         : ValueKey<String>('menu-row-${item.label}'),
+                    enabled: item.onPressed != null,
                     onPressed: item.onPressed == null
                         ? close
                         : item.keepsMenuOpen
