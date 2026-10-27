@@ -202,6 +202,14 @@ r.addEventListener("input",set);set()})})`,
                 { label: "Reference", autogenerate: { directory: "reference" } },
               ],
             },
+            // Making things for Lumit: extensions, themes, icons and packages.
+            {
+              id: "make",
+              label: "Make",
+              link: "/make/",
+              icon: "puzzle",
+              items: ["make", "make/extensions", "make/themes", "make/icons", "make/share"],
+            },
           ],
           // The site root is a landing page; it sits under the Tutorials topic
           // so it carries the same sidebar and topic tabs as every other page.

@@ -557,7 +557,8 @@ class _FloatSurfaceState extends State<FloatSurface> {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    final surface = Container(
+    final dressed = partStyle(context, t, 'menu');
+    final surface = frosted(dressed, BorderRadius.circular(dressed.radius ?? t.tokens.floatRadius), Container(
       width: widget.width,
       padding: const EdgeInsets.all(menuInset),
       decoration: dress(
@@ -567,7 +568,7 @@ class _FloatSurfaceState extends State<FloatSurface> {
           border: Border.all(color: t.hairline, width: 1),
           boxShadow: t.floatShadow,
         ),
-        partStyle(context, t, 'menu'),
+        dressed,
       ),
       child: Entrance.content(
         spec: scope.motion.content,
@@ -575,7 +576,7 @@ class _FloatSurfaceState extends State<FloatSurface> {
         blur: scope.motion.contentBlur,
         child: StylePart(name: 'menu', child: widget.child),
       ),
-    );
+    ));
     return _MenuHoverScope(
       hovered: _hovered,
       state: this,

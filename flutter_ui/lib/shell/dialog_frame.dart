@@ -85,52 +85,64 @@ class DialogFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    final style = partStyle(context, t, 'dialog');
     return SizedBox(
       width: width,
-      child: Container(
-        // The fill under the content and the edge over it, as before.
-        decoration: dress(
-          BoxDecoration(
-            color: t.surface1,
-            borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-            boxShadow: t.floatShadow,
-          ),
-          PartStyle(
-              background: style.background,
-              radius: style.radius,
-              shadows: style.shadows),
-        ),
-        foregroundDecoration: dress(
-          BoxDecoration(
-            borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-            border: Border.all(color: t.hairline),
-          ),
-          PartStyle(
-              borderColour: style.borderColour,
-              borderWidth: style.borderWidth,
-              radius: style.radius),
-        ),
-        child: ClipRRect(
-          borderRadius:
-              BorderRadius.circular(style.radius ?? t.tokens.floatRadius),
-          child: Entrance.content(
-            spec: scope.motion.content,
-            rise: scope.motion.contentRise,
-            blur: scope.motion.contentBlur,
-            child: StylePart(
-              name: 'dialog',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
-              ),
-            ),
+      child: dialogSurface(
+        context,
+        t,
+        Entrance.content(
+          spec: scope.motion.content,
+          rise: scope.motion.contentRise,
+          blur: scope.motion.contentBlur,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
       ),
     );
   }
+}
+
+/// A dialogue's box: `surface1` out to a hairline edge drawn over its outer
+/// pixel, the float corner and shadow, with a style's `dialog` rules over it.
+/// Shared by every dialogue and the Settings window.
+Widget dialogSurface(BuildContext context, LumitTheme t, Widget child) {
+  final style = partStyle(context, t, 'dialog');
+  final radius = BorderRadius.circular(style.radius ?? t.tokens.floatRadius);
+  return frosted(
+    style,
+    radius,
+    Container(
+      decoration: dress(
+        BoxDecoration(
+          color: t.surface1,
+          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          boxShadow: t.floatShadow,
+        ),
+        PartStyle(
+            background: style.background,
+            radius: style.radius,
+            shadows: style.shadows,
+            blur: style.blur),
+      ),
+      foregroundDecoration: dress(
+        BoxDecoration(
+          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          border: Border.all(color: t.hairline),
+        ),
+        PartStyle(
+            borderColour: style.borderColour,
+            borderWidth: style.borderWidth,
+            radius: style.radius),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: StylePart(name: 'dialog', child: child),
+      ),
+    ),
+  );
 }
 
 /// The title strip: what this dialog is, what it is about, and the way out.

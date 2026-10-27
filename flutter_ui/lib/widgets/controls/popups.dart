@@ -556,6 +556,7 @@ class _HoverTipState extends State<_HoverTip> {
             style: t.body,
           );
     final body = widget.body;
+    final tip = partStyle(context, t, 'tooltip');
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
@@ -578,7 +579,7 @@ class _HoverTipState extends State<_HoverTip> {
                       : scope.motion.tooltipRise,
                   child: child!,
                 ),
-                child: Container(
+                child: frosted(tip, BorderRadius.circular(tip.radius ?? t.tokens.floatRadius), Container(
                   constraints: BoxConstraints(
                       maxWidth: widget.maxWidth ?? double.infinity),
                   padding:
@@ -591,7 +592,7 @@ class _HoverTipState extends State<_HoverTip> {
                       border: Border.all(color: t.hairline),
                       boxShadow: t.tipShadow,
                     ),
-                    partStyle(context, t, 'tooltip'),
+                    tip,
                   ),
                   child: body == null
                       ? says
@@ -600,7 +601,7 @@ class _HoverTipState extends State<_HoverTip> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [says, body],
                         ),
-                ),
+                )),
               ),
             ),
           ),

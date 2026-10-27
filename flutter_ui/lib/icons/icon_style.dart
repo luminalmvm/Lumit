@@ -89,9 +89,20 @@ abstract final class IconStyle {
   static bool reload() {
     final before = Map.of(_overrides);
     _overrides.clear();
-    final dir = folder;
-    final d = dir == null ? null : Directory(dir);
-    if (d == null || !d.existsSync()) return before.isNotEmpty;
+    // The style's icons first, so the person's own folder wins over them.
+    for (final dir in [...under, if (folder case final own?) own]) {
+      _overrides.addAll(_read(dir));
+    }
+    return !mapEquals(before, _overrides);
+  }
+
+  /// Folders read under the person's own: the style's icons.
+  static List<String> under = const [];
+
+  static Map<String, String> _read(String dir) {
+    final found = <String, String>{};
+    final d = Directory(dir);
+    if (!d.existsSync()) return found;
     for (final entry in d.listSync()) {
       if (entry is! File || !entry.path.toLowerCase().endsWith('.svg')) {
         continue;
@@ -99,18 +110,18 @@ abstract final class IconStyle {
       final name = entry.uri.pathSegments.last;
       final text = entry.readAsStringSync();
       if (text.contains('<svg')) {
-        _overrides[_key(name.substring(0, name.length - 4))] = text;
+        found[_key(name.substring(0, name.length - 4))] = text;
       }
     }
     // A file under the older name stands in for its glyph, unless the glyph
     // has a file of its own.
     for (final icon in LumitIcon.values) {
-      final own = _overrides[_key(icon.name)];
+      final own = found[_key(icon.name)];
       final glyph = glyphOf(icon);
       final name = glyph == null ? null : _names[glyph];
-      if (own != null && name != null) _overrides.putIfAbsent(name, () => own);
+      if (own != null && name != null) found.putIfAbsent(name, () => own);
     }
-    return !mapEquals(before, _overrides);
+    return found;
   }
 
   /// How many icons the folder replaces, for the Settings row.
