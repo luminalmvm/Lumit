@@ -110,9 +110,12 @@ class LumitAppNew extends StatelessWidget {
             listenable: uiState,
             builder: (context, _) => ThemeScope(
               theme: uiState.theme,
-              // The system's own "no animations" setting outranks Lumit's.
-              animationLevel: MediaQuery.disableAnimationsOf(context)
-                  ? AnimationLevel.none
+              // The system's own "reduce motion" setting brings Lumit down to
+              // Minimal, which keeps the short fades that say what happened.
+              // Only Lumit's own None stills everything.
+              animationLevel: MediaQuery.disableAnimationsOf(context) &&
+                      uiState.workspace.animationLevel == AnimationLevel.all
+                  ? AnimationLevel.minimal
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               wireStyle: uiState.workspace.interface.wireStyle,
