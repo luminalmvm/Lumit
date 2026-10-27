@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart'
     show HitTestEntry, HitTestResult, PointerEnterEvent, kSecondaryButton;
 import 'package:flutter/material.dart';
@@ -484,13 +485,32 @@ class _HoverTipState extends State<_HoverTip> {
   /// which is the loop this was stuck in.
   Timer? _pending;
 
+  /// The control was pressed: the tip stays away until the pointer leaves,
+  /// so it does not come up over what the press did.
+  bool _pressed = false;
+
+  /// Which way the tip went, above its control or below.
+  final ValueNotifier<bool> _flipped = ValueNotifier<bool>(false);
+
+  /// When a tip last went away. The next one within a moment is shown at
+  /// once and without its entrance, so running the pointer along a bar reads
+  /// each control in turn without the wait.
+  static DateTime? _lastGone;
+  static const Duration _warm = Duration(milliseconds: 300);
+
   void _show(PointerEnterEvent e) {
     _pending?.cancel();
+    _pressed = false;
+    final gone = _lastGone;
+    if (gone != null && clock.now().difference(gone) < _warm) {
+      _present(still: true);
+      return;
+    }
     _pending = Timer(const Duration(milliseconds: 500), _present);
   }
 
-  void _present() {
-    if (!mounted || _entry != null) return;
+  void _present({bool still = false}) {
+    if (!mounted || _entry != null || _pressed) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
     // In the overlay's own space, or the UI scale puts the tip further from
@@ -529,13 +549,20 @@ class _HoverTipState extends State<_HoverTip> {
           // near the bottom (the Viewer's transport) would otherwise tip below
           // the window entirely.
           child: CustomSingleChildLayout(
-            delegate: _PopupLayout(origin, above: above),
+            delegate: _PopupLayout(origin, above: above, flipped: _flipped),
             child: MouseRegion(
               onEnter: (_) => _pending?.cancel(),
               onExit: (_) => _leave(),
-              child: Entrance(
-                spec: scope.motion.tooltip,
-                rise: scope.motion.tooltipRise,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _flipped,
+                // A tip over its control rises onto it from below.
+                builder: (_, up, child) => Entrance(
+                  spec: still ? MotionSpec.still : scope.motion.tooltip,
+                  rise: up
+                      ? -scope.motion.tooltipRise
+                      : scope.motion.tooltipRise,
+                  child: child!,
+                ),
                 child: Container(
                   constraints: BoxConstraints(
                       maxWidth: widget.maxWidth ?? double.infinity),
@@ -571,6 +598,7 @@ class _HoverTipState extends State<_HoverTip> {
   void _hide() {
     _pending?.cancel();
     _pending = null;
+    if (_entry != null) _lastGone = clock.now();
     _entry?.remove();
     _entry = null;
   }
@@ -593,6 +621,12 @@ class _HoverTipState extends State<_HoverTip> {
   Widget build(BuildContext context) => MouseRegion(
         onEnter: _show,
         onExit: (_) => _leave(),
-        child: widget.child,
+        child: Listener(
+          onPointerDown: (_) {
+            _pressed = true;
+            _hide();
+          },
+          child: widget.child,
+        ),
       );
 }
