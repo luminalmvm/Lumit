@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../icons/lumit_icon.dart';
 import '../../icons/lumit_icons.dart';
 import '../../l10n/strings.dart';
+import '../../theme/style_sheet.dart';
 import '../hover_intent.dart';
 import 'base.dart';
 import 'motion.dart';
@@ -130,9 +131,15 @@ class _MenuRowState extends State<MenuRow> {
               : scope.motion.rowTrail.duration,
           curve: scope.motion.rowTrail.curve,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          decoration: dress(
+            BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            ),
+            partStyle(context, t, 'row', states: {
+              if (_hover) 'hover',
+              if (widget.selected) 'on',
+            }),
           ),
           child: DefaultTextStyle(style: t.bodyPrimary, child: widget.child),
         ),
@@ -371,17 +378,20 @@ class _FloatSurfaceState extends State<FloatSurface> {
     final surface = Container(
       width: widget.width,
       padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: t.surface3,
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        border: Border.all(color: t.hairline, width: 1),
-        boxShadow: t.floatShadow,
+      decoration: dress(
+        BoxDecoration(
+          color: t.surface3,
+          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          border: Border.all(color: t.hairline, width: 1),
+          boxShadow: t.floatShadow,
+        ),
+        partStyle(context, t, 'menu'),
       ),
       child: Entrance.content(
         spec: scope.motion.content,
         rise: scope.motion.contentRise,
         blur: scope.motion.contentBlur,
-        child: widget.child,
+        child: StylePart(name: 'menu', child: widget.child),
       ),
     );
     return _MenuHoverScope(

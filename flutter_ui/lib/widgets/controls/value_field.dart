@@ -11,6 +11,7 @@ import '../../l10n/strings.dart';
 import '../../src/rust/api/project.dart' show ProjectReference;
 import '../../state/app_state.dart' show LumitState;
 import '../../theme/theme.dart';
+import '../../theme/style_sheet.dart';
 import '../time_readout.dart' show monoSlotWidth;
 import 'base.dart';
 import 'menus.dart';
@@ -603,7 +604,7 @@ class _DragValueFieldState extends State<DragValueField>
         width: _restingWidth(t),
         height: widget.bare ? null : wellHeight,
         child: DecoratedBox(
-          decoration: BoxDecoration(
+          decoration: dress(BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
             // `animated`, not `accent`: the focused value field is the one
@@ -611,7 +612,9 @@ class _DragValueFieldState extends State<DragValueField>
             // at the resting face's own width so the edge does not move either.
             border:
                 Border.all(color: _refused ? t.error : t.animated, width: 1),
-          ),
+          ), widget.bare
+              ? PartStyle.none
+              : partStyle(context, t, 'well', states: const {'focus'})),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
           // text selected nothing.
@@ -763,7 +766,7 @@ class _DragValueFieldState extends State<DragValueField>
           padding: widget.bare
               ? EdgeInsets.zero
               : const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
+          decoration: dress(BoxDecoration(
             // The inset stays the inset in every state: a well does not lift
             // under the pointer, because then it would stop being a recess
             // (§2.1). Hover and scrub speak through the edge instead.
@@ -792,7 +795,13 @@ class _DragValueFieldState extends State<DragValueField>
                                     : t.hairline,
                     lit: _refused || _dragging || _focused || _hover,
                   ),
-          ),
+          ), widget.bare
+              ? PartStyle.none
+              : partStyle(context, t, 'well', states: {
+                  if (_hover) 'hover',
+                  if (_focused) 'focus',
+                  if (_dragging) 'pressed',
+                })),
           child: Align(
             alignment: Alignment.centerRight,
             widthFactor: 1,

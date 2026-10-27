@@ -2151,10 +2151,6 @@
   "@settingsIconsFolder": {
     "description": "Settings window, Appearance: the row showing the folder a person's own icon files are read from, with a reload button."
   },
-  "reloadIcons": "Reload icons",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
-  },
   "iconsReplaced": "{count} replaced",
   "@iconsReplaced": {
     "description": "Beside the custom icons row: how many of the set's icons the folder currently replaces.",
@@ -2163,6 +2159,43 @@
         "type": "int"
       }
     }
+  },
+  "settingsStylesFolder": "Your styles",
+  "@settingsStylesFolder": {
+    "description": "Settings window, Appearance: the row showing the folder a person's own style files are read from, with a reload button."
+  },
+  "styleProblem": "Line {line}: {problem}",
+  "@styleProblem": {
+    "description": "Under the Your styles row: one line of the style in use that Lumit skipped, then why.",
+    "placeholders": {
+      "line": {"type": "int"},
+      "problem": {"type": "String"}
+    }
+  },
+  "styleNoBase": "there's no style called {name}",
+  "@styleNoBase": {
+    "description": "Why a style file's @base line was skipped: it names a style that isn't Studio, Desk or Lantern.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleNoColon": "{text} has no colon",
+  "@styleNoColon": {
+    "description": "Why a line of a style file was skipped: a setting with no colon between its name and value.",
+    "placeholders": {"text": {"type": "String"}}
+  },
+  "styleRootDashes": "{name} needs to start with --",
+  "@styleRootDashes": {
+    "description": "Why a line of a style file was skipped: a variable in :root whose name doesn't start with two hyphens.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleBadSelector": "can't read {selector}",
+  "@styleBadSelector": {
+    "description": "Why a rule of a style file was skipped: its selector (the part before the brace) isn't one Lumit understands.",
+    "placeholders": {"selector": {"type": "String"}}
+  },
+  "styleNoProperty": "there's no setting called {name}",
+  "@styleNoProperty": {
+    "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
+    "placeholders": {"name": {"type": "String"}}
   },
   "styleChoice": "Style's choice",
   "@styleChoice": {

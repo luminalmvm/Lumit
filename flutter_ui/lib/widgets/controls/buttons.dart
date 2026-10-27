@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/motion.dart';
 import '../../theme/theme.dart';
+import '../../theme/style_sheet.dart';
 import 'base.dart';
 import 'motion.dart';
 
@@ -190,6 +191,20 @@ class _HouseButtonState extends State<HouseButton> {
         math.max(0, t.tokens.actionRadius - inset).toDouble());
     // The fill comes up quickly and leaves a little slower (docs/15 §8).
     final step = _hover || _down ? scope.motion.hoverIn : scope.motion.hoverOut;
+    final dressed = partStyle(context, t, 'button', classes: {
+      if (widget.primary) 'primary',
+      if (widget.dropdown) 'dropdown',
+    }, states: {
+      if (_hover) 'hover',
+      if (_down) 'pressed',
+      if (widget.active) 'on',
+      if (!enabled) 'disabled',
+      if (_focused) 'focus',
+    });
+    if (dressed.colour != null) {
+      label = dressed.colour;
+      labelStyle = labelStyle?.copyWith(color: label);
+    }
     // Keyboard-reachable (docs/15 §9): Tab lands here in reading order,
     // Enter/Space press it, and the accent edge is the focus ring (§6.5).
     return FocusableActionDetector(
@@ -220,7 +235,7 @@ class _HouseButtonState extends State<HouseButton> {
           curve: step.curve,
           margin: margin,
           padding: innerPad,
-          decoration: BoxDecoration(
+          decoration: dress(BoxDecoration(
             color: fill,
             // A one-sided border cannot carry a radius, and Desk's is nought.
             borderRadius: plate ? null : radius,
@@ -234,7 +249,7 @@ class _HouseButtonState extends State<HouseButton> {
                         color: edge ?? const Color(0x00000000), width: 1))
                 : Border.all(
                     color: edge ?? const Color(0x00000000), width: 1),
-          ),
+          ), dressed),
           // The index is painted over the box, so it insets nothing and the
           // control in force is the same size as its neighbours.
           foregroundDecoration: index

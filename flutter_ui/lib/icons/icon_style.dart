@@ -14,6 +14,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'icons.dart' show LumitIcon, glyphOf;
@@ -84,12 +85,13 @@ abstract final class IconStyle {
   }
 
   /// Read every `<name>.svg` in [folder]; a missing folder is no icons.
-  static void reload() {
+  /// Whether anything changed, so a redraw happens only when it has to.
+  static bool reload() {
+    final before = Map.of(_overrides);
     _overrides.clear();
     final dir = folder;
-    if (dir == null) return;
-    final d = Directory(dir);
-    if (!d.existsSync()) return;
+    final d = dir == null ? null : Directory(dir);
+    if (d == null || !d.existsSync()) return before.isNotEmpty;
     for (final entry in d.listSync()) {
       if (entry is! File || !entry.path.toLowerCase().endsWith('.svg')) {
         continue;
@@ -108,6 +110,7 @@ abstract final class IconStyle {
       final name = glyph == null ? null : _names[glyph];
       if (own != null && name != null) _overrides.putIfAbsent(name, () => own);
     }
+    return !mapEquals(before, _overrides);
   }
 
   /// How many icons the folder replaces, for the Settings row.
