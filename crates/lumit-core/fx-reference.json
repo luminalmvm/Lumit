@@ -4824,6 +4824,71 @@
           "hard_min": 0.0
         },
         {
+          "id": "phase",
+          "label": "Phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
+        },
+        {
+          "id": "style",
+          "label": "Style",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Twitchy",
+            "Jumpy"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "stillness",
+          "label": "Stillness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.7,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "twitch_freq",
+          "label": "Twitch frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "drift",
+          "label": "Drift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.3,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "centre_bias",
+          "label": "Centre bias",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
           "id": "rotation",
           "label": "Rotation amount",
           "kind": "float",
@@ -4906,6 +4971,124 @@
           "hard_min": 0.0
         },
         {
+          "id": "x_wave",
+          "label": "X wave",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "x_wave_freq",
+          "label": "X wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "x_wave_phase",
+          "label": "X wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "y_wave",
+          "label": "Y wave",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "y_wave_freq",
+          "label": "Y wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "y_wave_phase",
+          "label": "Y wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "z_wave",
+          "label": "Z wave",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "z_wave_freq",
+          "label": "Z wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "z_wave_phase",
+          "label": "Z wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "rot_wave",
+          "label": "Rotation wave",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 45.0,
+          "hard_min": 0.0,
+          "hard_max": 360.0
+        },
+        {
+          "id": "rot_wave_freq",
+          "label": "Rotation wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rot_wave_phase",
+          "label": "Rotation wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
           "id": "motion_blur",
           "label": "Motion blur",
           "kind": "bool",
@@ -4921,7 +5104,7 @@
           "slider_min": 0.0,
           "slider_max": 1.0,
           "hard_min": 0.0,
-          "hard_max": 1.0
+          "hard_max": 4.0
         },
         {
           "id": "mb_samples",
@@ -4935,12 +5118,37 @@
           "hard_max": 64.0
         },
         {
+          "id": "scale",
+          "label": "Scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 100.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
           "id": "edge",
           "label": "Edges",
           "kind": "choice",
           "unit": "raw",
           "default": 2,
           "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "y_edge",
+          "label": "Y edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Same",
             "Transparent",
             "Repeat",
             "Mirror"
@@ -5032,6 +5240,34 @@
       ],
       "groups": [
         {
+          "label": "",
+          "params": [
+            "stillness",
+            "twitch_freq"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "style",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "drift",
+            "centre_bias"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "style",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
           "label": "Per-axis wobble",
           "params": [
             "x_amp",
@@ -5040,6 +5276,24 @@
             "y_freq",
             "z_amp",
             "z_freq"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Wave",
+          "params": [
+            "x_wave",
+            "x_wave_freq",
+            "x_wave_phase",
+            "y_wave",
+            "y_wave_freq",
+            "y_wave_phase",
+            "z_wave",
+            "z_wave_freq",
+            "z_wave_phase",
+            "rot_wave",
+            "rot_wave_freq",
+            "rot_wave_phase"
           ],
           "collapsed": true
         },
