@@ -140,7 +140,7 @@ class _Geometry {
 Future<void> showEasingPopup({
   required BuildContext context,
   required Offset position,
-  required ValueChanged<EasingCurve> onApply,
+  required ApplyEasing onApply,
 }) =>
     showLumitPopup<void>(
       context: context,
@@ -171,7 +171,7 @@ Future<void> showEasingPopup({
 /// selected keys, for the Read button; null leaves the button out.
 /// [footer] stands under the buttons, where the panel puts the selected key.
 class EasingEditor extends StatefulWidget {
-  final ValueChanged<EasingCurve>? onApply;
+  final ApplyEasing? onApply;
   final VoidCallback? onClose;
   final String? whyNot;
   final ValueListenable<EasingCurve?>? span;
@@ -239,7 +239,7 @@ class _EasingEditorState extends State<EasingEditor>
 
   /// The box's shape sent to the keys, when Apply as you shape is on.
   void _applyIfLive() {
-    if (_live) widget.onApply?.call(_curve);
+    if (_live) widget.onApply?.call(_curve, EaseSides.both);
   }
 
   void _startNaming(String forName) => setState(() {
@@ -588,7 +588,8 @@ class _EasingEditorState extends State<EasingEditor>
               key: const ValueKey('easing-apply'),
               small: true,
               primary: true,
-              onPressed: apply == null ? null : () => apply(_curve),
+              onPressed:
+                  apply == null ? null : () => apply(_curve, EaseSides.both),
               child: Text(l10n.apply,
                   style: t.small.copyWith(
                       color: apply == null ? t.textDisabled : t.textPrimary)),
@@ -724,8 +725,9 @@ class _EasingEditorState extends State<EasingEditor>
   /// is any, so someone who only uses theirs never scrolls past the rest.
   ///
   /// **A click is an apply.** A tile loads its shape into the box and presses
-  /// the same road Apply does, so easing a selection is one click. While
-  /// there is nowhere to send a shape a click only loads.
+  /// the same road Apply does, so easing a selection is one click. Shift or
+  /// Ctrl eases one side only ([EaseSides]). While there is nowhere to send a
+  /// shape a click only loads.
   Widget _library(LumitTheme t, double available) {
     // Past this a wider panel only stretches the thumbnails.
     final width = available.clamp(0.0, 480.0).toDouble();
@@ -878,7 +880,14 @@ class _EasingEditorState extends State<EasingEditor>
       padding: const EdgeInsets.all(2),
       onPressed: () {
         _show(curve);
-        widget.onApply?.call(curve);
+        final keys = HardwareKeyboard.instance;
+        widget.onApply?.call(
+            curve,
+            keys.isShiftPressed
+                ? EaseSides.into
+                : keys.isControlPressed
+                    ? EaseSides.outOf
+                    : EaseSides.both);
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

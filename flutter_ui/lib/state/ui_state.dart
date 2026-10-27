@@ -16,7 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
+import 'package:lumit_flutter/panels/easing_curve.dart'
+    show ApplyEasing, EasingCurve;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
@@ -739,7 +740,7 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// The keyframe selection itself stays the Timeline's and is never published:
   /// the panel sends a shape and is told nothing about what it landed on.
-  final ValueNotifier<ValueChanged<EasingCurve>?> easingApply =
+  final ValueNotifier<ApplyEasing?> easingApply =
       ValueNotifier(null);
 
   /// The one selected keyframe, as its speed and influence on each side, with
