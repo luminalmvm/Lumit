@@ -169,26 +169,35 @@ class FxKeyStripScope extends InheritedWidget {
                 ),
               ),
               Positioned.fill(child: lane),
+              // On a layer of its own and moved rather than laid out again, as
+              // [PlayheadOverlay] is, so playing does not redraw the keys.
               Positioned.fill(
                 child: IgnorePointer(
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: scope.playhead,
-                    builder: (context, frame, _) {
-                      final rel = frame - scope.spanStart;
-                      if (rel < 0 || rel > scope.axis.frames) {
-                        return const SizedBox.shrink();
-                      }
-                      return Stack(children: [
-                        Positioned(
-                          left: (scope.axis.xOf(rel) - 0.5)
-                              .clamp(0.0, scope.width - 1),
-                          top: 0,
-                          bottom: 0,
+                  child: RepaintBoundary(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: scope.playhead,
+                      builder: (context, frame, line) {
+                        final rel = frame - scope.spanStart;
+                        if (rel < 0 || rel > scope.axis.frames) {
+                          return const SizedBox.shrink();
+                        }
+                        return Transform.translate(
+                          offset: Offset(
+                              (scope.axis.xOf(rel) - 0.5)
+                                  .clamp(0.0, scope.width - 1),
+                              0),
+                          child: line,
+                        );
+                      },
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
                           width: 1,
+                          height: double.infinity,
                           child: ColoredBox(color: t.accent),
                         ),
-                      ]);
-                    },
+                      ),
+                    ),
                   ),
                 ),
               ),
