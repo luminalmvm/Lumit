@@ -42,8 +42,10 @@ export default defineConfig({
         "./src/styles/theme.css",
       ],
       // A code block is a card: the card's corner and hairline here, and its
-      // ground in theme.css, as Starlight sets that one after these.
+      // ground in theme.css, as Starlight sets that one after these. Dark only,
+      // as the site is, or a phone in light mode gets light code colours.
       expressiveCode: {
+        themes: ["starlight-dark"],
         styleOverrides: { borderRadius: "4px", borderColor: "var(--sl-color-hairline)" },
       },
       // The before-and-after wipe on every effect page. Each figure carries a

@@ -13,6 +13,7 @@
    than left to resolve differently in the light branch. */
 
 :root {
+  color-scheme: dark;
   --sl-font: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --sl-font-mono: "Paper Mono", ui-monospace, monospace;
 
