@@ -687,9 +687,10 @@ pub enum FxCategory {
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
-    /// **SICELIOT**: the Cavalry-style, non-destructive picture effects of the
-    /// SICELIOT extension (docs/siceliot/). A picture family like the eight
-    /// above, kept apart so its effects are found together in one place.
+    /// **Siceliot FX**: the Cavalry-style, non-destructive picture effects of
+    /// SICELIOT, its LFX extension's and its own (Type fill). A picture family
+    /// like the eight above, kept apart so its effects are found together in
+    /// one place.
     Siceliot,
     /// The effects that process **sound** and draw nothing: Gain, EQ,
     /// Compressor, Reverb (docs/impl/audio-effects.md §2). A built-in here
@@ -731,11 +732,11 @@ pub enum FxCategory {
     /// every frame, and a menu that mixed the two would be a menu that could
     /// not say which.
     Drivers,
-    /// **SICELIOT's drivers**: Stagger, Random, Oscillator and Noise, values in
-    /// the manner of Cavalry's behaviours (docs/siceliot/). A driver in every
-    /// respect [`FxCategory::Drivers`] is, asked through
-    /// [`FxCategory::is_driver`], but browsed under the SICELIOT heading with
-    /// the rest of SICELIOT.
+    /// **Siceliot Nodes**: SICELIOT's drivers, Stagger, Random, Oscillator,
+    /// Value noise and Ring wave, values in the manner of Cavalry's behaviours.
+    /// A driver in every respect [`FxCategory::Drivers`] is, asked through
+    /// [`FxCategory::is_driver`], so it is found only where drivers are, in the
+    /// Node graph, under a heading of its own that says so.
     SiceliotDrivers,
 }
 
@@ -751,12 +752,12 @@ impl FxCategory {
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
-            FxCategory::Siceliot => "SICELIOT",
+            FxCategory::Siceliot => "Siceliot FX",
             FxCategory::Audio => "Audio",
             FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
-            FxCategory::SiceliotDrivers => "SICELIOT",
+            FxCategory::SiceliotDrivers => "Siceliot Nodes",
         }
     }
 
@@ -780,7 +781,6 @@ impl FxCategory {
     pub const fn grouping(self) -> FxCategory {
         match self {
             FxCategory::Drivers => FxCategory::Controls,
-            FxCategory::SiceliotDrivers => FxCategory::Siceliot,
             other => other,
         }
     }
@@ -812,7 +812,7 @@ impl FxCategory {
         // rather than from the Add-effect menu, so it sits after the family it
         // is kin to.
         FxCategory::Drivers,
-        // SICELIOT's drivers after Lumit's own; browsed under SICELIOT.
+        // SICELIOT's drivers after Lumit's own, under their own heading.
         FxCategory::SiceliotDrivers,
     ];
 }

@@ -34,8 +34,8 @@
       "label": "Utility"
     },
     {
-      "slug": "siceliot",
-      "label": "SICELIOT"
+      "slug": "siceliot-fx",
+      "label": "Siceliot FX"
     },
     {
       "slug": "audio",
@@ -54,8 +54,8 @@
       "label": "Drivers"
     },
     {
-      "slug": "siceliot",
-      "label": "SICELIOT"
+      "slug": "siceliot-nodes",
+      "label": "Siceliot Nodes"
     }
   ],
   "effects": [
@@ -14787,8 +14787,8 @@
       "match_name": "siceliot_type_fill",
       "label": "Type fill",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot FX",
+      "category_slug": "siceliot-fx",
       "params": [
         {
           "id": "text_layer",
@@ -27863,8 +27863,8 @@
       "match_name": "siceliot_stagger",
       "label": "Stagger",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot Nodes",
+      "category_slug": "siceliot-nodes",
       "params": [
         {
           "id": "minimum",
@@ -27932,8 +27932,8 @@
       "match_name": "siceliot_random",
       "label": "Random",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot Nodes",
+      "category_slug": "siceliot-nodes",
       "params": [
         {
           "id": "minimum",
@@ -27987,8 +27987,8 @@
       "match_name": "siceliot_oscillator",
       "label": "Oscillator",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot Nodes",
+      "category_slug": "siceliot-nodes",
       "params": [
         {
           "id": "shape",
@@ -28107,8 +28107,8 @@
       "match_name": "siceliot_noise",
       "label": "Value noise",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot Nodes",
+      "category_slug": "siceliot-nodes",
       "params": [
         {
           "id": "minimum",
@@ -28195,8 +28195,8 @@
       "match_name": "siceliot_ring_wave",
       "label": "Ring wave",
       "version": 1,
-      "category": "SICELIOT",
-      "category_slug": "siceliot",
+      "category": "Siceliot Nodes",
+      "category_slug": "siceliot-nodes",
       "params": [
         {
           "id": "minimum",

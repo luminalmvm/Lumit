@@ -960,7 +960,6 @@ Roundness
 Row gap
 Rows
 Rows/columns jitter
-SICELIOT
 Same as Per
 Samples
 Satin
@@ -1023,6 +1022,8 @@ Show points
 Shutter
 Shutter angle
 Shutter phase
+Siceliot FX
+Siceliot Nodes
 Sides
 Sine
 Single

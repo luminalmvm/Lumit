@@ -4724,9 +4724,13 @@
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxSiceliot": "SICELIOT",
+  "fxSiceliot": "Siceliot FX",
   "@fxSiceliot": {
-    "description": "Add-effect menu category heading. A proper name: keep it as it is in every language."
+    "description": "Add-effect menu category heading: the SICELIOT effects. Siceliot is a proper name: keep it as it is in every language."
+  },
+  "fxSiceliotNodes": "Siceliot Nodes",
+  "@fxSiceliotNodes": {
+    "description": "Node graph category heading: the SICELIOT drivers, which are found only in the Node graph. Siceliot is a proper name: keep it as it is in every language."
   },
   "fxStagger": "Stagger",
   "@fxStagger": {
