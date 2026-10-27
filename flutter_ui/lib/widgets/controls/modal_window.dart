@@ -2,6 +2,7 @@
 // on, and the count that tells the panels to stand down while one is up.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
@@ -14,7 +15,8 @@ import 'motion.dart';
 
 /// Show a positioned popup and complete with the value handed to `close`.
 /// Clicking outside, or pressing Escape, dismisses with null.
-/// A centred modal on the app Overlay, with a dimmed click-to-dismiss backdrop.
+/// A centred modal on the app Overlay, with a dimmed backdrop. A click on the
+/// backdrop dismisses only a window without an [id].
 /// Completes with whatever `close` was given, or null when dismissed.
 ///
 /// **Escape closes it from the ladder's dialogue rung**. It was
@@ -81,7 +83,10 @@ Future<T?> showLumitModal<T>({
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => close(null),
+                // Only a one-question window goes on a click beside it. One
+                // with an id holds work, such as a filled-in export, which a
+                // stray click must not throw away.
+                onTap: id == null ? () => close(null) : null,
                 // The wash comes up with the window rather than cutting in
                 // ahead of it. It takes the click from its first frame either
                 // way.
@@ -250,8 +255,11 @@ class _MovableWindowState extends State<_MovableWindow> {
   Size? _clampSize(Size? s, BoxConstraints box) => s == null
       ? null
       : Size(
-          s.width.clamp(widget.minSize.width, box.maxWidth),
-          s.height.clamp(widget.minSize.height, box.maxHeight),
+          // The window's minimum gives way to an app window smaller than it.
+          s.width.clamp(math.min(widget.minSize.width, box.maxWidth),
+              box.maxWidth),
+          s.height.clamp(math.min(widget.minSize.height, box.maxHeight),
+              box.maxHeight),
         );
 
   @override
