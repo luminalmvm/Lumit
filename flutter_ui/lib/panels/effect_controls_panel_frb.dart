@@ -63,6 +63,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
+import 'viewer_effect_points.dart' show pickForPoint;
 import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
 import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
@@ -1118,12 +1119,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _Header(
           layerName: info.name,
           // An add lands on the layer these rows are for, and no other.
-          onAdd: (name) {
-            try {
-              layer.addEffect(name: name);
-            } catch (_) {}
-            ui.model.refresh();
-          },
+          onAdd: (name) => ui.addEffect(layer, name),
         ),
         Expanded(
           // The keyframe strip beside the rows, spanning the layer's own in
@@ -1614,15 +1610,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         onWrite: (id, param, value) {
           _effects.write(layer, id, param, value);
           ui.model.refresh();
+          if (!style) pickForPoint(ui, layer, fx, param);
         },
         onWritePair: (id, values) {
           _effects.writeAll(layer, id, values);
           ui.model.refresh();
+          if (!style) pickForPoint(ui, layer, fx, values.keys.first);
         },
-        onLive: (id, param, value) => setState(() {
-          _effects.live(comp, layer, id, param, value,
-              frame: ui.playheadFrame.value, scale: ui.viewerScale);
-        }),
+        onLive: (id, param, value) {
+          if (!style) pickForPoint(ui, layer, fx, param);
+          setState(() {
+            _effects.live(comp, layer, id, param, value,
+                frame: ui.playheadFrame.value, scale: ui.viewerScale);
+          });
+        },
         layer: layer,
         // The list a layer-valued row picks from. A card that draws one is
         // rebuilt whenever [_layersRead] moves, so the list it holds says the
