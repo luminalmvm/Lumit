@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "id": "reaizzi-glass",
+  "name": "Reaizzi Glass",
+  "version": "1.3.0",
+  "summary": "Refractive glass: the layer it is on, another layer's silhouette, or a built-in shape bends everything beneath it.",
+  "author": "andrea68git",
+  "effects": [
+    {
+      "id": "glass",
+      "name": "Reaizzi Glass",
+      "category": "Distortion",
+      "version": 2,
+      "api": 1,
+      "shader": "glass.wgsl",
+      "passes": [
+        { "name": "down", "scale": 0.5 },
+        { "name": "blur_h", "scale": 0.25 },
+        { "name": "blur_v", "scale": 0.25 },
+        { "name": "frost_h", "scale": 0.5 },
+        { "name": "frost_v", "scale": 0.5 },
+        { "name": "shade" }
+      ],
+      "input": { "label": "Shape layer", "kind": "depth" },
+      "backdrop": true
+    }
+  ]
+}

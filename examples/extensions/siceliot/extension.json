@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "id": "siceliot",
+  "name": "Siceliot",
+  "version": "1.3.0",
+  "summary": "Cavalry-style, non-destructive falloffs, gradients, patterns, filters and warps.",
+  "author": "andrea68git",
+  "requires": "0.10.0",
+  "effects": [
+    { "id": "falloff", "name": "Falloff", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "falloff.wgsl" },
+    { "id": "conical-gradient", "name": "Conical gradient", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "conical-gradient.wgsl" },
+    { "id": "sweep-gradient", "name": "Sweep gradient", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "sweep-gradient.wgsl" },
+    { "id": "multi-point-gradient", "name": "Multi-point gradient", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "multi-point-gradient.wgsl" },
+    { "id": "gradient-map", "name": "Gradient map", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "gradient-map.wgsl" },
+    { "id": "voronoi", "name": "Voronoi", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "voronoi.wgsl" },
+    { "id": "checkerboard", "name": "Checkerboard", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "checkerboard.wgsl" },
+    { "id": "halftone", "name": "Halftone", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "halftone.wgsl" },
+    { "id": "dithering", "name": "Dithering", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "dithering.wgsl" },
+    { "id": "inner-shadow", "name": "Inner shadow", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "inner-shadow.wgsl",
+      "passes": [{ "name": "spread_x", "scale": 0.5 }, { "name": "spread_y", "scale": 0.5 }, { "name": "shade" }] },
+    { "id": "erosion", "name": "Erosion", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "erosion.wgsl",
+      "passes": [{ "name": "rows" }, { "name": "cols" }] },
+    { "id": "light-sweep", "name": "Light sweep", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "light-sweep.wgsl" },
+    { "id": "lighting", "name": "Lighting", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "lighting.wgsl" },
+    { "id": "stripes", "name": "Stripes", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "stripes.wgsl" },
+    { "id": "scrape", "name": "Scrape", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "scrape.wgsl" },
+    { "id": "bilateral-blur", "name": "Bilateral blur", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "bilateral-blur.wgsl",
+      "passes": [{ "name": "across" }, { "name": "down" }] },
+    { "id": "bend", "name": "Bend", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "bend.wgsl" },
+    { "id": "wave", "name": "Wave", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "wave.wgsl" },
+    { "id": "four-point-warp", "name": "Four point warp", "category": "Siceliot FX", "version": 1, "api": 1, "shader": "four-point-warp.wgsl" }
+  ]
+}

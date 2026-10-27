@@ -1,0 +1,362 @@
+﻿nodes/behaviours	Behaviours	Behaviours can be thought of as effects. They can be used to animate or deform other Layers.
+nodes/behaviours/3d-matrix	3D Matrix	Apply 3d transformations to Shapes and Sub-Meshes to create a faux 3d effect.
+nodes/behaviours/add-divisions	Add Divisions	Add divisions to a Shape's edges to create smoother deformations.
+nodes/behaviours/align	Align	Set dynamic pivot points to pin Shapes based on their bounding box.
+nodes/behaviours/alpha-material-override	Alpha Material Override	Override the alpha within sub-meshes.
+nodes/behaviours/apply-distribution	Apply Distribution	Place sub-meshes into distributions.
+nodes/behaviours/apply-layout	Apply Layout	Stack Shapes within a Sub-Mesh together.
+nodes/behaviours/apply-layout/grid-layout	Grid Layout	Stack Shapes within a Sub-Mesh into a grid layout.
+nodes/behaviours/apply-layout/horizontal-layout	Horizontal Layout	Stack Shapes within a Sub-Mesh into a horizontal layout.
+nodes/behaviours/apply-layout/vertical-layout	Vertical Layout	Stack Shapes within a Sub-Mesh into a vertical layout.
+nodes/behaviours/area-range	Area Range	Interpret a range of input values as an area and then remap them to dimensions.
+nodes/behaviours/auto-animate	Auto-Animate	Add various transform and opacity animations to Shapes with only a few keyframes.
+nodes/behaviours/auto-crop	Auto-Crop	Crop Shapes based on their bounding box.
+nodes/behaviours/behaviour-mixer	Behaviour Mixer	Combine and control the effect of multiple Behaviours.
+nodes/behaviours/bend-deformer	Bend Deformer	Deform Shapes by bending them around the circumference of a circle.
+nodes/behaviours/bevel	Bevel	Create round or mitred edges for Shapes.
+nodes/behaviours/blend-shape	Blend Shape	Blend between multiple Shapes with matching verb counts.
+nodes/behaviours/blend-sub-mesh-positions	Blend Sub-Mesh Positions	Blend between the Sub-Mesh positions of two Shapes.
+nodes/behaviours/boolean	Boolean	Procedurally remove or add Shapes to other Shapes
+nodes/behaviours/chop-path	Chop Path	Chop a Shape into several slices.
+nodes/behaviours/clean-up	Clean Up	Remove unwanted points to optimise Shape topology.
+nodes/behaviours/color-blend	Color Blend	Blend between two colours using a gradient to control the transition.
+nodes/behaviours/color-material-override	Color Material Override	Override colors within Sub-Meshes.
+nodes/behaviours/common-attributes-behaviours	Common Attributes (Behaviours)	Attributes that are common to most Behaviours.
+nodes/behaviours/contours-to-sub-meshes	Contours to Sub-Meshes	Convert Path Contours within Shapes into Sub-Meshes.
+nodes/behaviours/curves-to-lines	Curves to Lines	Convert bézier curves to polygonal lines.
+nodes/behaviours/distance	Distance	Drive an attribute of one layer using its distance from another.
+nodes/behaviours/extend-open-paths	Extend Open Paths	Extend the ends of open Paths along their tangents or a specified angle.
+nodes/behaviours/fill-rule	Fill Rule	Define how holes and self-intersections affect a Shape's fill.
+nodes/behaviours/flare	Flare	Taper a Shape along a vertical or horizontal axis.
+nodes/behaviours/flatten-shape-layers	Flatten Shape Layers	Flatten the internal hierarchy of a Shape into one single Path or layer.
+nodes/behaviours/four-point-warp	Four Point Warp	Deform Shapes using a four corner warp with bézier handles.
+nodes/behaviours/frame	Frame	Use and manipulate time to drive other attributes.
+nodes/behaviours/get-vector	Get Vector	Get the directional vector between two points.
+nodes/behaviours/hsv-material-override	HSV Material Override	Override the Hue, Saturation and Value of Shapes within sub-meshes.
+nodes/behaviours/is-within	Is Within	Determine the one Shape's position falls within another's.
+nodes/behaviours/javascript-deformer	JavaScript Deformer	Write JavaScript expressions to manipulate Shapes in interesting and novel ways.
+nodes/behaviours/knot	Knot	Add gaps to Paths where a Contour self-intersects.
+nodes/behaviours/lattice	Lattice Deformer	Deform Shapes using a flexible grid of control points.
+nodes/behaviours/look-at	Look At	Rotate shapes towards a target.
+nodes/behaviours/manipulator	Manipulator	Apply transformations to Shapes.
+nodes/behaviours/material-sampler	Material Sampler	Sample the color of a Shape and use that to drive other attributes.
+nodes/behaviours/mesh-solver	Mesh Solver	Connect deformers to create drawing machines or iterative effects like differential growth.
+nodes/behaviours/modulate	Modulate	Output repeating sequences of numbers using the modulus function.
+nodes/behaviours/morph	Morph	Morph between shapes with different point counts.
+nodes/behaviours/motion-stretch	Motion Stretch	Deform shapes based on their motion to create an effect similar to smearing.
+nodes/behaviours/noise	Noise	Generate noise patterns to deform Shapes or generate values.
+nodes/behaviours/number-range	Number Range	Remap input values within one range into another range.
+nodes/behaviours/number-range-to-color	Number Range to Color	Remap values to colors based on a gradient.
+nodes/behaviours/oscillator	Oscillator	Deform Shapes and affect values using trigonometric wave patterns.
+nodes/behaviours/path-average	Path Average	Smooth Path points by averaging their positions.
+nodes/behaviours/pathfinder	Pathfinder	Move or deform Shapes along a path.
+nodes/behaviours/path-offset	Path Offset	Shrink or grow paths.
+nodes/behaviours/path-relax	Path Relax	Move path points away from each other.
+nodes/behaviours/pinch	Pinch	Pinch and pull Shapes within a Falloff by moving a Null.
+nodes/behaviours/position-blend	Position Blend	Blend between two positions.
+nodes/behaviours/push-along-vector	Push Along Vector	Deform a Shape along a vector.
+nodes/behaviours/random	Random	Generate random numbers and control how biased they are.
+nodes/behaviours/resample-path	Resample Path	Remove overlapping contours and/or simplify a path.
+nodes/behaviours/reverse-path	Reverse Path	Reverse the direction of contours within a Path.
+nodes/behaviours/round	Round	Round values up, down or to the nearest multiple of a value.
+nodes/behaviours/rubber-hose-limb	Rubber Hose Limb	A simple 2 bone IK system for bendy or straight limbs.
+nodes/behaviours/skew	Skew	Apply a skew transformation to a Shape.
+nodes/behaviours/sound	Sound	Playback audio and drive deformation or values.
+nodes/behaviours/spring	Spring	Add dynamic secondary motion to a Shape's position keyframes.
+nodes/behaviours/squash-and-stretch	Squash and Stretch	Squash and stretch Shapes with options to add bulge and preserve the area.
+nodes/behaviours/stagger	Stagger	Generate sequential values between a minimum and maximum.
+nodes/behaviours/stitches	Stitches	Fill closed Paths with a stitch effect.
+nodes/behaviours/subdivide	Subdivide	Add divisions to geometry and smooth the resulting Path.
+nodes/behaviours/sub-mesh	Sub-Mesh	Access sub-meshes within Shapes to apply transforms, materials and more.
+nodes/behaviours/swap-color	Swap Color Override	Searches for and swaps specific colors on sub-meshes.
+nodes/behaviours/travel-deformer	Travel Deformer	Reposition the start points for all Contours within a Path.
+nodes/behaviours/value	Value	Store and manipulate a one dimensional value.
+nodes/behaviours/value2	Value2	Store and manipulate two dimensional values.
+nodes/behaviours/value2-blend	Value2 Blend	Blend (lerp) between two dimensional values.
+nodes/behaviours/value2-solver	Value2 Solver	Store the values from previous frames in order to accumulate and/ or fade them over time.
+nodes/behaviours/value3	Value3	Store and manipulate three dimensional values.
+nodes/behaviours/value3-blend	Value3 Blend	Blend (lerp) between three dimensional values.
+nodes/behaviours/value-blend	Value Blend	Blend (lerp) between two one dimensional values.
+nodes/behaviours/value-solver	Value Solver	Store the values from previous frames in order to accumulate and/ or fade them over time.
+nodes/behaviours/visibility-sequence	Visibility Sequence	Affect the visibility of Sub-Meshes.
+nodes/behaviours/voxelize	Voxelize	Convert Shapes into voxels with control over their size and scale to create gaps.
+nodes/behaviours/wave	Wave	Create looping wave distortions along open and closed Paths.
+nodes/effects	Effects	Adjust the appearance of Shapes.
+nodes/effects/filters	Filters	Modify the appearance of a Shape.
+nodes/effects/filters/background-blur-filter	Background Blur Filter	Blur the areas of a Shape that sit within another Shape.
+nodes/effects/filters/bilateral-blur-filter	Bilateral Blur Filter	Add an edge-preserving blur that smooths areas of similar color while maintaining sharp edges.
+nodes/effects/filters/black-and-white-filter	Black and White Filter	Apply a greyscale conversion to images.
+nodes/effects/filters/box-blur-filter	Box Blur Filter	Add a fast box blur to Shapes and Shaders.
+nodes/effects/filters/brightness-and-contrast-filter	Brightness and Contrast Filter	Adjust the tonal range of colours.
+nodes/effects/filters/bulge-filter	Bulge Filter	Distort a Shape by wrapping it onto a spherical surface, creating a bulge or pinch effect.
+nodes/effects/filters/chroma-key-filter	Chroma Key Filter	Remove green/blue/red screen from images with advanced matte controls.
+nodes/effects/filters/chromatic-aberration-filter	Chromatic Aberration Filter	Mimic the real world phenomenon in which light rays passing through a lens focus at different points depending on their wavelength.
+nodes/effects/filters/common-attributes-filters	Common Attributes (Filters)	
+nodes/effects/filters/curves-filter	Curves Filter	Color correct the RGB, alpha and hue/saturation components of a Layer with editable curves.
+nodes/effects/filters/directional-blur-filter	Directional Blur Filter	Blur a Shape along an axis to create a streaking effect or simulate motion blur.
+nodes/effects/filters/distort-edges-filter	Distort Edges Filter	Distort the edges of a Shape using a Shader.
+nodes/effects/filters/distortion-filter	Distortion Filter	Distort Shapes by sampling a Shader.
+nodes/effects/filters/dithering-filter	Dithering Filter	Create the illusion of color depth in images with a limited color palette.
+nodes/effects/filters/drop-shadow-filter	Drop Shadow	Add a drop shadow to Shapes.
+nodes/effects/filters/edge-detection-filter	Edge Detection Filter	Convert the boundaries of colors within images to lines.
+nodes/effects/filters/erosion-filter	Erosion Filter	Erode a Layer's alpha for transitions and matte adjustments.
+nodes/effects/filters/fast-blur-filter	Fast Blur Filter	Add fast blur to Shapes and Shaders.
+nodes/effects/filters/fill-color-filter	Fill Color Filter	Replace a Shape's color.
+nodes/effects/filters/gamma-correction-filter	Gamma Correction Filter	Apply a gamma curve to adjust the perceived brightness or darkness of an image.
+nodes/effects/filters/gaussian-blur-filter	Gaussian Blur Filter	Add high-quality Gaussian blur to Shapes and Shaders.
+nodes/effects/filters/glow-filter	Glow Filter	Add a glow effect to a Shape with controls for the RGB channels.
+nodes/effects/filters/gradient-map-filter	Gradient Map Filter	Generate a gradient based on the brightness of an input.
+nodes/effects/filters/grain-filter	Grain Filter	Add grain to images to emulate the visual appearance of film stock.
+nodes/effects/filters/halftone-filter	Halftone Filter	Simulate continuous-tone imagery through the use of dots, varying in size to generate a gradient-like effect.
+nodes/effects/filters/hsv-adjustment-filter	HSV Adjustment Filter	Adjust the Hue, Saturation and Value of a Shape.
+nodes/effects/filters/inner-shadow-filter	Inner Shadow Filter	Add an inner shadow to Shapes to simulate depth.
+nodes/effects/filters/invert-filter	Invert Filter	Invert the color information on a Shape.
+nodes/effects/filters/levels-filter	Levels Filter	Remap the black and white levels of a Layer to correct its tonal range and color balance.
+nodes/effects/filters/lighting-filter	Lighting Filter	Add contact shadows and point lights to Shapes to create long shadows.
+nodes/effects/filters/light-sweep-filter	Light Sweep Filter	Simulate a light source moving over a Layer.
+nodes/effects/filters/linear-wipe-filter	Linear Wipe	Reveal a Shape in a linear motion.
+nodes/effects/filters/luminance-blur-filter	Luminance Blur Filter	Blur one layer based on the luminance values of another.
+nodes/effects/filters/mirror-filter	Mirror Filter	Reverse a Shape along a centre line to create a reflection.
+nodes/effects/filters/pixelate-filter	Pixelate Filter	Redraw a Layer using squares/ triangles of uniform color.
+nodes/effects/filters/pixel-sorting-filter	Pixel Sorting Filter	Reorder a Layer's pixels by sorting them according to various attributes such as brightness.
+nodes/effects/filters/polar-coordinates-filter	Polar Coordinates Filter	Remap Cartesian coordinates to polar coordinates to wrap a Shape around a central point.
+nodes/effects/filters/posterize-filter	Posterize Filter	Create a low color depth look by reducing the color variation of Shapes to solid tones or colours.
+nodes/effects/filters/radial-wipe-filter	Radial Wipe Filter	Reveal a Shape in a circular motion.
+nodes/effects/filters/rgb-split-filter	RGB Split Filter	Split and offset the red, green and blue channels of a Shape.
+nodes/effects/filters/ripple-filter	Ripple Filter	Distort a Shape's materials using linear, concentric or spiral wave patterns.
+nodes/effects/filters/scan-lines-filter	Scan Lines Filter	Mimic the effect of a CRT monitor
+nodes/effects/filters/scrape-filter	Scrape Filter	Stretch pixels from a line to create a smeared effect.
+nodes/effects/filters/sharpen-filter	Sharpen Filter	Increase the contrast between edge pixels, giving the appearance of greater sharpness.
+nodes/effects/filters/shift-channels-filter	Shift Channels Filter	Replace the red, green, blue, and alpha channels with values from other channels.
+nodes/effects/filters/sksl-filter	SkSL Filter	
+nodes/effects/filters/slit-scan-filter	Slit Scan Filter	Create an animated fly-through effect.
+nodes/effects/filters/spherise-filter	Spherise Filter	Map an input Shape onto a sphere that can be rotated.
+nodes/effects/filters/stripes-filter	Stripes Filter	Sample a line of pixels and extend them to create a striped pattern.
+nodes/effects/filters/threshold-filter	Threshold Filter	Convert all pixels lighter than the threshold to white and all pixels darker than the threshold to black.
+nodes/effects/filters/tritone-filter	TriTone Filter	Map dark, mid-tone and bright values to specified colors.
+nodes/effects/filters/twist-filter	Twist Filter	Rotate a Shape's materials around a centre point.
+nodes/effects/filters/venetian-blinds-filter	Venetian Blinds Filter	Reveal a Shape using a striped wipe effect.
+nodes/effects/filters/vignette-filter	Vignette Filter	Simulate the light falloff characteristic when viewing images through certain types of lenses.
+nodes/effects/filters/zoom-blur-filter	Zoom Blur Filter	Blur a Shape outwards from a point with customisable attenuation.
+nodes/effects/shaders	Shaders	Add gradients and patterns to Shapes.
+nodes/effects/shaders/blend-shader	Blend Shader	Combine several Shaders together and output a single Shader.
+nodes/effects/shaders/checkerboard-shader	Checkerboard Shader	Add a checkerboard pattern to a Shape.
+nodes/effects/shaders/color-shader	Color Shader	A simple shader that outputs a color.
+nodes/effects/shaders/common-attributes-shaders	Common Attributes (Shaders)	
+nodes/effects/shaders/gradient-shader	Gradient Shader	Interpolate between colors to create smooth color transitions.
+nodes/effects/shaders/image-shader	Image Shader	A Shader for images, image sequences and video.
+nodes/effects/shaders/multi-point-gradient-shader	Multi-Point Gradient Shader	Create complex gradients by setting the position, color and influence for multiple points.
+nodes/effects/shaders/noise-shader	Noise Shader	Create a coherent noise effect from Perlin, Value or Cellular noise.
+nodes/effects/shaders/shape-to-shader	Shape to Shader	Use a Shape to create a Shader for another Shape.
+nodes/effects/shaders/sksl-shader	SkSL Shader	
+nodes/effects/shaders/sla-shader	SLA Shader	Create novel noise effects.
+nodes/effects/shaders/voronoi-shader	Voronoi Shader	Generate a cellular pattern by calculating the distances between a lattice of points.
+nodes/general/blend-modes	Blend Modes	Determine how Layers are blended together in the Viewport.
+nodes/general/distribution-types	Introduction	Distribute points in various arrangements.
+nodes/general/distribution-types/array-distribution	Array Distribution	Distribute points by specifying positions for each index.
+nodes/general/distribution-types/circle-distribution	Circle Distribution	Distribute points in a radial pattern.
+nodes/general/distribution-types/custom-distribution	Custom Distribution	Distribute points using JavaScript.
+nodes/general/distribution-types/fibonacci-distribution	Fibonacci Distribution	Distribute points in a Fibonacci spiral pattern.
+nodes/general/distribution-types/grid-distribution	Grid Distribution	Distribute points in a grid.
+nodes/general/distribution-types/intersections-distribution	Intersections Distribution	Distribute points where Shapes intersect with each other.
+nodes/general/distribution-types/linear-distribution	Linear Distribution	Distribute points in a horizontal or vertical line.
+nodes/general/distribution-types/mask-distribution	Mask Distribution	Distribute points and remove any that fall outside another Shape.
+nodes/general/distribution-types/math-distribution	Math Distribution	Distribute points using mathematical expressions.
+nodes/general/distribution-types/particle-distribution	Particle Distribution	Distribute points onto a Particle Shape.
+nodes/general/distribution-types/path-distribution	Path Distribution	Distribute points along a path or paths.
+nodes/general/distribution-types/point-distribution	Point Distribution	Distribute points at 0,0.
+nodes/general/distribution-types/random-distribution	Random Distribution	Distribute points to random positions.
+nodes/general/distribution-types/rose-distribution	Rose Distribution	Distribute points in a rose pattern.
+nodes/general/distribution-types/shape-edges-distribution	Shape Edges Distribution	Distribute points onto another Shape's edges.
+nodes/general/distribution-types/shape-points-distribution	Shape Points Distribution	Distribute points onto another Shape's points/vertices.
+nodes/general/distribution-types/shuffle-distribution	Shuffle Distribution	Distribute points by rearranging the Ids of a sub-mesh.
+nodes/general/distribution-types/sort-distribution	Sort Distribution	Distribute points by reordering the Ids of another Distribution.
+nodes/general/distribution-types/sub-mesh-distribution	Sub-Mesh Distribution	Distribute points onto the positions of child-meshes.
+nodes/general/distribution-types/transform-distribution	Transform Distribution	Distribute points onto the position of a Layer.
+nodes/general/distribution-types/voxelize-distribution	Voxelize Distribution	Distribute points by voxelizing another Shape.
+nodes/general/javascript-layers	JavaScript Layers	Write JavaScript expressions to create custom Shapes, Utilities or Deformers in Cavalry.
+nodes/general/motion-blur	Motion Blur	Mimic the blurring effect of a physical camera (and the human eye) for fast moving Shapes.
+nodes/general/vector-artwork-support	Vector artwork support	Import and export SVG artwork to/from other vector drawing applications.
+nodes/general/working-with-regex	Working with Regex	Using regular expressions in Cavalry.
+nodes/shapes	Shapes	Information about the component parts of a Shape.
+nodes/shapes/background-shape	Background Shape	A shape which automatically resizes to the resolution of its composition.
+nodes/shapes/basic-line	Introduction	Create a straight, bézier or spiral line.
+nodes/shapes/basic-line/bezier	Bézier	Create a bézier line.
+nodes/shapes/basic-line/line	Line	Create a straight line.
+nodes/shapes/basic-line/spiral	Spiral	Create a spiral line.
+nodes/shapes/basic-shape	Basic Shape	Create a primitive Shape such a Rectangle, Ellipse or Polygon.
+nodes/shapes/basic-shape/arc	Arc	Create an Arc Shape.
+nodes/shapes/basic-shape/arrow	Arrow	Create an Arrow Shape.
+nodes/shapes/basic-shape/capsule	Capsule	Create a Capsule Shape.
+nodes/shapes/basic-shape/cogwheel	Cogwheel	Create a Cogwheel Shape.
+nodes/shapes/basic-shape/ellipse	Ellipse	Create an Ellipse Shape.
+nodes/shapes/basic-shape/polygon	Polygon	Create a Polygon Shape.
+nodes/shapes/basic-shape/rectangle	Rectangle	Create a Rectangle Shape.
+nodes/shapes/basic-shape/ring	Ring	Create a Ring Shape.
+nodes/shapes/basic-shape/star	Star	Create a Star Shape.
+nodes/shapes/basic-shape/super-ellipse	Super Ellipse	Create a Super Ellipse Shape.
+nodes/shapes/basic-shape/super-shape	Super Shape	Create a Super Shape based on the superformula.
+nodes/shapes/cel-animation-shape	Cel Animation Shape	Create frame-by-frame animation.
+nodes/shapes/common-attributes	Common Attributes (Shapes)	Attributes that are common to most Shapes in Cavalry.
+nodes/shapes/component-shape	Component	Collect Layers and promote attributes to create a simplified, custom container.
+nodes/shapes/composition	Composition	The stage to compose Layers on.
+nodes/shapes/composition/pre-comp-overrides	Pre-Comp Overrides	Override attributes contained within Compositions to create templates.
+nodes/shapes/connect-shape	Connect Shape	Connect distributions of points to create intricate patterns of lines.
+nodes/shapes/convex-hull	Convex Hull	Create a Shape that encompasses other Shapes.
+nodes/shapes/corner-pin	Corner Pin	Deform a Shape to create the illusion of 3d perspective.
+nodes/shapes/custom-shape	Custom Shape	A Shape that inherits the properties of another shape to create instances.
+nodes/shapes/duplicator	Duplicator	Duplicate and distribute Shapes to create grids, circles and other patterns.
+nodes/shapes/editable-shape	Editable Shape	A Shape with points that can be added to or manipulated with the Edit Shape tool.
+nodes/shapes/extract-sub-meshes	Extract Sub-Meshes	Create a Shape by extracting specific child-meshes from another Shape.
+nodes/shapes/extrude	Extrude	Extrude Shapes to give the appearance of depth.
+nodes/shapes/footage-shape	Footage Shape	A Shape that inherits the dimensions of its footage.
+nodes/shapes/forge-dynamics/collision-events	Collision Events	Change the appearance or properties of Shapes when they are involved in a collision with other Shapes.
+nodes/shapes/forge-dynamics/constraints	Constraints	Bind the positions of Shapes within Forge Dynamics simulations.
+nodes/shapes/forge-dynamics/fields	Fields	Influence how Shapes move within a Forge Dynamics simulation.
+nodes/shapes/forge-dynamics/forge-dynamics-shape	Forge Dynamics Shape	Create dynamic simulations natively in Cavalry.
+nodes/shapes/group	Group	Collect Layers to organise them and/or create a common transform.
+nodes/shapes/image-to-shapes	Image to Shapes	Create shapes by sampling an image.
+nodes/shapes/isolines-shape	Isolines Shape	Convert images or Shape Layers into Contours.
+nodes/shapes/javascript-shape	JavaScript Shape	Create vector Shapes using JavaScript code.
+nodes/shapes/layouts/grid-layout-group	Grid Layout Group	Create stacks of Shapes with a grid.
+nodes/shapes/layouts/grid-layout-row	Grid Layout Row	Layout Shapes in a row nested within a grid.
+nodes/shapes/layouts/layout-group	Layout Group	Create stacks of Shapes in either a horizontal or vertical direction with options for wrapping.
+nodes/shapes/layouts/layouts-intro	Layouts	Create stacks of Shapes in rows, columns or grids.
+nodes/shapes/layout-shape	Layout Shape	(Deprecated) Create stacks of Shapes in either a horizontal, vertical or grid layouts.
+nodes/shapes/merge	Merge	Create a Shape with a closed Path from two Shapes containing open Paths.
+nodes/shapes/mesh-shape	Mesh Shape	Create a mesh by adding control vertices to deform images or Shaders.
+nodes/shapes/metaballs-shape	Metaballs Shape	Combine multiple Shapes into an organic blob.
+nodes/shapes/outline	Outline	Create a geometry stroke using the path of another Shape.
+nodes/shapes/particle-shape	Particle Shape	Simulate complex physically-based effects like smoke, rain or dust.
+nodes/shapes/points-to-path	Points to Path	Create a path using the points within a distribution.
+nodes/shapes/quad-tree-shape	Quad Tree Shape	Subdivide a square into smaller squares using a distribution of points.
+nodes/shapes/ray	Ray	Create a line that starts in its centre and radiates out to an infinite length unless it collides with other shapes.
+nodes/shapes/rectangle-pattern	Rectangle Pattern	Create stacked bar charts and pie charts.
+nodes/shapes/segment-path	Segment Path	Segment Paths into smaller sections to create a sub-mesh.
+nodes/shapes/shortest-path	Shortest Path	Generates Paths by finding the shortest path between a start and end position via a distribution of points.
+nodes/shapes/spacer	Spacer	An empty mesh for use with layouts.
+nodes/shapes/sub-mesh-bounding-box	Sub-Mesh Bounding Box	Create rectangles using the bounding boxes of sub-meshes (Duplicator, Text, SVG etc).
+nodes/shapes/svg-shape	SVG	Create shapes from .svg files.
+nodes/shapes/text-shape	Text Shape	Render text in Cavalry.
+nodes/shapes/trails	Trails	Generate trails (lines) from the movement of other Shapes.
+nodes/utilities	Utilities	Utilities are general purpose building blocks that can be used to create custom set-ups.
+nodes/utilities/accumulator	Accumulator	Create 'stacks' of Shapes or custom layouts within a Duplicator.
+nodes/utilities/animation-control	Animation Control	Remap an attribute's animation curve (e.g. from the first to the last keyframe) to a percentage.
+nodes/utilities/apply-character-spacing	Apply Character Spacing	Create procedural kerning pairs via the Text Shape's Style Behaviours.
+nodes/utilities/apply-font-size	Apply Font Size	Procedurally set a Text Shape's Font Size based on a search via the Text Shape's Style Behaviours.
+nodes/utilities/apply-font-style	Apply Font Style	Procedurally set a Text Shape's Underline, Strikethrough, Superscript or Subscript styling.
+nodes/utilities/apply-opentype	Apply OpenType	Procedurally set a Text Shape's OpenType features based on a search via the Text Shape's Style Behaviours.
+nodes/utilities/apply-text-material	Apply Text Material	Procedurally set a Text Shape's materials based on a search via the Text Shape's Style Behaviours.
+nodes/utilities/apply-typeface	Apply Typeface	Procedurally set a Text Shape's typeface based on a search via the Text Shape's Style Behaviours.
+nodes/utilities/array-manipulator	Array Manipulator	This is an experimental feature. To enable, check Enable Experimental Features in Preferences.
+nodes/utilities/asset-array	Asset Array	Create a list of assets that can be assigned to other Shapes via their indices.
+nodes/utilities/asset-from-smart-folder	Asset from Smart Folder	Reference assets (images, videos, audio etc) contained within a Smart Folder.
+nodes/utilities/attractor-field	Attractor Field	Pull or push Shapes towards or away from a target within a Forge Dynamics simulation.
+nodes/utilities/body-settings-collision-event	Body Settings Collision Event	Update the settings of a dynamic body when it collides with another as part of a Forge Dynamics simulation.
+nodes/utilities/bounding-box	Bounding Box	Extract the bounding box of a Shape.
+nodes/utilities/bounding-box-constraint	Bounding Box Constraint	Constrain Shapes to the bounding box of other shapes.
+nodes/utilities/bridge-constraint	Bridge Constraint	Connect Shapes together to form chains or bridge structures in a Forge Dynamics simulation.
+nodes/utilities/buoyancy-field	Buoyancy Field	Create fluid containers within which dynamic bodies will float or sink based on their density.
+nodes/utilities/camera	Camera	Use a camera to create a 2.5D environment.
+nodes/utilities/camera-guide	Camera Guide	Use a guide to drive a Camera's animation.
+nodes/utilities/color-array	Color Array	Create a list of colors that can be assigned to other Shapes via their indices.
+nodes/utilities/color-collision-event	Color Collision Event	Update the settings of a dynamic body when it collides with another as part of a Forge Dynamics simulation.
+nodes/utilities/color-info	Color Info	Get the hue, saturation or value of a given color.
+nodes/utilities/comparison	Comparison	Perform simple comparison operations on values.
+nodes/utilities/comp-constraint	Composition Constraint	Constrain Shapes to the Composition.
+nodes/utilities/component-constraint	Component Constraint	Constrain Shapes to the points or edges of another.
+nodes/utilities/contrasting-color	Contrasting Color	Output colors that contrast with an input color.
+nodes/utilities/count-sub-meshes	Count Sub-Meshes	Count the number of sub-meshes within a Shape at a given level.
+nodes/utilities/custom-dropdown	Custom Dropdown	Create custom dropdowns for use in the Control Centre.
+nodes/utilities/data-modifier	Data Modifier	Affect a particle's properties including Id, lifespan and velocity.
+nodes/utilities/direction-field	Direction Field	Create a directional force in a Forge Dynamics simulation to push Shapes along.
+nodes/utilities/distance-constraint	Distance Constraint	Constrain Shapes to their original positions in a Forge Dynamics simulation.
+nodes/utilities/distribution-emitter	Distribution Emitter	Emit Particles from a Distribution.
+nodes/utilities/drag-field	Drag Field	Apply a force counter to a Shape's current positional and rotational velocities in a Forge Dynamics simulation.
+nodes/utilities/falloff	Falloff	Attenuate the effect of Behaviours, Deformers and other Layers.
+nodes/utilities/fill	Fill	Add a Fill material that can be used on many Shapes at once.
+nodes/utilities/flow-field-modifier	Flow Field Modifier	Move particles through a grid of directional cells to create a natural, fluid motion.
+nodes/utilities/force-modifier	Force Modifier	Change the physical properties of particles such as gravity and mass by applying a force.
+nodes/utilities/get-name	Get Name	Get the 'nice name' for a Layer and output it as a string.
+nodes/utilities/get-sub-mesh-transform	Get Sub-Mesh Transform	Get the transform (position, rotation, scale) of any Shape within a Sub-Mesh.
+nodes/utilities/goal-modifier	Goal Modifier	Move particles towards a target distribution.
+nodes/utilities/hsv-color	HSV Color	Create a color using hue, saturation and value.
+nodes/utilities/if-else	If Else	Switch between two results depending on whether a condition is true or not.
+nodes/utilities/image-modifier	Image Modifier	Add images or sequences of images to particles.
+nodes/utilities/image-sampler	Image Sampler	Sample values from Image Assets and use them to drive other Attributes.
+nodes/utilities/impulse-collision-event	Impulse Collision Event	Add additional forces to Shapes when they collide as part of a Forge Dynamics simulation.
+nodes/utilities/index-context	Index Context	Provide context to Layers.
+nodes/utilities/index-to-color	Index to Color	Map a gradient to each index to set the colors of Shapes within a sub-mesh.
+nodes/utilities/javascript-emitter	JavaScript Emitter	Use JavaScript to create a custom Particle Emitter.
+nodes/utilities/javascript-modifier	JavaScript Modifier	Use JavaScript to control or influence particles.
+nodes/utilities/javascript-utility	JavaScript Utility	Write JavaScript expressions to set attributes in Cavalry
+nodes/utilities/js-math	Jsmath	Use JavaScript to perform mathematical operations on values.
+nodes/utilities/lattice-controller	Lattice Controller	Manipulate the position, rotation and scale of multiple lattice points.
+nodes/utilities/layer-seed	Layer Seed	Generate unique random values for individual Layer connections.
+nodes/utilities/length-context	Length Context	Read the length of a path or paths and pass values through to affect any other attribute.
+nodes/utilities/local-time	Local Time	Output the current time.
+nodes/utilities/logic	Logic	Perform simple logic operations on boolean values.
+nodes/utilities/magnetic-modifier	Magnetic Modifier	Attract or repel particles towards or away from a position.
+nodes/utilities/math	Math	Perform simple mathematical operations on attributes with single channels.
+nodes/utilities/math2	Math2	Perform simple mathematical operations on two dimensional values.
+nodes/utilities/math3	Math3	Perform simple mathematical operations on three dimensional values.
+nodes/utilities/measure	Measure	Measure the distance between two Shapes.
+nodes/utilities/measure-text	Measure Text	An optimised method to output the bounding box of a string without rendering in the Viewport.
+nodes/utilities/null	Null	A non-rendering Shape that can be used for the control and movement of other Layers.
+nodes/utilities/particle-emitter	Particle Emitter	Emit Particles from a Point, Shape or Path.
+nodes/utilities/path-field	Path Field	Apply path following forces to dynamics bodies.
+nodes/utilities/path-length	Path Length	Output the length of a Path.
+nodes/utilities/path-modifier	Path Modifier	Flow particles along a path.
+nodes/utilities/pin-constraint	Pin Constraint	Pin Shapes to their original position in a Forge Dynamics simulation while allowing them to rotate.
+nodes/utilities/radius	Radius	Generate the radius for a circle which encompasses several Shapes.
+nodes/utilities/range-falloff	Range Falloff	Attenuate the effect of Behaviours and Deformers for a range of values.
+nodes/utilities/rig-control	Rig Control	A 2d controller or joystick which can be used for pose-based rigging.
+nodes/utilities/scheduling-group	Scheduling Group	Procedurally position child layers in time.
+nodes/utilities/seconds-to-frames	Seconds to Frames	Convert a given number of seconds to the equivalent number of frames based on a frame rate.
+nodes/utilities/sequence	Sequence	Generate random (or non-random), non-repeating number sequences.
+nodes/utilities/shader-array	Shader Array	Create a list of Shaders that can be assigned to other Layers via their indices.
+nodes/utilities/shape-array	Shape Array	Create a list of Shapes that can be assigned to other Layers via their indices.
+nodes/utilities/speed-modifier	Speed Modifier	Add drag or set limits for a particle's speed.
+nodes/utilities/spreadsheet	Spreadsheet	Read data from a Google Sheet, .csv or .xlsx file.
+nodes/utilities/spreadsheet-lookup	Spreadsheet Lookup	Lookup values in spreadsheets based on keys.
+nodes/utilities/sticky-collision-event	Sticky Collision Event	Stick a dynamic body to another when they collide.
+nodes/utilities/string	String	A simple utility that creates a string (aka text) which can be used to pass a string through to another Layer.
+nodes/utilities/string-array	String Array	Create a list of strings that can be assigned to other Layers via their indices.
+nodes/utilities/string-from-asset	String From Asset	Read strings from Text Assets.
+nodes/utilities/string-generator	String Generator	Create procedurally generated strings such as dates and time, hashes, numbers and timecodes.
+nodes/utilities/string-generator/block-generator	Block Generator	Create text blocks and optionally use Behaviours to populate paragraphs, lines, words amd characters.
+nodes/utilities/string-generator/formatted-date-time-generator	Formatted Date and Time Generator	Build a custom date and time string using tokens.
+nodes/utilities/string-generator/formatted-string-generator	Formatted String Generator	Build a custom string from an array from smaller strings.
+nodes/utilities/string-generator/hash-generator	Hash Generator	Generate a random string using hash values.
+nodes/utilities/string-generator/hexadecimal-generator	Hexadecimal Generator	Generate a random string using the characters 0-9 and a-f.
+nodes/utilities/string-generator/random-date-generator	Random Date Generator	Generate a random date.
+nodes/utilities/string-generator/random-number-generator	Random Number Generator	Generate a random number.
+nodes/utilities/string-generator/timecode-generator	Timecode Generator	Generate a timecode.
+nodes/utilities/string-generator/value-generator	Value Generator	Generate a number with options to format precision, padding and separators.
+nodes/utilities/string-length	String Length	Count how many lines/words/characters there are within a String.
+nodes/utilities/string-manipulator	Introduction	String Manipulators can be used to procedurally edit strings.
+nodes/utilities/string-manipulator/change-string-case-manipulator	Change String Case Manipulator	Change the case of text strings.
+nodes/utilities/string-manipulator/join-string-manipulator	Join String Manipulator	Concatenate text strings.
+nodes/utilities/string-manipulator/regex-string-manipulator	Regex String Manipulator	Use regular expressions to match strings
+nodes/utilities/string-manipulator/replace-string-manipulator	Replace String Manipulator	Find and replace sections of your text strings with other strings.
+nodes/utilities/string-manipulator/resize-string-manipulator	Resize String Manipulator	Change the length of a string.
+nodes/utilities/string-manipulator/shuffle-string-manipulator	Shuffle String Manipulator	Rearrange the characters within a string.
+nodes/utilities/string-manipulator/sub-string-manipulator	Sub-String Manipulator	Output a specified range of characters within a string.
+nodes/utilities/string-manipulator/transition-string-manipulator	Transition String Maniplulator	Transition from one string to another.
+nodes/utilities/string-manipulator/unicode-offset-string-manipulator	Unicode Offset String Manipulator	Offset characters in a string by Unicode code point.
+nodes/utilities/stroke	Stroke	Add a Stroke material that can be used on many Shapes at once.
+nodes/utilities/stroke-duplicator	Stroke Duplicator	Add complex combinations of Strokes to Shapes.
+nodes/utilities/timeline-counter	Timeline Counter	Use Time Markers or Pacing Markers to accumulate or trigger a value over time.
+nodes/utilities/transform-constraint	Transform Constraint	Constrain one Shape to another.
+nodes/utilities/turbulence-modifier	Turbulence Modifier	Use noise to influence a particle's position and velocity to add interest to a simulation.
+nodes/utilities/typeface	Typeface	Define a font and its weight to be used as part of a Typeface Array.
+nodes/utilities/typeface-array	Typeface Array	Create a list of Typefaces that can be assigned to Text Shapes via their indices.
+nodes/utilities/value2-array	Value2 Array	Create a list of two dimensional values that can be assigned to other Layers via their indices.
+nodes/utilities/value3-array	Value3 Array	Create a list of three dimensional values that can be assigned to other Layers via their indices.
+nodes/utilities/value-array	Value Array	Create a list of values that can be assigned to other Layers via their indices.
+nodes/utilities/velocity-context	Velocity Context	Extract a Shape within a Duplicator's direction.
+nodes/utilities/velocity-magnitude-context	Velocity Magnitude Context	Extract the speed of a Shape within a Duplicator.
+nodes/utilities/visibility-collision-event	Visibility Collision Event	Affect the Visibility or Opacity of Shapes when they collide within a Forge Dynamics simulation.
+nodes/utilities/visual-modifier	Visual Modifier	Change the visual appearance of particles.
+nodes/utilities/vortex-field	Vortex Field	Apply spiral forces to rotate dynamic bodies around a centre point.
+nodes/utilities/vortex-modifier	Vortex Modifier	Swirl particles around a position to create a spiral or galaxy effect.
