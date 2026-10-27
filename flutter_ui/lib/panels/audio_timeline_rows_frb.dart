@@ -18,6 +18,7 @@ import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/name_direction.dart';
 import 'layer_fold_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_metrics_frb.dart';
@@ -485,6 +486,8 @@ class AudioTrackOutlineRow extends StatelessWidget {
                   info.name,
                   key: ValueKey<String>('atl-name-${track.id}'),
                   style: selected ? t.bodyPrimary : t.body,
+                  textDirection: nameDirection(info.name),
+                  textAlign: TextAlign.left,
                   overflow: TextOverflow.ellipsis,
                 )
               : RowRenameField(

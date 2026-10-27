@@ -27,6 +27,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
+import '../widgets/name_direction.dart';
 import 'audio_streams_menu_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
@@ -928,6 +929,8 @@ class _OutlineRowState extends State<OutlineRow> {
           // the selected row; every other row keeps `body`.
           child: Text(info.name,
               style: widget.selected ? t.bodyPrimary : t.body,
+              textDirection: nameDirection(info.name),
+              textAlign: TextAlign.left,
               overflow: TextOverflow.ellipsis),
         ),
       ),

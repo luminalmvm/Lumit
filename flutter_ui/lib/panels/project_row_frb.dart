@@ -25,6 +25,7 @@ import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
+import '../widgets/name_direction.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -970,7 +971,10 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             ? t.textPrimary
             : t.textSecondary;
     return Text(widget.name,
-        style: t.body.copyWith(color: colour), overflow: TextOverflow.ellipsis);
+        style: t.body.copyWith(color: colour),
+        textDirection: nameDirection(widget.name),
+        textAlign: TextAlign.left,
+        overflow: TextOverflow.ellipsis);
   }
 
   /// The per-type glyph and tint, off [projectDefaultLabel] so the filter

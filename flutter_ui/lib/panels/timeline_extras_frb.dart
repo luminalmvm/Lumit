@@ -37,6 +37,7 @@ import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/layer_picker.dart';
+import '../widgets/name_direction.dart';
 import 'timeline_metrics_frb.dart'
     show TimelineMode, laneKeyHalf, positionOf;
 import 'timeline_snap.dart';
@@ -800,6 +801,7 @@ class _CompTabState extends State<_CompTab> {
                       style: active
                           ? t.bodyPrimary
                           : t.body.copyWith(color: t.textMuted),
+                      textDirection: nameDirection(name),
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.ellipsis,

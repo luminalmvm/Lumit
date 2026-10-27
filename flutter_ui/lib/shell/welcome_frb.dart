@@ -39,6 +39,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/middle_ellipsis.dart';
+import '../widgets/name_direction.dart';
 import 'about_window_frb.dart';
 import 'backups_window.dart';
 import 'menu_bar_frb.dart';
@@ -744,6 +745,8 @@ class _RecentRowState extends State<_RecentRow> {
                   children: [
                     Text(
                       widget.name ?? projectDisplayName(widget.path),
+                      textDirection: nameDirection(
+                          widget.name ?? projectDisplayName(widget.path)),
                       style: t.bodyPrimary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -55,6 +55,7 @@ import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/marquee.dart' show MarqueeBox;
+import '../widgets/name_direction.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
@@ -3267,6 +3268,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 builder: (context, picked, _) => Text(
                   info.name,
                   key: ValueKey<String>('ctl-name-${track.id}'),
+                  textDirection: nameDirection(info.name),
+                  textAlign: TextAlign.left,
                   style: picked.any((l) =>
                           l.internallayerId ==
                           track.entry.layer.internallayerId)
