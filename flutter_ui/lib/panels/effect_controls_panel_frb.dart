@@ -266,9 +266,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       const {};
 
   /// Every Points input on the layer's effects, by `effectId/portId`, with
-  /// the port's label. Taken from the same read as [_driven], which already
-  /// names what each one is wired to.
-  Map<String, String> _points = const {};
+  /// the port's label and the output it is wired from. Taken from the same
+  /// read as [_driven].
+  Map<String, ({String label, BridgeOutputRef? from})> _points = const {};
   LumitUiState? _boundUi;
 
   @override
@@ -470,11 +470,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // a row cannot say *driven* in one panel and offer a spinner in the other.
     final next =
         graph == null ? const <String, DrivenParam>{} : drivenParamsIn(graph);
+    final into = {
+      for (final e in graph?.wiring.edges ?? const <BridgeGraphEdge>[])
+        e.to: e.from,
+    };
     final points = {
       for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
         if (n.node case BridgeNodeRef_Effect(:final field0))
           for (final p in n.inputs)
-            if (p.portType == BridgePortType.points) '$field0/${p.id}': p.label,
+            if (p.portType == BridgePortType.points)
+              '$field0/${p.id}': (
+                label: p.label,
+                from: into[BridgeInputRef.param(node: n.node, port: p.id)],
+              ),
     };
     if (!mapEquals(next, _driven) || !mapEquals(points, _points)) {
       setState(() {
@@ -2034,9 +2042,9 @@ class _EffectSection extends StatelessWidget {
   final Map<String, ({String driver, BridgePortType type, bool noStream})>
       driven;
 
-  /// The layer's Points inputs, by `effectId/portId`, with each port's label.
-  /// Read once by the panel beside [driven].
-  final Map<String, String> points;
+  /// The layer's Points inputs, by `effectId/portId`, with each port's label
+  /// and what it is wired from. Read once by the panel beside [driven].
+  final Map<String, ({String label, BridgeOutputRef? from})> points;
 
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
@@ -2502,8 +2510,8 @@ class _EffectSection extends StatelessWidget {
         // parameter row of its own.
         for (final input in points.entries)
           if (input.key.startsWith('$id/'))
-            _pointsRow(
-                context, input.key.substring('$id/'.length), input.value),
+            _pointsRow(context, input.key.substring('$id/'.length),
+                input.value.label, input.value.from),
         ..._paramRows(named, base, id, values),
       ],
     );
@@ -2514,7 +2522,8 @@ class _EffectSection extends StatelessWidget {
   ///
   /// The list is read when the menu opens, as the layer picker's is. Which
   /// effects sit above is a position, and a card can outlive one.
-  Widget _pointsRow(BuildContext context, String port, String label) {
+  Widget _pointsRow(BuildContext context, String port, String label,
+      BridgeOutputRef? from) {
     final t = ThemeScope.of(context).theme;
     final node = BridgeNodeRef.effect(info.id);
     final to = BridgeInputRef.param(node: node, port: port);
@@ -2526,6 +2535,8 @@ class _EffectSection extends StatelessWidget {
         width: effectCellWidth + 40,
         child: BareLazyDropdown<BridgeOutputRef?>(
           key: ValueKey<String>('fx-points-${info.id}-$port'),
+          // Ticked by the wire itself: two effects can share a name.
+          value: from,
           // A wire from a driver in the graph is named here too, though the
           // list only offers the stack.
           label: driven['${info.id}/$port']?.driver ?? l10n.none,
