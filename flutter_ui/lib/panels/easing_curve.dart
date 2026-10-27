@@ -31,6 +31,14 @@ import 'graph_maths.dart'
 /// constant, which is why the two agree by construction.
 const double easingHandleReach = 0.5;
 
+/// Which sides of each span a shape lands on. A preset Shift-clicked eases into
+/// the later key only, and Ctrl-clicked out of the earlier key only, as Flow
+/// does. The other side keeps what it had.
+enum EaseSides { both, into, outOf }
+
+/// Send a shape to the selected keys.
+typedef ApplyEasing = void Function(EasingCurve curve, EaseSides sides);
+
 /// A normalised easing shape: the cubic bezier from (0, 0) to (1, 1) whose two
 /// control points are [x1], [y1] and [x2], [y2] — the same four numbers CSS
 /// writes as `cubic-bezier(x1, y1, x2, y2)`.

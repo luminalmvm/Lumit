@@ -32,7 +32,7 @@ void main() {
   }) async {
     final p = freshProject();
     final applied = <EasingCurve>[];
-    if (claimed) p.uiState.easingApply.value = applied.add;
+    if (claimed) p.uiState.easingApply.value = (c, _) => applied.add(c);
     // The panel lays out to the window it is given, not to the MediaQuery
     // size, and the default test window is a third of 800 across.
     tester.view.physicalSize = Size(width, 600);

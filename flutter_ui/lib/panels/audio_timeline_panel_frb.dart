@@ -60,7 +60,7 @@ import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
-import 'easing_curve.dart' show EasingCurve;
+import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
@@ -305,7 +305,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   bool Function()? _heldDelete;
   bool Function()? _heldCopy;
   bool Function()? _heldPaste;
-  ValueChanged<EasingCurve>? _heldEasing;
+  ApplyEasing? _heldEasing;
 
   @override
   void initState() {
@@ -704,7 +704,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   /// A shape sent from the Easing panel, onto every span the picked keyframes
   /// cover - one press, one undo step.
-  void _applyEasing(EasingCurve curve) {
+  void _applyEasing(EasingCurve curve, EaseSides sides) {
     final ui = _ui;
     if (!mounted || ui == null) return;
     final channels = _keyChannels(ui);
@@ -713,7 +713,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     asOneUndoStep(
       Provider.of<LumitState>(context, listen: false).project,
       () => applyEasingToSelection(
-          channels: channels, selectedKeys: selection, curve: curve),
+          channels: channels,
+          selectedKeys: selection,
+          curve: curve,
+          sides: sides),
     );
     _afterWrite();
   }

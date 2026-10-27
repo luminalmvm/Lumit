@@ -2768,7 +2768,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   ///
   /// The popup is an overlay entry, so it outlives the panel that opened it —
   /// a re-dock while it is up would otherwise land an Apply on a dead State.
-  void _applyEasing(EasingCurve curve) {
+  void _applyEasing(EasingCurve curve, EaseSides sides) {
     if (!mounted) return;
     if (_graph && _graphLens != GraphLens.value) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -2783,6 +2783,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         channels: channels,
         selectedKeys: selection,
         curve: curve,
+        sides: sides,
       );
     });
     ui.model.refresh();

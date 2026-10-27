@@ -649,6 +649,7 @@ void applyEasingToSelection({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
   required EasingCurve curve,
+  EaseSides sides = EaseSides.both,
 }) {
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in channels) {
@@ -666,17 +667,17 @@ void applyEasingToSelection({
       // Two keys on the same frame have no travel to shape, and dividing by
       // that gap is how a curve becomes infinities. Leave the pair alone.
       if (dt <= 0) continue;
-      final sides = curve.sidesFor((keys[i + 1].value - keys[i].value) / dt);
+      final eased = curve.sidesFor((keys[i + 1].value - keys[i].value) / dt);
       next[i] = BridgeKeyframe(
         time: next[i].time,
         value: next[i].value,
         interpIn: next[i].interpIn,
-        interpOut: sides.out,
+        interpOut: sides == EaseSides.into ? next[i].interpOut : eased.out,
       );
       next[i + 1] = BridgeKeyframe(
         time: next[i + 1].time,
         value: next[i + 1].value,
-        interpIn: sides.inTo,
+        interpIn: sides == EaseSides.outOf ? next[i + 1].interpIn : eased.inTo,
         interpOut: next[i + 1].interpOut,
       );
       touched = true;

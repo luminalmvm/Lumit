@@ -39,7 +39,7 @@ class EasingPanelFrb extends StatelessWidget {
     // Listening to the claim alone, not to the whole shell: the editor holds
     // the shape being drawn in its own State, and rebuilding it on every
     // unrelated notification is how a half-dragged handle would jump back.
-    return ValueListenableBuilder<ValueChanged<EasingCurve>?>(
+    return ValueListenableBuilder<ApplyEasing?>(
       valueListenable: ui.easingApply,
       builder: (context, apply, _) => EasingEditor(
         // One State for the panel's whole life, so the drawn shape survives
