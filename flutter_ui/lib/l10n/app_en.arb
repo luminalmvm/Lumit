@@ -12622,6 +12622,20 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
+  "viewerSpeed": "Playback speed",
+  "@viewerSpeed": {
+    "description": "Tooltip of the Viewer's playback speed picker: how fast playback runs, at the composition's own rate or slower. A preview setting, the export is unchanged."
+  },
+  "viewerSpeedTimes": "{times}×",
+  "@viewerSpeedTimes": {
+    "description": "One choice of the Viewer's playback speed, as a multiple of the composition's rate: 1×, 0.5× or 0.25×.",
+    "placeholders": {
+      "times": {
+        "type": "double",
+        "format": "decimalPattern"
+      }
+    }
+  },
   "viewerReadoutDegraded": "{source} → {preview}",
   "@viewerReadoutDegraded": {
     "description": "The size part of the Viewer bar's reading while the preview was made at fewer pixels than the composition has, set in mono and drawn in the warning colour: the composition's own pixel size, an arrow, and the pixel size the preview was actually made at. Both parts are numbers, so only the arrow is translatable.",

@@ -35,7 +35,7 @@ const double _deckClockSize = 15;
 
 /// Below this the deck stops spreading and slides sideways instead. Nothing is
 /// shed: the transport is first on the row, so it is what a narrow deck keeps.
-const double _deckMinimum = 620;
+const double _deckMinimum = 690;
 
 /// The Viewer's **deck** (key `viewer-deck`): the playing half of the Viewer's
 /// chrome, under the picture, when the arrangement is [ViewerBars.deck].
@@ -131,7 +131,8 @@ class ViewerDeck extends StatelessWidget {
                 ),
                 viewerBarGapBox(viewerBarGap),
                 // Preview mode and quality: the same two answers the header's
-                // quality menu carries, each as its own picker here.
+                // quality menu carries, each as its own picker here, then the
+                // speed.
                 LumitTooltip(
                   message: l10n.viewerQualityPlayback,
                   child: BareDropdown<PlaybackMode>(
@@ -160,6 +161,8 @@ class ViewerDeck extends StatelessWidget {
                     onChanged: ui.setPreviewResolution,
                   ),
                 ),
+                const SizedBox(width: viewerHeaderGap),
+                const ViewerSpeedPicker(),
                 viewerBarGapBox(viewerBarGap),
                 // The loop mode, the same mark the bar carries.
                 viewerLoopMark(t,

@@ -2361,6 +2361,10 @@ impl CompositionReference {
     /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
     /// keeps time by skipping frames, in either direction, and is silent.
     ///
+    /// `slow` is how many times slower than the comp's rate the leg plays,
+    /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
+    /// the sound is slowed with its pitch kept.
+    ///
     /// `until` is the frame the leg ends on, the end of the work area going
     /// forwards and its start going back. Nothing past it is composited.
     /// `None` runs to the end of the composition.
@@ -2374,6 +2378,7 @@ impl CompositionReference {
         view: u32,
         reverse: bool,
         speed: u32,
+        slow: u32,
         until: Option<u64>,
     ) -> Result<(), BridgeError> {
         // ponytail: sound plays forwards at the comp's rate only. Pitch-shifted
@@ -2414,6 +2419,7 @@ impl CompositionReference {
                 scale,
                 reverse,
                 speed,
+                slow,
                 until,
                 audio,
                 view,

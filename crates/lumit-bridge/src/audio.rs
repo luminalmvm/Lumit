@@ -65,6 +65,8 @@ enum Cmd {
     Pause,
     /// The monitor mute: silence at the device, the mix and clock untouched.
     Mute(bool),
+    /// How many times slower than the mix the sound plays, its pitch kept.
+    Slow(u32),
     Seek(f64),
     /// Sound `len` seconds from `at` once, with the transport stopped.
     Scrub {
@@ -116,6 +118,9 @@ struct AudioState {
     /// The monitor mute, kept here so it outlives the engine: a changed
     /// output opens a fresh stream, and a muted user must not get sound back.
     muted: bool,
+    /// How many times slower than the mix the comp playing is heard, kept
+    /// here for the same reason as `muted`.
+    slow: u32,
     /// How late this machine's output is heard, in milliseconds, from the
     /// Audio settings. The picture follows the clock less this, so it lands
     /// with the sound as it reaches the ears. Below zero the picture is the
@@ -178,6 +183,7 @@ impl AudioState {
             loaded_sig: None,
             playing: false,
             muted: false,
+            slow: 1,
             offset_ms: 0,
             pending_start: None,
             worker_busy: false,
@@ -466,6 +472,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 Cmd::Play => engine.play(),
                 Cmd::Pause => engine.pause(),
                 Cmd::Mute(m) => engine.set_muted(m),
+                Cmd::Slow(s) => engine.set_slow(s),
                 Cmd::Seek(s) => engine.seek_seconds(s),
                 Cmd::Scrub { at, len } => engine.scrub(at, len),
                 Cmd::Unload => engine.unload(),
@@ -486,10 +493,12 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 meters,
                 rate,
             };
-            // A fresh stream starts unmuted: carry the mute over to it.
+            // A fresh stream starts unmuted and at the mix's own speed:
+            // carry the mute and the speed over to it.
             if st.muted {
                 let _ = tx.send(Cmd::Mute(true));
             }
+            let _ = tx.send(Cmd::Slow(st.slow));
             Some((tx, rate, generation))
         }
         _ => {
@@ -683,9 +692,14 @@ pub(crate) fn prepare(comp: Uuid, doc: Arc<lumit_core::model::Document>) {
 /// When its mix is already loaded this is an immediate seek and play; otherwise
 /// the mix is prepared in the background and starts from `start` when it lands,
 /// and the picture runs on the caller's own clock until then.
-pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::model::Document>) {
+///
+/// `slow` is how many times slower than the comp it plays, 1 for its own
+/// speed, with its pitch kept: the Viewer's playback speed.
+pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::model::Document>, slow: u32) {
     let mut st = lock();
     st.playing = true;
+    st.slow = slow;
+    send(&st, Cmd::Slow(slow));
     // The comp is what the user wants to hear now, so a preview still decoding
     // must not land on top of it.
     st.wanted_preview = None;
@@ -735,6 +749,8 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
             return;
         }
         st.wanted_preview = Some(item);
+        st.slow = 1;
+        send(&st, Cmd::Slow(1));
         // This file's preview is already in the engine: a second press is a
         // seek, not a second look at the file.
         if st.loaded_comp == Some(item) && st.loaded_preview.as_ref() == Some(&sound) {
@@ -1053,8 +1069,10 @@ pub(crate) fn clock() -> (f64, bool, bool) {
             let loaded = st.loaded_comp.is_some();
             let playing = clock.is_playing();
             // Only while playing: a stopped clock is where the playhead sits.
+            // The sound heard now left the mix that long ago, which is less
+            // of the mix when it is slowed.
             let late = if playing {
-                f64::from(st.offset_ms) / 1000.0
+                f64::from(st.offset_ms) / 1000.0 / f64::from(st.slow.max(1))
             } else {
                 0.0
             };

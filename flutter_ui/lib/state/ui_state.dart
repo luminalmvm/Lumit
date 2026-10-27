@@ -1013,7 +1013,7 @@ class LumitUiState extends ChangeNotifier {
     // frames ahead of the first picture shown.
     if (workspace.performance.playback == PlaybackMode.adaptive) {
       _clockAnchor = null;
-      _clockFps = comp.fps() * _speed;
+      _clockFps = comp.fps() * _speed / _slow;
       _clockWatch
         ..reset()
         ..start();
@@ -1054,6 +1054,27 @@ class LumitUiState extends ChangeNotifier {
 
   /// How many times the comp's rate the run plays at.
   int get _speed => _shuttle == 0 ? 1 : _shuttle.abs();
+
+  /// How many times slower than the comp's rate playback runs: 1, 2 or 4,
+  /// from the Viewer. A preview setting, never saved. Every frame is shown,
+  /// and the sound is slowed with its pitch kept.
+  int playbackSlow = 1;
+
+  /// The run's own: a shuttle keeps its rung's speed.
+  int get _slow => _shuttle == 0 ? playbackSlow : 1;
+
+  /// Play `slow` times slower. A run already going carries on from where it
+  /// is at the new speed, and still goes back to where it started.
+  void setPlaybackSlow(int slow) {
+    if (slow == playbackSlow) return;
+    playbackSlow = slow;
+    notifyListeners();
+    if (!playing.value || _shuttle != 0) return;
+    final from = _playedFrom;
+    stopPlayback(restorePlayhead: false);
+    play();
+    _playedFrom = from;
+  }
 
   /// J and L: one step along the shuttle ladder, `direction` being -1 or 1.
   ///
@@ -1125,6 +1146,7 @@ class LumitUiState extends ChangeNotifier {
         view: views.previewing?.engineId ?? activeViewId,
         reverse: _reverse,
         speed: _speed,
+        slow: _slow,
         // Where the leg ends, so nothing past it is made.
         until: BigInt.from(_clockEnd),
       );
