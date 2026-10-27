@@ -164,6 +164,13 @@ const layers = [
     -webkit-user-select: text;
     user-select: text;
   }
+  /* As wide as its longest reading, so it does not move what is beside it
+     as it counts. */
+  .hc-fr {
+    flex: none;
+    width: 8ch;
+    contain: layout;
+  }
   .hc-fr,
   .hc-hint,
   .hc-reset,
@@ -531,13 +538,20 @@ const layers = [
       play.innerHTML = playing ? PAUSE : PLAY;
       play.setAttribute("aria-label", playing ? "Pause" : "Play");
       if (!playing) announce();
+      run();
     };
+    // The first pass stops on the word. It loops from when the visitor
+    // presses Play or moves a keyframe.
+    let looping = false;
     const seek = (time: number) => {
       t = clamp(time, 0, SECONDS - STEP);
       render();
       announce();
     };
-    play.addEventListener("click", () => setPlaying(!playing));
+    play.addEventListener("click", () => {
+      looping = true;
+      setPlaying(!playing);
+    });
 
     // ---- the ruler and the keyframes ----
     const ruler = $<HTMLElement>("[data-ruler]");
@@ -561,6 +575,7 @@ const layers = [
       track[i][0] = clamp(Math.round(time * FPS) / FPS, lo, hi);
       place(key, track[i][0]);
       reset.hidden = false;
+      looping = true;
       render();
     };
     const build = () => {
@@ -632,6 +647,7 @@ const layers = [
     lanes.addEventListener("keydown", (e) => {
       if (e.key === " ") {
         e.preventDefault();
+        looping = true;
         setPlaying(!playing);
         return;
       }
@@ -727,23 +743,38 @@ const layers = [
     document.addEventListener("hero:ready", () => (held = false), { once: true });
     setTimeout(() => (held = false), 2000);
     let seen = true;
-    new IntersectionObserver((entries) => {
-      seen = entries[0].isIntersecting;
-    }).observe(wm);
-    let last = performance.now();
+    let raf = 0;
+    let last = 0;
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      if (playing && seen && !document.hidden && !hero.paused && !held) {
-        t = (t + dt) % SECONDS;
+      raf = requestAnimationFrame(frame);
+      if (document.hidden || hero.paused || held) return;
+      // Where the word starts to close back into the mark.
+      const rest = tracks.word[2][0];
+      if (!looping && t < rest && t + dt >= rest) {
+        t = rest;
         render();
+        setPlaying(false);
+        return;
       }
-      requestAnimationFrame(frame);
+      t = (t + dt) % SECONDS;
+      render();
     };
+    // Frames are only asked for while it plays and can be seen.
+    function run() {
+      cancelAnimationFrame(raf);
+      if (!playing || !seen) return;
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
+    new IntersectionObserver((entries) => {
+      seen = entries[0].isIntersecting;
+      run();
+    }).observe(wm);
 
     build();
     setPlaying(playing);
     render();
-    requestAnimationFrame(frame);
   }
 </script>

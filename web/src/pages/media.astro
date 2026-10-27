@@ -419,14 +419,26 @@ const assets = [
       const MOVE = 1258;
       const STAND = 2400;
       const LOOP = LEAD + MOVE + STAND;
+      // Only a pose that has changed is drawn, and only while one of them
+      // can be seen.
+      let drawn = -1;
+      let raf = 0;
       const frame = (now: number) => {
         const at = now % LOOP;
-        if (at < LEAD) pose(0);
-        else if (at < LEAD + MOVE) pose(marks[0].wmTiming!((at - LEAD) / MOVE));
-        else pose(1);
-        requestAnimationFrame(frame);
+        const p = at < LEAD ? 0 : at < LEAD + MOVE ? marks[0].wmTiming!((at - LEAD) / MOVE) : 1;
+        if (p !== drawn) pose((drawn = p));
+        raf = requestAnimationFrame(frame);
       };
-      requestAnimationFrame(frame);
+      const shown = new Set<Element>();
+      const seen = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) shown.add(e.target);
+          else shown.delete(e.target);
+        }
+        cancelAnimationFrame(raf);
+        if (shown.size) raf = requestAnimationFrame(frame);
+      });
+      for (const m of marks) seen.observe(m);
     }
   }
 </script>
