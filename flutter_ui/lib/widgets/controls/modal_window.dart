@@ -42,6 +42,9 @@ import 'motion.dart';
 /// A [modeless] window is a panel that floats over the work instead: no
 /// scrim, so a click beside it reaches the panels, and neither Escape nor the
 /// keyboard is taken from them. Only its own close mark closes it.
+///
+/// A [still] window is simply there, with no entrance and no wash fading in,
+/// for one opened from the keyboard many times a day.
 Future<T?> showLumitModal<T>({
   required BuildContext context,
   required Widget Function(void Function(T?) close) builder,
@@ -50,6 +53,7 @@ Future<T?> showLumitModal<T>({
   Size minSize = const Size(320, 240),
   bool dimBackground = true,
   bool modeless = false,
+  bool still = false,
 }) {
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
@@ -91,7 +95,7 @@ Future<T?> showLumitModal<T>({
                 // ahead of it. It takes the click from its first frame either
                 // way.
                 child: Entrance.fade(
-                  spec: takesOver ? MotionSpec.still : motion.scrim,
+                  spec: takesOver || still ? MotionSpec.still : motion.scrim,
                   child: ColoredBox(
                     color: dimBackground
                         ? scope.theme.scrim
@@ -110,7 +114,7 @@ Future<T?> showLumitModal<T>({
             // was dismissed is gone, and the caller's next window never opens
             // over one still fading out.
             child: Entrance(
-              spec: motion.modal,
+              spec: still ? MotionSpec.still : motion.modal,
               rise: motion.modalRise,
               scale: motion.modalScale,
               leads: true,
