@@ -1,0 +1,134 @@
+---
+title: OFX plugins
+description: Carry an OpenFX plugin in an extension, build it, and let it render on the graphics card.
+sidebar:
+  order: 3.5
+---
+
+An extension can carry an **OpenFX (OFX) plugin**, written in C or C++. It is a library built
+for each system, and runs in a process of its own. The same plugin runs in other OFX hosts.
+
+## Your first OFX plugin
+
+**Sort** sorts runs of pixels by brightness along rows or columns. It is one C file and the
+OpenFX headers, in the repository at
+[`examples/extensions/sort`](https://github.com/luminalmvm/Lumit/tree/main/examples/extensions/sort).
+
+```
+sort/
+  extension.json
+  sort.c
+  openfx/
+  Sort.ofx.bundle/
+    Contents/
+      Win64/Sort.ofx
+      MacOS/Sort.ofx
+      Linux-x86-64/Sort.ofx
+```
+
+`extension.json`:
+
+```json
+{
+  "format": 1,
+  "id": "sort",
+  "name": "Sort",
+  "version": "1.0.0",
+  "summary": "Sorts runs of pixels by brightness.",
+  "author": "Lumit",
+  "effects": [
+    {
+      "id": "sort",
+      "name": "Sort",
+      "category": "Stylise",
+      "version": 1,
+      "api": 1,
+      "ofx": "Sort.ofx.bundle",
+      "plugin": "com.lumitlab.sort"
+    }
+  ]
+}
+```
+
+**1. Build the bundle** from the `sort` folder. On Windows, in an x64 Native Tools prompt:
+
+```
+mkdir Sort.ofx.bundle\Contents\Win64
+cl /nologo /O2 /LD sort.c /Fe:Sort.ofx.bundle\Contents\Win64\Sort.ofx /link /NOIMPLIB /NOEXP
+```
+
+On macOS, for both kinds of Mac:
+
+```
+mkdir -p Sort.ofx.bundle/Contents/MacOS
+clang -O2 -bundle -arch arm64 -arch x86_64 sort.c -o Sort.ofx.bundle/Contents/MacOS/Sort.ofx
+```
+
+On Linux:
+
+```
+mkdir -p Sort.ofx.bundle/Contents/Linux-x86-64
+gcc -O2 -shared -fPIC sort.c -o Sort.ofx.bundle/Contents/Linux-x86-64/Sort.ofx
+```
+
+**2. Install the folder** from **Settings ▸ Addons ▸ Extensions ▸ Install from a folder**.
+The install window says **Runs its own code on this computer**.
+
+**3. Drag Sort from [Effects & presets](/panels/effects-presets/) onto a layer.** It is
+under the plugin's own **Stylise** heading. Effect controls shows **Direction**,
+**Threshold** and **Reverse**.
+
+## The manifest
+
+An effect with `ofx` in place of `shader` is an OFX plugin. The other fields are as in
+[LFX effects](/make/lfx-effects/#the-manifest).
+
+| Field | What it is |
+| --- | --- |
+| `ofx` | The `.ofx.bundle` folder, inside the extension. |
+| `plugin` | The plugin's OFX identifier, as its describe gives it. A project saves the effect as `ofx:<plugin>`. |
+| `interface` | Optional. An interface page, as for an LFX effect. |
+
+An entry with both `shader` and `ofx`, or neither, is refused. **Make a package** refuses a
+bundle with no library for the computer it runs on. A package can hold the libraries for
+all three systems.
+
+## What Lumit hosts
+
+Lumit is an OpenFX 1.4 host. Images are RGBA, 32-bit float. The contexts are filter,
+general, generator and transition. A plugin's parameters are its rows in Effect controls.
+
+Each bundle runs in a process of its own. A render that fails, crashes or runs past its
+time limit, 10 seconds by default, is a strike. After three the plugin is switched off until
+Lumit restarts.
+
+A plugin polls `abort` to stop a frame that is no longer wanted.
+
+## The graphics card
+
+A plugin that says it supports CUDA, OpenCL or Metal renders on the graphics card, with
+images in the card's memory, as in other OFX hosts.
+
+| System | What Lumit offers |
+| --- | --- |
+| Windows, Linux | CUDA on NVIDIA cards, then OpenCL |
+| macOS | Metal |
+
+A frame the card fails on is drawn again on the CPU. After two failures the plugin stays on
+the CPU until Lumit restarts. **Settings ▸ Preview and cache ▸ Render plugins on the
+graphics card** turns it off for every plugin.
+
+:::note[Not built yet]
+Frames go through ordinary memory on the way to and from the plugin.
+:::
+
+## Installing again
+
+Installing or removing the extension stops its plugin's process first. A changed library
+takes effect at the next start.
+
+## Related
+
+- [LFX effects](/make/lfx-effects/)
+- [Plugins](/use/plugins/)
+- [Extensions](/use/extensions/)
