@@ -40,7 +40,6 @@ import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
-import '../icons/icon_style.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
@@ -445,7 +444,7 @@ class _CommandBox extends StatelessWidget {
           child: Row(
             children: [
               glyph.LumitIcon(
-                IconStyle.resolve('search', LumitIcons.search, t),
+                LumitIcons.search,
                 size: 12,
                 colour: Color.lerp(t.textMuted, t.textPrimary, lit),
               ),

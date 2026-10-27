@@ -50,6 +50,7 @@ import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
+import '../icons/icon_style.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/escape_ladder.dart';
@@ -1317,7 +1318,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _glyphColour = colour;
     vg
         .loadPicture(
-            SvgStringLoader(LumitIcons.composition,
+            SvgStringLoader(
+                IconStyle.resolve(LumitIcons.composition, ThemeScope.of(context).theme),
                 theme: SvgTheme(currentColor: colour)),
             null)
         .then((info) {
