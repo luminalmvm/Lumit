@@ -25,3 +25,4 @@ pub mod broker;
 pub mod pipe;
 pub mod proto;
 pub mod shm;
+mod spawn;
