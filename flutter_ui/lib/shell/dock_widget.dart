@@ -1501,7 +1501,10 @@ class _PaneChrome extends StatelessWidget {
         // place to read the rule.
         PanelFloor(
           minWidth: panelMinWidth(pane.panel),
-          child: StylePart(name: pane.panel.name, child: child),
+          // Its own layer, so a panel redrawing every frame while playing
+          // repaints itself and not the window around it.
+          child: StylePart(
+              name: pane.panel.name, child: RepaintBoundary(child: child)),
         ),
         Positioned.fill(child: _DropPreview(pane: pane, drag: drag)),
       ],
