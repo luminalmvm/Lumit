@@ -25,6 +25,7 @@ const effectCategories = fxReference.categories
 // deployment target rather than a redirect. Shares the marketing site's palette.
 export default defineConfig({
   site: "https://docs.lumitlab.com",
+  redirects: { "/use/lfx-effects/": "/make/lfx-effects/" },
   integrations: [
     starlight({
       title: "Lumit docs",
@@ -167,7 +168,6 @@ r.addEventListener("input",set);set()})})`,
                         "use/presets",
                         "use/plugins",
                         "use/extensions",
-                        "use/lfx-effects",
                         "use/addons",
                       ],
                     },
@@ -202,13 +202,23 @@ r.addEventListener("input",set);set()})})`,
                 { label: "Reference", autogenerate: { directory: "reference" } },
               ],
             },
-            // Making things for Lumit: extensions, themes, icons and packages.
+            // Making things for Lumit: extensions, themes, icons, effects, scripts and packages.
             {
               id: "make",
               label: "Make",
               link: "/make/",
               icon: "puzzle",
-              items: ["make", "make/extensions", "make/themes", "make/icons", "make/share"],
+              items: [
+                "make",
+                "make/extensions",
+                "make/themes",
+                "make/icons",
+                "make/lfx-effects",
+                "make/ofx-plugins",
+                "make/scripts",
+                "make/mcp",
+                "make/share",
+              ],
             },
           ],
           // The site root is a landing page; it sits under the Tutorials topic

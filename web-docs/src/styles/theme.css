@@ -320,7 +320,7 @@ body::before {
 
 /* ---------- the sidebar ---------- */
 
-/* The three topics as a row of tabs, in the kicker's face, the current one
+/* The four topics as a row of tabs, in the kicker's face, the current one
    with the spruce tick under it. The plugin's own rules are scoped and not in
    a layer, so these carry `.sidebar-content` to outrank them. */
 .sidebar-content ul.starlight-sidebar-topics {

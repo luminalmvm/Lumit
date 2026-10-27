@@ -6,7 +6,7 @@ sidebar:
 ---
 
 An **extension** is a folder with an `extension.json` in it. It can add a panel showing a
-web page, and [LFX effects](/use/lfx-effects/).
+web page, and [LFX effects](/make/lfx-effects/).
 
 The smallest extension with a panel is two files:
 
@@ -65,7 +65,7 @@ my-extension/
 | `summary`, `author`, `homepage` | Optional. Shown before installing. |
 | `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
 | `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
-| `effects` | Optional. The [LFX effects](/use/lfx-effects/#the-manifest) it carries. |
+| `effects` | Optional. The [LFX effects](/make/lfx-effects/#the-manifest) it carries. |
 | `permissions` | What the page may ask. See below. |
 | `hosts` | The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
 
@@ -166,5 +166,5 @@ await lumit.call("edit.layer.add", { comp: comps[0].id, kind: "null", name: "Con
 
 - [Extensions](/use/extensions/)
 - [Package and share](/make/share/)
-- [Writing LFX effects](/use/lfx-effects/)
+- [LFX effects](/make/lfx-effects/)
 - [Make a theme](/make/themes/)
