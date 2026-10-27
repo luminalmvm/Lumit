@@ -76,6 +76,7 @@ import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
+import 'layer_settings_frb.dart' show newSolidFrb;
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -1266,7 +1267,14 @@ List<MenuSection> lumitMenus(
             // selected ([newLayerRow]).
             MenuEntry.submenu(l10n.menuNew, [
               MenuEntry(
-                  l10n.menuSolid, onComp((c) => c.addSolidLayer(row: row(c))),
+                  l10n.menuSolid,
+                  comp == null
+                      ? null
+                      : () => newSolidFrb(
+                          context: context,
+                          comp: comp,
+                          row: row(comp),
+                          onDone: app.notifyDocumentChanged),
                   action: 'layer.new.solid'),
               MenuEntry(
                   l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
