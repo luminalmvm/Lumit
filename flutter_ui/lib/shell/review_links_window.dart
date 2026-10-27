@@ -37,6 +37,7 @@ import '../state/external_links.dart';
 import '../state/reviews.dart';
 import '../state/timecode.dart';
 import '../state/workspace.dart' show Workspace;
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
@@ -133,6 +134,11 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   int? _version;
   bool _all = false;
   _Page _page = _Page.comments;
+
+  /// How many times the tab has been changed since the window opened. The
+  /// first page arrives with the window, and every page after it makes a
+  /// small entrance of its own.
+  int _pageTurns = 0;
 
   /// The composition being sent, while the window is on its other face.
   CompositionReference? _sendFor;
@@ -929,6 +935,15 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     // Nothing on this version at all: no comment, no like, nobody's yes.
     final bare = version.approvals.isEmpty &&
         !_reviews.comments.any((c) => c.version == version.n);
+    // What the tab shows is keyed by it, so a new page comes up into place as
+    // a settings page does and the one left is gone at once.
+    final motion = ThemeScope.of(context).motion;
+    Widget turn(Widget child) => Entrance(
+          key: ValueKey<_Page>(_page),
+          spec: _pageTurns == 0 ? MotionSpec.still : motion.reveal,
+          rise: motion.revealRise,
+          child: child,
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -994,6 +1009,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
             // A page opens at its top, wherever the other was scrolled to.
             if (_detailScroll.hasClients) _detailScroll.jumpTo(0);
             setState(() {
+              if (page != _page) _pageTurns++;
               _page = page;
               _at = null;
             });
@@ -1005,7 +1021,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
         if (_page == _Page.comments && said.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: _commentsHead(t, review, version, said),
+            child: turn(_commentsHead(t, review, version, said)),
           ),
         Expanded(
           child: _page == _Page.comments && bare
@@ -1015,14 +1031,14 @@ class _ReviewWindowState extends State<_ReviewWindow> {
               ? Center(
                   child: _reviews.reading
                       ? null
-                      : Text(l10n.reviewNoComments,
+                      : turn(Text(l10n.reviewNoComments,
                           key: const ValueKey('review-no-comments'),
-                          style: t.small),
+                          style: t.small)),
                 )
               : ReviewScroll(
                   controller: _detailScroll,
                   ground: t.surface1,
-                  child: Padding(
+                  child: turn(Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1047,7 +1063,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
                               ),
                             ],
                     ),
-                  ),
+                  )),
                 ),
         ),
       ],

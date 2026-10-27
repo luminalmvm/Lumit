@@ -39,6 +39,7 @@ import '../state/share.dart';
 import '../state/timecode.dart';
 import '../state/updates.dart';
 import '../state/workspace.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/share_marks.dart';
@@ -477,6 +478,11 @@ class _ShareDialogState extends State<_ShareDialog> {
   bool _passwordShown = false;
 
   _Page _page = _Page.share;
+
+  /// How many times the tab has been changed since the window opened. The
+  /// first page arrives with the window, and every page after it makes a
+  /// small entrance of its own.
+  int _pageTurns = 0;
 
   /// What the engine knows the open project by, which the secret of its
   /// invite is filed under, and that secret if it was shared from here before.
@@ -1285,6 +1291,7 @@ class _ShareDialogState extends State<_ShareDialog> {
               ],
               current: _page,
               onPick: (page) => setState(() {
+                if (page != _page) _pageTurns++;
                 _page = page;
                 _error = null;
               }),
@@ -1303,22 +1310,31 @@ class _ShareDialogState extends State<_ShareDialog> {
               children: [_body(_onlineRows(t, share))],
             )
           else
-            _body(switch ((share.role, _page)) {
-              (ShareRole.none, _Page.share) => _startRows(t),
-              (ShareRole.none, _Page.join) => _joinRows(t),
-              (ShareRole.host, _) => [
-                  ..._inviteRows(t, share),
-                  _people(t, share),
-                  ..._transfers(t, share),
-                ],
-              (ShareRole.guest, _) => [
-                  ..._guestRows(t, share),
-                  _people(t, share),
-                  ..._transfers(t, share),
-                  _advancedFold(t),
-                  if (_advanced) ..._footageRows(t),
-                ],
-            }),
+            // Keyed by the tab, so a new one comes up into place as a
+            // settings page does and the one left is gone at once.
+            Entrance(
+              key: ValueKey<_Page>(_page),
+              spec: _pageTurns == 0
+                  ? MotionSpec.still
+                  : ThemeScope.of(context).motion.reveal,
+              rise: ThemeScope.of(context).motion.revealRise,
+              child: _body(switch ((share.role, _page)) {
+                (ShareRole.none, _Page.share) => _startRows(t),
+                (ShareRole.none, _Page.join) => _joinRows(t),
+                (ShareRole.host, _) => [
+                    ..._inviteRows(t, share),
+                    _people(t, share),
+                    ..._transfers(t, share),
+                  ],
+                (ShareRole.guest, _) => [
+                    ..._guestRows(t, share),
+                    _people(t, share),
+                    ..._transfers(t, share),
+                    _advancedFold(t),
+                    if (_advanced) ..._footageRows(t),
+                  ],
+              }),
+            ),
           dialogFooter(
             t,
             keyPrefix: 'share',

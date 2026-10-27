@@ -13,6 +13,7 @@ import 'package:lumit_flutter/src/rust/api/interpret.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/timecode.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
@@ -133,6 +134,11 @@ class _InterpretBody extends StatefulWidget {
 
 class _InterpretBodyState extends State<_InterpretBody> {
   _Page _page = _Page.main;
+
+  /// How many times the tab has been changed since the dialogue opened. The
+  /// first page arrives with the dialogue, and every page after it makes a
+  /// small entrance of its own.
+  int _pageTurns = 0;
 
   late BridgeAlphaMode _alpha;
   late List<int> _matte;
@@ -279,6 +285,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final motion = ThemeScope.of(context).motion;
     return DialogFrame(
       width: _width,
       children: [
@@ -296,47 +303,63 @@ class _InterpretBodyState extends State<_InterpretBody> {
             (_Page.colour, l10n.interpretTabColour),
           ],
           current: _page,
-          onPick: (page) => setState(() => _page = page),
+          onPick: (page) => setState(() {
+            if (page != _page) _pageTurns++;
+            _page = page;
+          }),
           keyPrefix: 'interpret',
         ),
-        if (_page == _Page.main) ...[
-          // Only a file with passes to choose between: a multi-pass EXR.
-          if (_file.renderPasses.length > 1)
-            _section(t, '', enabled: true, [
-              _row(t, l10n.interpretRenderPass, _passRow(t)),
-            ]),
-          _section(t, l10n.interpretAlpha, enabled: _file.hasPicture, [
-            _row(t, l10n.interpretReadAs, _alphaRow(t)),
-            _tick(t, 'interpret-invert', l10n.interpretInvertAlpha, _invert,
-                (on) => _set(() => _invert = on)),
-          ]),
-          _section(t, l10n.interpretTime, enabled: _runs, [
-            _row(t, l10n.frameRate, _rateRow(t)),
-            _row(t, l10n.interpretStartTimecode, _timecodeRow(t)),
-          ]),
-          _section(t, l10n.interpretFieldsGroup, enabled: _runs, [
-            _row(t, l10n.interpretSeparateFields, _fieldsRow(t)),
-            _tick(
-                t,
-                'interpret-preserve-edges',
-                l10n.interpretPreserveEdges,
-                _preserveEdges,
-                _fields == BridgeFieldOrder.off
-                    ? null
-                    : (on) => _set(() => _preserveEdges = on)),
-            _row(t, l10n.interpretRemovePulldown, _pulldownRow(t)),
-          ]),
-          _section(t, l10n.interpretOther, enabled: _file.hasPicture, [
-            _row(t, l10n.interpretPixelShape, _shapeRow(t)),
-            _row(t, l10n.interpretLoop, _loopRow(t)),
-          ]),
-        ] else
-          _section(t, '', enabled: _file.hasPicture, [
-            _row(t, l10n.colourSpace, _spaceRow(t)),
-            _row(t, l10n.interpretLinearLight, _linearRow(t)),
-            _tick(t, 'interpret-preserve-rgb', l10n.interpretPreserveRgb,
-                _preserveRgb, (on) => _set(() => _preserveRgb = on)),
-          ]),
+        // Keyed by the tab, so a new one comes up into place as a settings
+        // page does and the one left is gone at once.
+        Entrance(
+          key: ValueKey<_Page>(_page),
+          spec: _pageTurns == 0 ? MotionSpec.still : motion.reveal,
+          rise: motion.revealRise,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_page == _Page.main) ...[
+                // Only a file with passes to choose between: a multi-pass EXR.
+                if (_file.renderPasses.length > 1)
+                  _section(t, '', enabled: true, [
+                    _row(t, l10n.interpretRenderPass, _passRow(t)),
+                  ]),
+                _section(t, l10n.interpretAlpha, enabled: _file.hasPicture, [
+                  _row(t, l10n.interpretReadAs, _alphaRow(t)),
+                  _tick(t, 'interpret-invert', l10n.interpretInvertAlpha,
+                      _invert, (on) => _set(() => _invert = on)),
+                ]),
+                _section(t, l10n.interpretTime, enabled: _runs, [
+                  _row(t, l10n.frameRate, _rateRow(t)),
+                  _row(t, l10n.interpretStartTimecode, _timecodeRow(t)),
+                ]),
+                _section(t, l10n.interpretFieldsGroup, enabled: _runs, [
+                  _row(t, l10n.interpretSeparateFields, _fieldsRow(t)),
+                  _tick(
+                      t,
+                      'interpret-preserve-edges',
+                      l10n.interpretPreserveEdges,
+                      _preserveEdges,
+                      _fields == BridgeFieldOrder.off
+                          ? null
+                          : (on) => _set(() => _preserveEdges = on)),
+                  _row(t, l10n.interpretRemovePulldown, _pulldownRow(t)),
+                ]),
+                _section(t, l10n.interpretOther, enabled: _file.hasPicture, [
+                  _row(t, l10n.interpretPixelShape, _shapeRow(t)),
+                  _row(t, l10n.interpretLoop, _loopRow(t)),
+                ]),
+              ] else
+                _section(t, '', enabled: _file.hasPicture, [
+                  _row(t, l10n.colourSpace, _spaceRow(t)),
+                  _row(t, l10n.interpretLinearLight, _linearRow(t)),
+                  _tick(t, 'interpret-preserve-rgb', l10n.interpretPreserveRgb,
+                      _preserveRgb, (on) => _set(() => _preserveRgb = on)),
+                ]),
+            ],
+          ),
+        ),
         dialogFooter(
           t,
           keyPrefix: 'interpret',
