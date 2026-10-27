@@ -30,7 +30,7 @@ const stories = [
     tag: "Lumit for iPhone",
     h: "Exports on your phone.",
     p: "Start and follow exports, and read the comments on your previews. It pairs with Lumit on your computer, and exports from the phone need Pro.",
-    link: { href: "https://testflight.apple.com/join/eGBpt5gx", label: "Get it on TestFlight" },
+    app: "https://apps.apple.com/app/lumit/id6824000097",
     c: "var(--label-azure)",
     wide: true,
   },
@@ -99,7 +99,12 @@ const stories = [
             <span class="tag"><i class="dot" />{s.tag}</span>
             <span class="text-[22px] leading-[1.15] tracking-[-0.02em] text-fg">{s.h}</span>
             <span class="max-w-[560px] text-[15px] leading-[1.45] text-fg-3">{s.p}</span>
-            {s.link && <a class="go mt-1 self-start" href={s.link.href}>{s.link.label}</a>}
+            {s.app && (
+              <span class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <a href={s.app}><img src="/media/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a>
+                <span class="text-[13px] text-fg-4">Android coming soon</span>
+              </span>
+            )}
           </figcaption>
         </figure>
       ))
