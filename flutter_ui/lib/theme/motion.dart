@@ -73,12 +73,10 @@ const Curve _land = Cubic(0.3, 1.4, 0.6, 1.0);
 /// Lantern's landing, nearer a tenth.
 const Curve _landSoft = Cubic(0.3, 1.6, 0.6, 1.0);
 
-/// A swell's spring: out past its size by about a sixth and back, once. More
+/// Lantern's swell: out past its size by about a third and back, once. More
 /// than a landing, because a swell travels a pixel or three and a twentieth
-/// of that is nothing anyone sees.
-const Curve _spring = Cubic(0.3, 1.7, 0.5, 1.0);
-
-/// Lantern's spring, nearer a third.
+/// of that is nothing anyone sees. Studio's swell has no spring at all: it is
+/// on things hovered tens of times a day, and Studio is quick and quiet.
 const Curve _springSoft = Cubic(0.3, 2.2, 0.5, 1.0);
 
 /// Every named movement, for one shape at one level.
@@ -328,7 +326,7 @@ class Motion {
     hoverIn: MotionSpec(_ms60, _out),
     hoverOut: MotionSpec(_ms140, _out),
     rowTrail: MotionSpec(_ms90, Curves.easeOut),
-    swell: MotionSpec(_ms180, _spring),
+    swell: MotionSpec(_ms120, _out),
     swellScale: 1.06,
     scroll: MotionSpec(_ms140, _out),
     zoom: MotionSpec(_ms120, _out),
