@@ -123,6 +123,26 @@ fn now(store: &DocumentStore, comp: Uuid, layer: Uuid, id: Uuid) -> Result<Value
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct GetArgs {
+    comp: String,
+    layer: String,
+    effect: Which,
+}
+
+pub(super) fn get(host: &dyn Host, a: GetArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let layer = find_layer(comp, &a.layer)?;
+    let index = find_effect(layer, &a.effect)?;
+    Ok(effect_json(
+        index,
+        &layer.effects[index],
+        layer.start_offset.0,
+    ))
+}
+
 pub(super) fn list(host: &dyn Host, a: LayerArgs) -> Result<Value, ScriptError> {
     let doc = host.store().snapshot();
     let comp = find_comp(&doc, &a.comp)?;
