@@ -396,9 +396,14 @@ const watching = people.length - editing;
     opacity: 0;
     translate: 0 -4px;
     pointer-events: none;
-    transition:
-      opacity 0.15s,
-      translate 0.15s;
+    transition: opacity 0.15s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tip {
+      transition:
+        opacity 0.15s,
+        translate 0.15s;
+    }
   }
   .tip-up {
     top: auto;

@@ -138,7 +138,11 @@ const [latest] = await releasesNewestFirst();
   }
   .release::after {
     content: "\2192";
-    transition: transform 0.2s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .release::after {
+      transition: transform 0.2s;
+    }
   }
   .release:hover {
     border-color: var(--color-line-2);

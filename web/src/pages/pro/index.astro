@@ -502,7 +502,11 @@ const questions = [
     content: "+";
     color: var(--color-fg-4);
     font-family: var(--font-mono);
-    transition: transform 0.2s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .faq summary::after {
+      transition: transform 0.2s;
+    }
   }
   .faq details[open] summary::after {
     transform: rotate(45deg);

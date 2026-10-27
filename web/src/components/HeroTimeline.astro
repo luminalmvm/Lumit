@@ -303,7 +303,11 @@ const layers = [
     inset: 5px;
     background: var(--key);
     transform: rotate(45deg);
-    transition: transform 0.12s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .hc-key::before {
+      transition: transform 0.12s;
+    }
   }
   .hc-key:hover::before,
   .hc-key:focus-visible::before,
