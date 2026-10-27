@@ -4362,7 +4362,7 @@ fn comp_walk(
                 }
 
                 let placed = drawn(layer, lt, &context);
-                draws.push(CompLayerDraw {
+                draws.push(crate::trails::with_sprites(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
                     natural_size: (comp.width as f32, comp.height as f32),
@@ -4475,7 +4475,7 @@ fn comp_walk(
                             keys,
                         )
                     },
-                });
+                }));
                 continue;
             }
             _ => {
@@ -4613,7 +4613,7 @@ fn comp_walk(
         };
 
         let placed = drawn(layer, lt, &context);
-        draws.push(CompLayerDraw {
+        draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
             natural_size: natural,
@@ -4704,7 +4704,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-        });
+        }));
     }
     // A live span reaching the top of the stack closes with the walk itself.
     if let Some((_, group, mark)) = open_unit {

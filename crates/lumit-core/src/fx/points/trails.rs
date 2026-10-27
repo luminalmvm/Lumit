@@ -13,4 +13,7 @@ pub struct Trails {
     pub clone: (u32, u32),
     /// How far the room round the art moves the points in, px@comp.
     pub inset: [f32; 2],
+    /// The picture a Sprite layer stamps, named by what is in it. `None` for
+    /// one nothing names, and then the walk keeps no pictures.
+    pub sprite: Option<u128>,
 }
