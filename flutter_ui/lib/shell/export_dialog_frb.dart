@@ -1721,18 +1721,14 @@ class _ExportDialogState extends State<_ExportDialog> {
                       tone: t.textDisabled),
             ),
             const SizedBox(width: 8),
-            HouseCheckbox(
-              key: const ValueKey('export-lock-aspect'),
-              value: _lockAspect,
-              onChanged:
-                  _picture ? (on) => _edit(() => _lockAspect = on) : null,
-            ),
-            const SizedBox(width: 6),
             Flexible(
-              child: Text(l10n.exportLockAspect,
-                  style: t.body
-                      .copyWith(color: _picture ? t.textMuted : t.textDisabled),
-                  overflow: TextOverflow.ellipsis),
+              child: HouseCheckbox(
+                key: const ValueKey('export-lock-aspect'),
+                value: _lockAspect,
+                label: l10n.exportLockAspect,
+                onChanged:
+                    _picture ? (on) => _edit(() => _lockAspect = on) : null,
+              ),
             ),
             const Spacer(),
             // *Fast* is bilinear and *High* is Lanczos-3 widened by the shrink
@@ -1768,17 +1764,14 @@ class _ExportDialogState extends State<_ExportDialog> {
             _cropWell(t, 'right', l10n.exportCropRight, _cropRight,
                 (v) => _cropRight = v, _compWidth),
             const SizedBox(width: 8),
-            HouseCheckbox(
-              key: const ValueKey('export-use-region'),
-              value: _useRegion,
-              onChanged: _picture ? (on) => _edit(() => _useRegion = on) : null,
-            ),
-            const SizedBox(width: 6),
             Flexible(
-              child: Text(l10n.exportUseRegionOfInterest,
-                  style: t.body
-                      .copyWith(color: _picture ? t.textMuted : t.textDisabled),
-                  overflow: TextOverflow.ellipsis),
+              child: HouseCheckbox(
+                key: const ValueKey('export-use-region'),
+                value: _useRegion,
+                label: l10n.exportUseRegionOfInterest,
+                onChanged:
+                    _picture ? (on) => _edit(() => _useRegion = on) : null,
+              ),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -2178,17 +2171,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// A tick with its word beside it.
   Widget _tick(LumitTheme t, String id, String label, bool value,
           ValueChanged<bool>? onChanged) =>
-      Row(mainAxisSize: MainAxisSize.min, children: [
-        HouseCheckbox(
-          key: ValueKey<String>(id),
-          value: value,
-          onChanged: onChanged,
-        ),
-        const SizedBox(width: 6),
-        Text(label,
-            style: t.body.copyWith(
-                color: onChanged == null ? t.textDisabled : t.textMuted)),
-      ]);
+      HouseCheckbox(
+        key: ValueKey<String>(id),
+        value: value,
+        label: label,
+        onChanged: onChanged,
+      );
 
   /// A control the engine cannot back: the drawing's own face, drawn dead, with
   /// a reason on hover. Not absent — the drawing shows it — and not live, which
