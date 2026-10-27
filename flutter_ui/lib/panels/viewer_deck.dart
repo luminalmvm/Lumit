@@ -35,7 +35,7 @@ const double _deckClockSize = 15;
 
 /// Below this the deck stops spreading and slides sideways instead. Nothing is
 /// shed: the transport is first on the row, so it is what a narrow deck keeps.
-const double _deckMinimum = 690;
+const double _deckMinimum = 800;
 
 /// The Viewer's **deck** (key `viewer-deck`): the playing half of the Viewer's
 /// chrome, under the picture, when the arrangement is [ViewerBars.deck].
@@ -103,7 +103,7 @@ class ViewerDeck extends StatelessWidget {
           // needs more room before it can spread; below that the row keeps
           // its own width and the deck scrolls.
           final loose =
-              constraints.maxWidth >= _deckMinimum + (desk ? 200 : 0);
+              constraints.maxWidth >= _deckMinimum + (desk ? 60 : 0);
           final row = Row(
               mainAxisSize: loose ? MainAxisSize.max : MainAxisSize.min,
               children: [
