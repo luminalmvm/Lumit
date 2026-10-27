@@ -721,7 +721,7 @@ class LumitMenuBarFrb extends StatelessWidget {
         category: l10n.menuEffect,
         disabled: layer == null ? l10n.paletteNeedsLayer : null,
         run: () {
-          layer?.addEffect(name: effect.name);
+          if (layer != null) ui.addEffect(layer, effect.name);
           app.notifyDocumentChanged();
         },
       ));
@@ -794,7 +794,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       // The primary layer only, as the Effect menu does.
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
-      layer.addEffect(name: name);
+      ui.addEffect(layer, name);
       app.notifyDocumentChanged();
     }
 
@@ -1499,7 +1499,7 @@ List<MenuSection> lumitMenus(
                 action: 'layer.ungroup'),
           ]
     ),
-    (title: l10n.menuEffect, items: () => _effectMenu(app, layers)),
+    (title: l10n.menuEffect, items: () => _effectMenu(app, ui, layers)),
     (
       title: l10n.menuAnimation,
       items: () => [
@@ -1868,7 +1868,9 @@ List<MenuSection> lumitMenus(
 /// The Effect menu: one submenu per effect category, each applying its effect
 /// to the primary layer. Disabled outright with nothing selected, since there
 /// is nowhere for an effect to go.
-List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
+List<MenuEntry> _effectMenu(
+        LumitState app, LumitUiState ui, List<LayerReference> layers) =>
+    [
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
           for (final effect in group.value)
@@ -1877,7 +1879,7 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
               layers.isEmpty
                   ? null
                   : () {
-                      layers.first.addEffect(name: effect.name);
+                      ui.addEffect(layers.first, effect.name);
                       app.notifyDocumentChanged();
                     },
             ),

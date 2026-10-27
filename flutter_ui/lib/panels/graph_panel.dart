@@ -2297,13 +2297,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// commits.
   void _addEffect(String name) {
     final layer = _layer;
-    if (layer == null) return;
-    try {
-      layer.addEffect(name: name);
-    } catch (_) {
-      return;
-    }
-    _ui?.model.refresh();
+    if (layer == null || !(_ui?.addEffect(layer, name) ?? false)) return;
     _reload();
   }
 

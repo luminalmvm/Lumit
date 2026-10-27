@@ -2213,6 +2213,31 @@ class LumitUiState extends ChangeNotifier {
     _publishPickedEffects();
   }
 
+  /// Put [name] on [layer]'s stack and pick it, as After Effects does, so its
+  /// points are on the picture to drag straight away. The one road every
+  /// add from a menu takes. False when the engine refused it.
+  bool addEffect(LayerReference layer, String name) {
+    final before = {
+      for (final fx
+          in model.byId(layer.internallayerId)?.info.effects ?? const [])
+        fx.id
+    };
+    try {
+      layer.addEffect(name: name);
+    } catch (_) {
+      return false;
+    }
+    model.refresh();
+    final added = model
+        .byId(layer.internallayerId)
+        ?.info
+        .effects
+        .where((fx) => !before.contains(fx.id))
+        .firstOrNull;
+    if (added != null) setEffectSelection(layer, [added.id]);
+    return true;
+  }
+
   /// Add [layer] to the selection, or take it out again — Shift-click.
   void toggleSelected(LayerReference layer) {
     final id = layer.internallayerId;
