@@ -1,0 +1,119 @@
+---
+title: Scripts
+description: Write a JavaScript script that edits a project, run it in Lumit or from the command line, and share it.
+sidebar:
+  order: 4
+---
+
+A **script** is a JavaScript file that edits a project through Lumit's own commands. Running
+one, and what After Effects scripts can do, is in [Scripts](/use/scripts/).
+
+## Your first script
+
+`stripes.js` makes a composition of five coloured stripes that fade in one after another:
+
+```js
+const comp = lumit.comp.new({
+  name: "Stripes",
+  width: 1280,
+  height: 720,
+  frame_rate: 30,
+});
+const colours = [
+  [0.9, 0.3, 0.2],
+  [0.9, 0.6, 0.2],
+  [0.3, 0.7, 0.4],
+  [0.2, 0.5, 0.9],
+  [0.5, 0.3, 0.8],
+];
+colours.forEach((colour, n) => {
+  const stripe = lumit.layer.add({
+    comp: comp.id,
+    kind: "solid",
+    name: "Stripe " + (n + 1),
+    colour,
+    width: 256,
+  });
+  lumit.layer.keys({
+    comp: comp.id,
+    layer: stripe.id,
+    property: "position",
+    value: [128 + 256 * n, 360],
+  });
+  lumit.layer.keys({
+    comp: comp.id,
+    layer: stripe.id,
+    property: "opacity",
+    keys: [
+      { time: n * 6, value: 0 },
+      { time: n * 6 + 12, value: 100 },
+    ],
+  });
+});
+print("Made", colours.length, "stripes");
+lumit.comp.frame({ comp: comp.id, time: 18, out: "stripes.png" });
+```
+
+**1. Save it as `stripes.js`** in the [Scripts folder](/use/scripts/#the-scripts-folder).
+
+**2. Choose File ▸ Scripts ▸ stripes.js.** The whole run is one undo step.
+
+**3. Or run it from the command line**, with no window:
+
+```
+lumit-cli run stripes.js --save-as stripes.lum
+```
+
+The project is saved as `stripes.lum`. In Lumit, a relative path such as `stripes.png` is
+read from the script's folder. From the command line, it is read from the folder the
+command runs in.
+
+## The lumit object
+
+Every command in the [Scripting reference](/reference/scripting/) is a method of `lumit`:
+`layer.add` is `lumit.layer.add({ ... })`. Each takes one object of arguments and answers an
+object.
+
+| Name | What it is |
+| --- | --- |
+| `lumit.command(name, args)` | Runs a command by its name, as `lumit.command("layer.add", { ... })`. |
+| `lumit.args` | The `--arg` values from the command line, and an event script's `event` and `file`. |
+| `lumit.chooseFile(title, extensions)` | Opens the system file dialogue and answers the path, or `null`. On the command line, `null`. |
+| `lumit.readText(path)`, `lumit.readJson(path)` | Reads a file the script may read. |
+| `lumit.frameAt(seconds, comp)` | The frame of a comp nearest a time in seconds. |
+| `print(...)`, `console.log(...)` | Writes a line to the log, or to standard error on the command line. |
+
+A command that fails throws an `Error` with the reason. A script that does not catch it stops,
+and the project is left as it was. Undo and redo are not methods: a run is one step.
+
+The value of the script's last line is its answer. The command line prints it as JSON.
+
+## Effects
+
+`effect.add` takes Lumit's name for an effect, its id, or After Effects' match name. It also
+takes the effects an extension carries, by name.
+
+`effect.get` answers one effect with every row it has, including the rows an LFX effect's or
+a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label:
+
+```js
+const at = { comp: "Stripes", layer: "Stripe 1" };
+lumit.effect.add({ ...at, effect: "Blinds" });
+lumit.effect.set({ ...at, effect: "Blinds", param: "Spacing", value: 10 });
+lumit.effect.get({ ...at, effect: 0 }).params;
+```
+
+[Blinds](/make/lfx-effects/#your-first-effect) is the first example in LFX effects.
+
+## Sharing a script
+
+A script is one file. Put it in the Scripts folder, or a folder inside it for a submenu of
+its own. A script reads files with `lumit.readText` from its own folder and the folders
+inside it.
+
+## Related
+
+- [Scripts](/use/scripts/)
+- [Scripting reference](/reference/scripting/)
+- [Command line](/use/command-line/)
+- [MCP](/make/mcp/)
