@@ -16,6 +16,7 @@ import '../state/dock.dart';
 import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 
 typedef PanelBuilder = Widget Function(BuildContext context, PaneId pane);
 
@@ -275,6 +276,8 @@ class _DockWidgetState extends State<DockWidget> {
           t.kickerCase(paneTitle(pane)),
           key: const ValueKey('pane-title'),
           style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );
@@ -823,29 +826,32 @@ class _TabGroup extends StatelessWidget {
       Column(
         children: [
           // The pill strip scrolls when the group is narrower than its
-          // tabs, as egui_tiles' tab bar does.
+          // tabs, as egui_tiles' tab bar does, and fades at the end that has
+          // more.
           _TitleLine(
             panel: active.id.panel.name,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < tabs.children.length; i++)
-                    _TabPill(
-                      pane: tabs.children[i].id,
-                      title: paneTitle(tabs.children[i].id),
-                      active: i == tabs.active,
-                      drag: drag,
-                      onClose: onClose,
-                      group: tabs,
-                      onGroupChanged: onChanged,
-                      onPressed: () {
-                        tabs.active = i;
-                        onChanged();
-                      },
-                    ),
-                ],
+            child: EdgeFade(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < tabs.children.length; i++)
+                      _TabPill(
+                        pane: tabs.children[i].id,
+                        title: paneTitle(tabs.children[i].id),
+                        active: i == tabs.active,
+                        drag: drag,
+                        onClose: onClose,
+                        group: tabs,
+                        onGroupChanged: onChanged,
+                        onPressed: () {
+                          tabs.active = i;
+                          onChanged();
+                        },
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1074,7 +1080,8 @@ class _TabPillState extends State<_TabPill> {
       drag: widget.drag,
       child: MouseRegion(
         key: ValueKey<String>('dock-tab-${widget.pane.panel.name}'),
-        cursor: SystemMouseCursors.click,
+        // The arrow, as a tab is on Windows.
+        cursor: MouseCursor.defer,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: GestureDetector(
