@@ -493,7 +493,8 @@ class _OpenRevealState extends State<OpenReveal> {
 /// [child] is the glyph for the state [open] says, exactly as the caller drew
 /// it before. At rest nothing is rotated, so the glyph sits on the same pixels
 /// it always did. It turns only when [open] changes while it is on screen: a
-/// row scrolled into view arrives already facing the right way.
+/// row scrolled into view arrives already facing the right way. Pressed again
+/// mid-turn, it turns back from where it is.
 class TwirlTurn extends StatefulWidget {
   final bool open;
   final Widget child;
@@ -506,24 +507,25 @@ class TwirlTurn extends StatefulWidget {
 
 class _TwirlTurnState extends State<TwirlTurn>
     with SingleTickerProviderStateMixin {
+  /// How open the triangle looks, 0 pointing right and 1 pointing down.
   AnimationController? _controller;
-  Curve _curve = Curves.linear;
 
   @override
   void didUpdateWidget(TwirlTurn old) {
     super.didUpdateWidget(old);
     if (old.open == widget.open) return;
     final spec = ThemeScope.of(context).motion.mark;
+    final controller = _controller ??=
+        AnimationController(vsync: this, value: old.open ? 1 : 0)
+          ..addListener(() => setState(() {}));
+    final to = widget.open ? 1.0 : 0.0;
     if (spec.isStill) {
-      _controller?.value = 1;
+      controller.value = to;
       return;
     }
-    _curve = spec.curve;
-    final controller = _controller ??= AnimationController(vsync: this)
-      ..addListener(() => setState(() {}));
     controller
       ..duration = spec.duration
-      ..forward(from: 0);
+      ..animateTo(to, curve: spec.curve);
   }
 
   @override
@@ -534,14 +536,13 @@ class _TwirlTurnState extends State<TwirlTurn>
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
-    final left = controller == null || !controller.isAnimating
-        ? 0.0
-        : 1 - _curve.transform(controller.value);
-    // Opening, the down-pointing glyph starts where the right-pointing one
-    // was, a quarter turn anticlockwise of its rest. Shutting is the reverse.
+    final open = _controller?.value ?? (widget.open ? 1.0 : 0.0);
+    // The glyph for the state it is going to, turned back by how far it has
+    // still to go: the down-pointing one anticlockwise, the right-pointing
+    // one clockwise.
+    final left = widget.open ? open - 1 : open;
     return Transform.rotate(
-      angle: (widget.open ? -1 : 1) * left * math.pi / 2,
+      angle: left * math.pi / 2,
       child: widget.child,
     );
   }
