@@ -650,9 +650,10 @@ class _ColourDropdown extends StatelessWidget {
                   key: ValueKey<String>(
                       'viewer-colour-view-${display.name}-$name'),
                   onPressed: () {},
+                  enabled: false,
                   child: Row(children: [
                     menuTick(false),
-                    Text(name, style: TextStyle(color: t.textDisabled)),
+                    Text(name),
                   ]),
                 ),
               )
