@@ -133,7 +133,9 @@ const ways = [
     color: var(--color-fg);
     font-size: 15px;
   }
-  .way:hover .go::after {
-    transform: translateX(3px);
+  @media (hover: hover) and (pointer: fine) {
+    .way:hover .go::after {
+      transform: translateX(3px);
+    }
   }
 </style>

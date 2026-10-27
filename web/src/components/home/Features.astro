@@ -196,9 +196,9 @@ const cuts = [
               <div class="carry">
                 <span class="file">.aep</span>
                 <span class="wire">
-                  <i class="key" />
-                  <i class="key" />
-                  <i class="key" />
+                  <i class="hop"><i class="key" /></i>
+                  <i class="hop"><i class="key" /></i>
+                  <i class="hop"><i class="key" /></i>
                 </span>
                 <span class="file file-lum">.lum</span>
               </div>
@@ -259,12 +259,22 @@ const cuts = [
     display: grid;
     gap: 20px;
   }
+  /* A card off screen is not drawn, and its drawing stops (the script
+     below). */
   .feat {
     display: flex;
     flex-direction: column;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
     background: var(--color-ink-2);
+    content-visibility: auto;
+    contain-intrinsic-size: auto 340px;
+  }
+  .art.off,
+  .art.off *,
+  .art.off *::before,
+  .art.off *::after {
+    animation-play-state: paused;
   }
   @media (min-width: 640px) {
     .bento {
@@ -337,11 +347,19 @@ const cuts = [
     top: 12px;
     left: 14px;
   }
+  /* Each playhead here is a line at the left edge of a box as wide as the
+     path it travels, and the box is what moves: a transform costs no layout. */
   .sweep {
+    position: absolute;
+    inset: 0;
+    transform: translateX(30%);
+  }
+  .sweep::before {
+    content: "";
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 30%;
+    left: 0;
     width: 1px;
     background: var(--color-accent-2);
   }
@@ -462,7 +480,16 @@ const cuts = [
     position: absolute;
     top: -9px;
     bottom: -5px;
-    left: 34%;
+    left: 0;
+    right: 0;
+    transform: translateX(34%);
+  }
+  .head::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
     width: 1px;
     background: var(--color-fg);
   }
@@ -484,11 +511,21 @@ const cuts = [
     padding: 0 18px;
   }
   .chips .plug {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     border-color: color-mix(in srgb, var(--label-teal) 55%, transparent);
     color: var(--color-fg);
+  }
+  /* A ring that leaves the plugin as it is found. */
+  .chips .plug::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 1px solid color-mix(in srgb, var(--label-teal) 70%, transparent);
+    border-radius: var(--radius-ctl);
+    opacity: 0;
   }
   .chips b {
     color: var(--label-teal);
@@ -525,17 +562,22 @@ const cuts = [
     height: 1px;
     background: var(--color-line-2);
   }
-  .wire .key {
+  .hop {
+    position: absolute;
+    inset: 0;
+    transform: translateX(20%);
+  }
+  .hop:nth-child(2) {
+    transform: translateX(50%);
+  }
+  .hop:nth-child(3) {
+    transform: translateX(80%);
+  }
+  .hop .key {
     position: absolute;
     top: -3px;
-    left: 20%;
+    left: 0;
     margin-left: -4px;
-  }
-  .wire .key:nth-child(2) {
-    left: 50%;
-  }
-  .wire .key:nth-child(3) {
-    left: 80%;
   }
 
   /* Music: a waveform, with the beats marked. */
@@ -622,6 +664,8 @@ const cuts = [
     top: 0;
     bottom: 0;
     left: 22px;
+    right: 22px;
+    transform: none;
     opacity: 0;
   }
   .wave .head::before {
@@ -641,7 +685,16 @@ const cuts = [
     height: 10px;
     border-radius: 1px;
   }
+  /* The ticks are a layer one tick wider than the meter, and the layer is
+     what slides, as the roadmap's stripes do. */
   .ticks {
+    position: relative;
+    overflow: hidden;
+  }
+  .ticks::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 -7px;
     background: repeating-linear-gradient(to right, var(--label-azure) 0 3px, transparent 3px 7px);
   }
   .fill {
@@ -689,7 +742,7 @@ const cuts = [
      each one stands as a finished picture without its animation. */
   @media (prefers-reduced-motion: no-preference) {
     .sweep {
-      animation: sweep 7s linear infinite;
+      animation: across 7s linear infinite;
     }
     .belt {
       animation: belt 60s linear infinite;
@@ -697,34 +750,34 @@ const cuts = [
     .belt:nth-child(2) {
       animation-direction: reverse;
     }
-    .wire .key {
+    .hop {
       animation: carry 3.6s linear infinite;
     }
-    .wire .key:nth-child(2) {
+    .hop:nth-child(2) {
       animation-delay: -1.2s;
     }
-    .wire .key:nth-child(3) {
+    .hop:nth-child(3) {
       animation-delay: -2.4s;
     }
     .fill::before {
-      animation: fill 6s ease-in-out infinite;
+      animation: fill 6s linear infinite;
     }
-    .ticks {
+    .ticks::before {
       animation: ticks 0.7s linear infinite;
     }
     .rider {
-      animation: ride 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      animation: ride 4.6s var(--ease-in-out) infinite;
     }
     .rows .head {
-      animation: cross 5s linear infinite;
+      animation: across 5s linear infinite;
     }
     /* The speed row drops open under the bar, stays for two passes of the
        playhead, and folds away again. */
     .speeds {
-      animation: drop 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+      animation: drop 10s var(--ease-in-out) infinite;
     }
     .twirl {
-      animation: twirl 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+      animation: twirl 10s var(--ease-in-out) infinite;
     }
     /* Each clip lifts as the playhead comes on to it. */
     .clips i {
@@ -734,17 +787,17 @@ const cuts = [
     .clips i:nth-child(3) { animation-delay: 1.79s; }
     .clips i:nth-child(4) { animation-delay: 3.21s; }
     .clips i:nth-child(5) { animation-delay: 3.93s; }
-    .plug {
-      animation: found 4.5s ease-out infinite;
+    .plug::after {
+      animation: found 4.5s var(--ease-out) infinite;
     }
-    .plug:nth-child(4) {
+    .plug:nth-child(4)::after {
       animation-delay: 0.9s;
     }
     /* The playhead crosses the waveform, and each beat jumps as it passes:
        a bar's delay is its place along the wave. */
     .wave .head {
       opacity: 1;
-      animation: play 6.4s linear infinite;
+      animation: across 6.4s linear infinite;
     }
     .wave .beat {
       animation: beat 6.4s linear infinite;
@@ -759,33 +812,29 @@ const cuts = [
       animation: blink 1.1s steps(1) infinite;
     }
   }
-  @keyframes sweep {
-    from { left: 0; }
-    to { left: 100%; }
+  @keyframes across {
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
   }
   @keyframes belt {
     to { transform: translateX(calc(-50% - 4px)); }
   }
   @keyframes carry {
-    0% { left: 0; opacity: 0; }
+    0% { transform: translateX(0); opacity: 0; }
     15%, 85% { opacity: 1; }
-    100% { left: 100%; opacity: 0; }
+    100% { transform: translateX(100%); opacity: 0; }
   }
   @keyframes fill {
     0% { transform: scaleX(0); }
     85%, 100% { transform: scaleX(1); }
   }
   @keyframes ticks {
-    to { background-position: 7px 0; }
+    to { transform: translateX(7px); }
   }
   @keyframes ride {
     0%, 8% { offset-distance: 0%; }
     46%, 58% { offset-distance: 100%; }
     96%, 100% { offset-distance: 0%; }
-  }
-  @keyframes cross {
-    from { left: 0; }
-    to { left: 100%; }
   }
   @keyframes drop {
     0%, 3% { clip-path: inset(0 0 100% 0); opacity: 0; }
@@ -802,12 +851,8 @@ const cuts = [
     14%, 100% { filter: none; }
   }
   @keyframes found {
-    0%, 6% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--label-teal) 70%, transparent); }
-    30%, 100% { box-shadow: 0 0 0 9px transparent; }
-  }
-  @keyframes play {
-    from { left: 22px; }
-    to { left: calc(100% - 22px); }
+    0%, 6% { opacity: 1; transform: none; }
+    30%, 100% { opacity: 0; transform: scale(1.15, 1.6); }
   }
   @keyframes beat {
     0% { transform: scaleY(1.45); filter: brightness(1.5); }
@@ -822,3 +867,10 @@ const cuts = [
     50% { opacity: 0; }
   }
 </style>
+
+<script>
+  const seen = new IntersectionObserver((entries) => {
+    for (const e of entries) e.target.classList.toggle("off", !e.isIntersecting);
+  });
+  for (const art of document.querySelectorAll(".art")) seen.observe(art);
+</script>
