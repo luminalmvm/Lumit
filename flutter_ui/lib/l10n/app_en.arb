@@ -7756,10 +7756,6 @@
       }
     }
   },
-  "projectEmpty": "No items yet — import footage or create a composition",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
     "description": "Project panel info line for sound-only footage, shown where a picture size would be. Lower case on purpose."

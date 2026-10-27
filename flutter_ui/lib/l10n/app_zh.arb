@@ -12669,10 +12669,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "还没有任何内容 — 请导入素材或创建合成",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "合成",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."

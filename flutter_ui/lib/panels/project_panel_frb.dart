@@ -882,13 +882,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           Expanded(
             child: _importOnDoubleTap(
               child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 240),
-                  child: Text(
-                    l10n.projectEmpty,
-                    style: t.small,
-                    textAlign: TextAlign.center,
-                  ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    HouseButton(
+                      key: const ValueKey('project-empty-import'),
+                      onPressed: _import,
+                      child: Text(l10n.projectFooterImport),
+                    ),
+                    HouseButton(
+                      key: const ValueKey('project-empty-new-comp'),
+                      onPressed: () => _newComposition(const []),
+                      child: Text(l10n.newComposition),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1052,6 +1061,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               Positioned.fill(
                 child: _importOnDoubleTap(child: const SizedBox.expand()),
               ),
+              // A search or a filter that leaves nothing says so, rather than
+              // a blank list.
+              if (rows.isEmpty)
+                Center(
+                  child: IgnorePointer(
+                    child: Text(l10n.noMatches,
+                        style: t.body.copyWith(color: t.textSecondary)),
+                  ),
+                ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 controller: _hScroll,

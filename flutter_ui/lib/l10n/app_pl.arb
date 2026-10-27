@@ -11038,10 +11038,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "Brak elementów — zaimportuj materiał lub utwórz kompozycję",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Kompozycja",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."

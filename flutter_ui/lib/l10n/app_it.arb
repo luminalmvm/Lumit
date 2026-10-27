@@ -11201,10 +11201,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "Ancora nessun elemento: importa metraggio o crea una composizione",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Composizione",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
