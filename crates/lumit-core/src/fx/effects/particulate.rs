@@ -778,7 +778,7 @@ pub struct Particulate {
         label = "Flock radius",
         min = 0.0,
         max = 500.0,
-        default = 50.0,
+        default = 150.0,
         hard_min = 0.0,
         unit = Px
     )]
