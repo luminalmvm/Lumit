@@ -1,12 +1,12 @@
 ---
 title: Make an extension
-description: The folder, the manifest, the page and what it can ask of Lumit, and the looks and shortcuts an extension carries.
+description: The folder, the manifest, the page and what it can ask of Lumit.
 sidebar:
   order: 1
 ---
 
 An **extension** is a folder with an `extension.json` in it. It can add a panel showing a
-web page, [LFX effects](/use/lfx-effects/), styles, colour schemes, icons and shortcuts.
+web page, and [LFX effects](/use/lfx-effects/).
 
 The smallest extension with a panel is two files:
 
@@ -66,36 +66,11 @@ my-extension/
 | `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
 | `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
 | `effects` | Optional. The [LFX effects](/use/lfx-effects/#the-manifest) it carries. |
-| `styles` | Optional. [Styles](/make/themes/#a-style) it carries, as paths inside the folder. |
-| `themes` | Optional. [Colour schemes](/make/themes/#a-colour-scheme) it carries, as paths inside the folder. |
-| `icons` | Optional. A folder of [icons](/make/icons/) inside it. |
-| `keymaps` | Optional. Shortcut files, as **Settings ▸ Shortcuts ▸ Export…** writes them. |
 | `permissions` | What the page may ask. See below. |
 | `hosts` | The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
 
-A manifest with a permission Lumit does not know, a path outside the folder, or a host that
-is not a bare name is refused, and so is one that adds no panel, effect, look or shortcuts. A folder holds at most 4,096 files and 512 MB.
-
-## Looks and shortcuts
-
-```json
-{
-  "format": 1,
-  "id": "soft-glass",
-  "name": "Soft glass",
-  "version": "1.0.0",
-  "summary": "Dark raised controls on frosted glass.",
-  "styles": ["Soft glass.lumstyle"],
-  "themes": ["harbour.lumtheme"],
-  "icons": "icons",
-  "keymaps": ["keys/lumit.json"]
-}
-```
-
-None of these needs a permission. Once installed, its styles are listed in **Shape** and its
-colour schemes in **Colour scheme**, beside the person's own, and its icons under **Icon set
-▸ From extensions**. Its shortcuts are used only when **Use its shortcuts** is ticked while
-installing, and then the first set replaces the person's own.
+A manifest with a permission Lumit does not know, an `entry` outside the folder, or a host
+that is not a bare name is refused. A folder holds at most 4,096 files and 512 MB.
 
 ## The page
 
