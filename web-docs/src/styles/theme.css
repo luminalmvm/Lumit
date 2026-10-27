@@ -117,10 +117,14 @@ header.header::before {
   background: linear-gradient(to right, transparent, var(--sl-color-accent-high));
   transform-origin: left;
 }
+/* As wide as the bar with the marker clipped out of its left end, so it can
+   travel by transform alone. */
 header.header::after {
-  margin-left: -5px;
-  border: 5px solid transparent;
-  border-top: 7px solid var(--sl-color-accent-high);
+  left: -5px;
+  right: 5px;
+  height: 7px;
+  background: var(--sl-color-accent-high);
+  clip-path: polygon(0 0, 10px 0, 5px 7px);
 }
 @supports (animation-timeline: scroll()) {
   header.header::before,
@@ -138,8 +142,8 @@ header.header::after {
   to { transform: scaleX(1); }
 }
 @keyframes playhead-move {
-  from { left: 0; }
-  to { left: 100%; }
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
 }
 
 /* The search field is a control, so it has a control's corner. */
@@ -527,9 +531,11 @@ figure.example figcaption {
 }
 
 /* The before-and-after wipe. The untouched frame sits underneath; the effect is
-   laid over it and clipped at --split, which the range input drives. Without
-   JavaScript the inline 50% stands and the figure is an honest half-and-half. */
+   laid over it and clipped where the range input says, set straight on the
+   picture and the handle by the script in astro.config.mjs. Without
+   JavaScript the figure is an honest half-and-half. */
 .compare {
+  container-type: inline-size;
   position: relative;
   overflow: hidden;
   border-radius: var(--lm-radius-card);
@@ -550,13 +556,14 @@ figure.example .compare > * {
 .compare__after {
   position: absolute;
   inset: 0;
-  clip-path: inset(0 0 0 var(--split));
+  clip-path: inset(0 0 0 50%);
 }
 .compare__handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--split);
+  left: 0;
+  transform: translateX(50cqw);
   width: 2px;
   margin-left: -1px;
   background: rgb(255 255 255 / 0.85);

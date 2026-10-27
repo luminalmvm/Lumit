@@ -49,7 +49,8 @@ export default defineConfig({
         styleOverrides: { borderRadius: "4px", borderColor: "var(--sl-color-hairline)" },
       },
       // The before-and-after wipe on every effect page. Each figure carries a
-      // range input across the picture; this points the CSS clip at its value.
+      // range input across the picture; this clips the picture and moves the
+      // handle to its value. A tap jumps there too, which iOS doesn't do.
       // Small enough to inline, and the figures degrade to an honest
       // half-and-half split if it never runs.
       head: [
@@ -57,9 +58,11 @@ export default defineConfig({
           tag: "script",
           content: `addEventListener("DOMContentLoaded",function(){
 document.querySelectorAll(".compare").forEach(function(c){
-var r=c.querySelector(".compare__range");if(!r)return;
-var set=function(){c.style.setProperty("--split",r.value+"%")};
-r.addEventListener("input",set);set()})})`,
+var r=c.querySelector(".compare__range"),a=c.querySelector(".compare__after"),h=c.querySelector(".compare__handle");if(!r||!a||!h)return;
+var set=function(){a.style.clipPath="inset(0 0 0 "+r.value+"%)";h.style.transform="translateX("+r.value+"cqw)"};
+r.addEventListener("input",set);
+r.addEventListener("pointerdown",function(e){var b=r.getBoundingClientRect();r.value=(e.clientX-b.left)/b.width*100;set()});
+set()})})`,
         },
       ],
       // Git-based per-page dates, shown under the title by the PageTitle
