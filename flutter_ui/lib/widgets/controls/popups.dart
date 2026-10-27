@@ -4,8 +4,11 @@
 
 import 'dart:async';
 
-import 'package:flutter/gestures.dart' show PointerEnterEvent;
+import 'package:flutter/gestures.dart'
+    show HitTestEntry, HitTestResult, PointerEnterEvent, kSecondaryButton;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart'
+    show BoxHitTestEntry, BoxHitTestResult, RenderProxyBox;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:provider/provider.dart';
 
@@ -152,6 +155,7 @@ Future<T?> showLumitPopup<T>({
   final overlay = Overlay.of(context);
   final anchor = overlayLocal(context, position);
   final completer = Completer<T?>();
+  final flipped = ValueNotifier<bool>(false);
   late OverlayEntry entry;
   late _PopupHandle handle;
   void close(T? v) {
@@ -168,6 +172,25 @@ Future<T?> showLumitPopup<T>({
   // in which case the chain that was up is dismissed first.
   final parentDepth =
       context.getInheritedWidgetOfExactType<_PopupScope>()?.depth ?? -1;
+  // Where the popup's bottom edge goes when there is no room under the
+  // anchor: over the control it hangs from, or over the pointer for one
+  // opened at the pointer, never on top of either. A flyout is only pulled
+  // up as far as fits, so it stays beside its row.
+  double? above;
+  if (parentDepth < 0) {
+    above = anchor.dy;
+    final opener = context.findRenderObject();
+    if (opener is RenderBox && opener.attached && opener.hasSize) {
+      final at = opener.localToGlobal(Offset.zero);
+      final gap = position.dy - (at.dy + opener.size.height);
+      if (gap >= 0 &&
+          gap <= 6 &&
+          position.dx >= at.dx - 1 &&
+          position.dx <= at.dx + opener.size.width) {
+        above = overlayLocal(context, at).dy - gap;
+      }
+    }
+  }
   _truncatePopups(parentDepth + 1);
   final depth = _popupChain.length;
   // Whether this one takes over from a popup that left at the same depth
@@ -193,28 +216,34 @@ Future<T?> showLumitPopup<T>({
             // Translucent still takes the click — it is above whatever it
             // covers, so it wins the gesture arena — but lets hover through to
             // the menu bar and to the menu this one flew out of.
-            child: GestureDetector(
-              behavior: hoverThrough
-                  ? HitTestBehavior.translucent
-                  : HitTestBehavior.opaque,
-              // One click away is one dismissal: the whole chain goes, not
-              // just the popup whose barrier caught the click.
-              onTap: closeLumitPopups,
-              onSecondaryTap: closeLumitPopups,
+            child: _Barrier(
+              child: GestureDetector(
+                behavior: hoverThrough
+                    ? HitTestBehavior.translucent
+                    : HitTestBehavior.opaque,
+                // One click away is one dismissal: the whole chain goes, not
+                // just the popup whose barrier caught the click.
+                onTap: closeLumitPopups,
+              ),
             ),
           ),
           Positioned.fill(
             child: CustomSingleChildLayout(
-              delegate: _PopupLayout(anchor),
+              delegate: _PopupLayout(anchor, above: above, flipped: flipped),
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
               child: SingleChildScrollView(
                 child: _PopupScope(
                   depth: depth,
-                  child: _PopupEntrance(
-                    flyout: depth > 0,
-                    still: takesOver,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: flipped,
                     child: builder(close),
+                    builder: (_, up, child) => _PopupEntrance(
+                      flyout: depth > 0,
+                      still: takesOver,
+                      up: up,
+                      child: child!,
+                    ),
                   ),
                 ),
               ),
@@ -228,6 +257,65 @@ Future<T?> showLumitPopup<T>({
   return completer.future;
 }
 
+/// The click-away barrier, which hands a right-click on to what is under it.
+///
+/// A right-click beside an open menu closes the menu and opens the menu of
+/// whatever was clicked, rather than needing a second right-click. The
+/// barrier is above everything, so the press is hit tested again without it
+/// and given to what it covered. The press's moves and release then reach
+/// those widgets through the pointer router, as any press's do.
+class _Barrier extends SingleChildRenderObjectWidget {
+  const _Barrier({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderBarrier();
+}
+
+class _RenderBarrier extends RenderProxyBox {
+  bool _passing = false;
+
+  /// Whether the last press stopped here. A barrier that lets hover through
+  /// lets presses through too, and those need nothing handing on.
+  bool _covers = false;
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (_passing || !size.contains(position)) return false;
+    _covers = hitTestChildren(result, position: position);
+    result.add(BoxHitTestEntry(this, position));
+    return _covers;
+  }
+
+  @override
+  void handleEvent(PointerEvent event, covariant HitTestEntry entry) {
+    if (event is! PointerDownEvent ||
+        event.buttons & kSecondaryButton == 0 ||
+        !attached) {
+      return;
+    }
+    closeLumitPopups();
+    if (!_covers) return;
+    final under = HitTestResult();
+    _passing = true;
+    try {
+      WidgetsBinding.instance
+          .hitTestInView(under, event.position, event.viewId);
+    } finally {
+      _passing = false;
+    }
+    // What the press reaches anyway (the overlay, the window, the binding)
+    // is left out, so nothing hears it twice.
+    final reached = <Object>{WidgetsBinding.instance};
+    for (RenderObject? r = this; r != null; r = r.parent) {
+      reached.add(r);
+    }
+    for (final hit in under.path) {
+      if (reached.contains(hit.target)) continue;
+      hit.target.handleEvent(event.transformed(hit.transform), hit);
+    }
+  }
+}
+
 /// How a popup arrives (docs/15-DESIGN.md §8): the first of a chain fades in
 /// while it settles from its anchor, a flyout only fades, and one taking over
 /// from another is simply there.
@@ -237,11 +325,16 @@ Future<T?> showLumitPopup<T>({
 class _PopupEntrance extends StatelessWidget {
   final bool flyout;
   final bool still;
+
+  /// Placed above its anchor for want of room below, so it comes up from
+  /// under rather than down onto the control that opened it.
+  final bool up;
   final Widget child;
 
   const _PopupEntrance({
     required this.flyout,
     required this.still,
+    required this.up,
     required this.child,
   });
 
@@ -254,11 +347,11 @@ class _PopupEntrance extends StatelessWidget {
     if (flyout) return Entrance(spec: motion.flyout, child: child);
     return Entrance(
       spec: motion.popup,
-      rise: motion.popupRise,
+      rise: up ? -motion.popupRise : motion.popupRise,
       scale: motion.popupScale,
       // Grown from the corner it is anchored at, which is the control that
       // opened it.
-      alignment: Alignment.topLeft,
+      alignment: up ? Alignment.bottomLeft : Alignment.topLeft,
       leads: true,
       child: child,
     );
@@ -271,8 +364,9 @@ class _PopupEntrance extends StatelessWidget {
 /// Anchoring alone was enough while every popup opened from the top of the
 /// window. A control near the bottom — the Viewer's transport, now that it sits
 /// under the picture — opens a list that would run off the bottom entirely, so
-/// the whole thing is shifted up until it fits. The same applies sideways for a
-/// control near the right edge.
+/// it goes above the control instead, given an [above]. Without one it is
+/// shifted up until it fits. A control near the right edge is shifted
+/// sideways.
 class _PopupLayout extends SingleChildLayoutDelegate {
   final Offset anchor;
 
@@ -280,7 +374,12 @@ class _PopupLayout extends SingleChildLayoutDelegate {
   /// anchor. A tip on a control at the foot of the window then sits over the
   /// control and not on top of it. Null only pulls it up as far as fits.
   final double? above;
-  const _PopupLayout(this.anchor, {this.above});
+
+  /// Told whether the popup went above, for its entrance to come up from
+  /// below. Told after the frame it is laid out in, so the entrance turns
+  /// from its second frame, while it is still clear.
+  final ValueNotifier<bool>? flipped;
+  const _PopupLayout(this.anchor, {this.above, this.flipped});
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
@@ -294,9 +393,16 @@ class _PopupLayout extends SingleChildLayoutDelegate {
   @override
   Offset getPositionForChild(Size size, Size childSize) {
     final over = above;
-    final top = over != null && anchor.dy + childSize.height > size.height
-        ? over - childSize.height
-        : anchor.dy;
+    // Above only where it does not fit below and there is more room above.
+    final up = over != null &&
+        anchor.dy + childSize.height > size.height &&
+        over > size.height - anchor.dy;
+    final flip = flipped;
+    if (flip != null && flip.value != up) {
+      // After the frame, as a rebuild cannot be asked for during layout.
+      SchedulerBinding.instance.addPostFrameCallback((_) => flip.value = up);
+    }
+    final top = up ? over - childSize.height : anchor.dy;
     return Offset(
       anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
       top.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
@@ -305,7 +411,7 @@ class _PopupLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_PopupLayout old) =>
-      old.anchor != anchor || old.above != above;
+      old.anchor != anchor || old.above != above || old.flipped != flipped;
 }
 
 /// A tooltip that honours Settings → Interface → Show tooltips app-wide —
