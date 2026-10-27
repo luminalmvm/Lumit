@@ -60,11 +60,20 @@ pub struct BridgeExtension {
     /// The sites it may ask the frontend to fetch from. A name stands for
     /// the sites under it too.
     pub hosts: Vec<String>,
-    /// A page or shader its manifest names is missing. It lists so it can
+    /// A file or folder its manifest names is missing. It lists so it can
     /// be installed again or removed.
     pub broken: bool,
     /// The LFX effects it carries.
     pub effects: Vec<BridgeExtensionEffect>,
+    /// Its style files, as full paths inside `folder`. Each path below is
+    /// only the manifest's own while it is not installed yet.
+    pub styles: Vec<String>,
+    /// Its colour scheme files.
+    pub themes: Vec<String>,
+    /// Its folder of SVG icons. Empty for none.
+    pub icons: String,
+    /// Its keymap files, in the format Lumit's own export writes.
+    pub keymaps: Vec<String>,
 }
 
 /// One LFX effect an extension carries.
@@ -152,7 +161,19 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
             height: effect.interface.as_ref().map_or(0, |page| page.height),
         })
         .collect();
+    // Joined a part at a time, so the separators are this platform's.
+    let full = |file: &String| {
+        let path = file
+            .split('/')
+            .fold(folder.to_path_buf(), |p, part| p.join(part));
+        path.to_string_lossy().into_owned()
+    };
+    let all = |files: &[String]| files.iter().map(full).collect();
     BridgeExtension {
+        styles: all(&manifest.styles),
+        themes: all(&manifest.themes),
+        icons: manifest.icons.as_ref().map(full).unwrap_or_default(),
+        keymaps: all(&manifest.keymaps),
         panel: manifest.entry.is_some(),
         entry: manifest.entry.unwrap_or_default().replace('\\', "/"),
         id: manifest.id,

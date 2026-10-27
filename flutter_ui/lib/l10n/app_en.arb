@@ -2164,6 +2164,10 @@
   "@settingsStylesFolder": {
     "description": "Settings window, Appearance: the row showing the folder a person's own style files are read from, with a reload button."
   },
+  "settingsFromExtensions": "From extensions",
+  "@settingsFromExtensions": {
+    "description": "Settings window, Appearance: the heading over icon sets that installed extensions carry, in the icon set dropdown."
+  },
   "settingsReduceTransparency": "Reduce transparency",
   "@settingsReduceTransparency": {
     "description": "Settings window, Appearance: draws a style's see-through parts solid and blurs nothing behind them."
@@ -18048,6 +18052,41 @@
         "type": "String"
       }
     }
+  },
+  "extensionCanStyles": "{count, plural, =1{Add a style} other{Add {count} styles}}",
+  "@extensionCanStyles": {
+    "description": "One line in the install window's It can list: the extension carries style files, which change how Lumit's controls look. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "extensionCanThemes": "{count, plural, =1{Add a colour scheme} other{Add {count} colour schemes}}",
+  "@extensionCanThemes": {
+    "description": "One line in the install window's It can list: the extension carries colour schemes for Lumit. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "extensionCanIcons": "Add a set of icons",
+  "@extensionCanIcons": {
+    "description": "One line in the install window's It can list: the extension carries its own icons for Lumit's buttons and menus."
+  },
+  "extensionCanKeymaps": "{count, plural, =1{Add a set of shortcuts} other{Add {count} sets of shortcuts}}",
+  "@extensionCanKeymaps": {
+    "description": "One line in the install window's It can list: the extension carries keymaps, whole sets of keyboard shortcuts. {count} is how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "extensionUseShortcuts": "Use its shortcuts",
+  "@extensionUseShortcuts": {
+    "description": "Checkbox in the install window, shown when the extension carries shortcuts. Ticked, its shortcuts replace the person's own once it is installed. Off at first."
   },
   "extensionInstallsTo": "Installs to",
   "@extensionInstallsTo": {

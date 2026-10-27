@@ -5,10 +5,12 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/extensions.dart';
 import '../state/file_dialogs.dart';
+import '../state/keymap.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
@@ -48,14 +50,21 @@ Future<void> installExtensionFromFolder(
   if (read is! BridgeExtensionOutcome_Ready) {
     return app.postNotice(extensionOutcomeText(read), error: true);
   }
+  final useKeys = ValueNotifier(false);
   final agreed = await showLumitModal<bool>(
     context: context,
     id: 'extension-install',
-    builder: (close) =>
-        _InstallQuestion(extension: read.extension_, onChoose: close),
+    builder: (close) => _InstallQuestion(
+        extension: read.extension_, useKeys: useKeys, onChoose: close),
   );
+  final keys = useKeys.value;
+  useKeys.dispose();
   if (agreed != true) return;
-  _say(app, await service.install(folder));
+  final done = await service.install(folder);
+  await _say(app, done,
+      keymap: keys && context.mounted
+          ? context.read<LumitUiState>().keymap
+          : null);
 }
 
 /// Pick a `.lfx` package and install it, as [installExtensionPackage] does.
@@ -78,26 +87,42 @@ Future<void> installExtensionPackage(BuildContext context, LumitState app,
   }
   final own = service.scanFolders.own;
   final into = ValueNotifier<String?>(own);
+  final useKeys = ValueNotifier(false);
   final agreed = await showLumitModal<bool>(
     context: context,
     id: 'extension-install',
     builder: (close) => _InstallQuestion(
-        extension: read.extension_, into: into, onChoose: close),
+        extension: read.extension_,
+        into: into,
+        useKeys: useKeys,
+        onChoose: close),
   );
   final folder = into.value;
+  final keys = useKeys.value;
   into.dispose();
+  useKeys.dispose();
   if (agreed != true) return;
-  _say(
-      app,
-      await service.installPackage(path,
-          folder: folder == own ? null : folder));
+  final done = await service.installPackage(path,
+      folder: folder == own ? null : folder);
+  await _say(app, done,
+      keymap: keys && context.mounted
+          ? context.read<LumitUiState>().keymap
+          : null);
 }
 
-void _say(LumitState app, BridgeExtensionOutcome outcome) {
+/// Say how an install went. Given the [keymap] because the person asked for
+/// its shortcuts, its first keymap becomes theirs, as Settings ▸ Shortcuts
+/// imports one.
+Future<void> _say(LumitState app, BridgeExtensionOutcome outcome,
+    {KeymapState? keymap}) async {
   if (outcome case BridgeExtensionOutcome_Ready(extension_: final extension)) {
     app.postNotice(extension.panel
         ? l10n.extensionInstalled(extension.name)
         : l10n.extensionInstalledPlain(extension.name));
+    if (keymap != null && extension.keymaps.isNotEmpty) {
+      final refusal = await keymap.fromFile(extension.keymaps.first);
+      if (refusal != null) app.postNotice(refusal, error: true);
+    }
   } else {
     app.postNotice(extensionOutcomeText(outcome), error: true);
   }
@@ -132,8 +157,15 @@ class _InstallQuestion extends StatelessWidget {
   /// install, which always goes into Lumit's own folder.
   final ValueNotifier<String?>? into;
 
+  /// Whether its first keymap becomes the person's once installed. Asked
+  /// only when it carries one, and off until they tick it.
+  final ValueNotifier<bool> useKeys;
+
   const _InstallQuestion(
-      {required this.extension, required this.onChoose, this.into});
+      {required this.extension,
+      required this.useKeys,
+      required this.onChoose,
+      this.into});
 
   @override
   Widget build(BuildContext context) {
@@ -179,12 +211,35 @@ class _InstallQuestion extends StatelessWidget {
                 if (extension.effects.isNotEmpty)
                   point(l10n.extensionCanEffects(
                       extension.effects.map((e) => e.name).join(', '))),
+                if (extension.styles.isNotEmpty)
+                  point(l10n.extensionCanStyles(extension.styles.length)),
+                if (extension.themes.isNotEmpty)
+                  point(l10n.extensionCanThemes(extension.themes.length)),
+                if (extension.icons.isNotEmpty) point(l10n.extensionCanIcons),
+                if (extension.keymaps.isNotEmpty)
+                  point(l10n.extensionCanKeymaps(extension.keymaps.length)),
                 for (final permission in extension.permissions)
                   point(extensionPermissionText(permission)),
                 if (extension.hosts.isNotEmpty)
                   point(l10n.extensionCanHosts(extension.hosts.join(', '))),
                 if (extension.panel) point(l10n.extensionCanPanel),
               ]),
+              if (extension.keymaps.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: useKeys,
+                    builder: (context, on, _) => Row(children: [
+                      HouseCheckbox(
+                        key: const ValueKey('extension-install-keys'),
+                        value: on,
+                        onChanged: (v) => useKeys.value = v,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(l10n.extensionUseShortcuts, style: t.small),
+                    ]),
+                  ),
+                ),
               dialogGroup(t, l10n.extensionCannot, [
                 point(l10n.extensionCannotFootage),
                 point(l10n.extensionCannotFiles),

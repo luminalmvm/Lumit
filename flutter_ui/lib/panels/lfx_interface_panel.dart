@@ -75,6 +75,10 @@ BridgeExtension _showing(BridgeExtension owner, BridgeExtensionEffect page) =>
       hosts: owner.hosts,
       broken: false,
       effects: owner.effects,
+      styles: owner.styles,
+      themes: owner.themes,
+      icons: owner.icons,
+      keymaps: owner.keymaps,
     );
 
 /// The floating panel itself: its title strip, and the page once there has

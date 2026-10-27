@@ -165,9 +165,12 @@ class StyleSheet {
 
   /// The picture the room shows, from `--room: url("room.jpg")`, as a path.
   /// Relative to the style's own folder.
-  String? get roomPicture {
+  String? get roomPicture => _url('room');
+
+  /// A `url(...)` variable as a path, relative to the style's own folder.
+  String? _url(String variable) {
     final m = RegExp(r'''url\(\s*["']?([^"')]+)["']?\s*\)''')
-        .firstMatch(_vars['room'] ?? '');
+        .firstMatch(_vars[variable] ?? '');
     if (m == null) return null;
     final path = m[1]!.trim();
     final absolute =
@@ -480,6 +483,23 @@ class StyleSheet {
     return (outer, inner);
   }
 
+  /// The style in [f], or null when it isn't one or can't be read.
+  static StyleSheet? readFile(File f) {
+    final file = f.uri.pathSegments.last;
+    if (!file.toLowerCase().endsWith('.$styleFileExtension')) return null;
+    try {
+      return StyleSheet.parse(f.readAsStringSync(),
+          name: file.substring(0, file.length - styleFileExtension.length - 1),
+          folder: f.parent.path);
+    } on FileSystemException {
+      // Mid-save, or gone: the next change reads it again.
+      return null;
+    }
+  }
+
+  /// The style's own icons, from `--icons: url("icons")`, as a folder path.
+  String? get iconFolder => _url('icons');
+
   /// Every style in [folder]: `name.lumstyle` there, or in a folder of its
   /// own beside its pictures and fonts. A missing folder is no styles.
   static List<StyleSheet> readFolder(String folder) {
@@ -487,16 +507,7 @@ class StyleSheet {
     if (!dir.existsSync()) return const [];
     final found = <StyleSheet>[];
     void take(File f) {
-      final file = f.uri.pathSegments.last;
-      if (!file.toLowerCase().endsWith('.$styleFileExtension')) return;
-      try {
-        found.add(StyleSheet.parse(f.readAsStringSync(),
-            name:
-                file.substring(0, file.length - styleFileExtension.length - 1),
-            folder: f.parent.path));
-      } on FileSystemException {
-        // Mid-save, or gone: the next change reads it again.
-      }
+      if (readFile(f) case final sheet?) found.add(sheet);
     }
 
     for (final e in dir.listSync()) {

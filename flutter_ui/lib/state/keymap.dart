@@ -15,12 +15,15 @@
 // those live — [KeymapState] stores the engine's JSON verbatim and never looks
 // inside it.
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show SingleActivator;
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 
+import '../l10n/strings.dart';
 import '../src/rust/api/keymap.dart';
 import 'os_keys.dart';
 import 'workspace.dart';
@@ -397,6 +400,18 @@ class KeymapState extends ChangeNotifier {
     } on AnyhowException catch (e) {
       return e.message;
     }
+  }
+
+  /// Take a keymap from the file at [path], as Settings ▸ Shortcuts imports
+  /// one. Returns null on success, or why not.
+  Future<String?> fromFile(String path) async {
+    final String text;
+    try {
+      text = await File(path).readAsString();
+    } catch (_) {
+      return l10n.keymapFileUnreadable;
+    }
+    return fromJson(text);
   }
 
   /// Take the shortcuts from an After Effects shortcut file. Returns how many

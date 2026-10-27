@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
+import '../theme/theme_file.dart' show readThemeFile;
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import '../theme/theme_tokens.dart' show applyTokens;
@@ -619,7 +620,11 @@ class Workspace extends ChangeNotifier {
     } on FileSystemException {
       // A read-only settings folder still opens Lumit, with no styles.
     }
-    styles = StyleSheet.readFolder(folder);
+    styles = [
+      ...StyleSheet.readFolder(folder),
+      for (final path in _extensionStyles)
+        if (StyleSheet.readFile(File(path)) case final sheet?) sheet,
+    ];
     if (_stylesWatch == null && Directory(folder).existsSync()) {
       _stylesWatch = Directory(folder)
           .watch(recursive: true)
@@ -627,6 +632,45 @@ class Workspace extends ChangeNotifier {
     }
     final style = activeStyle;
     if (style != null) themeShape = style.base;
+    // Under the person's own icons: the style's, then a picked set.
+    IconStyle.under = [
+      if (style?.iconFolder case final icons?) icons,
+      if (extensionIcons[interface.iconPack] case final pack?) pack,
+    ];
+    IconStyle.reload();
+  }
+
+  /// The style files, colour schemes and icon sets installed extensions
+  /// carry, as paths. Set by the extension list whenever it is read.
+  List<String> _extensionStyles = const [];
+  List<CustomTheme> extensionThemes = const [];
+
+  /// Icon sets from extensions, by the extension's name, as folders.
+  Map<String, String> extensionIcons = const {};
+
+  void useExtensionLooks({
+    required List<String> styles,
+    required List<String> themes,
+    required Map<String, String> icons,
+  }) {
+    _extensionStyles = styles;
+    extensionThemes = [
+      for (final path in themes)
+        if (_readTheme(path) case final theme?) theme,
+    ];
+    extensionIcons = icons;
+    reloadStyles();
+  }
+
+  static CustomTheme? _readTheme(String path) {
+    try {
+      final file = path.split(RegExp(r'[\\/]')).last;
+      final stem =
+          file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file;
+      return readThemeFile(File(path).readAsStringSync(), name: stem).theme;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   /// Use the person's own style called [name].
@@ -652,9 +696,13 @@ class Workspace extends ChangeNotifier {
   /// the named one has been deleted.
   CustomTheme? get activeCustomTheme => _customThemeNamed(customThemeName);
 
-  CustomTheme? _customThemeNamed(String? name) {
+  CustomTheme? _customThemeNamed(String? name) =>
+      _customThemeIn(customThemes, name) ??
+      _customThemeIn(extensionThemes, name);
+
+  CustomTheme? _customThemeIn(List<CustomTheme> themes, String? name) {
     if (name == null) return null;
-    for (final theme in customThemes) {
+    for (final theme in themes) {
       if (theme.name == name) return theme;
     }
     return null;
@@ -1359,6 +1407,9 @@ class Workspace extends ChangeNotifier {
         for (final s in LumitColorScheme.values)
           if (s.mode == ThemeMode2.light) ThemeChoice.builtIn(s),
         for (final t in customThemes) ThemeChoice.custom(t.name),
+        for (final t in extensionThemes)
+          if (!customThemes.any((own) => own.name == t.name))
+            ThemeChoice.custom(t.name),
       ];
 
   /// What the picker shows as selected. A custom theme whose name no longer

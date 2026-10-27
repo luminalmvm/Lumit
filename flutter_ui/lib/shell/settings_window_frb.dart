@@ -1632,19 +1632,34 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsIconSet,
-            _dropdown<IconSet>(
+            // The set's own weights, then the icon sets extensions carry.
+            _dropdown<Object>(
               key: 'settings-icon-set',
-              value: settings.iconSet,
-              options: IconSet.values,
+              value: settings.iconPack != null &&
+                      ui.workspace.extensionIcons
+                          .containsKey(settings.iconPack)
+                  ? settings.iconPack!
+                  : settings.iconSet,
+              options: [
+                ...IconSet.values,
+                ...ui.workspace.extensionIcons.keys,
+              ],
               label: (set) => switch (set) {
                 IconSet.styleChoice => l10n.styleChoice,
                 IconSet.regular => l10n.iconSetRegular,
                 IconSet.engraved => l10n.iconSetEngraved,
                 IconSet.bold => l10n.iconSetBold,
+                _ => '$set',
               },
+              group: (set) => set is String ? l10n.settingsFromExtensions : null,
               onChanged: (set) => setState(() {
-                settings.iconSet = set;
-                ui.workspace.recompose();
+                if (set is IconSet) {
+                  settings.iconSet = set;
+                  settings.iconPack = null;
+                } else {
+                  settings.iconPack = set as String;
+                }
+                ui.workspace.reloadStyles();
                 ui.workspace.save();
               }),
             ),
@@ -3275,16 +3290,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Future<void> _importKeymap(KeymapState km) async {
     final path = await pickKeymapToOpen();
     if (path == null) return;
-    String text;
-    try {
-      text = await File(path).readAsString();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _keymapMessage = l10n.keymapFileUnreadable);
-      }
-      return;
-    }
-    final refusal = await km.fromJson(text);
+    final refusal = await km.fromFile(path);
     if (!mounted) return;
     setState(() => _keymapMessage = refusal ?? l10n.keymapImported);
   }

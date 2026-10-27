@@ -518,6 +518,9 @@ class InterfaceSettings {
   /// Which weight the icon set draws at, or the style's own.
   IconSet iconSet;
 
+  /// The extension whose icons are in use, by name, or null for none.
+  String? iconPack;
+
   /// Which room Lantern's cards stand in. Day by default, because the light
   /// room is what the drawing draws. Read only while the shape is Lantern.
   LanternRoom room;
@@ -580,6 +583,7 @@ class InterfaceSettings {
     this.shiftAOpensNodeSearch = true,
     this.wireStyle = WireStyle.curved,
     this.iconSet = IconSet.styleChoice,
+    this.iconPack,
     this.room = LanternRoom.auto,
     this.labelCase,
   });
@@ -623,6 +627,7 @@ class InterfaceSettings {
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
         'wire_style': wireStyle.name,
         'icon_set': iconSet.name,
+        'icon_pack': iconPack,
         'lantern_room': room.name,
         if (labelCase != null) 'label_case': labelCase!.name,
       };
@@ -755,6 +760,7 @@ class InterfaceSettings {
           (s) => s.name == j['icon_set'],
           orElse: () => IconSet.styleChoice,
         ),
+        iconPack: j['icon_pack'] as String?,
         // By name. An unknown name, or a file written before Lantern had a
         // room, is the day room the drawing draws.
         room: LanternRoom.values.firstWhere(

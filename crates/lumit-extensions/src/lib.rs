@@ -44,6 +44,12 @@ const MAX_SHADER: u64 = 1 << 20;
 /// The most effects one extension carries.
 const MAX_EFFECTS: usize = 64;
 
+/// The longest a style, colour scheme or keymap file is read.
+const MAX_LOOK: u64 = 1 << 20;
+
+/// The most style, colour scheme or keymap files one extension carries.
+const MAX_LOOKS: usize = 64;
+
 /// One thing an extension may ask to be allowed. Each is a family of
 /// questions it can ask the interface and of things it is told.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -112,6 +118,31 @@ pub struct Manifest {
     /// The LFX effects it carries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<ManifestEffect>,
+    /// Style files it carries, as paths inside the folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<String>,
+    /// Colour scheme files it carries, as paths inside the folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub themes: Vec<String>,
+    /// A folder of SVG icons, as a path inside the folder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icons: Option<String>,
+    /// Keymap files, in the format Lumit's own export writes, as paths
+    /// inside the folder. Used only when the person says so.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keymaps: Vec<String>,
+}
+
+impl Manifest {
+    /// The style, colour scheme and keymap files it names, with what each
+    /// is called in a refusal.
+    fn looks(&self) -> impl Iterator<Item = (&'static str, &String)> {
+        self.styles
+            .iter()
+            .map(|f| ("style", f))
+            .chain(self.themes.iter().map(|f| ("colour scheme", f)))
+            .chain(self.keymaps.iter().map(|f| ("keymap", f)))
+    }
 }
 
 /// One effect an extension carries: a shader written to the Custom shader's
@@ -289,8 +320,38 @@ pub fn parse(text: &str) -> Result<Manifest, ExtensionError> {
     if manifest.summary.len() > 300 || manifest.author.len() > 64 || manifest.homepage.len() > 200 {
         return Err(invalid("extension.json says too much about itself"));
     }
-    if manifest.entry.is_none() && manifest.effects.is_empty() {
-        return Err(invalid("an extension adds a panel, effects or both"));
+    if manifest.entry.is_none()
+        && manifest.effects.is_empty()
+        && manifest.icons.is_none()
+        && manifest.looks().next().is_none()
+    {
+        return Err(invalid(
+            "an extension adds a panel, effects, looks or shortcuts",
+        ));
+    }
+    if [&manifest.styles, &manifest.themes, &manifest.keymaps]
+        .iter()
+        .any(|files| files.len() > MAX_LOOKS)
+    {
+        return Err(invalid(
+            "an extension carries at most 64 styles, 64 colour schemes and 64 keymaps",
+        ));
+    }
+    for (what, file) in manifest.looks() {
+        if inside(file).is_none() {
+            return Err(ExtensionError::Invalid(format!(
+                "each {what} is a file inside the extension's own folder"
+            )));
+        }
+    }
+    if manifest
+        .icons
+        .as_deref()
+        .is_some_and(|i| inside(i).is_none())
+    {
+        return Err(invalid(
+            "an extension's icons are a folder inside its own folder",
+        ));
     }
     if manifest
         .entry
@@ -493,17 +554,19 @@ pub struct Installed {
     pub manifest: Manifest,
     /// Its folder, which the panel's page is served from.
     pub path: PathBuf,
-    /// A page or shader the manifest names is not there. It still lists, so
+    /// A file or folder the manifest names is not there. It still lists, so
     /// it can be installed again or removed.
     pub broken: bool,
 }
 
 /// Whether every file the manifest names is there, asking `size` for the
 /// size of a file by its path inside the extension, or None when it is not
-/// a file. Shared by a folder and a package, so both are judged alike.
+/// a file, and `is_dir` whether a path inside it is a folder. Shared by a
+/// folder and a package, so both are judged alike.
 fn check_files(
     manifest: &Manifest,
     size: &dyn Fn(&Path) -> Option<u64>,
+    is_dir: &dyn Fn(&Path) -> bool,
 ) -> Result<(), ExtensionError> {
     let there = |entry: &str| inside(entry).is_some_and(|path| size(&path).is_some());
     if manifest.entry.as_deref().is_some_and(|entry| !there(entry)) {
@@ -536,6 +599,30 @@ fn check_files(
             )));
         }
     }
+    for (what, file) in manifest.looks() {
+        match inside(file).and_then(|path| size(&path)) {
+            None => {
+                return Err(ExtensionError::Invalid(format!(
+                    "the {what} {file} is not in the folder"
+                )))
+            }
+            Some(bytes) if bytes > MAX_LOOK => {
+                return Err(ExtensionError::Invalid(format!(
+                    "the {what} {file} is longer than 1 MB"
+                )))
+            }
+            Some(_) => {}
+        }
+    }
+    if manifest
+        .icons
+        .as_deref()
+        .is_some_and(|icons| !inside(icons).is_some_and(|path| is_dir(&path)))
+    {
+        return Err(invalid(
+            "the icons folder extension.json names is not in the folder",
+        ));
+    }
     Ok(())
 }
 
@@ -561,7 +648,9 @@ fn read_manifest(folder: &Path) -> Result<Manifest, ExtensionError> {
 /// to read before they agree to it. Nothing is copied.
 pub fn inspect(folder: &Path) -> Result<Manifest, ExtensionError> {
     let manifest = read_manifest(folder)?;
-    check_files(&manifest, &|path| file_size(&folder.join(path)))?;
+    check_files(&manifest, &|path| file_size(&folder.join(path)), &|path| {
+        folder.join(path).is_dir()
+    })?;
     Ok(manifest)
 }
 
@@ -586,7 +675,10 @@ pub fn scan() -> Vec<Installed> {
             if !named || found.iter().any(|f| f.manifest.id == manifest.id) {
                 continue;
             }
-            let broken = check_files(&manifest, &|p| file_size(&path.join(p))).is_err();
+            let broken = check_files(&manifest, &|p| file_size(&path.join(p)), &|p| {
+                path.join(p).is_dir()
+            })
+            .is_err();
             found.push(Installed {
                 manifest,
                 path,
@@ -791,6 +883,12 @@ mod tests {
             m["effects"] = serde_json::json!([]);
         });
         assert!(parse(&neither).is_err());
+        let looks_only = manifest(|m| {
+            m.as_object_mut().unwrap().remove("entry");
+            m["effects"] = serde_json::json!([]);
+            m["keymaps"] = serde_json::json!(["keys/ableton.json"]);
+        });
+        assert!(parse(&looks_only).is_ok());
         let refused = [
             ("entry", serde_json::json!("../outside.html")),
             ("entry", serde_json::json!("C:\\outside.html")),
@@ -801,6 +899,10 @@ mod tests {
             ("hosts", serde_json::json!(["*"])),
             ("format", serde_json::json!(2)),
             ("requires", serde_json::json!("99.0.0")),
+            ("styles", serde_json::json!(["../frost.lumstyle"])),
+            ("themes", serde_json::json!(["C:\\harbour.lumtheme"])),
+            ("icons", serde_json::json!("/icons")),
+            ("keymaps", serde_json::json!(["keys/../../ableton.json"])),
         ];
         for (field, value) in refused {
             let text = manifest(|m| m[field] = value.clone());

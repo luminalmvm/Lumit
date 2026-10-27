@@ -25481,6 +25481,10 @@ impl SseDecode for crate::api::extensions::BridgeExtension {
         let mut var_broken = <bool>::sse_decode(deserializer);
         let mut var_effects =
             <Vec<crate::api::extensions::BridgeExtensionEffect>>::sse_decode(deserializer);
+        let mut var_styles = <Vec<String>>::sse_decode(deserializer);
+        let mut var_themes = <Vec<String>>::sse_decode(deserializer);
+        let mut var_icons = <String>::sse_decode(deserializer);
+        let mut var_keymaps = <Vec<String>>::sse_decode(deserializer);
         return crate::api::extensions::BridgeExtension {
             id: var_id,
             name: var_name,
@@ -25495,6 +25499,10 @@ impl SseDecode for crate::api::extensions::BridgeExtension {
             hosts: var_hosts,
             broken: var_broken,
             effects: var_effects,
+            styles: var_styles,
+            themes: var_themes,
+            icons: var_icons,
+            keymaps: var_keymaps,
         };
     }
 }
@@ -36177,6 +36185,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::extensions::BridgeExtension {
             self.hosts.into_into_dart().into_dart(),
             self.broken.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
+            self.styles.into_into_dart().into_dart(),
+            self.themes.into_into_dart().into_dart(),
+            self.icons.into_into_dart().into_dart(),
+            self.keymaps.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -43853,6 +43865,10 @@ impl SseEncode for crate::api::extensions::BridgeExtension {
         <Vec<String>>::sse_encode(self.hosts, serializer);
         <bool>::sse_encode(self.broken, serializer);
         <Vec<crate::api::extensions::BridgeExtensionEffect>>::sse_encode(self.effects, serializer);
+        <Vec<String>>::sse_encode(self.styles, serializer);
+        <Vec<String>>::sse_encode(self.themes, serializer);
+        <String>::sse_encode(self.icons, serializer);
+        <Vec<String>>::sse_encode(self.keymaps, serializer);
     }
 }
 

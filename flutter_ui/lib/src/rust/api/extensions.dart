@@ -135,12 +135,25 @@ class BridgeExtension {
   /// the sites under it too.
   final List<String> hosts;
 
-  /// A page or shader its manifest names is missing. It lists so it can
+  /// A file or folder its manifest names is missing. It lists so it can
   /// be installed again or removed.
   final bool broken;
 
   /// The LFX effects it carries.
   final List<BridgeExtensionEffect> effects;
+
+  /// Its style files, as full paths inside `folder`. Each path below is
+  /// only the manifest's own while it is not installed yet.
+  final List<String> styles;
+
+  /// Its colour scheme files.
+  final List<String> themes;
+
+  /// Its folder of SVG icons. Empty for none.
+  final String icons;
+
+  /// Its keymap files, in the format Lumit's own export writes.
+  final List<String> keymaps;
 
   const BridgeExtension({
     required this.id,
@@ -156,6 +169,10 @@ class BridgeExtension {
     required this.hosts,
     required this.broken,
     required this.effects,
+    required this.styles,
+    required this.themes,
+    required this.icons,
+    required this.keymaps,
   });
 
   @override
@@ -172,7 +189,11 @@ class BridgeExtension {
       permissions.hashCode ^
       hosts.hashCode ^
       broken.hashCode ^
-      effects.hashCode;
+      effects.hashCode ^
+      styles.hashCode ^
+      themes.hashCode ^
+      icons.hashCode ^
+      keymaps.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -191,7 +212,11 @@ class BridgeExtension {
           permissions == other.permissions &&
           hosts == other.hosts &&
           broken == other.broken &&
-          effects == other.effects;
+          effects == other.effects &&
+          styles == other.styles &&
+          themes == other.themes &&
+          icons == other.icons &&
+          keymaps == other.keymaps;
 }
 
 /// One of Lumit's commands, as an extension's page lists it.

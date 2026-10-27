@@ -113,9 +113,15 @@ fn open(path: &Path) -> Result<Package, ExtensionError> {
         .read_to_string(&mut text)
         .map_err(|_| invalid("extension.json could not be read"))?;
     let manifest = parse(&text)?;
-    check_files(&manifest, &|path| {
-        files.get(&slashed(path)).map(|&(_, size)| size)
-    })?;
+    check_files(
+        &manifest,
+        &|path| files.get(&slashed(path)).map(|&(_, size)| size),
+        // A package holds files only, so a folder is there when one is in it.
+        &|path| {
+            let under = format!("{}/", slashed(path));
+            files.keys().any(|name| name.starts_with(&under))
+        },
+    )?;
     Ok(Package {
         zip,
         files,

@@ -55,6 +55,15 @@ class ExtensionService extends ChangeNotifier {
     if (read != _reads) return;
     installed = list;
     if (folders != null) scanFolders = folders;
+    // The looks they carry join the person's own in Settings.
+    _workspace.useExtensionLooks(
+      styles: [for (final e in list) ...e.styles],
+      themes: [for (final e in list) ...e.themes],
+      icons: {
+        for (final e in list)
+          if (e.icons.isNotEmpty) e.name: e.icons,
+      },
+    );
     notifyListeners();
   }
 
