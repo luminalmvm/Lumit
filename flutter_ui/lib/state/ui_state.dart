@@ -3984,14 +3984,16 @@ class LumitUiState extends ChangeNotifier {
   /// from the value it was *drawn* with would carry a stale reading for the
   /// other half into the write — two changes between two rebuilds, and the
   /// second undoes the first.
-  void setViewerStops(double stops) =>
-      setViewerLook((stops: stops, toneMap: viewerLook.toneMap));
+  void setViewerStops(double stops, {bool live = false}) =>
+      setViewerLook((stops: stops, toneMap: viewerLook.toneMap), live: live);
 
   void toggleViewerToneMap() =>
       setViewerLook((stops: viewerLook.stops, toneMap: !viewerLook.toneMap));
 
   /// Set how the fronted comp is looked at, tell the engine, and write it down.
-  void setViewerLook(ViewerLook look) {
+  /// A [live] change, a scrub still in hand, only tells the engine, and the
+  /// last one is written down when the scrub lets go.
+  void setViewerLook(ViewerLook look, {bool live = false}) {
     final id = _selectedComp?.internalid.toString();
     if (id == null) return;
     if (look == neutralLook) {
@@ -4000,6 +4002,7 @@ class LumitUiState extends ChangeNotifier {
       viewerLooks[id] = look;
     }
     pushViewerLook();
+    if (live) return;
     rememberSession();
     notifyListeners();
   }

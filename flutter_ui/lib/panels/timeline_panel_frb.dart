@@ -2183,6 +2183,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void _edgeFollow() {
     final ui = _ui;
     if (ui == null || !ui.playing.value || !mounted) return;
+    // Nothing to follow behind another tab; the next frame once shown does.
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return;
     final position = positionOf(_hLane);
     if (position == null || position.maxScrollExtent <= 0) return;
     final viewport = position.viewportDimension;

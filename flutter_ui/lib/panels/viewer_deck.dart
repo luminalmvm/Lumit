@@ -110,7 +110,7 @@ class ViewerDeck extends StatelessWidget {
                 ...viewerTransportMarks(
                   t,
                   playing: playing,
-                  frame: frame,
+                  playhead: ui.playheadFrame,
                   settings: settings,
                   comp: comp,
                   onPlayPause: onPlayPause,

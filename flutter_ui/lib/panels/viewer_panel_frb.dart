@@ -696,69 +696,67 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           )
         : null;
 
-    // Both notifiers, because the transport shows two things the engine owns:
-    // where the playhead is, and whether it is running.
+    // Whether the transport is running. Where the playhead is goes to the
+    // clock alone, so the bar is not rebuilt for every frame.
     final bar = ValueListenableBuilder<bool>(
       valueListenable: ui.playing,
       builder: (context, playing, _) => ValueListenableBuilder<int>(
-        valueListenable: ui.playheadFrame,
-        builder: (context, frame, _) => ValueListenableBuilder<int>(
-          valueListenable: ui.previewTier,
-          builder: (context, tier, _) => ViewerBar(
-            channel: _channel,
-            // Session state rather than panel state: the engine has to
-            // be told when it flips, and [LumitUiState] is what talks to it.
-            grid: ui.viewerGrid,
-            wireframes: ui.viewerLayerControls,
-            look: ui.viewerLook,
-            onStops: ui.setViewerStops,
-            playing: playing,
-            frame: frame,
-            settings: settings,
-            comp: comp,
-            compSize: facts.size,
-            tier: tier,
-            shownScale: _shownScale,
-            background: ui.model.heldBackground,
-            onChannel: (c) => setState(() => _channel = c),
-            onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
-            onWireframes: () =>
-                ui.setViewerLayerControls(!ui.viewerLayerControls),
-            onPlayPause: _togglePlay,
-            onSeek: (f) => _seek(comp, ui, f),
-            hasSnapshot: _snapshot != null,
-            onSnapshotTake: _takeSnapshot,
-            onSnapshotHold: _holdSnapshot,
-            detached: round,
-            transport: !deck,
-            loop: ui.workspace.performance.loop,
-            onLoop: ui.workspace.setLoopMode,
-            viewId: widget.view.engineId,
-            // Gathered: the header's contents lead the one strip, in the
-            // order the two strips read.
-            leading: split
-                ? const []
-                : [
-                    DockPaneHandle(
-                      child: Text(
-                          t.kickerCase(viewport
-                              ? l10n.panel3dViewport
-                              : l10n.panelViewer),
-                          style: t.kickerOn),
-                    ),
-                    viewerBarGapBox(viewerBarGap),
-                    ...viewerPickers(
-                      zoom: _zoom,
-                      shownScale: _shownScale,
-                      look: ui.viewerLook,
-                      showToneMap: ui.workspace.interface.showToneMap,
-                      onToneMap: ui.toggleViewerToneMap,
-                      onZoom: goToNamedZoom,
-                      quality: !deck,
-                      viewId: widget.view.engineId,
-                    ),
-                  ],
-          ),
+        valueListenable: ui.previewTier,
+        builder: (context, tier, _) => ViewerBar(
+          channel: _channel,
+          // Session state rather than panel state: the engine has to
+          // be told when it flips, and [LumitUiState] is what talks to it.
+          grid: ui.viewerGrid,
+          wireframes: ui.viewerLayerControls,
+          look: ui.viewerLook,
+          onStops: ui.setViewerStops,
+          onStopsLive: (stops) => ui.setViewerStops(stops, live: true),
+          playing: playing,
+          playhead: ui.playheadFrame,
+          settings: settings,
+          comp: comp,
+          compSize: facts.size,
+          tier: tier,
+          shownScale: _shownScale,
+          background: ui.model.heldBackground,
+          onChannel: (c) => setState(() => _channel = c),
+          onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
+          onWireframes: () =>
+              ui.setViewerLayerControls(!ui.viewerLayerControls),
+          onPlayPause: _togglePlay,
+          onSeek: (f) => _seek(comp, ui, f),
+          hasSnapshot: _snapshot != null,
+          onSnapshotTake: _takeSnapshot,
+          onSnapshotHold: _holdSnapshot,
+          detached: round,
+          transport: !deck,
+          loop: ui.workspace.performance.loop,
+          onLoop: ui.workspace.setLoopMode,
+          viewId: widget.view.engineId,
+          // Gathered: the header's contents lead the one strip, in the
+          // order the two strips read.
+          leading: split
+              ? const []
+              : [
+                  DockPaneHandle(
+                    child: Text(
+                        t.kickerCase(viewport
+                            ? l10n.panel3dViewport
+                            : l10n.panelViewer),
+                        style: t.kickerOn),
+                  ),
+                  viewerBarGapBox(viewerBarGap),
+                  ...viewerPickers(
+                    zoom: _zoom,
+                    shownScale: _shownScale,
+                    look: ui.viewerLook,
+                    showToneMap: ui.workspace.interface.showToneMap,
+                    onToneMap: ui.toggleViewerToneMap,
+                    onZoom: goToNamedZoom,
+                    quality: !deck,
+                    viewId: widget.view.engineId,
+                  ),
+                ],
         ),
       ),
     );
@@ -823,54 +821,51 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                       event.scrollDelta.dy, constraints, size, fitted));
             }
           },
-          child: ValueListenableBuilder<int>(
-            valueListenable: ui.playheadFrame,
-            builder: (context, frame, _) => ViewerStage(
-              comp: comp,
-              viewId: widget.view.engineId,
-              uiState: ui,
-              fitted: fitted,
-              pictureRect: canvas,
-              showPicture: !(viewport && widget.view.wireframeOnly),
-              grid: ui.viewerGrid,
-              overlays: ui.viewerOverlays,
-              pictureKey: _pictureKey,
-              snapshot: _showingSnapshot ? _snapshot : null,
-              snapshotArea: _snapshotArea,
-              wireframes: ui.viewerLayerControls,
-              channel: _channel,
-              compSize: size,
-              footage: footage,
-              onPan: _panBy,
-              // The model is *told* an edit landed, rather than the boxes
-              // checking for themselves as they draw: the Viewer
-              // commits its own edits, and the drawing path reads the held
-              // copy now, so this is what puts the new document on screen
-              // without waiting for the change stream's round trip. The same
-              // thing every other panel does after committing.
-              onChanged: () {
-                ui.model.refresh();
-                setState(() {});
-              },
-              // Both in the picture area's frame, for [_scrollZoom]'s
-              // reason: the pan that comes back is measured from the middle of
-              // what the rulers have left.
-              onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
-                cursor: at - _bandOffset,
-                factor: out ? 1 / zoomToolStep : zoomToolStep,
-                fitted: fitted.shift(-_bandOffset),
-                compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: _pictureArea(constraints),
-              )),
-              onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
-                box: box.shift(-_bandOffset),
-                out: out,
-                fitted: fitted.shift(-_bandOffset),
-                compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: _pictureArea(constraints),
-              )),
-              onZoom: goToNamedZoom,
-            ),
+          child: ViewerStage(
+            comp: comp,
+            viewId: widget.view.engineId,
+            uiState: ui,
+            fitted: fitted,
+            pictureRect: canvas,
+            showPicture: !(viewport && widget.view.wireframeOnly),
+            grid: ui.viewerGrid,
+            overlays: ui.viewerOverlays,
+            pictureKey: _pictureKey,
+            snapshot: _showingSnapshot ? _snapshot : null,
+            snapshotArea: _snapshotArea,
+            wireframes: ui.viewerLayerControls,
+            channel: _channel,
+            compSize: size,
+            footage: footage,
+            onPan: _panBy,
+            // The model is *told* an edit landed, rather than the boxes
+            // checking for themselves as they draw: the Viewer
+            // commits its own edits, and the drawing path reads the held
+            // copy now, so this is what puts the new document on screen
+            // without waiting for the change stream's round trip. The same
+            // thing every other panel does after committing.
+            onChanged: () {
+              ui.model.refresh();
+              setState(() {});
+            },
+            // Both in the picture area's frame, for [_scrollZoom]'s
+            // reason: the pan that comes back is measured from the middle of
+            // what the rulers have left.
+            onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
+              cursor: at - _bandOffset,
+              factor: out ? 1 / zoomToolStep : zoomToolStep,
+              fitted: fitted.shift(-_bandOffset),
+              compSize: Size(size.width.toDouble(), size.height.toDouble()),
+              panel: _pictureArea(constraints),
+            )),
+            onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
+              box: box.shift(-_bandOffset),
+              out: out,
+              fitted: fitted.shift(-_bandOffset),
+              compSize: Size(size.width.toDouble(), size.height.toDouble()),
+              panel: _pictureArea(constraints),
+            )),
+            onZoom: goToNamedZoom,
           ),
         );
       },

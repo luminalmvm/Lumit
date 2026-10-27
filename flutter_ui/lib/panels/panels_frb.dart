@@ -71,7 +71,9 @@ class LookHeld extends StatelessWidget {
     final tools = context.read<LumitUiState>().tools;
     return ListenableBuilder(
       listenable: tools,
-      child: child,
+      // Its own layer under the dim, so a meter ticking inside a dimmed panel
+      // repaints the meter, not the whole panel.
+      child: RepaintBoundary(child: child),
       builder: (context, child) => IgnorePointer(
         ignoring: tools.lookOnly,
         child: ExcludeFocus(

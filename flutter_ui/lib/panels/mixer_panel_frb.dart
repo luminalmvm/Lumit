@@ -111,7 +111,10 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
   @override
   void initState() {
     super.initState();
-    if (widget.feed == null) _feed.start();
+    if (widget.feed == null) {
+      final ui = Provider.of<LumitUiState>(context, listen: false);
+      _feed.start(wake: Listenable.merge([ui.playing, ui.playheadFrame]));
+    }
   }
 
   /// The strips' own scroll, for the bar under them and the wheel.
@@ -565,7 +568,11 @@ class _LimiterLamp extends StatelessWidget {
         child: HoverMark(
           builder: (context, over) => GestureDetector(
             key: const ValueKey('limiter-lamp'),
-            onTap: resetAudioClip,
+            onTap: () {
+              resetAudioClip();
+              // A parked poll would leave the lamp lit.
+              feed.wake();
+            },
             child: AnimatedContainer(
               duration: ThemeScope.of(context).motion.mark.duration,
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),

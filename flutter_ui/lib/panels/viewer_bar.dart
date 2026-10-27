@@ -7,6 +7,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -47,7 +48,10 @@ class ViewerBar extends StatelessWidget {
   /// times a second to be told what the frontend already knows.
   final ViewerLook look;
   final bool playing;
-  final int frame;
+
+  /// Where the playhead is. Listened to by the clock alone, so the rest of
+  /// the bar is not rebuilt for every frame of playback.
+  final ValueListenable<int> playhead;
   final BridgeCompSettings settings;
   final CompositionReference comp;
 
@@ -69,6 +73,9 @@ class ViewerBar extends StatelessWidget {
   final VoidCallback onGrid;
   final VoidCallback onWireframes;
   final ValueChanged<double> onStops;
+
+  /// The exposure while it is scrubbed: the engine is told, nothing is saved.
+  final ValueChanged<double> onStopsLive;
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
@@ -107,7 +114,7 @@ class ViewerBar extends StatelessWidget {
     required this.wireframes,
     required this.look,
     required this.playing,
-    required this.frame,
+    required this.playhead,
     required this.settings,
     required this.comp,
     required this.compSize,
@@ -118,6 +125,7 @@ class ViewerBar extends StatelessWidget {
     required this.onGrid,
     required this.onWireframes,
     required this.onStops,
+    required this.onStopsLive,
     required this.onPlayPause,
     required this.onSeek,
     required this.hasSnapshot,
@@ -201,7 +209,7 @@ class ViewerBar extends StatelessWidget {
                   ...viewerTransportMarks(
                     t,
                     playing: playing,
-                    frame: frame,
+                    playhead: playhead,
                     settings: settings,
                     comp: comp,
                     onPlayPause: onPlayPause,
@@ -306,23 +314,8 @@ class ViewerBar extends StatelessWidget {
         // what says so while it is engaged.
         LumitTooltip(
           message: l10n.tipViewerExposure,
-          child: DragValueField(
-            key: const ValueKey('viewer-exposure'),
-            value: look.stops,
-            bare: true,
-            // Ten stops each way: past that a picture is white or black
-            // whatever is in it, so the drag has somewhere to stop.
-            min: -10,
-            max: 10,
-            speed: 0.1,
-            decimals: 1,
-            signed: true,
-            resetTo: 0,
-            // Snapped to the tenth the box actually reads, so a drag cannot
-            // leave a hair of exposure behind that shows as `+0.0` while the
-            // engine treats the view as engaged.
-            onChanged: (v) => onStops((v * 10).round() / 10),
-          ),
+          child: _ExposureField(
+              stops: look.stops, onStops: onStops, onLive: onStopsLive),
         ),
         // One edge each side of the seam rather than two: the hairline is a
         // plain rule and carries none of its own.
@@ -367,7 +360,7 @@ class ViewerBar extends StatelessWidget {
 List<Widget> viewerTransportMarks(
   LumitTheme t, {
   required bool playing,
-  required int frame,
+  required ValueListenable<int> playhead,
   required BridgeCompSettings settings,
   required CompositionReference comp,
   required VoidCallback onPlayPause,
@@ -401,7 +394,7 @@ List<Widget> viewerTransportMarks(
       key: const ValueKey('viewer-step-back'),
       icon: LumitIcon.previousFrame,
       colour: t.textMuted,
-      onPressed: () => onSeek(frame - 1),
+      onPressed: () => onSeek(playhead.value - 1),
       tip: l10n.tipTransportPrevious,
       action: 'playback.frame.prev',
     ),
@@ -437,7 +430,7 @@ List<Widget> viewerTransportMarks(
       key: const ValueKey('viewer-step-forward'),
       icon: LumitIcon.nextFrame,
       colour: t.textMuted,
-      onPressed: () => onSeek(frame + 1),
+      onPressed: () => onSeek(playhead.value + 1),
       tip: l10n.tipTransportNext,
       action: 'playback.frame.next',
     ),
@@ -474,19 +467,23 @@ List<Widget> viewerTransportMarks(
     // The clock, in a slot wide enough for the longest time this comp can
     // show, and clickable to type one (docs/07 §2.2 item 11). A time past
     // either end of the composition lands on that end.
+    // The one part of the transport that moves while playing.
     if (clock)
-      TimeReadout(
-        key: const ValueKey('viewer-timecode'),
-        frame: frame,
-        format: (f) => timecodeOf(f, settings),
-        widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-        style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
-        parse: (text) =>
-            framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-        onCommit: onSeek,
-        minFrame: 0,
-        maxFrame: _lastFrameOf(settings),
-        tooltip: l10n.tipFrameOnScreen,
+      ValueListenableBuilder<int>(
+        valueListenable: playhead,
+        builder: (context, frame, _) => TimeReadout(
+          key: const ValueKey('viewer-timecode'),
+          frame: frame,
+          format: (f) => timecodeOf(f, settings),
+          widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+          style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
+          parse: (text) =>
+              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+          onCommit: onSeek,
+          minFrame: 0,
+          maxFrame: _lastFrameOf(settings),
+          tooltip: l10n.tipFrameOnScreen,
+        ),
       ),
   ];
 }
@@ -565,6 +562,60 @@ const double _barKeepsLooking = 400;
 
 /// Below this the clock goes and the transport stands alone.
 const double _barKeepsClock = 280;
+
+/// The exposure box. A scrub only tells the engine, so the number it shows
+/// meanwhile is held here, and the look is written down once when it lets go.
+class _ExposureField extends StatefulWidget {
+  final double stops;
+  final ValueChanged<double> onStops;
+  final ValueChanged<double> onLive;
+
+  const _ExposureField(
+      {required this.stops, required this.onStops, required this.onLive});
+
+  @override
+  State<_ExposureField> createState() => _ExposureFieldState();
+}
+
+class _ExposureFieldState extends State<_ExposureField> {
+  double? _live;
+
+  // Snapped to the tenth the box actually reads, so a drag cannot leave a
+  // hair of exposure behind that shows as `+0.0` while the engine treats the
+  // view as engaged.
+  static double _snap(num v) => (v * 10).round() / 10;
+
+  void _commit(double stops) {
+    setState(() => _live = null);
+    widget.onStops(stops);
+  }
+
+  @override
+  Widget build(BuildContext context) => DragValueField(
+        key: const ValueKey('viewer-exposure'),
+        value: _live ?? widget.stops,
+        bare: true,
+        // Ten stops each way: past that a picture is white or black whatever
+        // is in it, so the drag has somewhere to stop.
+        min: -10,
+        max: 10,
+        speed: 0.1,
+        decimals: 1,
+        signed: true,
+        resetTo: 0,
+        onChanged: (v) => _commit(_snap(v)),
+        onChangeLive: (v) {
+          final stops = _snap(v);
+          setState(() => _live = stops);
+          widget.onLive(stops);
+        },
+        onChangeEnd: (v) => _commit(_snap(v)),
+        onDragCancel: () {
+          final live = _live;
+          if (live != null) _commit(live);
+        },
+      );
+}
 
 /// The one mark the ways of looking fold into on a narrow bar.
 ///

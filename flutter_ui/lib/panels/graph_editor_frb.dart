@@ -3283,6 +3283,33 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 const double graphGutterWidth = 34;
 
 /// The grid, the value-axis labels, and every channel's curve.
+/// An expression's curve across a span, held until the document or the span
+/// moves, so a scroll repainting the graph asks the engine nothing.
+List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
+    BridgeRational end, int samples, BigInt? revision) {
+  if (_curvesRevision != revision || _curves.length >= 64) {
+    _curves.clear();
+    _curvesRevision = revision;
+  }
+  final layer = channel.entry.layer;
+  return _curves[(
+    channel.scalar,
+    layer.internallayerId,
+    channel.expressionRow,
+    start,
+    end,
+  )] ??= sampleScalarRangeWithContext(
+      scalar: channel.scalar,
+      layer: layer,
+      start: start,
+      end: end,
+      samples: samples,
+      row: channel.expressionRow);
+}
+
+final Map<Object, List<double>> _curves = {};
+BigInt? _curvesRevision;
+
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;
 
@@ -3414,13 +3441,8 @@ class _GraphPainter extends CustomPainter {
             timeOfSubframe(endSeconds * f, comp.fpsExact.$1, comp.fpsExact.$2);
 
         const samples = 500;
-        final result = sampleScalarRangeWithContext(
-            scalar: channel.scalar,
-            layer: channel.entry.layer,
-            start: start,
-            end: end,
-            samples: samples,
-            row: channel.expressionRow);
+        final result =
+            _expressionCurve(channel, start, end, samples, comp.heldRevision);
 
         for (var i = 0; i < result.length; i++) {
           final x = size.width * (i.toDouble() / samples.toDouble());
