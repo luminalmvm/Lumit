@@ -547,11 +547,6 @@ figure.example img {
   width: 100%;
   height: auto;
 }
-figure.example figcaption {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--sl-color-gray-3);
-}
 
 /* The before-and-after wipe. The untouched frame sits underneath; the effect is
    laid over it and clipped where the range input says, set straight on the
