@@ -57,14 +57,6 @@ enum WireStyle {
   hanging,
 }
 
-/// The duration owned widgets animate with under a level. All ≈ the egui
-/// 120 ms micro-motion budget; None is instant.
-Duration animationDuration(AnimationLevel level) => switch (level) {
-      AnimationLevel.all => const Duration(milliseconds: 120),
-      AnimationLevel.minimal => const Duration(milliseconds: 50),
-      AnimationLevel.none => Duration.zero,
-    };
-
 /// Every named colour scheme Lumit ships, in picker order.
 enum LumitColorScheme {
   dark,

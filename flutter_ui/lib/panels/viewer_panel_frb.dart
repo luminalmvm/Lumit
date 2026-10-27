@@ -74,6 +74,7 @@ import '../state/viewer_views.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'placeholder.dart';
@@ -375,9 +376,15 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   double? _zoomFrom;
   Offset _panFrom = Offset.zero;
 
-  /// How much motion the shell is set to show, read in [build] because that is
-  /// where the theme scope is in reach.
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  /// How a zoom flies under the shell's shape and motion setting, read in
+  /// [build] because that is where the theme scope is in reach.
+  MotionSpec _zoomFlight = MotionSpec.still;
+
+  /// How far through a zoom flight the picture is, eased, or null when none
+  /// is running.
+  double? get _flightAt => _zoomFrom != null && _zoomMotion.value < 1
+      ? _zoomFlight.curve.transform(_zoomMotion.value)
+      : null;
 
   // --- Snapshots (docs/07 §2.2 item 14) -------------------------------------
   //
@@ -496,19 +503,22 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// from the rectangle it measured — asking for it again here would need the
   /// constraints, which live in the layout builder.
   void _goToZoom(double? scale, Offset pan, {required double from}) {
+    // From the pan on screen, as the scale is, so a zoom sent mid-flight
+    // carries on from where the picture is rather than jumping.
+    final at = _flightAt;
+    final panFrom = at == null ? _pan : Offset.lerp(_panFrom, _pan, at)!;
     setState(() {
       _zoomFrom = from;
-      _panFrom = _pan;
+      _panFrom = panFrom;
       _zoom = scale;
       _pan = pan;
     });
-    final duration = animationDuration(_animationLevel);
-    if (duration == Duration.zero) {
+    if (_zoomFlight.isStill) {
       _zoomMotion.value = 1;
       _boundUi?.requestFrame();
       return;
     }
-    _zoomMotion.duration = duration;
+    _zoomMotion.duration = _zoomFlight.duration;
     _zoomMotion.forward(from: 0);
   }
 
@@ -656,7 +666,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     final footage = _footageOf(ui);
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     // Roomed panes part the bars from the picture and gather the transport
     // into one pill; flush panes weld the bars on.
     final round = t.tokens.roomed;
@@ -999,8 +1009,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     var scale = target;
     var pan = _pan;
     final from = _zoomFrom;
-    if (from != null && _zoomMotion.value < 1) {
-      final t = Curves.easeOutCubic.transform(_zoomMotion.value);
+    final t = _flightAt;
+    if (from != null && t != null) {
       // Geometric, not linear: magnification is a *ratio*, and lerping the
       // number itself makes the second half of a big zoom crawl while the
       // first half bolts. Interpolating the logarithm is what makes a 1x → 8x
@@ -1096,9 +1106,13 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       // percentage in the readout would sit at whatever it was until a frame
       // happened to arrive. After the frame, never during it: this runs inside
       // a layout, where a `setState` is an assertion rather than a rebuild.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() {});
-      });
+      // A zoom in flight already rebuilds the panel every tick, so it needs
+      // no second build, and the tick it lands on is not in flight.
+      if (!_zoomMotion.isAnimating) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
     }
     state.reportViewerScale(
       _shownScale > fit ? _shownScale : fit,

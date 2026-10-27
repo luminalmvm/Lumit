@@ -130,7 +130,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   double _zoomAnchorViewportX = 0;
   bool _zoomAnchorHeld = false;
   bool _pullingBackZoom = false;
-  AnimationLevel _animationLevel = AnimationLevel.all;
   Motion? _motion;
 
   /// The lanes' viewport and the comp's length as the last layout knew them.
@@ -1554,7 +1553,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _setZoom(double z, {bool fly = true}) {
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
     _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+        motion: fly ? _motion?.zoom ?? MotionSpec.still : MotionSpec.still);
   }
 
   void _zoomDragStart() {
@@ -1638,7 +1637,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _motion?.zoom ?? MotionSpec.still,
       );
       return;
     }
@@ -2710,7 +2709,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       BuildContext context, LumitUiState ui, CompositionReference comp) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
     _motion = scope.motion;
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;

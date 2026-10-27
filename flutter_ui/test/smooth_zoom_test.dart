@@ -3,7 +3,10 @@
 // its own, and the flight it drives.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/theme/motion.dart';
 import 'package:lumit_flutter/widgets/smooth_zoom.dart';
+
+const flight = MotionSpec(Duration(milliseconds: 120));
 
 void main() {
   group('The flight', () {
@@ -11,7 +14,7 @@ void main() {
       final zoom = SmoothZoom(vsync: tester, initial: 1);
       addTearDown(zoom.dispose);
 
-      zoom.goTo(4);
+      zoom.goTo(4, motion: flight);
       expect(zoom.target, 4);
       expect(zoom.value, 1, reason: 'it has not moved yet');
       await tester.pumpAndSettle();
@@ -23,9 +26,9 @@ void main() {
       final zoom = SmoothZoom(vsync: tester, initial: 1, min: 0.5, max: 8);
       addTearDown(zoom.dispose);
 
-      zoom.goTo(1000);
+      zoom.goTo(1000, motion: flight);
       expect(zoom.target, 8);
-      zoom.goTo(0.001);
+      zoom.goTo(0.001, motion: flight);
       expect(zoom.target, 0.5);
       await tester.pumpAndSettle();
     });
@@ -41,11 +44,11 @@ void main() {
       addTearDown(zoom.dispose);
 
       // Two notches a long way apart: no boost, so each is worth exactly 2×.
-      zoom.nudge(2);
+      zoom.nudge(2, motion: flight);
       now += const Duration(seconds: 1);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
-      zoom.nudge(2);
+      zoom.nudge(2, motion: flight);
       expect(zoom.target, closeTo(4, 1e-6),
           reason: 'the second notch doubled the target, not the value it had '
               'reached part-way through the first flight');
@@ -62,7 +65,7 @@ void main() {
       addTearDown(clicked.dispose);
       for (var i = 0; i < 3; i++) {
         now += const Duration(milliseconds: 400);
-        clicked.nudge(1.12);
+        clicked.nudge(1.12, motion: flight);
       }
       final clickedTarget = clicked.target;
 
@@ -71,7 +74,7 @@ void main() {
       addTearDown(rolled.dispose);
       for (var i = 0; i < 3; i++) {
         now += const Duration(milliseconds: 15);
-        rolled.nudge(1.12);
+        rolled.nudge(1.12, motion: flight);
       }
       expect(rolled.target, greaterThan(clickedTarget),
           reason: 'the same three notches, rolled, cover more ground');

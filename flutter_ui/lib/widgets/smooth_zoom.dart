@@ -24,12 +24,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-/// How long a zoom flight lasts when nothing interrupts it.
-///
-/// Matched to the Viewer's own: long enough to read as motion, short enough
-/// that a second notch lands inside it, which is what makes a rolled wheel feel
-/// continuous rather than stepped.
-const Duration smoothZoomFlight = Duration(milliseconds: 140);
+import '../theme/motion.dart';
 
 /// Below this gap between notches the wheel counts as *rolled* rather than
 /// clicked, and each notch starts being worth more.
@@ -77,8 +72,7 @@ class SmoothZoom extends ChangeNotifier {
         _target = initial,
         _from = initial,
         _clock = clock ?? _defaultClock {
-    _controller = AnimationController(vsync: vsync, duration: smoothZoomFlight)
-      ..addListener(_tick);
+    _controller = AnimationController(vsync: vsync)..addListener(_tick);
   }
 
   /// A monotonic clock, injectable so the acceleration can be driven from a
@@ -98,6 +92,7 @@ class SmoothZoom extends ChangeNotifier {
   double _value;
   double _target;
   double _from;
+  Curve _curve = Curves.linear;
   Duration? _lastNudge;
 
   /// The magnification to draw at, this frame.
@@ -113,7 +108,7 @@ class SmoothZoom extends ChangeNotifier {
   void _tick() {
     // Geometric, not linear: magnification is a *ratio*, so equal time should
     // buy equal ratio. Lerping the logarithm is what does that.
-    final t = _controller.value;
+    final t = _curve.transform(_controller.value);
     _value = math.exp(
       _lerp(math.log(_from), math.log(_target), t),
     );
@@ -122,24 +117,25 @@ class SmoothZoom extends ChangeNotifier {
 
   static double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-  /// Send the zoom to [to], flying there over [duration].
+  /// Send the zoom to [to], flying there on [motion].
   ///
-  /// A [duration] of zero arrives at once, which is what the shell's
+  /// A still [motion] arrives at once, which is what the shell's
   /// reduced-motion setting asks for — the destination is the same either way,
   /// so nothing about the result depends on the animation running.
-  void goTo(double to, {Duration duration = smoothZoomFlight}) {
+  void goTo(double to, {required MotionSpec motion}) {
     final clamped = to.clamp(min, max).toDouble();
     if (clamped == _target && !_controller.isAnimating) return;
     _from = _value;
     _target = clamped;
-    if (duration == Duration.zero) {
+    if (motion.isStill) {
       _controller.stop();
       _value = clamped;
       notifyListeners();
       return;
     }
+    _curve = motion.curve;
     _controller
-      ..duration = duration
+      ..duration = motion.duration
       ..forward(from: 0);
   }
 
@@ -149,23 +145,19 @@ class SmoothZoom extends ChangeNotifier {
   /// quickly go further; the flight then finishes and settles on its own, which
   /// is what makes a hard roll end cleanly rather than stopping dead wherever
   /// the last notch fell.
-  void nudge(
-    double factorPerNotch, {
-    Duration duration = smoothZoomFlight,
-  }) {
+  void nudge(double factorPerNotch, {required MotionSpec motion}) {
     final now = _clock();
     final since = _lastNudge == null ? smoothZoomFastGap : now - _lastNudge!;
     _lastNudge = now;
     final boost = zoomBoost(since);
     // Applied to the *target*, not to where the flight has reached, so a second
     // notch inside a flight adds to the journey instead of restarting it short.
-    goTo(_target * math.pow(factorPerNotch, boost).toDouble(),
-        duration: duration);
+    goTo(_target * math.pow(factorPerNotch, boost).toDouble(), motion: motion);
   }
 
   /// Put the zoom at [to] with no flight — for the caller that is restoring a
   /// remembered value rather than performing a gesture.
-  void jumpTo(double to) => goTo(to, duration: Duration.zero);
+  void jumpTo(double to) => goTo(to, motion: MotionSpec.still);
 
   @override
   void dispose() {

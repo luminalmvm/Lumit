@@ -47,6 +47,7 @@ import '../state/drag_payloads.dart';
 import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
@@ -192,7 +193,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   double _zoomAnchorViewportX = 0;
   bool _zoomAnchorHeld = false;
   bool _pullingBackZoom = false;
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  MotionSpec _zoomFlight = MotionSpec.still;
 
   /// The lanes' viewport width and the comp's length as the last layout knew
   /// them: what a peak window is worked out from, and what the zoom's ceiling
@@ -961,8 +962,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   void _setZoom(double z, {bool fly = true}) {
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
-    _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+    _zoomMotion.goTo(z, motion: fly ? _zoomFlight : MotionSpec.still);
   }
 
   void _zoomDragStart() {
@@ -1037,7 +1037,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _zoomFlight,
       );
       return;
     }
@@ -1134,7 +1134,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       BuildContext context, LumitUiState ui, CompositionReference comp) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
