@@ -54,6 +54,7 @@ const layers = [
       readonly
       spellcheck="false"
       autocomplete="off"
+      enterkeyhint="done"
       title="Drag to scrub. Click to type a frame, or seconds:frames."
       aria-label="Current time"
     />
@@ -157,6 +158,7 @@ const layers = [
     font-feature-settings: "zero";
     text-align: center;
     cursor: ew-resize;
+    touch-action: pan-y;
   }
   .hc-tc:not([readonly]) {
     border-color: var(--key);
@@ -367,6 +369,25 @@ const layers = [
     left: -4px;
     border: 4.5px solid transparent;
     border-top: 7px solid var(--color-accent-2);
+  }
+  /* A finger needs more to hold than a pointer, and a phone zooms in on a
+     box with text under 16px. */
+  @media (pointer: coarse) {
+    .hc-tc {
+      font-size: 16px;
+    }
+    .hc-name,
+    .hc-lane {
+      height: 30px;
+    }
+    .hc-key {
+      width: 26px;
+      height: 26px;
+      margin: -13px 0 0 -13px;
+    }
+    .hc-key::before {
+      inset: 9px;
+    }
   }
   @media (max-width: 520px) {
     .hc {

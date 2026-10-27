@@ -100,6 +100,11 @@ const rendered = await Promise.all(
       color 0.15s,
       border-color 0.15s;
   }
+  @media (pointer: coarse) {
+    .jump a {
+      padding: 15px 12px;
+    }
+  }
   .jump a:hover {
     border-color: var(--color-line-2);
     color: var(--color-fg);

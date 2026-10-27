@@ -97,13 +97,13 @@ const AUTH = {
     </div>
   </section>
 
-  <div id="bar" class="sticky top-16 z-10 mt-12 border-y border-line bg-ink/95">
+  <div id="bar" class="z-10 mt-12 sm:sticky sm:top-16 border-y border-line bg-ink/95">
     <div class="wrap flex flex-wrap items-center gap-x-5 gap-y-3 py-3.5">
       <label class="flex max-w-full items-center gap-2.5 text-[14px] text-fg-3">
         Language
         <select
           id="lang"
-          class="h-9 min-w-0 rounded-ctl border border-line-2 bg-ink-2 px-2.5 text-[15px] text-fg"
+          class="h-9 min-w-0 rounded-ctl border border-line-2 bg-ink-2 px-2.5 text-base text-fg"
         >
           {
             LANGUAGES.map((l) => (
@@ -262,7 +262,7 @@ const AUTH = {
             : ""
         }
         <input
-          class="mt-2.5 h-10 w-full rounded-ctl border border-line-2 bg-ink-2 px-3 text-[15px] text-fg outline-none focus:border-accent-2 disabled:border-line disabled:text-fg-4"
+          class="mt-2.5 h-10 w-full rounded-ctl border border-line-2 bg-ink-2 px-3 text-base text-fg outline-none focus:border-accent-2 disabled:border-line disabled:text-fg-4"
           type="text" dir="auto" spellcheck="false" autocomplete="off"
           aria-label="${esc(english)}" value="${esc(value)}" ${translator ? "" : "disabled"} />
         <p class="mt-1.5 flex flex-wrap gap-x-3 font-mono text-[12px] text-fg-4">

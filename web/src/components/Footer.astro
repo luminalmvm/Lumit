@@ -65,7 +65,7 @@ const columns = [
       }
     </nav>
   </div>
-  <div class="wrap flex flex-wrap gap-x-6 gap-y-2 pb-10 text-[13px] text-fg-4">
+  <div class="legal wrap flex flex-wrap gap-x-6 gap-y-2 pb-10 text-[13px] text-fg-4">
     <a href="/terms" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Terms</a>
     <a href="/privacy" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Privacy</a>
     <a href="/refunds" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Refunds</a>
@@ -90,6 +90,19 @@ const columns = [
   @media (min-width: 640px) {
     .groups {
       grid-template-columns: repeat(3, auto);
+    }
+  }
+  /* Tall enough to hit with a finger. */
+  @media (pointer: coarse) {
+    .links,
+    .legal {
+      row-gap: 0;
+    }
+    .links a,
+    .legal a {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
     }
   }
   /* Wide enough for it: a group's links fill two columns downwards under its

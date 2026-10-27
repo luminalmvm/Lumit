@@ -487,6 +487,18 @@ const questions = [
     width: 96px;
     text-align: center;
   }
+  /* On a phone the ticks take less room, so the feature has more. */
+  @media (max-width: 639px) {
+    .compare th,
+    .compare td {
+      padding-inline: 16px;
+    }
+    .compare th:not(:first-child),
+    .compare td:not(:first-child) {
+      width: 52px;
+      padding-inline: 4px;
+    }
+  }
   .faq {
     border-top: 1px solid var(--color-line);
   }

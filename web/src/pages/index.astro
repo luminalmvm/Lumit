@@ -317,7 +317,8 @@ import Closing from "../components/home/Closing.astro";
           if (!clip) return;
           clip.pause();
           clip.currentTime = 0;
-          if (on && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
+          const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+          if (on && !saveData && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
         });
       },
       true,

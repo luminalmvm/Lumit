@@ -54,6 +54,7 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
   /* Less motion: each part that moves drops its movement where it is
      declared and keeps its fades, and anything that loops plays once. */
@@ -95,7 +96,17 @@
   .btn {
     @apply inline-flex h-10 items-center justify-center gap-2 rounded-ctl border
            border-line-2 bg-transparent px-[18px] text-[15px] text-fg
-           no-underline transition-colors hover:bg-white/[0.05];
+           no-underline transition-colors hover:bg-white/[0.05]
+           select-none touch-manipulation;
+  }
+  /* A press sinks it a touch. */
+  .btn:active {
+    scale: 0.97;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn {
+      transition-property: color, background-color, border-color, scale;
+    }
   }
   .btn-ghost {
     @apply border-line;
