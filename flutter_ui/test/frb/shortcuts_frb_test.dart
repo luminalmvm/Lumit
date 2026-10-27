@@ -285,7 +285,10 @@ void main() {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
+      await tester.pumpAndSettle();
+      // A solid asks for its settings first.
+      await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
+      await tester.pumpAndSettle();
       expect(comp.getLayers().single.getKind(), BridgeLayerKind.solid);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -306,7 +309,9 @@ void main() {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
+      await tester.pumpAndSettle();
       expect(comp.getLayers().map((l) => l.getKind()), [
         BridgeLayerKind.adjustment,
         BridgeLayerKind.solid,

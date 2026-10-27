@@ -553,6 +553,12 @@ void main() {
         final before = comp.getLayers().length;
         await choose(tester, 'Layer', item, under: 'New');
         await tester.pump();
+        // A solid asks for its settings first.
+        if (item == 'Solid') {
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
+          await tester.pumpAndSettle();
+        }
         expect(comp.getLayers(), hasLength(before + 1),
             reason: '$item added one');
       }
