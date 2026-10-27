@@ -912,6 +912,7 @@ Rise
 Robust Video Matting
 Roll
 Roll speed
+Rolloff
 Room size
 Rotation
 Rotation amount

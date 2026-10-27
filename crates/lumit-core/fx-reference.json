@@ -4690,6 +4690,17 @@
           "slider_max": 4.0
         },
         {
+          "id": "rolloff",
+          "label": "Rolloff",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
           "id": "repeat_edge_pixels",
           "label": "Repeat edge pixels",
           "kind": "bool",

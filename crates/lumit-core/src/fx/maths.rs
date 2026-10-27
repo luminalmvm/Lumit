@@ -149,6 +149,18 @@ pub fn transform_op(
     }
 }
 
+/// Glow's Rolloff on one channel: values under `1 − rolloff` pass untouched
+/// and the rest bend smoothly towards 1, so a very bright halo goes white
+/// gradually instead of clipping with a hard edge. Rolloff 0 returns `x`.
+/// The WGSL combine pass spells the same arithmetic.
+pub fn glow_rolloff(x: f32, rolloff: f32) -> f32 {
+    let k = 1.0 - rolloff;
+    if rolloff <= 0.0 || x <= k {
+        return x;
+    }
+    k + rolloff * (1.0 - (-(x - k) / rolloff).exp())
+}
+
 /// The glow bright pass on one channel (docs/08 §3.3 step 1):
 /// `max(0, x − threshold)` with a soft knee — the hinge's onset is weighted
 /// by a smoothstep over `threshold ± knee`, so the bloom fades in over the

@@ -318,6 +318,8 @@ pub struct GlowOp {
     pub tint: [f32; 4],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// 0..1, how much of the top bends towards white (== cpu::GlowHalo's).
+    pub rolloff: f32,
 }
 
 #[repr(C)]
@@ -331,8 +333,8 @@ pub(super) struct GlowParams {
     /// 1 = gate the bright pass by the matte's luma. The combine pass
     /// reads the same uniform and ignores both fields.
     pub(super) matte_on: f32,
-    /// Was Invert; the seam applies it once instead. Always 0.
-    pub(super) _pad0: f32,
+    /// Read by the combine pass only. Was Invert's slot.
+    pub(super) rolloff: f32,
     pub(super) _pad: [f32; 2],
 }
 
@@ -927,7 +929,7 @@ impl FxEngine {
             // survived, which is the whole difference from dissolving the
             // finished glow.
             matte_on: f32::from(matte.is_some()),
-            _pad0: 0.0,
+            rolloff: op.rolloff,
             _pad: [0.0; 2],
         };
         // The bright pass wants ONE picture, so its `orig` slot is free and the

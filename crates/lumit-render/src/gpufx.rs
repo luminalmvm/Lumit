@@ -3514,6 +3514,7 @@ impl GpuEffect for Glow {
                 intensity,
                 tint,
                 mix,
+                rolloff: halo.rolloff,
             },
         )
     }

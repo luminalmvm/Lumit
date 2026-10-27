@@ -146,6 +146,7 @@ pub fn glow(
             fringe_tints: HALO_FRINGE_TINTS,
             fringe_wavelength: false,
             fringe_samples: 0,
+            rolloff: 0.0,
         },
         threshold,
         knee,
@@ -182,6 +183,10 @@ pub struct GlowHalo {
     pub fringe_wavelength: bool,
     /// Wavelength's tap count, 3 to 64. Unread while it is off.
     pub fringe_samples: i32,
+    /// 0..1, how much of the top of the result bends towards white rather
+    /// than clipping (see [`glow_rolloff`](super::maths::glow_rolloff)). 0 is
+    /// off.
+    pub rolloff: f32,
 }
 
 /// Red one way, green on its own pixel, blue the other: the three normalised
@@ -283,7 +288,12 @@ pub fn glow_shaped(
         let o = &original[i..i + 4];
         let hl = &light[i..i + 4];
         for c in 0..3 {
-            let glowed = o[c] + intensity * (hl[c] * tint[c]);
+            let mut glowed = o[c] + intensity * (hl[c] * tint[c]);
+            // The picture's own highlights keep their value, only the light
+            // added on top bends.
+            if halo.rolloff > 0.0 {
+                glowed = o[c].max(super::maths::glow_rolloff(glowed, halo.rolloff));
+            }
             rgba[i + c] = o[c] * (1.0 - mix) + glowed * mix;
         }
         let a = (o[3] + intensity * hl[3]).min(1.0);

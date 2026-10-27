@@ -36,6 +36,7 @@ Parts of the image brighter than the threshold emit a glow.
 | **Colour 3** | Colour | Each channel 0 to 1, scene-linear | 0, 0, 1, 1 | - |
 | **Intensity** | Slider | 0 to 10; higher | 1 | - |
 | **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Rolloff** | Slider | 0 to 1 | 0 | - |
 | **Repeat edge pixels** | Checkbox | On or off | On | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -64,6 +65,7 @@ In the Effect Controls panel:
   Angle and the third the other.
 - **Intensity**: how intense the bloom is.
 - **Tint**: the colour of the bloom. Neutral keeps each highlight's own colour.
+- **Rolloff**: how much of the top of the bloom bends towards white instead of clipping.
 - **Repeat edge pixels**: on keeps the bloom inside the layer's edges. Off spreads it past
   them, and the layer grows to hold it.
 - **Mix**: how much of the result replaces the original.
