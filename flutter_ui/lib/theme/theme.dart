@@ -2375,9 +2375,9 @@ class LumitTheme {
     'monospace',
   ];
 
-  /// Tabular figures where the shape sets numbers in its sans.
-  List<FontFeature>? get _figures =>
-      tokens.tabularNumbers ? const [FontFeature.tabularFigures()] : null;
+  /// Tabular figures in the sans under every shape, so a number set in it
+  /// keeps its width as it changes, and not only under Desk.
+  List<FontFeature> get _figures => const [FontFeature.tabularFigures()];
 
   /// The same for the two mono styles. Paper Mono draws a plain zero unless
   /// it is asked for the slashed one, and a frame readout of "F0" must not
