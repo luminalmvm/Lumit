@@ -1,0 +1,503 @@
+---
+import { Image, getImage } from "astro:assets";
+import SectionHead from "../SectionHead.astro";
+import { MONTHLY, YEARLY } from "../../scripts/pro";
+import sharedShot from "../../assets/shots/story-shared.png";
+import sharedClip from "../../assets/clips/story-shared.mp4";
+
+const sharedFull = {
+  url: (await getImage({ src: sharedShot, width: sharedShot.width, quality: 90 })).src,
+  w: sharedShot.width,
+  h: sharedShot.height,
+};
+
+// Who is in the project and what they have done in the last two minutes, drawn
+// the way the Timeline draws layers. `from` and `to` are where an edit sits
+// along the lane, 0 two minutes ago and 100 now, and a live one is still going.
+// The colours are the ones Lumit gives each person in the clip beside it.
+const people = [
+  {
+    name: "luminal",
+    c: "var(--label-amber)",
+    on: "Tower",
+    status: "Editing",
+    edits: [
+      { from: 3, to: 30, label: "Moved Tower", when: "1m ago", notes: ["Set 3 keyframes on Position", "Eased the landing"] },
+      { from: 58, to: 100, label: "Easing the drop", when: "Now", notes: ["Dragging the speed graph", "Tower, Position"], live: true },
+    ],
+  },
+  {
+    name: "kiriko",
+    c: "var(--label-violet)",
+    on: "Sky",
+    status: "Editing",
+    edits: [
+      { from: 33, to: 58, label: "Added Glow", when: "1m ago", notes: ["Glow on Tower", "Threshold 0.42"], after: 30 },
+      { from: 66, to: 100, label: "Grading Sky", when: "Now", notes: ["Curves and Levels", "Sky adjustment layer"], live: true, show: true },
+    ],
+  },
+  {
+    name: "me",
+    c: "var(--label-mint)",
+    on: "Clouds",
+    status: "Idle",
+    edits: [
+      { from: 6, to: 36, label: "Trimmed Clouds", when: "1m ago", notes: ["Cloud 1 to Cloud 4", "Out points to 05s"] },
+      { from: 40, to: 62, label: "Renamed Rig", when: "45s ago", notes: ["Rig to Camera rig"] },
+    ],
+  },
+  {
+    name: "dara",
+    c: "var(--label-azure)",
+    on: "Looking",
+    status: "Watching",
+    edits: [],
+    watching: 40,
+  },
+];
+
+const editing = people.filter((p) => p.status !== "Watching").length;
+const watching = people.length - editing;
+---
+
+<section id="together" class="wrap flex scroll-mt-20 flex-col gap-12 pb-20 sm:pb-28">
+  <SectionHead kicker="Multi-edit" title="Edit one project together." no="03 / 07">
+    <Fragment slot="lede">
+      Invite friends by their username, or send them an invite link.
+    </Fragment>
+  </SectionHead>
+
+  <div class="grid gap-5 lg:grid-cols-12">
+    <div class="board lit lg:col-span-7" style="--c:var(--label-violet)" data-reveal>
+      <p class="sr-only">
+        Four people in the project Luma Key. luminal is easing the Tower layer, kiriko is
+        grading the sky, and dara is watching.
+      </p>
+      <div class="top" aria-hidden="true">
+        <span class="faces">
+          {people.map((p) => <i style={`--p:${p.c}`} />)}
+        </span>
+        <b>Luma Key</b>
+        <span class="meta">{editing} editing · {watching} watching</span>
+        <span class="since">Last 2 min</span>
+      </div>
+
+      <div class="grid-lanes" aria-hidden="true">
+        <span />
+        <div class="ruler">
+          <span style="left:0">-2m</span>
+          <span class="mid" style="left:25%">-90s</span>
+          <span style="left:50%">-60s</span>
+          <span class="mid" style="left:75%">-30s</span>
+          <b>Now</b>
+        </div>
+
+        {
+          people.map((p, row) => (
+            <Fragment>
+              <div class="who" style={`--p:${p.c}`}>
+                <i />
+                <span>
+                  <b>{p.name}</b>
+                  <em>{p.on}</em>
+                </span>
+                {p.status !== "Editing" && <small>{p.status}</small>}
+              </div>
+              <div class="lane" style={`--p:${p.c}`}>
+                {p.watching !== undefined && <span class="look" style={`left:${p.watching}%`} />}
+                {p.edits.map((e) => e.after !== undefined && (
+                  <i class="link" style={`left:${e.after}%;width:${e.from - e.after}%`} />
+                ))}
+                {p.edits.map((e) => (
+                  <span
+                    class:list={["edit", e.live && "live", e.show && "show"]}
+                    style={`left:${e.from}%;width:${e.to - e.from}%`}
+                  >
+                    <span class="name">{e.label}</span>
+                    <span class:list={["tip", row > 1 && "tip-up"]}>
+                      <b>
+                        {p.name} · {e.when}
+                      </b>
+                      {e.notes.map((n) => (
+                        <span>{n}</span>
+                      ))}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </Fragment>
+          ))
+        }
+      </div>
+    </div>
+
+    <figure class="lit shot m-0 flex flex-col rounded-card border border-line bg-ink-2 lg:col-span-5" style="--c:var(--label-amber)" data-reveal>
+      <button type="button" class="zoom relative border-b border-line bg-ink" data-zoom={sharedFull.url} data-w={sharedFull.w} data-h={sharedFull.h} aria-label="Enlarge this screenshot">
+        <Image
+          class="block w-full"
+          src={sharedShot}
+          alt="A multi-edit project: two other people's pointers named in the Viewer, and their playheads in their own colours on the Timeline"
+          widths={[720, 1000, 1400]}
+          sizes="(min-width: 1360px) 490px, (min-width: 1024px) 40vw, 100vw"
+          loading="lazy"
+          quality={90}
+        />
+        <video class="clip" data-clip src={sharedClip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+      </button>
+      <figcaption class="flex flex-col gap-2.5 p-7">
+        <span class="text-[15px] leading-[1.45] text-fg-3">
+          One person hosts and sends an invite, and up to 16 people can join. Edits appear for
+          everyone as they're made, and each person has a colour for their pointer, playhead, and
+          selection.
+        </span>
+      </figcaption>
+    </figure>
+  </div>
+
+  {/* Multi-edit is free on your own network. Pro is what takes it anywhere. */}
+  <a class="pro lit" href="/pro" style="--c:var(--key-jade)" data-reveal>
+    <span class="pro-name">
+      <img src="/lumit-wordmark.svg" alt="Lumit" width="59" height="22" />
+      <span class="badge"><span class="sweep">Pro</span></span>
+    </span>
+    <span class="pro-what">
+      Multi-edit is free on your own network. Pro adds a relay so anyone can join from
+      anywhere, with previews, comments, sync, and backups.
+    </span>
+    <span class="pro-price">${MONTHLY} a month, or ${YEARLY} a year</span>
+    <span class="go">See Pro</span>
+  </a>
+</section>
+
+<style>
+  .board {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-2);
+  }
+
+  /* The project, who is in it, and how far back the lanes go. */
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-line);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .top b {
+    color: var(--color-fg);
+    font-weight: 400;
+  }
+  .meta {
+    overflow: hidden;
+    color: var(--color-fg-3);
+    text-overflow: ellipsis;
+  }
+  .since {
+    margin-left: auto;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .faces {
+    display: flex;
+  }
+  .faces i {
+    width: 14px;
+    height: 14px;
+    margin-left: -4px;
+    border: 2px solid var(--color-ink-2);
+    border-radius: 50%;
+    background: var(--p);
+  }
+  .faces i:first-child {
+    margin-left: 0;
+  }
+
+  /* Names on the left and lanes on the right, the way the Timeline splits. */
+  .grid-lanes {
+    position: relative;
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    flex: 1;
+    grid-template-rows: 36px;
+    grid-auto-rows: minmax(52px, 1fr);
+    padding: 4px 20px 16px;
+    font-size: 13px;
+  }
+  .ruler {
+    position: relative;
+    align-self: center;
+    height: 20px;
+    color: var(--color-fg-4);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-feature-settings: "zero";
+  }
+  .ruler span {
+    position: absolute;
+    top: 4px;
+  }
+  .ruler b {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 3px 6px;
+    border-radius: var(--radius-ctl);
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    color: var(--color-fg);
+    font-weight: 400;
+  }
+
+  .who {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+  }
+  .who > i {
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--p);
+  }
+  .who span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+  .who b {
+    color: var(--color-fg);
+    font-weight: 400;
+  }
+  .who em {
+    color: var(--color-fg-4);
+    font-size: 12px;
+    font-style: normal;
+  }
+  .who small {
+    padding: 2px 5px;
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink-3);
+    color: var(--color-fg-3);
+    font-size: 11px;
+  }
+
+  .lane {
+    position: relative;
+    border-top: 1px solid var(--color-line);
+  }
+  /* Older edits fade into the left edge, the way they leave the window. The
+     tips sit over the fade. */
+  .lane::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 -1px;
+    z-index: 1;
+    width: 12%;
+    background: linear-gradient(to right, var(--color-ink-2), transparent);
+    pointer-events: none;
+  }
+  .edit {
+    position: absolute;
+    top: calc(50% - 14px);
+    height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    border: 1px solid color-mix(in srgb, var(--p) 45%, transparent);
+    border-radius: var(--radius-ctl);
+    background: color-mix(in srgb, var(--p) 16%, var(--color-ink-2));
+    color: var(--color-fg-2);
+    white-space: nowrap;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
+  }
+  .edit:hover {
+    border-color: var(--p);
+    background: color-mix(in srgb, var(--p) 26%, var(--color-ink-2));
+    color: var(--color-fg);
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Still going: the end stands bright at now, and light runs along it. */
+  .live {
+    overflow: visible;
+    border-right: 2px solid var(--p);
+    background:
+      linear-gradient(90deg, transparent, color-mix(in srgb, var(--p) 22%, transparent) 50%, transparent) 0 0 / 40% 100% no-repeat,
+      color-mix(in srgb, var(--p) 20%, var(--color-ink-2));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .live {
+      animation: run 2.6s linear infinite;
+    }
+  }
+  @keyframes run {
+    from { background-position: -60% 0, 0 0; }
+    to { background-position: 160% 0, 0 0; }
+  }
+
+  /* One person's edit following on from another's, from the row above. */
+  .link {
+    position: absolute;
+    top: -50%;
+    height: 100%;
+    border-bottom: 1px dashed var(--color-fg-4);
+    border-left: 1px dashed var(--color-fg-4);
+    border-bottom-left-radius: 6px;
+  }
+  /* Someone who can only look: a hollow line from when they joined. */
+  .look {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    border-top: 1px dashed color-mix(in srgb, var(--p) 60%, transparent);
+  }
+  .look::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--p);
+  }
+
+  /* What an edit was, under the pointer. The newest is open until a pointer
+     comes to the lanes. */
+  .tip {
+    position: absolute;
+    z-index: 2;
+    top: calc(100% + 8px);
+    right: 0;
+    display: flex;
+    min-width: 200px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-line-2);
+    border-radius: var(--radius-card);
+    background: var(--color-ink-3);
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
+    color: var(--color-fg-2);
+    font-size: 12.5px;
+    line-height: 1.35;
+    opacity: 0;
+    translate: 0 -4px;
+    pointer-events: none;
+    transition:
+      opacity 0.15s,
+      translate 0.15s;
+  }
+  .tip-up {
+    top: auto;
+    bottom: calc(100% + 8px);
+    translate: 0 4px;
+  }
+  .tip b {
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+  }
+  .tip span::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin: 0 8px 2px 0;
+    border-radius: 50%;
+    background: var(--p);
+  }
+  .edit:hover .tip,
+  .grid-lanes:not(:hover) .show .tip {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  /* The Pro strip under the section. */
+  .pro {
+    display: grid;
+    align-items: center;
+    gap: 14px 32px;
+    padding: 22px 28px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background:
+      radial-gradient(50% 140% at 0% 50%, color-mix(in srgb, var(--key-jade) 8%, transparent), transparent 70%),
+      var(--color-ink-2);
+    color: var(--color-fg-2);
+    font-size: 15px;
+    line-height: 1.45;
+    text-decoration: none;
+  }
+  .pro-name {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .badge {
+    padding: 3px 6px;
+    border: 1px solid color-mix(in srgb, var(--key-jade) 50%, transparent);
+    border-radius: var(--radius-ctl);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sweep {
+    background: linear-gradient(90deg, var(--key-jade), var(--key-sky));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .pro-price {
+    color: var(--color-fg);
+    white-space: nowrap;
+  }
+  .pro:hover .go {
+    color: var(--color-fg);
+  }
+  .pro:hover .go::after {
+    transform: translateX(3px);
+  }
+  @media (min-width: 1024px) {
+    .pro {
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .grid-lanes {
+      grid-template-columns: 84px minmax(0, 1fr);
+      padding-inline: 14px;
+      font-size: 12px;
+    }
+    .who em,
+    .who small,
+    .ruler .mid,
+    .meta {
+      display: none;
+    }
+    .edit {
+      padding: 0 6px;
+    }
+    .tip {
+      display: none;
+    }
+  }
+</style>

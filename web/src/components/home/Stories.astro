@@ -1,14 +1,13 @@
 ---
 import { Image, getImage } from "astro:assets";
 import SectionHead from "../SectionHead.astro";
-import sharedShot from "../../assets/shots/story-shared.png";
+import phoneShot from "../../assets/shots/story-iphone.jpg";
 import setupShot from "../../assets/shots/story-setup.png";
 import textShot from "../../assets/shots/story-text.png";
 import shortcutsShot from "../../assets/shots/story-shortcuts.png";
 // A card's clip: the same box as its picture, recorded from the application,
 // and the picture is the clip's first frame. A card with no clip is its
 // picture and nothing else.
-import sharedClip from "../../assets/clips/story-shared.mp4";
 import setupClip from "../../assets/clips/story-setup.mp4";
 import textClip from "../../assets/clips/story-text.mp4";
 import shortcutsClip from "../../assets/clips/story-shortcuts.mp4";
@@ -19,19 +18,20 @@ const fullSize = async (src: ImageMetadata) => ({
   h: src.height,
 });
 
-// Four parts of the application, each cut out of a whole-window capture so
-// the interface in it can be read at the size it is shown. A wide card and a
-// narrow one share a row, and the pictures are cut to the shapes that makes.
+// Three parts of the application, each cut out of a whole-window capture so
+// the interface in it can be read at the size it is shown, and Lumit for
+// iPhone. A wide card and a narrow one share a row, and the pictures are cut
+// to the shapes that makes.
 const stories = [
   {
-    src: sharedShot,
-    clip: sharedClip,
-    full: await fullSize(sharedShot),
-    alt: "A shared project: two other people's pointers named in the Viewer, and their playheads in their own colours on the Timeline",
-    tag: "Shared projects",
-    h: "Edit one project together.",
-    p: "One person hosts and sends an invite, and up to 16 people can join. Edits appear for everyone as they're made, and each person has a colour for their pointer, playhead, and selection.",
-    c: "var(--label-violet)",
+    src: phoneShot,
+    full: await fullSize(phoneShot),
+    alt: "Lumit for iPhone: the Exports tab following an export on Studio PC, and a preview with its comments",
+    tag: "Lumit for iPhone",
+    h: "Exports on your phone.",
+    p: "Start and follow exports, and read the comments on your previews. It pairs with Lumit on your computer, and exports from the phone need Pro.",
+    link: { href: "https://testflight.apple.com/join/eGBpt5gx", label: "Get it on TestFlight" },
+    c: "var(--label-azure)",
     wide: true,
   },
   {
@@ -71,7 +71,7 @@ const stories = [
 ---
 
 <section class="wrap flex flex-col gap-12 pb-20 sm:pb-28">
-  <SectionHead kicker="Inside Lumit" title="Make it yours. Share the work." no="03 / 06" />
+  <SectionHead kicker="Inside Lumit" title="Make it yours." no="04 / 07" />
 
   <div class="grid gap-5 lg:grid-cols-12">
     {
@@ -99,6 +99,7 @@ const stories = [
             <span class="tag"><i class="dot" />{s.tag}</span>
             <span class="text-[22px] leading-[1.15] tracking-[-0.02em] text-fg">{s.h}</span>
             <span class="max-w-[560px] text-[15px] leading-[1.45] text-fg-3">{s.p}</span>
+            {s.link && <a class="go mt-1 self-start" href={s.link.href}>{s.link.label}</a>}
           </figcaption>
         </figure>
       ))
