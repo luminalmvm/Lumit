@@ -7,6 +7,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -47,7 +48,10 @@ class ViewerBar extends StatelessWidget {
   /// times a second to be told what the frontend already knows.
   final ViewerLook look;
   final bool playing;
-  final int frame;
+
+  /// Where the playhead is. Listened to by the clock alone, so the rest of
+  /// the bar is not rebuilt for every frame of playback.
+  final ValueListenable<int> playhead;
   final BridgeCompSettings settings;
   final CompositionReference comp;
 
@@ -110,7 +114,7 @@ class ViewerBar extends StatelessWidget {
     required this.wireframes,
     required this.look,
     required this.playing,
-    required this.frame,
+    required this.playhead,
     required this.settings,
     required this.comp,
     required this.compSize,
@@ -205,7 +209,7 @@ class ViewerBar extends StatelessWidget {
                   ...viewerTransportMarks(
                     t,
                     playing: playing,
-                    frame: frame,
+                    playhead: playhead,
                     settings: settings,
                     comp: comp,
                     onPlayPause: onPlayPause,
@@ -356,7 +360,7 @@ class ViewerBar extends StatelessWidget {
 List<Widget> viewerTransportMarks(
   LumitTheme t, {
   required bool playing,
-  required int frame,
+  required ValueListenable<int> playhead,
   required BridgeCompSettings settings,
   required CompositionReference comp,
   required VoidCallback onPlayPause,
@@ -390,7 +394,7 @@ List<Widget> viewerTransportMarks(
       key: const ValueKey('viewer-step-back'),
       icon: LumitIcon.previousFrame,
       colour: t.textMuted,
-      onPressed: () => onSeek(frame - 1),
+      onPressed: () => onSeek(playhead.value - 1),
       tip: l10n.tipTransportPrevious,
       action: 'playback.frame.prev',
     ),
@@ -426,7 +430,7 @@ List<Widget> viewerTransportMarks(
       key: const ValueKey('viewer-step-forward'),
       icon: LumitIcon.nextFrame,
       colour: t.textMuted,
-      onPressed: () => onSeek(frame + 1),
+      onPressed: () => onSeek(playhead.value + 1),
       tip: l10n.tipTransportNext,
       action: 'playback.frame.next',
     ),
@@ -463,19 +467,23 @@ List<Widget> viewerTransportMarks(
     // The clock, in a slot wide enough for the longest time this comp can
     // show, and clickable to type one (docs/07 §2.2 item 11). A time past
     // either end of the composition lands on that end.
+    // The one part of the transport that moves while playing.
     if (clock)
-      TimeReadout(
-        key: const ValueKey('viewer-timecode'),
-        frame: frame,
-        format: (f) => timecodeOf(f, settings),
-        widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-        style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
-        parse: (text) =>
-            framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-        onCommit: onSeek,
-        minFrame: 0,
-        maxFrame: _lastFrameOf(settings),
-        tooltip: l10n.tipFrameOnScreen,
+      ValueListenableBuilder<int>(
+        valueListenable: playhead,
+        builder: (context, frame, _) => TimeReadout(
+          key: const ValueKey('viewer-timecode'),
+          frame: frame,
+          format: (f) => timecodeOf(f, settings),
+          widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+          style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
+          parse: (text) =>
+              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+          onCommit: onSeek,
+          minFrame: 0,
+          maxFrame: _lastFrameOf(settings),
+          tooltip: l10n.tipFrameOnScreen,
+        ),
       ),
   ];
 }
