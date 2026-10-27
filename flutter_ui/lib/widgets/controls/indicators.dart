@@ -61,8 +61,8 @@ class HouseProgressBar extends StatelessWidget {
   }
 }
 
-/// The live readout a gesture carries with it: a small `surface4` pill of 8px
-/// mono, drawn beside the thing being moved and gone the moment it is let go
+/// The live readout a gesture carries with it: a small `surface4` pill of 9px
+/// mono, the floor every word is set at, drawn beside the thing being moved and gone the moment it is let go
 /// (docs/impl/timeline-interaction.md P1, §4.2/§6.2).
 ///
 /// In plain terms: while you drag a keyframe, a tiny label rides next to the
@@ -115,7 +115,8 @@ class HintPill extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+        style:
+            t.mono.copyWith(fontSize: t.caption.fontSize, color: t.textPrimary),
       ),
     );
   }
