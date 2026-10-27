@@ -466,6 +466,11 @@ class BareLazyDropdown<T> extends StatelessWidget {
   /// What the closed button shows.
   final String label;
 
+  /// The value chosen, which the list marks. Two options can share a name,
+  /// two masks called Mask 1 for instance, so the mark goes by value. Left
+  /// out, it goes by [label].
+  final Object? value;
+
   /// The options, as (value, label) pairs — called when the menu opens.
   final List<(T, String)> Function() options;
   final ValueChanged<T> onChanged;
@@ -477,10 +482,13 @@ class BareLazyDropdown<T> extends StatelessWidget {
   const BareLazyDropdown({
     super.key,
     required this.label,
+    this.value = _byLabel,
     required this.options,
     required this.onChanged,
     this.dense = false,
   });
+
+  static const Object _byLabel = Object();
 
   @override
   Widget build(BuildContext context) {
@@ -503,7 +511,9 @@ class BareLazyDropdown<T> extends StatelessWidget {
                 children: [
                   for (final (value, optionLabel) in built)
                     MenuRow(
-                      selected: optionLabel == label,
+                      selected: identical(this.value, _byLabel)
+                          ? optionLabel == label
+                          : value == this.value,
                       // Wrapped in a record so a null value survives the
                       // popup's null-means-dismissed contract.
                       onPressed: () => close((value,)),

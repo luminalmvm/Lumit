@@ -1558,6 +1558,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-clip-$id-${param.id}'),
+        value: current,
         label: chosenLayer == null
             ? l10n.fxClipNoLayer
             : current == null
@@ -1600,6 +1601,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-mask-$id-${param.id}'),
+        value: current,
         label: current == null
             ? l10n.firstMask
             : (masks
