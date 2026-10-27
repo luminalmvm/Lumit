@@ -4540,6 +4540,82 @@
   "@fxRotationFrequency": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxTwitchy": "Twitchy",
+  "@fxTwitchy": {
+    "description": "Effect controls — a Style option on Shake: the picture holds still between bursts of shaking."
+  },
+  "fxJumpy": "Jumpy",
+  "@fxJumpy": {
+    "description": "Effect controls — a Style option on Shake: the picture jumps from place to place instead of wobbling smoothly."
+  },
+  "fxStillness": "Stillness",
+  "@fxStillness": {
+    "description": "Effect controls — a control on Shake (Twitchy style): about how much of the time the picture is held still, 0 to 1."
+  },
+  "fxTwitchFrequency": "Twitch frequency",
+  "@fxTwitchFrequency": {
+    "description": "Effect controls — a control on Shake (Twitchy style): how often a burst of shaking can start or stop, per second."
+  },
+  "fxCentreBias": "Centre bias",
+  "@fxCentreBias": {
+    "description": "Effect controls — a control on Shake (Jumpy style): the chance that a jump lands back at the centre, 0 to 1."
+  },
+  "fxYEdges": "Y edges",
+  "@fxYEdges": {
+    "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
+  },
+  "fxSame": "Same",
+  "@fxSame": {
+    "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
+  },
+  "fxXWave": "X wave",
+  "@fxXWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth sideways goes."
+  },
+  "fxXWaveFrequency": "X wave frequency",
+  "@fxXWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the X wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxXWavePhase": "X wave phase",
+  "@fxXWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the X wave starts, in degrees."
+  },
+  "fxYWave": "Y wave",
+  "@fxYWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth up and down goes."
+  },
+  "fxYWaveFrequency": "Y wave frequency",
+  "@fxYWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Y wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxYWavePhase": "Y wave phase",
+  "@fxYWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Y wave starts, in degrees."
+  },
+  "fxZWave": "Z wave",
+  "@fxZWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in scale goes."
+  },
+  "fxZWaveFrequency": "Z wave frequency",
+  "@fxZWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Z wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxZWavePhase": "Z wave phase",
+  "@fxZWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Z wave starts, in degrees."
+  },
+  "fxRotationWave": "Rotation wave",
+  "@fxRotationWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in rotation goes."
+  },
+  "fxRotationWaveFrequency": "Rotation wave frequency",
+  "@fxRotationWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Rotation wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxRotationWavePhase": "Rotation wave phase",
+  "@fxRotationWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Rotation wave starts, in degrees."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."

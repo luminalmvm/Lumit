@@ -5899,6 +5899,15 @@ fn in_aperture_shape(dx: f32, dy: f32, coc2: f32, p: &DofParams) -> Option<f32> 
 }
 
 /// Resolve a sample index under an edge policy; None = transparent.
+/// The y policy out of an edge code. Bits 2 and up hold it plus one, so a
+/// plain 0 to 2 code means the same policy on both axes.
+fn edge_y(edge: u32) -> u32 {
+    match edge >> 2 {
+        0 => edge & 3,
+        n => n - 1,
+    }
+}
+
 fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
     if (0..len).contains(&i) {
         return Some(i);
@@ -5933,7 +5942,9 @@ pub fn radial_blur_taps(amount_px: f32) -> i32 {
 
 /// Bilinear sample under a blur edge policy: out-of-frame taps repeat or
 /// mirror per axis, or read as transparent (contributing nothing while
-/// keeping full weight, exactly like the gaussian's normalisation).
+/// keeping full weight, exactly like the gaussian's normalisation). An
+/// `edge` past 3 carries a separate policy for y in its upper bits (see
+/// [`edge_y`]).
 fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
@@ -5942,7 +5953,8 @@ fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [
     let tx = fx - x0;
     let ty = fy - y0;
     let (wi, hi) = (w as i64, h as i64);
-    let at = |x: i64, y: i64| match (edge_index(x, wi, edge), edge_index(y, hi, edge)) {
+    let (ex, ey) = (edge & 3, edge_y(edge));
+    let at = |x: i64, y: i64| match (edge_index(x, wi, ex), edge_index(y, hi, ey)) {
         (Some(x), Some(y)) => {
             let s = ((y * wi + x) * 4) as usize;
             [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]]

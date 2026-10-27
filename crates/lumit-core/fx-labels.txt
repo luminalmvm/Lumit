@@ -159,6 +159,7 @@ Cell width
 Centre
 Centre X
 Centre Y
+Centre bias
 Change
 Channel
 Channel blur
@@ -553,6 +554,7 @@ Jagged
 Jitter x
 Jitter y
 Jitter z
+Jumpy
 Keep in picked
 Keep inside
 Key out safe
@@ -915,12 +917,16 @@ Rotation
 Rotation amount
 Rotation frequency
 Rotation jitter
+Rotation wave
+Rotation wave frequency
+Rotation wave phase
 Roto brush
 Roughen
 Roughen edges
 Roundness
 Rows
 Rows/columns jitter
+Same
 Same as Per
 Samples
 Satin
@@ -1059,6 +1065,7 @@ Steps per second
 Stereo phase
 Stereo width
 Stick
+Stillness
 Stops
 Store
 Streak
@@ -1153,6 +1160,8 @@ Turn
 Turn points
 Twirl
 Twist
+Twitch frequency
+Twitchy
 Two layer, magenta
 Two points
 Two-way strike
@@ -1235,14 +1244,24 @@ Wrap
 X
 X amount
 X frequency
+X wave
+X wave frequency
+X wave phase
 Y
 Y amount
+Y edges
 Y frequency
+Y wave
+Y wave frequency
+Y wave phase
 Yellow
 Yellows
 Z amount
 Z dist
 Z frequency
+Z wave
+Z wave frequency
+Z wave phase
 Zebra
 Zoom
 sRGB
