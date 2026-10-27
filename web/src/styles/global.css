@@ -84,8 +84,8 @@
     @apply block h-2 w-3.5 shrink-0 rounded-ctl border border-current;
   }
   */
-  /* One button shape: a resting outline. No filled action on the site -
-     the drawing's hero download is an outline and nothing here outranks it. */
+  /* One button shape: a resting outline. The download is the one filled
+     button, so it is the first thing found on a page. */
   .btn {
     @apply inline-flex h-10 items-center justify-center gap-2 rounded-ctl border
            border-line-2 bg-transparent px-[18px] text-[15px] text-fg
@@ -93,6 +93,9 @@
   }
   .btn-ghost {
     @apply border-line;
+  }
+  .btn-solid {
+    @apply border-fg bg-fg text-ink hover:bg-white;
   }
   .pill {
     @apply inline-flex items-center gap-2 rounded-ctl border border-line bg-ink-2
