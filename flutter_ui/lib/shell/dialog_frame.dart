@@ -382,10 +382,13 @@ Widget dialogRow(
       constraints: BoxConstraints(minHeight: minHeight),
       child: Row(
         children: [
+          // One line, cut with the whole word on hover: a long German word
+          // broke mid-letter onto a second line the row had no room for.
           SizedBox(
               width: labelColumn,
-              child: Text(label,
-                  style: dimmed
+              child: FittedText(
+                  label,
+                  dimmed
                       ? t.body.copyWith(color: t.textDisabled)
                       : t.body)),
           SizedBox(width: gap),
