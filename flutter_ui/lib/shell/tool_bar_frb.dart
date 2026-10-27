@@ -46,6 +46,7 @@ import '../main.dart';
 import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
@@ -885,6 +886,10 @@ class _ToolButton extends StatefulWidget {
 class _ToolButtonState extends State<_ToolButton> {
   bool _hover = false;
 
+  /// Whether this tool was armed at the last build, so a switch of tool can
+  /// be told from a hover.
+  bool? _wasActive;
+
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
@@ -945,10 +950,13 @@ class _ToolButtonState extends State<_ToolButton> {
         : desk
             ? toolRailWidth
             : 36.0;
-    // The armed mark moves as a mark does, the hover light as a hover does,
-    // and the glyph goes with the fill behind it.
-    final step = active
-        ? scope.motion.mark
+    // Arming a tool is a key press, many times an hour, so the mark moves
+    // at once, on the tool armed and the one let go. The hover light moves
+    // as a hover does, and the glyph goes with the fill behind it.
+    final switched = _wasActive != null && _wasActive != active;
+    _wasActive = active;
+    final step = active || switched
+        ? MotionSpec.still
         : _hover
             ? scope.motion.hoverIn
             : scope.motion.hoverOut;
