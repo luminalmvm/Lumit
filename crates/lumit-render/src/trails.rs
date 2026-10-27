@@ -16,7 +16,8 @@ use std::sync::{Arc, Mutex};
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate as P;
 use lumit_core::fx::params::Params;
-use lumit_core::fx::points::{Projection, RenderMode, Trails};
+use lumit_core::fx::points::trails::Trails;
+use lumit_core::fx::points::{Projection, RenderMode};
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::model::LayerKind;
 use lumit_gpu::fx::points_draw::{DrawPoint, FieldTest, PointsDrawOp};
@@ -29,6 +30,26 @@ use crate::fxops::CachedTex;
 use crate::gpufx::AuxSlot;
 
 type Tex = wgpu::Texture;
+
+/// What a Particulate with Trails on, `e` on `layer`, carries to the card.
+pub(crate) fn carriage(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    e: &lumit_core::model::EffectInstance,
+    clone: (u32, u32),
+    inset: [f32; 2],
+) -> Trails {
+    use lumit_core::fx::points::stepped::{definition, target};
+    Trails {
+        key: definition(doc, comp, layer, e, target(comp, e)),
+        doc: Arc::clone(doc),
+        comp: comp.id,
+        layer: layer.id,
+        clone,
+        inset,
+    }
+}
 
 /// How often a walk keeps its picture, in frames.
 const KEEP_EVERY: i64 = 8;
