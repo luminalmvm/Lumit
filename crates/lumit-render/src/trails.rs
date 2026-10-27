@@ -377,6 +377,7 @@ pub(crate) fn draw(
     while frame < target {
         // A frame nobody wants any more stops here, and keeps where it got to.
         if crate::cancel::requested() {
+            crate::cancel::cut_short();
             break;
         }
         let k = frame + 1;

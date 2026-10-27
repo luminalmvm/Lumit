@@ -6,16 +6,30 @@
 //! short: it records into one command buffer and caches precomps as it goes,
 //! and stopping half way would leave a cached picture that was never drawn.
 //! Particulate's Trails do stop inside it, so once a stop is asked nothing
-//! more is filed and the frame is not shown.
+//! more is filed, and a frame a trail cut short is not shown. A frame that
+//! finished is shown even if a newer one is waiting.
 
 use lumit_eval::epoch::EpochToken;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 /// The error a cancelled frame returns, so the worker can tell it from a fault.
 pub const CANCELLED: &str = "cancelled";
 
 thread_local! {
     static TOKEN: RefCell<Option<EpochToken>> = const { RefCell::new(None) };
+    static SHORT: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Note that a stop left this frame's picture unfinished, as a trail that
+/// stopped walking does.
+pub fn cut_short() {
+    SHORT.with(|s| s.set(true));
+}
+
+/// Whether the picture was left unfinished since the last ask, and forget it.
+#[must_use]
+pub fn drawn_short() -> bool {
+    SHORT.with(|s| s.replace(false))
 }
 
 /// Keeps `token` as this thread's render token until dropped, then puts back
