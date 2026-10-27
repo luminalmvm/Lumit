@@ -1893,6 +1893,11 @@ List<MenuEntry> _effectMenu(
         ]),
     ];
 
+/// The Effect menu as a flyout, for a layer's own right-click menu.
+Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
+        VoidCallback close) =>
+    _MenuList(items: _effectMenu(app, ui, [layer]), close: close);
+
 /// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on
