@@ -1,15 +1,70 @@
 ---
-title: Writing LFX effects
-description: The manifest, the shader and its passes, the interface page, and making a package.
+title: LFX effects
+description: Write an effect as a WGSL shader, install it, give it an interface and package it.
 sidebar:
-  order: 9.85
+  order: 3
 ---
 
 An **LFX effect** is an effect an extension carries: a WGSL shader and an optional
 interface page. Lumit checks the shader before it runs, then runs it on the GPU in its own
 pipeline. The same files work on Windows, macOS and Linux.
 
-The worked example is **Tape**, in the repository at
+## Your first effect
+
+Blinds darkens every other band of rows. It is two files in a folder called `blinds`.
+
+`extension.json`:
+
+```json
+{
+  "format": 1,
+  "id": "blinds",
+  "name": "Blinds",
+  "version": "1.0.0",
+  "effects": [
+    {
+      "id": "blinds",
+      "name": "Blinds",
+      "category": "Stylise",
+      "version": 1,
+      "api": 1,
+      "shader": "blinds.wgsl"
+    }
+  ]
+}
+```
+
+`blinds.wgsl`:
+
+```wgsl
+struct Params {
+    /// @slider(2, 20) @default(6) @unit(px) Spacing
+    spacing: f32,
+    /// @slider(0, 1) @default(0.5) Strength
+    strength: f32,
+};
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    let colour = lumit_sample(uv);
+    let row = fract(lumit_px(uv).y / p.spacing);
+    let dark = step(0.5, row) * p.strength;
+    return colour * (1.0 - dark);
+}
+```
+
+**1. Add the folder that holds `blinds`** under **Settings ▸ Addons ▸ Extension
+folders**.
+
+**2. Pick a layer and choose Effect ▸ Stylise ▸ Blinds.** Effect controls shows
+**Spacing** and **Strength**.
+
+**3. Edit the shader and save it.** The change is drawn when **Settings ▸ Addons** next
+opens, or at the next start. A shader that does not compile leaves the picture alone, and
+Effect controls gives the reason and the line.
+
+**4. Make a package** when it is done, as in [Making a package](#making-a-package).
+
+The larger example is **Tape**, in the repository at
 [`examples/extensions/tape`](https://github.com/luminalmvm/Lumit/tree/main/examples/extensions/tape):
 a worn video tape in two passes, with a cassette deck for its interface.
 
