@@ -447,6 +447,7 @@ class ReviewLinkRow extends StatelessWidget {
         // accent edge, and the padding gives up what the edge takes.
         child: AnimatedContainer(
           duration: scope.motion.mark.duration,
+          curve: scope.motion.mark.curve,
           height: reviewLinkRowHeight,
           padding: EdgeInsets.only(left: chosen ? 10 : 12, right: 12),
           decoration: BoxDecoration(

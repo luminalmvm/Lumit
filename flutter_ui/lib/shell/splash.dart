@@ -70,7 +70,8 @@ class _OpeningOverlayState extends State<OpeningOverlay>
     with SingleTickerProviderStateMixin {
   /// Only ever built for the indeterminate card: a controller left repeating
   /// under a bar that is being told its own fill would keep the tree from ever
-  /// settling, for an animation nothing draws.
+  /// settling, for an animation nothing draws. And only at Full, since it is a
+  /// loop: below that the bar stands full and still.
   AnimationController? _sweep;
 
   VoidCallback? _escapeRelease;
@@ -78,18 +79,26 @@ class _OpeningOverlayState extends State<OpeningOverlay>
   @override
   void initState() {
     super.initState();
-    if (widget.fraction == null) {
-      _sweep = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 900),
-      )..repeat();
-    }
     // The card has the window, so Escape is its own: it presses Cancel where
     // there is one, and reaches nothing underneath either way.
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
       widget.onCancel?.call();
       return true;
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.fraction == null && ThemeScope.of(context).motion.carries) {
+      final sweep = _sweep ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 900),
+      );
+      if (!sweep.isAnimating) sweep.repeat();
+    } else {
+      _sweep?.stop();
+    }
   }
 
   @override
@@ -142,11 +151,16 @@ class _OpeningOverlayState extends State<OpeningOverlay>
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (_sweep case final sweep?)
+                  if (_sweep case final sweep? when sweep.isAnimating)
                     AnimatedBuilder(
                       animation: sweep,
                       builder: (context, _) =>
                           HouseProgressBar(fraction: sweep.value, eased: false),
+                    )
+                  else if (widget.fraction == null)
+                    const Opacity(
+                      opacity: 0.5,
+                      child: HouseProgressBar(fraction: 1, eased: false),
                     )
                   else
                     HouseProgressBar(fraction: widget.fraction ?? 0),

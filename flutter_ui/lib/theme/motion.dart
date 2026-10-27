@@ -107,6 +107,10 @@ class Motion {
   /// went, and at 50ms there is nothing left of it to see.
   final MotionSpec scroll;
 
+  /// A zoom flying to its new magnification, in the Viewer and the Timelines.
+  /// Full only, as [scroll] is, since it is how the view travels.
+  final MotionSpec zoom;
+
   /// A state mark changing: the tab that is fronted, the tool that is armed,
   /// a focus ring.
   final MotionSpec mark;
@@ -183,6 +187,7 @@ class Motion {
     required this.swell,
     required this.swellScale,
     required this.scroll,
+    required this.zoom,
     required this.mark,
     required this.pop,
     required this.popScale,
@@ -244,6 +249,7 @@ class Motion {
         swell: MotionSpec.still,
         swellScale: 1,
         scroll: MotionSpec.still,
+        zoom: MotionSpec.still,
         mark: MotionSpec.still,
         pop: MotionSpec.still,
         popScale: 1,
@@ -287,6 +293,7 @@ class Motion {
       swell: MotionSpec.still,
       swellScale: 1,
       scroll: MotionSpec.still,
+      zoom: MotionSpec.still,
       mark: snap,
       pop: MotionSpec.still,
       popScale: 1,
@@ -326,6 +333,7 @@ class Motion {
     swell: MotionSpec(_ms180, _spring),
     swellScale: 1.06,
     scroll: MotionSpec(_ms140, _out),
+    zoom: MotionSpec(_ms120, _out),
     mark: MotionSpec(_ms120, _out),
     pop: MotionSpec(_ms110, _out),
     popScale: 0.5,
@@ -363,6 +371,7 @@ class Motion {
     swell: MotionSpec(_ms80, _detent),
     swellScale: 1.04,
     scroll: MotionSpec(_ms90, _detent),
+    zoom: MotionSpec(_ms80, _detent),
     mark: MotionSpec(_ms80, _detent),
     // A tick on an instrument is on or it is off.
     pop: MotionSpec.still,
@@ -402,6 +411,7 @@ class Motion {
     swell: MotionSpec(_ms220, _springSoft),
     swellScale: 1.08,
     scroll: MotionSpec(_ms180, _out),
+    zoom: MotionSpec(_ms150, _out),
     mark: MotionSpec(_ms150, _out),
     pop: MotionSpec(_ms140, _landSoft),
     popScale: 0.4,

@@ -670,10 +670,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     () => layer.getClipEffects(clip: clip, onCompClock: true);
               }
               // Going between a layer's stack and a clip's is content
-              // arriving in a place that was already there.
+              // arriving in a place that was already there, and the stack
+              // being left goes at once.
               final reveal = ThemeScope.of(context).motion.reveal;
               return AnimatedSwitcher(
                 duration: reveal.duration,
+                reverseDuration: Duration.zero,
                 switchInCurve: reveal.curve,
                 layoutBuilder: (current, previous) => Stack(
                   fit: StackFit.expand,
@@ -796,13 +798,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                   await details.data.landOn(layer, clip: clipId);
                   if (mounted) changed();
                 },
-                builder: (context, candidate, _) => Container(
-                  decoration: candidate.isEmpty
-                      ? null
-                      : BoxDecoration(
-                          border: Border.all(color: t.accent),
-                          color: t.accent.withValues(alpha: 0.06),
-                        ),
+                builder: (context, candidate, _) => _DropGround(
+                  lit: candidate.isNotEmpty,
                   child: ListView(
                     key: const ValueKey('fx-clip-ground'),
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -960,13 +957,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                   } catch (_) {}
                   ui.model.refresh();
                 },
-                builder: (context, candidate, _) => Container(
-                  decoration: candidate.isEmpty
-                      ? null
-                      : BoxDecoration(
-                          border: Border.all(color: t.accent),
-                          color: t.accent.withValues(alpha: 0.06),
-                        ),
+                builder: (context, candidate, _) => _DropGround(
+                  lit: candidate.isNotEmpty,
                   child: GestureDetector(
                     key: const ValueKey('fx-group-ground'),
                     behavior: HitTestBehavior.translucent,
@@ -1147,15 +1139,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               await details.data.landOn(layer);
               ui.model.refresh();
             },
-            builder: (context, candidate, _) => Container(
+            builder: (context, candidate, _) => _DropGround(
               // While something is over it, say so: a drop with no feedback is
               // indistinguishable from a drop that did nothing.
-              decoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(color: t.accent),
-                      color: t.accent.withValues(alpha: 0.06),
-                    ),
+              lit: candidate.isNotEmpty,
               // **A click on nothing clears the pick.** Every other surface
               // in the editor works this way — the Timeline's lane ground,
               // the Project panel's floor, the graph canvas — and an effect
@@ -1801,6 +1788,32 @@ class _AtPlayhead extends StatelessWidget {
             Provider.of<LumitUiState>(context, listen: false).playheadFrame,
         builder: (context, frame, _) => builder(context, frame),
       );
+}
+
+/// The ground an effect is dropped on, lit while one is over it. It lights up
+/// as the dock's own drop preview does, and the edge is drawn over [child] so
+/// nothing in it shifts.
+class _DropGround extends StatelessWidget {
+  final bool lit;
+  final Widget child;
+
+  const _DropGround({required this.lit, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final accent = scope.theme.accent;
+    final step = scope.motion.dropZone;
+    return AnimatedContainer(
+      duration: step.duration,
+      curve: step.curve,
+      decoration:
+          BoxDecoration(color: accent.withValues(alpha: lit ? 0.06 : 0)),
+      foregroundDecoration: BoxDecoration(
+          border: Border.all(color: accent.withValues(alpha: lit ? 1 : 0))),
+      child: child,
+    );
+  }
 }
 
 /// A clip's own blend mode under the header: **From layer** while it has

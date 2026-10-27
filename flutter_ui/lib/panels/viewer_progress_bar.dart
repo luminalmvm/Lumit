@@ -23,21 +23,20 @@
 // **The motion.** The fill animates towards each report rather than jumping,
 // so a bar that advances in five steps reads as one movement; and while it is
 // waiting it carries a slow sheen, which is what distinguishes "working" from
-// "stuck" at a glance. Both respect the theme's animation level — at
-// `none` the bar simply sits at its reported fraction.
+// "stuck" at a glance. The sheen is a loop, so it runs at Full only, and the
+// fill moves as a state mark does, so at None the bar simply sits at its
+// reported fraction.
 
 import 'package:flutter/widgets.dart';
 
 import '../state/preview_progress.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/time_readout.dart';
 
 /// How tall the bar's own track is.
 const double _trackHeight = 3;
-
-/// How long the fill takes to catch up with a new report.
-const Duration _fillDuration = Duration(milliseconds: 180);
 
 /// One sweep of the sheen along the fill.
 const Duration _sheenPeriod = Duration(milliseconds: 1400);
@@ -72,7 +71,12 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     super.initState();
     _sheen = AnimationController(vsync: this, duration: _sheenPeriod);
     widget.tracker.addListener(_onProgress);
-    if (widget.tracker.visible) _sheen.repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _runSheen();
   }
 
   @override
@@ -91,19 +95,26 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     super.dispose();
   }
 
-  /// The sheen runs only while a bar is on screen: an animation ticking behind
-  /// a widget that is not drawn is a frame's work per frame for nothing, and —
-  /// as the frame-rate readout found the hard way — it also stops the interface
-  /// ever settling, which hangs every widget test that waits for it to.
   void _onProgress() {
     if (!mounted) return;
-    final visible = widget.tracker.visible;
-    if (visible && !_sheen.isAnimating) {
+    _runSheen();
+    setState(() {});
+  }
+
+  /// The sheen runs only while a bar is on screen, and only at Full: an
+  /// animation ticking behind a widget that is not drawn is a frame's work per
+  /// frame for nothing, and — as the frame-rate readout found the hard way —
+  /// it also stops the interface ever settling, which hangs every widget test
+  /// that waits for it to.
+  void _runSheen() {
+    final loops = widget.tracker.visible &&
+        (context.getInheritedWidgetOfExactType<ThemeScope>()?.motion.carries ??
+            false);
+    if (loops && !_sheen.isAnimating) {
       _sheen.repeat();
-    } else if (!visible && _sheen.isAnimating) {
+    } else if (!loops && _sheen.isAnimating) {
       _sheen.stop();
     }
-    setState(() {});
   }
 
   @override
@@ -114,7 +125,7 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     // Nothing to say: an empty box rather than a transparent bar, so the
     // Viewer's own hit testing is untouched while no frame is being waited on.
     if (!tracker.visible) return const SizedBox.shrink();
-    final still = scope.animationLevel == AnimationLevel.none;
+    final motion = scope.motion;
 
     return IgnorePointer(
       child: Padding(
@@ -134,23 +145,27 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
               ),
             ),
             const SizedBox(width: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              child: SizedBox(
-                width: _trackWidth,
-                height: _trackHeight,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: ColoredBox(color: t.surface2),
-                    ),
-                    Positioned.fill(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _fill(t, still, tracker.fraction),
+            // Its own layer, so the sheen repaints the track and not the
+            // transport round it.
+            RepaintBoundary(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                child: SizedBox(
+                  width: _trackWidth,
+                  height: _trackHeight,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ColoredBox(color: t.surface2),
                       ),
-                    ),
-                  ],
+                      Positioned.fill(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _fill(t, motion, tracker.fraction),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -174,7 +189,8 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
   }
 
   /// The filled part, with the sheen travelling along it.
-  Widget _fill(LumitTheme t, bool still, double fraction) {
+  Widget _fill(LumitTheme t, Motion motion, double fraction) {
+    final sheen = motion.carries;
     final bar = LayoutBuilder(
       builder: (context, constraints) => AnimatedBuilder(
         animation: _sheen,
@@ -183,7 +199,7 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
           return DecoratedBox(
             decoration: BoxDecoration(
               color: t.accent,
-              gradient: still
+              gradient: !sheen
                   ? null
                   : LinearGradient(
                       // The sheen is one brighter band sliding from the left
@@ -200,13 +216,13 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
         },
       ),
     );
-    return still
+    return motion.mark.isStill
         ? FractionallySizedBox(
             widthFactor: fraction.clamp(0.0, 1.0), child: bar)
         : TweenAnimationBuilder<double>(
             tween: Tween<double>(end: fraction.clamp(0.0, 1.0)),
-            duration: _fillDuration,
-            curve: Curves.easeOut,
+            duration: motion.mark.duration,
+            curve: motion.mark.curve,
             builder: (context, value, child) =>
                 FractionallySizedBox(widthFactor: value, child: child),
             child: bar,

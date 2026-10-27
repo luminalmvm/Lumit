@@ -61,6 +61,7 @@ import '../state/settings.dart';
 import '../state/share.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 // The ruler helpers moved with the ruler (shared with the graph editor); the
@@ -1973,12 +1974,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// magnification without reading the axis it is itself rebuilding.
   int _laneFrames = 1;
 
-  /// How much motion the shell is set to show, read in build where the theme
-  /// scope is in reach — the same arrangement the Viewer's zoom uses.
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  /// How a zoom flies under the shell's shape and motion setting, read in
+  /// build where the theme scope is in reach — the same arrangement the
+  /// Viewer's zoom uses.
+  MotionSpec _zoomFlight = MotionSpec.still;
 
   /// The room the lanes leave either side of the frames
-  /// ([TimelineAxis.padFor]), read in build beside [_animationLevel] so the
+  /// ([TimelineAxis.padFor]), read in build beside [_zoomFlight] so the
   /// scroll arithmetic outside it measures against the axis that is drawn.
   double _axisPad = TimelineAxis.pad;
 
@@ -3483,7 +3485,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _zoomFlight,
       );
       return;
     }
@@ -3540,8 +3542,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is exact: the flight (and the drag) re-applies the same fixed point
     // every tick, which is the invariant the whole mechanism is built on.
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
-    _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+    _zoomMotion.goTo(z, motion: fly ? _zoomFlight : MotionSpec.still);
   }
 
   /// The navigator asked for a window: `start` frames from the left, `span`
@@ -4064,8 +4065,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    // How much motion the shell shows, for the zoom's flight.
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     _axisPad = TimelineAxis.padFor(t);
     // The columns actually drawn. The render-time column is only there while
     // something is being measured: switched off it takes no width, no
