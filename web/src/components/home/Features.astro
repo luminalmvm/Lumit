@@ -713,7 +713,7 @@ const cuts = [
       animation: ticks 0.7s linear infinite;
     }
     .rider {
-      animation: ride 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      animation: ride 4.6s var(--ease-in-out) infinite;
     }
     .rows .head {
       animation: cross 5s linear infinite;
@@ -721,10 +721,10 @@ const cuts = [
     /* The speed row drops open under the bar, stays for two passes of the
        playhead, and folds away again. */
     .speeds {
-      animation: drop 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+      animation: drop 10s var(--ease-in-out) infinite;
     }
     .twirl {
-      animation: twirl 10s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+      animation: twirl 10s var(--ease-in-out) infinite;
     }
     /* Each clip lifts as the playhead comes on to it. */
     .clips i {

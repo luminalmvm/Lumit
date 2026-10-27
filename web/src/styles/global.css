@@ -25,6 +25,11 @@
 
   --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Paper Mono", ui-monospace, monospace;
+
+  /* Two curves for everything that moves: out for what arrives or answers a
+     pointer, in-out for what moves across the page. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 :root {
@@ -256,10 +261,10 @@
       transition: transform 0.2s;
     }
     .lit::before {
-      transition: transform 0.3s ease-out;
+      transition: transform 0.3s var(--ease-out);
     }
     .shot {
-      transition: scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+      transition: scale 200ms var(--ease-out);
     }
   }
   .shot:has(.zoom:hover),
@@ -367,11 +372,12 @@
 
 /* Nothing marked for reveal is drawn until a script releases it - the wordmark
    coming home for the hero, scrolling into view for the rest. --i staggers the
-   pieces of one group against each other, 70ms apart. Only a page that sets
-   `anim` on <html> hides anything, so without script the page is simply there. */
+   pieces of one group against each other, 70ms apart, and --blur is softer on
+   the large pictures. Only a page that sets `anim` on <html> hides anything,
+   so without script the page is simply there. */
 html.anim [data-reveal] {
   opacity: 0;
-  filter: blur(10px);
+  filter: blur(var(--blur, 10px));
   transform: translateY(12px);
 }
 html.anim [data-reveal].shown {
@@ -381,10 +387,10 @@ html.anim [data-reveal].shown {
   filter: none;
   transform: none;
   transition:
-    opacity 500ms ease-out calc(var(--i, 0) * 70ms),
-    filter 500ms ease-out calc(var(--i, 0) * 70ms),
-    transform 500ms ease-out calc(var(--i, 0) * 70ms),
-    scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+    opacity 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    filter 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    transform 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    scale 200ms var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
   html.anim [data-reveal] {

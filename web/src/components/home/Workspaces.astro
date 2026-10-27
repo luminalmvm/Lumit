@@ -77,7 +77,7 @@ const tabs = [
       far enough that each shows its name and some of its picture. A click on
       one behind brings it forward, and a click on the front one enlarges
       it. */}
-  <div class="stack" data-stack data-reveal>
+  <div class="stack" data-stack data-reveal style="--blur:4px">
     {
       tabs.map((c, i) => (
         <button
@@ -143,8 +143,8 @@ const tabs = [
   @media (prefers-reduced-motion: no-preference) {
     .layer {
       transition:
-        translate 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.12),
-        scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3),
+        translate 320ms var(--ease-in-out),
+        scale 200ms var(--ease-out),
         border-color 0.2s,
         filter 0.3s;
     }

@@ -213,7 +213,7 @@ const assets = [
   @media (prefers-reduced-motion: no-preference) {
     .ground {
       transition:
-        transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.12),
+        transform 260ms var(--ease-out),
         border-color 0.2s,
         filter 0.3s;
     }
@@ -280,7 +280,7 @@ const assets = [
       --shift: 52px;
     }
   }
-  @media (hover: hover) and (min-width: 640px) {
+  @media (hover: hover) and (pointer: fine) and (min-width: 640px) {
     .stack:hover,
     .stack:focus-within {
       --peek: 74px;

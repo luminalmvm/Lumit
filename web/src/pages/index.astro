@@ -160,7 +160,7 @@ import Closing from "../components/home/Closing.astro";
   /* The download button blurs in as the page is shown, and the rest of the
      hero follows it. */
   :global(html.anim) .lead {
-    animation: piece-in 500ms both;
+    animation: piece-in 500ms var(--ease-out) both;
   }
   @keyframes piece-in {
     from {
@@ -547,7 +547,7 @@ import Closing from "../components/home/Closing.astro";
         ? fwd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "ease-out", fill: "forwards" })
         : fwd.animate([{ transform: from(now) }, { transform: from(back) }], {
             duration: 340,
-            easing: "cubic-bezier(0.3, 0, 0.2, 1)",
+            easing: "cubic-bezier(0.23, 1, 0.32, 1)", // --ease-out
             fill: "forwards",
           });
       going.onfinish = () => {
