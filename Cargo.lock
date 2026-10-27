@@ -2275,6 +2275,7 @@ dependencies = [
  "lumit-ofx-testplug",
  "lumit-peer",
  "memmap2",
+ "metal",
  "parking_lot",
  "rayon",
  "serde",

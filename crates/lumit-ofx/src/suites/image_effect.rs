@@ -291,10 +291,10 @@ fn image_property_set(image: &Image, time: OfxTime) -> PropertySet {
     set.seed(keys::IMAGE_ROW_BYTES, PropValue::int(image.row_bytes()));
     set.seed(keys::PIXEL_ASPECT_RATIO, PropValue::double(1.0));
     set.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
-    set.seed(
-        keys::IMAGE_DATA,
-        PropValue::Pointer(vec![image.data_pointer() as usize]),
-    );
+    // On the card for a GPU render, which is the spec's meaning of
+    // `kOfxImageEffectPropCudaEnabled` and its two siblings.
+    let data = image.device().unwrap_or(image.data_pointer() as usize);
+    set.seed(keys::IMAGE_DATA, PropValue::Pointer(vec![data]));
     set
 }
 

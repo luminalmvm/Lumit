@@ -54,6 +54,7 @@ use crate::describe::Context;
 use crate::ffi::{
     actions, frames_needed_key, prop_keys as keys, prop_values as values, region_of_interest_key,
 };
+use crate::gpu::{DeviceImages, GpuRender};
 use crate::handles::Handle;
 use crate::host::state;
 use crate::image::{Frame16, Image, RectI, RowOrder};
@@ -146,6 +147,10 @@ pub enum RenderError {
     /// reported as itself rather than blamed on it.
     #[error("the host could not render ({0:?})")]
     Host(Status),
+    /// The graphics card would not take the frame, or give it back. The broker
+    /// renders the frame again on the CPU.
+    #[error("{0}")]
+    Gpu(String),
 }
 
 impl From<Status> for RenderError {
@@ -179,6 +184,9 @@ pub struct RenderRequest {
     /// the engine beside the frame in hand and the same size as it. Empty for
     /// a plain filter.
     pub neighbours: Vec<(i32, Frame16)>,
+    /// The graphics card path this frame takes, or `None` for the CPU. Only a
+    /// broker that opened a card ([`crate::gpu`]) sets it.
+    pub gpu: Option<GpuRender>,
 }
 
 impl RenderRequest {
@@ -198,6 +206,7 @@ impl RenderRequest {
             order: RowOrder::BottomUp,
             inputs,
             neighbours: Vec::new(),
+            gpu: None,
         }
     }
 
@@ -370,6 +379,33 @@ pub fn frames_wanted(needed: &BTreeMap<String, (f64, f64)>, time: f64) -> Vec<Fr
         }
     }
     wanted
+}
+
+/// The frame offsets an OFX absolute frame range comes to, relative to `time`.
+///
+/// OFX answers `getFramesNeeded` in absolute frames per clip; the neighbour
+/// machinery counts in offsets from the frame being rendered. The range is
+/// widened outwards to whole frames — a plugin asking for `t − 2.5` is asking
+/// for a frame between two of ours, and fetching both is the answer that never
+/// leaves it short. `None` when every clip wants only the current frame, which
+/// is the honest "nothing more specific to say than the declaration".
+pub(crate) fn offsets_of(frames: &BTreeMap<String, (f64, f64)>, time: f64) -> Option<Vec<i32>> {
+    let mut offsets = vec![0i32];
+    for (first, last) in frames.values() {
+        let (low, high) = ((first - time).floor(), (last - time).ceil());
+        if !low.is_finite() || !high.is_finite() {
+            continue;
+        }
+        // A plugin asking for a thousand frames either side is asking for more
+        // than the neighbour decode will ever hold; the ring's own byte budget
+        // (docs/impl/ofx-host.md §4) is what refuses it, and clamping here keeps
+        // this from building the list that would then be refused.
+        let (low, high) = (low.max(-64.0) as i32, high.min(64.0) as i32);
+        offsets.extend(low..=high);
+    }
+    offsets.sort_unstable();
+    offsets.dedup();
+    (offsets.len() > 1).then_some(offsets)
 }
 
 /// Render one frame through one instance of one plugin.
@@ -605,15 +641,28 @@ fn render_sequence(
     request: &RenderRequest,
     token: &EpochToken,
 ) -> Result<(), RenderError> {
+    // On the card from the begin to the end, and only then: a plugin that
+    // looks at its pictures while it is asked its region or whether it is an
+    // identity reads host memory, as the spec's flags are only in these three.
+    let device = match request.gpu {
+        Some(gpu) => Some(DeviceImages::upload(gpu, handle)?),
+        None => None,
+    };
+    let device = device.as_ref();
     dispatch(
         plugin,
         handle,
         actions::BEGIN_SEQUENCE_RENDER,
-        Some(sequence_args(request)),
+        Some(sequence_args(request, device)),
     )?;
     check(token)?;
     let scope = CancelScope::new(token);
-    let render = dispatch(plugin, handle, actions::RENDER, Some(render_args(request)));
+    let render = dispatch(
+        plugin,
+        handle,
+        actions::RENDER,
+        Some(render_args(request, device)),
+    );
     drop(scope);
     // The end action runs whatever the render answered: a plugin that
     // allocated in the begin must be given its chance to free, and a host
@@ -622,10 +671,13 @@ fn render_sequence(
         plugin,
         handle,
         actions::END_SEQUENCE_RENDER,
-        Some(sequence_args(request)),
+        Some(sequence_args(request, device)),
     );
     render?;
     end?;
+    if let Some(device) = device {
+        device.download(handle)?;
+    }
     check(token)?;
     Ok(())
 }
@@ -840,7 +892,7 @@ fn is_identity(
 /// The `inArgs` of `beginSequenceRender` and `endSequenceRender`. One frame is
 /// a sequence of one; the host is not a render farm node, so nothing here is
 /// sequential or interactive.
-fn sequence_args(request: &RenderRequest) -> PropertySet {
+fn sequence_args(request: &RenderRequest, device: Option<&DeviceImages>) -> PropertySet {
     let mut args = PropertySet::new();
     args.seed(
         keys::FRAME_RANGE,
@@ -851,34 +903,14 @@ fn sequence_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
-    gpu_render_off(&mut args);
+    // The stock support library reads every GPU argument on the begin, the
+    // render and the end, so all of them are there whichever path this is.
+    crate::gpu::render_args(&mut args, device);
     args
 }
 
-/// The OFX 1.3 to 1.5 GPU render arguments, all saying no: the flags
-/// are nought and the queues and streams are null, which is what the spec
-/// says a CPU render carries. The stock support library reads every one of
-/// them on the begin, the render and the end.
-fn gpu_render_off(args: &mut PropertySet) {
-    for key in [
-        keys::OPENGL_ENABLED,
-        keys::CUDA_ENABLED,
-        keys::METAL_ENABLED,
-        keys::OPENCL_ENABLED,
-    ] {
-        args.seed(key, PropValue::int(0));
-    }
-    for key in [
-        keys::CUDA_STREAM,
-        keys::METAL_COMMAND_QUEUE,
-        keys::OPENCL_COMMAND_QUEUE,
-    ] {
-        args.seed(key, PropValue::Pointer(vec![0]));
-    }
-}
-
 /// The `inArgs` of the render itself.
-fn render_args(request: &RenderRequest) -> PropertySet {
+fn render_args(request: &RenderRequest, device: Option<&DeviceImages>) -> PropertySet {
     let mut args = PropertySet::new();
     args.seed(keys::TIME, PropValue::double(request.time));
     if let Ok(field) = PropValue::string(values::IMAGE_FIELD_NONE) {
@@ -892,7 +924,7 @@ fn render_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
-    gpu_render_off(&mut args);
+    crate::gpu::render_args(&mut args, device);
     args
 }
 

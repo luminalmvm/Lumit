@@ -42,6 +42,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::describe::{Context, PluginDescriptor};
+use crate::gpu::GpuApi;
 use crate::image::{Frame16, RectI};
 use crate::instance::{ParamSnapshot, Settled};
 use crate::ipc::pipe::{self, PipeError};
@@ -200,8 +201,9 @@ pub struct BrokerConfig {
     pub frame: (usize, usize),
     /// Where the broker executable is, if not beside Lumit's own.
     pub exe: Option<PathBuf>,
-    /// Extra environment for the child. Lumit sets none of its own; the tests
-    /// use it to tell a plugin to misbehave on purpose.
+    /// Extra environment for the child: the graphics card setting and which
+    /// card Lumit draws with ([`crate::gpu`]), and in the tests a plugin told
+    /// to misbehave on purpose.
     pub env: Vec<(String, String)>,
 }
 
@@ -214,7 +216,7 @@ impl BrokerConfig {
             quirks: Quirks::default(),
             frame,
             exe: None,
-            env: Vec::new(),
+            env: crate::gpu::broker_env(),
         }
     }
 }
@@ -243,6 +245,9 @@ pub struct BrokerRender {
     pub frames_needed: BTreeMap<String, (f64, f64)>,
     /// The clip the plugin said this frame simply is, if it said so.
     pub identity_of: Option<String>,
+    /// The graphics card path the plugin renders its next frame through,
+    /// `None` being the CPU.
+    pub path: Option<GpuApi>,
 }
 
 /// One plugin bundle, hosted in a process of its own.
@@ -256,6 +261,8 @@ pub struct Broker {
     ring_frame: (usize, usize),
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
+    /// The graphics card path of each of `descriptors`, as the broker last said.
+    paths: Vec<Option<GpuApi>>,
     refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
     /// The instances that have rendered a frame in this process. The first
@@ -288,6 +295,7 @@ impl Broker {
             ring_frame,
             link: None,
             descriptors: Vec::new(),
+            paths: Vec::new(),
             refused: Vec::new(),
             instances: BTreeMap::new(),
             warm: BTreeSet::new(),
@@ -430,9 +438,14 @@ impl Broker {
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
         let deadline = describe_deadline(&self.config.quirks);
         match self.action(&HostMessage::Describe, deadline, None) {
-            Ok(BrokerMessage::Described { plugins, refused }) => {
+            Ok(BrokerMessage::Described {
+                plugins,
+                refused,
+                paths,
+            }) => {
                 self.descriptors = plugins;
                 self.refused = refused;
+                self.note_paths(paths);
                 Ok(&self.descriptors)
             }
             Ok(_) => Err(BrokerError::Unexpected(
@@ -453,6 +466,32 @@ impl Broker {
                 Fault::Gone => BrokerError::NoHandshake,
                 Fault::Refused(_) => BrokerError::Unexpected("a refusal"),
             }
+        }
+    }
+
+    /// Keep each plugin's path, here and where the frame key reads it.
+    fn note_paths(&mut self, paths: Vec<Option<GpuApi>>) {
+        self.paths = paths;
+        for (index, descriptor) in self.descriptors.iter().enumerate() {
+            let path = self.paths.get(index).copied().flatten();
+            crate::gpu::note_path(&descriptor.identifier, descriptor.version, path);
+        }
+    }
+
+    /// One plugin's path changed: the card failed on it and the CPU took over.
+    fn note_path(&mut self, instance: InstanceId, path: Option<GpuApi>) {
+        let Some(plugin) = self.instances.get(&instance).map(|record| record.plugin) else {
+            return;
+        };
+        let index = plugin as usize;
+        if self.paths.get(index).copied().flatten() == path {
+            return;
+        }
+        if let Some(slot) = self.paths.get_mut(index) {
+            *slot = path;
+        }
+        if let Some(descriptor) = self.descriptors.get(index) {
+            crate::gpu::note_path(&descriptor.identifier, descriptor.version, path);
         }
     }
 
@@ -721,8 +760,10 @@ impl Broker {
                 slot,
                 frames_needed,
                 identity_of,
+                path,
             }) => {
                 self.warm.insert(instance);
+                self.note_path(instance, path);
                 let (_, frame) = self.ring.read_frame(slot)?;
                 Ok(BrokerRender {
                     frame,
@@ -730,6 +771,7 @@ impl Broker {
                     error: None,
                     frames_needed,
                     identity_of,
+                    path,
                 })
             }
             // Nobody's frame: its own input, and nothing for a badge to say.
@@ -1053,14 +1095,23 @@ impl Broker {
         let (width, height) = self.ring_frame;
         self.ring = Ring::create(&ring_path(&fresh_identifier()?), width, height)?;
         self.next_slot = 0;
+        // A broker that died with plugins on the card comes back on the CPU: a
+        // crash in a driver cannot be redone on the CPU in place, and trying
+        // the card again would only spend the next strike.
+        if self.paths.iter().any(Option::is_some) {
+            self.config
+                .env
+                .push((crate::gpu::GPU_ENV.to_owned(), "0".to_owned()));
+        }
         self.start(&fresh_identifier()?)?;
 
         let describe = describe_deadline(&self.config.quirks);
         let warm_up = self.warm_up_deadline();
-        if let Ok(BrokerMessage::Described { plugins, .. }) =
+        if let Ok(BrokerMessage::Described { plugins, paths, .. }) =
             self.exchange(&HostMessage::Describe, describe, None)
         {
             self.descriptors = plugins;
+            self.note_paths(paths);
         }
         let records: Vec<(InstanceId, InstanceRecord)> = self
             .instances
@@ -1106,5 +1157,6 @@ fn errored(frame: Frame16, why: &str) -> BrokerRender {
         error: Some(why.to_owned()),
         frames_needed: BTreeMap::new(),
         identity_of: None,
+        path: None,
     }
 }

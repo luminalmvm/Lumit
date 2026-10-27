@@ -475,6 +475,68 @@ fn a_broker_with_no_credential_does_not_start() {
     );
 }
 
+/// The test plugin's gain drawn on the graphics card comes back as the CPU
+/// draws it, through CUDA and through OpenCL. The plugin is told the card is
+/// `needed`, so it refuses the CPU and a frame that came back was the card's.
+/// Each API this machine cannot open is skipped, which on CI is both.
+#[test]
+fn a_frame_drawn_on_the_graphics_card_matches_the_cpu() {
+    let name = "a_frame_drawn_on_the_graphics_card_matches_the_cpu";
+    let pixels: Vec<f32> = (0..FRAME.0 * FRAME.1 * 4)
+        .map(|index| index as f32 / 256.0)
+        .collect();
+    let source = Frame16::from_f32(FRAME.0, FRAME.1, &pixels).expect("a frame");
+    let mut params = ParamSnapshot::new();
+    params.set("gain", PropValue::double(1.5));
+    let render = |env: &[(&str, &str)]| {
+        let root = tempfile::tempdir().expect("a temp dir");
+        let (mut broker, _) = a_broker(root.path(), env)?;
+        let plugin = broker
+            .descriptors()
+            .iter()
+            .position(|descriptor| descriptor.identifier == "com.lumitlab.testplug")
+            .expect("the test plugin");
+        let instance = broker
+            .create_instance(plugin as u32, Context::Filter, params.clone())
+            .expect("an instance");
+        let request = RenderRequest::filter(0.0, source.clone());
+        Some(
+            broker
+                .render(instance, &request, &|_, _| None)
+                .expect("a frame back"),
+        )
+    };
+
+    let Some(cpu) = render(&[(lumit_ofx::gpu::GPU_ENV, "0")]) else {
+        skipped(name);
+        return;
+    };
+    assert!(!cpu.errored, "the CPU frame: {:?}", cpu.error);
+    for api in ["cuda", "opencl"] {
+        let gpu = render(&[
+            (lumit_ofx_testplug::gpu::GPU_ENV, "needed"),
+            (lumit_ofx::gpu::GPU_ENV, api),
+        ])
+        .expect("a broker");
+        if gpu.path.is_none() {
+            eprintln!("{name}: skipped {api}, which this machine cannot open");
+            continue;
+        }
+        assert!(!gpu.errored, "the {api} frame: {:?}", gpu.error);
+        for y in 0..FRAME.1 {
+            for x in 0..FRAME.0 {
+                let (on_card, on_cpu) = (gpu.frame.pixel(x, y), cpu.frame.pixel(x, y));
+                for channel in 0..4 {
+                    assert!(
+                        (on_card[channel] - on_cpu[channel]).abs() < 1e-3,
+                        "{api} at {x},{y}: {on_card:?} against {on_cpu:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Set by the cancelling thread in the test below.
 static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

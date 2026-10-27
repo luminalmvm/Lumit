@@ -214,6 +214,10 @@ pub struct Image {
     /// is given is [`Image::row_bytes`].
     stride: usize,
     block: Block,
+    /// The same picture's address on the graphics card, for the begin, render
+    /// and end of a GPU render ([`crate::gpu`]). The plugin is given this as
+    /// the data pointer while it is set.
+    device: Option<usize>,
 }
 
 impl Image {
@@ -238,6 +242,7 @@ impl Image {
             order,
             stride,
             block: Block::zeroed(bytes)?,
+            device: None,
         })
     }
 
@@ -331,6 +336,31 @@ impl Image {
                 base.add(self.stride * self.bounds.height().saturating_sub(1))
             },
         }
+    }
+
+    /// The address on the card, when the picture is on one.
+    #[must_use]
+    pub const fn device(&self) -> Option<usize> {
+        self.device
+    }
+
+    /// See [`Image::device`].
+    pub(crate) fn set_device(&mut self, device: Option<usize>) {
+        self.device = device;
+    }
+
+    /// The whole block, in memory order, for a copy to or from the card.
+    pub(crate) fn bytes(&self) -> &[u8] {
+        let len = self.floats_len() * size_of::<f32>();
+        // SAFETY: as `floats`, read as the bytes they are.
+        unsafe { std::slice::from_raw_parts(self.block.as_mut_ptr(), len) }
+    }
+
+    /// As [`Image::bytes`], for writing.
+    pub(crate) fn bytes_mut(&mut self) -> &mut [u8] {
+        let len = self.floats_len() * size_of::<f32>();
+        // SAFETY: as `floats_mut`.
+        unsafe { std::slice::from_raw_parts_mut(self.block.as_mut_ptr(), len) }
     }
 
     /// The floats of one OFX row, `y` counted the OFX way (up from `y1`).

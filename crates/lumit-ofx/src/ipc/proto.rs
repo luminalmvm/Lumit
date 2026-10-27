@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::describe::{Context, PluginDescriptor};
+use crate::gpu::GpuApi;
 use crate::image::{RectI, RowOrder};
 use crate::instance::{ParamSnapshot, Settled};
 
@@ -36,7 +37,8 @@ use crate::instance::{ParamSnapshot, Settled};
 ///
 /// 6 added `Settle`, and a press answers with the plugin's controls as well as
 /// its values. 7 added the generator and transition contexts. 8 added the
-/// ring's cancel word and `Cancelled`.
+/// ring's cancel word, `Cancelled`, and which graphics card path each plugin
+/// renders through.
 pub const PROTOCOL_VERSION: u32 = 8;
 
 /// Which instance a message is about. The host mints these; the broker only
@@ -217,6 +219,9 @@ pub enum BrokerMessage {
         plugins: Vec<PluginDescriptor>,
         /// One line per plugin that did not, naming it and saying why.
         refused: Vec<String>,
+        /// The graphics card path each of `plugins` renders through, `None`
+        /// being the CPU.
+        paths: Vec<Option<GpuApi>>,
     },
     /// The instance exists.
     Created,
@@ -251,6 +256,9 @@ pub enum BrokerMessage {
         frames_needed: BTreeMap<String, (f64, f64)>,
         /// The clip the plugin said this frame simply is, if it said so.
         identity_of: Option<String>,
+        /// The path the plugin renders its next frame through, `None` being
+        /// the CPU, which is what it is kept on once the card keeps failing.
+        path: Option<GpuApi>,
     },
     /// The host raised the cancel word and the render stopped. Not a failure
     /// and not a strike: the frame is nobody's any more.

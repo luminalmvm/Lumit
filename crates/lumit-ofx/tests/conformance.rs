@@ -183,6 +183,7 @@ fn request_for(clips: &[String], source: &Frame16) -> RenderRequest {
         order: RowOrder::BottomUp,
         inputs,
         neighbours: Vec::new(),
+        gpu: None,
     }
 }
 

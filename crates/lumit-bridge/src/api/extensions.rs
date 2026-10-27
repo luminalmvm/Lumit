@@ -214,6 +214,17 @@ pub(crate) fn register_effects() -> (Vec<String>, Vec<String>) {
     (added, skipped)
 }
 
+/// The plugin scan's standard options. The brokers the scan starts render on
+/// the card Lumit draws with, unless `prefs` say plugins stay on the CPU.
+#[frb(ignore)]
+pub(crate) fn scan_options(
+    prefs: &lumit_project::plugins::PluginPrefs,
+) -> lumit_ofx::discover::ScanOptions {
+    lumit_ofx::gpu::set_enabled(!prefs.plugins_on_cpu);
+    lumit_ofx::gpu::set_adapter(lumit_gpu::adapter_summary());
+    lumit_ofx::discover::ScanOptions::standard()
+}
+
 #[frb(ignore)]
 fn outcome(done: Result<Installed, ExtensionError>) -> BridgeExtensionOutcome {
     match done {

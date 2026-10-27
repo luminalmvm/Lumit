@@ -43,6 +43,7 @@ use lumit_ofx::ffi::{
 };
 use lumit_ofx::status::{OfxStatus, Status};
 
+pub mod gpu;
 mod probes;
 
 /// How many times `setHost` has been called, across every plugin here.
@@ -527,6 +528,7 @@ fn describe(variant: Variant, handle: *mut c_void) -> OfxStatus {
                 0,
                 1,
             );
+            gpu::declare(props_suite, props);
         }
         _ => {
             set_string(
@@ -1247,7 +1249,20 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
     // recognisably "the plugin filled this" and not "the host forgot to".
     let fill = [0.5_f32, 0.5, 0.5, 1.0];
 
-    let (width, height) = (destination.width(), destination.height());
+    // On the card the pictures are device memory, so the loop below is given
+    // nothing to do.
+    let on_card = gpu::render(
+        props_suite,
+        in_args,
+        &destination,
+        source.as_ref(),
+        !others.is_empty(),
+        gain as f32,
+    );
+    let (width, height) = match on_card {
+        Some(_) => (0, 0),
+        None => (destination.width(), destination.height()),
+    };
     for y in 0..height {
         // SAFETY: the image is pinned until it is released below, and `y` is
         // inside the bounds the host gave us.
@@ -1298,5 +1313,5 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
     }
     // SAFETY: as above.
     unsafe { (effect_suite.clip_release_image)(destination.handle) };
-    Status::Ok.code()
+    on_card.unwrap_or(Status::Ok.code())
 }

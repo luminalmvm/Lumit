@@ -8,9 +8,9 @@
 //!
 //! That is a real cost — two transfers per plugin op per frame — and it is why a
 //! plugin's declared cost is [`CostClass::Heavy`](lumit_core::fx::schema::CostClass) and
-//! why the degradation ladder gives one up before it gives up a built-in. OFX
-//! 1.5's GPU render suites are the answer to it (docs/12 §2.4) and are a later
-//! milestone; until then, the honest slow path beats a fast wrong one.
+//! why the degradation ladder gives one up before it gives up a built-in. A
+//! plugin that renders on the card does so in its broker, from these same
+//! floats (`lumit_ofx::gpu`), so the round trip stays either way.
 //!
 //! **Nothing here knows what an OFX plugin is.** The pass talks to an
 //! [`EffectDef`] and nothing else, which is what keeps `lumit-render` free of a

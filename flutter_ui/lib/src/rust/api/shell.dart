@@ -3,6 +3,7 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../api.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -50,6 +51,20 @@ void setFullResDragPreviews({required bool fullRes}) => BridgeLib.instance.api
 /// already open wants reopening. Held the way the drag setting above is.
 void setHardwareDecode({required bool on_}) =>
     BridgeLib.instance.api.crateApiShellSetHardwareDecode(on_: on_);
+
+/// Whether OFX plugins render on the graphics card where they can. Kept with
+/// the plugin preferences.
+bool pluginsOnGraphicsCard() =>
+    BridgeLib.instance.api.crateApiShellPluginsOnGraphicsCard();
+
+/// Turn plugin rendering on the graphics card on or off. It reaches plugins
+/// whose broker starts from here on, so the next start or rescan.
+///
+/// # Errors
+///
+/// [`BridgeError::WriteFailed`] when the preference could not be written.
+void setPluginsOnGraphicsCard({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetPluginsOnGraphicsCard(on_: on_);
 
 /// What Discord shows under the person's name while Lumit is open.
 ///

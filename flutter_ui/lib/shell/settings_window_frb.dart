@@ -256,9 +256,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// it makes a small entrance of its own (docs/15 §8).
   int _pageTurns = 0;
 
+  /// "Render plugins on the graphics card", read once as the window opens.
+  bool _pluginsOnCard = true;
+
   @override
   void initState() {
     super.initState();
+    _pluginsOnCard = pluginsOnGraphicsCard();
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -3426,6 +3430,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ui.workspace.performance.hardwareDecode = on;
             setHardwareDecode(on_: on);
             ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-plugins-on-card', l10n.settingsPluginsOnCard,
+              value: _pluginsOnCard, set: (on) {
+            _pluginsOnCard = on;
+            try {
+              setPluginsOnGraphicsCard(on_: on);
+            } catch (_) {
+              // Not kept, but in force until Lumit closes.
+            }
           }),
           _row(
             t,

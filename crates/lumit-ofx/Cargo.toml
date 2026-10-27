@@ -49,6 +49,10 @@ interprocess = "2"
 # spelled once instead of twice.
 memmap2 = "0.9"
 
+# A plugin's Metal render on macOS (`gpu::metal`), pinned with lumit-gpu's.
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.31"
+
 [build-dependencies]
 # The four parameter-suite entry points that are C-variadic in the header are
 # written in C (`src/suites/variadic.c`), because Rust cannot define one on
