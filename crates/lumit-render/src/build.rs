@@ -3424,7 +3424,6 @@ fn comp_walk(
                 if let Some(layer) =
                     owner.filter(|_| lumit_core::fx::points::stepped::trails(comp, e))
                 {
-                    use lumit_core::fx::points::stepped::{definition, target};
                     return lumit_core::fx::points::PointsSchedule {
                         schedule: lumit_core::fx::points::Schedule::default(),
                         t,
@@ -3437,14 +3436,14 @@ fn comp_walk(
                         label,
                         grow,
                         stepped: None,
-                        trails: Some(lumit_core::fx::points::Trails {
-                            key: definition(expr_doc, comp, layer, e, target(comp, e)),
-                            doc: expr_doc.clone(),
-                            comp: comp.id,
-                            layer: layer.id,
-                            clone: clone_number,
+                        trails: Some(crate::trails::carriage(
+                            expr_doc,
+                            comp,
+                            layer,
+                            e,
+                            clone_number,
                             inset,
-                        }),
+                        )),
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -4363,7 +4362,7 @@ fn comp_walk(
                 }
 
                 let placed = drawn(layer, lt, &context);
-                draws.push(CompLayerDraw {
+                draws.push(crate::trails::with_sprites(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
                     natural_size: (comp.width as f32, comp.height as f32),
@@ -4476,7 +4475,7 @@ fn comp_walk(
                             keys,
                         )
                     },
-                });
+                }));
                 continue;
             }
             _ => {
@@ -4614,7 +4613,7 @@ fn comp_walk(
         };
 
         let placed = drawn(layer, lt, &context);
-        draws.push(CompLayerDraw {
+        draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
             natural_size: natural,
@@ -4705,7 +4704,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-        });
+        }));
     }
     // A live span reaching the top of the stack closes with the walk itself.
     if let Some((_, group, mark)) = open_unit {
