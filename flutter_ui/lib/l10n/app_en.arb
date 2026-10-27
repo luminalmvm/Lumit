@@ -2164,6 +2164,10 @@
   "@settingsStylesFolder": {
     "description": "Settings window, Appearance: the row showing the folder a person's own style files are read from, with a reload button."
   },
+  "settingsReduceTransparency": "Reduce transparency",
+  "@settingsReduceTransparency": {
+    "description": "Settings window, Appearance: draws a style's see-through parts solid and blurs nothing behind them."
+  },
   "styleProblem": "Line {line}: {problem}",
   "@styleProblem": {
     "description": "Under the Your styles row: one line of the style in use that Lumit skipped, then why.",

@@ -1,6 +1,9 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
+import 'dart:io';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +40,7 @@ import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
+import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
@@ -114,7 +118,8 @@ class LumitAppNew extends StatelessWidget {
               wireStyle: uiState.workspace.interface.wireStyle,
               child: Directionality(
                 textDirection: TextDirection.ltr,
-                child: ColoredBox(
+                child: _RoomPicture(
+                  child: ColoredBox(
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
                   // deepest surface.
@@ -137,11 +142,42 @@ class LumitAppNew extends StatelessWidget {
                     ),
                   ),
                 ),
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A style's room picture, under the whole window. The room colour is
+/// see-through then, so the picture shows wherever the room is painted.
+class _RoomPicture extends StatelessWidget {
+  final Widget child;
+  const _RoomPicture({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilt with the theme, which is rebuilt whenever the style changes.
+    ThemeScope.of(context);
+    final style = StyleSheet.current;
+    final path = style?.roomPicture;
+    if (style == null || path == null || StyleSheet.solid) return child;
+    Widget picture = Image.file(File(path), fit: BoxFit.cover);
+    if (style.roomBlur > 0) {
+      picture = ImageFiltered(
+        imageFilter: ImageFilter.blur(
+            sigmaX: style.roomBlur,
+            sigmaY: style.roomBlur,
+            tileMode: TileMode.clamp),
+        child: picture,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [RepaintBoundary(child: picture), child],
     );
   }
 }

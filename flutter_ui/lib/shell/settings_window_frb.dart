@@ -77,6 +77,7 @@ import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
+import 'dialog_frame.dart' show dialogSurface;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -519,19 +520,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // decoration so that it is painted *over* the outermost pixel rather than
     // insetting everything by one: the drawing's 760 is the room inside the
     // frame, not the room inside the frame less its border.
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surface1,
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        boxShadow: t.floatShadow,
-      ),
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        border: Border.all(color: t.hairline),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        child: Entrance.content(
+    return dialogSurface(
+      context,
+      t,
+      Entrance.content(
           spec: ThemeScope.of(context).motion.content,
           rise: ThemeScope.of(context).motion.contentRise,
           blur: ThemeScope.of(context).motion.contentBlur,
@@ -561,7 +553,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -1417,6 +1408,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
             description: ui.workspace.activeStyle?.problems.firstOrNull ?? '',
           ),
+          _flag(t, 'settings-reduce-transparency',
+              l10n.settingsReduceTransparency,
+              value: settings.reduceTransparency, set: (on) {
+            settings.reduceTransparency = on;
+            ui.workspace.recompose();
+            ui.workspace.settingsChanged();
+          }),
           // How labels are cased. Null is the style's own, and a file that
           // never chose stores nothing.
           _row(
@@ -1990,7 +1988,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       }
       return;
     }
-    final read = readThemeFile(text);
+    final file = path.split(RegExp(r'[\\/]')).last;
+    final read = readThemeFile(text,
+        name: file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file);
     if (!mounted) return;
     final theme = read.theme;
     if (theme == null) {
@@ -2010,8 +2010,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final path = await pickThemeSaveLocation(themeFileName(name));
     if (path == null) return;
     try {
-      await File(path)
-          .writeAsString(encodeThemeFile(CustomTheme.from(name, ui.theme)));
+      // Written over the scheme it came from, so the file holds only what
+      // differs.
+      final base = workspace.customThemeName == null
+          ? workspace.colorScheme
+          : workspace.activeCustomTheme?.base;
+      await File(path).writeAsString(
+          encodeThemeFile(CustomTheme.from(name, ui.theme, base: base)));
       if (mounted) setState(() => _themeMessage = l10n.themeExported(name));
     } catch (e) {
       if (mounted) {

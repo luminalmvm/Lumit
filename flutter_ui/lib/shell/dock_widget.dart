@@ -780,13 +780,17 @@ Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
     ),
     style.fill,
   );
-  return Container(
-    decoration: decoration,
-    // Over the content, so the header's fill can't cover it on the curve.
-    foregroundDecoration:
-        style.edge(decoration.borderRadius as BorderRadius?),
-    clipBehavior: Clip.antiAlias,
-    child: insetShadows(style, decoration.borderRadius as BorderRadius?, child),
+  final radius = decoration.borderRadius as BorderRadius?;
+  return frosted(
+    style,
+    radius,
+    Container(
+      decoration: decoration,
+      // Over the content, so the header's fill can't cover it on the curve.
+      foregroundDecoration: style.edge(radius),
+      clipBehavior: Clip.antiAlias,
+      child: insetShadows(style, radius, child),
+    ),
   );
 }
 
@@ -1512,7 +1516,14 @@ class _PaneChrome extends StatelessWidget {
           // Animated for the boundary alone: the accent edge comes up on the
           // pane that took the click and fades off the one that lost it. The
           // content is the same widget either way, so it is not rebuilt.
-          child: AnimatedContainer(
+          child: frosted(
+            edged,
+            edged.radius != null
+                ? BorderRadius.circular(edged.radius!)
+                : card
+                    ? BorderRadius.circular(t.tokens.cardRadius)
+                    : null,
+            AnimatedContainer(
             key: drag.paneKey(pane),
             duration: scope.motion.mark.duration,
             curve: scope.motion.mark.curve,
@@ -1561,6 +1572,7 @@ class _PaneChrome extends StatelessWidget {
                   ? body
                   : Column(children: [header!, Expanded(child: body)]),
             ),
+          ),
           ),
         ),
       );

@@ -404,6 +404,13 @@ class _HouseTextFieldState extends State<HouseTextField>
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
       alignment: Alignment.centerLeft,
+      // A style's inner shadows, so a well can sit sunk into its panel.
+      foregroundDecoration: widget.frameless
+          ? null
+          : insetDecoration(
+              partStyle(context, t, 'well'),
+              BorderRadius.circular(
+                  partStyle(context, t, 'well').radius ?? t.tokens.wellRadius)),
       decoration: widget.frameless
           ? null
           : dress(BoxDecoration(

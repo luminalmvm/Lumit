@@ -1,5 +1,9 @@
 // A theme as a file you can send somebody.
 //
+// It is written like CSS, the same way a style is: `@name`, `@base` naming
+// the built-in scheme it starts from, and the colours that differ from that
+// scheme as `:root` variables. A file from before this, in JSON, still reads.
+//
 // **In plain terms.** A custom theme normally lives inside the workspace file,
 // which is machine-local: it never leaves the computer it was made on. This is
 // the same theme written out on its own, so it can be posted, put in a repo, or
@@ -21,9 +25,14 @@
 // than an exception, because picking the wrong file is a normal thing to do.
 
 import 'dart:convert';
+import 'dart:ui' show Color;
 
 import 'custom_theme.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+
+import 'style_sheet.dart';
+import 'theme.dart';
+import 'theme_tokens.dart';
 
 /// The extension a shared theme is written under. Lumit's own, so the file
 /// picker can offer just these and the system can associate them later.
@@ -41,13 +50,31 @@ const int themeFileVersion = 1;
 /// The theme as the text of a file. Indented, and with a trailing newline, so
 /// it reads well in an editor and diffs a line at a time.
 String encodeThemeFile(CustomTheme theme) {
-  const encoder = JsonEncoder.withIndent('  ');
-  final document = <String, dynamic>{
-    'format': themeFileFormat,
-    'version': themeFileVersion,
-    ...theme.toJson(),
-  };
-  return '${encoder.convert(document)}\n';
+  final base = theme.baseScheme.build();
+  final out = StringBuffer()
+    ..writeln('/* A Lumit colour scheme. A colour left out comes from the base. */')
+    ..writeln('@name "${theme.name.replaceAll('"', '')}";')
+    ..writeln('@base ${_kebab(theme.baseScheme.name)};')
+    ..writeln()
+    ..writeln(':root {');
+  for (final token in themeTokens) {
+    final c = theme.colours[token.key];
+    if (c == null || c == token.read(base)) continue;
+    out.writeln('  --${_kebab(token.key)}: ${_hex(c)};');
+  }
+  out.writeln('}');
+  return out.toString();
+}
+
+/// `textPrimary` as `text-primary`, the way CSS names things.
+String _kebab(String key) => key.replaceAllMapped(
+    RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
+
+String _hex(Color c) {
+  String two(double v) =>
+      (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+  final alpha = c.a < 1 ? two(c.a) : '';
+  return '#${two(c.r)}${two(c.g)}${two(c.b)}$alpha';
 }
 
 /// What reading a theme file came to: a theme, or a sentence saying why not.
@@ -65,7 +92,13 @@ class ThemeFileRead {
 /// Read a theme file's text. Never throws: a file that is not a theme comes
 /// back as a refusal, because choosing the wrong file is a normal thing to do
 /// and an editor should say so rather than fall over.
-ThemeFileRead readThemeFile(String text) {
+///
+/// [name] is the file's own name, used when the file doesn't say one.
+ThemeFileRead readThemeFile(String text, {String name = ''}) {
+  final lead = text.trimLeft();
+  if (!lead.startsWith('{') && !lead.startsWith('[') && !lead.startsWith('"')) {
+    return _readCss(text, name);
+  }
   Object? parsed;
   try {
     parsed = jsonDecode(text);
@@ -102,4 +135,23 @@ String themeFileName(String themeName) {
       .replaceAll(RegExp('[^a-z0-9]+'), '-')
       .replaceAll(RegExp('^-+|-+\$'), '');
   return '${slug.isEmpty ? 'theme' : slug}.$themeFileExtension';
+}
+
+/// The CSS form: `@name`, `@base` and `:root` colours.
+ThemeFileRead _readCss(String text, String name) {
+  final sheet = StyleSheet.parse(text, name: name);
+  final scheme = sheet.baseName == null ? null : schemeNamed(sheet.baseName!);
+  final base = scheme ?? LumitColorScheme.dark;
+  final colours = sheet.colours(base.build());
+  if (scheme == null && colours.isEmpty) {
+    return ThemeFileRead.refused(l10n.themeFileNotATheme);
+  }
+  final title = (sheet.title ?? name).trim();
+  if (title.isEmpty) return ThemeFileRead.refused(l10n.themeFileNoName);
+  return ThemeFileRead.loaded(CustomTheme(
+    name: title,
+    mode: base.mode,
+    colours: colours,
+    base: scheme,
+  ));
 }
