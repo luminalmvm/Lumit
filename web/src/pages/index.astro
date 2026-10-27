@@ -11,11 +11,6 @@ import Features from "../components/home/Features.astro";
 import Roadmap from "../components/home/Roadmap.astro";
 import Closing from "../components/home/Closing.astro";
 
-// The hero line arrives a word at a time. One span per word, each carrying its
-// own index; the delay is arithmetic in CSS rather than script.
-const tagline =
-  "Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.";
-const words = tagline.split(" ");
 ---
 
 <Base
@@ -24,22 +19,9 @@ const words = tagline.split(" ");
 >
   {/* Everything below the hero starts hidden and is revealed by the script at
       the foot of this page. Without script the class is never set and the page
-      is simply the page.
-
-      `hold` keeps the whole page unseen until the hero has all its parts, so
-      nothing of it shows half-made: the field says when (HeroField.astro).
-      Two seconds is as long as anyone is kept waiting for it. */}
+      is simply the page. */}
   <script is:inline>
-    (function () {
-      var root = document.documentElement;
-      root.classList.add("anim", "hold");
-      document.addEventListener("hero:ready", function () {
-        root.classList.remove("hold");
-      }, { once: true });
-      setTimeout(function () {
-        if (root.classList.contains("hold")) document.dispatchEvent(new Event("hero:ready"));
-      }, 2000);
-    })();
+    document.documentElement.classList.add("anim");
   </script>
 
   {/* ---------- hero ---------- */}
@@ -52,16 +34,9 @@ const words = tagline.split(" ");
         <span class="sr-only">Lumit - Compositing that adapts to your workflow.</span>
       </h1>
 
-      {/* The hero arrives once the wordmark is home, and the download button
-          leads: button, line, the two links under it. */}
-      <p class="words relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80" data-reveal style="--base:150ms">
-        {
-          words.map((word, i) => (
-            <Fragment>
-              <span class="word" style={`--i:${i}`}>{word}</span>{" "}
-            </Fragment>
-          ))
-        }
+      {/* The download button leads, then the line and the link under it. */}
+      <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80" data-reveal style="--i:2">
+        Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.
       </p>
 
       <div class="lead relative mt-7 flex flex-wrap items-center justify-center gap-3">
@@ -181,9 +156,9 @@ const words = tagline.split(" ");
 </Base>
 
 <style>
-  /* The download button does not wait for the wordmark: it blurs in as the
-     page is shown, and the rest of the hero follows the lockup home. */
-  :global(html.anim:not(.hold)) .lead {
+  /* The download button blurs in as the page is shown, and the rest of the
+     hero follows it. */
+  :global(html.anim) .lead {
     animation: piece-in 500ms both;
   }
   @keyframes piece-in {
@@ -199,42 +174,8 @@ const words = tagline.split(" ");
     }
   }
 
-  /* The hero line is the one that arrives a word at a time, so the paragraph
-     itself never blurs - its words do, each taking 500ms and starting 16ms
-     after the one before it, the line as a whole starting at --base. */
-  :global(html.anim) [data-reveal].words {
-    opacity: 1;
-    filter: none;
-    transform: none;
-    transition: none;
-  }
-  :global(html.anim) .words .word {
-    opacity: 0;
-  }
-  :global(html.anim) .words.shown .word {
-    animation: word-in 500ms both;
-    animation-delay: calc(var(--base, 0ms) + var(--i) * 16ms);
-  }
-  .word {
-    display: inline-block;
-  }
-  /* Both ends are written out. A keyframe list with no `to` takes the element's
-     own style as its end, and a word's own style is the hidden one above - so
-     an implicit end would animate it from invisible to invisible. */
-  @keyframes word-in {
-    from {
-      opacity: 0;
-      filter: blur(6px);
-    }
-    to {
-      opacity: 1;
-      filter: none;
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    :global(html.anim) .lead,
-    :global(html.anim) .words .word {
+    :global(html.anim) .lead {
       animation: none;
       opacity: 1;
       filter: none;
@@ -307,13 +248,6 @@ const words = tagline.split(" ");
      should be weighing light against dark. */
   html.lens body > main {
     background-color: var(--color-ink);
-  }
-  /* The page held back until the hero is ready, then let in quickly. */
-  html.anim body {
-    transition: opacity 200ms ease-out;
-  }
-  html.hold body {
-    opacity: 0;
   }
 </style>
 
@@ -639,36 +573,17 @@ const words = tagline.split(" ");
     });
   }
 
-  // The page below the hero arrives once the wordmark has come home - the same
-  // cue the hero's own background waits for - and then a group at a time as it
-  // scrolls into view. The timeout is the safety net for a wordmark that never
-  // animates.
-  const reveal = () => {
-    const seen = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.classList.add("shown");
-          seen.unobserve(entry.target);
-        }
-      },
-      { rootMargin: "0px 0px -8% 0px" },
-    );
-    for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
-  };
-
-  let revealed = false;
-  const once = () => {
-    if (revealed) return;
-    revealed = true;
-    reveal();
-  };
-  // A visit that lands part-way down the page - an anchor from the header, a
-  // restored scroll position - has no hero animation to wait for.
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) once();
-  else if (location.hash || scrollY > 0) once();
-  else {
-    document.addEventListener("wordmark:home", once, { once: true });
-    setTimeout(once, 1800);
-  }
+  // The page arrives a group at a time as it scrolls into view, starting as
+  // soon as it is read.
+  const seen = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("shown");
+        seen.unobserve(entry.target);
+      }
+    },
+    { rootMargin: "0px 0px -8% 0px" },
+  );
+  for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
 </script>

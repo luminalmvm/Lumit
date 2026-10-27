@@ -717,9 +717,11 @@ const layers = [
 
     // ---- the clock ----
     // It waits for the field behind to have its picture (HeroField.astro says
-    // when), so the mark is not already moving when its light comes on.
-    let held = document.documentElement.classList.contains("hold");
+    // when), so the mark is not already moving when its light comes on. Two
+    // seconds at most.
+    let held = true;
     document.addEventListener("hero:ready", () => (held = false), { once: true });
+    setTimeout(() => (held = false), 2000);
     let seen = true;
     new IntersectionObserver((entries) => {
       seen = entries[0].isIntersecting;
