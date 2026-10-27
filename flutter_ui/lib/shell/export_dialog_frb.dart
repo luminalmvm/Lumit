@@ -1802,11 +1802,6 @@ class _ExportDialogState extends State<_ExportDialog> {
           ]),
           dimmed: dim,
         ),
-        if (_images)
-          _reading(
-            t,
-            l10n.exportImageSequenceNote(_format.extension.toUpperCase()),
-          ),
         // Not while the group is dead: a reading of a frame nobody is writing
         // is the "this does nothing" line the disabled group already states.
         if (!dim &&
@@ -1873,18 +1868,13 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
           dimmed: dim,
         ),
-        // What the container will actually do with the choice, said where
-        // the choice is made: a wide-gamut file carrying no label is read as
-        // sRGB and comes back looking wrong.
         // A file written through a config's transform carries no reliable
         // primaries or transfer to state, so it is written untagged rather
-        // than mis-tagged (docs/impl/ocio.md §5.2) — said here, where the
-        // choice is made.
+        // than mis-tagged (docs/impl/ocio.md §5.2). Said here, where the
+        // choice is made, since a file without a tag can come back looking
+        // wrong.
         if (_colourFromConfig && _caps.colourSpaces.isNotEmpty)
-          _reading(t, l10n.exportColourConfigUntagged,
-              key: const ValueKey('export-colour-tagging'))
-        else if (_caps.colourSpaces.length > 1)
-          _reading(t, l10n.exportColourStated,
+          _warning(t, l10n.exportColourConfigUntagged,
               key: const ValueKey('export-colour-tagging')),
       ],
       dimmed: dim,
@@ -2417,7 +2407,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               : (choice) => setState(() => _footage = choice),
         ),
       ),
-      _reading(t, l10n.exportFootageCount(_lacking.length)),
+      _warning(t, l10n.exportFootageCount(_lacking.length)),
     ]);
   }
 
@@ -2518,6 +2508,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         padding: const EdgeInsets.only(
             left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: dialogMono(t)),
+      );
+
+  /// A line the user has to act on, where a reading would go.
+  Widget _warning(LumitTheme t, String text, {Key? key}) => Padding(
+        padding: const EdgeInsets.only(
+            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        child: Text(text, key: key, style: t.small),
       );
 
   /// One of the output types, as the drawing's chip: the chosen one outlined

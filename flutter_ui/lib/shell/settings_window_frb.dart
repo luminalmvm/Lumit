@@ -1027,7 +1027,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsShareUpLimit,
               _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
                   (limit) => ui.workspace.setShareLimits(up: limit)),
-              description: l10n.settingsShareLimitHint,
             ),
             _row(
               t,
@@ -2684,7 +2683,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   context, context.read<LumitState>(), service)),
           child: Text(l10n.chooseEllipsis, style: t.small),
         ),
-        description: l10n.settingsExtensionsInstallHint,
       ),
       _row(
         t,

@@ -1243,24 +1243,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
-                    // A null layer has no picture, so nothing here changes one
-                    // — but the parameters are real, animatable values, which is
-                    // exactly what a null is for once expressions can read them.
-                    // Said plainly, once, rather than refusing the drop.
-                    if (info.kind == BridgeLayerKind.nullLayer &&
-                        info.effects.isNotEmpty)
-                      Padding(
-                        key: const ValueKey('fx-null-inert'),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        child: Text(
-                          'A null layer draws nothing, so an effect here changes '
-                          'no picture. Its parameters stay live — a null is '
-                          'where a control lives when it is meant to drive other '
-                          'layers.',
-                          style: t.small.copyWith(color: t.textMuted),
-                        ),
-                      ),
                     if (info.effects.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
