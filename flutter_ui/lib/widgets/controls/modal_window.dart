@@ -11,6 +11,7 @@ import '../../state/workspace.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
+import 'menus.dart';
 import 'motion.dart';
 
 /// Show a positioned popup and complete with the value handed to `close`.
@@ -160,7 +161,10 @@ int _openModals = 0;
 /// the open and close calls: a window can also leave by having the tree taken
 /// down under it, and a count only the close path decremented would stick above
 /// zero and leave the keyboard dead for the rest of the session.
-bool get lumitModalOpen => _openModals > 0;
+///
+/// Also true for the length of an arrow key or Enter pressed while a menu is
+/// up, which the menu answers, so the panels stand down for those as well.
+bool get lumitModalOpen => _openModals > 0 || menuTakesKey;
 
 /// For a modal surface that is not a [_MovableWindow] — the FX console
 /// is the one today. Counted from `initState` and `dispose`, for the

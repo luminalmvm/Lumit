@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../icons/lumit_icon.dart';
 import '../../icons/lumit_icons.dart';
@@ -109,13 +110,26 @@ class _MenuRowState extends State<MenuRow> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _surface = FloatSurface._of(context);
+    final surface = FloatSurface._of(context);
+    if (surface == _surface) return;
+    _surface?._rows.remove(this);
+    _surface = surface?.._rows.add(this);
   }
 
   @override
   void dispose() {
+    _surface?._rows.remove(this);
     _alone?.dispose();
     super.dispose();
+  }
+
+  /// Where the row is on screen, top to bottom, or null while it is not
+  /// laid out. The arrow keys walk the rows in this order.
+  double? get _top {
+    final box = context.findRenderObject();
+    return box is RenderBox && box.attached && box.hasSize
+        ? box.localToGlobal(Offset.zero).dy
+        : null;
   }
 
   void _press() {
@@ -198,6 +212,22 @@ class _MenuRowState extends State<MenuRow> {
   }
 }
 
+/// Whether an open menu is answering the key being pressed. The arrows and
+/// Enter belong to the menu while one is up, so a panel behind it does not
+/// act on them as well.
+bool get menuTakesKey =>
+    _FloatSurfaceState._up.any((s) => s._rows.isNotEmpty) &&
+    HardwareKeyboard.instance.logicalKeysPressed.any(_menuKeys.contains);
+
+final Set<LogicalKeyboardKey> _menuKeys = {
+  LogicalKeyboardKey.arrowUp,
+  LogicalKeyboardKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight,
+  LogicalKeyboardKey.enter,
+  LogicalKeyboardKey.numpadEnter,
+};
+
 /// The floating popup surface every menu and dropdown shares: `surface3`
 /// fill, hairline edge, the float radius and the real drop shadow.
 ///
@@ -227,6 +257,11 @@ class FloatSurface extends StatefulWidget {
   static ValueNotifier<Object?>? hoveredRow(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_MenuHoverScope>()?.hovered;
 
+  /// The row of the nearest floating surface that is lit, by the pointer or
+  /// the arrow keys, named by its [MenuRow.hoverId]. Null outside a surface.
+  static ValueNotifier<Object?>? litRow(BuildContext context) =>
+      _of(context)?._lit;
+
   /// The surface state itself — the rows and [SubmenuRow] talk to it for the
   /// hover-intent gating.
   static _FloatSurfaceState? _of(BuildContext context) =>
@@ -242,6 +277,94 @@ class _FloatSurfaceState extends State<FloatSurface> {
   /// The row that is lit. Unlike [_hovered] it is never held back, and the
   /// pointer leaving a row puts it out.
   final _lit = ValueNotifier<Object?>(null);
+
+  // --- The keys ------------------------------------------------------------
+  //
+  // A menu holds no focus (see popups.dart), so Up, Down, Enter, Right and
+  // Left are heard on the hardware keyboard, and only by the innermost menu
+  // that is up. They move the same highlight the pointer does.
+
+  /// The rows on this surface, for the arrow keys to walk.
+  final Set<_MenuRowState> _rows = {};
+
+  /// The surfaces up in a popup, innermost last. A surface drawn inside a
+  /// page rather than a popup is not one of them.
+  static final List<_FloatSurfaceState> _up = [];
+  bool _listed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_listed || !inLumitPopup(context)) return;
+    _listed = true;
+    _up.add(this);
+    // Removed and added, as the escape ladder does: the binding empties its
+    // handlers between widget tests.
+    HardwareKeyboard.instance
+      ..removeHandler(_onKey)
+      ..addHandler(_onKey);
+  }
+
+  static bool _onKey(KeyEvent event) =>
+      event is! KeyUpEvent && _up.isNotEmpty && _up.last._key(event.logicalKey);
+
+  /// Whether a text box has the keys. Up and Down still move the highlight,
+  /// as in the search picker, and the rest are the box's.
+  static bool _typing() {
+    final focused = FocusManager.instance.primaryFocus?.context;
+    return focused != null &&
+        (focused.widget is EditableText ||
+            focused.findAncestorWidgetOfExactType<EditableText>() != null);
+  }
+
+  bool _key(LogicalKeyboardKey key) {
+    final rows = [
+      for (final r in _rows)
+        if (r.widget.enabled && r._top != null) r
+    ]..sort((a, b) => a._top!.compareTo(b._top!));
+    if (rows.isEmpty) return false;
+    final at = rows.indexWhere((r) => r._id == _lit.value);
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp) {
+      final down = key == LogicalKeyboardKey.arrowDown;
+      final next = rows[at < 0
+          ? (down ? 0 : rows.length - 1)
+          : (at + (down ? 1 : -1)) % rows.length];
+      _lit.value = next._id;
+      Scrollable.ensureVisible(
+        next.context,
+        alignmentPolicy: down
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+            : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+      );
+      return true;
+    }
+    if (_typing()) return false;
+    if (key == LogicalKeyboardKey.arrowLeft) return closeLumitFlyout(context);
+    if (at < 0) return false;
+    final row = rows[at];
+    final sub = row.widget.hoverId;
+    if (sub is _SubmenuRowState &&
+        (key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter)) {
+      sub._open();
+      // Its first row lit once it is up, so Down is not needed to get in.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final inner = _up.lastOrNull;
+        if (inner != null && inner != this && inner._lit.value == null) {
+          inner._key(LogicalKeyboardKey.arrowDown);
+        }
+      });
+      return true;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      row._press();
+      return true;
+    }
+    return false;
+  }
 
   // --- Safe-triangle hover intent ---------------------------------------
   //
@@ -423,6 +546,10 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _debugShape.dispose();
     _hovered.dispose();
     _lit.dispose();
+    if (_listed) {
+      _up.remove(this);
+      if (_up.isEmpty) HardwareKeyboard.instance.removeHandler(_onKey);
+    }
     super.dispose();
   }
 

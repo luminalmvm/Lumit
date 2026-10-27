@@ -84,8 +84,23 @@ void _truncatePopups(int depth) {
 /// Take down every open menu, dropdown and flyout.
 void closeLumitPopups() => _truncatePopups(0);
 
+/// Whether [context] is inside a popup.
+bool inLumitPopup(BuildContext context) =>
+    context.getInheritedWidgetOfExactType<_PopupScope>() != null;
+
+/// Take down the flyout [context] is in, and anything it opened, leaving the
+/// menu it flew out of. False when [context] is not in a flyout.
+bool closeLumitFlyout(BuildContext context) {
+  final depth =
+      context.getInheritedWidgetOfExactType<_PopupScope>()?.depth ?? 0;
+  if (depth == 0) return false;
+  _truncatePopups(depth);
+  return true;
+}
+
 /// Whether any popup is up. The menus are not a modal — panels keep their
-/// keyboard — so this is for tests and for Escape, not for gating commands.
+/// keyboard, all but the keys a menu walks with (see `menuTakesKey`) — so
+/// this is for tests and for Escape, not for gating commands.
 bool get lumitPopupOpen => _popupChain.isNotEmpty;
 
 /// The same answer as something to listen to, for a control that draws

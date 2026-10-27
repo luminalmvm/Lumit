@@ -397,11 +397,11 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
               width: 288,
               autofocus: true,
               hint: widget.hint,
+              // Enter takes the row that is lit: the first match as the
+              // search narrows, or wherever the arrow keys moved it.
               onSubmitted: (_) {
-                // Enter takes the only match, which is what a search that
-                // has narrowed to one thing means.
-                final only = _entries.where((e) => e.optionIndex != null);
-                if (only.length == 1) widget.onPick(only.first.optionIndex);
+                final lit = FloatSurface.litRow(context)?.value;
+                if (lit is int) widget.onPick(lit);
               },
             ),
           ),
@@ -432,6 +432,7 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
                       final idx = e.optionIndex!;
                       return MenuRow(
                         selected: idx == widget.value,
+                        hoverId: idx,
                         onPressed: () => widget.onPick(idx),
                         child: Text(
                           widget.options[idx],
@@ -453,6 +454,9 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
     super.initState();
     _query.addListener(() {
       setState(() => _entries = _build(_query.text));
+      final first = _entries.where((e) => e.optionIndex != null).firstOrNull;
+      FloatSurface.litRow(context)?.value =
+          _query.text.isEmpty ? null : first?.optionIndex;
     });
   }
 }
