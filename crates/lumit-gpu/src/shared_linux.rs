@@ -568,7 +568,10 @@ pub(crate) fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu
     let (device, queue) = unsafe {
         adapter.create_device_from_hal::<wgpu::hal::api::Vulkan>(
             open,
-            &wgpu::DeviceDescriptor::default(),
+            &wgpu::DeviceDescriptor {
+                required_limits: crate::widest_texture(adapter),
+                ..Default::default()
+            },
             None,
         )
     }

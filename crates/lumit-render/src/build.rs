@@ -993,8 +993,7 @@ fn points_room(
         // To the further of the frame's two edges, and never past a frame's
         // width, however far off the layer has been moved.
         let px = corner.max(frame - corner - art).clamp(0.0, frame);
-        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(tex) / 2;
-        ((px * scale).ceil() as u32).min(most)
+        lumit_core::largest_picture::room((px * scale).ceil() as u32, tex)
     };
     let room = [
         side(corner.0, natural.0, frame.0, tex.0),
@@ -4726,17 +4725,15 @@ fn comp_walk(
 
 /// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
 fn at_own_size(d: &mut CompLayerDraw) {
-    let max = crate::plan::MAX_TEXTURE_SIDE;
-    let (w, h) = (
-        (d.natural_size.0 as u32).min(max),
-        (d.natural_size.1 as u32).min(max),
-    );
+    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
     if let DrawSource::Pixels {
         rgba, tex_w, tex_h, ..
     } = &mut d.source
     {
         let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
-        if (*tex_w, *tex_h) == (8, 8) && (w, h) != (8, 8) && flat {
+        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
+            let fit = lumit_core::largest_picture::fit;
+            let (w, h) = (fit(natural.0), fit(natural.1));
             let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
             (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
         }

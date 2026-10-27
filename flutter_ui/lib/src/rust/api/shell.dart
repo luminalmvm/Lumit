@@ -7,7 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `journal_file`
+// These functions are ignored because they are not marked as `pub`: `journal_file`, `memory_takes`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// What this build can truthfully say about itself at load time.
@@ -51,6 +51,24 @@ void setFullResDragPreviews({required bool fullRes}) => BridgeLib.instance.api
 /// already open wants reopening. Held the way the drag setting above is.
 void setHardwareDecode({required bool on_}) =>
     BridgeLib.instance.api.crateApiShellSetHardwareDecode(on_: on_);
+
+/// The widest and tallest picture the renderer makes, in pixels. Held to what
+/// the graphics card takes.
+int largestPicture() => BridgeLib.instance.api.crateApiShellLargestPicture();
+
+/// The sides [`largest_picture`] may be set to on this machine, smallest
+/// first: as far as the card takes, while one picture at 16-bit (8 bytes a
+/// pixel) is no more than a quarter of the graphics memory, or of the
+/// machine's where the card does not say.
+Uint32List largestPictureChoices() =>
+    BridgeLib.instance.api.crateApiShellLargestPictureChoices();
+
+/// Set [`largest_picture`], to the largest choice no bigger than `side` that
+/// the memory takes. The card is held to when the picture is made, since a
+/// setting handed back at boot comes before the card is open. Held the way
+/// the drag setting above is.
+void setLargestPicture({required int side}) =>
+    BridgeLib.instance.api.crateApiShellSetLargestPicture(side: side);
 
 /// Whether OFX plugins render on the graphics card where they can. Kept with
 /// the plugin preferences.

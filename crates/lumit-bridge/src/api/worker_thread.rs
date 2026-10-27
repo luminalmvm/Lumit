@@ -4001,6 +4001,7 @@ fn present_ring_frame(
                     view,
                     reach: prepared.reach().map(|r| r.rect.map(f64::from)),
                     reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+                    cut: prepared.cut(),
                 },
             ));
         }
@@ -4029,6 +4030,7 @@ fn present_ring_frame(
                 view,
                 reach: prepared.reach().map(|r| r.rect.map(f64::from)),
                 reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+                cut: prepared.cut(),
             }));
         }
         Err(err) => note!("Shared DMA-BUF present failed, dropping frame: {err}"),
@@ -5894,6 +5896,7 @@ fn send_dmabuf(
         view: state.view_id(),
         reach: prepared.reach().map(|r| r.rect.map(f64::from)),
         reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+        cut: prepared.cut(),
     }));
     true
 }
@@ -5986,6 +5989,7 @@ fn send_shared(
             view: state.view_id(),
             reach: prepared.reach().map(|r| r.rect.map(f64::from)),
             reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+            cut: prepared.cut(),
         },
     ));
     true

@@ -362,6 +362,13 @@ fn feed_comp(
         h.update(b"room");
         h.update(&doc.graph_room.frames().to_le_bytes());
     }
+    // The largest picture, which is the machine's and not the project's, but
+    // changes the pixels of anything it cuts all the same.
+    let side = lumit_core::largest_picture::side();
+    if side != lumit_core::largest_picture::DEFAULT_SIDE {
+        h.update(b"side");
+        h.update(&side.to_le_bytes());
+    }
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
     }

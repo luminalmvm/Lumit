@@ -31,6 +31,8 @@ import '../state/comp_time.dart'
     show sampledExpression, sampledOrientation, sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart'
     show shapeContentsBounds, shapeContentsRect, textLayerBounds;
+import '../shell/settings_window_frb.dart'
+    show SettingsPage, showSettingsWindowFrb;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
 import '../state/view_projection.dart' show flatView;
@@ -815,6 +817,7 @@ class ViewerStage extends StatelessWidget {
               ),
             ),
             _missingSlate(),
+            _cutSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
             // called once per tool layer — six times per build, sixty times a
@@ -1224,6 +1227,29 @@ class ViewerStage extends StatelessWidget {
       child: _MissingBadge(footage: footage),
     );
   }
+
+  /// A notice when the last frame was cut to the largest picture, which
+  /// opens the setting that raises it.
+  Widget _cutSlate() => Positioned(
+        right: 8,
+        bottom: 8,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: uiState.cutOf(viewId),
+          builder: (context, cut, _) {
+            if (!cut) return const SizedBox.shrink();
+            final t = ThemeScope.of(context).theme;
+            return HouseButton(
+              key: const ValueKey('viewer-cut'),
+              small: true,
+              onPressed: () => unawaited(showSettingsWindowFrb(context,
+                  initialPage: SettingsPage.previewAndCache,
+                  row: l10n.settingsLargestPicture)),
+              child: Text(l10n.viewerPictureCut,
+                  style: t.small.copyWith(color: t.warning)),
+            );
+          },
+        ),
+      );
 }
 
 /// Whether [entry] is seen through the comp's camera: a 3D layer, or a light,
