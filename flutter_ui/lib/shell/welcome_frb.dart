@@ -277,10 +277,16 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     _cards(),
                     const SizedBox(height: welcomeBlockGap),
                     _recents(app, workspace),
-                    if (_backedUp.isNotEmpty) ...[
-                      const SizedBox(height: welcomeBlockGap),
-                      _backups(app),
-                    ],
+                    _arriving(OpenReveal(
+                      open: _backedUp.isNotEmpty,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: welcomeBlockGap),
+                          _backups(app),
+                        ],
+                      ),
+                    )),
                     const SizedBox(height: welcomeBlockGap),
                     _footer(t, app),
                   ],
@@ -290,6 +296,20 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The backed-up projects come in after the page does, once the account
+  /// has answered, so the column grows to take them rather than jumping.
+  Widget _arriving(Widget block) {
+    final reveal = ThemeScope.of(context).motion.reveal;
+    // With motion off the spec has no length, which a size animation refuses.
+    if (reveal.isStill) return block;
+    return AnimatedSize(
+      duration: reveal.duration,
+      curve: reveal.curve,
+      alignment: Alignment.topCenter,
+      child: block,
     );
   }
 
