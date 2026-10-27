@@ -6,8 +6,10 @@
 //! Gaussian Blur lands as the same effect does in an imported project.
 
 use lumit_core::anim::{Animation, Property};
-use lumit_core::fx::{self, schema::FxCategory};
-use lumit_core::model::{Composition, EffectInstance, EffectNamespace, EffectValue, Layer};
+use lumit_core::fx::{self, schema::FxCategory, schema::ParamSchema};
+use lumit_core::model::{
+    Composition, EffectInstance, EffectNamespace, EffectParam, EffectValue, Layer,
+};
 use lumit_core::ops::Op;
 use lumit_core::store::DocumentStore;
 use lumit_core::time::Rational;
@@ -29,16 +31,45 @@ fn name_of(e: &EffectInstance) -> &str {
         .unwrap_or(&e.effect.match_name)
 }
 
+/// Every control of `e`: its effect's own, then the ones its source declares,
+/// such as an LFX effect's shader rows.
+fn rows_of(e: &EffectInstance) -> Vec<&'static ParamSchema> {
+    fx::builtins::def(&e.effect.match_name).map_or_else(Vec::new, |def| {
+        def.schema().params.iter().chain(def.derived(e)).collect()
+    })
+}
+
 /// The label of control `id` of `e`, or the id when it has none.
 fn label_of<'a>(e: &EffectInstance, id: &'a str) -> &'a str {
-    fx::builtins::schema(&e.effect.match_name)
-        .and_then(|s| s.params.iter().find(|p| p.id == id))
+    rows_of(e)
+        .into_iter()
+        .find(|p| p.id == id)
         .map_or(id, |p| p.label)
+}
+
+/// Store `row` on `e` at its default, as the panel does when a declared row
+/// is first written. A button has nothing to store.
+fn fill(e: &mut EffectInstance, row: &ParamSchema) {
+    if let Some(value) = fx::builtins::default_param_value(&row.kind) {
+        e.params.push(EffectParam {
+            id: row.id.to_owned(),
+            value,
+            extra: serde_json::Map::new(),
+        });
+    }
 }
 
 /// One effect as `effect.list` answers it. Key times are on the comp's
 /// clock, `offset` ahead of the layer's.
 fn effect_json(index: usize, e: &EffectInstance, offset: Rational) -> Value {
+    // Rows the source declares and nobody has written yet, at their defaults.
+    let mut e = e.clone();
+    for row in rows_of(&e) {
+        if !e.params.iter().any(|p| p.id == row.id) {
+            fill(&mut e, row);
+        }
+    }
+    let e = &e;
     let params: Vec<Value> = e
         .params
         .iter()
@@ -85,6 +116,26 @@ fn now(store: &DocumentStore, comp: Uuid, layer: Uuid, id: Uuid) -> Result<Value
         .iter()
         .position(|e| e.id == id)
         .ok_or_else(|| ScriptError::Failed("The effect went away.".into()))?;
+    Ok(effect_json(
+        index,
+        &layer.effects[index],
+        layer.start_offset.0,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct GetArgs {
+    comp: String,
+    layer: String,
+    effect: Which,
+}
+
+pub(super) fn get(host: &dyn Host, a: GetArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let layer = find_layer(comp, &a.layer)?;
+    let index = find_effect(layer, &a.effect)?;
     Ok(effect_json(
         index,
         &layer.effects[index],
@@ -286,6 +337,14 @@ fn set_param(
     key: &str,
     change: Change,
 ) -> Result<(), ScriptError> {
+    let rows = rows_of(e);
+    let declared = rows
+        .iter()
+        .find(|p| p.id == key)
+        .or_else(|| rows.iter().find(|p| p.label.eq_ignore_ascii_case(key)));
+    if let Some(row) = declared.filter(|row| !e.params.iter().any(|p| p.id == row.id)) {
+        fill(e, row);
+    }
     let own = e.params.iter().position(|p| p.id == key).or_else(|| {
         e.params
             .iter()
