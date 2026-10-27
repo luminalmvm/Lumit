@@ -43,12 +43,15 @@ export default defineConfig({
         "./src/styles/theme.css",
       ],
       // A code block is a card: the card's corner and hairline here, and its
-      // ground in theme.css, as Starlight sets that one after these.
+      // ground in theme.css, as Starlight sets that one after these. Dark only,
+      // as the site is, or a phone in light mode gets light code colours.
       expressiveCode: {
+        themes: ["starlight-dark"],
         styleOverrides: { borderRadius: "4px", borderColor: "var(--sl-color-hairline)" },
       },
       // The before-and-after wipe on every effect page. Each figure carries a
-      // range input across the picture; this points the CSS clip at its value.
+      // range input across the picture; this clips the picture and moves the
+      // handle to its value. A tap jumps there too, which iOS doesn't do.
       // Small enough to inline, and the figures degrade to an honest
       // half-and-half split if it never runs.
       head: [
@@ -56,10 +59,14 @@ export default defineConfig({
           tag: "script",
           content: `addEventListener("DOMContentLoaded",function(){
 document.querySelectorAll(".compare").forEach(function(c){
-var r=c.querySelector(".compare__range");if(!r)return;
-var set=function(){c.style.setProperty("--split",r.value+"%")};
-r.addEventListener("input",set);set()})})`,
+var r=c.querySelector(".compare__range"),a=c.querySelector(".compare__after"),h=c.querySelector(".compare__handle");if(!r||!a||!h)return;
+var set=function(){a.style.clipPath="inset(0 0 0 "+r.value+"%)";h.style.transform="translateX("+r.value+"cqw)"};
+r.addEventListener("input",set);
+r.addEventListener("pointerdown",function(e){var b=r.getBoundingClientRect();r.value=(e.clientX-b.left)/b.width*100;set()});
+set()})})`,
         },
+        // The phone's bar in the page's own ground.
+        { tag: "meta", attrs: { name: "theme-color", content: "#0b0c0e" } },
       ],
       // Git-based per-page dates, shown under the title by the PageTitle
       // override. CI must clone full history or every page shows deploy day.

@@ -13,6 +13,7 @@
    than left to resolve differently in the light branch. */
 
 :root {
+  color-scheme: dark;
   --sl-font: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --sl-font-mono: "Paper Mono", ui-monospace, monospace;
 
@@ -61,6 +62,18 @@
   --sl-text-h4: 1.0625rem;
 }
 
+/* No grey flash on a tap. Buttons give way under the finger instead. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+starlight-menu-button button,
+site-search button[data-open-modal] {
+  transition: transform 0.1s ease-out;
+}
+:is(starlight-menu-button button, site-search button[data-open-modal], .pagination-links a):active {
+  transform: scale(0.97);
+}
+
 /* ---------- the bar ---------- */
 
 /* The wordmark at the main site's size, then "Docs" in the kicker's face. The
@@ -88,7 +101,7 @@
    row inside it is a `.header` too and would draw a second line. */
 header.header {
   border-bottom: 1px solid var(--sl-color-hairline);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
 }
 .social-icons {
   gap: 1.75rem;
@@ -116,10 +129,14 @@ header.header::before {
   background: linear-gradient(to right, transparent, var(--sl-color-accent-high));
   transform-origin: left;
 }
+/* As wide as the bar with the marker clipped out of its left end, so it can
+   travel by transform alone. */
 header.header::after {
-  margin-left: -5px;
-  border: 5px solid transparent;
-  border-top: 7px solid var(--sl-color-accent-high);
+  left: -5px;
+  right: 5px;
+  height: 7px;
+  background: var(--sl-color-accent-high);
+  clip-path: polygon(0 0, 10px 0, 5px 7px);
 }
 @supports (animation-timeline: scroll()) {
   header.header::before,
@@ -137,8 +154,8 @@ header.header::after {
   to { transform: scaleX(1); }
 }
 @keyframes playhead-move {
-  from { left: 0; }
-  to { left: 100%; }
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
 }
 
 /* The search field is a control, so it has a control's corner. */
@@ -273,8 +290,10 @@ body::before {
 .go:hover {
   color: var(--sl-color-white);
 }
-.go:hover::after {
-  transform: translateX(3px);
+@media (hover: hover) and (pointer: fine) {
+  .go:hover::after {
+    transform: translateX(3px);
+  }
 }
 /* A card that lights under the pointer: its label colour runs along the top
    edge and lights the corner. */
@@ -302,17 +321,24 @@ body::before {
   transition: opacity 0.3s;
   pointer-events: none;
 }
-.lit:hover::before,
+/* Only a mouse lights it by hovering, or a tap leaves it lit. */
+@media (hover: hover) and (pointer: fine) {
+  .lit:hover::before {
+    transform: scaleX(1);
+  }
+  .lit:hover::after {
+    opacity: 1;
+  }
+}
 .lit:focus-visible::before {
   transform: scaleX(1);
 }
-.lit:hover::after,
 .lit:focus-visible::after {
   opacity: 1;
 }
+/* Nothing moves, but the light still fades in. */
 @media (prefers-reduced-motion: reduce) {
   .lit::before,
-  .lit::after,
   .go::after {
     transition: none;
   }
@@ -480,7 +506,9 @@ h1#_top {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
-  transition: border-color 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.1s ease-out;
 }
 .pagination-links a:hover {
   border-color: var(--sl-color-hairline-light);
@@ -520,16 +548,13 @@ figure.example img {
   width: 100%;
   height: auto;
 }
-figure.example figcaption {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--sl-color-gray-3);
-}
 
 /* The before-and-after wipe. The untouched frame sits underneath; the effect is
-   laid over it and clipped at --split, which the range input drives. Without
-   JavaScript the inline 50% stands and the figure is an honest half-and-half. */
+   laid over it and clipped where the range input says, set straight on the
+   picture and the handle by the script in astro.config.mjs. Without
+   JavaScript the figure is an honest half-and-half. */
 .compare {
+  container-type: inline-size;
   position: relative;
   overflow: hidden;
   border-radius: var(--lm-radius-card);
@@ -550,13 +575,14 @@ figure.example .compare > * {
 .compare__after {
   position: absolute;
   inset: 0;
-  clip-path: inset(0 0 0 var(--split));
+  clip-path: inset(0 0 0 50%);
 }
 .compare__handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--split);
+  left: 0;
+  transform: translateX(50cqw);
   width: 2px;
   margin-left: -1px;
   background: rgb(255 255 255 / 0.85);
