@@ -6,10 +6,11 @@
 //! words naturally are. A **Region layer** (any layer: a shape, a letter, a
 //! precomp of shapes put together with blend modes) says where the words may
 //! go: along each row, a column keeps only the stretches the region leaves
-//! free, and every stretch wider than Min width gets the column's word
-//! stretched across and down to fill it exactly. Animate the region and the
-//! words flood the room it leaves, as Cavalry's Boolean, Contours to
-//! Sub-Meshes and Mesh distribution do together.
+//! free, and the column's word is stretched across and down from its first
+//! stretch to its last, each stretch showing its own slice: a shape that
+//! cuts a column in two cuts the word, never shows it twice. Animate the
+//! region and the words flood the room it leaves, as Cavalry's Boolean,
+//! Contours to Sub-Meshes and Mesh distribution do together.
 //!
 //! The look comes from a Text layer, as Label points' does. This file says
 //! which word goes in which box; the renderer draws them, because the text
@@ -70,6 +71,14 @@ pub struct TypeFill {
     #[toggle(label = "Invert region", default = false)]
     pub invert: bool,
 
+    /// Keep every word whole at its column's width, instead of stretching
+    /// it into the room it has: two Type fills on both sides of a shape then
+    /// share each word, "th" on one, "e" on the other. Word gap no longer
+    /// insets the region's edges. Either way the region cuts the words pixel
+    /// by pixel.
+    #[toggle(label = "Cut words", default = false)]
+    pub cut_words: bool,
+
     /// How much of the region a place needs to be in it, per cent.
     #[slider(
         label = "Threshold",
@@ -117,7 +126,7 @@ pub struct TypeFill {
     )]
     pub word_gap: f32,
 
-    /// A stretch narrower than this is left empty, px@comp.
+    /// A column whose word would be narrower than this is left empty, px@comp.
     #[slider(
         label = "Min width",
         min = 0.0,
@@ -150,11 +159,13 @@ pub struct TypeFill {
 }
 
 /// One word in its box: which word of the list, and where, left, top, right
-/// and bottom in raster px.
+/// and bottom in raster px; only the slice between `clip` (left and right)
+/// shows.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Piece {
     pub word: usize,
     pub rect: [f32; 4],
+    pub clip: [f32; 2],
 }
 
 impl TypeFill {
@@ -214,6 +225,19 @@ impl TypeFill {
         }
     }
 
+    /// How much of a place the words keep, 0..1, from the region read there
+    /// (`v`, 0..1): a soft step at Threshold, so a Type fill and its Invert
+    /// region twin add up to exactly one along the region's edge.
+    #[must_use]
+    pub fn coverage(&self, v: f32) -> f32 {
+        let c = ((v - self.threshold / 100.0) * 2.0 + 0.5).clamp(0.0, 1.0);
+        if self.invert {
+            1.0 - c
+        } else {
+            c
+        }
+    }
+
     /// The free stretches along one row, left to right, from the region read
     /// across it (`samples`, one 0..1 value a pixel). A place is in the
     /// region at Threshold and above; Invert region takes the rest.
@@ -246,8 +270,11 @@ impl TypeFill {
     ///
     /// Each row is cut into columns across the whole width, one word each,
     /// with Word gap between them; a column keeps the parts of the free
-    /// stretches it covers, less Word gap at the region's edges, and each
-    /// part as wide as Min width gets the column's word.
+    /// stretches it covers, less Word gap at the region's edges. Its word is
+    /// stretched from the first part to the last, if that is as wide as Min
+    /// width, and each part shows its own slice of it: a shape that cuts a
+    /// column in two cuts its word, "t" on one side and "he" on the other,
+    /// and never shows the word twice.
     #[must_use]
     pub fn pieces(
         &self,
@@ -277,25 +304,51 @@ impl TypeFill {
             for &k in &order {
                 let column = [left, left + room * natural[k].max(1e-3) / total];
                 left = column[1] + gap;
-                for span in free.get(r).map_or(&[][..], Vec::as_slice) {
-                    // Inset from the region's own edges, not the frame's.
-                    let s0 = if span[0] > 0.0 {
-                        span[0] + gap * 0.5
-                    } else {
-                        span[0]
-                    };
-                    let s1 = if span[1] < width {
-                        span[1] - gap * 0.5
-                    } else {
-                        span[1]
-                    };
-                    let (x0, x1) = (column[0].max(s0), column[1].min(s1));
-                    if x1 - x0 >= least {
+                if self.cut_words {
+                    // Every word whole; the region cuts it pixel by pixel
+                    // (`TypeFill::coverage`).
+                    if column[1] - column[0] >= least {
                         out.push(Piece {
                             word: k,
-                            rect: [x0, band[0], x1, band[1]],
+                            rect: [column[0], band[0], column[1], band[1]],
+                            clip: column,
                         });
                     }
+                    continue;
+                }
+                let parts: Vec<[f32; 2]> = free
+                    .get(r)
+                    .map_or(&[][..], Vec::as_slice)
+                    .iter()
+                    .filter_map(|span| {
+                        // Inset from the region's own edges, not the frame's.
+                        let s0 = if span[0] > 0.0 {
+                            span[0] + gap * 0.5
+                        } else {
+                            span[0]
+                        };
+                        let s1 = if span[1] < width {
+                            span[1] - gap * 0.5
+                        } else {
+                            span[1]
+                        };
+                        let (x0, x1) = (column[0].max(s0), column[1].min(s1));
+                        (x1 > x0).then_some([x0, x1])
+                    })
+                    .collect();
+                let (Some(first), Some(last)) = (parts.first(), parts.last()) else {
+                    continue;
+                };
+                let across = [first[0], last[1]];
+                if across[1] - across[0] < least {
+                    continue;
+                }
+                for part in &parts {
+                    out.push(Piece {
+                        word: k,
+                        rect: [across[0], band[0], across[1], band[1]],
+                        clip: *part,
+                    });
                 }
             }
         }
@@ -372,28 +425,71 @@ mod tests {
             vec![
                 Piece {
                     word: 0,
-                    rect: [0.0, 0.0, 145.0, 50.0]
+                    rect: [0.0, 0.0, 145.0, 50.0],
+                    clip: [0.0, 145.0]
                 },
                 Piece {
                     word: 1,
-                    rect: [255.0, 0.0, 295.0, 50.0]
+                    rect: [255.0, 0.0, 295.0, 50.0],
+                    clip: [255.0, 295.0]
                 },
                 Piece {
                     word: 2,
-                    rect: [305.0, 0.0, 400.0, 50.0]
+                    rect: [305.0, 0.0, 400.0, 50.0],
+                    clip: [305.0, 400.0]
                 },
             ]
         );
-        // The first column's other part, 255..190, does not exist; a free
-        // stretch of 15 px is too narrow.
+        // A free stretch of 15 px is too narrow for a word.
         let narrow = vec![vec![[0.0, 15.0]]];
         assert!(t
             .pieces(&bands[..1], &narrow, &natural, 400.0, 1.0)
             .is_empty());
 
+        // A shape at 230..250 cuts "the" (200..295) in two: one "the" across
+        // the whole column, its left slice on one side, its right on the
+        // other, never a second "the".
+        let cut: Vec<f32> = (0..400)
+            .map(|x| if (230..250).contains(&x) { 0.0 } else { 1.0 })
+            .collect();
+        let pieces = t.pieces(&bands[..1], &[t.free_spans(&cut)], &natural, 400.0, 1.0);
+        assert_eq!(
+            pieces[1..3],
+            [
+                Piece {
+                    word: 1,
+                    rect: [200.0, 0.0, 295.0, 50.0],
+                    clip: [200.0, 225.0]
+                },
+                Piece {
+                    word: 1,
+                    rect: [200.0, 0.0, 295.0, 50.0],
+                    clip: [255.0, 295.0]
+                },
+            ]
+        );
+
         let mut inverted = t;
         inverted.invert = true;
         assert_eq!(inverted.free_spans(&samples), vec![[150.0, 250.0]]);
+
+        // Cut words: every word whole at its column's width, wherever the
+        // region is; the region then cuts it pixel by pixel, and a Type fill
+        // and its inverted twin share each edge pixel exactly.
+        let mut cut_out = t;
+        cut_out.cut_words = true;
+        let mut cut_in = inverted;
+        cut_in.cut_words = true;
+        let whole = cut_out.pieces(&bands[..1], &[vec![]], &natural, 400.0, 1.0);
+        assert_eq!(
+            whole.iter().map(|p| (p.word, p.clip)).collect::<Vec<_>>(),
+            vec![(0, [0.0, 190.0]), (1, [200.0, 295.0]), (2, [305.0, 400.0])]
+        );
+        for v in [0.0, 0.3, 0.5, 0.7, 1.0] {
+            let sum = cut_out.coverage(v) + cut_in.coverage(v);
+            assert!((sum - 1.0).abs() < 1e-6, "edge pixel {v} shared");
+        }
+        assert!(cut_out.coverage(1.0) == 1.0 && cut_out.coverage(0.0) == 0.0);
 
         let mut shifted = t;
         shifted.order = 1;

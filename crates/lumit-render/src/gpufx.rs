@@ -6087,10 +6087,11 @@ fn word_drawing(
 /// Type fill (SICELIOT): rows of words, each stretched to fill a free
 /// stretch of the Region layer.
 ///
-/// The region is read back off the card once a frame along the middle of
-/// every row; `TypeFill::pieces` says which word goes in which box; each word
+/// The region is read back off the card once a frame; its value along the
+/// middle of every row is where `TypeFill::pieces` puts which word; each word
 /// is laid out once, at about the rows' height, trimmed to its letters, and
-/// stretched into its boxes by the same drawing Label points uses.
+/// stretched into its boxes by the same drawing Label points uses; and the
+/// region then cuts the words pixel by pixel.
 struct TypeFill;
 impl GpuEffect for TypeFill {
     fn match_name(&self) -> &'static str {
@@ -6173,12 +6174,30 @@ impl GpuEffect for TypeFill {
         let pieces = inst.pieces(&bands, &free, &natural, w as f32, px_scale);
         let placed: Vec<Placed<'_>> = pieces
             .iter()
-            .filter_map(|piece| Placed::boxed(drawings.get(piece.word)?, piece.rect, None))
+            .filter_map(|piece| {
+                Placed::boxed(drawings.get(piece.word)?, piece.rect, None)
+                    .map(|p| p.clipped_x(piece.clip))
+            })
             .collect();
         if placed.is_empty() {
             return tex.clone();
         }
-        let px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
+        let mut px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
+        // The region cuts the words pixel by pixel: the rows read it only
+        // along their middle, and a curved edge crosses a tall row.
+        if let Some(region) = &region {
+            for (out, t) in px.chunks_exact_mut(4).zip(region.chunks_exact(4)) {
+                let v = if luminance {
+                    (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
+                } else {
+                    t[3].clamp(0.0, 1.0)
+                };
+                let keep = inst.coverage(v);
+                for c in out.iter_mut() {
+                    *c *= keep;
+                }
+            }
+        }
         stamp_box(
             fx,
             ctx,

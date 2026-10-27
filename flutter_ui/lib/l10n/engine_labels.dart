@@ -1173,6 +1173,7 @@ Map<String, String> get _built => {
       "Region placement": l10n.fxRegionPlacement,
       "Region from": l10n.fxRegionFrom,
       "Invert region": l10n.fxInvertRegion,
+      "Cut words": l10n.fxCutWords,
       "Row gap": l10n.fxRowGap,
       "Word gap": l10n.fxWordGap,
       "Min width": l10n.fxMinWidth,

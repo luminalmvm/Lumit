@@ -857,6 +857,17 @@ impl<'a> Placed<'a> {
             ],
         })
     }
+
+    /// Only the slice between `left` and `right` (px on the frame) drawn:
+    /// a word a shape cuts in two (SICELIOT, Type fill).
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn clipped_x(mut self, [left, right]: [f32; 2]) -> Self {
+        let whole = |v: f32| v.clamp(-1e9, 1e9) as i64;
+        self.bounds[0] = self.bounds[0].max(whole(left.round()));
+        self.bounds[2] = self.bounds[2].min(whole(right.round()));
+        self
+    }
 }
 
 impl LabelDrawing {

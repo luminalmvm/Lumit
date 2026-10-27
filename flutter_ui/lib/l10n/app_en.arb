@@ -4896,6 +4896,10 @@
   "@fxInvertRegion": {
     "description": "Effect controls — a checkbox on Type fill (SICELIOT): fill where the region is not."
   },
+  "fxCutWords": "Cut words",
+  "@fxCutWords": {
+    "description": "Effect controls — a checkbox on Type fill (Siceliot FX): keep each word at its column's width and let the region's edge cut it, instead of stretching it."
+  },
   "fxRowGap": "Row gap",
   "@fxRowGap": {
     "description": "Effect controls — a control on Type fill (SICELIOT): the room between one row and the next, in pixels."

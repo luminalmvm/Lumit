@@ -14844,6 +14844,13 @@
           "default": false
         },
         {
+          "id": "cut_words",
+          "label": "Cut words",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "threshold",
           "label": "Threshold",
           "kind": "float",

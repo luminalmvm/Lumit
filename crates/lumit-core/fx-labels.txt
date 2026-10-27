@@ -265,6 +265,7 @@ Custom
 Custom controls
 Custom shader
 Cut
+Cut words
 Cyan
 Cyans
 Cycle

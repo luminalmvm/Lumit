@@ -10,8 +10,9 @@ Type fill is a **Siceliot FX** effect, found under that heading in Effects & pre
 Sets the **Words**, typed between bars (`Flood|the|Grid`), in rows from top to bottom. Each row
 is cut into columns across the whole width, one word each, the columns as wide as the words
 naturally are. A **Region layer** says where the words may go: along each row a column keeps
-only the stretches the region leaves free, and every stretch at least **Min width** wide gets
-the column's word, stretched across and down to fill it exactly.
+only the stretches the region leaves free. The column's word is stretched across and down from
+its first stretch to its last, each stretch showing its own slice of it: a shape that cuts a
+column in two cuts the word, "t" on one side and "he" on the other, and never shows it twice.
 
 The region can be any layer: a shape, a letter, a precomp of shapes put together with blend
 modes. Animate it and the words flood the room it leaves. The look (font, style, colour) comes
@@ -27,6 +28,7 @@ from a **Text layer**, which can be hidden.
 | **Region placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Region from** | Dropdown | Alpha · Luminance | Alpha | - |
 | **Invert region** | Checkbox | On or off | Off | - |
+| **Cut words** | Checkbox | On or off | Off | - |
 | **Threshold** | Slider | 0 to 100 | 50 | Per cent |
 | **Rows** | Slider, whole numbers | 1 to 200 | 24 | - |
 | **Row gap** | Slider | 0 to 200 | 6 | Pixels at composition size |
@@ -45,14 +47,19 @@ from a **Text layer**, which can be hidden.
 - **Region from** and **Threshold**: a place is in the region where the Region layer is that
   opaque (Alpha) or that bright (Luminance).
 - **Invert region**: fill where the region is not.
+- **Cut words**: keep every word whole at its column's width and let the region cut it pixel by
+  pixel, instead of stretching it into the room it has. Word gap no longer insets the edges.
+  Either way the region cuts the words pixel by pixel, so a tall row never spills a word over a
+  curved edge.
 - **Rows**, **Row gap**: how many rows fill the frame, and the room between them.
 - **Word gap**: the room between the words of a row, and at the region's edges.
-- **Min width**: a stretch narrower than this stays empty.
+- **Min width**: a column whose stretches span less than this gets no word.
 - **Order**: each row's words in the same order, moved on one word a row, or shuffled per row by
   the **Seed**.
 
 Two Type fills with the same Region layer, one with Invert region on and its words in the other
-colour, fill both sides of a shape: black on white outside, white on black inside.
+colour, fill both sides of a shape: black on white outside, white on black inside. With
+**Cut words** on in both, they share each word across the shape's edge.
 
 ## Related
 
