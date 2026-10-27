@@ -20,7 +20,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show duplicateLayersFrb;
+import '../shell/menu_bar_frb.dart' show duplicateLayersFrb, effectFlyout;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
@@ -1266,6 +1266,14 @@ class _OutlineRowState extends State<OutlineRow> {
           ),
         ),
         if (!locked) ...[
+          // The Effect menu itself, onto the layer that was clicked.
+          SubmenuRow(
+            key: const ValueKey('tl-row-effect'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => effectFlyout(context.read<LumitState>(),
+                context.read<LumitUiState>(), widget.entry.layer, dismiss),
+            child: Text(l10n.menuEffect),
+          ),
           if (index > 0)
             MenuRow(
                 onPressed: () => close('up'), child: Text(l10n.bringForward)),
