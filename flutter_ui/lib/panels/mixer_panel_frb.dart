@@ -537,7 +537,7 @@ class _MasterStripState extends State<_MasterStrip> {
           // option, and a number invented here would be a lie with decimals.
           Text(
             l10n.mixerLufsPending,
-            style: t.small.copyWith(fontSize: 8, color: t.textDisabled),
+            style: t.caption.copyWith(color: t.textDisabled),
           ),
         ],
       ),
@@ -794,7 +794,7 @@ class _FaderState extends State<_Fader> with TickerProviderStateMixin {
                   rail: t.surface3,
                   knob: Color.lerp(t.accent, t.textPrimary, _glow.light * 0.3)!,
                   tick: t.textMuted,
-                  label: t.mono.copyWith(fontSize: 7, color: t.textMuted),
+                  label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                 ),
               ),
             ),

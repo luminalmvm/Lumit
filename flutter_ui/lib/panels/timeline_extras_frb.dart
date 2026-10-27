@@ -2378,7 +2378,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       axis: axis,
                       fps: widget.fps,
                       label: t.mono.copyWith(
-                        fontSize: 7,
+                        fontSize: 9,
                         color: t.textMuted.withValues(alpha: 0.75),
                       ),
                     ),
@@ -4122,12 +4122,11 @@ const double workAreaHandleRadius = 1;
 /// still the edge's to catch.
 const double workAreaHandleTopInset = 18;
 
-/// What a marker's label is set in: mono at 8, the mockup's own size —
-/// a marker's label is a cue read at a glance beside a clock, and it sets in
-/// the same face the clock does, one step quieter so the pill stays a pill
-/// inside the ruler's 12px lower row.
+/// What a marker's label is set in: the clock's own face and size, mono at 9.
+/// A marker's label is a cue read at a glance beside the clock, and at 9 with
+/// no leading the pill still fits the ruler's 12px lower row.
 TextStyle markerLabelStyle(LumitTheme t) =>
-    t.mono.copyWith(fontSize: 8, color: t.textPrimary, height: 1);
+    t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
 
 /// The corner of a marker's label pill: a capsule under Lantern, 2 elsewhere.
 double markerPillRadius(LumitTheme t) =>

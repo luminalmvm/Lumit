@@ -3534,7 +3534,7 @@ class GraphNodeCard extends StatelessWidget {
                     border: Border.all(color: t.warning),
                   ),
                   child: Text('!',
-                      style: t.mono.copyWith(fontSize: 8, color: t.warning)),
+                      style: t.mono.copyWith(fontSize: 9, color: t.warning)),
                 ),
               ),
             ],

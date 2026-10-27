@@ -56,6 +56,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
@@ -1384,11 +1386,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           onPressed: worn.length < offeredStyles().length
               ? () => _addStyleMenu(context, ui, layer, worn)
               : null,
-          child: Text('+',
-              style: t.small.copyWith(
-                  color: worn.length < offeredStyles().length
-                      ? t.textMuted
-                      : t.textDisabled)),
+          child: glyph.LumitIcon(LumitIcons.addEffect,
+              size: 12,
+              colour: worn.length < offeredStyles().length
+                  ? t.textMuted
+                  : t.textDisabled),
         ),
       ),
     );

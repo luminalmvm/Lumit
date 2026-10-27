@@ -1247,7 +1247,9 @@ class _StripEntry extends StatelessWidget {
           onPressed: onPressed,
           child: Container(
             padding: const EdgeInsets.only(bottom: 2),
-            decoration: active
+            // Painted over the padding, so the word doesn't move a pixel when
+            // its workspace is fronted.
+            foregroundDecoration: active
                 ? BoxDecoration(
                     border: Border(bottom: BorderSide(color: t.accent)))
                 : null,

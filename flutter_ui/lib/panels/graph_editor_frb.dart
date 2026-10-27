@@ -2598,9 +2598,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                             .model,
                         grid: t.hairline,
                         // The axis numbers are numbers, so they are set in the
-                        // mono face at the mockup's own 8 — Hanken at 10 read
-                        // as body text ruling the graph.
-                        label: t.mono.copyWith(fontSize: 8, color: t.textMuted),
+                        // mono face at 9, the smallest type the editor uses.
+                        // Hanken at 10 read as body text ruling the graph.
+                        label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                         viewportLeft: _viewportLeft,
                         viewportWidth: _viewportWidth(constraints.maxWidth),
                         gutterFill: t.surface0.withValues(alpha: 0.85),
@@ -2788,7 +2788,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   box.count,
                   KeyBlock(first: box.first, last: box.last, count: box.count)
                       .spanFrames),
-              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+              style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
             ),
           ),
         ),
