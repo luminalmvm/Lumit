@@ -1,0 +1,61 @@
+---
+title: Type fill
+description: "Fills the frame with rows of words that stretch to fill the room a shape leaves them."
+---
+
+Type fill is a **Generate** effect (SICELIOT).
+
+## What it does
+
+Sets the **Words**, typed between bars (`Flood|the|Grid`), in rows from top to bottom. Each row
+is cut into columns across the whole width, one word each, the columns as wide as the words
+naturally are. A **Region layer** says where the words may go: along each row a column keeps
+only the stretches the region leaves free, and every stretch at least **Min width** wide gets
+the column's word, stretched across and down to fill it exactly.
+
+The region can be any layer: a shape, a letter, a precomp of shapes put together with blend
+modes. Animate it and the words flood the room it leaves. The look (font, style, colour) comes
+from a **Text layer**, which can be hidden.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Text layer** | Layer | Any layer in the composition | None | - |
+| **Words** | Text | A short line of text | Flood\|the\|Grid | - |
+| **Region layer** | Layer | Any layer in the composition | None | - |
+| **Region placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Region from** | Dropdown | Alpha · Luminance | Alpha | - |
+| **Invert region** | Checkbox | On or off | Off | - |
+| **Threshold** | Slider | 0 to 100 | 50 | Per cent |
+| **Rows** | Slider, whole numbers | 1 to 200 | 24 | - |
+| **Row gap** | Slider | 0 to 200 | 6 | Pixels at composition size |
+| **Word gap** | Slider | 0 to 200 | 8 | Pixels at composition size |
+| **Min width** | Slider | 0 to 1000 | 24 | Pixels at composition size |
+| **Order** | Dropdown | In turn · Shift per row · Random | In turn | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+
+## What each control does
+
+- **Text layer**: the Text layer whose look the words take. Unset draws nothing.
+- **Words**: the words between bars, left to right in every row.
+- **Region layer**: where the words may go. Unset, the whole frame is theirs.
+- **Region placement**: where the Region layer's picture sits on this one.
+- **Region from** and **Threshold**: a place is in the region where the Region layer is that
+  opaque (Alpha) or that bright (Luminance).
+- **Invert region**: fill where the region is not.
+- **Rows**, **Row gap**: how many rows fill the frame, and the room between them.
+- **Word gap**: the room between the words of a row, and at the region's edges.
+- **Min width**: a stretch narrower than this stays empty.
+- **Order**: each row's words in the same order, moved on one word a row, or shuffled per row by
+  the **Seed**.
+
+Two Type fills with the same Region layer, one with Invert region on and its words in the other
+colour, fill both sides of a shape: black on white outside, white on black inside.
+
+## Related
+
+- [Label points](/effects/generate/label-points/)
+- [Text](/use/text/)
+- [Generate](/effects/#generate)

@@ -539,6 +539,7 @@ In front
 In high
 In low
 In order
+In turn
 Include spaces
 Index
 Inflate
@@ -563,6 +564,7 @@ Inverse
 Invert
 Invert edges
 Invert noise
+Invert region
 Iris
 Iris centre x
 Iris centre y
@@ -699,6 +701,7 @@ Midtone contrast
 Midtones
 Min
 Min area
+Min width
 Minimum
 Minimum gap
 Mirror
@@ -767,6 +770,7 @@ Open graph
 Operate on alpha
 Operation
 Orange
+Order
 Order by
 Orientation
 Origin
@@ -900,6 +904,9 @@ Reduce brightness
 Reduce saturation
 Refine radius
 Refraction
+Region from
+Region layer
+Region placement
 Region size
 Relax points
 Release
@@ -950,6 +957,7 @@ Roto brush
 Roughen
 Roughen edges
 Roundness
+Row gap
 Rows
 Rows/columns jitter
 SICELIOT
@@ -1008,6 +1016,7 @@ Shapes
 Share of frame
 Sharp colours
 Sharpen
+Shift per row
 Shift x
 Shift y
 Show points
@@ -1196,6 +1205,7 @@ Two layer, magenta
 Two points
 Two-way strike
 Type
+Type fill
 Ultra
 Uncircle
 Uncoated
@@ -1273,6 +1283,8 @@ Wipe angle
 Wipe centre x
 Wipe centre y
 Word
+Word gap
+Words
 Work area
 Wrap
 X

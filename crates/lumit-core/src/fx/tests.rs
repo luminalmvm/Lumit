@@ -6726,6 +6726,9 @@ fn every_parameter_declares_a_unit() {
             // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
+            ("siceliot_type_fill", "row_gap"),
+            ("siceliot_type_fill", "word_gap"),
+            ("siceliot_type_fill", "min_width"),
             // Vary points and Pick points: the pattern's own distances, and
             // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),

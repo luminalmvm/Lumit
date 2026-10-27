@@ -753,15 +753,15 @@ pub struct LabelDrawing {
 }
 
 /// One label as it lands on the frame: its drawing, where on the drawing and
-/// on the frame its anchor is, how much smaller than the drawing it is drawn,
-/// its turn, its colour, and the pixels round it (left, top, right, bottom,
-/// right and bottom not included).
+/// on the frame its anchor is, how much smaller than the drawing it is drawn
+/// across and down, its turn, its colour, and the pixels round it (left, top,
+/// right, bottom, right and bottom not included).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Placed<'a> {
     pub drawing: &'a LabelDrawing,
     pub anchor: [f32; 2],
     pub at: [f32; 2],
-    pub shrink: f32,
+    pub shrink: [f32; 2],
     pub cos: f32,
     pub sin: f32,
     pub tint: Option<Tint>,
@@ -812,7 +812,7 @@ impl<'a> Placed<'a> {
             drawing,
             anchor,
             at: label.at,
-            shrink,
+            shrink: [shrink; 2],
             cos,
             sin,
             tint: label.tint,
@@ -823,6 +823,72 @@ impl<'a> Placed<'a> {
                 whole(hi[1].ceil()) + 1,
             ],
         })
+    }
+
+    /// `drawing` stretched to fill `rect` (left, top, right, bottom, px on
+    /// the frame) exactly, across and down independently, unturned
+    /// (SICELIOT, Type fill). `None` for nothing to draw.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    pub fn boxed(drawing: &'a LabelDrawing, rect: [f32; 4], tint: Option<Tint>) -> Option<Self> {
+        let (w, h) = (rect[2] - rect[0], rect[3] - rect[1]);
+        if drawing.width == 0
+            || drawing.height == 0
+            || w <= 0.0
+            || h <= 0.0
+            || !rect.iter().all(|v| v.is_finite())
+        {
+            return None;
+        }
+        let whole = |v: f32| v.clamp(-1e9, 1e9) as i64;
+        Some(Self {
+            drawing,
+            anchor: [0.0, 0.0],
+            at: [rect[0], rect[1]],
+            shrink: [w / drawing.width as f32, h / drawing.height as f32],
+            cos: 1.0,
+            sin: 0.0,
+            tint,
+            bounds: [
+                whole(rect[0].floor()) - 1,
+                whole(rect[1].floor()) - 1,
+                whole(rect[2].ceil()) + 1,
+                whole(rect[3].ceil()) + 1,
+            ],
+        })
+    }
+}
+
+impl LabelDrawing {
+    /// The drawing cut to the box round its letters (SICELIOT, Type fill), so
+    /// a word stretched into a box fills it edge to edge. An empty drawing
+    /// stays empty.
+    #[must_use]
+    pub fn trimmed(&self) -> Self {
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.px.get(y * self.width + x).is_some_and(|t| t[3] > 0.0) {
+                    x0 = x0.min(x);
+                    y0 = y0.min(y);
+                    x1 = x1.max(x + 1);
+                    y1 = y1.max(y + 1);
+                }
+            }
+        }
+        if x1 <= x0 || y1 <= y0 {
+            return Self::default();
+        }
+        let width = x1 - x0;
+        let px = (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .map(|(x, y)| self.px[y * self.width + x])
+            .collect();
+        Self {
+            width,
+            height: y1 - y0,
+            px,
+        }
     }
 }
 
@@ -868,8 +934,8 @@ pub fn composite(placed: &[Placed<'_>], origin: [i64; 2], size: [i64; 2]) -> Vec
                 for y in l.bounds[1].max(top)..l.bounds[3].min(bottom) {
                     for x in l.bounds[0].max(x0)..l.bounds[2].min(x0 + bw) {
                         let (dx, dy) = (x as f32 + 0.5 - l.at[0], y as f32 + 0.5 - l.at[1]);
-                        let u = (dx * l.cos + dy * l.sin) / l.shrink + l.anchor[0] - 0.5;
-                        let v = (-dx * l.sin + dy * l.cos) / l.shrink + l.anchor[1] - 0.5;
+                        let u = (dx * l.cos + dy * l.sin) / l.shrink[0] + l.anchor[0] - 0.5;
+                        let v = (-dx * l.sin + dy * l.cos) / l.shrink[1] + l.anchor[1] - 0.5;
                         if u <= -1.0 || v <= -1.0 || u >= dw as f32 || v >= dh as f32 {
                             continue;
                         }

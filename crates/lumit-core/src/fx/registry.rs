@@ -457,6 +457,14 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
+    /// SICELIOT: whether this effect reads a Text layer's look (its Text
+    /// layer row) without being a points effect, so the builder hands it the
+    /// carriage the points effects get, with the layer's document in it
+    /// ([`crate::fx::points::wants_carriage_of`]).
+    fn reads_text_layer(&self) -> bool {
+        false
+    }
+
     /// What this entry produces and consumes. Every effect is
     /// [`Signature::Image`] with neither half filled; a driver declares its
     /// output ports, a points producer declares its Points output beside its

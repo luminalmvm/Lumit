@@ -1000,7 +1000,7 @@ pub fn run_ops(
         let mut slot = 0u32;
         let mut first = ops.len();
         for (i, op) in ops.iter().enumerate() {
-            if lumit_core::fx::points::wants_carriage(op.def.signature()) {
+            if lumit_core::fx::points::wants_carriage_of(op.def) {
                 if late_wanted.contains(&slot) {
                     first = first.min(i);
                 }
@@ -1149,7 +1149,7 @@ pub fn run_ops(
             .get(path_i..(path_i + paths_n).min(mask_paths.len()))
             .unwrap_or(&[]);
         path_i += paths_n;
-        let (slot, schedule) = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
+        let (slot, schedule) = if lumit_core::fx::points::wants_carriage_of(resolved.def) {
             let slot = points_schedules.get(sched_i);
             sched_i += 1;
             (u32::try_from(sched_i - 1).ok(), slot)
@@ -1894,7 +1894,7 @@ fn op_keys(
             // Emit rate track, neither of which is in the bag `feed_hash`
             // walked. Without it a scrub would be answered from the cache with
             // the previous frame's particles.
-            if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
+            if lumit_core::fx::points::wants_carriage_of(resolved.def) {
                 if let Some(sched) = points_schedules.get(sched_i) {
                     h.update(&sched.t.to_le_bytes());
                     h.update(&sched.schedule.dt().to_le_bytes());

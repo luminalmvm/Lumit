@@ -191,6 +191,7 @@ use super::effects::{
     tritone::{Tritone, TritoneDef},
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
     twirl::{Twirl, TwirlDef},
+    type_fill::{TypeFill, TypeFillDef},
     vary_points::{VaryPoints, VaryPointsDef},
     vector_blur::{VectorBlur, VectorBlurDef},
     vegas::{Vegas, VegasDef},
@@ -296,6 +297,8 @@ crate::catalogue![
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
     LabelPointsDef => LabelPoints,
+    // SICELIOT: rows of words that fill the room a region leaves.
+    TypeFillDef => TypeFill,
     // The modifiers: a points wire in and another out.
     VaryPointsDef => VaryPoints,
     PickPointsDef => PickPoints,

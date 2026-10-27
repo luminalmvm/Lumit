@@ -4868,6 +4868,54 @@
   "@fxVerticalAnchor": {
     "description": "Effect controls — a control on Label points (SICELIOT): which part of the label's height sits at its point and what it turns about."
   },
+  "fxTypeFill": "Type fill",
+  "@fxTypeFill": {
+    "description": "Effect name (SICELIOT): rows of words, each stretched to fill the room a Region layer leaves along its row."
+  },
+  "fxWords": "Words",
+  "@fxWords": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): the words, between bars, set left to right in every row."
+  },
+  "fxRegionLayer": "Region layer",
+  "@fxRegionLayer": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): the layer that says where the words may go."
+  },
+  "fxRegionPlacement": "Region placement",
+  "@fxRegionPlacement": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): where the Region layer's picture sits on this one."
+  },
+  "fxRegionFrom": "Region from",
+  "@fxRegionFrom": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): whether the region is where the Region layer is opaque or where it is bright."
+  },
+  "fxInvertRegion": "Invert region",
+  "@fxInvertRegion": {
+    "description": "Effect controls — a checkbox on Type fill (SICELIOT): fill where the region is not."
+  },
+  "fxRowGap": "Row gap",
+  "@fxRowGap": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): the room between one row and the next, in pixels."
+  },
+  "fxWordGap": "Word gap",
+  "@fxWordGap": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): the room between the words of a row, in pixels."
+  },
+  "fxMinWidth": "Min width",
+  "@fxMinWidth": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): a stretch narrower than this is left empty, in pixels."
+  },
+  "fxOrder": "Order",
+  "@fxOrder": {
+    "description": "Effect controls — a control on Type fill (SICELIOT): which word each column of a row has."
+  },
+  "fxInTurn": "In turn",
+  "@fxInTurn": {
+    "description": "Effect controls — an option of Order on Type fill (SICELIOT): the same order of words in every row."
+  },
+  "fxShiftPerRow": "Shift per row",
+  "@fxShiftPerRow": {
+    "description": "Effect controls — an option of Order on Type fill (SICELIOT): the list of words moved on one word a row."
+  },
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
     "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."

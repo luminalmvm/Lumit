@@ -1300,7 +1300,7 @@ fn text_carriage(
     Option<Box<lumit_core::model::TextDocument>>,
 ) {
     let name = e.effect.match_name.as_str();
-    if name != "text_to_points" && name != "label_points" {
+    if name != "text_to_points" && name != "label_points" && name != "siceliot_type_fill" {
         return Default::default();
     }
     // An unset row means the layer the effect is on.
@@ -1324,7 +1324,7 @@ fn text_carriage(
         current_depth: 0,
         inputs: None,
     }));
-    if name == "label_points" {
+    if name == "label_points" || name == "siceliot_type_fill" {
         // A label is set straight and still, so the path and the animators
         // are left behind.
         let label = lumit_core::model::TextDocument {
@@ -3298,8 +3298,7 @@ fn comp_walk(
             .filter(|(_, e)| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|(i, e)| {
                 let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                let wants =
-                    lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
+                let wants = lumit_core::fx::points::wants_carriage_of(def) && def.is_image_op();
                 wants.then_some((i, e, def))
             })
             .collect();
@@ -5863,7 +5862,7 @@ impl GraphLower<'_> {
         let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name) else {
             return Vec::new();
         };
-        if !(lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op()) {
+        if !(lumit_core::fx::points::wants_carriage_of(def) && def.is_image_op()) {
             return Vec::new();
         }
         let (t, dt) = (self.t, 1.0 / graph_comp.frame_rate.fps().max(1.0));

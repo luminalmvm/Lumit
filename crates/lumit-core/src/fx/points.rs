@@ -2555,6 +2555,14 @@ pub fn wants_carriage(sig: crate::fx::registry::Signature) -> bool {
     wants_schedule(sig) || consumes_points(sig)
 }
 
+/// [`wants_carriage`] for an entry: its signature's reasons, or (SICELIOT)
+/// that it reads a Text layer's look, which rides in the same carriage. The
+/// one test the builder and the walk both ask, so their slots line up.
+#[must_use]
+pub fn wants_carriage_of(def: &dyn crate::fx::registry::EffectDef) -> bool {
+    wants_carriage(def.signature()) || def.reads_text_layer()
+}
+
 /// A mask path in the raster the frame is being drawn at.
 ///
 /// A polyline is flattened in **px@comp** — deliberately, so the same document

@@ -139,6 +139,7 @@ pub mod transform_points;
 pub mod tritone;
 pub mod turbulent_displace;
 pub mod twirl;
+pub mod type_fill;
 pub mod vary_points;
 pub mod vector_blur;
 pub mod vegas;
