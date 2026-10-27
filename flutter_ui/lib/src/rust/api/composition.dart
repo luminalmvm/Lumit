@@ -1089,6 +1089,18 @@ class CompositionReference {
           withPicture: withPicture,
           arrival: arrival);
 
+  /// Put the whole of `comp` down at `at_frame` as one clip, the drop of a
+  /// composition from the Project panel. `target` is the picture Sequence
+  /// layer to place on, or `None` for a new one at the top of the stack.
+  /// The clip overwrites what it lands on.
+  BridgeCutResult cutPlaceComp(
+          {LayerReference? target,
+          required CompositionReference comp,
+          required PlatformInt64 atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceComp(
+              that: this, target: target, comp: comp, atFrame: atFrame);
+
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
   /// linked to one that was cut is cut too, and the later halves are
