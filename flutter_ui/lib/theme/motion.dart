@@ -13,9 +13,9 @@
 // **What the three levels keep.** Full plays everything. Minimal keeps the
 // motion that says something, where a row went or that a menu opened, as a
 // 50ms fade or slide, and drops the motion that is only manner: nothing rises,
-// grows, overshoots or trails. The one thing it keeps whole is what is on a
-// menu or a dialogue following it in. None plays nothing, and a widget given a
-// still spec does not mount a controller at all.
+// grows, overshoots or trails. What is on a menu is there with the menu.
+// None plays nothing, and a widget given a still spec does not mount a
+// controller at all.
 //
 // **What no level drops.** The light a pressable thing takes under the
 // pointer. It is what says the thing can be pressed, so it is a state and not
@@ -73,12 +73,10 @@ const Curve _land = Cubic(0.3, 1.4, 0.6, 1.0);
 /// Lantern's landing, nearer a tenth.
 const Curve _landSoft = Cubic(0.3, 1.6, 0.6, 1.0);
 
-/// A swell's spring: out past its size by about a sixth and back, once. More
+/// Lantern's swell: out past its size by about a third and back, once. More
 /// than a landing, because a swell travels a pixel or three and a twentieth
-/// of that is nothing anyone sees.
-const Curve _spring = Cubic(0.3, 1.7, 0.5, 1.0);
-
-/// Lantern's spring, nearer a third.
+/// of that is nothing anyone sees. Studio's swell has no spring at all: it is
+/// on things hovered tens of times a day, and Studio is quick and quiet.
 const Curve _springSoft = Cubic(0.3, 2.2, 0.5, 1.0);
 
 /// Every named movement, for one shape at one level.
@@ -131,10 +129,10 @@ class Motion {
   final double popupScale;
 
   /// What is on a menu or a dialogue, following its surface in: the surface
-  /// is there first and its rows come up a beat behind, clearing from a blur
-  /// as they settle. The rise is as a popup's, the blur is the sigma it starts
-  /// at. Runs a little past 150ms, because it starts late and the surface it
-  /// is on has landed and takes the pointer long before it is done.
+  /// is there first and its rows come up a beat behind. Menus open dozens of
+  /// times an hour and are read by their rows, so the beat is short and only
+  /// Lantern's soft cards clear from a blur, and only slightly. The rise is as
+  /// a popup's, the blur is the sigma it starts at.
   final MotionSpec content;
   final double contentRise;
   final double contentBlur;
@@ -279,11 +277,9 @@ class Motion {
 
   /// Minimal is the same under every shape: what is left is too short to
   /// carry a manner. A 50ms fade or slide where the motion says something,
-  /// and nothing where it only decorates. Only the content of a menu or a
-  /// dialogue moves as its shape does at Full.
+  /// and nothing where it only decorates.
   static Motion _minimal(ThemeShape shape) {
     const snap = MotionSpec(_ms50, Curves.easeOut);
-    final full = of(shape, AnimationLevel.all);
     return Motion._(
       shape: shape,
       level: AnimationLevel.minimal,
@@ -301,9 +297,9 @@ class Motion {
       popup: snap,
       popupRise: 0,
       popupScale: 1,
-      content: full.content,
-      contentRise: full.contentRise,
-      contentBlur: full.contentBlur,
+      content: MotionSpec.still,
+      contentRise: 0,
+      contentBlur: 0,
       flyout: MotionSpec.still,
       tooltip: MotionSpec.still,
       tooltipRise: 0,
@@ -330,7 +326,7 @@ class Motion {
     hoverIn: MotionSpec(_ms60, _out),
     hoverOut: MotionSpec(_ms140, _out),
     rowTrail: MotionSpec(_ms90, Curves.easeOut),
-    swell: MotionSpec(_ms180, _spring),
+    swell: MotionSpec(_ms120, _out),
     swellScale: 1.06,
     scroll: MotionSpec(_ms140, _out),
     zoom: MotionSpec(_ms120, _out),
@@ -341,9 +337,9 @@ class Motion {
     popup: MotionSpec(_ms110, _out),
     popupRise: -4,
     popupScale: 1,
-    content: MotionSpec(_ms180, _out),
+    content: MotionSpec(_ms120, _out),
     contentRise: 3,
-    contentBlur: 3,
+    contentBlur: 0,
     flyout: MotionSpec(_ms80, Curves.easeOut),
     tooltip: MotionSpec(_ms90, Curves.easeOut),
     tooltipRise: -2,
@@ -421,7 +417,7 @@ class Motion {
     popupScale: 0.96,
     content: MotionSpec(_ms220, _out),
     contentRise: 4,
-    contentBlur: 5,
+    contentBlur: 2,
     flyout: MotionSpec(_ms100, Curves.easeOut),
     tooltip: MotionSpec(_ms110, Curves.easeOut),
     tooltipRise: -3,
