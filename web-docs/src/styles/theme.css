@@ -278,8 +278,10 @@ body::before {
 .go:hover {
   color: var(--sl-color-white);
 }
-.go:hover::after {
-  transform: translateX(3px);
+@media (hover: hover) and (pointer: fine) {
+  .go:hover::after {
+    transform: translateX(3px);
+  }
 }
 /* A card that lights under the pointer: its label colour runs along the top
    edge and lights the corner. */
@@ -307,17 +309,24 @@ body::before {
   transition: opacity 0.3s;
   pointer-events: none;
 }
-.lit:hover::before,
+/* Only a mouse lights it by hovering, or a tap leaves it lit. */
+@media (hover: hover) and (pointer: fine) {
+  .lit:hover::before {
+    transform: scaleX(1);
+  }
+  .lit:hover::after {
+    opacity: 1;
+  }
+}
 .lit:focus-visible::before {
   transform: scaleX(1);
 }
-.lit:hover::after,
 .lit:focus-visible::after {
   opacity: 1;
 }
+/* Nothing moves, but the light still fades in. */
 @media (prefers-reduced-motion: reduce) {
   .lit::before,
-  .lit::after,
   .go::after {
     transition: none;
   }
