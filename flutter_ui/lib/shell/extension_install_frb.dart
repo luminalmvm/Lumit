@@ -185,16 +185,18 @@ class _InstallQuestion extends StatelessWidget {
                   point(l10n.extensionCanHosts(extension.hosts.join(', '))),
                 if (extension.panel) point(l10n.extensionCanPanel),
               ]),
-              dialogGroup(t, l10n.extensionCannot, [
-                point(l10n.extensionCannotFootage),
-                point(l10n.extensionCannotFiles),
-                if (extension.permissions
-                    .contains(BridgeExtensionPermission.edit))
-                  point(l10n.extensionCannotSave)
-                // An effect's own interface sets that effect's rows.
-                else if (!extension.effects.any((e) => e.interface_))
-                  point(l10n.extensionCannotEdit),
-              ]),
+              // An OFX plugin is held to none of these.
+              if (!extension.native)
+                dialogGroup(t, l10n.extensionCannot, [
+                  point(l10n.extensionCannotFootage),
+                  point(l10n.extensionCannotFiles),
+                  if (extension.permissions
+                      .contains(BridgeExtensionPermission.edit))
+                    point(l10n.extensionCannotSave)
+                  // An effect's own interface sets that effect's rows.
+                  else if (!extension.effects.any((e) => e.interface_))
+                    point(l10n.extensionCannotEdit),
+                ]),
               if (into case final into?)
                 ValueListenableBuilder<String?>(
                   valueListenable: into,
@@ -222,6 +224,10 @@ class _InstallQuestion extends StatelessWidget {
                   ]),
                 ),
               const SizedBox(height: 10),
+              if (extension.native)
+                Text(l10n.extensionNative,
+                    key: const ValueKey('extension-install-native'),
+                    style: muted),
               Text(l10n.extensionWebNote, style: muted),
             ],
           ),

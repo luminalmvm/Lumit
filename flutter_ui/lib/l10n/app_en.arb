@@ -8132,6 +8132,10 @@
   "@settingsHardwareDecode": {
     "description": "Settings window: the name of the tick that lets the graphics card decode video. On by default. Turning it off is slower, and is what to try when importing video freezes the computer."
   },
+  "settingsPluginsOnCard": "Render plugins on the graphics card",
+  "@settingsPluginsOnCard": {
+    "description": "Settings window: the name of the tick that lets OFX plugins render on the graphics card where they support it. On by default. Turning it off keeps them on the processor, which is what to try when a plugin misbehaves with the graphics driver."
+  },
   "settingsFullResolutionWhileDragging": "Full resolution while dragging",
   "@settingsFullResolutionWhileDragging": {
     "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."
@@ -18028,6 +18032,10 @@
   "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
+  },
+  "extensionNative": "Runs its own code on this computer",
+  "@extensionNative": {
+    "description": "Quiet note above extensionWebNote in the extension install question, for an extension that carries an OFX plugin: a program of its own, held to none of Lumit's limits. The It cannot list is left out then, as it would not hold."
   },
   "extensionInstall": "Install",
   "@extensionInstall": {

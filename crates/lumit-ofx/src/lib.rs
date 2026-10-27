@@ -50,6 +50,7 @@ pub mod def;
 pub mod describe;
 pub mod discover;
 pub mod ffi;
+pub mod gpu;
 pub mod handles;
 pub mod host;
 pub mod image;

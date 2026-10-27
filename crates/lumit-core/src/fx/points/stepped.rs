@@ -91,8 +91,7 @@ pub const SAME: Place = Place {
 };
 
 thread_local! {
-    /// What says the frame this thread is drawing is no longer wanted. The
-    /// renderer holds the token, so it puts its own check here.
+    /// This thread's stop check, put here by the renderer, which holds the token.
     static STOP: Cell<Option<fn() -> bool>> = const { Cell::new(None) };
 }
 
@@ -101,7 +100,8 @@ pub fn stop_when(check: Option<fn() -> bool>) -> Option<fn() -> bool> {
     STOP.with(|stop| stop.replace(check))
 }
 
-fn stopping() -> bool {
+/// Whether the frame this thread is drawing is no longer wanted, as OFX asks too.
+pub fn stopping() -> bool {
     STOP.with(|stop| stop.get().is_some_and(|check| check()))
 }
 

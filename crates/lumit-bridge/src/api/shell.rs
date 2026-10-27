@@ -111,6 +111,30 @@ pub fn set_hardware_decode(on: bool) {
     let _ = on;
 }
 
+/// Whether OFX plugins render on the graphics card where they can. Kept with
+/// the plugin preferences.
+#[frb(sync)]
+pub fn plugins_on_graphics_card() -> bool {
+    !lumit_project::plugins::PluginPrefs::load_default().plugins_on_cpu
+}
+
+/// Turn plugin rendering on the graphics card on or off. It reaches plugins
+/// whose broker starts from here on, so the next start or rescan.
+///
+/// # Errors
+///
+/// [`BridgeError::WriteFailed`] when the preference could not be written.
+#[frb(sync)]
+pub fn set_plugins_on_graphics_card(on: bool) -> Result<(), BridgeError> {
+    lumit_ofx::gpu::set_enabled(on);
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
+    if prefs.plugins_on_cpu != on {
+        return Ok(());
+    }
+    prefs.plugins_on_cpu = !on;
+    prefs.save_default().map_err(|_| BridgeError::WriteFailed)
+}
+
 /// What Discord shows under the person's name while Lumit is open.
 ///
 /// `show` off takes Lumit out of their status. On, it says Lumit is open, and

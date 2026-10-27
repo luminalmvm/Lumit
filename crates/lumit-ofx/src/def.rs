@@ -190,6 +190,8 @@ pub struct OfxEffectDef {
     /// (a path, a vendor blob) keeps.
     defaults: ParamSnapshot,
     host: Arc<dyn PluginHost>,
+    /// Its identifier and version, which is how its graphics card path is found.
+    plugin: (String, (u32, u32)),
 }
 
 impl OfxEffectDef {
@@ -223,6 +225,7 @@ impl OfxEffectDef {
             owners,
             defaults: ParamSnapshot::from_defaults(descriptor),
             host,
+            plugin: (descriptor.identifier.clone(), descriptor.version),
         }
     }
 
@@ -488,6 +491,10 @@ const DERIVED_MEMORY: ParamId = ParamId::new("derived.memory");
 /// speaks. A plugin asks for the frames either side as `time ± 1`, and a
 /// time in seconds would make that a second either side.
 const DERIVED_FRAME: ParamId = ParamId::new("derived.frame");
+
+/// The bag id the graphics card path rides under, so a frame the card drew and
+/// one the CPU drew are two frames to the cache.
+const DERIVED_PATH: ParamId = ParamId::new("derived.path");
 
 /// The frame the plugin is told, out of the bag, or `lt` as it stands when no
 /// comp put one there, which is a stack built by hand.
@@ -770,6 +777,12 @@ impl EffectDef for OfxEffectDef {
     /// that can see the comp's rate.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(DERIVED_MEMORY, Value::Int(remember(cx.inst)));
+        // ponytail: a frame the card failed on and the CPU redid is filed under
+        // the card's key, which changes only once the plugin is kept on the
+        // CPU. Exact would need the key after the render.
+        let (identifier, version) = &self.plugin;
+        let path = crate::gpu::path_of(identifier, *version);
+        push(DERIVED_PATH, Value::Int(crate::gpu::GpuApi::key(path)));
         let fps = cx
             .context
             .comp
@@ -822,33 +835,6 @@ fn moves(value: &EffectValue) -> bool {
         EffectValue::Colour(channels) => channels.iter().any(moving),
         _ => false,
     }
-}
-
-/// The frame offsets an OFX absolute frame range comes to, relative to `time`.
-///
-/// OFX answers `getFramesNeeded` in absolute frames per clip; the neighbour
-/// machinery counts in offsets from the frame being rendered. The range is
-/// widened outwards to whole frames — a plugin asking for `t − 2.5` is asking
-/// for a frame between two of ours, and fetching both is the answer that never
-/// leaves it short. `None` when every clip wants only the current frame, which
-/// is the honest "nothing more specific to say than the declaration".
-fn offsets_of(frames: &BTreeMap<String, (f64, f64)>, time: f64) -> Option<Vec<i32>> {
-    let mut offsets = vec![0i32];
-    for (first, last) in frames.values() {
-        let (low, high) = ((first - time).floor(), (last - time).ceil());
-        if !low.is_finite() || !high.is_finite() {
-            continue;
-        }
-        // A plugin asking for a thousand frames either side is asking for more
-        // than the neighbour decode will ever hold; the ring's own byte budget
-        // (docs/impl/ofx-host.md §4) is what refuses it, and clamping here keeps
-        // this from building the list that would then be refused.
-        let (low, high) = (low.max(-64.0) as i32, high.min(64.0) as i32);
-        offsets.extend(low..=high);
-    }
-    offsets.sort_unstable();
-    offsets.dedup();
-    (offsets.len() > 1).then_some(offsets)
 }
 
 /// A plugin hosted **in this process** — the bundle is loaded here and its code
@@ -968,7 +954,7 @@ impl PluginHost for LocalHost {
         let source = Frame16::black(1, 1).ok()?;
         let request = RenderRequest::filter(time, source);
         let rendered = self.attempt(instance, &request, params).ok()?;
-        offsets_of(&rendered.frames_needed, time)
+        crate::render::offsets_of(&rendered.frames_needed, time)
     }
 
     fn press(
@@ -1001,7 +987,7 @@ impl PluginHost for LocalHost {
 /// One bundle's broker, shared by the plugins in it, and whether one of them
 /// is inside a press right now.
 pub struct SharedBroker {
-    broker: Mutex<Broker>,
+    pub(crate) broker: Mutex<Broker>,
     /// Set for as long as a plugin is inside a press. A render that finds it
     /// set answers identity with a badge instead of queueing behind a window
     /// that may stay open for minutes.
@@ -1177,7 +1163,7 @@ impl PluginHost for BrokerHost {
         let source = Frame16::black(1, 1).ok()?;
         let request = RenderRequest::filter(time, source);
         let answer = broker.render(id, &request, &|_, _| None).ok()?;
-        offsets_of(&answer.frames_needed, time)
+        crate::render::offsets_of(&answer.frames_needed, time)
     }
 
     fn press(

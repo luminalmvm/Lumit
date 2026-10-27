@@ -291,8 +291,9 @@ fn host_property_set() -> PropertySet {
     // No interact suite yet, so no overlays. Saying otherwise would have
     // plugins draw into a viewer that never asks them to.
     set.seed(keys::SUPPORTS_OVERLAYS, PropValue::int(0));
-    // What the OFX 1.3 to 1.5 additions ask a host, answered honestly: no GPU
-    // render of any flavour, pictures bottom-up, no window handle.
+    // What the OFX 1.3 to 1.5 additions ask a host, answered honestly: a GPU
+    // render only through what this broker really opened (never OpenGL),
+    // pictures bottom-up, no window handle.
     // Every one of these is read by the stock support library during
     // describe, and a host that answers "unknown property" to it is a host
     // "missing a feature" — which is how HitFilm and Red Giant Universe
@@ -305,14 +306,15 @@ fn host_property_set() -> PropertySet {
     set.seed(keys::HOST_OS_HANDLE, PropValue::Pointer(vec![0]));
     set.seed(keys::PARAM_SUPPORTS_STR_CHOICE_ANIMATION, PropValue::int(0));
     set.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
-    for key in [
-        keys::OPENGL_RENDER_SUPPORTED,
-        keys::CUDA_RENDER_SUPPORTED,
-        keys::CUDA_STREAM_SUPPORTED,
-        keys::METAL_RENDER_SUPPORTED,
-        keys::OPENCL_RENDER_SUPPORTED,
+    let open = crate::gpu::available();
+    for (key, yes) in [
+        (keys::OPENGL_RENDER_SUPPORTED, false),
+        (keys::CUDA_RENDER_SUPPORTED, open.cuda),
+        (keys::CUDA_STREAM_SUPPORTED, open.cuda_stream),
+        (keys::METAL_RENDER_SUPPORTED, open.metal),
+        (keys::OPENCL_RENDER_SUPPORTED, open.opencl),
     ] {
-        seed_string(&mut set, key, values::FALSE);
+        seed_string(&mut set, key, if yes { "true" } else { values::FALSE });
     }
     set.seed(keys::SUPPORTS_MULTI_RESOLUTION, PropValue::int(0));
     set.seed(keys::SUPPORTS_TILES, PropValue::int(0));

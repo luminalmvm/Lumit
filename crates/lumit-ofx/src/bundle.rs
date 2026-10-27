@@ -417,16 +417,38 @@ pub fn search_paths() -> Vec<PathBuf> {
 const MAX_BUNDLE_DEPTH: usize = 4;
 
 /// The bundle binaries at or below one directory:
-/// `**/*.ofx.bundle/Contents/<arch>/*.ofx`.
+/// `**/*.ofx.bundle/Contents/<arch>/*.ofx`. `dir` may be a bundle itself,
+/// as an extension names one.
 ///
 /// Sorted, so two runs discover plugins in the same order — which is what
 /// makes an effect list stable between sessions.
 #[must_use]
 pub fn scan_dir(dir: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    collect_bundles(dir, 0, &mut found);
+    if is_bundle(dir) {
+        binaries_of(dir, &mut found);
+    } else {
+        collect_bundles(dir, 0, &mut found);
+    }
     found.sort();
     found
+}
+
+fn is_bundle(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".ofx.bundle"))
+}
+
+/// The binaries a bundle holds for this platform.
+fn binaries_of(bundle: &Path, found: &mut Vec<PathBuf>) {
+    let binaries = bundle.join("Contents").join(BUNDLE_ARCH_DIR);
+    for binary in std::fs::read_dir(binaries).into_iter().flatten().flatten() {
+        let path = binary.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("ofx") {
+            found.push(path);
+        }
+    }
 }
 
 /// One directory's worth of the walk: the bundles in it, then the folders
@@ -437,21 +459,8 @@ fn collect_bundles(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
     };
     for entry in entries.flatten() {
         let bundle = entry.path();
-        if bundle
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(".ofx.bundle"))
-        {
-            let binaries = bundle.join("Contents").join(BUNDLE_ARCH_DIR);
-            let Ok(binaries) = std::fs::read_dir(binaries) else {
-                continue;
-            };
-            for binary in binaries.flatten() {
-                let path = binary.path();
-                if path.extension().and_then(|ext| ext.to_str()) == Some("ofx") {
-                    found.push(path);
-                }
-            }
+        if is_bundle(&bundle) {
+            binaries_of(&bundle, found);
             // A bundle is not looked inside for another bundle: what is in
             // there is one plugin's own business.
             continue;
