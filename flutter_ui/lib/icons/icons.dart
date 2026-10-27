@@ -22,7 +22,6 @@ import 'package:flutter/widgets.dart';
 // `LumitIcon`, and the enum below owns that name here.
 import 'icon_style.dart';
 import 'lumit_icon.dart' as glyph;
-import '../widgets/controls/base.dart' show ThemeScope;
 import 'lumit_icons.dart';
 
 /// One icon.
@@ -330,20 +329,10 @@ const double _iconStrokeUnits = 1.5;
 /// why a glyph would be the worse drawing.
 Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
   final own = _ownGlyph(icon);
-  if (own != null) {
-    // Restyled to the weight in force, or replaced by the person's own file.
-    return Builder(
-      builder: (context) {
-        // A glyph drawn outside any theme (a test, a bare probe) is the set's.
-        final scope =
-            context.dependOnInheritedWidgetOfExactType<ThemeScope>();
-        return glyph.LumitIcon(
-          scope == null ? own : IconStyle.resolve(icon.name, own, scope.theme),
-          size: size,
-          colour: color,
-        );
-      },
-    );
+  if (own != null) return glyph.LumitIcon(own, size: size, colour: color);
+  // A painted mark the person has drawn their own of.
+  if (IconStyle.own(icon.name) case final svg?) {
+    return glyph.LumitIcon(svg, size: size, colour: color);
   }
   return CustomPaint(
     size: Size.square(size),
@@ -359,6 +348,10 @@ Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
     },
   );
 }
+
+/// The glyph from Lumit's own set that this icon means, or null for the
+/// painted marks.
+String? glyphOf(LumitIcon icon) => _ownGlyph(icon);
 
 /// The glyph from Lumit's own set that this icon means, or null where the set
 /// has no word for it yet (docs/15 §5's table is the mapping).
