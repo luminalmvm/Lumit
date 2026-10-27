@@ -2473,7 +2473,9 @@ class _VersionRowState extends State<_VersionRow> {
         ),
       ),
     );
-    if (!widget.reveal || scope.animationLevel != AnimationLevel.all) {
+    final motion = scope.motion;
+    // A shape whose reveals don't rise has nothing to stagger.
+    if (!widget.reveal || !motion.carries || motion.revealRise == 0) {
       return row;
     }
     // Held back a beat for each row above it, then up and in, the way the
@@ -2482,11 +2484,11 @@ class _VersionRowState extends State<_VersionRow> {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 240 + wait),
-      curve: Interval(wait / (240 + wait), 1, curve: scope.motion.reveal.curve),
+      curve: Interval(wait / (240 + wait), 1, curve: motion.reveal.curve),
       builder: (context, shown, child) => Opacity(
         opacity: shown,
-        child:
-            Transform.translate(offset: Offset(0, (1 - shown) * 6), child: child),
+        child: Transform.translate(
+            offset: Offset(0, (1 - shown) * motion.revealRise), child: child),
       ),
       child: row,
     );
