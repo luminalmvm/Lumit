@@ -62,6 +62,7 @@ import '../state/keymap.dart';
 import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
+import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
@@ -560,7 +561,8 @@ class LumitMenuBarFrb extends StatelessWidget {
     final roomed = t.tokens.roomed;
     final onRail = ui.workspace.interface.toolBarPositionFor(ui.theme.shape) ==
         ToolBarPosition.left;
-    return Container(
+    // Named, so a style can dress the menu bar's buttons apart from others.
+    return StylePart(name: 'menubar', child: Container(
       height: t.density.menuBar,
       // **Load-bearing.** The scroll view above shrink-wraps to the width of
       // its Row, so without this the bar is only as wide as its nine headings
@@ -636,7 +638,7 @@ class LumitMenuBarFrb extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 
   /// The palette finds everything from one box: every menu command, and the

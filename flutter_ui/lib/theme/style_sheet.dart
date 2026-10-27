@@ -14,6 +14,7 @@
 // line rather than the whole style.
 
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -55,6 +56,9 @@ class PartStyle {
   final List<BoxShadow>? insetShadows;
   final Color? colour;
 
+  /// How far what is behind the part is blurred, so it shows through frosted.
+  final double? blur;
+
   const PartStyle({
     this.background,
     this.borderColour,
@@ -63,6 +67,7 @@ class PartStyle {
     this.shadows,
     this.insetShadows,
     this.colour,
+    this.blur,
   });
 
   static const none = PartStyle();
@@ -75,6 +80,7 @@ class PartStyle {
         shadows: shadows,
         insetShadows: insetShadows,
         colour: colour,
+        blur: blur,
       );
 
   /// Just its edge, drawn over a box's content so a fill inside can't cover
@@ -115,6 +121,7 @@ const _properties = {
   'shadow',
   'colour',
   'color',
+  'blur',
 };
 
 class StyleSheet {
@@ -123,6 +130,13 @@ class StyleSheet {
 
   /// The style it starts from.
   final ThemeShape base;
+
+  /// What `@base` said, as written: a style for a style file, a colour
+  /// scheme for a colour file.
+  final String? baseName;
+
+  /// What `@name` said, if anything.
+  final String? title;
 
   /// The folder the file is in.
   final String folder;
@@ -138,12 +152,31 @@ class StyleSheet {
   final Map<String, PartStyle> _resolved = {};
   LumitTheme? _resolvedFor;
 
-  StyleSheet._(this.name, this.base, this.folder, this.problems, this.source,
-      this._vars, this._rules);
+  StyleSheet._(this.name, this.base, this.baseName, this.title, this.folder,
+      this.problems, this.source, this._vars, this._rules);
 
   /// The style in force, or null for one of the three built in. Set by the
   /// workspace as it builds the theme, the way the icon weight is.
   static StyleSheet? current;
+
+  /// Settings ▸ Reduce transparency: every fill drawn solid and nothing
+  /// blurred, whatever the style says.
+  static bool solid = false;
+
+  /// The picture the room shows, from `--room: url("room.jpg")`, as a path.
+  /// Relative to the style's own folder.
+  String? get roomPicture {
+    final m = RegExp(r'''url\(\s*["']?([^"')]+)["']?\s*\)''')
+        .firstMatch(_vars['room'] ?? '');
+    if (m == null) return null;
+    final path = m[1]!.trim();
+    final absolute =
+        path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+    return absolute ? path : '$folder${Platform.pathSeparator}$path';
+  }
+
+  /// How far the room picture is blurred, from `--room-blur`.
+  double get roomBlur => _number(_vars['roomblur'], null) ?? 0;
 
   /// Read a style file's text.
   factory StyleSheet.parse(String text,
@@ -157,13 +190,20 @@ class StyleSheet {
         '\n'.allMatches(text.substring(0, offset)).length + 1;
 
     var base = ThemeShape.studio;
+    String? baseName;
     text = text.replaceAllMapped(RegExp(r'@base\s+([^;\s]+)\s*;'), (m) {
+      baseName = m[1]!;
       final found = ThemeShape.values.asNameMap()[m[1]!.toLowerCase()];
-      if (found == null) {
-        problems.add(l10n.styleProblem(line(m.start), l10n.styleNoBase(m[1]!)));
-      } else {
+      if (found != null) {
         base = found;
+      } else if (schemeNamed(m[1]!) == null) {
+        problems.add(l10n.styleProblem(line(m.start), l10n.styleNoBase(m[1]!)));
       }
+      return m[0]!.replaceAll(RegExp(r'[^\n]'), ' ');
+    });
+    String? title;
+    text = text.replaceAllMapped(RegExp(r'@name\s+"([^"]*)"\s*;'), (m) {
+      title = m[1];
       return m[0]!.replaceAll(RegExp(r'[^\n]'), ' ');
     });
 
@@ -214,7 +254,8 @@ class StyleSheet {
     // The strongest rule last, so applying them in order lets it win.
     rules.sort((a, b) =>
         a.weight != b.weight ? a.weight - b.weight : a.order - b.order);
-    return StyleSheet._(name, base, folder, problems, source, vars, rules);
+    return StyleSheet._(
+        name, base, baseName, title, folder, problems, source, vars, rules);
   }
 
   static List<_Compound>? _readSelector(String sel) {
@@ -234,6 +275,13 @@ class StyleSheet {
     }
     return out;
   }
+
+  /// The colours its `:root` sets, by token key, resolved against [t] so one
+  /// colour can be written in terms of another.
+  Map<String, Color> colours(LumitTheme t) => {
+        for (final token in themeTokens)
+          if (_colour(_vars[_key(token.key)], t) case final c?) token.key: c,
+      };
 
   /// The style's own shape: the base's numbers with its `:root` variables
   /// over them.
@@ -363,6 +411,7 @@ class StyleSheet {
       shadows: shadows?.$1,
       insetShadows: shadows?.$2,
       colour: _colour(props['colour'] ?? props['color'], t),
+      blur: _number(props['blur'], t),
     );
   }
 
@@ -463,6 +512,15 @@ class StyleSheet {
   }
 }
 
+/// The built-in colour scheme called [name], however it is cased or spaced:
+/// `nocturne-dark`, `nocturneDark` and `Nocturne dark` are one scheme.
+LumitColorScheme? schemeNamed(String name) {
+  for (final s in LumitColorScheme.values) {
+    if (_key(s.name) == _key(name)) return s;
+  }
+  return null;
+}
+
 String _hex(Color c) {
   String two(double v) =>
       (v * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
@@ -486,6 +544,18 @@ PartStyle partStyle(
 /// shadow, each only where the style sets one.
 BoxDecoration dress(BoxDecoration d, PartStyle s) {
   if (identical(s, PartStyle.none)) return d;
+  if (StyleSheet.solid) {
+    final fill = s.background;
+    s = PartStyle(
+      background: fill?.withValues(alpha: fill.a == 0 ? 0 : 1),
+      borderColour: s.borderColour,
+      borderWidth: s.borderWidth,
+      radius: s.radius,
+      shadows: s.shadows,
+      insetShadows: s.insetShadows,
+      colour: s.colour,
+    );
+  }
   var border = d.border;
   if (s.borderWidth != null || s.borderColour != null) {
     final was = border is Border ? border.top : BorderSide.none;
@@ -495,12 +565,63 @@ BoxDecoration dress(BoxDecoration d, PartStyle s) {
     );
     border = s.borderWidth == 0 ? null : Border.fromBorderSide(side);
   }
+  final glass = (s.blur ?? 0) > 0 && !StyleSheet.solid;
   return d.copyWith(
     color: s.background,
     border: border,
     borderRadius: s.radius == null ? null : BorderRadius.circular(s.radius!),
-    boxShadow: s.shadows,
+    boxShadow: glass ? const [] : s.shadows,
   );
+}
+
+/// [child] frosted: what is behind it blurred, inside [radius], with the
+/// part's drop shadows drawn round it but never under it, so the glass stays
+/// clear. [child] carries the part's own fill. Nothing changes without a blur.
+Widget frosted(PartStyle s, BorderRadius? radius, Widget child) {
+  final blur = s.blur;
+  if (blur == null || blur <= 0 || StyleSheet.solid) return child;
+  final r = radius ?? BorderRadius.zero;
+  return CustomPaint(
+    painter: _OuterShadowPainter(s.shadows ?? const [], r),
+    child: ClipRRect(
+      borderRadius: r,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: child,
+      ),
+    ),
+  );
+}
+
+class _OuterShadowPainter extends CustomPainter {
+  final List<BoxShadow> shadows;
+  final BorderRadius radius;
+  _OuterShadowPainter(this.shadows, this.radius);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (shadows.isEmpty) return;
+    final box = radius.toRRect(Offset.zero & size);
+    canvas.save();
+    // Everything but the box itself, so a shadow never darkens the glass.
+    canvas.clipPath(Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(box.outerRect.inflate(1000))
+      ..addRRect(box));
+    for (final s in shadows) {
+      canvas.drawRRect(
+        box.inflate(s.spreadRadius).shift(s.offset),
+        Paint()
+          ..color = s.color
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s.blurSigma),
+      );
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_OuterShadowPainter old) =>
+      old.shadows != shadows || old.radius != radius;
 }
 
 /// [child] with the style's inset shadows painted over it, inside [radius].
@@ -512,6 +633,39 @@ Widget insetShadows(PartStyle s, BorderRadius? radius, Widget child) {
         _InsetShadowPainter(shadows, radius ?? BorderRadius.zero),
     child: child,
   );
+}
+
+/// The style's inset shadows as a decoration, for a box that takes a
+/// foreground decoration. Null when there are none.
+Decoration? insetDecoration(PartStyle s, BorderRadius? radius) {
+  final shadows = s.insetShadows;
+  if (shadows == null || shadows.isEmpty) return null;
+  return _InsetShadows(shadows, radius ?? BorderRadius.zero);
+}
+
+class _InsetShadows extends Decoration {
+  final List<BoxShadow> shadows;
+  final BorderRadius radius;
+  const _InsetShadows(this.shadows, this.radius);
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _InsetBoxPainter(this);
+}
+
+class _InsetBoxPainter extends BoxPainter {
+  final _InsetShadows decoration;
+  _InsetBoxPainter(this.decoration);
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null) return;
+    canvas.save();
+    canvas.translate(offset.dx, offset.dy);
+    _InsetShadowPainter(decoration.shadows, decoration.radius)
+        .paint(canvas, size);
+    canvas.restore();
+  }
 }
 
 class _InsetShadowPainter extends CustomPainter {

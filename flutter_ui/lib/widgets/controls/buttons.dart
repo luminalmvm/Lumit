@@ -230,10 +230,11 @@ class _HouseButtonState extends State<HouseButton> {
         onTapUp: enabled ? (_) => setState(() => _down = false) : null,
         onTapCancel: enabled ? () => setState(() => _down = false) : null,
         onTap: widget.onPressed,
-        child: AnimatedContainer(
+        child: Padding(
+          padding: margin,
+          child: frosted(dressed, radius, insetShadows(dressed, radius, AnimatedContainer(
           duration: step.duration,
           curve: step.curve,
-          margin: margin,
           padding: innerPad,
           decoration: dress(BoxDecoration(
             color: fill,
@@ -267,6 +268,7 @@ class _HouseButtonState extends State<HouseButton> {
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
             child: _centred(_capitalised(t, widget.child, widget.primary)),
           ),
+        ))),
         ),
       ),
     );

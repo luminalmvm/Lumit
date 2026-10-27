@@ -26,17 +26,24 @@ class CustomTheme {
   /// to the base.
   final Map<String, Color> colours;
 
+  /// The built-in scheme it starts from, or null for the plain one of its
+  /// mode.
+  final LumitColorScheme? base;
+
   const CustomTheme({
     required this.name,
     required this.mode,
     required this.colours,
+    this.base,
   });
 
-  /// The scheme a custom theme is built over. One per mode, and deliberately
-  /// the plainest of each: a custom theme should start from Lumit's own
-  /// neutral ramp, not from somebody else's palette.
+  /// The scheme a custom theme is built over: the one it names, else the
+  /// plainest of its mode, Lumit's own neutral ramp.
   LumitColorScheme get baseScheme =>
-      mode == ThemeMode2.light ? LumitColorScheme.light : LumitColorScheme.dark;
+      base ??
+      (mode == ThemeMode2.light
+          ? LumitColorScheme.light
+          : LumitColorScheme.dark);
 
   /// This theme, resolved: the base scheme under the shape, with the stored
   /// colours over it.
@@ -47,18 +54,22 @@ class CustomTheme {
 
   /// The same theme under a new name — what "save as" does.
   CustomTheme renamed(String to) =>
-      CustomTheme(name: to, mode: mode, colours: colours);
+      CustomTheme(name: to, mode: mode, colours: colours, base: base);
 
   /// Capture a whole theme's colours under [name]. What the editor saves.
-  factory CustomTheme.from(String name, LumitTheme theme) => CustomTheme(
+  factory CustomTheme.from(String name, LumitTheme theme,
+          {LumitColorScheme? base}) =>
+      CustomTheme(
         name: name,
         mode: theme.mode,
         colours: tokensOf(theme),
+        base: base,
       );
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'mode': mode.name,
+        if (base != null) 'base': base!.name,
         // Stored as `#rrggbb` rather than a number: a person opening the
         // workspace file should be able to read their own theme, and paste a
         // colour into it.
@@ -71,6 +82,7 @@ class CustomTheme {
     final name = json['name'];
     if (name is! String || name.trim().isEmpty) return null;
     final mode = ThemeMode2.values.asNameMap()[json['mode']] ?? ThemeMode2.dark;
+    final base = LumitColorScheme.values.asNameMap()[json['base']];
     final raw = json['colours'];
     final colours = <String, Color>{};
     if (raw is Map) {
@@ -80,7 +92,7 @@ class CustomTheme {
         if (colour != null) colours[key] = colour;
       });
     }
-    return CustomTheme(name: name, mode: mode, colours: colours);
+    return CustomTheme(name: name, mode: mode, colours: colours, base: base);
   }
 }
 

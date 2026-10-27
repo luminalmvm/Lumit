@@ -766,6 +766,14 @@ class _DragValueFieldState extends State<DragValueField>
           padding: widget.bare
               ? EdgeInsets.zero
               : const EdgeInsets.symmetric(horizontal: 6),
+          // A style's inner shadows, so a well can sit sunk into its panel.
+          foregroundDecoration: widget.bare
+              ? null
+              : insetDecoration(
+                  partStyle(context, t, 'well'),
+                  BorderRadius.circular(
+                      partStyle(context, t, 'well').radius ??
+                          t.tokens.wellRadius)),
           decoration: dress(BoxDecoration(
             // The inset stays the inset in every state: a well does not lift
             // under the pointer, because then it would stop being a recess
