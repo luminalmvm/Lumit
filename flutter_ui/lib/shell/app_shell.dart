@@ -21,6 +21,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/layer_settings_frb.dart' show newSolidFrb;
 import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
@@ -797,12 +798,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // Layer ▸ New from the keyboard: the same engine call the menu row
       // makes, on the fronted composition.
-      // A light asks for its settings first, as the menu row does.
-      case 'layer.new.light.point':
+      // A light or a solid asks for its settings first, as the menu row does.
+      case 'layer.new.light.point' || 'layer.new.solid':
         if (comp == null) {
           handled = false;
         } else {
-          newLightFrb(
+          (action == 'layer.new.solid' ? newSolidFrb : newLightFrb)(
             context: context,
             comp: comp,
             row: newLayerRow(ui, comp),
@@ -817,8 +818,7 @@ class _LumitAppViewState extends State<LumitAppView> {
           insertEmptyLayer(ui, comp, action);
           state.notifyDocumentChanged();
         }
-      case 'layer.new.solid' ||
-            'layer.new.text' ||
+      case 'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
             'layer.new.null':
@@ -828,8 +828,6 @@ class _LumitAppViewState extends State<LumitAppView> {
           // Directly above the selected layer, exactly as the menu row does.
           final row = newLayerRow(ui, comp);
           switch (action) {
-            case 'layer.new.solid':
-              comp.addSolidLayer(row: row);
             case 'layer.new.text':
               comp.addTextLayer(row: row);
             case 'layer.new.camera':

@@ -22,6 +22,7 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../shell/layer_settings_frb.dart' show newSolidFrb;
 import '../shell/light_settings_dialog.dart';
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
@@ -468,7 +469,10 @@ Future<void> _showLayerMenu(
       // The row carries what it does, not a word to switch on: the label is
       // translated and would no longer match an English case.
       for (final (label, add) in <(String, VoidCallback)>[
-        (l10n.menuSolid, comp.addSolidLayer),
+        (
+          l10n.menuSolid,
+          () => newSolidFrb(context: context, comp: comp, onDone: onChanged)
+        ),
         (l10n.menuText, comp.addTextLayer),
         (l10n.menuCamera, comp.addCameraLayer),
         (
