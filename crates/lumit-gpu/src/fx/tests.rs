@@ -330,6 +330,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
         intensity: 1.0,
         tint: [1.0; 4],
         mix: 1.0,
+        rolloff: 0.0,
     };
     // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
@@ -2346,6 +2347,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
             intensity,
             tint,
             mix,
+            rolloff: 0.0,
         };
         let out = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -2433,6 +2435,8 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             },
             fringe_wavelength: wavelength,
             fringe_samples: samples,
+            // One case runs Rolloff through both paths too.
+            rolloff: if name == "both" { 0.6 } else { 0.0 },
         };
         let mut cpu = img.clone();
         lumit_core::fx::cpu::glow_shaped(&mut cpu, w, h, &halo, 0.8, 0.5, 1.0, [1.0; 4], 1.0, &[]);
@@ -2471,6 +2475,7 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             intensity: 1.0,
             tint: [1.0; 4],
             mix: 1.0,
+            rolloff: halo.rolloff,
         };
         let out = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();

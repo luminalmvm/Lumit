@@ -2395,6 +2395,7 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
                 fringe_tints: cpu::HALO_FRINGE_TINTS,
                 fringe_wavelength: false,
                 fringe_samples: 16,
+                rolloff: 0.0,
             },
             0.0,
             0.0,

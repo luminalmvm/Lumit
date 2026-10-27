@@ -4040,6 +4040,10 @@
   "@fxIntensity": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxRolloff": "Rolloff",
+  "@fxRolloff": {
+    "description": "Effect controls — a control on Glow: how much of the top of the glow bends smoothly towards white instead of clipping, 0 to 1."
+  },
   "fxInterlaceOffset": "Interlace offset",
   "@fxInterlaceOffset": {
     "description": "Effect controls — a control on Scanlines."

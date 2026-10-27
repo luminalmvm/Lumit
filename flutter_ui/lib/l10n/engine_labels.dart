@@ -1077,6 +1077,7 @@ Map<String, String> get _built => {
       "Rise": l10n.fxRise,
       "Robust Video Matting": l10n.fxRobustVideoMatting,
       "Roll speed": l10n.fxRollSpeed,
+      "Rolloff": l10n.fxRolloff,
       "Rotation": l10n.fxRotation,
       "Rotation amount": l10n.fxRotationAmount,
       "Rotation frequency": l10n.fxRotationFrequency,
