@@ -14,6 +14,7 @@ import syncClip from "../../assets/clips/pro-sync.mp4";
 import previewClip from "../../assets/clips/pro-preview.mp4";
 import phoneClip from "../../assets/clips/pro-preview-phone.mp4";
 import historyClip from "../../assets/clips/pro-history.mp4";
+import phoneAppShot from "../../assets/shots/story-iphone.jpg";
 import { MONTHLY, YEARLY, SAVING } from "../../scripts/pro";
 
 // What Pro is, what it costs, and how to get it. Nothing is bought on this
@@ -67,6 +68,15 @@ const features = [
     wide: true,
     sizes: "(min-width: 1360px) 1200px, 100vw",
   },
+  {
+    h: "Exports on your phone",
+    p: "Start and follow exports from Lumit for iPhone.",
+    c: "azure",
+    shot: phoneAppShot,
+    alt: "Lumit for iPhone: the Exports tab following an export on Studio PC, and a preview with its comments.",
+    wide: true,
+    sizes: "(min-width: 1360px) 1200px, 100vw",
+  },
 ];
 
 // The whole editor is on the left and it stays there.
@@ -78,6 +88,7 @@ const compare = [
   { what: "Multi-edit projects kept online while you're away", free: false, pro: true },
   { what: "Settings synced across your devices", free: false, pro: true },
   { what: "Save and send previews, and receive comments with timestamps within Lumit", free: false, pro: true },
+  { what: "Start and follow exports from Lumit for iPhone", free: false, pro: true },
   { what: "Backup every save and revert at any time", free: false, pro: true },
 ];
 
@@ -179,7 +190,7 @@ const questions = [
               <div class:list={["stage", f.phone && "pair"]}>
                 <div class="frame">
                   <Image src={f.shot} alt={f.alt} widths={[720, 1000, 1400]} sizes={f.sizes} loading="lazy" quality={90} />
-                  <video class="clip" data-clip src={f.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />
+                  {f.clip && <video class="clip" data-clip src={f.clip} muted loop playsinline preload="none" tabindex="-1" aria-hidden="true" />}
                 </div>
                 {f.phone && (
                   <div class="frame phone">

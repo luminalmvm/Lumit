@@ -5,6 +5,7 @@ import ReleaseDate from "../components/ReleaseDate.astro";
 import { releasesNewestFirst } from "../scripts/releases";
 
 const RELEASES = "https://github.com/luminalmvm/Lumit/releases";
+const TESTFLIGHT = "https://testflight.apple.com/join/eGBpt5gx";
 const DOCS = "https://docs.lumitlab.com";
 
 // `ext` is the file a card hands over, and `note` is the one thing to know
@@ -122,6 +123,18 @@ const [latest] = await releasesNewestFirst();
         }
       </div>
 
+      <article class="phone card lit">
+        <div>
+          <span class="ext">TestFlight</span>
+          <h2 class="mt-6 text-[28px] leading-none tracking-[-0.03em]">iPhone</h2>
+          <p class="mt-3 max-w-[640px] text-[14px] leading-[1.5] text-fg-3">
+            Lumit for iPhone pairs with Lumit on your computer, to start and follow exports and
+            read the comments on your previews. Pair it in Settings, under Account and Devices.
+          </p>
+        </div>
+        <a class="btn" href={TESTFLIGHT}>Join on TestFlight</a>
+      </article>
+
       <p class="text-[13.5px] text-fg-3">
         All builds can be found on the
         <a href={RELEASES} class="text-fg-2 underline underline-offset-2 hover:text-fg">
@@ -175,6 +188,18 @@ const [latest] = await releasesNewestFirst();
 </Base>
 
 <style>
+  /* Lumit for iPhone: one row under the computers, since it is not installed
+     from here. */
+  .phone {
+    display: grid;
+    align-items: end;
+    gap: 24px;
+  }
+  @media (min-width: 1024px) {
+    .phone {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
   /* The release on one line: which, when, and where its notes are. */
   .strip {
     display: flex;
