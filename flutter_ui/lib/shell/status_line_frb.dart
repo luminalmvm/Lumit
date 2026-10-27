@@ -909,25 +909,25 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           ],
         BridgeProxyState_Done(:final path) => [
             Flexible(
-              child: Text(
+              child: _result(Text(
                 l10n.proxyMade(path),
                 key: const ValueKey('status-proxy-done'),
                 style: t.small,
                 overflow: TextOverflow.ellipsis,
-              ),
+              )),
             ),
             const SizedBox(width: 8),
           ],
         BridgeProxyState_Failed(:final error) => [
             Flexible(
-              child: Text(
+              child: _result(Text(
                 error == 'cancelled'
                     ? l10n.proxyCancelled
                     : l10n.proxyFailed(error),
                 key: const ValueKey('status-proxy-failed'),
                 style: t.small.copyWith(color: t.warning),
                 overflow: TextOverflow.ellipsis,
-              ),
+              )),
             ),
             const SizedBox(width: 8),
           ],
@@ -971,7 +971,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         BridgeExportState_Done(:final path) => [
             // The finished file is one click away: the line opens its folder.
             Flexible(
-              child: LumitTooltip(
+              child: _result(LumitTooltip(
                 message: l10n.tipOpenFolder,
                 child: HoverMark(
                   builder: (context, lit) => GestureDetector(
@@ -986,22 +986,28 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                     ),
                   ),
                 ),
-              ),
+              )),
             ),
           ],
         BridgeExportState_Failed(:final error) => [
             Flexible(
-              child: Text(
+              child: _result(Text(
                 error == 'cancelled'
                     ? l10n.exportCancelled
                     : l10n.exportFailed(error),
                 key: const ValueKey('status-export-failed'),
                 style: t.small.copyWith(color: t.warning),
                 overflow: TextOverflow.ellipsis,
-              ),
+              )),
             ),
           ],
       };
+
+  /// How a finished job's line arrives: as the notice beside it does.
+  Widget _result(Widget line) {
+    final motion = ThemeScope.of(context).motion;
+    return Entrance(spec: motion.reveal, rise: motion.revealRise, child: line);
+  }
 }
 
 /// How long a running export has left, in words for the strip, or null while
