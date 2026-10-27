@@ -72,11 +72,10 @@
   .wrap {
     @apply mx-auto w-full max-w-[1280px] px-5 sm:px-10;
   }
-  /* The drawing's eyebrow: mono caps, muted, led by a small outlined tile. Every
-     container label on the site is one of these (docs/15-DESIGN §7.1). */
+  /* A section's label: sentence case and muted, so the heading under it leads.
+     Every container label on the site is one of these. */
   .kicker {
-    @apply flex items-center gap-2 font-mono text-[12px] leading-none
-           tracking-[0.08em] uppercase text-fg-3;
+    @apply flex items-center gap-2 text-[14px] leading-none text-fg-3;
   }
   /* REMOVED THIS PART FOR NOW Prefer text just sitting by itself on the left
   .kicker::before {
