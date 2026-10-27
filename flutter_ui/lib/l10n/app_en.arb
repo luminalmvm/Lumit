@@ -1620,15 +1620,6 @@
       }
     }
   },
-  "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
-  },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
@@ -7760,10 +7751,6 @@
       }
     }
   },
-  "projectEmpty": "No items yet — import footage or create a composition",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
     "description": "Project panel info line for sound-only footage, shown where a picture size would be. Lower case on purpose."
@@ -13836,10 +13823,6 @@
   "@exportColourSpaceDisplayP3": {
     "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
   },
-  "exportColourStated": "The file states this space in its own header.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportAudio44k": "44.100 kHz",
   "@exportAudio44k": {
     "description": "Export dialog, Audio section, sample-rate list: 44100 hertz, the CD rate. A number and its unit; keep the same decimal style as the other two rates."
@@ -17873,10 +17856,6 @@
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
   },
-  "settingsShareLimitHint": "Applies to footage in shared projects.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
-  },
   "settingsShareNoLimit": "No limit",
   "@settingsShareNoLimit": {
     "description": "Option in the footage upload and download limit lists in Settings."
@@ -17933,10 +17912,6 @@
   "settingsExtensionsInstall": "Install from a folder",
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
-  },
-  "settingsExtensionsInstallHint": "Pick the folder containing extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
   },
   "settingsExtensionsFolder": "Extensions folder",
   "@settingsExtensionsFolder": {

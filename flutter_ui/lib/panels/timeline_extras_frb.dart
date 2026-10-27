@@ -35,7 +35,9 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/layer_picker.dart';
+import '../widgets/name_direction.dart';
 import 'timeline_metrics_frb.dart'
     show TimelineMode, laneKeyHalf, positionOf;
 import 'timeline_snap.dart';
@@ -195,11 +197,23 @@ class CompTabsFrb extends StatelessWidget {
                     BoxDecoration(color: t.accent, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
-              Segment(
-                key: const ValueKey('tl-comp-tabs'),
-                children: _tabs(context, t, comps, selected),
+              // Scrolls sideways once the tabs outgrow the line, so the mode
+              // pill and Export always keep their place.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: EdgeFade(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Segment(
+                        key: const ValueKey('tl-comp-tabs'),
+                        children: _tabs(context, t, comps, selected),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               if (mode != null && onMode != null) ...[
                 Segment(key: const ValueKey('tl-mode-tabs'), children: [
                   for (final (keyName, label, tip, which) in [
@@ -727,6 +741,8 @@ class _CompTabState extends State<_CompTab> {
     final dropping = widget.dropping;
     final tab = Container(
           height: round ? null : compTabHeight,
+          // A long name is cut short rather than making a tab that wide.
+          constraints: const BoxConstraints(maxWidth: 200),
           padding: const EdgeInsets.only(left: 10, right: 10),
           // **The pointer says the tab is a control**. A tab that is
           // not the open one answered a hover with nothing at all, so there
@@ -772,15 +788,25 @@ class _CompTabState extends State<_CompTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                // Body, not `small`: a composition's name is the *user's* text
-                // (§7.1), and the mockup sets both states at 11. Only the colour
-                // tells the fronted tab from the rest.
-                child: Text(
-                  name,
-                  style: active
-                      ? t.bodyPrimary
-                      : t.body.copyWith(color: t.textMuted),
+              Flexible(
+                child: Center(
+                  widthFactor: 1,
+                  // Body, not `small`: a composition's name is the *user's*
+                  // text (§7.1), and the mockup sets both states at 11. Only
+                  // the colour tells the fronted tab from the rest.
+                  child: LumitTooltip(
+                    message: name,
+                    child: Text(
+                      name,
+                      style: active
+                          ? t.bodyPrimary
+                          : t.body.copyWith(color: t.textMuted),
+                      textDirection: nameDirection(name),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2354,7 +2380,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       axis: axis,
                       fps: widget.fps,
                       label: t.mono.copyWith(
-                        fontSize: 7,
+                        fontSize: 9,
                         color: t.textMuted.withValues(alpha: 0.75),
                       ),
                     ),
@@ -4098,12 +4124,11 @@ const double workAreaHandleRadius = 1;
 /// still the edge's to catch.
 const double workAreaHandleTopInset = 18;
 
-/// What a marker's label is set in: mono at 8, the mockup's own size —
-/// a marker's label is a cue read at a glance beside a clock, and it sets in
-/// the same face the clock does, one step quieter so the pill stays a pill
-/// inside the ruler's 12px lower row.
+/// What a marker's label is set in: the clock's own face and size, mono at 9.
+/// A marker's label is a cue read at a glance beside the clock, and at 9 with
+/// no leading the pill still fits the ruler's 12px lower row.
 TextStyle markerLabelStyle(LumitTheme t) =>
-    t.mono.copyWith(fontSize: 8, color: t.textPrimary, height: 1);
+    t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
 
 /// The corner of a marker's label pill: a capsule under Lantern, 2 elsewhere.
 double markerPillRadius(LumitTheme t) =>

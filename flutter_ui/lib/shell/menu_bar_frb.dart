@@ -228,12 +228,17 @@ class MenuEntry {
   /// How to rebuild this row when [live] fires. Null unless [live] is set.
   final MenuEntry Function()? rebuild;
 
+  /// What hovering the row says, where its label is a shortened name: the
+  /// full path of a recent project.
+  final String? tip;
+
   MenuEntry(
     this.label,
     this.onPressed, {
     this.action,
     this.needsPro = false,
     bool? checked,
+    this.tip,
   })  : isDivider = false,
         children = null,
         todo = false,
@@ -263,7 +268,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = checked,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// **An option row that leaves the menu open**, on the same terms as
   /// [MenuEntry.toggle] and for a narrower reason: the rows that pick one of
@@ -285,7 +291,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = checked,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   MenuEntry.divider()
       : label = null,
@@ -298,7 +305,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   MenuEntry.submenu(this.label, this.children)
       : onPressed = null,
@@ -309,7 +317,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// A command the specification has and the build has not.
   MenuEntry.todo(this.label, {this.action})
@@ -321,7 +330,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// A row that redraws itself while its menu is open, from [rebuild], every
   /// time [live] fires — and which does *not* close the menu when pressed.
@@ -342,7 +352,8 @@ class MenuEntry {
         todo = false,
         needsPro = false,
         _checked = null,
-        _checkedNow = null;
+        _checkedNow = null,
+        tip = null;
 
   /// The tick this row wears now: fixed for an ordinary row, re-read for a
   /// [MenuEntry.toggle] whose menu is still open after it was pressed.
@@ -965,7 +976,9 @@ List<MenuSection> lumitMenus(
                 MenuEntry(l10n.menuNothingYet, null)
               else
                 for (final path in ui.workspace.recentProjects)
-                  MenuEntry(path, () => app.openProject(path)),
+                  MenuEntry(projectDisplayName(path),
+                      () => app.openProject(path),
+                      tip: path),
             ]),
             MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
                 needsPro: needsPro()),
@@ -2994,7 +3007,7 @@ class _RequestHotkeyState extends State<_RequestHotkey> {
 String? _openHeading;
 VoidCallback? _closeHeading;
 
-class _MenuButton extends StatelessWidget {
+class _MenuButton extends StatefulWidget {
   final String title;
 
   /// Built when the menu opens, not when the bar does — see [MenuSection].
@@ -3002,9 +3015,25 @@ class _MenuButton extends StatelessWidget {
   const _MenuButton({required this.title, required this.items});
 
   @override
+  State<_MenuButton> createState() => _MenuButtonState();
+}
+
+class _MenuButtonState extends State<_MenuButton> {
+  /// Whether this heading's menu is up. The heading keeps its hover face for
+  /// as long as it is, so the pointer moving into the menu still shows which
+  /// one is open.
+  bool _up = false;
+
+  /// Counts the menus this heading has opened, so the close of one it has
+  /// just replaced doesn't take the face off the one now up.
+  int _opens = 0;
+
+  String get title => widget.title;
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return MouseRegion(
+    final button = MouseRegion(
       // Only once a menu is already open: hovering the bar with nothing open
       // must not start dropping menus at a passing pointer.
       onEnter: (_) {
@@ -3027,6 +3056,17 @@ class _MenuButton extends StatelessWidget {
         },
       ),
     );
+    // HouseButton's own hover face, drawn under it while the pointer is away.
+    return DecoratedBox(
+      decoration: _up
+          ? BoxDecoration(
+              color: t.surface3,
+              border: Border.all(color: t.hairlineStrong),
+              borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+            )
+          : const BoxDecoration(),
+      child: button,
+    );
   }
 
   void _open(BuildContext context) {
@@ -3037,7 +3077,9 @@ class _MenuButton extends StatelessWidget {
     _openHeading = title;
     // Built here, once, rather than inside the popup's builder: the rows are
     // this menu's answer at the moment it was asked for.
-    final rows = items();
+    final rows = widget.items();
+    final mine = ++_opens;
+    setState(() => _up = true);
     showLumitPopup<void>(
       context: context,
       position: origin,
@@ -3051,7 +3093,9 @@ class _MenuButton extends StatelessWidget {
           child: _MenuList(items: rows, close: () => close(null)),
         );
       },
-    );
+    ).then((_) {
+      if (mounted && mine == _opens) setState(() => _up = false);
+    });
   }
 }
 
@@ -3190,10 +3234,16 @@ class _MenuListState extends State<_MenuList> {
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
+    final text = Text(item.text,
+        style: style, maxLines: 1, overflow: TextOverflow.ellipsis);
     return Row(
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
-        Expanded(child: Text(item.text, style: style)),
+        Expanded(
+          child: item.tip == null
+              ? text
+              : LumitTooltip(message: item.tip!, child: text),
+        ),
         if (item.needsPro)
           const Padding(
             padding: EdgeInsets.only(left: 16),

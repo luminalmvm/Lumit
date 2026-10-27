@@ -400,7 +400,7 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
         child: Text(
           '${_secondsOf(held, shift).toStringAsFixed(2)} '
           '${l10n.unitSymbolSeconds}',
-          style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+          style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
         ),
       ),
     );

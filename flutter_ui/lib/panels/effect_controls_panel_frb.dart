@@ -56,6 +56,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
@@ -1251,24 +1253,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
-                    // A null layer has no picture, so nothing here changes one
-                    // — but the parameters are real, animatable values, which is
-                    // exactly what a null is for once expressions can read them.
-                    // Said plainly, once, rather than refusing the drop.
-                    if (info.kind == BridgeLayerKind.nullLayer &&
-                        info.effects.isNotEmpty)
-                      Padding(
-                        key: const ValueKey('fx-null-inert'),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        child: Text(
-                          'A null layer draws nothing, so an effect here changes '
-                          'no picture. Its parameters stay live — a null is '
-                          'where a control lives when it is meant to drive other '
-                          'layers.',
-                          style: t.small.copyWith(color: t.textMuted),
-                        ),
-                      ),
                     if (info.effects.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1410,11 +1394,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           onPressed: worn.length < offeredStyles().length
               ? () => _addStyleMenu(context, ui, layer, worn)
               : null,
-          child: Text('+',
-              style: t.small.copyWith(
-                  color: worn.length < offeredStyles().length
-                      ? t.textMuted
-                      : t.textDisabled)),
+          child: glyph.LumitIcon(LumitIcons.addEffect,
+              size: 12,
+              colour: worn.length < offeredStyles().length
+                  ? t.textMuted
+                  : t.textDisabled),
         ),
       ),
     );

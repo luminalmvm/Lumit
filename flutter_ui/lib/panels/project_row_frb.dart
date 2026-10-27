@@ -25,6 +25,7 @@ import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
+import '../widgets/name_direction.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -574,7 +575,10 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     tint: 0.14,
                   ),
             padding: EdgeInsets.only(
-              left: projectRowPadding + widget.depth * projectIndentPerDepth,
+              // Five levels at most, so a deep folder still leaves its rows
+              // a name and room for the columns.
+              left: projectRowPadding +
+                  math.min(widget.depth, 5) * projectIndentPerDepth,
               right: projectRowPadding,
             ),
             child: Row(
@@ -590,45 +594,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                 // desk test). The indent and the badges come out of it exactly
                 // as they always did.
                 Expanded(child: _nameAndBadges(t)),
-                if (widget.missing) ...[
-                  const SizedBox(width: projectRowGap),
-                  // The badge *is* the relink control: the mockup gives a
-                  // broken row a pill and no button, and the panel would
-                  // otherwise lose the one-click relink the row has always had.
-                  LumitTooltip(
-                    message: l10n.relinkEllipsis,
-                    child: HoverMark(
-                      swells: true,
-                      builder: (context, lit) => GestureDetector(
-                        key: ValueKey<String>('relink-${projectItemId(item)}'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () =>
-                            _doRelink((item as ItemReference_Footage).field0),
-                        // Claims a double-click here too, so the row never
-                        // opens New composition over the badge.
-                        onDoubleTap: () =>
-                            _doRelink((item as ItemReference_Footage).field0),
-                        child: ProjectBadge(
-                          label: l10n.projectItemMissing,
-                          colour:
-                              Color.lerp(t.warning, t.textPrimary, 0.35 * lit)!,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                if (widget.undecodable) ...[
-                  const SizedBox(width: projectRowGap),
-                  LumitTooltip(
-                    message: l10n.tipProjectUndecodable,
-                    child: ProjectBadge(
-                      key: ValueKey<String>(
-                          'undecodable-${projectItemId(item)}'),
-                      label: l10n.projectItemUndecodable,
-                      colour: t.warning,
-                    ),
-                  ),
-                ],
                 // **The row's own label square** (the owner's ask): a
                 // hue-quartered mark that opens the eight-colour picker to
                 // tag this row — and the rest of the selection when the row
@@ -670,11 +635,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       return Draggable<FootageDragData>(
         data: FootageDragData(
           dragged,
-          dragged.length > 1 ? '${dragged.length} items' : name,
+          dragged.length > 1 ? l10n.projectItemCount(dragged.length) : name,
         ),
         dragAnchorStrategy: pointerDragAnchorStrategy,
         feedback: _DragFeedbackFrb(
-          name: dragged.length > 1 ? '${dragged.length} items' : name,
+          name: dragged.length > 1 ? l10n.projectItemCount(dragged.length) : name,
         ),
         child: row,
       );
@@ -862,6 +827,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       // its reason.
       if (widget.standIn)
         ('stand-in-$id', l10n.projectItemStandIn, t.textMuted),
+      if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
+      if (widget.undecodable)
+        ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
@@ -924,11 +892,42 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             ],
             for (final (key, label, colour) in fit) ...[
               const SizedBox(width: projectRowGap),
-              ProjectBadge(
-                key: ValueKey<String>(key),
-                label: label,
-                colour: colour,
-              ),
+              if (key.startsWith('relink-'))
+                // The badge *is* the relink control: the mockup gives a
+                // broken row a pill and no button, and the panel would
+                // otherwise lose the one-click relink the row has always had.
+                LumitTooltip(
+                  message: l10n.relinkEllipsis,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
+                          _doRelink((item as ItemReference_Footage).field0),
+                      // Claims a double-click here too, so the row never
+                      // opens New composition over the badge.
+                      onDoubleTap: () =>
+                          _doRelink((item as ItemReference_Footage).field0),
+                      child: ProjectBadge(
+                        label: label,
+                        colour: Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
+                      ),
+                    ),
+                  ),
+                )
+              else if (key.startsWith('undecodable-'))
+                LumitTooltip(
+                  message: l10n.tipProjectUndecodable,
+                  child: ProjectBadge(
+                      key: ValueKey<String>(key), label: label, colour: colour),
+                )
+              else
+                ProjectBadge(
+                  key: ValueKey<String>(key),
+                  label: label,
+                  colour: colour,
+                ),
             ],
           ],
         );
@@ -972,7 +971,10 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             ? t.textPrimary
             : t.textSecondary;
     return Text(widget.name,
-        style: t.body.copyWith(color: colour), overflow: TextOverflow.ellipsis);
+        style: t.body.copyWith(color: colour),
+        textDirection: nameDirection(widget.name),
+        textAlign: TextAlign.left,
+        overflow: TextOverflow.ellipsis);
   }
 
   /// The per-type glyph and tint, off [projectDefaultLabel] so the filter

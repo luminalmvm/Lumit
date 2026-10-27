@@ -2155,10 +2155,6 @@
   "@exportColourSpaceSrgb": {
     "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
-  "exportColourStated": "يذكر الملف هذه المساحة في ترويسته.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportCrop": "اقتصاص",
   "@exportCrop": {
     "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
@@ -2364,15 +2360,6 @@
   "exportGuideLayers": "طبقات الإرشاد",
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
-  },
-  "exportImageSequenceNote": "ملف {extension} مرقّم لكل إطار، بجانب الاسم المختار.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
   },
   "exportKeepBoth": "الاحتفاظ بالاثنين",
   "@exportKeepBoth": {
@@ -9073,10 +9060,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "لا توجد عناصر بعد — استورد لقطات أو أنشئ تكوينًا",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "تكوين",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -10658,10 +10641,6 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "اختر المجلد الذي يحتوي على extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
-  },
   "settingsExtensionsInstallPackage": "تثبيت حزمة",
   "@settingsExtensionsInstallPackage": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
@@ -11163,10 +11142,6 @@
   "settingsShareDownLimit": "حد تنزيل اللقطات",
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
-  },
-  "settingsShareLimitHint": "ينطبق على اللقطات في المشاريع المشتركة.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
   },
   "settingsShareLimitValue": "{kilobytes} KB/s",
   "@settingsShareLimitValue": {

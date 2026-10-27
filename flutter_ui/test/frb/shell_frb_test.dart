@@ -807,8 +807,6 @@ void main() {
       expect(live('export-depth'), isTrue, reason: 'and either depth');
       expect(live('export-audio'), isFalse,
           reason: 'a folder of stills is mute');
-      expect(find.textContaining('One numbered PNG per frame'), findsOneWidget,
-          reason: 'the dialog says what a sequence writes');
 
       await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
       await tester.pumpAndSettle();

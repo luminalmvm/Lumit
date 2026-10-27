@@ -410,11 +410,9 @@ class _InterpretBodyState extends State<_InterpretBody> {
               ),
             ),
           ],
-          const Spacer(),
-          if (_noAlphaGuess) ...[
-            Text(l10n.interpretNoGuess, style: dialogMono(t)),
-            const SizedBox(width: 8),
-          ],
+          const SizedBox(width: 8),
+          Expanded(child: _noGuess(t, _noAlphaGuess)),
+          const SizedBox(width: 8),
           HouseButton(
             key: const ValueKey('interpret-guess-alpha'),
             small: true,
@@ -423,6 +421,15 @@ class _InterpretBodyState extends State<_InterpretBody> {
           ),
         ],
       );
+
+  /// What a guess that found nothing says, on one line beside its button.
+  Widget _noGuess(LumitTheme t, bool shown) => shown
+      ? Text(l10n.interpretNoGuess,
+          style: dialogMono(t),
+          textAlign: TextAlign.end,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis)
+      : const SizedBox.shrink();
 
   Color get _matteColour =>
       Color.fromARGB(255, _matte[0], _matte[1], _matte[2]);
@@ -561,11 +568,9 @@ class _InterpretBodyState extends State<_InterpretBody> {
               : null,
           width: 170,
         ),
-        const Spacer(),
-        if (_noPulldownGuess) ...[
-          Text(l10n.interpretNoGuess, style: dialogMono(t)),
-          const SizedBox(width: 8),
-        ],
+        const SizedBox(width: 8),
+        Expanded(child: _noGuess(t, _noPulldownGuess)),
+        const SizedBox(width: 8),
         HouseButton(
           key: const ValueKey('interpret-guess-pulldown'),
           small: true,

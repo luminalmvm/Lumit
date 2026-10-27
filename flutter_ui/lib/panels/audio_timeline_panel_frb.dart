@@ -2715,7 +2715,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             right: 8,
             bottom: 4,
             child: Text(reading,
-                style: t.mono.copyWith(fontSize: 8, color: t.textMuted)),
+                style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
           ),
         // The corners of the layer's own bar: the first fade dragged on to one
         // converts it, as the first trim does.

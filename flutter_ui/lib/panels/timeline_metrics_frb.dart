@@ -27,9 +27,10 @@ import 'package:lumit_flutter/src/rust/api/retime.dart';
 // Timeline's shared numbers still finds the drag among them.
 export 'timeline_layer_drag.dart';
 
-/// The layer-number column: the mockup's own 18, shared by the column
-/// header's `#` and the muted mono number under it so the two stack.
-const double numberCellWidth = 18;
+/// The layer-number column, shared by the column header's `#` and the muted
+/// mono number under it so the two stack. Three digits of the 10px mono, so a
+/// comp of a hundred layers or more still writes each number on one line.
+const double numberCellWidth = 19;
 
 /// How thick a scrollbar thumb is — 7 (docs/15 §12A.6, where it is
 /// named for the graph side's horizontal bar; the lanes' bar carries the same

@@ -955,7 +955,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
               held.db <= volumeBandFloorDb
                   ? l10n.volumeNegInf
                   : '${held.db.toStringAsFixed(1)} dB',
-              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+              style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
             ),
           ),
         ),

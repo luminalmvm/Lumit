@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../theme/style_sheet.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 
 /// The title strip, over its hairline.
 const double dialogTitleStrip = 30;
@@ -187,11 +188,7 @@ Widget dialogTitleBar(
   );
   final about = Padding(
     padding: const EdgeInsets.only(left: 10),
-    child: Text(
-      subject,
-      style: t.body.copyWith(color: t.textMuted),
-      overflow: TextOverflow.ellipsis,
-    ),
+    child: MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
   );
   final close = LumitTooltip(
     message: l10n.close,
@@ -397,10 +394,13 @@ Widget dialogRow(
       constraints: BoxConstraints(minHeight: minHeight),
       child: Row(
         children: [
+          // One line, cut with the whole word on hover: a long German word
+          // broke mid-letter onto a second line the row had no room for.
           SizedBox(
               width: labelColumn,
-              child: Text(label,
-                  style: dimmed
+              child: FittedText(
+                  label,
+                  dimmed
                       ? t.body.copyWith(color: t.textDisabled)
                       : t.body)),
           SizedBox(width: gap),

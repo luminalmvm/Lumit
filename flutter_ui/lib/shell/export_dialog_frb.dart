@@ -66,6 +66,7 @@ import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_queue_frb.dart';
 import 'settings_window_frb.dart';
@@ -1081,12 +1082,17 @@ class _ExportDialogState extends State<_ExportDialog> {
                   _path == null ? l10n.exportNotChosen : _leaf(_path!),
                   key: const ValueKey('export-path'),
                   tone: t.textMuted,
+                  tip: _path,
                 ),
               ),
               const SizedBox(width: 6),
-              SizedBox(
-                width: exportButtonWidth,
-                height: dialogControlHeight,
+              // A floor rather than a width: a longer word for Browse grows
+              // the button instead of wrapping.
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                    minWidth: exportButtonWidth,
+                    minHeight: dialogControlHeight,
+                    maxHeight: dialogControlHeight),
                 child: HouseButton(
                   key: const ValueKey('export-choose'),
                   onPressed: _choose,
@@ -1789,11 +1795,6 @@ class _ExportDialogState extends State<_ExportDialog> {
           ]),
           dimmed: dim,
         ),
-        if (_images)
-          _reading(
-            t,
-            l10n.exportImageSequenceNote(_format.extension.toUpperCase()),
-          ),
         // Not while the group is dead: a reading of a frame nobody is writing
         // is the "this does nothing" line the disabled group already states.
         if (!dim &&
@@ -1860,18 +1861,13 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
           dimmed: dim,
         ),
-        // What the container will actually do with the choice, said where
-        // the choice is made: a wide-gamut file carrying no label is read as
-        // sRGB and comes back looking wrong.
         // A file written through a config's transform carries no reliable
         // primaries or transfer to state, so it is written untagged rather
-        // than mis-tagged (docs/impl/ocio.md §5.2) — said here, where the
-        // choice is made.
+        // than mis-tagged (docs/impl/ocio.md §5.2). Said here, where the
+        // choice is made, since a file without a tag can come back looking
+        // wrong.
         if (_colourFromConfig && _caps.colourSpaces.isNotEmpty)
-          _reading(t, l10n.exportColourConfigUntagged,
-              key: const ValueKey('export-colour-tagging'))
-        else if (_caps.colourSpaces.length > 1)
-          _reading(t, l10n.exportColourStated,
+          _warning(t, l10n.exportColourConfigUntagged,
               key: const ValueKey('export-colour-tagging')),
       ],
       dimmed: dim,
@@ -2342,7 +2338,9 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A recessed box holding something the user did not type — a chosen path,
   /// or a number this row is not offering to change.
-  Widget _well(LumitTheme t, String text, {Key? key, Color? tone}) => Container(
+  Widget _well(LumitTheme t, String text,
+          {Key? key, Color? tone, String? tip}) =>
+      Container(
         key: key,
         height: dialogControlHeight,
         alignment: Alignment.centerLeft,
@@ -2352,10 +2350,10 @@ class _ExportDialogState extends State<_ExportDialog> {
           border: Border.all(color: t.hairline),
           borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
         ),
-        child: Text(
+        child: MiddleEllipsis(
           text,
           style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
-          overflow: TextOverflow.ellipsis,
+          tip: tip,
         ),
       );
 
@@ -2397,7 +2395,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               : (choice) => setState(() => _footage = choice),
         ),
       ),
-      _reading(t, l10n.exportFootageCount(_lacking.length)),
+      _warning(t, l10n.exportFootageCount(_lacking.length)),
     ]);
   }
 
@@ -2498,6 +2496,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         padding: const EdgeInsets.only(
             left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: dialogMono(t)),
+      );
+
+  /// A line the user has to act on, where a reading would go.
+  Widget _warning(LumitTheme t, String text, {Key? key}) => Padding(
+        padding: const EdgeInsets.only(
+            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        child: Text(text, key: key, style: t.small),
       );
 
   /// One of the output types, as the drawing's chip: the chosen one outlined

@@ -1031,12 +1031,13 @@ void main() {
       expect(dot.right, lessThanOrEqualTo(name.left),
           reason: 'and the dot belongs to the name it colours');
 
-      // The number's cell is 18 wide, so its glyph does not fill it: the gaps
-      // are measured off the cells, which is what the drawing dimensions.
+      // The number's glyph does not fill its cell: the gaps are measured off
+      // the cells, which is what the drawing dimensions.
       expect(number.left - twirl.right, closeTo(identityGap, 0.5),
           reason: 'the drawing sets 8 between the twirl and the number');
-      expect(dot.left - (number.left + 18), closeTo(identityGap, 0.5),
-          reason: 'and 8 between the number\'s 18px cell and the dot\'s');
+      expect(dot.left - (number.left + numberCellWidth),
+          closeTo(identityGap, 0.5),
+          reason: 'and 8 between the number\'s cell and the dot\'s');
       expect(identityGap, 8, reason: 'which is the constant\'s own value');
     });
 

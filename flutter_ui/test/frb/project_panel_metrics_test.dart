@@ -58,7 +58,7 @@ void main() {
     testWidgets('dragging a column seam moves that column and no other',
         (tester) async {
       final p = withItems();
-      await mount(tester, p, width: 560);
+      await mount(tester, p, width: 575);
       await settleFrb(tester, minRounds: 6);
 
       final header =
@@ -77,8 +77,8 @@ void main() {
           reason: 'the seam widened the column it follows');
       expect(heading('Size'), projectSizeColumn,
           reason: 'and left the columns between alone');
-      // 560 less the arrangement every column asks for at its starting
-      // width (512) is 48 of slack, and all of it was Path's.
+      // 575 less the arrangement every column asks for at its starting
+      // width (527) is 48 of slack, and all of it was Path's.
       expect(heading('Path'), projectPathColumn + 48 - 40,
           reason: 'Path gave up exactly what Name took, since it holds the '
               'panel\'s slack');
