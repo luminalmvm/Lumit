@@ -23832,8 +23832,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeExtension dco_decode_bridge_extension(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeExtension(
       id: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -23848,6 +23848,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       hosts: dco_decode_list_String(arr[10]),
       broken: dco_decode_bool(arr[11]),
       effects: dco_decode_list_bridge_extension_effect(arr[12]),
+      native: dco_decode_bool(arr[13]),
     );
   }
 
@@ -31050,6 +31051,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_hosts = sse_decode_list_String(deserializer);
     var var_broken = sse_decode_bool(deserializer);
     var var_effects = sse_decode_list_bridge_extension_effect(deserializer);
+    var var_native = sse_decode_bool(deserializer);
     return BridgeExtension(
         id: var_id,
         name: var_name,
@@ -31063,7 +31065,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         permissions: var_permissions,
         hosts: var_hosts,
         broken: var_broken,
-        effects: var_effects);
+        effects: var_effects,
+        native: var_native);
   }
 
   @protected
@@ -39300,6 +39303,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_list_String(self.hosts, serializer);
     sse_encode_bool(self.broken, serializer);
     sse_encode_list_bridge_extension_effect(self.effects, serializer);
+    sse_encode_bool(self.native, serializer);
   }
 
   @protected

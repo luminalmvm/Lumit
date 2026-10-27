@@ -987,7 +987,7 @@ impl PluginHost for LocalHost {
 /// One bundle's broker, shared by the plugins in it, and whether one of them
 /// is inside a press right now.
 pub struct SharedBroker {
-    broker: Mutex<Broker>,
+    pub(crate) broker: Mutex<Broker>,
     /// Set for as long as a plugin is inside a press. A render that finds it
     /// set answers identity with a badge instead of queueing behind a window
     /// that may stay open for minutes.

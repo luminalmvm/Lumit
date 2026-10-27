@@ -63,8 +63,10 @@ pub struct BridgeExtension {
     /// A page or shader its manifest names is missing. It lists so it can
     /// be installed again or removed.
     pub broken: bool,
-    /// The LFX effects it carries.
+    /// The effects it carries.
     pub effects: Vec<BridgeExtensionEffect>,
+    /// It carries an OFX plugin, which is code that runs on this computer.
+    pub native: bool,
 }
 
 /// One LFX effect an extension carries.
@@ -74,7 +76,8 @@ pub struct BridgeExtensionEffect {
     /// Its id within the extension.
     pub id: String,
     pub name: String,
-    /// `lfx:<extension>/<effect>`, what adding it takes.
+    /// `lfx:<extension>/<effect>`, or `ofx:<plugin>` for an OFX plugin, what
+    /// adding it takes.
     pub match_name: String,
     /// Whether it has an interface page of its own.
     pub interface: bool,
@@ -141,7 +144,10 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
         .map(|effect| BridgeExtensionEffect {
             id: effect.id.clone(),
             name: effect.name.clone(),
-            match_name: lfx::match_name(&manifest.id, &effect.id),
+            match_name: match &effect.plugin {
+                Some(plugin) if effect.ofx.is_some() => format!("ofx:{plugin}"),
+                _ => lfx::match_name(&manifest.id, &effect.id),
+            },
             interface: effect.interface.is_some(),
             entry: effect
                 .interface
@@ -153,6 +159,7 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
         })
         .collect();
     BridgeExtension {
+        native: manifest.effects.iter().any(|effect| effect.ofx.is_some()),
         panel: manifest.entry.is_some(),
         entry: manifest.entry.unwrap_or_default().replace('\\', "/"),
         id: manifest.id,
@@ -214,15 +221,54 @@ pub(crate) fn register_effects() -> (Vec<String>, Vec<String>) {
     (added, skipped)
 }
 
-/// The plugin scan's standard options. The brokers the scan starts render on
-/// the card Lumit draws with, unless `prefs` say plugins stay on the CPU.
+/// Stop the plugin processes of the installed extension `id`'s OFX bundles,
+/// so its files can be replaced or deleted. Its OFX effects answer identity
+/// until Lumit starts again.
+#[frb(ignore)]
+fn release(id: &str) {
+    for installed in lumit_extensions::scan() {
+        if installed.manifest.id == id {
+            lumit_ofx::discover::stop_brokers(&installed.path);
+        }
+    }
+}
+
+/// The plugin scan's standard options, with the OFX bundles every installed
+/// extension carries among its paths, so they are scanned as any other. The
+/// brokers the scan starts render on the card Lumit draws with, unless `prefs`
+/// say plugins stay on the CPU.
 #[frb(ignore)]
 pub(crate) fn scan_options(
     prefs: &lumit_project::plugins::PluginPrefs,
 ) -> lumit_ofx::discover::ScanOptions {
     lumit_ofx::gpu::set_enabled(!prefs.plugins_on_cpu);
     lumit_ofx::gpu::set_adapter(lumit_gpu::adapter_summary());
-    lumit_ofx::discover::ScanOptions::standard()
+    let mut options = lumit_ofx::discover::ScanOptions::standard();
+    let installed = lumit_extensions::scan();
+    options
+        .paths
+        .extend(installed.iter().flat_map(lumit_extensions::bundles));
+    options
+}
+
+/// Offer the OFX plugins in these extensions' bundles, as the plugin scan
+/// does. One registered already is skipped by name, so a changed bundle
+/// runs from the next start.
+#[frb(ignore)]
+fn offer_bundles(installed: &[Installed]) {
+    let paths: Vec<_> = installed
+        .iter()
+        .flat_map(lumit_extensions::bundles)
+        .collect();
+    if paths.is_empty() {
+        return;
+    }
+    let options = lumit_ofx::discover::ScanOptions {
+        paths,
+        disabled: lumit_project::plugins::PluginPrefs::load_default().disabled,
+        hosting: lumit_ofx::discover::Hosting::Broker,
+    };
+    lumit_ofx::discover::scan(&options, &mut lumit_render::gpufx::ofx::register);
 }
 
 #[frb(ignore)]
@@ -281,9 +327,16 @@ pub fn extension_inspect_package(path: String) -> BridgeExtensionOutcome {
 /// Not sync: a folder of pictures takes a moment to copy.
 #[must_use]
 pub fn extension_install(folder: String) -> BridgeExtensionOutcome {
-    let done = outcome(lumit_extensions::install(Path::new(&folder)));
+    let folder = Path::new(&folder);
+    if let Ok(manifest) = lumit_extensions::inspect(folder) {
+        release(&manifest.id);
+    }
+    let installed = lumit_extensions::install(folder);
+    if let Ok(installed) = &installed {
+        offer_bundles(std::slice::from_ref(installed));
+    }
     register_effects();
-    done
+    outcome(installed)
 }
 
 /// Install the `.lfx` package at `path` into `folder`, or Lumit's own
@@ -293,11 +346,15 @@ pub fn extension_install(folder: String) -> BridgeExtensionOutcome {
 /// Not sync: a package of pictures takes a moment to unpack.
 #[must_use]
 pub fn extension_install_package(path: String, folder: Option<String>) -> BridgeExtensionOutcome {
-    let into = folder.as_deref().map(Path::new);
-    let done = outcome(lumit_extensions::package::install_package(
-        Path::new(&path),
-        into,
-    ));
+    let (path, into) = (Path::new(&path), folder.as_deref().map(Path::new));
+    if let Ok(manifest) = lumit_extensions::package::read_package(path) {
+        release(&manifest.id);
+    }
+    let installed = lumit_extensions::package::install_package(path, into);
+    if let Ok(installed) = &installed {
+        offer_bundles(std::slice::from_ref(installed));
+    }
+    let done = outcome(installed);
     if let (BridgeExtensionOutcome::Ready { .. }, Some(into)) = (&done, into) {
         // The extension is in place either way; a folder that would not be
         // remembered only means it is not found after a restart.
@@ -341,6 +398,7 @@ pub enum BridgeExtensionRemoval {
 /// Not sync: a folder of pictures takes a moment to delete.
 #[must_use]
 pub fn extension_remove(id: String) -> BridgeExtensionRemoval {
+    release(&id);
     let removed = match lumit_extensions::remove(&id) {
         Ok(()) => BridgeExtensionRemoval::Removed,
         Err(ExtensionError::Missing) => BridgeExtensionRemoval::Missing,
@@ -385,6 +443,7 @@ pub fn extension_folders() -> BridgeExtensionFolders {
 #[must_use]
 pub fn extension_add_folder(folder: String) -> bool {
     let added = lumit_extensions::add_dir(Path::new(&folder)).unwrap_or(false);
+    offer_bundles(&lumit_extensions::scan());
     register_effects();
     added
 }

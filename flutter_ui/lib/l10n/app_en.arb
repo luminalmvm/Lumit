@@ -17986,6 +17986,10 @@
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
   },
+  "extensionNative": "Runs its own code on this computer",
+  "@extensionNative": {
+    "description": "Quiet note above extensionWebNote in the extension install question, for an extension that carries an OFX plugin: a program of its own, held to none of Lumit's limits. The It cannot list is left out then, as it would not hold."
+  },
   "extensionInstall": "Install",
   "@extensionInstall": {
     "description": "Default button of the extension install question."

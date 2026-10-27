@@ -25540,6 +25540,7 @@ impl SseDecode for crate::api::extensions::BridgeExtension {
         let mut var_broken = <bool>::sse_decode(deserializer);
         let mut var_effects =
             <Vec<crate::api::extensions::BridgeExtensionEffect>>::sse_decode(deserializer);
+        let mut var_native = <bool>::sse_decode(deserializer);
         return crate::api::extensions::BridgeExtension {
             id: var_id,
             name: var_name,
@@ -25554,6 +25555,7 @@ impl SseDecode for crate::api::extensions::BridgeExtension {
             hosts: var_hosts,
             broken: var_broken,
             effects: var_effects,
+            native: var_native,
         };
     }
 }
@@ -36238,6 +36240,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::extensions::BridgeExtension {
             self.hosts.into_into_dart().into_dart(),
             self.broken.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
+            self.native.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -43914,6 +43917,7 @@ impl SseEncode for crate::api::extensions::BridgeExtension {
         <Vec<String>>::sse_encode(self.hosts, serializer);
         <bool>::sse_encode(self.broken, serializer);
         <Vec<crate::api::extensions::BridgeExtensionEffect>>::sse_encode(self.effects, serializer);
+        <bool>::sse_encode(self.native, serializer);
     }
 }
 

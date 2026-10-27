@@ -19,6 +19,15 @@ use crate::{
 /// A package's file extension.
 pub const PACKAGE_EXTENSION: &str = "lfx";
 
+/// The folder in an OFX bundle that holds this computer's binary, as the
+/// plugin host reads it.
+#[cfg(windows)]
+const ARCH_DIR: &str = "Win64";
+#[cfg(target_os = "macos")]
+const ARCH_DIR: &str = "MacOS";
+#[cfg(all(not(windows), not(target_os = "macos")))]
+const ARCH_DIR: &str = "Linux-x86-64";
+
 fn not_a_package() -> ExtensionError {
     invalid("this file is not an extension package")
 }
@@ -227,14 +236,31 @@ fn write_zip(folder: &Path, files: &[String], out: &Path) -> Result<(), Extensio
 }
 
 /// Make a package of the extension in `folder` at `out`, after judging the
-/// folder as an install would and then reading the package back the way an
-/// install will, so a bad one is caught by its author.
+/// folder as an install would, checking each OFX bundle has a binary for
+/// this computer, and then reading the package back the way an install
+/// will, so a bad one is caught by its author.
 ///
 /// # Errors
 /// What [`inspect`] or [`read_package`] refuses, or a file that would not
 /// write. Nothing is left at `out` then.
 pub fn pack(folder: &Path, out: &Path) -> Result<Manifest, ExtensionError> {
     let manifest = inspect(folder)?;
+    for effect in &manifest.effects {
+        let Some(bundle) = &effect.ofx else {
+            continue;
+        };
+        let binaries = folder.join(bundle).join("Contents").join(ARCH_DIR);
+        let built = fs::read_dir(binaries).into_iter().flatten().flatten();
+        if !built
+            .map(|entry| entry.path())
+            .any(|path| path.extension().is_some_and(|ext| ext == "ofx"))
+        {
+            return Err(ExtensionError::Invalid(format!(
+                "the {} effect's bundle has no plugin for this computer in Contents/{ARCH_DIR}",
+                effect.id
+            )));
+        }
+    }
     let mut files = Vec::new();
     gather(folder, "", 0, &mut files, &mut 0)?;
     let mut part = out.as_os_str().to_owned();

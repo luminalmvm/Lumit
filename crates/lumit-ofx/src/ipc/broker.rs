@@ -271,7 +271,7 @@ pub struct Broker {
     next_instance: InstanceId,
     next_slot: Slot,
     strikes: u32,
-    disabled: bool,
+    pub(crate) disabled: bool,
     shipments: usize,
     restarts: usize,
     notes: Vec<(String, String)>,
@@ -1134,7 +1134,7 @@ impl Broker {
     }
 
     /// End the broker process, however it feels about that.
-    fn kill(&mut self) {
+    pub(crate) fn kill(&mut self) {
         if let Some(mut link) = self.link.take() {
             let _ = pipe::send(&mut link.sender, &HostMessage::Shutdown);
             let _ = link.child.kill();
