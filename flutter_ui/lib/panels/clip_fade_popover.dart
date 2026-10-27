@@ -196,6 +196,12 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
         borderRadius: BorderRadius.circular(t.tokens.floatRadius),
         boxShadow: t.floatShadow,
       ),
+      // The edge again over the content, which would otherwise cover it where
+      // the corner curves.
+      foregroundDecoration: BoxDecoration(
+        border: Border.all(color: t.hairline),
+        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Entrance.content(
         spec: ThemeScope.of(context).motion.content,

@@ -473,6 +473,12 @@ class FxSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(t.tokens.cardRadius),
         border: Border.all(color: t.hairline),
       ),
+      // The edge again over the content, which would otherwise cover it where
+      // the corner curves.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+        border: Border.all(color: t.hairline),
+      ),
       clipBehavior: Clip.antiAlias,
       child: column,
     );
