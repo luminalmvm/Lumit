@@ -71,7 +71,7 @@
      -0.03em, and nothing on the page is heavier than the copy it sits above. */
   h1, h2, h3 { color: var(--color-fg); font-weight: 400; letter-spacing: -0.03em; }
   ::selection { background: var(--color-accent); color: #fff; }
-  :focus-visible { outline: 1px solid var(--color-accent); outline-offset: 2px; border-radius: var(--radius-ctl); }
+  :focus-visible { outline: 1px solid var(--color-accent); outline-offset: 2px; }
 }
 
 @layer components {
@@ -332,6 +332,7 @@
      note itself. */
   .release-prose {
     @apply text-[16px] leading-relaxed;
+    overflow-wrap: anywhere;
   }
   .release-prose > :first-child {
     @apply mt-0;
