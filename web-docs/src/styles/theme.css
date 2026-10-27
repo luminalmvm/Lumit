@@ -62,6 +62,18 @@
   --sl-text-h4: 1.0625rem;
 }
 
+/* No grey flash on a tap. Buttons give way under the finger instead. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+starlight-menu-button button,
+site-search button[data-open-modal] {
+  transition: transform 0.1s ease-out;
+}
+:is(starlight-menu-button button, site-search button[data-open-modal], .pagination-links a):active {
+  transform: scale(0.97);
+}
+
 /* ---------- the bar ---------- */
 
 /* The wordmark at the main site's size, then "Docs" in the kicker's face. The
@@ -493,7 +505,9 @@ h1#_top {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
-  transition: border-color 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.1s ease-out;
 }
 .pagination-links a:hover {
   border-color: var(--sl-color-hairline-light);

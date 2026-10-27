@@ -181,7 +181,8 @@ const sections = groupsOf(Astro.locals.fullSidebar).map((topic, t) => ({
     cursor: pointer;
     transition:
       border-color 0.15s,
-      color 0.15s;
+      color 0.15s,
+      transform 0.1s ease-out;
   }
   .home-search:hover {
     border-color: var(--sl-color-gray-3);
@@ -208,11 +209,18 @@ const sections = groupsOf(Astro.locals.fullSidebar).map((topic, t) => ({
     border: 1px solid var(--sl-color-hairline);
     border-radius: var(--lm-radius-card);
     background: var(--lm-surface-1);
-    transition: border-color 0.15s;
+    transition:
+      border-color 0.15s,
+      transform 0.1s ease-out;
   }
   .home-card:hover,
   .home-tile:hover {
     border-color: var(--sl-color-hairline-light);
+  }
+  .home-search:active,
+  .home-card:active,
+  .home-tile:active {
+    transform: scale(0.97);
   }
   .home-card {
     display: flex;
@@ -295,5 +303,17 @@ const sections = groupsOf(Astro.locals.fullSidebar).map((topic, t) => ({
   }
   .home-col a:hover {
     color: var(--sl-color-white);
+  }
+  /* A finger needs a taller row than a mouse does. */
+  @media (pointer: coarse) {
+    .home-col {
+      gap: 0;
+    }
+    .home-col a {
+      display: flex;
+      align-items: center;
+      align-self: stretch;
+      min-height: 2.75rem;
+    }
   }
 </style>
