@@ -2,39 +2,42 @@
 import SectionHead from "../SectionHead.astro";
 
 // Three stages. The last one is drawn dashed and hollow: past the near work
-// the order is a guess and the site should say so.
+// the order is a guess and the site should say so. Completed opens on its
+// first SHOWN items, the biggest, and the rest are a click away.
+const SHOWN = 12;
+
 const roadmap = [
   {
     label: "Completed",
     state: "done",
     count: "shipped",
     items: [
+      "Multi-edit, with friends",
+      "Lumit for iPhone",
+      "3D lights, shadows and materials",
+      "3D layers, camera and depth of field",
+      "Sequence layers and the Retime system",
+      "Node graph effects and compositions",
+      "Expressions and the Expressions panel",
+      "Text layers, animators and panels",
+      "Shape layers, modifiers and paint",
+      "Roto brush and Puppet",
+      "OFX, CLAP and VST3 plugin hosting",
+      "After Effects, PSD and Illustrator import",
       "Layers, masks, mattes and blend modes",
       "Keyframes and the graph editor",
-      "Sequence layers and the Retime system",
       "Optical-flow frame interpolation",
       "Beat detection and markers",
       "Over 100 GPU effects",
       "Points effects",
       "Presets, saved and shared",
-      "3D layers, camera and depth of field",
-      "3D lights, shadows and materials",
-      "Roto brush and Puppet",
       "Camera and planar tracking",
-      "Text layers, animators and panels",
-      "Shape layers, modifiers and paint",
-      "Expressions and the Expressions panel",
-      "Node graph effects and compositions",
       "The Audio timeline and audio effects",
       "The Audio workspace",
       "The Cut workspace",
       "Interpret footage",
       "Scripting, the command line and MCP",
-      "OFX, CLAP and VST3 plugin hosting",
-      "After Effects, PSD and Illustrator import",
-      "Multi-edit, with friends",
       "Lumit Pro: previews, backup and sync",
-      "Lumit for iPhone",
       "Multiple Viewers, with compare",
       "Interface styles and colour themes",
       "Addons with local models",
@@ -110,14 +113,32 @@ const roadmap = [
             </h3>
             <p class="count">{stage.items.length} {stage.count}</p>
           </div>
-          <ul class="items">
-            {stage.items.map((item) => (
-              <li>
-                <i class:list={["key", stage.state === "next" && "key-hollow"]} />
-                {item}
-              </li>
-            ))}
-          </ul>
+          <div>
+            <ul class="items">
+              {stage.items.slice(0, stage.state === "done" ? SHOWN : undefined).map((item) => (
+                <li>
+                  <i class:list={["key", stage.state === "next" && "key-hollow"]} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            {stage.state === "done" && stage.items.length > SHOWN && (
+              <details class="more">
+                <summary class="go">
+                  <span class="closed">Show all {stage.items.length}</span>
+                  <span class="opened">Show fewer</span>
+                </summary>
+                <ul class="items">
+                  {stage.items.slice(SHOWN).map((item) => (
+                    <li>
+                      <i class="key" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
         </div>
       ))
     }
@@ -288,6 +309,29 @@ const roadmap = [
     top: -1px;
     width: 6px;
     height: 6px;
+  }
+  /* The rest of what is done, behind a button under the first few. */
+  .more summary {
+    width: fit-content;
+    margin: 14px 0 6px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .more summary::-webkit-details-marker {
+    display: none;
+  }
+  .more summary::after {
+    content: "\2193";
+  }
+  .more[open] summary::after {
+    content: "\2191";
+  }
+  .more .opened,
+  .more[open] .closed {
+    display: none;
+  }
+  .more[open] .opened {
+    display: inline;
   }
   .stage-next .items li {
     color: var(--color-fg-3);
