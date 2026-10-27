@@ -112,7 +112,8 @@ const RENDEZVOUS_TIMEOUT: Duration = Duration::from_secs(2);
 /// the test's own process any more.
 pub const CRASH_ON_FRAME_ENV: &str = "LUMIT_TESTPLUG_CRASH_ON_FRAME";
 
-/// Never come back from a render. The host's deadline is what ends it.
+/// Never come back from a render, unless the host cancels it. The host's
+/// deadline is what ends it otherwise.
 pub const HANG_ENV: &str = "LUMIT_TESTPLUG_HANG";
 
 /// Say this many things through the message suite during a render. A plugin in
@@ -1128,7 +1129,7 @@ fn render(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> OfxSta
 /// The crash is a real one: `abort` does not unwind, does not run destructors,
 /// and leaves the process dead the way a bad pointer does. That is the point —
 /// a host that only survives a tidy failure has not been tested.
-fn misbehave(props_suite: &OfxPropertySuiteV1, time: f64) {
+fn misbehave(props_suite: &OfxPropertySuiteV1, effect: *mut c_void, time: f64) {
     let _ = props_suite;
     if let Some(frame) = flag(CRASH_ON_FRAME_ENV) {
         if (time - frame).abs() < 0.5 {
@@ -1136,7 +1137,10 @@ fn misbehave(props_suite: &OfxPropertySuiteV1, time: f64) {
         }
     }
     if flag(HANG_ENV).is_some_and(|value| value != 0.0) {
-        loop {
+        // Until the host says the frame is no longer wanted, as a slow plugin
+        // asks between rows.
+        // SAFETY: the host's own function, given the instance it is rendering.
+        while !image_effect_suite().is_some_and(|suite| unsafe { (suite.abort)(effect) } != 0) {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -1186,7 +1190,7 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
 
     // The three ways a plugin goes wrong, on purpose. None of them can happen
     // unless a test asked for it in this process's environment.
-    misbehave(props_suite, time);
+    misbehave(props_suite, effect, time);
 
     let output = clip_handle(effect_suite, effect, c"Output");
     let Some(destination) = fetch_image(effect_suite, props_suite, output, time) else {

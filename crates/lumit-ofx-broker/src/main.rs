@@ -36,7 +36,7 @@ use lumit_ofx::ipc::proto::{
     BrokerMessage, FrameWanted, HostMessage, InstanceId, PROTOCOL_VERSION,
 };
 use lumit_ofx::ipc::shm::Ring;
-use lumit_ofx::render::{render_with_prefetch, RenderError, RenderRequest};
+use lumit_ofx::render::{render_with_prefetch, HostCancelScope, RenderError, RenderRequest};
 
 /// The protocol version this broker announces. Normally
 /// [`PROTOCOL_VERSION`]; an environment variable overrides it so that a test
@@ -373,17 +373,20 @@ impl Session {
         let sender = &mut self.sender;
         let receiver = &mut self.receiver;
 
-        // Never cancelled here: cancellation lives in the host, which drops the
-        // frame it no longer wants. Carrying the epoch across the pipe is worth
-        // doing only once there is a plugin slow enough to need it, and the
-        // watchdog covers the case that matters.
+        // The host's own epoch arrives as the ring's cancel word, which the
+        // plugin's `abort` and the driver's checks read for this render.
         let epoch = Epoch::new();
         let token = epoch.token();
+        let _cancel = ring.and_then(Ring::cancel_word).map(HostCancelScope::new);
+        let cancelled = || ring.is_some_and(Ring::cancel_raised);
 
         let mut prefetch = |wanted: &[FrameWanted]| fetch(sender, receiver, ring, wanted);
 
         let rendered =
             render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
+        if cancelled() || matches!(rendered, Err(RenderError::Cancelled)) {
+            return self.reply(&BrokerMessage::Cancelled);
+        }
         let (frame, frames_needed, identity_of) = match rendered {
             Ok(rendered) => (rendered.frame, rendered.frames_needed, rendered.identity_of),
             Err(error) => return self.failed("render", &error.to_string()),

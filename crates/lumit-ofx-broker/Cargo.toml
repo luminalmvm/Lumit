@@ -28,6 +28,8 @@ interprocess = "2"
 # `CARGO_BIN_EXE_lumit-ofx-broker` exists only for tests in the package that
 # owns the binary, and Cargo does not build a dependency's binaries.
 lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
+# The render thread's stop check, which is how a test cancels a frame.
+lumit-core = { path = "../lumit-core" }
 tempfile = "3"
 
 # A broker is the host, in another process: same C ABI, same override.

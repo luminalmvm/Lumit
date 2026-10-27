@@ -44,6 +44,7 @@
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use lumit_eval::epoch::{Cancelled, EpochToken};
 use thiserror::Error;
@@ -269,10 +270,57 @@ impl Drop for CancelScope {
     }
 }
 
+thread_local! {
+    /// The word the host raises to stop the frame in flight, as an address, in
+    /// a broker. Set by [`HostCancelScope`] the way [`CANCEL_TOKEN`] is set.
+    static HOST_CANCEL: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Answers this thread's `abort` from a word another process raises, for as
+/// long as it is alive. The broker's word is in the frame ring
+/// ([`crate::ipc::shm::Ring::cancel_word`]), which outlives the render.
+pub struct HostCancelScope {
+    previous: usize,
+}
+
+impl HostCancelScope {
+    /// Read `word` until dropped.
+    #[must_use]
+    pub fn new(word: &AtomicU32) -> Self {
+        let previous = HOST_CANCEL.with(|slot| slot.replace(std::ptr::from_ref(word) as usize));
+        Self { previous }
+    }
+}
+
+impl Drop for HostCancelScope {
+    fn drop(&mut self) {
+        HOST_CANCEL.with(|slot| slot.set(self.previous));
+    }
+}
+
+/// Whether the host has asked for the frame in flight to stop.
+fn host_cancelled() -> bool {
+    let address = HOST_CANCEL.with(Cell::get);
+    // SAFETY: the address was written by a live `HostCancelScope` on this
+    // thread, which borrows the word for its whole life.
+    address != 0 && unsafe { &*(address as *const AtomicU32) }.load(Ordering::Acquire) != 0
+}
+
+/// The driver's check between steps: the token, or the host's word.
+fn check(token: &EpochToken) -> Result<(), RenderError> {
+    if token.cancelled() || host_cancelled() {
+        return Err(RenderError::Cancelled);
+    }
+    Ok(())
+}
+
 /// Whether the render on this thread has been cancelled — what the image effect
 /// suite's `abort` answers.
 #[must_use]
 pub fn render_is_cancelled() -> bool {
+    if host_cancelled() {
+        return true;
+    }
     let address = CANCEL_TOKEN.with(Cell::get);
     if address == 0 {
         return false;
@@ -353,7 +401,7 @@ pub fn render_with_prefetch(
     prefetch: Prefetch<'_>,
 ) -> Result<Rendered, RenderError> {
     let handle = instance.handle();
-    token.check()?;
+    check(token)?;
     let adapted = in_context(request, instance.context())?;
     let request: &RenderRequest = &adapted;
     let source = source_clip(instance.context()).unwrap_or(SOURCE_CLIP);
@@ -474,10 +522,10 @@ fn ask(
     let source = source_clip(instance.context()).unwrap_or(SOURCE_CLIP);
 
     let region_of_definition = get_region_of_definition(plugin, handle, request)?;
-    token.check()?;
+    check(token)?;
 
     get_regions_of_interest(plugin, handle, request, region_of_definition)?;
-    token.check()?;
+    check(token)?;
 
     // The clip preferences are asked for and the answers are already true:
     // fp32 RGBA premultiplied with square pixels is the only thing the host
@@ -497,10 +545,10 @@ fn ask(
             status,
         });
     }
-    token.check()?;
+    check(token)?;
 
     let frames_needed = get_frames_needed(plugin, handle, request)?;
-    token.check()?;
+    check(token)?;
 
     // Whatever the plugin wants beyond the frames that came with the request
     // is asked for here, after it has said which frames those are and before
@@ -529,7 +577,7 @@ fn ask(
         images_at.insert(key.clone(), Image::from_frame(frame, request.order)?);
     }
     add_images_at(handle, images_at)?;
-    token.check()?;
+    check(token)?;
 
     if let Some(clip) = is_identity(plugin, handle, request)? {
         return Ok(Answers {
@@ -538,7 +586,7 @@ fn ask(
             identity_of: Some(clip),
         });
     }
-    token.check()?;
+    check(token)?;
 
     render_sequence(plugin, handle, request, token)?;
     Ok(Answers {
@@ -563,7 +611,7 @@ fn render_sequence(
         actions::BEGIN_SEQUENCE_RENDER,
         Some(sequence_args(request)),
     )?;
-    token.check()?;
+    check(token)?;
     let scope = CancelScope::new(token);
     let render = dispatch(plugin, handle, actions::RENDER, Some(render_args(request)));
     drop(scope);
@@ -578,7 +626,7 @@ fn render_sequence(
     );
     render?;
     end?;
-    token.check()?;
+    check(token)?;
     Ok(())
 }
 

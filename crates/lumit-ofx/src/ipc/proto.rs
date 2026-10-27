@@ -35,8 +35,9 @@ use crate::instance::{ParamSnapshot, Settled};
 /// to the other that it holds the session secret ([`lumit_peer`]).
 ///
 /// 6 added `Settle`, and a press answers with the plugin's controls as well as
-/// its values. 7 added the generator and transition contexts.
-pub const PROTOCOL_VERSION: u32 = 7;
+/// its values. 7 added the generator and transition contexts. 8 added the
+/// ring's cancel word and `Cancelled`.
+pub const PROTOCOL_VERSION: u32 = 8;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -251,6 +252,9 @@ pub enum BrokerMessage {
         /// The clip the plugin said this frame simply is, if it said so.
         identity_of: Option<String>,
     },
+    /// The host raised the cancel word and the render stopped. Not a failure
+    /// and not a strike: the frame is nobody's any more.
+    Cancelled,
     /// Something went wrong, as a sentence rather than a status code: the host
     /// puts it on a badge and the user reads it.
     Failed {

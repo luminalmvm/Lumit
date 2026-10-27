@@ -95,6 +95,10 @@ pub const MAX_LIVE_INSTANCES: usize = 1_024;
 /// not a queue, it is a memory leak with a plugin attached (docs/14 §3).
 pub const MAX_NOTES: usize = 64;
 
+/// How often a wait for an answer looks up to see whether the frame is still
+/// wanted. The plugin sees a raised cancel word at its next `abort`.
+const CANCEL_POLL: Duration = Duration::from_millis(5);
+
 /// The environment variable that overrides where the broker executable is,
 /// for a test or for a developer running from a build tree.
 pub const BROKER_EXE_ENV: &str = "LUMIT_OFX_BROKER";
@@ -696,6 +700,8 @@ impl Broker {
             }
         }
         let output = self.take_slot();
+        // Lowered for this frame; raised by `exchange` if it stops being wanted.
+        self.ring.clear_cancel();
 
         let message = HostMessage::Render {
             instance,
@@ -725,6 +731,12 @@ impl Broker {
                     frames_needed,
                     identity_of,
                 })
+            }
+            // Nobody's frame: its own input, and nothing for a badge to say.
+            Ok(BrokerMessage::Cancelled) => {
+                let mut cancelled = errored(identity, "");
+                cancelled.error = None;
+                Ok(cancelled)
             }
             Ok(_) => Ok(errored(identity, "the broker answered out of turn")),
             Err(Fault::Timeout) => Ok(errored(identity, "the plugin missed its deadline")),
@@ -816,6 +828,8 @@ impl Broker {
         }
         let outcome = self.exchange(message, deadline, source);
         match outcome {
+            // A frame stopped on purpose says nothing about the plugin.
+            Ok(BrokerMessage::Cancelled) => Ok(BrokerMessage::Cancelled),
             Ok(BrokerMessage::Failed { action, message }) => {
                 // A plugin that answers "no" is not a plugin that has gone
                 // wrong: the frame is lost, the process is fine, and the next
@@ -846,9 +860,20 @@ impl Broker {
     ) -> Result<BrokerMessage, Fault> {
         let expiry = Instant::now() + deadline;
         self.send(message).map_err(|_| Fault::Gone)?;
+        let mut raised = false;
         loop {
             let left = expiry.saturating_duration_since(Instant::now());
-            match self.wait_for(left) {
+            match self.wait_for(left.min(CANCEL_POLL)) {
+                // Still waiting. If the thread asking has had its frame
+                // cancelled, say so through the ring and keep waiting: the
+                // plugin stops at its next `abort`, and its answer still has
+                // to be read before the next question can be asked.
+                Err(Fault::Timeout) if !left.is_zero() => {
+                    if !raised && lumit_core::fx::points::stepped::stopping() {
+                        self.ring.raise_cancel();
+                        raised = true;
+                    }
+                }
                 Ok(BrokerMessage::NeedFrames { frames }) => {
                     self.ship(&frames, source)?;
                 }

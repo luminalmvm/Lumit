@@ -474,3 +474,43 @@ fn a_broker_with_no_credential_does_not_start() {
         "a broker with no credential must refuse rather than serve"
     );
 }
+
+/// Set by the cancelling thread in the test below.
+static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A frame cancelled while a slow plugin renders it stops at the plugin's next
+/// `abort`, rather than at the deadline, and is no strike against it.
+#[test]
+fn a_cancelled_frame_stops_a_plugin_that_polls_abort() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[("LUMIT_TESTPLUG_HANG", "1")]) else {
+        skipped("a_cancelled_frame_stops_a_plugin_that_polls_abort");
+        return;
+    };
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+
+    let cancel = std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(200));
+        STOP.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let before = lumit_core::fx::points::stepped::stop_when(Some(|| {
+        STOP.load(std::sync::atomic::Ordering::SeqCst)
+    }));
+    let started = std::time::Instant::now();
+    let rendered = broker
+        .render(
+            instance,
+            &RenderRequest::filter(0.0, a_flat_frame(0.5)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    let took = started.elapsed();
+    lumit_core::fx::points::stepped::stop_when(before);
+    cancel.join().expect("the cancel");
+
+    assert_eq!(rendered.error, None, "a cancelled frame is not a failure");
+    assert!(took < Duration::from_millis(1500), "it stopped in {took:?}");
+    assert_eq!(broker.strikes(), 0);
+}

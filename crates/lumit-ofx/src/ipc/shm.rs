@@ -24,6 +24,12 @@
 //! wrong answer arrives silently — no error, no status, just the previous
 //! frame's pixels — and the hash is what turns that into a noticed fault.
 //!
+//! Before the first slot sits one small control block both sides read. Its
+//! first word is the **cancel word**: the host clears it before a render and
+//! raises it when the frame stops being wanted, and the plugin's `abort`
+//! answers from it in the broker, so a scrub that lands mid-frame stops a
+//! plugin that polls rather than waiting the frame out.
+//!
 //! **Row bytes here describe the ring, not the plugin.** The block is tightly
 //! packed, top-down, four floats per pixel. The flip to OFX's bottom-up
 //! convention happens at the plugin boundary, inside the broker, where
@@ -31,12 +37,16 @@
 
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use memmap2::MmapMut;
 use thiserror::Error;
 
 use crate::image::{Frame16, RectI, CHANNELS};
 use crate::ipc::proto::RingSpec;
+
+/// The control block before the first slot.
+const CONTROL_BYTES: usize = 64;
 
 /// The bytes at the head of every slot.
 pub const HEADER_BYTES: usize = 64;
@@ -265,7 +275,11 @@ impl Ring {
             options.mode(0o600);
         }
         let file = options.open(path)?;
-        file.set_len(slot_bytes.saturating_mul(u64::from(slots)))?;
+        file.set_len(
+            slot_bytes
+                .saturating_mul(u64::from(slots))
+                .saturating_add(CONTROL_BYTES as u64),
+        )?;
         let map = map_file(&file)?;
         Ok(Self {
             spec,
@@ -336,15 +350,50 @@ impl Ring {
         self.spec.slots
     }
 
+    /// The cancel word, or `None` for a mapping too short to hold one.
+    #[must_use]
+    pub fn cancel_word(&self) -> Option<&AtomicU32> {
+        if self.map.len() < CONTROL_BYTES {
+            return None;
+        }
+        // SAFETY: the mapping starts on a page boundary, so its first four
+        // bytes are aligned for a `u32`, and they are inside it. No slice of
+        // the map ever covers the control block, so nothing else aliases
+        // them, and an atomic is the only way either process touches them.
+        Some(unsafe { &*self.map.as_ptr().cast::<AtomicU32>() })
+    }
+
+    /// Clear the cancel word, before a render.
+    pub fn clear_cancel(&self) {
+        if let Some(word) = self.cancel_word() {
+            word.store(0, Ordering::Release);
+        }
+    }
+
+    /// Raise the cancel word: the frame in flight is no longer wanted.
+    pub fn raise_cancel(&self) {
+        if let Some(word) = self.cancel_word() {
+            word.store(1, Ordering::Release);
+        }
+    }
+
+    /// Whether the host has raised the cancel word.
+    #[must_use]
+    pub fn cancel_raised(&self) -> bool {
+        self.cancel_word()
+            .is_some_and(|word| word.load(Ordering::Acquire) != 0)
+    }
+
     /// Where one slot starts and ends.
     fn range(&self, slot: u32) -> Result<(usize, usize), ShmError> {
         if slot >= self.spec.slots {
             return Err(ShmError::NoSuchSlot(slot));
         }
-        let start = self
+        let start: usize = self
             .spec
             .slot_bytes
             .saturating_mul(u64::from(slot))
+            .saturating_add(CONTROL_BYTES as u64)
             .try_into()
             .map_err(|_| ShmError::NoSuchSlot(slot))?;
         let length: usize = self
