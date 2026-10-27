@@ -14,12 +14,10 @@ import syncClip from "../../assets/clips/pro-sync.mp4";
 import previewClip from "../../assets/clips/pro-preview.mp4";
 import phoneClip from "../../assets/clips/pro-preview-phone.mp4";
 import historyClip from "../../assets/clips/pro-history.mp4";
+import { MONTHLY, YEARLY, SAVING } from "../../scripts/pro";
 
 // What Pro is, what it costs, and how to get it. Nothing is bought on this
 // page: Pro is bought from inside Lumit, where the account is.
-const MONTHLY = 6;
-const YEARLY = 60;
-const SAVING = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100);
 
 // The first two share a row and the others have one each. `sizes` is how wide
 // a picture is drawn.
