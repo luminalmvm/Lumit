@@ -1,0 +1,37 @@
+{
+  "lumit_flare": 1,
+  "name": "Spotlight",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 80, "falloff": 0.3, "core": 1.5, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 350, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "values": {"count": 50, "size": 700, "thickness": 7.0, "brightness": 0.15, "length_var": 0.6, "softness": 1.0, "taper": 1.0, "shimmer": 0.4}
+    },
+    {
+      "kind": "orbs",
+      "name": "Orbs",
+      "values": {"count": 40, "size": 25, "brightness": 0.3, "size_var": 0.6, "reach": 700, "fill": 0.2, "edge": 0.2236068, "softness": 0.8, "drift": 40}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "values": {"place": 1.5, "size": 160, "brightness": 0.4, "sides": 0, "roundness": 0.4, "fill": 0.03, "edge": 0.2, "edge_width": 0.06, "softness": 0.5, "fringe": 0.0, "response": 2, "response_amount": 0.6, "response_range": 0.7}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 1.0, 1.0]]},
+      "values": {"texture": 1, "size": 750, "reach": 900, "brightness": 0.15}
+    }
+  ]
+}

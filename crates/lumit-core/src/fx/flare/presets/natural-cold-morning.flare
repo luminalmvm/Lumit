@@ -1,0 +1,35 @@
+{
+  "lumit_flare": 1,
+  "name": "Cold morning",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.9, 0.95, 1.0]]},
+      "values": {"size": 60, "falloff": 0.25, "core": 1.5, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.8, 0.9, 1.0]]},
+      "values": {"size": 220, "brightness": 0.03, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.85, 0.92, 1.0]]},
+      "values": {"points": 8, "size": 380, "thickness": 3.0, "brightness": 0.4}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "values": {"size": 280, "thickness": 24, "brightness": 0.2, "arc": 130, "grow": 0.5, "fringe": 1.0, "softness": 0.8, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[0.6, 0.8, 1.0], [0.8, 0.9, 1.0], [0.7, 0.75, 1.0]]},
+      "values": {"count": 6, "size": 45, "brightness": 0.4, "sides": 8, "roundness": 0.2, "fill": 0.12, "edge": 0.591608, "edge_width": 0.06, "softness": 0.1, "fringe": 0.2, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 1.8}
+    }
+  ]
+}

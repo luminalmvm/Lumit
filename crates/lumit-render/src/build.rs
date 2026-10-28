@@ -4872,21 +4872,29 @@ fn colour_tables(
 }
 
 /// The lens each enabled built-in lens effect reads other than its Lens row,
-/// 1:1 and in order with the stack's lens ops, as the LUT files are.
+/// 1:1 and in order with the stack's lens ops, as the LUT files are. A
+/// Sprite flare's kept design rides the same list as text.
 fn flare_lens_files(
     effects: &[lumit_core::model::EffectInstance],
     lt: f64,
 ) -> Vec<Option<lumit_core::fx::lens::LensSource>> {
     use lumit_core::fx::lens;
     use lumit_core::model::EffectNamespace;
+    let flare = |e: &lumit_core::model::EffectInstance| e.effect.match_name == "sprite_flare";
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && lens::takes_a_lens(&e.effect.match_name)
+                && (lens::takes_a_lens(&e.effect.match_name) || flare(e))
         })
-        .map(|e| lens::source_at(e, lt))
+        .map(|e| {
+            if flare(e) {
+                lumit_core::fx::flare::design::embedded_text(e).map(lens::LensSource::Text)
+            } else {
+                lens::source_at(e, lt)
+            }
+        })
         .collect()
 }
 

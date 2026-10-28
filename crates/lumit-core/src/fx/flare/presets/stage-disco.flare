@@ -1,0 +1,40 @@
+{
+  "lumit_flare": 1,
+  "name": "Disco",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 45, "falloff": 0.3, "core": 2.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.9, 0.6, 1.0]]},
+      "values": {"size": 200, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.3, 0.6], [0.3, 0.6, 1.0], [1.0, 0.85, 0.3], [0.4, 1.0, 0.6]]},
+      "values": {"count": 16, "size": 650, "thickness": 6.0, "brightness": 0.5, "length_var": 0.3, "softness": 0.5, "taper": 1.0, "shimmer": 0.4, "spin": 25}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "values": {"size": 170, "thickness": 14, "brightness": 0.25, "softness": 0.7, "fringe": 1.0}
+    },
+    {
+      "kind": "orbs",
+      "name": "Orbs",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.3, 0.6], [0.3, 0.6, 1.0], [1.0, 0.85, 0.3], [0.4, 1.0, 0.6]]},
+      "values": {"count": 50, "size": 22, "brightness": 0.35, "size_var": 0.6, "reach": 800, "fill": 0.3, "edge": 0.5, "softness": 0.3, "drift": 60}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.3, 0.6], [0.3, 0.6, 1.0], [1.0, 0.85, 0.3], [0.4, 1.0, 0.6]]},
+      "values": {"count": 6, "size": 40, "brightness": 0.35, "sides": 0, "roundness": 0.2, "fill": 0.15, "edge": 0.4, "edge_width": 0.06, "softness": 0.2, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 2.0, "scatter": 50}
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import 'api/effect.dart';
 import 'api/export.dart';
 import 'api/expressions.dart';
 import 'api/extensions.dart';
+import 'api/flare.dart';
 import 'api/folder.dart';
 import 'api/footage.dart';
 import 'api/graph.dart';
@@ -769,6 +770,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFileParam dco_decode_bridge_file_param(dynamic raw);
+
+  @protected
+  BridgeFlareControl dco_decode_bridge_flare_control(dynamic raw);
+
+  @protected
+  BridgeFlareEdit dco_decode_bridge_flare_edit(dynamic raw);
+
+  @protected
+  BridgeFlareKind dco_decode_bridge_flare_kind(dynamic raw);
+
+  @protected
+  BridgeFlareOption dco_decode_bridge_flare_option(dynamic raw);
+
+  @protected
+  BridgeFlarePreset dco_decode_bridge_flare_preset(dynamic raw);
 
   @protected
   BridgeFlowEngineState dco_decode_bridge_flow_engine_state(dynamic raw);
@@ -1576,6 +1592,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFileComp> dco_decode_list_bridge_file_comp(dynamic raw);
+
+  @protected
+  List<BridgeFlareControl> dco_decode_list_bridge_flare_control(dynamic raw);
+
+  @protected
+  List<BridgeFlareKind> dco_decode_list_bridge_flare_kind(dynamic raw);
+
+  @protected
+  List<BridgeFlareOption> dco_decode_list_bridge_flare_option(dynamic raw);
+
+  @protected
+  List<BridgeFlarePreset> dco_decode_list_bridge_flare_preset(dynamic raw);
 
   @protected
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw);
@@ -2972,6 +3000,24 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFileParam sse_decode_bridge_file_param(SseDeserializer deserializer);
 
   @protected
+  BridgeFlareControl sse_decode_bridge_flare_control(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeFlareEdit sse_decode_bridge_flare_edit(SseDeserializer deserializer);
+
+  @protected
+  BridgeFlareKind sse_decode_bridge_flare_kind(SseDeserializer deserializer);
+
+  @protected
+  BridgeFlareOption sse_decode_bridge_flare_option(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeFlarePreset sse_decode_bridge_flare_preset(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeFlowEngineState sse_decode_bridge_flow_engine_state(
       SseDeserializer deserializer);
 
@@ -3900,6 +3946,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFileComp> sse_decode_list_bridge_file_comp(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFlareControl> sse_decode_list_bridge_flare_control(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFlareKind> sse_decode_list_bridge_flare_kind(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFlareOption> sse_decode_list_bridge_flare_option(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFlarePreset> sse_decode_list_bridge_flare_preset(
       SseDeserializer deserializer);
 
   @protected
@@ -5454,6 +5516,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFileParam self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_flare_control(
+      BridgeFlareControl self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_flare_edit(
+      BridgeFlareEdit self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_flare_kind(
+      BridgeFlareKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_flare_option(
+      BridgeFlareOption self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_flare_preset(
+      BridgeFlarePreset self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_flow_engine_state(
       BridgeFlowEngineState self, SseSerializer serializer);
 
@@ -6482,6 +6564,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_file_comp(
       List<BridgeFileComp> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_flare_control(
+      List<BridgeFlareControl> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_flare_kind(
+      List<BridgeFlareKind> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_flare_option(
+      List<BridgeFlareOption> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_flare_preset(
+      List<BridgeFlarePreset> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_footage_lack(

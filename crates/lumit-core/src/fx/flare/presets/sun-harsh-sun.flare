@@ -1,0 +1,47 @@
+{
+  "lumit_flare": 1,
+  "name": "Harsh sun",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 1.0, 0.97], [1.0, 0.92, 0.7]]},
+      "values": {"size": 110, "falloff": 0.35, "core": 1.0, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.92, 0.75]]},
+      "values": {"size": 450, "brightness": 0.06, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.95, 0.85]]},
+      "values": {"count": 160, "size": 1000, "thickness": 2.5, "brightness": 0.3, "length_var": 0.8, "softness": 0.5, "taper": 1.0, "shimmer": 0.3, "fringe": 0.4}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "values": {"size": 400, "thickness": 40, "brightness": 0.3, "arc": 150, "grow": 0.5, "fringe": 1.0, "softness": 0.9, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.9, 0.55], [0.65, 0.85, 1.0], [0.75, 1.0, 0.75]]},
+      "values": {"count": 9, "size": 60, "brightness": 0.45, "sides": 6, "roundness": 0.1, "fill": 0.12, "edge": 0.55, "edge_width": 0.06, "softness": 0.08, "fringe": 0.3, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.35, "to": 2.2, "notches": 0.6, "face": 1}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.85, 0.6]]},
+      "values": {"place": 2.0, "size": 300, "brightness": 0.4, "sides": 6, "roundness": 0.1, "fill": 0.03, "edge": 0.35, "edge_width": 0.06, "softness": 0.3, "fringe": 0.5, "response": 2, "response_amount": 0.6, "response_range": 0.7, "notches": 0.5, "face": 1}
+    },
+    {
+      "kind": "dirt",
+      "name": "Specks",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.95, 0.85]]},
+      "values": {"texture": 5, "size": 1100, "reach": 900, "brightness": 0.4}
+    }
+  ]
+}

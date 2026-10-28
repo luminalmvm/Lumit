@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Laser",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.6, 1.0, 0.6]]},
+      "values": {"size": 28, "falloff": 0.6, "core": 2.0, "core_size": 0.3, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.2, 1.0, 0.2]]},
+      "values": {"size": 160, "brightness": 0.06, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.4, 1.0, 0.4]]},
+      "values": {"points": 8, "size": 300, "thickness": 2.5, "brightness": 0.5}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[0.4, 1.0, 0.4]]},
+      "values": {"size": 80, "thickness": 8, "brightness": 0.12, "softness": 0.8}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[0.4, 1.0, 0.4]]},
+      "values": {"count": 150, "size": 400, "thickness": 1.5, "brightness": 0.4, "length_var": 0.8, "softness": 0.5, "taper": 1.0, "shimmer": 0.6}
+    }
+  ]
+}

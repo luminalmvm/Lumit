@@ -674,10 +674,16 @@
       "slug": "sprite-flare",
       "match_name": "sprite_flare",
       "label": "Sprite flare",
-      "version": 1,
+      "version": 2,
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
+        {
+          "id": "edit_flare",
+          "label": "Edit flare…",
+          "kind": "action",
+          "unit": "raw"
+        },
         {
           "id": "light_x",
           "label": "Light x",
@@ -697,8 +703,60 @@
           "slider_max": 2160.0
         },
         {
+          "id": "light_from",
+          "label": "Light from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Point",
+            "3D point",
+            "Lights",
+            "Bright spots",
+            "Mask points",
+            "Points"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_z",
+          "label": "Light z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "light_mask",
+          "label": "Mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "threshold_softness",
+          "label": "Softness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.25,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "intensity",
-          "label": "Intensity",
+          "label": "Brightness",
           "kind": "float",
           "unit": "raw",
           "default": 1.0,
@@ -707,8 +765,26 @@
           "hard_min": 0.0
         },
         {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "tint",
-          "label": "Tint",
+          "label": "Colour",
           "kind": "colour",
           "unit": "raw",
           "default": [
@@ -721,94 +797,145 @@
           "slider_max": 4.0
         },
         {
-          "id": "glow_size",
-          "label": "Glow size",
+          "id": "evolution",
+          "label": "Evolution",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "centre_x",
+          "label": "Centre X",
           "kind": "float",
           "unit": "px",
-          "default": 120.0,
+          "default": 960.0,
           "slider_min": 0.0,
-          "slider_max": 800.0,
-          "hard_min": 0.0
+          "slider_max": 3840.0
         },
         {
-          "id": "glow_intensity",
-          "label": "Glow intensity",
+          "id": "centre_y",
+          "label": "Centre Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "flicker",
+          "label": "Amount",
           "kind": "float",
           "unit": "raw",
-          "default": 1.0,
+          "default": 0.0,
           "slider_min": 0.0,
-          "slider_max": 4.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "flicker_speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghosts",
-          "label": "Ghosts",
+          "id": "flicker_seed",
+          "label": "Seed",
           "kind": "int",
           "unit": "raw",
-          "default": 6,
+          "default": 1,
           "slider_min": 0.0,
-          "slider_max": 16.0,
-          "hard_min": 0.0,
-          "hard_max": 16.0
-        },
-        {
-          "id": "ghost_spacing",
-          "label": "Ghost spacing",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 1.5,
+          "slider_max": 999.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghost_size",
-          "label": "Ghost size",
+          "id": "use_light_colour",
+          "label": "Use light colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "use_light_intensity",
+          "label": "Use light intensity",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "size_with_distance",
+          "label": "Size with distance",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "hide_behind",
+          "label": "Hide behind",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "hide_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Alpha",
+            "Luma"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_size",
+          "label": "Light size",
           "kind": "float",
           "unit": "px",
-          "default": 60.0,
+          "default": 20.0,
           "slider_min": 0.0,
           "slider_max": 400.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghost_intensity",
-          "label": "Ghost intensity",
-          "kind": "float",
+          "id": "depth_m",
+          "label": "Depth",
+          "kind": "layer",
           "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
+          "self_default": false
         },
         {
-          "id": "streak_length",
-          "label": "Streak length",
+          "id": "light_distance_m",
+          "label": "Light distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1000.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "edge_fade",
+          "label": "Edge fade",
           "kind": "float",
           "unit": "px",
-          "default": 300.0,
+          "default": 200.0,
           "slider_min": 0.0,
-          "slider_max": 2000.0,
+          "slider_max": 1000.0,
           "hard_min": 0.0
         },
         {
-          "id": "streak_intensity",
-          "label": "Streak intensity",
-          "kind": "float",
+          "id": "texture_layer",
+          "label": "Texture layer",
+          "kind": "layer",
           "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "streak_angle",
-          "label": "Streak angle",
-          "kind": "float",
-          "unit": "degrees",
-          "default": 0.0,
-          "slider_min": -180.0,
-          "slider_max": 180.0
+          "self_default": false
         },
         {
           "id": "mix",
@@ -889,31 +1016,176 @@
       ],
       "groups": [
         {
-          "label": "Glow",
+          "label": "",
           "params": [
-            "glow_size",
-            "glow_intensity"
+            "light_z"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1
+            ]
+          }
         },
         {
-          "label": "Ghosts",
+          "label": "",
           "params": [
-            "ghosts",
-            "ghost_spacing",
-            "ghost_size",
-            "ghost_intensity"
+            "light_mask"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              4
+            ]
+          }
         },
         {
-          "label": "Streak",
+          "label": "",
           "params": [
-            "streak_length",
-            "streak_intensity",
-            "streak_angle"
+            "threshold",
+            "threshold_softness"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
+          "label": "Centre",
+          "params": [
+            "centre_x",
+            "centre_y"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_speed",
+            "flicker_seed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Lights",
+          "params": [
+            "use_light_colour",
+            "use_light_intensity",
+            "size_with_distance"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1,
+              2,
+              3,
+              5
+            ]
+          }
+        },
+        {
+          "label": "Hiding",
+          "params": [
+            "hide_behind",
+            "hide_channel",
+            "light_size",
+            "depth_m",
+            "light_distance_m",
+            "edge_fade"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Textures",
+          "params": [
+            "texture_layer"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "use_light_colour",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 1
+        },
+        {
+          "param": "use_light_intensity",
+          "on": "light_from",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "size_with_distance",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "hide_channel",
+          "on": "hide_behind",
+          "cond": "layer_set"
+        },
+        {
+          "param": "light_distance_m",
+          "on": "depth_m",
+          "cond": "layer_set"
         }
       ],
       "matte_role": "strength"

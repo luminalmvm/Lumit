@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Par can",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.95, 0.85], [1.0, 0.6, 0.25]]},
+      "values": {"size": 90, "falloff": 0.35, "core": 1.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.65, 0.3]]},
+      "values": {"size": 350, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.7, 0.4]]},
+      "values": {"count": 80, "size": 450, "thickness": 6.0, "brightness": 0.2, "length_var": 0.7, "softness": 0.9, "taper": 1.0, "shimmer": 0.4}
+    },
+    {
+      "kind": "orbs",
+      "name": "Orbs",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.75, 0.5]]},
+      "values": {"count": 25, "size": 35, "brightness": 0.3, "size_var": 0.6, "reach": 600, "fill": 0.15, "edge": 0.2236068, "softness": 0.8, "drift": 30}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.75, 0.5]]},
+      "values": {"texture": 1, "size": 700, "reach": 800, "brightness": 0.15}
+    }
+  ]
+}

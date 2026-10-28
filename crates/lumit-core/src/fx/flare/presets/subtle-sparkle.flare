@@ -1,0 +1,31 @@
+{
+  "lumit_flare": 1,
+  "name": "Sparkle",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 26, "falloff": 0.3, "core": 2.0, "core_size": 0.25, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 100, "brightness": 0.06, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "values": {"points": 8, "size": 200, "thickness": 2.0, "brightness": 0.5, "twin": 0.5, "twin_length": 0.5}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "values": {"count": 60, "size": 180, "thickness": 1.5, "brightness": 0.4, "length_var": 0.8, "softness": 0.5, "taper": 1.0, "shimmer": 0.8}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "values": {"size": 55, "thickness": 8, "brightness": 0.15, "softness": 0.9, "fringe": 0.5}
+    }
+  ]
+}

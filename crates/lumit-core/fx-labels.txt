@@ -7,6 +7,7 @@
 2 kHz
 250 Hz
 31 Hz
+3D point
 4 kHz
 500 Hz
 63 Hz
@@ -137,6 +138,7 @@ Boundary
 Bounds
 Boxes x
 Boxes y
+Bright spots
 Brightness
 Broadband, amber
 Broadband, blue
@@ -329,11 +331,13 @@ Echo
 Echoes
 Edge
 Edge colour
+Edge fade
 Edge margin
 Edge sharpness
 Edge type
 Edges
 Edit expression…
+Edit flare…
 Edit lens…
 Edit shader…
 Element 1
@@ -410,6 +414,7 @@ Fit to size
 Flag
 Flare options
 Flash
+Flicker
 Flip axis
 Flip direction
 Flip order
@@ -452,18 +457,13 @@ Gaussian
 Gaussian blur
 Generate
 Ghost intensity
-Ghost size
 Ghost softness
-Ghost spacing
-Ghosts
 Glass curvature
 Glass dirt
 Glow
 Glow colour
-Glow intensity
 Glow opacity
 Glow radius
-Glow size
 Gradient
 Gradient overlay
 Gradient type
@@ -491,6 +491,8 @@ Hardness
 Haze
 Height
 Hexagons
+Hide behind
+Hiding
 High
 High cut
 Highlight amount
@@ -600,10 +602,13 @@ Light
 Light colour
 Light direction
 Light distance (m)
+Light from
+Light size
 Light tint
 Light wrap
 Light x
 Light y
+Light z
 Lighten
 Lighter colour
 Lightness
@@ -627,6 +632,7 @@ Lower left x
 Lower left y
 Lower right x
 Lower right y
+Luma
 Luminance
 Luminance only
 Luminosity
@@ -645,6 +651,7 @@ Map softness
 Map white to
 Mask
 Mask path
+Mask points
 Mask/Path
 Master
 Math
@@ -998,6 +1005,7 @@ Size from
 Size from width
 Size jitter
 Size over life
+Size with distance
 Skew
 Skew axis
 Slice repeat
@@ -1070,8 +1078,6 @@ Stillness
 Stops
 Store
 Streak
-Streak angle
-Streak intensity
 Streak length
 Strength
 Stretch
@@ -1108,6 +1114,8 @@ Text layer
 Text to points
 Texture
 Texture contrast
+Texture layer
+Textures
 Texturize
 This comp
 Threshold
@@ -1182,6 +1190,8 @@ Upper right y
 Use colour ramp
 Use focus point
 Use inner radius
+Use light colour
+Use light intensity
 Use masks
 Use middle colour
 Use point colour

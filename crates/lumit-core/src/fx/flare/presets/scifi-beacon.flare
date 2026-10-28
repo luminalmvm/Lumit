@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Beacon",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.9, 0.85], [1.0, 0.15, 0.1]]},
+      "values": {"size": 55, "falloff": 0.3, "core": 2.0, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.1, 0.05]]},
+      "values": {"size": 300, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.25, 0.15]]},
+      "values": {"size": 400, "thickness": 12.0, "brightness": 0.4, "taper": 0.7}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.3, 0.2]]},
+      "values": {"count": 40, "size": 300, "thickness": 3.0, "brightness": 0.3, "length_var": 0.6, "softness": 0.5, "taper": 1.0, "shimmer": 0.5}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.3, 0.2]]},
+      "values": {"place": 1.7, "size": 180, "brightness": 0.5, "sides": 0, "roundness": 0.4, "fill": 0.04, "edge": 0.2828427, "edge_width": 0.06, "softness": 0.3, "fringe": 0.0, "response": 2, "response_amount": 0.6, "response_range": 0.7}
+    }
+  ]
+}

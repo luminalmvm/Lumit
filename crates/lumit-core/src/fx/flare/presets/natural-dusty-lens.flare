@@ -1,0 +1,39 @@
+{
+  "lumit_flare": 1,
+  "name": "Dusty lens",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.96, 0.9]]},
+      "values": {"size": 65, "falloff": 0.3, "core": 1.2, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 280, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "values": {"count": 80, "size": 350, "thickness": 2.5, "brightness": 0.2, "length_var": 0.7, "softness": 0.6, "taper": 1.0, "shimmer": 0.3}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.95, 0.85]]},
+      "values": {"texture": 1, "size": 750, "reach": 800, "brightness": 0.18}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "values": {"size": 300, "thickness": 30, "brightness": 0.25, "arc": 150, "grow": 0.5, "fringe": 0.8, "softness": 0.8, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[0.6, 0.8, 1.0], [1.0, 0.8, 0.5], [0.7, 1.0, 0.75]]},
+      "values": {"count": 6, "size": 55, "brightness": 0.4, "sides": 7, "roundness": 0.3, "fill": 0.12, "edge": 0.55, "edge_width": 0.06, "softness": 0.1, "fringe": 0.25, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 1.9, "texture": 1}
+    }
+  ]
+}

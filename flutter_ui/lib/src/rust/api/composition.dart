@@ -2507,6 +2507,23 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceStartExport(
           that: this, spec: spec, path: path);
 
+  /// A still of this composition at `frame`, its longest edge `max_edge`
+  /// pixels, with effect `effect` switched off wherever it sits: the Flare
+  /// window's Frame background, which the flare preview is then added over.
+  /// Rides the welcome row's thumbnail road, so it is small and asked for
+  /// once. `None` on a machine with no graphics adapter. Not `sync`: it
+  /// renders.
+  ///
+  /// # Errors
+  /// [`BridgeError::InvalidComp`] when this is not a composition.
+  Future<BridgeRenderedFrame?> stillWithoutEffect(
+          {required BigInt frame,
+          required int maxEdge,
+          required UuidValue effect}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceStillWithoutEffect(
+              that: this, frame: frame, maxEdge: maxEdge, effect: effect);
+
   /// Stop playing, and silence the sound. Harmless when nothing is playing.
   void stopPlayback() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceStopPlayback(
