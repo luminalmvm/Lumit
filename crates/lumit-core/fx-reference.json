@@ -713,7 +713,8 @@
             "3D point",
             "Lights",
             "Bright spots",
-            "Mask points"
+            "Mask points",
+            "Points"
           ],
           "dividers_after": []
         },
@@ -1084,7 +1085,8 @@
             "values": [
               1,
               2,
-              3
+              3,
+              5
             ]
           }
         },
@@ -1138,6 +1140,18 @@
           "on": "light_from",
           "cond": "choice_is_not",
           "value": 4
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
         },
         {
           "param": "light_y",

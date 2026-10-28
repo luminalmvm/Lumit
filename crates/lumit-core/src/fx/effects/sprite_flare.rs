@@ -12,8 +12,9 @@ use crate::fx::flare::raster::{self, Frame, Light};
 use crate::fx::noise::value3;
 use crate::fx::{
     params::{ParamId, Params, Value},
-    registry::{EffectDef, EffectMetadata, ResolveCx},
-    schema::{EffectSchema, EnabledCond, EnabledWhen, ParamGroup},
+    points::PointsStream,
+    registry::{EffectDef, EffectMetadata, ResolveCx, Signature},
+    schema::{EffectSchema, EnabledCond, EnabledWhen, ParamGroup, Port, PortType},
 };
 use crate::model::{Composition, EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
@@ -63,7 +64,7 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
             "size_with_distance",
         ],
         collapsed: false,
-        visible_when: Some(("light_from", &[THREE_D_POINT, LIGHTS, BRIGHT_SPOTS])),
+        visible_when: Some(("light_from", &[THREE_D_POINT, LIGHTS, BRIGHT_SPOTS, POINTS])),
         visible_when_lens_elements: None,
     },
     ParamGroup {
@@ -99,6 +100,14 @@ pub const LIGHTS: u32 = 2;
 pub const BRIGHT_SPOTS: u32 = 3;
 /// Light from: each vertex of one of the layer's masks.
 pub const MASK_POINTS: u32 = 4;
+/// Light from: each point of a points stream wired in.
+pub const POINTS: u32 = 5;
+
+const POINTS_IN: &[Port] = &[Port::new(
+    crate::fx::effects::clone_to_points::POINTS_PORT,
+    "Points",
+    PortType::Points,
+)];
 
 const fn when(param: &'static str, on: &'static str, cond: EnabledCond) -> EnabledWhen {
     EnabledWhen { param, on, cond }
@@ -124,6 +133,8 @@ pub const SPRITE_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[
         "light_from",
         EnabledCond::ChoiceIsNot(MASK_POINTS),
     ),
+    when("light_x", "light_from", EnabledCond::ChoiceIsNot(POINTS)),
+    when("light_y", "light_from", EnabledCond::ChoiceIsNot(POINTS)),
     when(
         "light_y",
         "light_from",
@@ -204,7 +215,7 @@ pub struct SpriteFlare {
     /// layer's own picture, or the corners of one of its masks.
     #[choice(
         label = "Light from",
-        options = ["Point", "3D point", "Lights", "Bright spots", "Mask points"],
+        options = ["Point", "3D point", "Lights", "Bright spots", "Mask points", "Points"],
         default = 0
     )]
     pub light_from: u32,
@@ -408,8 +419,9 @@ impl SpriteFlare {
                     }
                 })
                 .collect()
-        } else if matches!(s.light_from, LIGHTS | MASK_POINTS) {
-            // No comp or layer to find them in.
+        } else if matches!(s.light_from, LIGHTS | MASK_POINTS | POINTS) {
+            // No comp or layer to find them in, or the points arrive at the
+            // draw.
             Vec::new()
         } else {
             vec![Light {
@@ -433,6 +445,43 @@ impl SpriteFlare {
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
         }
+    }
+
+    /// One light for each point of the wired stream while Light from is
+    /// Points, up to 16: where the point is seen, its colour when Use light
+    /// colour is on, its opacity as its brightness, and its foreshortening
+    /// as its size when Size with distance is on.
+    pub fn points_lights(p: Params<'_>, stream: &PointsStream) -> Option<Vec<Light>> {
+        let s = Self::read(p);
+        let mix = (s.mix / 100.0).clamp(0.0, 1.0);
+        if s.light_from != POINTS || s.intensity <= 0.0 || mix <= 0.0 {
+            return None;
+        }
+        let tint = [s.tint[0].max(0.0), s.tint[1].max(0.0), s.tint[2].max(0.0)];
+        let picked = |i: usize| stream.pick.get(i).is_none_or(|&k| k > 0.5);
+        let lights = (0..stream.position.len())
+            .filter(|&i| picked(i) && stream.depth_scale(i) > 0.0)
+            .take(16)
+            .map(|i| {
+                let [r, g, b, a] = stream.colour.get(i).copied().unwrap_or([1.0; 4]);
+                let own = if s.use_light_colour && a > 1e-6 {
+                    [r / a, g / a, b / a]
+                } else {
+                    [1.0; 3]
+                };
+                Light {
+                    pos: stream.projected(i),
+                    colour: [own[0] * tint[0], own[1] * tint[1], own[2] * tint[2]],
+                    gain: a.clamp(0.0, 1.0) * mix,
+                    scale: if s.size_with_distance {
+                        stream.depth_scale(i)
+                    } else {
+                        1.0
+                    },
+                }
+            })
+            .collect();
+        Some(lights)
     }
 
     /// How to find the lights in the picture while Light from is Bright
@@ -717,6 +766,13 @@ impl EffectDef for SpriteFlareDef {
         &["depth_m"]
     }
 
+    fn signature(&self) -> Signature {
+        Signature::Image {
+            inputs: POINTS_IN,
+            extra: &[],
+        }
+    }
+
     /// Where the lights are when the Light row alone doesn't say: through
     /// the camera, from the Light layers or a mask, and across the shutter
     /// when the layer blurs. Bright spots are found on the GPU from the picture.
@@ -731,7 +787,7 @@ impl EffectDef for SpriteFlareDef {
         let Some(comp) = ctx.comp.and_then(|id| ctx.document.comp(id)) else {
             return;
         };
-        if mode == BRIGHT_SPOTS {
+        if mode == BRIGHT_SPOTS || mode == POINTS {
             return;
         }
         let blurs = ctx

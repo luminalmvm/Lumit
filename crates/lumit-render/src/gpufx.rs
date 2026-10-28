@@ -795,7 +795,10 @@ impl GpuEffect for SpriteFlare {
             aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
         };
         use lumit_gpu::fx::sprite_flare as sf;
-        let frame = SpriteFlare::frame(p);
+        let mut frame = SpriteFlare::frame(p);
+        if let Some(stream) = points_input_at(aux, 0, frame.px_scale) {
+            frame.lights = SpriteFlare::points_lights(p, &stream).unwrap_or(frame.lights);
+        }
         let spots = SpriteFlare::spots(p);
         if frame.lights.is_empty() && spots.is_none() {
             return tex.clone();

@@ -31,7 +31,7 @@ Ghosts and other elements on the axis line up on the line from the light through
 | **Edit flare…** | Button | - | - | - |
 | **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
 | **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
-| **Light from** | Dropdown | Point · 3D point · Lights · Bright spots · Mask points | Point | - |
+| **Light from** | Dropdown | Point · 3D point · Lights · Bright spots · Mask points · Points | Point | - |
 | **Light z** | Slider | -4000 to 4000; any value by typing | 0 | Pixels at composition size |
 | **Mask** | Masks | This layer's masks | First mask | - |
 | **Threshold** | Slider | 0 to 1; higher | 1 | - |
@@ -66,7 +66,7 @@ In the Effect Controls panel:
 
 - **Centre** groups **Centre X**, **Centre Y**, and starts closed.
 - **Flicker** groups **Amount**, **Speed**, **Seed**, and starts closed.
-- **Lights** groups **Use light colour**, **Use light intensity**, **Size with distance**, and appears while **Light from** is 3D point or Lights or Bright spots.
+- **Lights** groups **Use light colour**, **Use light intensity**, **Size with distance**, and appears while **Light from** is 3D point or Lights or Bright spots or Points.
 - **Hiding** groups **Hide behind**, **Channel**, **Light size**, **Depth**, **Light distance (m)**, **Edge fade**, and starts closed.
 - **Textures** groups **Texture layer**, and starts closed.
 - **Light x** is editable while **Light from** is anything but Lights.
@@ -74,6 +74,8 @@ In the Effect Controls panel:
 - **Light y** is editable while **Light from** is anything but Lights.
 - **Light y** is editable while **Light from** is anything but Bright spots.
 - **Light x** is editable while **Light from** is anything but Mask points.
+- **Light x** is editable while **Light from** is anything but Points.
+- **Light y** is editable while **Light from** is anything but Points.
 - **Light y** is editable while **Light from** is anything but Mask points.
 - **Use light colour** is editable while **Light from** is anything but 3D point.
 - **Use light intensity** is editable while **Light from** is set to Lights.
@@ -95,6 +97,8 @@ In the Effect Controls panel:
   each bright spot in the layer's own picture, up to 16. **Mask points** draws a flare on
   each vertex of the mask picked in **Mask**, up to 16, and follows the mask as it moves.
   The mask also cuts the layer unless its mode is **None**.
+  **Points** draws a flare on each point of a points stream wired into the effect, up to
+  16, in the point's colour and at its opacity.
 - **Threshold**: how bright a spot must be to flare, in **Bright spots**.
 - **Softness**: how far above **Threshold** a spot flares fully.
 - **Mask**: the mask whose vertices flare, in **Mask points**. Unset is the layer's first
