@@ -73,7 +73,7 @@ struct Out {
     @location(3) @interpolate(flat) inst: u32,
     @location(4) @interpolate(flat) turn: f32,
     @location(5) @interpolate(flat) light: vec2<f32>,
-    @location(6) @interpolate(flat) half: vec2<f32>,
+    @location(6) @interpolate(flat) extent: vec2<f32>,
 };
 
 fn ramp(a: f32, b: f32, x: f32) -> f32 {
@@ -128,7 +128,7 @@ fn sf_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Ou
     if (i.a.x > 1.5) {
         scale = 1.0;
     }
-    let half = i.b.zw * (1.0 + i.c.z * rho) * scale;
+    let extent = i.b.zw * (1.0 + i.c.z * rho) * scale;
     let s = sin(angle);
     let c = cos(angle);
     let off = i.b.xy * scale;
@@ -138,11 +138,11 @@ fn sf_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Ou
         vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
     );
     let uv = corners[vi];
-    let p = uv * half;
+    let p = uv * extent;
     let px = centre + vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
     o.pos = vec4<f32>(px.x / frame.w * 2.0 - 1.0, 1.0 - px.y / frame.h * 2.0, 0.0, 1.0);
     o.place = vec4<f32>(centre, angle, 0.0);
-    o.half = half;
+    o.extent = extent;
     o.colour = vec4<f32>(i.col.xyz * l.colour.xyz, gain);
     o.colour_b = vec4<f32>(i.col_b.xyz * l.colour.xyz, i.col_b.w);
     o.inst = ii / n;
@@ -256,9 +256,9 @@ fn texel(k: u32, p: vec2<f32>, footprint: f32) -> vec3<f32> {
     let t = texture(k, p, footprint);
     if (k == TEX_RAINBOW) {
         let n = f32(TEX_SIZE);
-        let half = n * 0.5;
+        let extent = n * 0.5;
         let w = p - n * floor(p / n);
-        let d = length(w - vec2<f32>(half)) / half;
+        let d = length(w - vec2<f32>(extent)) / extent;
         return t * spectrum(clamp((d - 0.6) / 0.3, 0.0, 1.0));
     }
     return vec3<f32>(t);
@@ -275,18 +275,18 @@ fn iris(q: vec2<f32>, s0: vec4<f32>, s1: vec4<f32>, angle: f32, feather: f32, ri
 }
 
 // Texels a pixel spans on a sprite whose square fills its quad.
-fn footprint(half: vec2<f32>) -> f32 {
-    return f32(TEX_SIZE) * 0.5 / max(min(half.x, half.y), 1e-3);
+fn footprint(extent: vec2<f32>) -> f32 {
+    return f32(TEX_SIZE) * 0.5 / max(min(extent.x, extent.y), 1e-3);
 }
 
 @fragment
 fn sf_fs(f: Out) -> @location(0) vec4<f32> {
     let i = insts[f.inst];
-    let half = f.half;
+    let extent = f.extent;
     let d = f.pos.xy - f.place.xy;
     let cs = cos(f.place.z);
     let sn = sin(f.place.z);
-    let uv = vec2<f32>((d.x * cs + d.y * sn) / half.x, (d.y * cs - d.x * sn) / half.y);
+    let uv = vec2<f32>((d.x * cs + d.y * sn) / extent.x, (d.y * cs - d.x * sn) / extent.y);
     let shape = u32(i.c.y);
     let len = length(uv);
     var v = vec3<f32>(0.0);
@@ -308,15 +308,15 @@ fn sf_fs(f: Out) -> @location(0) vec4<f32> {
             along = exp(-pow(a * i.s0.y, i.s0.z)) * (1.0 - ramp(0.9, 1.0, a));
             narrow = min(a * i.s0.y * 0.5, 1.0);
         }
-        let g = along * band(uv.y * half.y, i.s0.w * (1.0 - i.s1.y * narrow), i.s1.x);
+        let g = along * band(uv.y * extent.y, i.s0.w * (1.0 - i.s1.y * narrow), i.s1.x);
         v = g * (vec3<f32>(1.0) + (spectrum(a) - vec3<f32>(1.0)) * (i.s1.z * ramp(0.0, 0.6, a)));
         r = a;
     } else if (shape == 2u) {
         let spread = max(i.s1.y, 1.0);
-        let x = (len - i.s0.x) * half.x / spread;
-        var b = band(x, i.s0.y * half.x, i.s0.z) / sqrt(spread);
+        let x = (len - i.s0.x) * extent.x / spread;
+        var b = band(x, i.s0.y * extent.x, i.s0.z) / sqrt(spread);
         if (i.s0.w < PI) {
-            let aa = 1.0 / max(len * half.x, 1.0);
+            let aa = 1.0 / max(len * extent.x, 1.0);
             let phi = abs(atan2(uv.y, uv.x));
             b = b * (1.0 - ramp(i.s0.w * (1.0 - i.s1.x) - aa, i.s0.w + aa, phi));
         }
@@ -324,7 +324,7 @@ fn sf_fs(f: Out) -> @location(0) vec4<f32> {
         r = 0.5 + 0.5 * (len - i.s0.x) / max(i.s0.y * spread, 1e-6);
     } else if (shape == 3u) {
         let m = i.s0.x;
-        let aa = m / max(min(half.x, half.y), 1e-3);
+        let aa = m / max(min(extent.x, extent.y), 1e-3);
         let feather = max(i.s1.w, aa);
         let rim_width = max(i.s1.z, aa);
         let angle = i.s0.z + f.turn;
@@ -342,7 +342,7 @@ fn sf_fs(f: Out) -> @location(0) vec4<f32> {
         var marked = vec3<f32>(1.0);
         if (i.s2.y >= 0.5) {
             let k = u32(round(i.s2.y));
-            let t = texel(k, (uv * 0.5 + vec2<f32>(0.5)) * f32(TEX_SIZE), footprint(half));
+            let t = texel(k, (uv * 0.5 + vec2<f32>(0.5)) * f32(TEX_SIZE), footprint(extent));
             marked = vec3<f32>(0.3) + 0.7 * t;
         }
         v = vec3<f32>(red, g.x, blue) * marked;
@@ -362,7 +362,7 @@ fn sf_fs(f: Out) -> @location(0) vec4<f32> {
             r = min(d, 1.0);
         } else {
             // A picture, fading out before the square's edge.
-            let t = texel(k, (uv * 0.5 + vec2<f32>(0.5)) * f32(TEX_SIZE), footprint(half));
+            let t = texel(k, (uv * 0.5 + vec2<f32>(0.5)) * f32(TEX_SIZE), footprint(extent));
             v = t * (1.0 - ramp(0.8, 1.0, len));
             r = min(len, 1.0);
         }
