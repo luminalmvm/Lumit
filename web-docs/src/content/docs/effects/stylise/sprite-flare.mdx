@@ -1,6 +1,6 @@
 ---
 title: "Sprite flare"
-description: "The cheap lens flare."
+description: "A lens flare built from glows, rays, rings and ghosts, designed in its own window."
 ---
 
 import Compare from "../../../../components/Compare.astro";
@@ -15,7 +15,12 @@ Sprite flare is a [Stylise](/effects/#stylise) effect.
 
 ## What it does
 
-A very simple lens flare effect.
+Draws a flare from a design: a list of elements such as glows, rays, rings and ghosts, kept
+in the effect and made in the **Flare** window. The rows below animate the whole flare. The
+design itself does not animate.
+
+Ghosts and other elements on the axis line up on the line from the light through the
+**Centre**, so they swing across the frame as the light moves.
 
 ## Parameters
 
@@ -23,19 +28,34 @@ A very simple lens flare effect.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Edit flare…** | Button | - | - | - |
 | **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
 | **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
-| **Intensity** | Slider | 0 to 4; higher | 1 | - |
-| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
-| **Glow size** | Slider | 0 to 800; higher | 120 | Pixels at composition size |
-| **Glow intensity** | Slider | 0 to 4; higher | 1 | - |
-| **Ghosts** | Slider, whole numbers | 0 to 16 | 6 | - |
-| **Ghost spacing** | Slider | 0 to 1.5; higher | 0.35 | - |
-| **Ghost size** | Slider | 0 to 400; higher | 60 | Pixels at composition size |
-| **Ghost intensity** | Slider | 0 to 2; higher | 0.35 | - |
-| **Streak length** | Slider | 0 to 2000; higher | 300 | Pixels at composition size |
-| **Streak intensity** | Slider | 0 to 2; higher | 0.5 | - |
-| **Streak angle** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Light from** | Dropdown | Point · 3D point · Lights · Bright spots · Mask points | Point | - |
+| **Light z** | Slider | -4000 to 4000; any value by typing | 0 | Pixels at composition size |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Threshold** | Slider | 0 to 1; higher | 1 | - |
+| **Softness** | Slider | 0 to 1; higher | 0.25 | - |
+| **Brightness** | Slider | 0 to 4; higher | 1 | - |
+| **Size** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Evolution** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Amount** | Slider | 0 to 1 | 0 | - |
+| **Speed** | Slider | 0 to 30; higher | 8 | - |
+| **Seed** | Slider, whole numbers | 0 to 999; higher | 1 | - |
+| **Use light colour** | Checkbox | On or off | On | - |
+| **Use light intensity** | Checkbox | On or off | On | - |
+| **Size with distance** | Checkbox | On or off | Off | - |
+| **Hide behind** | Layer | Any layer in the composition | None | - |
+| **Hiding › Channel** | Dropdown | Alpha · Luma | Alpha | - |
+| **Light size** | Slider | 0 to 400; higher | 20 | Pixels at composition size |
+| **Depth** | Layer | Any layer in the composition | None | - |
+| **Light distance (m)** | Slider | 1 to 1000; down to 0.01 and higher | 1000 | - |
+| **Edge fade** | Slider | 0 to 1000; higher | 200 | Pixels at composition size |
+| **Texture layer** | Layer | Any layer in the composition | None | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -44,38 +64,142 @@ A very simple lens flare effect.
 
 In the Effect Controls panel:
 
-- **Glow** groups **Glow size**, **Glow intensity**.
-- **Ghosts** groups **Ghosts**, **Ghost spacing**, **Ghost size**, **Ghost intensity**.
-- **Streak** groups **Streak length**, **Streak intensity**, **Streak angle**.
+- **Centre** groups **Centre X**, **Centre Y**, and starts closed.
+- **Flicker** groups **Amount**, **Speed**, **Seed**, and starts closed.
+- **Lights** groups **Use light colour**, **Use light intensity**, **Size with distance**, and appears while **Light from** is 3D point or Lights or Bright spots.
+- **Hiding** groups **Hide behind**, **Channel**, **Light size**, **Depth**, **Light distance (m)**, **Edge fade**, and starts closed.
+- **Textures** groups **Texture layer**, and starts closed.
+- **Light x** is editable while **Light from** is anything but Lights.
+- **Light x** is editable while **Light from** is anything but Bright spots.
+- **Light y** is editable while **Light from** is anything but Lights.
+- **Light y** is editable while **Light from** is anything but Bright spots.
+- **Light x** is editable while **Light from** is anything but Mask points.
+- **Light y** is editable while **Light from** is anything but Mask points.
+- **Use light colour** is editable while **Light from** is anything but 3D point.
+- **Use light intensity** is editable while **Light from** is set to Lights.
+- **Size with distance** is editable while **Light from** is anything but Bright spots.
+- **Channel** is editable while **Hide behind** names a layer.
+- **Light distance (m)** is editable while **Depth** names a layer.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 
 ## What each control does
 
-- **Light x** and **Light y**: where the light is positioned.
-- **Intensity**: the gain on the lens flare.
-- **Tint**: the colour of the flare.
+- **Edit flare…** opens the Flare window. See [The Flare window](#the-flare-window).
+- **Light**: where the light is.
+- **Light from**: **Point** is the Light row. **3D point** places the light at **Light x**,
+  **Light y** and **Light z** in the composition's 3D space, seen through its camera. A
+  light behind the camera draws nothing. **Lights** draws a flare for each Light layer in
+  the composition, up to 16, and skips ambient lights. **Bright spots** draws a flare for
+  each bright spot in the layer's own picture, up to 16. **Mask points** draws a flare on
+  each vertex of the mask picked in **Mask**, up to 16, and follows the mask as it moves.
+  The mask also cuts the layer unless its mode is **None**.
+- **Threshold**: how bright a spot must be to flare, in **Bright spots**.
+- **Softness**: how far above **Threshold** a spot flares fully.
+- **Mask**: the mask whose vertices flare, in **Mask points**. Unset is the layer's first
+  mask.
+- **Brightness**: the gain on everything the flare draws.
+- **Size**: the size of the whole flare, in per cent.
+- **Rotation**: turns the whole flare.
+- **Colour**: multiplies the light's colour.
+- **Evolution**: moves the shimmer of rays and the drift of orbs.
 - **Mix**: how much of the result replaces the original.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
 
-The **Glow** group:
+The **Centre** group:
 
-- **Glow size**: its radius, in pixels.
-- **Glow intensity**: its gain.
+- **Centre X** and **Centre Y**: the point the axis runs through. A new Sprite flare puts it
+  in the middle of the composition.
 
-The **Ghosts** group:
+The **Flicker** group:
 
-- **Ghosts**: how many discs march along the axis.
-- **Ghost spacing**: how far apart they sit.
-- **Ghost size**: their base radius.
-- **Ghost intensity**: their gain. 
+- **Amount**: how far the brightness dips at random. 0 is no flicker.
+- **Speed**: dips a second.
+- **Seed**: picks a different flicker.
 
-The **Streak** group:
+The **Lights** group:
 
-- **Streak length**: how far it reaches from the light.
-- **Streak intensity**: its gain.
-- **Streak angle**: direction it runs in.
+- **Use light colour**: each flare takes its light's colour.
+- **Use light intensity**: each flare takes its light's intensity.
+- **Size with distance**: a flare shrinks as its light moves away from the camera.
+
+The **Hiding** group:
+
+- **Hide behind**: a layer the light can go behind.
+- **Channel**: reads that layer's **Alpha** or **Luma**.
+- **Light size**: the size of the light, in pixels. A light half covered flares at about
+  half.
+- **Depth**: a layer read as distance. The light hides where it is nearer than **Light
+  distance (m)**.
+- **Light distance (m)**: how far the light is from the camera, in metres.
+- **Edge fade**: how far past the frame's edge the light fades out. 0 never fades.
+
+The **Textures** group:
+
+- **Texture layer**: a layer whose picture elements can use as their texture.
+
+When the layer and the composition have motion blur on, the flare blurs along the light's
+path. **Bright spots** does not.
+
+## The Flare window
+
+**Edit flare…** opens the **Flare** window. On the left are the flare's elements, drawn
+from the top of the list down. In the middle is a preview with the light, which can be
+dragged, and a mark at the centre. Under it are the flares to start from, **Built in** and,
+once any are saved, **Yours**. On the right are the controls of the selected element.
+
+- **Add** adds an element.
+- Drag an element to move it in the list. The eye shows or hides it. Alt-click the eye to
+  show only that element in the preview.
+- Double-click an element's name to rename it. Right-click for **Duplicate** and **Delete**.
+- **Black** shows the flare on black. **Frame** shows it over the composition at the
+  playhead.
+- **Moving light** moves the light round the preview. **Still** stops it.
+- **Fit** shows the flare at the preview's size. **100%** shows it at composition size.
+- Click a flare under the preview to replace the elements with it.
+- **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo inside the window.
+
+While the window is open the Viewer shows the flare as it is being edited.
+
+| Element | What it is |
+| --- | --- |
+| **Glow** | A soft light round the source. |
+| **Rays** | Many fine rays of varied length. |
+| **Star** | A few bold points. |
+| **Streak** | Anamorphic lines through the light. **End width** narrows them towards their ends. |
+| **Ring** | A circle round the light. |
+| **Halo** | An arc round the light that faces the centre and grows as the light moves out. |
+| **Ghost** | One iris shape on the axis. **Notches** cuts a dent at each corner. |
+| **Ghosts** | A train of iris shapes on the axis. |
+| **Orbs** | Soft discs across the frame, lit by how near the light is. |
+| **Dirt** | A texture across the frame, lit near the light. |
+| **Picture** | One texture at a place on the axis. |
+
+Every element has:
+
+- **Size**, **Brightness** and **Rotation**.
+- **Colour**: **Light** takes the light's colour. **Solid** is one colour. **Mixed** picks
+  one of several for each copy. **Gradient** runs from the first colour in the middle to the
+  second at the edge. **Rainbow** is a spectrum across the element.
+- **Place**, on axis elements: 0 is the light, 1 is the centre, 2 is the light mirrored
+  through the centre.
+- **Response**: **Brighter near** makes the element brighter as the light nears **The
+  centre** or **The edges**. **Amount** is how much, **Range** how far the change spans.
+- **Ignore**: the element keeps its own size, brightness or rotation when the effect's
+  rows change them, or doesn't fade at the frame's edge.
+
+**Textures** are **Dust**, **Smudge**, **Caustic**, **Rings**, **Specks**, **Hex bokeh**,
+**Scratches**, **Rainbow**, **Water drops**, **Grain** and **Layer**, the picture of the
+**Texture layer**. The preview draws nothing for **Layer**.
+
+- **Import…** opens a `.flare` file. A file that is not one is refused: "Not a flare file".
+- **Share…** offers **Export to a file…**, which writes a `.flare` file, and **Copy as text**.
+- **Cancel** closes the window and changes nothing.
+- **Save to your flares** saves it to your own flares, offered in every project.
+- **Use flare** puts the flare on the effect. It is kept in the effect and saved with the
+  project.
 
 ## Related
 
