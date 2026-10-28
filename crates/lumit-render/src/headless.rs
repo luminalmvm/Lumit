@@ -1524,6 +1524,7 @@ impl HeadlessRenderer {
             // makes the returned texture the region's size regardless, so
             // everything downstream sees one shape.
             let roi = self.region_px(cw, ch);
+            let _ = crate::cancel::drawn_short();
             let linear = realiser.realise_region(
                 Some(crate::track::camera_pose(doc, comp, t)),
                 cw,
@@ -1533,9 +1534,10 @@ impl HeadlessRenderer {
                 roi,
                 self.ground,
             );
-            // Asked to stop while compositing: a trail may have stopped short,
-            // so the picture is never shown.
-            if crate::cancel::requested() {
+            // A trail that stopped short is never shown. Any other picture is
+            // whole, even when a newer one is waiting. Dropping it left its
+            // work queued on the card under the next frame's.
+            if crate::cancel::drawn_short() {
                 break 'frame Err(crate::cancel::CANCELLED.to_string());
             }
             let linear = match roi {
