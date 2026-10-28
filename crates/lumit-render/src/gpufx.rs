@@ -786,11 +786,21 @@ impl GpuEffect for SpriteFlare {
         aux: AuxSlot<'_>,
     ) -> Tex {
         use effects::sprite_flare::{design_of, SpriteFlare};
-        use lumit_core::fx::flare::instances;
+        use lumit_core::fx::flare::{instances, textures};
+        // The layer rows' pictures arrive in row order.
+        let picture = |id: &str| {
+            let at = <SpriteFlare as EffectMetadata>::SCHEMA
+                .layer_inputs()
+                .position(|row| row == id)?;
+            aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
+        };
+        use lumit_gpu::fx::sprite_flare as sf;
         let frame = SpriteFlare::frame(p);
-        if frame.lights.is_empty() {
+        let spots = SpriteFlare::spots(p);
+        if frame.lights.is_empty() && spots.is_none() {
             return tex.clone();
         }
+        let (luma, radius) = SpriteFlare::hiding(p);
         let design = design_of(aux.lens_file());
         let list: Vec<_> = instances::expand(&design, &frame, w, h)
             .iter()
@@ -801,7 +811,7 @@ impl GpuEffect for SpriteFlare {
             .iter()
             .map(|l| {
                 let [r, g, b] = l.colour;
-                [l.pos[0], l.pos[1], l.gain, 0.0, r, g, b, 0.0]
+                [l.pos[0], l.pos[1], l.gain, l.scale, r, g, b, 0.0]
             })
             .collect();
         fx.sprite_flare(
@@ -809,11 +819,32 @@ impl GpuEffect for SpriteFlare {
             tex,
             w,
             h,
-            &lumit_gpu::fx::sprite_flare::SpriteFlareOp {
+            &sf::SpriteFlareOp {
                 instances: &list,
                 lights: &lights,
                 centre: frame.centre,
                 edge_fade: frame.edge_fade * frame.px_scale,
+                spots: spots.map(|s| sf::SpotsOp {
+                    threshold: s.threshold,
+                    softness: s.softness,
+                    use_colour: s.use_colour,
+                    colour: s.colour,
+                    gain: s.gain,
+                }),
+                hide: picture("hide_behind").map(|picture| sf::HideOp {
+                    picture,
+                    luma,
+                    radius,
+                }),
+                depth: picture("depth_m").zip(SpriteFlare::light_distance(p)).map(
+                    |(picture, metres)| sf::DepthOp {
+                        picture,
+                        metres,
+                        radius,
+                    },
+                ),
+                layer: picture("texture_layer"),
+                textures: textures::all(),
             },
         )
     }

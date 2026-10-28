@@ -944,8 +944,12 @@ fn feed_effect_stack(
             h.update(&(text.len() as u64).to_le_bytes());
             h.update(text.as_bytes());
         }
+        // Across a blurred shutter it draws the light where it is either
+        // side of the frame, which this frame's rows alone don't say.
+        let shutter =
+            comp.motion_blur.enabled && marker_layer.is_some_and(|l| l.switches.motion_blur);
         if e.effect.match_name == "sprite_flare"
-            && lumit_core::fx::effects::sprite_flare::moves_with_time(e)
+            && (shutter || lumit_core::fx::effects::sprite_flare::moves_with_time(e))
         {
             h.update(b"flare-time");
             feed_f64(h, lt);

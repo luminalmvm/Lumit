@@ -703,6 +703,57 @@
           "slider_max": 2160.0
         },
         {
+          "id": "light_from",
+          "label": "Light from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Point",
+            "3D point",
+            "Lights",
+            "Bright spots",
+            "Mask points"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_z",
+          "label": "Light z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "light_mask",
+          "label": "Mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "threshold_softness",
+          "label": "Softness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.25,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "intensity",
           "label": "Brightness",
           "kind": "float",
@@ -802,6 +853,73 @@
           "hard_min": 0.0
         },
         {
+          "id": "use_light_colour",
+          "label": "Use light colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "use_light_intensity",
+          "label": "Use light intensity",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "size_with_distance",
+          "label": "Size with distance",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "hide_behind",
+          "label": "Hide behind",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "hide_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Alpha",
+            "Luma"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_size",
+          "label": "Light size",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "depth_m",
+          "label": "Depth",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "light_distance_m",
+          "label": "Light distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1000.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.01
+        },
+        {
           "id": "edge_fade",
           "label": "Edge fade",
           "kind": "float",
@@ -810,6 +928,13 @@
           "slider_min": 0.0,
           "slider_max": 1000.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "texture_layer",
+          "label": "Texture layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "mix",
@@ -890,6 +1015,46 @@
       ],
       "groups": [
         {
+          "label": "",
+          "params": [
+            "light_z"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "light_mask"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              4
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "threshold",
+            "threshold_softness"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
           "label": "Centre",
           "params": [
             "centre_x",
@@ -905,6 +1070,108 @@
             "flicker_seed"
           ],
           "collapsed": true
+        },
+        {
+          "label": "Lights",
+          "params": [
+            "use_light_colour",
+            "use_light_intensity",
+            "size_with_distance"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "Hiding",
+          "params": [
+            "hide_behind",
+            "hide_channel",
+            "light_size",
+            "depth_m",
+            "light_distance_m",
+            "edge_fade"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Textures",
+          "params": [
+            "texture_layer"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "use_light_colour",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 1
+        },
+        {
+          "param": "use_light_intensity",
+          "on": "light_from",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "size_with_distance",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "hide_channel",
+          "on": "hide_behind",
+          "cond": "layer_set"
+        },
+        {
+          "param": "light_distance_m",
+          "on": "depth_m",
+          "cond": "layer_set"
         }
       ],
       "matte_role": "strength"

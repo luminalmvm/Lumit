@@ -10,3 +10,4 @@ pub mod design;
 pub mod instances;
 pub mod presets;
 pub mod raster;
+pub mod textures;

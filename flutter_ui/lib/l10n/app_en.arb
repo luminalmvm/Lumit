@@ -22045,8 +22045,84 @@
   "@fxAcrossTheFrame": {
     "description": "Flare window, Add menu heading: the kinds scattered over the whole frame."
   },
+  "fxLightFrom": "Light from",
+  "@fxLightFrom": {
+    "description": "Effect controls: Sprite flare's choice of where the light comes from."
+  },
+  "fx3dPoint": "3D point",
+  "@fx3dPoint": {
+    "description": "Effect controls, Sprite flare's Light from option: the light is a point in the comp's 3D space."
+  },
+  "fxBrightSpots": "Bright spots",
+  "@fxBrightSpots": {
+    "description": "Effect controls, Sprite flare's Light from option: the lights are found in the bright parts of the layer's picture."
+  },
+  "fxLightZ": "Light z",
+  "@fxLightZ": {
+    "description": "Effect controls: Sprite flare's depth of its 3D point."
+  },
+  "fxUseLightColour": "Use light colour",
+  "@fxUseLightColour": {
+    "description": "Effect controls, Sprite flare: each light's own colour tints its flare."
+  },
+  "fxUseLightIntensity": "Use light intensity",
+  "@fxUseLightIntensity": {
+    "description": "Effect controls, Sprite flare: each Light layer's intensity scales its flare."
+  },
+  "fxSizeWithDistance": "Size with distance",
+  "@fxSizeWithDistance": {
+    "description": "Effect controls, Sprite flare: a light further from the camera draws a smaller flare."
+  },
+  "fxHiding": "Hiding",
+  "@fxHiding": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that hide the light behind a layer."
+  },
   "fxFlicker": "Flicker",
   "@fxFlicker": {
     "description": "Effect controls, Sprite flare: the twirl of rows that make the flare's brightness dip at random."
+  },
+  "fxHideBehind": "Hide behind",
+  "@fxHideBehind": {
+    "description": "Effect controls, Sprite flare: the layer that hides the light where it covers it."
+  },
+  "fxLuma": "Luma",
+  "@fxLuma": {
+    "description": "Effect controls, Sprite flare's Channel option: the layer's brightness hides the light."
+  },
+  "fxLightSize": "Light size",
+  "@fxLightSize": {
+    "description": "Effect controls, Sprite flare: how wide the light is, for how much of it a layer hides."
+  },
+  "fxEndWidth": "End width",
+  "@fxEndWidth": {
+    "description": "Flare window, Streak: how wide the line still is at its ends, as a fraction of its middle."
+  },
+  "fxNotches": "Notches",
+  "@fxNotches": {
+    "description": "Flare window, Ghost and Ghosts: how deep the small dents at each corner of the iris shape are, where a real lens's blades overlap."
+  },
+  "fxTextureLayer": "Texture layer",
+  "@fxTextureLayer": {
+    "description": "Effect controls, Sprite flare: the layer whose picture the flare's elements can take as their texture."
+  },
+  "fxTextures": "Textures",
+  "@fxTextures": {
+    "description": "Effect controls, Sprite flare: the twirl holding the Texture layer row."
+  },
+  "fxHexBokeh": "Hex bokeh",
+  "@fxHexBokeh": {
+    "description": "Flare window, Texture option: out-of-focus highlights shaped like hexagons."
+  },
+  "fxWaterDrops": "Water drops",
+  "@fxWaterDrops": {
+    "description": "Flare window, Texture option: rain drops on the lens."
+  },
+  "fxGrain": "Grain",
+  "@fxGrain": {
+    "description": "Flare window, Texture option: fine sparkling grain."
+  },
+  "fxMaskPoints": "Mask points",
+  "@fxMaskPoints": {
+    "description": "Effect controls, Sprite flare's Light from option: a light on each corner of one of the layer's masks."
   }
 }

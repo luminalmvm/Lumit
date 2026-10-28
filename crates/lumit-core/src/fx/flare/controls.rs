@@ -73,8 +73,25 @@ const UNIT: (f32, f32, f32, f32) = (0.0, 1.0, 0.0, 1.0);
 const ANGLE: (f32, f32, f32, f32) = (-180.0, 180.0, -BIG, BIG);
 const PLACE: (f32, f32, f32, f32) = (-3.0, 3.0, -10.0, 10.0);
 
-/// The textures Ghost, Dirt and Picture can use, by index. 0 is none.
-pub const TEXTURES: &[&str] = &["None", "Dust", "Smudge", "Caustic", "Rings", "Specks"];
+/// The textures Ghost, Dirt and Picture can use, by index. 0 is none, and
+/// the last is the effect's Texture layer.
+pub const TEXTURES: &[&str] = &[
+    "None",
+    "Dust",
+    "Smudge",
+    "Caustic",
+    "Rings",
+    "Specks",
+    "Hex bokeh",
+    "Scratches",
+    "Rainbow",
+    "Water drops",
+    "Grain",
+    "Layer",
+];
+
+/// The texture choices' hard range: none up to Layer.
+const TEXTURE_RANGE: (f32, f32, f32, f32) = (0.0, 11.0, 0.0, 11.0);
 
 /// What the element brightens towards.
 pub const RESPONSES: &[&str] = &["Nothing", "The centre", "The edges"];
@@ -89,7 +106,7 @@ use Unit::{Degrees, DegreesPerSecond, Px};
 
 /// Size first, then brightness and rotation: every kind has these, and Size
 /// is in each kind's own terms (a glow's radius, a ray's length).
-const fn common(size: f32, size_max: f32) -> [Control; 3] {
+const fn common(size: f32, size_max: f32, brightness: f32) -> [Control; 3] {
     [
         c(
             "size",
@@ -107,7 +124,7 @@ const fn common(size: f32, size_max: f32) -> [Control; 3] {
             Slider,
             Unit::None,
             (0.0, 2.0, 0.0, 100.0),
-            1.0,
+            brightness,
         ),
         c("rotation", "Rotation", LOOK, Angle, Degrees, ANGLE, 0.0),
     ]
@@ -183,7 +200,7 @@ const TAIL: [Control; 7] = [
 ];
 
 /// The iris shape Ghost and Ghosts share.
-const GHOST_SHAPE: [Control; 10] = [
+const GHOST_SHAPE: [Control; 11] = [
     c(
         "sides",
         "Sides",
@@ -202,7 +219,8 @@ const GHOST_SHAPE: [Control; 10] = [
         UNIT,
         0.2,
     ),
-    c("fill", "Fill", SHAPE, Slider, Unit::None, UNIT, 0.35),
+    c("notches", "Notches", SHAPE, Slider, Unit::None, UNIT, 0.0),
+    c("fill", "Fill", SHAPE, Slider, Unit::None, UNIT, 0.2),
     c("edge", "Edge", SHAPE, Slider, Unit::None, UNIT, 0.4),
     c(
         "edge_width",
@@ -239,13 +257,13 @@ const GHOST_SHAPE: [Control; 10] = [
         SHAPE,
         Choice(TEXTURES),
         Unit::None,
-        (0.0, 5.0, 0.0, 5.0),
+        TEXTURE_RANGE,
         0.0,
     ),
 ];
 
 const GLOW: &[Control] = &[
-    c("falloff", "Falloff", SHAPE, Slider, Unit::None, UNIT, 0.5),
+    c("falloff", "Falloff", SHAPE, Slider, Unit::None, UNIT, 0.4),
     c(
         "core",
         "Core",
@@ -273,6 +291,7 @@ const GLOW: &[Control] = &[
         (0.1, 10.0, 0.01, 100.0),
         1.0,
     ),
+    c("fringe", "Fringe", SHAPE, Slider, Unit::None, UNIT, 0.0),
 ];
 
 const RAYS: &[Control] = &[
@@ -315,6 +334,7 @@ const RAYS: &[Control] = &[
         360.0,
     ),
     c("shimmer", "Shimmer", SHAPE, Slider, Unit::None, UNIT, 0.3),
+    c("fringe", "Fringe", SHAPE, Slider, Unit::None, UNIT, 0.0),
     c(
         "spin",
         "Spin",
@@ -389,6 +409,15 @@ const STREAK: &[Control] = &[
         8.0,
     ),
     c("taper", "Taper", SHAPE, Slider, Unit::None, UNIT, 0.5),
+    c(
+        "end_width",
+        "End width",
+        SHAPE,
+        Slider,
+        Unit::None,
+        UNIT,
+        1.0,
+    ),
     c("fringe", "Fringe", SHAPE, Slider, Unit::None, UNIT, 0.0),
     c(
         "face",
@@ -517,7 +546,7 @@ const ORBS: &[Control] = &[
         Counter,
         Unit::None,
         (1.0, 300.0, 1.0, 2000.0),
-        60.0,
+        40.0,
     ),
     c(
         "size_var",
@@ -537,9 +566,9 @@ const ORBS: &[Control] = &[
         (10.0, 4000.0, 1.0, BIG),
         600.0,
     ),
-    c("fill", "Fill", SHAPE, Slider, Unit::None, UNIT, 0.6),
+    c("fill", "Fill", SHAPE, Slider, Unit::None, UNIT, 0.2),
     c("edge", "Edge", SHAPE, Slider, Unit::None, UNIT, 0.3),
-    c("softness", "Softness", SHAPE, Slider, Unit::None, UNIT, 0.2),
+    c("softness", "Softness", SHAPE, Slider, Unit::None, UNIT, 0.4),
     c(
         "drift",
         "Drift",
@@ -559,7 +588,7 @@ const DIRT: &[Control] = &[
         SHAPE,
         Choice(TEXTURES),
         Unit::None,
-        (1.0, 5.0, 1.0, 5.0),
+        (1.0, 11.0, 1.0, 11.0),
         1.0,
     ),
     c(
@@ -581,7 +610,7 @@ const PICTURE: &[Control] = &[
         SHAPE,
         Choice(TEXTURES),
         Unit::None,
-        (1.0, 5.0, 1.0, 5.0),
+        (1.0, 11.0, 1.0, 11.0),
         3.0,
     ),
     c("place", "Place", SHAPE, Slider, Unit::None, PLACE, 0.0),
@@ -605,19 +634,21 @@ const PICTURE: &[Control] = &[
     ),
 ];
 
-const fn size_of(kind: Kind) -> (f32, f32) {
+/// Each kind's default size, the top of its Size slider and its default
+/// brightness: what an element added on its own starts at.
+const fn size_of(kind: Kind) -> (f32, f32, f32) {
     match kind {
-        Kind::Glow => (120.0, 1000.0),
-        Kind::Rays => (300.0, 2000.0),
-        Kind::Star => (200.0, 2000.0),
-        Kind::Streak => (600.0, 4000.0),
-        Kind::Ring => (150.0, 1000.0),
-        Kind::Halo => (250.0, 1500.0),
-        Kind::Ghost => (60.0, 600.0),
-        Kind::Ghosts => (40.0, 400.0),
-        Kind::Orbs => (40.0, 400.0),
-        Kind::Dirt => (1000.0, 4000.0),
-        Kind::Picture => (100.0, 1000.0),
+        Kind::Glow => (120.0, 1000.0, 0.35),
+        Kind::Rays => (300.0, 2000.0, 1.0),
+        Kind::Star => (200.0, 2000.0, 1.0),
+        Kind::Streak => (600.0, 4000.0, 0.5),
+        Kind::Ring => (150.0, 1000.0, 0.5),
+        Kind::Halo => (250.0, 1500.0, 1.0),
+        Kind::Ghost => (60.0, 600.0, 1.0),
+        Kind::Ghosts => (40.0, 400.0, 1.0),
+        Kind::Orbs => (40.0, 400.0, 0.3),
+        Kind::Dirt => (1000.0, 4000.0, 0.12),
+        Kind::Picture => (100.0, 1000.0, 1.0),
     }
 }
 
@@ -640,12 +671,12 @@ const fn own(kind: Kind) -> &'static [Control] {
 /// Every control `kind` shows, in the window's order: its look, its shape,
 /// then Response and Ignore.
 pub fn controls(kind: Kind) -> impl Iterator<Item = Control> {
-    let (size, size_max) = size_of(kind);
+    let (size, size_max, brightness) = size_of(kind);
     let ghost_shape: &'static [Control] = match kind {
         Kind::Ghost | Kind::Ghosts => &GHOST_SHAPE,
         _ => &[],
     };
-    common(size, size_max)
+    common(size, size_max, brightness)
         .into_iter()
         .chain(own(kind).iter().copied())
         .chain(ghost_shape.iter().copied())

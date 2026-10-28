@@ -7,6 +7,7 @@ use std::f32::consts::TAU;
 
 use super::design::{ColourMode, Design, Element, Kind};
 use super::raster::Frame;
+use super::textures;
 use crate::fx::noise::hash01;
 
 /// How many floats an instance packs into, which the WGSL reads as nine
@@ -33,6 +34,8 @@ pub const RAY: u32 = 1;
 pub const ANNULUS: u32 = 2;
 /// A polygon or a circle with a fill and a rim.
 pub const IRIS: u32 = 3;
+/// One of the [`super::textures`]: a sprite, or dirt across the frame.
+pub const TEXTURE: u32 = 4;
 
 /// Its angle is measured from the axis rather than from the frame.
 pub const FOLLOWS_AXIS: u32 = 1;
@@ -228,7 +231,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
             out.push(Instance {
                 shape: GLOW,
                 half: [size * extent * stretch, size * extent],
-                s: pad(&[extent, p, e.num("core"), core_size]),
+                s: pad(&[extent, p, e.num("core"), core_size, fringe]),
                 ..base
             });
         }
@@ -266,8 +269,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
                     angle,
                     length,
                     thickness,
-                    e.num("softness"),
-                    e.num("taper"),
+                    [e.num("softness"), e.num("taper"), fringe],
                 );
             }
         }
@@ -286,18 +288,11 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
             };
             for i in 0..n {
                 let angle = rotation + i as f32 * step;
-                ray(out, &star, angle, size, thickness, 1.0, e.num("taper"));
+                let look = [1.0, e.num("taper"), 0.0];
+                ray(out, &star, angle, size, thickness, look);
                 if twin > 0.0 {
                     let length = size * twin_length;
-                    ray(
-                        out,
-                        &second,
-                        angle + step * 0.5,
-                        length,
-                        thickness,
-                        1.0,
-                        e.num("taper"),
-                    );
+                    ray(out, &second, angle + step * 0.5, length, thickness, look);
                 }
             }
         }
@@ -320,7 +315,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
                     half: [size * extent, across(width)],
                     gain: gain / (1.0 + from_middle.abs()),
                     rainbow: rainbow.max(fringe),
-                    s: pad(&[1.0, extent, p, width, 1.0]),
+                    s: pad(&[1.0, extent, p, width, 1.0, 1.0 - e.num("end_width")]),
                     ..base
                 });
             }
@@ -328,7 +323,10 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
         Kind::Ring | Kind::Halo => {
             let halo = e.kind == Kind::Halo;
             let thickness = e.num("thickness") * k;
-            let half = size + across(thickness);
+            // Softness spreads the band as well as blurring it, so a soft
+            // ring reads as a glowing band rather than a line.
+            let spread = 1.0 + 3.0 * e.num("softness");
+            let half = size + across(thickness * spread);
             let feather = if halo { 1.0 } else { e.num("arc_feather") };
             out.push(Instance {
                 shape: ANNULUS,
@@ -342,6 +340,7 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
                     e.num("softness"),
                     e.num("arc").to_radians() * 0.5,
                     feather,
+                    spread,
                 ]),
                 ..base
             });
@@ -394,21 +393,53 @@ fn element(e: &Element, frame: &Frame, frame_px: [f32; 2], out: &mut Vec<Instanc
                 }
             }
         }
-        // Textures come later.
-        Kind::Dirt | Kind::Picture => {}
+        Kind::Dirt => {
+            let middle = [frame_px[0] * 0.5, frame_px[1] * 0.5];
+            let texels = textures::SIZE as f32;
+            out.push(Instance {
+                anchor: ON_FRAME,
+                at: middle,
+                half: [middle[0] + 1.0, middle[1] + 1.0],
+                angle: 0.0,
+                shape: TEXTURE,
+                s: pad(&[
+                    e.num("texture"),
+                    1.0,
+                    rotation,
+                    texels / size,
+                    rand(seed, 0, 0) * texels,
+                    rand(seed, 1, 0) * texels,
+                    e.num("reach") * frame.px_scale,
+                ]),
+                ..base
+            });
+        }
+        Kind::Picture => {
+            let stretch = e.num("stretch").max(0.01);
+            out.push(Instance {
+                anchor: ON_AXIS,
+                at: [e.num("place"), 0.0],
+                flags: base.flags | if e.on("face") { FOLLOWS_AXIS } else { 0 },
+                half: [size * stretch, size],
+                shape: TEXTURE,
+                s: pad(&[e.num("texture"), 0.0]),
+                ..base
+            });
+        }
     }
 }
 
-/// One ray from the light out at `angle`.
+/// One ray from the light out at `angle`, its softness, taper and fringe in
+/// `look`.
 fn ray(
     out: &mut Vec<Instance>,
     base: &Instance,
     angle: f32,
     length: f32,
     thickness: f32,
-    softness: f32,
-    taper: f32,
+    look: [f32; 3],
 ) {
+    let [softness, taper, fringe] = look;
     if length <= 0.0 {
         return;
     }
@@ -417,7 +448,7 @@ fn ray(
         angle,
         offset: [length * 0.5, 0.0],
         half: [length * 0.5, across(thickness)],
-        s: pad(&[0.0, 0.0, 2.0, thickness, softness, taper]),
+        s: pad(&[0.0, 0.0, 2.0, thickness, softness, taper, fringe]),
         ..*base
     });
 }
@@ -468,10 +499,14 @@ fn iris(
             rotation,
             if ghost { e.num("roundness") } else { 1.0 },
             e.num("fill"),
-            e.num("edge"),
+            // Squared, so the low end of the slider is a faint rim rather
+            // than already a bright one.
+            e.num("edge").powi(2),
             edge_width,
             softness,
             shift,
+            if ghost { e.num("texture") } else { 0.0 },
+            if ghost { e.num("notches") } else { 0.0 },
         ]),
         ..*base
     });

@@ -5338,8 +5338,9 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
 }
 
 /// **Sprite flare**: the instanced draw agrees with the CPU twin for every
-/// kind of element, is bit-stable, moving the light moves the flare
-/// smoothly, and with no light it is the input untouched.
+/// kind of element, textures, a layer texture and a light half hidden by a
+/// layer or by depth included, is bit-stable, moving the light moves the
+/// flare smoothly, and with no light it is the input untouched.
 #[test]
 fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     use lumit_core::fx::flare::design::{ColourMode, Design, Element, Kind};
@@ -5381,7 +5382,12 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         elements: vec![
             el(
                 Kind::Glow,
-                &[("size", 10.0), ("falloff", 0.3), ("stretch", 1.5)],
+                &[
+                    ("size", 10.0),
+                    ("falloff", 0.3),
+                    ("stretch", 1.5),
+                    ("fringe", 0.8),
+                ],
             ),
             el(
                 Kind::Rays,
@@ -5390,6 +5396,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                     ("count", 40.0),
                     ("thickness", 0.6),
                     ("brightness", 0.4),
+                    ("fringe", 0.7),
                 ],
             ),
             el(
@@ -5409,10 +5416,14 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                     ("spacing", 3.0),
                     ("face", 1.0),
                     ("brightness", 0.4),
+                    ("end_width", 0.3),
                 ],
             ),
             ring,
-            el(Kind::Halo, &[("size", 18.0), ("brightness", 0.4)]),
+            el(
+                Kind::Halo,
+                &[("size", 18.0), ("brightness", 0.4), ("softness", 1.0)],
+            ),
             el(
                 Kind::Ghost,
                 &[
@@ -5420,6 +5431,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                     ("fringe", 1.0),
                     ("edge", 0.8),
                     ("stretch", 1.3),
+                    ("notches", 1.0),
                 ],
             ),
             ghosts,
@@ -5432,6 +5444,27 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                     ("brightness", 0.3),
                 ],
             ),
+            el(
+                Kind::Ghost,
+                &[("size", 12.0), ("place", 1.4), ("texture", 2.0)],
+            ),
+            // Small, so it reads from the smaller copies.
+            el(
+                Kind::Ghost,
+                &[("size", 5.0), ("place", 1.8), ("texture", 8.0)],
+            ),
+            el(
+                Kind::Ghost,
+                &[("size", 10.0), ("place", 0.3), ("texture", 11.0)],
+            ),
+            el(
+                Kind::Dirt,
+                &[("size", 50.0), ("reach", 70.0), ("brightness", 0.5)],
+            ),
+            el(
+                Kind::Picture,
+                &[("size", 24.0), ("place", 0.6), ("texture", 4.0)],
+            ),
         ],
         ..lumit_core::fx::flare::presets::default_design()
     };
@@ -5441,7 +5474,36 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         f.edge_fade = 20.0;
         f
     };
-    let gpu_of = |f: &raster::Frame| {
+    // A wall over the left of the frame, up to the light's middle.
+    let wall: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let a = if i % w < 24 { 1.0 } else { 0.0 };
+            [a, a, a, a]
+        })
+        .collect();
+    let wall_tex = upload_linear_f32(&ctx, &wall, w, h);
+    // The Texture layer: a coloured ramp.
+    let (lw, lh) = (24u32, 16u32);
+    let layer: Vec<f32> = (0..lw * lh)
+        .flat_map(|i| {
+            let (x, y) = ((i % lw) as f32 / lw as f32, (i / lw) as f32 / lh as f32);
+            [x, y, 1.0 - x, 1.0]
+        })
+        .collect();
+    let layer_tex = upload_linear_f32(&ctx, &layer, lw, lh);
+    let picture = raster::Picture {
+        rgba: &layer,
+        w: lw,
+        h: lh,
+    };
+    let cpu_of = |f: &raster::Frame| {
+        let mut cpu = img.clone();
+        raster::draw_with(&design, f, w, h, &mut cpu, Some(picture));
+        cpu
+    };
+    let gpu_hidden = |f: &raster::Frame,
+                      hide: Option<crate::fx::sprite_flare::HideOp<'_>>,
+                      depth: Option<crate::fx::sprite_flare::DepthOp<'_>>| {
         let list: Vec<_> = instances::expand(&design, f, w, h)
             .iter()
             .map(instances::Instance::packed)
@@ -5454,7 +5516,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
                     l.pos[0],
                     l.pos[1],
                     l.gain,
-                    0.0,
+                    l.scale,
                     l.colour[0],
                     l.colour[1],
                     l.colour[2],
@@ -5467,13 +5529,58 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             lights: &lights,
             centre: f.centre,
             edge_fade: f.edge_fade * f.px_scale,
+            spots: None,
+            hide,
+            depth,
+            layer: Some(&layer_tex),
+            textures: lumit_core::fx::flare::textures::all(),
         };
         readback_linear_f32(&ctx, &fx.sprite_flare(&ctx, &tex, w, h, &op), w, h).unwrap()
     };
+    let gpu_of = |f: &raster::Frame| gpu_hidden(f, None, None);
+    let worst_gap = |a: &[f32], b: &[f32]| {
+        a.iter()
+            .zip(b)
+            .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+            .fold(0.0f32, f32::max)
+    };
 
+    // Half behind the wall, the light flares at about half, the same on
+    // both sides.
     let f = frame(24.0);
-    let mut cpu = img.clone();
-    raster::draw(&design, &f, w, h, &mut cpu);
+    let radius = 6.0;
+    let covered = raster::covered(&wall, w, h, f.lights[0].pos, radius, false);
+    assert!((0.4..0.6).contains(&covered), "covered {covered}");
+    let mut hidden = f.clone();
+    hidden.lights[0].gain *= 1.0 - covered;
+    let hide = crate::fx::sprite_flare::HideOp {
+        picture: &wall_tex,
+        luma: false,
+        radius,
+    };
+    let gap = worst_gap(&cpu_of(&hidden), &gpu_hidden(&f, Some(hide), None));
+    assert!(gap < 5e-2, "hidden worst |Δ| {gap}");
+
+    // The same wall as a depth 5 m away, in front of a light 50 m away.
+    let near: Vec<f32> = wall
+        .chunks(4)
+        .flat_map(|px| {
+            let m = if px[3] > 0.5 { 5.0 } else { 900.0 };
+            [m, m, m, 1.0]
+        })
+        .collect();
+    let near_tex = upload_linear_f32(&ctx, &near, w, h);
+    let nearer = raster::nearer(&near, w, h, f.lights[0].pos, radius, 50.0);
+    assert!((covered - nearer).abs() < 1e-6, "nearer {nearer}");
+    let depth = crate::fx::sprite_flare::DepthOp {
+        picture: &near_tex,
+        metres: 50.0,
+        radius,
+    };
+    let gap = worst_gap(&cpu_of(&hidden), &gpu_hidden(&f, None, Some(depth)));
+    assert!(gap < 5e-2, "behind depth worst |Δ| {gap}");
+
+    let cpu = cpu_of(&f);
     let gpu = gpu_of(&f);
     let added: f32 = gpu.iter().zip(&img).map(|(a, b)| (a - b).abs()).sum();
     assert!(added > 1.0, "the flare drew nothing ({added})");
@@ -5516,6 +5623,59 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     let mut dark = frame(24.0);
     dark.lights.clear();
     assert_eq!(gpu_of(&dark), img, "no light must be the bit-exact input");
+
+    // Bright spots: three lamps on a dark picture are found on the GPU and
+    // flare as the CPU's detection says, each in its own colour.
+    let mut lamps = vec![0.02f32; (w * h * 4) as usize];
+    for (x0, y0, c) in [
+        (10u32, 8u32, [1.0f32, 0.5, 0.2]),
+        (60, 14, [0.3, 0.6, 1.0]),
+        (40, 44, [1.0, 1.0, 1.0]),
+    ] {
+        for y in y0..y0 + 4 {
+            for x in x0..x0 + 4 {
+                let i = ((y * w + x) * 4) as usize;
+                lamps[i..i + 3].copy_from_slice(&c);
+            }
+        }
+    }
+    let lamps_tex = upload_linear_f32(&ctx, &lamps, w, h);
+    let mut spotted = frame(24.0);
+    let found =
+        lumit_core::fx::lens_flare::detect_lights(&lamps, w, h, 0.3, 0.1, true, [1.0; 3], false);
+    assert_eq!(found.len(), 3);
+    spotted.lights = raster::spots(&found, w, h, true, [1.0, 0.9, 0.8], 0.7);
+    let mut cpu = lamps.clone();
+    raster::draw(&design, &spotted, w, h, &mut cpu);
+    let list: Vec<_> = instances::expand(&design, &spotted, w, h)
+        .iter()
+        .map(instances::Instance::packed)
+        .collect();
+    let op = crate::fx::sprite_flare::SpriteFlareOp {
+        instances: &list,
+        lights: &[],
+        centre: spotted.centre,
+        edge_fade: spotted.edge_fade * spotted.px_scale,
+        spots: Some(crate::fx::sprite_flare::SpotsOp {
+            threshold: 0.3,
+            softness: 0.1,
+            use_colour: true,
+            colour: [1.0, 0.9, 0.8],
+            gain: 0.7,
+        }),
+        hide: None,
+        depth: None,
+        layer: None,
+        textures: lumit_core::fx::flare::textures::all(),
+    };
+    let gpu =
+        readback_linear_f32(&ctx, &fx.sprite_flare(&ctx, &lamps_tex, w, h, &op), w, h).unwrap();
+    let gap = cpu
+        .iter()
+        .zip(&gpu)
+        .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+        .fold(0.0f32, f32::max);
+    assert!(gap < 5e-2, "bright spots worst |Δ| {gap}");
 }
 
 /// **Light wrap** (docs/08 §3.28): the WGSL agrees with the CPU

@@ -13,13 +13,34 @@ use crate::fx::noise::value3;
 use crate::fx::{
     params::{ParamId, Params, Value},
     registry::{EffectDef, EffectMetadata, ResolveCx},
-    schema::{EffectSchema, ParamGroup},
+    schema::{EffectSchema, EnabledCond, EnabledWhen, ParamGroup},
 };
-use crate::model::{EffectInstance, EffectParam, EffectValue};
+use crate::model::{Composition, EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// The panel's two twirls.
+/// The panel's twirls, and the rows only one way of finding the light uses.
 pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
+    ParamGroup {
+        label: "",
+        params: &["light_z"],
+        collapsed: false,
+        visible_when: Some(("light_from", &[THREE_D_POINT])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["light_mask"],
+        collapsed: false,
+        visible_when: Some(("light_from", &[MASK_POINTS])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["threshold", "threshold_softness"],
+        collapsed: false,
+        visible_when: Some(("light_from", &[BRIGHT_SPOTS])),
+        visible_when_lens_elements: None,
+    },
     ParamGroup {
         label: "Centre",
         params: &["centre_x", "centre_y"],
@@ -34,7 +55,118 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: None,
         visible_when_lens_elements: None,
     },
+    ParamGroup {
+        label: "Lights",
+        params: &[
+            "use_light_colour",
+            "use_light_intensity",
+            "size_with_distance",
+        ],
+        collapsed: false,
+        visible_when: Some(("light_from", &[THREE_D_POINT, LIGHTS, BRIGHT_SPOTS])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "Hiding",
+        params: &[
+            "hide_behind",
+            "hide_channel",
+            "light_size",
+            "depth_m",
+            "light_distance_m",
+            "edge_fade",
+        ],
+        collapsed: true,
+        visible_when: None,
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "Textures",
+        params: &["texture_layer"],
+        collapsed: true,
+        visible_when: None,
+        visible_when_lens_elements: None,
+    },
 ];
+
+/// Light from: the Light row.
+pub const POINT: u32 = 0;
+/// Light from: the Light row and Light z, seen through the comp's camera.
+pub const THREE_D_POINT: u32 = 1;
+/// Light from: the comp's Light layers.
+pub const LIGHTS: u32 = 2;
+/// Light from: the bright parts of the layer's own picture.
+pub const BRIGHT_SPOTS: u32 = 3;
+/// Light from: each vertex of one of the layer's masks.
+pub const MASK_POINTS: u32 = 4;
+
+const fn when(param: &'static str, on: &'static str, cond: EnabledCond) -> EnabledWhen {
+    EnabledWhen { param, on, cond }
+}
+
+/// The Light row is only where the light is while nothing else finds it, and
+/// the Lights rows each mean something to some of the ways only.
+pub const SPRITE_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[
+    when("light_x", "light_from", EnabledCond::ChoiceIsNot(LIGHTS)),
+    when(
+        "light_x",
+        "light_from",
+        EnabledCond::ChoiceIsNot(BRIGHT_SPOTS),
+    ),
+    when("light_y", "light_from", EnabledCond::ChoiceIsNot(LIGHTS)),
+    when(
+        "light_y",
+        "light_from",
+        EnabledCond::ChoiceIsNot(BRIGHT_SPOTS),
+    ),
+    when(
+        "light_x",
+        "light_from",
+        EnabledCond::ChoiceIsNot(MASK_POINTS),
+    ),
+    when(
+        "light_y",
+        "light_from",
+        EnabledCond::ChoiceIsNot(MASK_POINTS),
+    ),
+    when(
+        "use_light_colour",
+        "light_from",
+        EnabledCond::ChoiceIsNot(THREE_D_POINT),
+    ),
+    when(
+        "use_light_intensity",
+        "light_from",
+        EnabledCond::ChoiceIs(LIGHTS),
+    ),
+    when(
+        "size_with_distance",
+        "light_from",
+        EnabledCond::ChoiceIsNot(BRIGHT_SPOTS),
+    ),
+    when("hide_channel", "hide_behind", EnabledCond::LayerSet),
+    when("light_distance_m", "depth_m", EnabledCond::LayerSet),
+];
+
+/// Most lights one frame draws from: sixteen Light layers, or fewer each
+/// drawn several times across a motion-blurred shutter.
+pub const MAX_LIGHTS: usize = 64;
+
+/// Most Light layers a frame takes, top of the stack first, and most mask
+/// vertices.
+pub const MAX_LIGHT_LAYERS: usize = 16;
+
+/// `<prefix><n>` for n up to [`MAX_LIGHTS`], as one const array.
+macro_rules! ids {
+    ($prefix:literal) => {
+        ids!($prefix; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+            42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63)
+    };
+    ($prefix:literal; $($n:literal),*) => {
+        [$(ParamId::new(concat!($prefix, $n))),*]
+    };
+}
 
 /// Sprite flare's controls.
 ///
@@ -52,6 +184,7 @@ pub const SPRITE_FLARE_GROUPS: &[ParamGroup] = &[
     cost = Cheap,
     roi = FullFrame,
     groups = SPRITE_FLARE_GROUPS,
+    enabled_when = SPRITE_FLARE_ENABLED_WHEN,
 )]
 pub struct SpriteFlare {
     /// Opens the Flare window.
@@ -65,6 +198,35 @@ pub struct SpriteFlare {
     /// See [`light_x`](Self::light_x).
     #[slider(min = 0.0, max = 2160.0, default = 360.0, unit = Px)]
     pub light_y: f32,
+
+    /// Where the light comes from: the Light row, that row as a point in the
+    /// comp's 3D space, the comp's Light layers, the bright parts of the
+    /// layer's own picture, or the corners of one of its masks.
+    #[choice(
+        label = "Light from",
+        options = ["Point", "3D point", "Lights", "Bright spots", "Mask points"],
+        default = 0
+    )]
+    pub light_from: u32,
+
+    /// The 3D point's depth, px@comp in the comp's own space: positive is
+    /// away from a camera that has not moved.
+    #[slider(label = "Light z", min = -4000.0, max = 4000.0, default = 0.0, unit = Px)]
+    pub light_z: f32,
+
+    /// The mask whose vertices are the lights, the layer's first unless
+    /// another is picked.
+    #[mask_path(label = "Mask")]
+    pub light_mask: bool,
+
+    /// The scene-linear luma a spot must pass to be a light, as Lens
+    /// flare's Matte source reads it.
+    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, unit = Raw)]
+    pub threshold: f32,
+
+    /// How far above Threshold a spot is a full light.
+    #[slider(label = "Softness", min = 0.0, max = 1.0, default = 0.25, hard_min = 0.0, unit = Raw)]
+    pub threshold_softness: f32,
 
     /// Gain on everything the effect draws; 0 draws nothing.
     #[slider(
@@ -130,9 +292,60 @@ pub struct SpriteFlare {
     #[counter(label = "Seed", min = 0, max = 999, default = 1, hard_min = 0, unit = Raw)]
     pub flicker_seed: i32,
 
+    /// A Light layer's own colour, or a spot's, tints the flare.
+    #[toggle(label = "Use light colour", default = true)]
+    pub use_light_colour: bool,
+
+    /// A Light layer's Intensity scales its flare.
+    #[toggle(label = "Use light intensity", default = true)]
+    pub use_light_intensity: bool,
+
+    /// A light further from the camera draws a smaller flare, by the
+    /// camera's zoom over its distance.
+    #[toggle(label = "Size with distance", default = false)]
+    pub size_with_distance: bool,
+
+    /// A layer that hides the light where it covers it, like a pole in
+    /// front of the sun. Decided by the render, so always `false` here.
+    #[layer(label = "Hide behind", self_default = false)]
+    pub hide_behind: bool,
+
+    /// What of Hide behind covers the light: its alpha or its luma.
+    #[choice(label = "Channel", options = ["Alpha", "Luma"], default = 0)]
+    pub hide_channel: u32,
+
+    /// How wide the light is, px@comp: a light half behind an edge flares
+    /// at about half.
+    #[slider(min = 0.0, max = 400.0, default = 20.0, hard_min = 0.0, unit = Px)]
+    pub light_size: f32,
+
+    /// Distance in metres per pixel, as Lens flare's Depth reads it. Set, a
+    /// light with something nearer in front of it is hidden. Decided by the
+    /// render, so always `false` here.
+    #[layer(label = "Depth", self_default = false)]
+    pub depth_m: bool,
+
+    /// How far away the light is, metres, read against the Depth. Bright
+    /// spots sit on the picture, so nothing hides them.
+    #[slider(
+        label = "Light distance (m)",
+        min = 1.0,
+        max = 1000.0,
+        default = 1000.0,
+        hard_min = 0.01,
+        unit = Raw
+    )]
+    pub light_distance_m: f32,
+
     /// How far past the frame's edge the light fades out. 0 never fades.
     #[slider(min = 0.0, max = 1000.0, default = 200.0, hard_min = 0.0, unit = Px)]
     pub edge_fade: f32,
+
+    /// A layer's picture the design's elements can take as their texture:
+    /// footage of a dirty lens, a logo. Decided by the render, so always
+    /// `false` here.
+    #[layer(label = "Texture layer", self_default = false)]
+    pub texture_layer: bool,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
@@ -151,6 +364,14 @@ impl SpriteFlare {
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
     /// Layer time, seconds, for Spin and Flicker.
     pub const DERIVED_TIME: ParamId = ParamId::new("derived.time");
+    /// How many lights the resolve found, when it found them rather than
+    /// the Light row: Light from is 3D point, Lights or Mask points, or the
+    /// shutter is open across the frame.
+    pub const DERIVED_LIGHT_COUNT: ParamId = ParamId::new("derived.sf_light_count");
+    /// Each light found: x and y in comp pixels, its gain and its scale.
+    pub const DERIVED_LIGHTS: [ParamId; MAX_LIGHTS] = ids!("derived.sf_light_");
+    /// Each light's own colour, before the Colour row.
+    pub const DERIVED_LIGHT_RGB: [ParamId; MAX_LIGHTS] = ids!("derived.sf_light_rgb_");
 
     /// The frame the design is drawn into, out of a resolved bag. No lights
     /// at Brightness 0 or Mix 0, which both render paths take as the
@@ -170,16 +391,35 @@ impl SpriteFlare {
                     0.0,
                     0,
                 );
-        let lights = if s.intensity > 0.0 && mix > 0.0 {
+        let colour = [s.tint[0].max(0.0), s.tint[1].max(0.0), s.tint[2].max(0.0)];
+        let found = p.int(Self::DERIVED_LIGHT_COUNT, -1);
+        let lights = if s.intensity <= 0.0 || mix <= 0.0 || s.light_from == BRIGHT_SPOTS {
+            Vec::new()
+        } else if found >= 0 {
+            (0..(found as usize).min(MAX_LIGHTS))
+                .map(|i| {
+                    let [x, y, gain, scale] = p.vec4(Self::DERIVED_LIGHTS[i], [0.0; 4]);
+                    let c = p.colour(Self::DERIVED_LIGHT_RGB[i], [1.0; 4]);
+                    Light {
+                        pos: [x * px_scale, y * px_scale],
+                        colour: [c[0] * colour[0], c[1] * colour[1], c[2] * colour[2]],
+                        gain: gain * mix,
+                        scale,
+                    }
+                })
+                .collect()
+        } else if matches!(s.light_from, LIGHTS | MASK_POINTS) {
+            // No comp or layer to find them in.
+            Vec::new()
+        } else {
             vec![Light {
                 pos: [s.light_x, s.light_y],
-                colour: [s.tint[0].max(0.0), s.tint[1].max(0.0), s.tint[2].max(0.0)],
+                colour,
                 // Mix rides on the light, so even an element that ignores
                 // Brightness is mixed.
                 gain: mix,
+                scale: 1.0,
             }]
-        } else {
-            Vec::new()
         };
         Frame {
             lights,
@@ -192,6 +432,129 @@ impl SpriteFlare {
             time_s: time,
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
+        }
+    }
+
+    /// How to find the lights in the picture while Light from is Bright
+    /// spots and the flare draws at all.
+    pub fn spots(p: Params<'_>) -> Option<Spots> {
+        let s = Self::read(p);
+        let mix = (s.mix / 100.0).clamp(0.0, 1.0);
+        (s.light_from == BRIGHT_SPOTS && s.intensity > 0.0 && mix > 0.0).then(|| Spots {
+            threshold: s.threshold.max(0.0),
+            softness: s.threshold_softness.max(0.0),
+            use_colour: s.use_light_colour,
+            colour: [s.tint[0].max(0.0), s.tint[1].max(0.0), s.tint[2].max(0.0)],
+            gain: mix,
+        })
+    }
+
+    /// What Hide behind reads, luma rather than alpha, and the light's
+    /// radius in raster pixels.
+    pub fn hiding(p: Params<'_>) -> (bool, f32) {
+        let s = Self::read(p);
+        (s.hide_channel == 1, s.light_size.max(0.0) * 0.5)
+    }
+
+    /// How far away the light is against the Depth, metres, or `None` for
+    /// Bright spots, whose lights sit on the picture.
+    pub fn light_distance(p: Params<'_>) -> Option<f32> {
+        let s = Self::read(p);
+        (s.light_from != BRIGHT_SPOTS).then_some(s.light_distance_m.max(0.01))
+    }
+}
+
+/// How Bright spots finds its lights: Lens flare's detection, and what each
+/// spot it finds becomes. See [`raster::spots`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Spots {
+    pub threshold: f32,
+    pub softness: f32,
+    pub use_colour: bool,
+    pub colour: [f32; 3],
+    pub gain: f32,
+}
+
+/// One light the resolve found: comp x, y, gain and scale, and its colour.
+type Found = ([f32; 4], [f32; 3]);
+
+/// The lights at `d` seconds from the frame `cx` resolves, in `mode`.
+fn lights_at(cx: &ResolveCx<'_>, comp: &Composition, mode: u32, d: f64) -> Vec<Found> {
+    let ctx = &cx.context;
+    let on = |id: &str, default: bool| cx.inst.bool_of(id).unwrap_or(default);
+    let at = |id: &str| {
+        cx.inst
+            .float_at_with_context(id, cx.lt + d, ctx.clone())
+            .unwrap_or(0.0)
+    };
+    let t = ctx.comp_time + d;
+    let (w, h) = (f64::from(comp.width), f64::from(comp.height));
+    // Seen the way the 3D layers are, through the default camera when the
+    // comp has none. Behind the eye is nowhere.
+    let pose = crate::track::active_camera_pose(&ctx.document, comp, t)
+        .unwrap_or_else(|| crate::camera::default_pose(w, h));
+    let m = crate::camera::projection(&pose, w, h);
+    let by_distance = on("size_with_distance", false);
+    let seen = |p: (f64, f64, f64)| {
+        let row = |r: [f64; 4]| r[0] * p.0 + r[1] * p.1 + r[2] * p.2 + r[3];
+        let depth = row(m[2]);
+        // The plane the camera sees 1:1 is depth 1, so the scale is its
+        // inverse.
+        let scale = if by_distance { 1.0 / depth } else { 1.0 };
+        (depth > 1e-6).then(|| {
+            [
+                (row(m[0]) / depth) as f32,
+                (row(m[1]) / depth) as f32,
+                scale as f32,
+            ]
+        })
+    };
+    match mode {
+        POINT => vec![(
+            [at("light_x") as f32, at("light_y") as f32, 1.0, 1.0],
+            [1.0; 3],
+        )],
+        THREE_D_POINT => seen((at("light_x"), at("light_y"), at("light_z")))
+            .map(|[x, y, k]| ([x, y, 1.0, k], [1.0; 3]))
+            .into_iter()
+            .collect(),
+        // Mask vertices are layer pixels, the space the Light row is in.
+        MASK_POINTS => {
+            let masks = ctx
+                .layer
+                .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+                .map_or(&[][..], |l| &l.masks[..]);
+            crate::mask::mask_index_for_path_param(masks, cx.inst.mask_ref("light_mask"), true)
+                .and_then(|i| masks.get(i))
+                .map(|m| {
+                    m.path_at(cx.lt + d)
+                        .vertices
+                        .iter()
+                        .take(MAX_LIGHT_LAYERS)
+                        .map(|v| ([v.pos.0 as f32, v.pos.1 as f32, 1.0, 1.0], [1.0; 3]))
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        _ => {
+            let read = crate::model::context_reader(ctx, t);
+            let solves = crate::track::solve_store().map(|store| (&ctx.document, store));
+            let colour = on("use_light_colour", true);
+            let intensity = on("use_light_intensity", true);
+            comp.lights_at(t, &read, solves)
+                .into_iter()
+                // An ambient light is not anywhere, so it has no place to
+                // flare from.
+                .filter(|l| l.kind != crate::model::LightKind::Ambient)
+                .take(MAX_LIGHT_LAYERS)
+                .filter_map(|l| {
+                    let [x, y, k] = seen((l.position.0, l.position.1, l.z))?;
+                    // A negative light takes light away, which a flare cannot.
+                    let gain = if intensity { l.gain.max(0.0) } else { 1.0 };
+                    let rgb = if colour { l.tint } else { [1.0; 3] };
+                    Some(([x, y, gain, k], rgb))
+                })
+                .collect()
         }
     }
 }
@@ -350,15 +713,100 @@ impl EffectDef for SpriteFlareDef {
         &<SpriteFlare as EffectMetadata>::SCHEMA
     }
 
+    fn depth_inputs(&self) -> &'static [&'static str] {
+        &["depth_m"]
+    }
+
+    /// Where the lights are when the Light row alone doesn't say: through
+    /// the camera, from the Light layers or a mask, and across the shutter
+    /// when the layer blurs. Bright spots are found on the GPU from the picture.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(SpriteFlare::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
         push(SpriteFlare::DERIVED_TIME, Value::Float(cx.lt as f32));
+        let mode = match cx.inst.param("light_from") {
+            Some(EffectValue::Choice(c)) => *c,
+            _ => POINT,
+        };
+        let ctx = &cx.context;
+        let Some(comp) = ctx.comp.and_then(|id| ctx.document.comp(id)) else {
+            return;
+        };
+        if mode == BRIGHT_SPOTS {
+            return;
+        }
+        let blurs = ctx
+            .layer
+            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+            .is_some_and(|l| l.switches.motion_blur);
+        let mut shutter = if blurs {
+            comp.motion_blur.sample_offsets()
+        } else {
+            Vec::new()
+        };
+        if mode == POINT && shutter.is_empty() {
+            return;
+        }
+        let now = lights_at(cx, comp, mode, 0.0);
+        // Fewer samples when there are many lights, so the frame stays in
+        // budget.
+        let room = (MAX_LIGHTS / now.len().max(1)) as u32;
+        if shutter.len() > room as usize {
+            shutter = crate::model::MotionBlur {
+                samples: room,
+                ..comp.motion_blur
+            }
+            .sample_offsets();
+        }
+        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        let samples: Vec<Vec<Found>> = shutter
+            .iter()
+            .map(|off| lights_at(cx, comp, mode, off * dt))
+            .collect();
+        // A light that holds still across the shutter is drawn once.
+        let lights: Vec<Found> = if samples.iter().all(|s| *s == now) {
+            now
+        } else {
+            let share = 1.0 / samples.len() as f32;
+            samples
+                .into_iter()
+                .flatten()
+                .map(|([x, y, gain, k], rgb)| ([x, y, gain * share, k], rgb))
+                .collect()
+        };
+        let n = lights.len().min(MAX_LIGHTS);
+        for (i, (geometry, [r, g, b])) in lights.into_iter().take(n).enumerate() {
+            push(SpriteFlare::DERIVED_LIGHTS[i], Value::Vec4(geometry));
+            push(
+                SpriteFlare::DERIVED_LIGHT_RGB[i],
+                Value::Colour([r, g, b, 0.0]),
+            );
+        }
+        push(SpriteFlare::DERIVED_LIGHT_COUNT, Value::Int(n as i32));
+    }
+
+    /// Raster pixels per comp pixel follows the raster as a length does.
+    fn derived_spatial(&self) -> &'static [ParamId] {
+        &[SpriteFlare::DERIVED_PX_SCALE]
     }
 
     /// The default design: a kept one rides beside the op, which a bag alone
-    /// can't carry.
+    /// can't carry. Bright spots are looked for in the picture as it came in.
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        raster::draw(&default_design(), &SpriteFlare::frame(p), w, h, rgba);
+        let mut frame = SpriteFlare::frame(p);
+        if let Some(s) = SpriteFlare::spots(p) {
+            let found = crate::fx::lens_flare::detect_lights(
+                rgba,
+                w,
+                h,
+                s.threshold,
+                s.softness,
+                s.use_colour,
+                [1.0; 3],
+                false,
+            );
+            frame.lights = raster::spots(&found, w, h, s.use_colour, s.colour, s.gain);
+        }
+        raster::draw(&default_design(), &frame, w, h, rgba);
     }
 }
 
@@ -448,5 +896,60 @@ mod tests {
             }
         }
         assert!(worst < 2e-4, "worst {worst}");
+    }
+
+    /// Mask points lights each corner of the mask, where it is at that moment.
+    #[test]
+    fn mask_points_light_each_corner_as_the_mask_moves() {
+        use crate::mask::{Mask, PathKeyframe};
+        let (mut doc, comp_id) = crate::fx::tests::lit_document(1);
+        let comp = doc.comp_mut(comp_id).unwrap_or_else(|| unreachable!());
+        let mut mask = Mask::rectangle(100.0, 50.0, 200.0, 100.0);
+        let mut moved = mask.path.clone();
+        for v in &mut moved.vertices {
+            v.pos.0 += 40.0;
+        }
+        let key = |s: i64, path| PathKeyframe {
+            time: crate::time::Rational::new(s, 1).unwrap_or_else(|_| unreachable!()),
+            path,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        mask.path_keys = vec![key(0, mask.path.clone()), key(1, moved)];
+        comp.layers[0].masks.push(mask);
+        let layer = comp.layers[0].id;
+
+        let mut inst =
+            crate::fx::builtins::instantiate("sprite_flare").unwrap_or_else(|| unreachable!());
+        for p in &mut inst.params {
+            if p.id == "light_from" {
+                p.value = EffectValue::Choice(MASK_POINTS);
+            }
+        }
+        let mut pushed = Vec::new();
+        SpriteFlareDef.resolve_derived(
+            &ResolveCx {
+                inst: &inst,
+                lt: 0.5,
+                diag_px: 2202.9,
+                px_scale: 1.0,
+                markers: &crate::fx::markers::MarkerContext::NONE,
+                context: Arc::new(crate::expression::ExpressionContext {
+                    document: Arc::new(doc),
+                    comp: Some(comp_id),
+                    layer: Some(layer),
+                    comp_time: 0.5,
+                    ..crate::expression::ExpressionContext::detached()
+                }),
+            },
+            &mut |id, v| pushed.push((id, v)),
+        );
+        let get = |id| pushed.iter().find(|(k, _)| *k == id).map(|(_, v)| *v);
+        assert_eq!(get(SpriteFlare::DERIVED_LIGHT_COUNT), Some(Value::Int(4)));
+        // Halfway between the keys, half the 40 px move.
+        assert_eq!(
+            get(SpriteFlare::DERIVED_LIGHTS[0]),
+            Some(Value::Vec4([120.0, 50.0, 1.0, 1.0]))
+        );
     }
 }

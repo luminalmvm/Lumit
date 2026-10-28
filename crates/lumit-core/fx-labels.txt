@@ -7,6 +7,7 @@
 2 kHz
 250 Hz
 31 Hz
+3D point
 4 kHz
 500 Hz
 63 Hz
@@ -137,6 +138,7 @@ Boundary
 Bounds
 Boxes x
 Boxes y
+Bright spots
 Brightness
 Broadband, amber
 Broadband, blue
@@ -489,6 +491,8 @@ Hardness
 Haze
 Height
 Hexagons
+Hide behind
+Hiding
 High
 High cut
 Highlight amount
@@ -598,10 +602,13 @@ Light
 Light colour
 Light direction
 Light distance (m)
+Light from
+Light size
 Light tint
 Light wrap
 Light x
 Light y
+Light z
 Lighten
 Lighter colour
 Lightness
@@ -625,6 +632,7 @@ Lower left x
 Lower left y
 Lower right x
 Lower right y
+Luma
 Luminance
 Luminance only
 Luminosity
@@ -643,6 +651,7 @@ Map softness
 Map white to
 Mask
 Mask path
+Mask points
 Mask/Path
 Master
 Math
@@ -996,6 +1005,7 @@ Size from
 Size from width
 Size jitter
 Size over life
+Size with distance
 Skew
 Skew axis
 Slice repeat
@@ -1104,6 +1114,8 @@ Text layer
 Text to points
 Texture
 Texture contrast
+Texture layer
+Textures
 Texturize
 This comp
 Threshold
@@ -1178,6 +1190,8 @@ Upper right y
 Use colour ramp
 Use focus point
 Use inner radius
+Use light colour
+Use light intensity
 Use masks
 Use middle colour
 Use point colour

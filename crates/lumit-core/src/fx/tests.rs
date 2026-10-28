@@ -6045,7 +6045,7 @@ fn a_missing_parameter_reads_its_default() {
 /// x from 300 by 100, each `(80, 40)` half-size at y 200 — what a Lights-mode
 /// flare resolves its derived sources from. Returns the document and the
 /// comp's id, ready for an [`ExpressionContext`].
-fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
+pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     use crate::model::*;
     use crate::time::{CompTime, Duration, FrameRate};
 
@@ -6260,8 +6260,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 3,
-        "Scanlines, the Lens flare and Transform points are the three today"
+        declaring, 4,
+        "Scanlines, the two flares and Transform points are the four today"
     );
 }
 
@@ -6508,8 +6508,10 @@ fn every_parameter_declares_a_unit() {
             ("sharpen", "radius"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
+            ("sprite_flare", "light_z"),
             ("sprite_flare", "centre_x"),
             ("sprite_flare", "centre_y"),
+            ("sprite_flare", "light_size"),
             ("sprite_flare", "edge_fade"),
             ("light_wrap", "width"),
             ("rgb_split", "amount"),
