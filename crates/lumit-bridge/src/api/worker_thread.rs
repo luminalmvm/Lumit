@@ -5220,8 +5220,9 @@ fn publish_preview(
     comp: &CompositionReference,
     frame: u64,
     asked: f32,
-    document: lumit_core::model::Document,
+    mut document: lumit_core::model::Document,
 ) -> Result<(), BridgeError> {
+    crate::realtime::draft_flares(&mut document);
     let (comp_width, comp_height) = document
         .comp(comp.id)
         .map_or((1, 1), |c| (c.width, c.height));
