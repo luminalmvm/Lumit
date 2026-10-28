@@ -329,11 +329,13 @@ Echo
 Echoes
 Edge
 Edge colour
+Edge fade
 Edge margin
 Edge sharpness
 Edge type
 Edges
 Edit expression…
+Edit flare…
 Edit lens…
 Edit shader…
 Element 1
@@ -410,6 +412,7 @@ Fit to size
 Flag
 Flare options
 Flash
+Flicker
 Flip axis
 Flip direction
 Flip order
@@ -452,18 +455,13 @@ Gaussian
 Gaussian blur
 Generate
 Ghost intensity
-Ghost size
 Ghost softness
-Ghost spacing
-Ghosts
 Glass curvature
 Glass dirt
 Glow
 Glow colour
-Glow intensity
 Glow opacity
 Glow radius
-Glow size
 Gradient
 Gradient overlay
 Gradient type
@@ -1070,8 +1068,6 @@ Stillness
 Stops
 Store
 Streak
-Streak angle
-Streak intensity
 Streak length
 Strength
 Stretch

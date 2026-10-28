@@ -6508,9 +6508,9 @@ fn every_parameter_declares_a_unit() {
             ("sharpen", "radius"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
-            ("sprite_flare", "glow_size"),
-            ("sprite_flare", "ghost_size"),
-            ("sprite_flare", "streak_length"),
+            ("sprite_flare", "centre_x"),
+            ("sprite_flare", "centre_y"),
+            ("sprite_flare", "edge_fade"),
             ("light_wrap", "width"),
             ("rgb_split", "amount"),
             ("chromatic_aberration", "amount"),
@@ -7138,83 +7138,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
                 0,
                 0.8,
                 0.75,
-            )
-        },
-    );
-    both(
-        &effects::sprite_flare::SpriteFlareDef,
-        &[
-            (
-                effects::sprite_flare::SpriteFlare::LIGHT_X,
-                Value::Float(1.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::LIGHT_Y,
-                Value::Float(2.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::INTENSITY,
-                Value::Float(1.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::TINT,
-                Value::Colour([1.0, 0.5, 0.25, 1.0]),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GLOW_SIZE,
-                Value::Float(3.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GLOW_INTENSITY,
-                Value::Float(1.0),
-            ),
-            (effects::sprite_flare::SpriteFlare::GHOSTS, Value::Int(3)),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_SPACING,
-                Value::Float(0.4),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_SIZE,
-                Value::Float(2.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_INTENSITY,
-                Value::Float(0.5),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_LENGTH,
-                Value::Float(4.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_INTENSITY,
-                Value::Float(0.6),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_ANGLE,
-                Value::Float(15.0),
-            ),
-            (effects::sprite_flare::SpriteFlare::MIX, Value::Float(50.0)),
-        ],
-        &|p| {
-            cpu::sprite_flare(
-                p,
-                4,
-                4,
-                &cpu::SpriteFlareParams {
-                    light: [1.0, 2.0],
-                    intensity: 1.0,
-                    tint: [1.0, 0.5, 0.25],
-                    glow_size: 3.0,
-                    glow_intensity: 1.0,
-                    ghosts: 3,
-                    ghost_spacing: 0.4,
-                    ghost_size: 2.0,
-                    ghost_intensity: 0.5,
-                    streak_length: 4.0,
-                    streak_intensity: 0.6,
-                    streak_angle_deg: 15.0,
-                    mix: 0.5,
-                },
             )
         },
     );

@@ -771,6 +771,10 @@ impl GpuEffect for SpriteFlare {
     fn match_name(&self) -> &'static str {
         "sprite_flare"
     }
+    /// The design kept in the effect rides the kept lens's carriage.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LensFile
+    }
     fn run(
         &self,
         fx: &FxEngine,
@@ -779,28 +783,37 @@ impl GpuEffect for SpriteFlare {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let s = effects::sprite_flare::SpriteFlare::read(p).packed();
+        use effects::sprite_flare::{design_of, SpriteFlare};
+        use lumit_core::fx::flare::instances;
+        let frame = SpriteFlare::frame(p);
+        if frame.lights.is_empty() {
+            return tex.clone();
+        }
+        let design = design_of(aux.lens_file());
+        let list: Vec<_> = instances::expand(&design, &frame, w, h)
+            .iter()
+            .map(instances::Instance::packed)
+            .collect();
+        let lights: Vec<[f32; 8]> = frame
+            .lights
+            .iter()
+            .map(|l| {
+                let [r, g, b] = l.colour;
+                [l.pos[0], l.pos[1], l.gain, 0.0, r, g, b, 0.0]
+            })
+            .collect();
         fx.sprite_flare(
             ctx,
             tex,
             w,
             h,
-            &lumit_gpu::fx::blur::SpriteFlareOp {
-                light: s.light,
-                intensity: s.intensity,
-                tint: s.tint,
-                glow_size: s.glow_size,
-                glow_intensity: s.glow_intensity,
-                ghosts: s.ghosts,
-                ghost_spacing: s.ghost_spacing,
-                ghost_size: s.ghost_size,
-                ghost_intensity: s.ghost_intensity,
-                streak_length: s.streak_length,
-                streak_intensity: s.streak_intensity,
-                streak_angle_deg: s.streak_angle_deg,
-                mix: s.mix,
+            &lumit_gpu::fx::sprite_flare::SpriteFlareOp {
+                instances: &list,
+                lights: &lights,
+                centre: frame.centre,
+                edge_fade: frame.edge_fade * frame.px_scale,
             },
         )
     }

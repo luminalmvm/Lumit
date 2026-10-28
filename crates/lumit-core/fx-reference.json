@@ -674,10 +674,16 @@
       "slug": "sprite-flare",
       "match_name": "sprite_flare",
       "label": "Sprite flare",
-      "version": 1,
+      "version": 2,
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
+        {
+          "id": "edit_flare",
+          "label": "Edit flare…",
+          "kind": "action",
+          "unit": "raw"
+        },
         {
           "id": "light_x",
           "label": "Light x",
@@ -698,7 +704,7 @@
         },
         {
           "id": "intensity",
-          "label": "Intensity",
+          "label": "Brightness",
           "kind": "float",
           "unit": "raw",
           "default": 1.0,
@@ -707,8 +713,26 @@
           "hard_min": 0.0
         },
         {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "tint",
-          "label": "Tint",
+          "label": "Colour",
           "kind": "colour",
           "unit": "raw",
           "default": [
@@ -721,94 +745,71 @@
           "slider_max": 4.0
         },
         {
-          "id": "glow_size",
-          "label": "Glow size",
-          "kind": "float",
-          "unit": "px",
-          "default": 120.0,
-          "slider_min": 0.0,
-          "slider_max": 800.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "glow_intensity",
-          "label": "Glow intensity",
-          "kind": "float",
-          "unit": "raw",
-          "default": 1.0,
-          "slider_min": 0.0,
-          "slider_max": 4.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "ghosts",
-          "label": "Ghosts",
-          "kind": "int",
-          "unit": "raw",
-          "default": 6,
-          "slider_min": 0.0,
-          "slider_max": 16.0,
-          "hard_min": 0.0,
-          "hard_max": 16.0
-        },
-        {
-          "id": "ghost_spacing",
-          "label": "Ghost spacing",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 1.5,
-          "hard_min": 0.0
-        },
-        {
-          "id": "ghost_size",
-          "label": "Ghost size",
-          "kind": "float",
-          "unit": "px",
-          "default": 60.0,
-          "slider_min": 0.0,
-          "slider_max": 400.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "ghost_intensity",
-          "label": "Ghost intensity",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "streak_length",
-          "label": "Streak length",
-          "kind": "float",
-          "unit": "px",
-          "default": 300.0,
-          "slider_min": 0.0,
-          "slider_max": 2000.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "streak_intensity",
-          "label": "Streak intensity",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "streak_angle",
-          "label": "Streak angle",
-          "kind": "float",
+          "id": "evolution",
+          "label": "Evolution",
+          "kind": "angle",
           "unit": "degrees",
           "default": 0.0,
-          "slider_min": -180.0,
-          "slider_max": 180.0
+          "dial_step": 15.0
+        },
+        {
+          "id": "centre_x",
+          "label": "Centre X",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "centre_y",
+          "label": "Centre Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "flicker",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "flicker_speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "flicker_seed",
+          "label": "Seed",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 0.0,
+          "slider_max": 999.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "edge_fade",
+          "label": "Edge fade",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
         },
         {
           "id": "mix",
@@ -889,31 +890,21 @@
       ],
       "groups": [
         {
-          "label": "Glow",
+          "label": "Centre",
           "params": [
-            "glow_size",
-            "glow_intensity"
+            "centre_x",
+            "centre_y"
           ],
-          "collapsed": false
+          "collapsed": true
         },
         {
-          "label": "Ghosts",
+          "label": "Flicker",
           "params": [
-            "ghosts",
-            "ghost_spacing",
-            "ghost_size",
-            "ghost_intensity"
+            "flicker",
+            "flicker_speed",
+            "flicker_seed"
           ],
-          "collapsed": false
-        },
-        {
-          "label": "Streak",
-          "params": [
-            "streak_length",
-            "streak_intensity",
-            "streak_angle"
-          ],
-          "collapsed": false
+          "collapsed": true
         }
       ],
       "matte_role": "strength"

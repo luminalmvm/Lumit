@@ -21788,5 +21788,161 @@
   "easingBuiltIn": "Built in",
   "@easingBuiltIn": {
     "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
+  },
+  "fxEditFlare": "Edit flare…",
+  "@fxEditFlare": {
+    "description": "Effect controls: Sprite flare's button row that opens the Flare window."
+  },
+  "fxFringe": "Fringe",
+  "@fxFringe": {
+    "description": "Flare window: a control on several elements, how much rainbow colour is pulled across the shape."
+  },
+  "fxThickness": "Thickness",
+  "@fxThickness": {
+    "description": "Flare window: a control on Rays, Star, Streak, Ring and Halo, the line's width in pixels."
+  },
+  "fxHalo": "Halo",
+  "@fxHalo": {
+    "description": "Flare window: the Halo kind of element, a rainbow arc round the light that grows away from the centre."
+  },
+  "fxRing": "Ring",
+  "@fxRing": {
+    "description": "Flare window: the Ring kind of element, a circle round the light."
+  },
+  "fxGhost": "Ghost",
+  "@fxGhost": {
+    "description": "Flare window: the Ghost kind of element, one iris shape on the axis through the centre."
+  },
+  "fxOrbs": "Orbs",
+  "@fxOrbs": {
+    "description": "Flare window: the Orbs kind of element, soft discs scattered across the whole frame."
+  },
+  "fxPicture": "Picture",
+  "@fxPicture": {
+    "description": "Flare window: the Picture kind of element, a texture placed anywhere."
+  },
+  "fxSolid": "Solid",
+  "@fxSolid": {
+    "description": "Flare window, colour mode: one colour."
+  },
+  "fxMixed": "Mixed",
+  "@fxMixed": {
+    "description": "Flare window, colour mode: each copy of the element picks one of a list of colours."
+  },
+  "fxRainbow": "Rainbow",
+  "@fxRainbow": {
+    "description": "Flare window, colour mode: a spectrum across the element."
+  },
+  "fxResponse": "Response",
+  "@fxResponse": {
+    "description": "Flare window: the group of controls saying how an element brightens as the light nears the centre or the edges."
+  },
+  "fxIgnore": "Ignore",
+  "@fxIgnore": {
+    "description": "Flare window: the group of switches that let an element ignore the effect's Size, Brightness, Rotation or Edge fade."
+  },
+  "fxNothing": "Nothing",
+  "@fxNothing": {
+    "description": "Flare window, Brighter near: the element does not respond to where the light is."
+  },
+  "fxTheCentre": "The centre",
+  "@fxTheCentre": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's centre."
+  },
+  "fxTheEdges": "The edges",
+  "@fxTheEdges": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's edges."
+  },
+  "fxBrighterNear": "Brighter near",
+  "@fxBrighterNear": {
+    "description": "Flare window, Response group: which place the element brightens towards."
+  },
+  "fxSmudge": "Smudge",
+  "@fxSmudge": {
+    "description": "Flare window, Texture option: a smudged lens texture."
+  },
+  "fxCaustic": "Caustic",
+  "@fxCaustic": {
+    "description": "Flare window, Texture option: a rippling light texture."
+  },
+  "fxSpecks": "Specks",
+  "@fxSpecks": {
+    "description": "Flare window, Texture option: fine specks of dust."
+  },
+  "fxReach": "Reach",
+  "@fxReach": {
+    "description": "Flare window: a control on Orbs and Dirt, how far from the light in pixels they are still lit."
+  },
+  "fxCore": "Core",
+  "@fxCore": {
+    "description": "Flare window, Glow: the brightness of the tight hot centre."
+  },
+  "fxCoreSize": "Core size",
+  "@fxCoreSize": {
+    "description": "Flare window, Glow: the hot centre's size as a fraction of the glow."
+  },
+  "fxShimmer": "Shimmer",
+  "@fxShimmer": {
+    "description": "Flare window, Rays: how much the rays' lengths flicker as Evolution turns."
+  },
+  "fxEdgeFade": "Edge fade",
+  "@fxEdgeFade": {
+    "description": "Flare window, Ignore group: the switch that lets an element ignore the fade at the frame's edge."
+  },
+  "fxEdgeWidth": "Edge width",
+  "@fxEdgeWidth": {
+    "description": "Flare window, Ghost: the width of the bright rim."
+  },
+  "fxLengthVariation": "Length variation",
+  "@fxLengthVariation": {
+    "description": "Flare window, Rays: how much each ray's length differs from the others."
+  },
+  "fxSizeVariation": "Size variation",
+  "@fxSizeVariation": {
+    "description": "Flare window, Ghosts and Orbs: how much each copy's size differs from the others."
+  },
+  "fxBrightnessVariation": "Brightness variation",
+  "@fxBrightnessVariation": {
+    "description": "Flare window, Ghosts: how much each ghost's brightness differs from the others."
+  },
+  "fxArcFeather": "Arc feather",
+  "@fxArcFeather": {
+    "description": "Flare window, Ring: how softly the arc's two ends fade out."
+  },
+  "fxSecondSet": "Second set",
+  "@fxSecondSet": {
+    "description": "Flare window, Star: the brightness of a second set of points rotated half a step."
+  },
+  "fxSecondSetLength": "Second set length",
+  "@fxSecondSetLength": {
+    "description": "Flare window, Star: the second set's length as a fraction of the first."
+  },
+  "fxFacesTheLight": "Faces the light",
+  "@fxFacesTheLight": {
+    "description": "Flare window, Ghost and Picture: the switch that turns the shape with the axis from the light."
+  },
+  "fxPointsToTheCentre": "Points to the centre",
+  "@fxPointsToTheCentre": {
+    "description": "Flare window, Streak: the switch that turns the streak along the axis to the centre."
+  },
+  "fxGrowsAwayFromTheCentre": "Grows away from the centre",
+  "@fxGrowsAwayFromTheCentre": {
+    "description": "Flare window, Halo: how much the halo's radius grows as the light moves away from the centre."
+  },
+  "fxOnTheLight": "On the light",
+  "@fxOnTheLight": {
+    "description": "Flare window, Add menu heading: the kinds drawn on the light itself."
+  },
+  "fxAlongTheAxis": "Along the axis",
+  "@fxAlongTheAxis": {
+    "description": "Flare window, Add menu heading: the kinds placed on the line from the light through the centre."
+  },
+  "fxAcrossTheFrame": "Across the frame",
+  "@fxAcrossTheFrame": {
+    "description": "Flare window, Add menu heading: the kinds scattered over the whole frame."
+  },
+  "fxFlicker": "Flicker",
+  "@fxFlicker": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that make the flare's brightness dip at random."
   }
 }

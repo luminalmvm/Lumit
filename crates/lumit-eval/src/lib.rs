@@ -938,6 +938,18 @@ fn feed_effect_stack(
             h.update(&(text.len() as u64).to_le_bytes());
             h.update(text.as_bytes());
         }
+        // A Sprite flare's design lives there as well.
+        if let Some(text) = lumit_core::fx::flare::design::embedded_text(e) {
+            h.update(b"flare/");
+            h.update(&(text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
+        }
+        if e.effect.match_name == "sprite_flare"
+            && lumit_core::fx::effects::sprite_flare::moves_with_time(e)
+        {
+            h.update(b"flare-time");
+            feed_f64(h, lt);
+        }
         // Track points draws nothing until its analysis lands, and a landing
         // changes no row. Whether one is in hand for these rows joins the key,
         // so frames cached before it are not served after.
