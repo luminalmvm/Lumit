@@ -73,6 +73,7 @@ import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
+import 'flare_window.dart';
 import 'lens_window.dart';
 import 'lfx_interface_panel.dart';
 import 'shader_editor.dart';
@@ -1638,6 +1639,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             effect: effect,
             param: param,
             onApplied: ui.model.refresh,
+          )) {
+            return;
+          }
+          // Edit flare… opens the Flare window on a Sprite flare.
+          if (pressFlareButton(
+            context: context,
+            home: _shaderHome(layer),
+            effect: effect,
+            param: param,
+            onApplied: ui.model.refresh,
+            comp: ui.selectedComp,
+            frame: BigInt.from(ui.playheadFrame.value),
           )) {
             return;
           }

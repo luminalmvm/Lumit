@@ -127,6 +127,19 @@ Future<String?> pickExportSaveLocation(
 XTypeGroup _easingsGroup() =>
     XTypeGroup(label: l10n.fileTypeEasings, extensions: const ['json']);
 
+/// Where to write a flare design, or null when cancelled.
+Future<String?> pickFlareSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.flareFileType, extensions: const ['flare']),
+    ],
+    suggestedName: '$suggestedName.flare',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.flare')) return path;
+  return '$path.flare';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;

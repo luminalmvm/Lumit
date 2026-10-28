@@ -371,6 +371,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// editor opens, never in a rebuild.
   String expressionSource();
 
+  /// The design this Sprite flare keeps, or the default design when it
+  /// keeps none, as JSON.
+  String flareDesign();
+
   /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
   BridgeEffectInstanceInfo getInfo();
 
@@ -557,6 +561,13 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// Stage new text on an Expression box. The graph's own commit writes it, so
   /// an edit is one undo step.
   void setExpressionSource({required String source});
+
+  /// Keep `json` as the effect's design. Staged like `set_value`;
+  /// `LayerReference::set_effects` commits it.
+  ///
+  /// # Errors
+  /// [`BridgeError::ReadFailed`] when `json` is not a design.
+  void setFlareDesign({required String json});
 
   /// Keep `lens` in the effect, or `None` to go back to the Lens row. Staged
   /// like `set_value`; `LayerReference::set_effects` commits it.

@@ -21789,6 +21789,110 @@
   "@easingBuiltIn": {
     "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
   },
+  "flareWindowTitle": "Flare",
+  "@flareWindowTitle": {
+    "description": "The Flare window, opened from Edit flare… on Sprite flare: its title."
+  },
+  "flareElements": "Elements",
+  "@flareElements": {
+    "description": "Flare window: heading over the list of elements (glows, rays, ghosts) the flare is made of."
+  },
+  "flareAdd": "Add",
+  "@flareAdd": {
+    "description": "Flare window: the button beside the Elements heading that opens the menu of element kinds to add. Shown with a plus."
+  },
+  "flareMovingLight": "Moving light",
+  "@flareMovingLight": {
+    "description": "Flare window, over the preview: the option that moves the light slowly round the frame so the flare's travel can be seen."
+  },
+  "flareStillLight": "Still",
+  "@flareStillLight": {
+    "description": "Flare window, over the preview: the option beside Moving light that holds the light where it was dragged."
+  },
+  "flareFit": "Fit",
+  "@flareFit": {
+    "description": "Flare window, over the preview: show the whole frame scaled to fit. Beside 100%."
+  },
+  "flareActualSize": "100%",
+  "@flareActualSize": {
+    "description": "Flare window, over the preview: show the flare at one comp pixel per screen pixel. Beside Fit."
+  },
+  "flareBuiltIn": "Built in",
+  "@flareBuiltIn": {
+    "description": "Flare window presets strip: the tab showing the flares that come with Lumit, beside the Yours tab. Very short."
+  },
+  "flareYours": "Yours",
+  "@flareYours": {
+    "description": "Flare window presets strip: the tab showing the flares the user has saved. Very short."
+  },
+  "flareAllGroups": "All",
+  "@flareAllGroups": {
+    "description": "Flare window presets strip: the chip that shows every group of built-in flares at once."
+  },
+  "flareDuplicate": "Duplicate",
+  "@flareDuplicate": {
+    "description": "Flare window: make a copy of the selected element, in its right-click menu and as a button over its controls."
+  },
+  "flareDelete": "Delete",
+  "@flareDelete": {
+    "description": "Flare window: remove the selected element or one of the user's saved flares, in a right-click menu and as a button."
+  },
+  "flareRename": "Rename…",
+  "@flareRename": {
+    "description": "Flare window presets strip: right-click on one of the user's saved flares, give it another name."
+  },
+  "flareNameTitle": "Flare name",
+  "@flareNameTitle": {
+    "description": "Flare window: the title of the small prompt asking what to call a flare being saved or renamed."
+  },
+  "flareImport": "Import…",
+  "@flareImport": {
+    "description": "Flare window, footer button: open a .flare file and take its elements."
+  },
+  "flareShare": "Share…",
+  "@flareShare": {
+    "description": "Flare window, footer button: opens a menu with Export to a file and Copy as text."
+  },
+  "flareExportFile": "Export to a file…",
+  "@flareExportFile": {
+    "description": "Flare window, Share menu: write the design to a .flare file."
+  },
+  "flareCopyJson": "Copy as text",
+  "@flareCopyJson": {
+    "description": "Flare window, Share menu: put the design's text on the clipboard."
+  },
+  "flareCopied": "Copied",
+  "@flareCopied": {
+    "description": "Flare window, footer line after Copy as text: the design's text is on the clipboard."
+  },
+  "flareSave": "Save to your flares",
+  "@flareSave": {
+    "description": "Flare window, footer button: save this design to the user's own flares, offered in every project."
+  },
+  "flareUse": "Use flare",
+  "@flareUse": {
+    "description": "Flare window, footer button: put this design on the effect and close the window."
+  },
+  "flareNotAFlare": "Not a flare file",
+  "@flareNotAFlare": {
+    "description": "Flare window, footer line: the file picked by Import is not a flare design."
+  },
+  "flareNotSaved": "Could not save",
+  "@flareNotSaved": {
+    "description": "Flare window, footer line: saving or exporting the design failed."
+  },
+  "flareFileType": "Flare",
+  "@flareFileType": {
+    "description": "File picker: the label of the .flare file type filter."
+  },
+  "flareBlack": "Black",
+  "@flareBlack": {
+    "description": "Flare window, preview background choice: the flare on black."
+  },
+  "flareFrame": "Frame",
+  "@flareFrame": {
+    "description": "Flare window, preview background choice: the flare over the composition's picture at the playhead."
+  },
   "fxEditFlare": "Edit flare…",
   "@fxEditFlare": {
     "description": "Effect controls: Sprite flare's button row that opens the Flare window."
