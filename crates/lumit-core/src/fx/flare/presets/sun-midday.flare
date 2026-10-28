@@ -1,0 +1,41 @@
+{
+  "lumit_flare": 1,
+  "name": "Midday",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 1.0, 0.95], [1.0, 0.9, 0.6]]},
+      "values": {"size": 100, "falloff": 0.3, "core": 1.5, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.9, 0.7]]},
+      "values": {"size": 420, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.95, 0.8]]},
+      "values": {"count": 140, "size": 900, "thickness": 2.5, "brightness": 0.3, "length_var": 0.8, "softness": 0.5, "taper": 1.0, "shimmer": 0.3}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "values": {"size": 380, "thickness": 36, "brightness": 0.25, "arc": 150, "grow": 0.5, "fringe": 1.0, "softness": 0.8, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.9, 0.55], [0.65, 0.85, 1.0], [0.75, 1.0, 0.75]]},
+      "values": {"count": 9, "size": 60, "brightness": 0.45, "sides": 6, "roundness": 0.2, "fill": 0.12, "edge": 0.5477226, "edge_width": 0.06, "softness": 0.1, "fringe": 0.3, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.35, "to": 2.2}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.85, 0.6]]},
+      "values": {"place": 2.0, "size": 280, "brightness": 0.45, "sides": 6, "roundness": 0.4, "fill": 0.02, "edge": 0.2236068, "edge_width": 0.06, "softness": 0.3, "fringe": 0.5, "response": 2, "response_amount": 0.6, "response_range": 0.7}
+    }
+  ]
+}

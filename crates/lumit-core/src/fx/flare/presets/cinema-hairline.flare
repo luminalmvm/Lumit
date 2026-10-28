@@ -1,0 +1,29 @@
+{
+  "lumit_flare": 1,
+  "name": "Hairline",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 35, "falloff": 0.25, "core": 2.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Haze",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.7, 1.0]]},
+      "values": {"size": 60, "brightness": 0.25, "falloff": 0.3, "core": 0.0, "stretch": 6.0}
+    },
+    {
+      "kind": "streak",
+      "name": "Hot line",
+      "colour": {"mode": "solid", "colours": [[0.6, 0.75, 1.0]]},
+      "values": {"size": 900, "thickness": 2.0, "brightness": 0.7, "taper": 0.5}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.7, 1.0]]},
+      "values": {"place": 1.4, "size": 110, "brightness": 0.35, "sides": 0, "roundness": 0.4, "fill": 0.03, "edge": 0.244949, "edge_width": 0.06, "softness": 0.3, "fringe": 0.0, "response": 2, "response_amount": 0.6, "response_range": 0.7, "stretch": 2.5}
+    }
+  ]
+}

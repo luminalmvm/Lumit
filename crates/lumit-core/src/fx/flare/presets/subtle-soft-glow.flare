@@ -1,0 +1,16 @@
+{
+  "lumit_flare": 1,
+  "name": "Soft glow",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 70, "falloff": 0.4, "core": 1.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 220, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "lumit_flare": 1,
+  "name": "Concert",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.95, 0.9]]},
+      "values": {"size": 55, "falloff": 0.3, "core": 2.0, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.9, 0.5, 1.0]]},
+      "values": {"size": 240, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.4, 0.7], [0.4, 0.6, 1.0], [1.0, 0.8, 0.3]]},
+      "values": {"count": 36, "size": 600, "thickness": 5.0, "brightness": 0.45, "length_var": 0.5, "softness": 0.5, "taper": 1.0, "shimmer": 0.5, "spin": 8}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.4, 0.7], [0.4, 0.6, 1.0], [1.0, 0.8, 0.3]]},
+      "values": {"count": 8, "size": 45, "brightness": 0.4, "sides": 0, "roundness": 0.2, "fill": 0.15, "edge": 0.4472136, "edge_width": 0.06, "softness": 0.3, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.4, "to": 2.2, "scatter": 60}
+    }
+  ]
+}

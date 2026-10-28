@@ -1,0 +1,42 @@
+{
+  "lumit_flare": 1,
+  "name": "Hologram",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.8, 1.0, 0.95]]},
+      "values": {"size": 35, "falloff": 0.3, "core": 1.5, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.3, 1.0, 0.8]]},
+      "values": {"size": 180, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[0.3, 1.0, 0.8]]},
+      "values": {"size": 130, "thickness": 6, "brightness": 0.4, "softness": 0.6, "arc": 110, "arc_feather": 0.3}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[0.3, 1.0, 0.8]]},
+      "values": {"size": 130, "thickness": 6, "brightness": 0.4, "softness": 0.6, "arc": 110, "arc_feather": 0.3, "rotation": 180}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[0.3, 1.0, 0.8]]},
+      "values": {"count": 7, "size": 60, "brightness": 0.4, "sides": 6, "roundness": 0.0, "fill": 0.03, "edge": 0.7745967, "edge_width": 0.03, "softness": 0.05, "fringe": 0.0, "size_var": 0.5, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 2.1, "face": 1}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.5, 1.0, 0.9]]},
+      "values": {"points": 2, "size": 500, "thickness": 2.0, "brightness": 0.4, "rotation": 90}
+    }
+  ]
+}

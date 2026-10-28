@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Rain on glass",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.92, 0.95, 1.0]]},
+      "values": {"size": 55, "falloff": 0.3, "core": 1.5, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.8, 0.88, 1.0]]},
+      "values": {"size": 260, "brightness": 0.05, "falloff": 0.45, "core": 0.0}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[0.7, 0.8, 1.0]]},
+      "values": {"size": 300, "thickness": 14.0, "brightness": 0.1, "taper": 0.6, "end_width": 0.3, "rotation": 90}
+    },
+    {
+      "kind": "dirt",
+      "name": "Drops",
+      "colour": {"mode": "solid", "colours": [[0.85, 0.92, 1.0]]},
+      "values": {"texture": 9, "size": 900, "reach": 650, "brightness": 0.25}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[0.8, 0.9, 1.0]]},
+      "values": {"count": 4, "size": 70, "brightness": 0.3, "sides": 0, "roundness": 0.2, "fill": 0.06, "edge": 0.3, "edge_width": 0.06, "softness": 0.4, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.7, "to": 1.6, "texture": 9}
+    }
+  ]
+}

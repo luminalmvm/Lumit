@@ -1,0 +1,42 @@
+{
+  "lumit_flare": 1,
+  "name": "Scratched lens",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"size": 45, "falloff": 0.3, "core": 2.0, "core_size": 0.15, "brightness": 1.0, "stretch": 1.5}
+    },
+    {
+      "kind": "glow",
+      "name": "Haze",
+      "colour": {"mode": "solid", "colours": [[0.45, 0.62, 1.0]]},
+      "values": {"size": 80, "brightness": 0.25, "falloff": 0.3, "core": 0.0, "stretch": 5.0}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[0.45, 0.62, 1.0]]},
+      "values": {"size": 450, "thickness": 12.0, "brightness": 0.5, "taper": 0.7, "end_width": 0.4}
+    },
+    {
+      "kind": "streak",
+      "name": "Hot line",
+      "colour": {"mode": "solid", "colours": [[0.75, 0.85, 1.0]]},
+      "values": {"size": 320, "thickness": 2.0, "brightness": 0.8, "taper": 0.6, "end_width": 0.2}
+    },
+    {
+      "kind": "dirt",
+      "name": "Scratches",
+      "colour": {"mode": "solid", "colours": [[0.6, 0.75, 1.0]]},
+      "values": {"texture": 7, "size": 1500, "reach": 650, "brightness": 0.2}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.7, 1.0]]},
+      "values": {"count": 4, "size": 50, "brightness": 0.3, "sides": 0, "roundness": 0.2, "fill": 0.08, "edge": 0.45, "edge_width": 0.06, "softness": 0.15, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.6, "to": 1.8, "stretch": 1.6}
+    }
+  ]
+}

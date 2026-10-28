@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Wide screen",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"size": 40, "falloff": 0.3, "core": 2.0, "core_size": 0.15, "brightness": 1.0, "stretch": 1.8}
+    },
+    {
+      "kind": "glow",
+      "name": "Haze",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.65, 1.0]]},
+      "values": {"size": 100, "brightness": 0.2, "falloff": 0.3, "core": 0.0, "stretch": 6.0}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.65, 1.0]]},
+      "values": {"size": 700, "thickness": 6.0, "brightness": 0.45, "taper": 0.6, "lines": 5, "spacing": 14, "end_width": 0.15}
+    },
+    {
+      "kind": "streak",
+      "name": "Hot line",
+      "colour": {"mode": "solid", "colours": [[0.8, 0.88, 1.0]]},
+      "values": {"size": 500, "thickness": 1.5, "brightness": 0.6, "taper": 0.55, "end_width": 0.1}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.7, 1.0]]},
+      "values": {"count": 3, "size": 40, "brightness": 0.3, "sides": 0, "roundness": 0.2, "fill": 0.06, "edge": 0.4, "edge_width": 0.06, "softness": 0.2, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.8, "to": 1.7, "stretch": 2.0}
+    }
+  ]
+}
