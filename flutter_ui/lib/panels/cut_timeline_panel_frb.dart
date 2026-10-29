@@ -174,6 +174,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     for (final name in _blendNames) engineLabel(name)
   ];
 
+  /// Whether waves are drawn as the three-band stack, as Settings says.
+  bool get _multiwave =>
+      _ui?.workspace.interface.multiwaveWaveforms ?? true;
+
   double get _zoom => _zoomMotion.value;
   double get _maxZoom => max(1.0, _laneFrames / _framesAtFullZoom.toDouble());
 
@@ -1581,8 +1585,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           pixels: b - a,
         );
         if (request == null) continue;
-        final key =
-            '${request.key}|${clip.startFrame}|${clip.endFrame}|${clip.retimed}';
+        final key = '${request.key}|${clip.startFrame}|${clip.endFrame}'
+            '|${clip.retimed}|$_multiwave';
         if (_peakKeys[id] == key) continue;
         _peakKeys[id] = key;
         track.entry.layer
@@ -1591,7 +1595,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           startSeconds: request.startSeconds,
           endSeconds: request.endSeconds,
           buckets: request.buckets,
-          multiwave: true,
+          multiwave: _multiwave,
           stereo: true,
         )
             .then((peaks) {
@@ -1629,8 +1633,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // A retimed layer's buckets go through its Retime map, so reshaping the
     // map changes the answer without moving the window.
     final key = info.retime == null
-        ? request.key
-        : '${request.key}|${ui.model.heldRevision}';
+        ? '${request.key}|$_multiwave'
+        : '${request.key}|${ui.model.heldRevision}|$_multiwave';
     if (_peakKeys[track.id] == key) return;
     _peakKeys[track.id] = key;
     track.entry.layer
@@ -1638,7 +1642,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       startSeconds: request.startSeconds,
       endSeconds: request.endSeconds,
       buckets: request.buckets,
-      multiwave: true,
+      multiwave: _multiwave,
     )
         .then((peaks) {
       if (!mounted || _peakKeys[track.id] != key) return;
@@ -4254,7 +4258,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       drop: t.accent,
     );
     final style = WaveformStyle(
-      multiwave: true,
+      multiwave: _multiwave,
       sqrtScale: true,
       fromBottom: ui.workspace.interface.waveformsFromBottom,
     );
