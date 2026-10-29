@@ -4526,6 +4526,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       {required TimelineAxis axis, required double fps}) {
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final lines = _speedLines;
+    final index = _tracks.indexOf(track);
     return SpeedEnvelope(
       entry: track.entry,
       comp: comp,
@@ -4536,6 +4537,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       fpsDen: fpsDen,
       onClip: true,
       shows: (clip) => lines || clip.retimed,
+      // A clip's fx and Pan/Crop buttons keep their clicks; the line is
+      // three pixels down the track.
+      blocked: (local) {
+        final at = Offset(local.dx, local.dy + _tops[index] + 3);
+        final hit = cutClipGrabAt(track, axis, at.dx);
+        return hit != null && _badgeAt(track, index, hit.clip, at) != null;
+      },
       onTapped: _speedTaps.tap,
       onPreview: (clip, keys) => comp.renderFrameWithClipRetime(
         frame: BigInt.from(ui.playheadFrame.value),

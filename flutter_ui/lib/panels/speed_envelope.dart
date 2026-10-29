@@ -55,6 +55,10 @@ class SpeedEnvelope extends StatefulWidget {
   /// Which clips draw a line, where not every one does.
   final bool Function(BridgeClip clip)? shows;
 
+  /// Places on a clip that keep their press, a clip's own buttons say, in
+  /// this widget's pixels: the line gives way there.
+  final bool Function(Offset local)? blocked;
+
   const SpeedEnvelope({
     super.key,
     required this.entry,
@@ -69,6 +73,7 @@ class SpeedEnvelope extends StatefulWidget {
     required this.onTapped,
     this.onClip = false,
     this.shows,
+    this.blocked,
   });
 
   @override
@@ -384,6 +389,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                     !widget.onClip ||
                     _drag != null ||
                     (!_nearClipEdge(local.dx) &&
+                        !(widget.blocked?.call(local) ?? false) &&
                         (_pointAt(local, height) != null ||
                             _onALine(local, height))),
                 // Over a clip, the line is found by the cursor changing.
