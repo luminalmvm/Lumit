@@ -518,8 +518,8 @@ impl<'a> Edit<'a> {
 
     /// Put clips down, each on its row, overwriting what it lands on and
     /// never a clip that came with it: two that overlapped before still do.
-    /// With `overlap` nothing is overwritten, and where a clip lands across
-    /// one end of another the two dissolve or crossfade.
+    /// With `overlap`, where a clip lands across one end of another the two
+    /// dissolve or crossfade, and nothing is overwritten.
     fn land(&mut self, clips: Vec<(usize, Clip)>, overlap: bool) -> Cut {
         for (landing, clip) in &clips {
             let row = &mut self.rows[*landing];
@@ -538,10 +538,10 @@ impl<'a> Edit<'a> {
                         .iter()
                         .any(|b| covers(a, b.place_start, b.place_end()))
                 });
-                if !met.iter().all(crossing) || met.len() > 2 || crowded {
-                    return Err(BridgeCutResult::Overlap.into());
+                // Anything else is overwritten, as Vegas does.
+                if met.iter().all(crossing) && met.len() <= 2 && !crowded {
+                    continue;
                 }
-                continue;
             }
             row.clips.push(clip.clone());
             row.clips = placed(std::mem::take(&mut row.clips), clip.id, false);

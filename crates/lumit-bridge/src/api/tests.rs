@@ -4935,8 +4935,8 @@ fn extracting_a_span_cuts_both_ends_and_closes_it_in_one_step() {
 }
 
 /// A move follows the timeline's three switches. With overlap a clip dragged
-/// across the end of another keeps both, and one that would cover another is
-/// refused. With ripple everything after the moved clip goes as far. A part
+/// across the end of another keeps both, and one that would cover another
+/// overwrites it. With ripple everything after the moved clip goes as far. A part
 /// of a frame is taken by sound alone.
 #[test]
 fn a_move_follows_the_timelines_switches() {
@@ -4967,9 +4967,11 @@ fn a_move_follows_the_timelines_switches() {
         "nothing was cut away, and the two share ten frames"
     );
     project.undo().expect("undo");
-    // Right on top of the middle clip is not a crossfade.
+    // Right on top of the middle clip is not a crossfade: it overwrites.
     let done = comp.cut_move(vec![], ids[2], -length, None, false, over);
-    assert_eq!(done.expect("answered"), BridgeCutResult::Overlap);
+    assert_eq!(done.expect("moved"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top), [(0, length), (length, 2 * length)]);
+    project.undo().expect("undo");
     assert_eq!(row_frames(&top), rest);
 
     // Ripple: the first clip moves later and the two after it go with it.
