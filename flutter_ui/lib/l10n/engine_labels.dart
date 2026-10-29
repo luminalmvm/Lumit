@@ -1436,6 +1436,8 @@ Map<String, String> get _built => {
       "Select the clip at the playhead": l10n.keySelectTheClipAtThePlayhead,
       "Turn snapping on or off": l10n.keyTurnSnappingOnOrOff,
       "Show or hide speed lines": l10n.keyShowOrHideSpeedLines,
+      "Show or hide the volume envelope": l10n.keyShowOrHideTheVolumeEnvelope,
+      "Show or hide the pan envelope": l10n.keyShowOrHideThePanEnvelope,
       "Turn looping on or off": l10n.keyTurnLoopingOnOrOff,
       "Group the picked clips": l10n.keyGroupThePickedClips,
       "Take the picked clips out of their group":

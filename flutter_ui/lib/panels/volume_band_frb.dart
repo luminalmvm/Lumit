@@ -18,7 +18,14 @@
 // release. `Ctrl`-click plants a key on the line (the lane ground's own
 // planting gesture, aimed at this row); `Alt`-click lifts one, the graph
 // and envelope grammar.
+//
+// The same band draws Pan when asked ([BandKind.pan]): centre in the middle,
+// left at the top and right at the bottom, as Vegas draws it. A double-click
+// on the line puts the level, or the key under the pointer, back to 0 dB or
+// centre, and `Ctrl` held during a drag moves it at a tenth of the speed.
 
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -28,6 +35,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'mixer_panel_frb.dart' show panLabel;
 import 'timeline_extras_frb.dart';
 
 /// The loudest the band's top means, in dB. A boost is real (+50 is the
@@ -56,7 +64,10 @@ double volumeBandDbOfY(double y, double height,
         {double topDb = volumeBandTopDb}) =>
     topDb - (y - 1) / (height - 2) * (topDb - volumeBandFloorDb);
 
-/// The layer's Volume as a band over its waveform lane.
+/// Which property a band draws and edits.
+enum BandKind { volume, pan }
+
+/// The layer's Volume (or Pan) as a band over its lane.
 class VolumeBand extends StatefulWidget {
   final BridgeLayerEntry entry;
   final TimelineAxis axis;
@@ -75,6 +86,8 @@ class VolumeBand extends StatefulWidget {
 
   final VoidCallback onChanged;
 
+  final BandKind kind;
+
   const VolumeBand({
     super.key,
     required this.entry,
@@ -85,6 +98,7 @@ class VolumeBand extends StatefulWidget {
     required this.barShift,
     required this.rowHeight,
     required this.onChanged,
+    this.kind = BandKind.volume,
   });
 
   @override
@@ -92,71 +106,96 @@ class VolumeBand extends StatefulWidget {
 }
 
 class VolumeBandState extends State<VolumeBand> {
-  /// The drag in flight: which key it holds (null while the volume is
-  /// static and the whole level moves), the dB it has reached, and the dB it
-  /// began at — travel in, travel out, so the line never teleports to the
-  /// pointer.
-  ({int? index, double db})? _drag;
+  /// The drag in flight: which key it holds (null while the property is
+  /// static and the whole level moves), the value it has reached, and the
+  /// value it began at. Travel in, travel out, so the line never teleports to
+  /// the pointer.
+  ({int? index, double value})? _drag;
   double _grabbedAt = 0;
   double _travelled = 0;
 
-  BridgeScalar get _scalar => widget.entry.info.volumeDb;
+  /// The last plain click, so a second one close by makes a double-click
+  /// without holding every single click back the way a double-tap gesture
+  /// would.
+  DateTime? _lastTap;
+  Offset _lastTapAt = Offset.zero;
+
+  /// Null while the pointer is off the band; on it, the diamond under it (null
+  /// on the bare line). The painter listens, so hover repaints and rebuilds
+  /// nothing.
+  final ValueNotifier<({int? key})?> _hover = ValueNotifier(null);
+
+  @override
+  void dispose() {
+    _hover.dispose();
+    super.dispose();
+  }
+
+  bool get _pan => widget.kind == BandKind.pan;
+
+  BridgeScalar get _scalar =>
+      _pan ? widget.entry.info.pan : widget.entry.info.volumeDb;
 
   List<BridgeKeyframe> get _keys => switch (_scalar) {
         BridgeScalar_Keyframed(:final field0) => field0,
         _ => const [],
       };
 
-  double get _staticDb => switch (_scalar) {
+  double get _staticValue => switch (_scalar) {
         BridgeScalar_Static(:final field0) => field0,
         _ => 0,
       };
 
-  double _y(double db) => volumeBandY(db, widget.rowHeight);
+  /// Pan runs left at the top to right at the bottom, centre between.
+  double _y(double value) => _pan
+      ? 1 + ((value + 100) / 200).clamp(0.0, 1.0) * (widget.rowHeight - 2)
+      : volumeBandY(value, widget.rowHeight);
 
-  double _dbOfY(double y) => volumeBandDbOfY(y, widget.rowHeight);
+  double _valueOfY(double y) => _pan
+      ? (-100 + (y - 1) / (widget.rowHeight - 2) * 200).clamp(-100.0, 100.0)
+      : volumeBandDbOfY(y, widget.rowHeight)
+          .clamp(volumeBandFloorDb, volumeBandTopDb);
 
   /// A key's x, on the comp clock its times cross in, carried along
   /// by a bar move in flight.
   double _xOfKey(BridgeKeyframe key) =>
       widget.axis.xOf(laneKeyFrame(key, widget.fps) + widget.barShift);
 
-  /// The band's points as drawn right now: each key's (x, y[dB]) with the
+  /// The band's points as drawn right now: each key's (x, y[value]) with the
   /// drag in flight applied, or the flat static level.
   List<Offset> _points() {
     final keys = _keys;
     final held = _drag;
     if (keys.isEmpty) {
-      final db = held != null ? held.db : _staticDb;
-      final y = _y(db);
+      final y = _y(held != null ? held.value : _staticValue);
       return [Offset(0, y), Offset(widget.axis.width, y)];
     }
     return [
       for (var i = 0; i < keys.length; i++)
         Offset(
           _xOfKey(keys[i]),
-          _y(held != null && held.index == i ? held.db : keys[i].value),
+          _y(held != null && held.index == i ? held.value : keys[i].value),
         ),
     ];
   }
 
-  /// The dB the band reads at [x], off the drawn points — what a planted key
-  /// takes, so planting moves nothing.
+  /// The value the band reads at [x], off the drawn points — what a planted
+  /// key takes, so planting moves nothing.
   ///
   /// ponytail: linear between keys, so an eased fade's planted key can land a
   /// shade off the engine's curve; sample through the engine if that shade is
   /// ever noticed.
-  double _dbAt(double x, List<Offset> pts) {
-    if (pts.isEmpty) return _staticDb;
-    if (x <= pts.first.dx) return _dbOfY(pts.first.dy);
+  double _valueAt(double x, List<Offset> pts) {
+    if (pts.isEmpty) return _staticValue;
+    if (x <= pts.first.dx) return _valueOfY(pts.first.dy);
     for (var i = 0; i + 1 < pts.length; i++) {
       if (x <= pts[i + 1].dx) {
         final w = pts[i + 1].dx - pts[i].dx;
         final f = w <= 0 ? 0.0 : ((x - pts[i].dx) / w).clamp(0.0, 1.0);
-        return _dbOfY(pts[i].dy + (pts[i + 1].dy - pts[i].dy) * f);
+        return _valueOfY(pts[i].dy + (pts[i + 1].dy - pts[i].dy) * f);
       }
     }
-    return _dbOfY(pts.last.dy);
+    return _valueOfY(pts.last.dy);
   }
 
   /// The nearest key within reach of [local], by x — the band is a line, so
@@ -178,11 +217,11 @@ class VolumeBandState extends State<VolumeBand> {
   void _startDrag(Offset local) {
     final keys = _keys;
     final index = keys.isEmpty ? null : (_keyNear(local) ?? _nearestByX(local));
-    final at = index == null ? _staticDb : keys[index].value;
+    final at = index == null ? _staticValue : keys[index].value;
     setState(() {
       _grabbedAt = at;
       _travelled = 0;
-      _drag = (index: index, db: at);
+      _drag = (index: index, value: at);
     });
   }
 
@@ -206,44 +245,64 @@ class VolumeBandState extends State<VolumeBand> {
   void _moveDrag(double dy) {
     final held = _drag;
     if (held == null) return;
-    _travelled += dy;
-    final span = volumeBandTopDb - volumeBandFloorDb;
-    final db = (_grabbedAt - _travelled / (widget.rowHeight - 2) * span)
-        .clamp(volumeBandFloorDb, volumeBandTopDb);
-    setState(() => _drag = (index: held.index, db: db));
+    final keyboard = HardwareKeyboard.instance;
+    // Ctrl held is the fine trim: a tenth of the speed.
+    _travelled += keyboard.isControlPressed || keyboard.isMetaPressed
+        ? dy / 10
+        : dy;
+    final value = _valueOfY(_y(_grabbedAt) + _travelled);
+    setState(() => _drag = (index: held.index, value: value));
   }
 
   void _commitDrag() {
     final held = _drag;
     setState(() => _drag = null);
     if (held == null) return;
-    if (held.db == _grabbedAt) return;
+    if (held.value == _grabbedAt) return;
     final keys = _keys;
-    if (held.index == null || keys.isEmpty) {
-      widget.entry.layer.setVolumeDb(value: BridgeScalar.static_(held.db));
-    } else {
-      widget.entry.layer.setVolumeDb(
-        value: BridgeScalar.keyframed([
-          for (var i = 0; i < keys.length; i++)
-            i == held.index
-                ? BridgeKeyframe(
-                    time: keys[i].time,
-                    value: held.db,
-                    interpIn: keys[i].interpIn,
-                    interpOut: keys[i].interpOut,
-                  )
-                : keys[i],
-        ]),
-      );
-    }
+    _write(held.index == null || keys.isEmpty
+        ? BridgeScalar.static_(held.value)
+        : _withKey(keys, held.index!, held.value));
+  }
+
+  /// [keys] with key [index] set to [value], its time and easing kept.
+  BridgeScalar _withKey(List<BridgeKeyframe> keys, int index, double value) =>
+      BridgeScalar.keyframed([
+        for (var i = 0; i < keys.length; i++)
+          i == index
+              ? BridgeKeyframe(
+                  time: keys[i].time,
+                  value: value,
+                  interpIn: keys[i].interpIn,
+                  interpOut: keys[i].interpOut,
+                )
+              : keys[i],
+      ]);
+
+  void _write(BridgeScalar next) {
+    final layer = widget.entry.layer;
+    _pan ? layer.setPan(value: next) : layer.setVolumeDb(value: next);
     widget.onChanged();
+  }
+
+  /// A double-click puts the level back to 0 dB or centre: the whole level
+  /// while it is static, the key under the pointer once it is keyed.
+  void _reset(Offset local) {
+    final keys = _keys;
+    if (keys.isEmpty) {
+      if (_staticValue != 0) _write(const BridgeScalar.static_(0));
+      return;
+    }
+    final index = _keyNear(local);
+    if (index == null || keys[index].value == 0) return;
+    _write(_withKey(keys, index, 0));
   }
 
   /// `Ctrl`-click plants a key on the line at that moment, reading the value
   /// the band already draws there — a place to grab, not a change.
   /// `Alt`-click lifts the diamond under the pointer; lifting the last one
   /// leaves the level as a static at that key's value, which is what the
-  /// curve read anyway.
+  /// curve read anyway. Two plain clicks close together reset.
   void _tap(Offset local) {
     final keyboard = HardwareKeyboard.instance;
     final keys = _keys;
@@ -254,21 +313,28 @@ class VolumeBandState extends State<VolumeBand> {
         for (var i = 0; i < keys.length; i++)
           if (i != index) keys[i],
       ];
-      widget.entry.layer.setVolumeDb(
-        value: left.isEmpty
-            ? BridgeScalar.static_(keys[index].value)
-            : BridgeScalar.keyframed(left),
-      );
-      widget.onChanged();
+      _write(left.isEmpty
+          ? BridgeScalar.static_(keys[index].value)
+          : BridgeScalar.keyframed(left));
       return;
     }
-    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) {
+      final now = DateTime.now();
+      final last = _lastTap;
+      final twice = last != null &&
+          now.difference(last) <= kDoubleTapTimeout &&
+          (local - _lastTapAt).distance <= kDoubleTapSlop;
+      _lastTap = twice ? null : now;
+      _lastTapAt = local;
+      if (twice) _reset(local);
+      return;
+    }
     final frame = widget.axis.frameAtExact(local.dx) - widget.barShift;
     final time = timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
-    final db = _dbAt(local.dx, _points());
+    final value = _valueAt(local.dx, _points());
     final planted = BridgeKeyframe(
       time: time,
-      value: db,
+      value: value,
       interpIn: const BridgeSideInterp.linear(),
       interpOut: const BridgeSideInterp.linear(),
     );
@@ -283,8 +349,7 @@ class VolumeBandState extends State<VolumeBand> {
         return;
       }
     }
-    widget.entry.layer.setVolumeDb(value: BridgeScalar.keyframed(grown));
-    widget.onChanged();
+    _write(BridgeScalar.keyframed(grown));
   }
 
   @override
@@ -293,19 +358,22 @@ class VolumeBandState extends State<VolumeBand> {
     final points = _points();
     final held = _drag;
     final readout = held != null
-        ? _readoutText(held.db)
+        ? _readoutText(held.value)
         : _keys.isEmpty
-            ? _readoutText(_staticDb)
+            ? _readoutText(_staticValue)
             : null;
+    final id = widget.entry.layer.internallayerId;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeUpDown,
       // Only where the band itself answers (the painter's hitTest): the
       // region must not steal hover from the whole lane.
       opaque: false,
       hitTestBehavior: HitTestBehavior.deferToChild,
+      onHover: (e) => _hover.value = (key: _keyNear(e.localPosition)),
+      onExit: (_) => _hover.value = null,
       child: GestureDetector(
         key: ValueKey<String>(
-            'tl-volume-band-${widget.entry.layer.internallayerId}'),
+            _pan ? 'tl-pan-band-$id' : 'tl-volume-band-$id'),
         behavior: HitTestBehavior.deferToChild,
         supportedDevices: dragDevices,
         onTapUp: (d) => _tap(d.localPosition),
@@ -317,21 +385,27 @@ class VolumeBandState extends State<VolumeBand> {
           size: Size(widget.axis.width, widget.rowHeight),
           painter: VolumeBandPainter(
             points: points,
-            line: t.accent,
+            // Pan in the warning tone, so the two lines on one lane never
+            // read as each other.
+            line: _pan ? t.warning : t.accent,
+            halo: t.surface0.withValues(alpha: 0.75),
             diamond: t.animated,
             readout: readout,
             readoutStyle:
                 t.mono.copyWith(fontSize: 9, color: t.textMuted),
             keyed: _keys.isNotEmpty,
+            hover: _hover,
           ),
         ),
       ),
     );
   }
 
-  String _readoutText(double db) => db <= volumeBandFloorDb
-      ? l10n.volumeNegInf
-      : '${db.toStringAsFixed(1)} dB';
+  String _readoutText(double value) => _pan
+      ? panLabel(value)
+      : value <= volumeBandFloorDb
+          ? l10n.volumeNegInf
+          : '${value.toStringAsFixed(1)} dB';
 }
 
 /// The band's line, its diamonds, and the readout — and the hit test that
@@ -344,9 +418,16 @@ class VolumeBandPainter extends CustomPainter {
   final String? readout;
   final TextStyle readoutStyle;
 
+  /// A darker edge drawn under the line, so it reads over a busy waveform.
+  final Color? halo;
+
   /// Whether the points are keyframes (drawn as diamonds) or the flat static
   /// level (drawn bare).
   final bool keyed;
+
+  /// The pointer on the band: the line thickens, and the diamond under it
+  /// grows.
+  final ValueListenable<({int? key})?>? hover;
 
   const VolumeBandPainter({
     required this.points,
@@ -355,14 +436,18 @@ class VolumeBandPainter extends CustomPainter {
     required this.readout,
     required this.readoutStyle,
     required this.keyed,
-  });
+    this.halo,
+    this.hover,
+  }) : super(repaint: hover);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
+    final over = hover?.value;
+    final width = over != null ? 2.2 : 1.6;
     final stroke = Paint()
       ..color = line
-      ..strokeWidth = 1.4
+      ..strokeWidth = width
       ..style = PaintingStyle.stroke;
     final path = Path()..moveTo(0, points.first.dy);
     path.lineTo(points.first.dx, points.first.dy);
@@ -370,19 +455,29 @@ class VolumeBandPainter extends CustomPainter {
       path.lineTo(p.dx, p.dy);
     }
     path.lineTo(size.width, points.last.dy);
+    if (halo case final edge?) {
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = edge
+            ..strokeWidth = width + 2
+            ..style = PaintingStyle.stroke);
+    }
     canvas.drawPath(path, stroke);
 
     if (keyed) {
       // The board's two-diamond grammar: a filled diamond per key, in the
       // animated gold every other keyframe diamond wears.
       final fill = Paint()..color = diamond;
-      for (final p in points) {
+      for (var i = 0; i < points.length; i++) {
+        final p = points[i];
+        final r = over?.key == i ? 5.0 : 3.5;
         canvas.drawPath(
           Path()
-            ..moveTo(p.dx, p.dy - 3.5)
-            ..lineTo(p.dx + 3.5, p.dy)
-            ..lineTo(p.dx, p.dy + 3.5)
-            ..lineTo(p.dx - 3.5, p.dy)
+            ..moveTo(p.dx, p.dy - r)
+            ..lineTo(p.dx + r, p.dy)
+            ..lineTo(p.dx, p.dy + r)
+            ..lineTo(p.dx - r, p.dy)
             ..close(),
           fill,
         );
@@ -425,7 +520,9 @@ class VolumeBandPainter extends CustomPainter {
   bool shouldRepaint(VolumeBandPainter old) =>
       old.points != points ||
       old.line != line ||
+      old.halo != halo ||
       old.diamond != diamond ||
       old.readout != readout ||
-      old.keyed != keyed;
+      old.keyed != keyed ||
+      old.hover != hover;
 }

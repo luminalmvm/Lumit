@@ -347,6 +347,8 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "Shift+X", "cut.crossfade.toggle"),
         row(Cut, "Alt+F8", "cut.quantise.toggle"),
         row(Cut, "Shift+E", "cut.speed.toggle"),
+        row(Cut, "Shift+V", "cut.envelope.volume"),
+        row(Cut, "Shift+P", "cut.envelope.pan"),
         row(Cut, "Mod+G", "cut.group"),
         row(Cut, "Mod+Shift+G", "cut.ungroup"),
         row(Cut, ";", "cut.lift"),
@@ -505,6 +507,7 @@ pub fn after_effects_preset() -> Keymap {
 ///   crossfades. Quantise to frames is on Alt+F8 already.
 /// - **Q** turns looping on and off, and **Mod+Shift+E** shows and hides the
 ///   speed lines on the clips, Vegas's chord for its envelopes.
+/// - **V** and **P** show and hide a track's volume and pan envelopes.
 /// - The wheel zooms time with no key held, and Ctrl with it scrolls the
 ///   tracks.
 /// - **G** groups the picked clips and **U** takes them out of their group.
@@ -552,6 +555,8 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+L", "cut.ripple.toggle"),
         (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),
         (Cut, "Mod+Shift+E", "cut.speed.toggle"),
+        (Cut, "V", "cut.envelope.volume"),
+        (Cut, "P", "cut.envelope.pan"),
         (Cut, "Q", "playback.loop.toggle"),
         (Cut, "G", "cut.group"),
         (Cut, "U", "cut.ungroup"),

@@ -23,7 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgeKeyframe, BridgeRational, BridgeScalar;
+    show BridgeKeyframe, BridgeRational, BridgeScalar, BridgeScalar_Keyframed;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -82,7 +82,7 @@ import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart' show RazorOverlay;
 import 'timeline_snap.dart';
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
-import 'volume_band_frb.dart' show volumeBandFloorDb;
+import 'volume_band_frb.dart' show BandKind, VolumeBand, volumeBandFloorDb;
 import 'waveform_frb.dart';
 
 /// How wide the header column stands: a name and three switches.
@@ -739,6 +739,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       case 'cut.speed.toggle':
         _toggle((s) => s.cutSpeedLines = !s.cutSpeedLines);
         _saySwitch(l10n.cutSpeedLines, _speedLines);
+      case 'cut.envelope.volume':
+        _toggleEnvelope(BandKind.volume);
+      case 'cut.envelope.pan':
+        _toggleEnvelope(BandKind.pan);
       case 'cut.group':
         _group(join: true);
       case 'cut.ungroup':
@@ -806,6 +810,49 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// The tracks a playhead command works on: the picked clips' own, top
   /// first, else every track.
+  /// The volume and pan lines across sound rows, by kind and row: shown
+  /// once asked for or once the property has keys, and hidden when asked.
+  final Set<String> _bandsShown = {};
+  final Set<String> _bandsHidden = {};
+
+  bool _bandShown(CutTrack track, BandKind kind) {
+    final key = '${kind.name}:${track.id}';
+    if (_bandsHidden.contains(key)) return false;
+    if (_bandsShown.contains(key)) return true;
+    final info = track.entry.info;
+    return (kind == BandKind.volume ? info.volumeDb : info.pan)
+        is BridgeScalar_Keyframed;
+  }
+
+  /// V or P, as Vegas has them: the line shows or hides on the sound rows
+  /// of the picked clips, else on the row last pressed, else on every one.
+  void _toggleEnvelope(BandKind kind) {
+    final rows = [
+      for (final track in _candidateTracks())
+        if (track.below) track
+    ];
+    final last = _tracks.where((t) => t.id == _lastTrack && t.below);
+    final aim = _selected.isNotEmpty && rows.isNotEmpty
+        ? rows
+        : last.isNotEmpty
+            ? last.toList()
+            : [for (final t in _tracks) if (t.below) t];
+    if (aim.isEmpty) return;
+    final on = !aim.every((t) => _bandShown(t, kind));
+    setState(() {
+      for (final track in aim) {
+        final key = '${kind.name}:${track.id}';
+        if (on) {
+          _bandsShown.add(key);
+          _bandsHidden.remove(key);
+        } else {
+          _bandsHidden.add(key);
+          _bandsShown.remove(key);
+        }
+      }
+    });
+  }
+
   List<CutTrack> _candidateTracks() {
     if (_selected.isEmpty) return _tracks;
     final at = <int>{
@@ -4559,6 +4606,36 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                           axis: axis, fps: fps),
                                     ),
                                   ),
+                              // A sound row's volume and pan, as Vegas's track
+                              // envelopes: lines across the whole row, over
+                              // the clips, taking only presses on themselves.
+                              for (var i = 0; i < _tracks.length; i++)
+                                if (_tracks[i].below &&
+                                    heights[i] > 20 &&
+                                    _toolOf(ui) == CutTool.select)
+                                  for (final kind in BandKind.values)
+                                    if (_bandShown(_tracks[i], kind))
+                                      Positioned(
+                                        key: ValueKey<String>(
+                                            'ctl-${kind.name}-${_tracks[i].id}'),
+                                        left: 0,
+                                        width: axis.width,
+                                        top: _tops[i] + 2,
+                                        height: heights[i] - 4,
+                                        child: RepaintBoundary(
+                                          child: VolumeBand(
+                                            entry: _tracks[i].entry,
+                                            axis: axis,
+                                            fps: fps,
+                                            fpsNum: ui.model.fpsExact.$1,
+                                            fpsDen: ui.model.fpsExact.$2,
+                                            barShift: 0,
+                                            rowHeight: heights[i] - 4,
+                                            onChanged: _afterSound,
+                                            kind: kind,
+                                          ),
+                                        ),
+                                      ),
                             ],
                           ),
                         ),

@@ -5900,6 +5900,14 @@
   "@keyShowOrHideSpeedLines": {
     "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
   },
+  "keyShowOrHideTheVolumeEnvelope": "Show or hide the volume envelope",
+  "@keyShowOrHideTheVolumeEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its volume over time. Vegas puts this on V."
+  },
+  "keyShowOrHideThePanEnvelope": "Show or hide the pan envelope",
+  "@keyShowOrHideThePanEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its left-right balance over time. Vegas puts this on P."
+  },
   "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
