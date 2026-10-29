@@ -608,9 +608,12 @@ enum CutBadge { fx, panCrop }
 /// clip, and Pan/Crop beside it on a picture clip. None on a box too small to
 /// keep room for its name.
 List<(CutBadge, Rect)> cutBadges(Rect box, {required bool picture}) {
-  final side = min(16.0, box.height - 4);
+  // Below the band the fade handles are taken in, so a short fade-out's
+  // handle and the fx button never share a pixel.
+  final top = box.top + cutFadeHandleHeight - 1;
+  final side = min(16.0, box.bottom - top - 2);
   if (side < 10 || box.width < side * 4 + 24) return const [];
-  final fx = Rect.fromLTWH(box.right - 3 - side, box.top + 2, side, side);
+  final fx = Rect.fromLTWH(box.right - 3 - side, top, side, side);
   return [
     (CutBadge.fx, fx),
     if (picture) (CutBadge.panCrop, fx.shift(Offset(-side - 2, 0))),

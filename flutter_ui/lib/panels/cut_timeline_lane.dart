@@ -348,12 +348,16 @@ class CutTrackPainter extends CustomPainter {
   /// corner, three pixels down from the handle's top. Hovered, its outline
   /// is lifted to the text colour, as a hovered edge is lifted.
   void _handle(Canvas canvas, double x, {required bool lit}) {
-    const mark = 5.0;
+    // Lit, it grows about the same centre and fills, so the pointer can
+    // tell it has the handle before it presses.
+    const base = 5.0;
+    final mark = lit ? 7.0 : base;
     canvas.save();
-    canvas.translate(x, 3 + mark / 2);
+    canvas.translate(x, 3 + base / 2);
     canvas.rotate(pi / 4);
     final square = Rect.fromCenter(center: Offset.zero, width: mark, height: mark);
-    canvas.drawRect(square, Paint()..color = colours.handleFill);
+    canvas.drawRect(
+        square, Paint()..color = lit ? colours.lift : colours.handleFill);
     canvas.drawRect(
       square.deflate(0.5),
       Paint()

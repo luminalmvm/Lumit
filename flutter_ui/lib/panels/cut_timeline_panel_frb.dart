@@ -245,6 +245,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Whether the pointer rests on a gain line, for the cursor.
   final ValueNotifier<bool> _overGain = ValueNotifier(false);
 
+  /// Whether it rests on a clip's fx or Pan/Crop button, for the hand.
+  final ValueNotifier<bool> _overBadge = ValueNotifier(false);
+
   /// The gain line in hand: whose, the level it was taken at, how far the
   /// pointer has gone, and the height of the box it is measured in.
   ({CutTrack track, BridgeClip clip, double travelled, double height})?
@@ -283,6 +286,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// Clicks on the speed lines, counted apart from the clips' own.
   final DoubleTap _speedTaps = DoubleTap();
+
+  /// Clicks on a gain line, counted apart too.
+  final DoubleTap _gainTaps = DoubleTap();
 
   /// Whether the last press was on a track's head rather than on its lane,
   /// which is the one time Delete may take the track itself.
@@ -375,6 +381,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _hover.dispose();
     _gainLive.dispose();
     _overGain.dispose();
+    _overBadge.dispose();
     _marquee.dispose();
     _pictures.dispose();
     _workPreview.dispose();
@@ -498,15 +505,35 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         .clamp(usual * cutTrackMinScale, usual * cutTrackMaxScale);
   }
 
-  void _resizeTrack(CutTrack track, double by) {
+  /// An edge taken hold of: the size it had and where the pointer was, so the
+  /// edge stays under the pointer past a limit and on the way back.
+  ({double size, double at})? _sizeFrom;
+
+  /// While an edge is dragged the pictures are not asked for again: the
+  /// release asks once.
+  bool _sizing = false;
+
+  void _startSizing(double size, double at) {
+    _sizeFrom = (size: size, at: at);
+    _sizing = true;
+  }
+
+  void _endSizing() {
+    _sizeFrom = null;
+    _sizing = false;
+    _queueRefresh();
+  }
+
+  void _resizeTrack(CutTrack track, double at) {
+    final from = _sizeFrom;
+    if (from == null) return;
     final usual = _trackHeight;
     _settle.stop();
     _settling = null;
     setState(() {
-      _heightsHere?[track.id] = (_heightOf(track) + by)
+      _heightsHere?[track.id] = (from.size + at - from.at)
           .clamp(usual * cutTrackMinScale, usual * cutTrackMaxScale);
     });
-    _queueRefresh();
   }
 
   /// A double-click on a track's lower edge: back to the usual height.
@@ -1418,7 +1445,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// for the picture rows, peaks over the visible stretch for the sound
   /// rows. Called after the frame and from the scrolls, never from a build.
   void _queueRefresh() {
-    if (_refreshQueued) return;
+    if (_refreshQueued || _sizing) return;
     _refreshQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshQueued = false;
@@ -1708,11 +1735,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// Keep the playhead in view during playback, as the Timeline does: when
   /// it leaves the viewport the lanes jump so it lands back at the left
-  /// edge, and the next page plays out under a still picture. Only while
-  /// playing, so it never fights a hand.
+  /// edge, and the next page plays out under a still picture. Stopped, only
+  /// a key that moved it does the same, an edit point or the end, as in
+  /// Vegas, so a scrub in the ruler is never fought.
   void _edgeFollow() {
     final ui = _ui;
-    if (ui == null || !ui.playing.value || !mounted) return;
+    if (ui == null || !mounted) return;
+    if (!ui.playing.value &&
+        HardwareKeyboard.instance.logicalKeysPressed.isEmpty) {
+      return;
+    }
     final position = positionOf(_hLane);
     if (position == null || position.maxScrollExtent <= 0) return;
     final viewport = position.viewportDimension;
@@ -1847,6 +1879,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final id = hit.clip.id.toString();
       _lastPressed = id;
       setState(() => _selected = _withMates(id));
+      // Two clicks put the level back at 0 dB, as Vegas's envelopes do.
+      if (_gainTaps.tap(at: at, slop: _clickSlop * 2)) {
+        if (hit.clip.gainDb != 0) {
+          try {
+            track.entry.layer.setClipGain(clip: hit.clip.id, db: 0);
+          } catch (_) {}
+          _afterCut(BridgeCutResult.done);
+        }
+        return;
+      }
       _gainHeld = (
         track: track,
         clip: hit.clip,
@@ -1935,7 +1977,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       tool: tool,
       stretch: stretch,
     );
-    _hover.value = null;
     // A gesture under a held tool key: the key gives its tool back on
     // release.
     if (_heldTool case final held?) {
@@ -1961,7 +2002,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _gainMove(Offset at, double dy) {
     final held = _gainHeld;
     if (held == null || !_escape.running) return;
-    final travelled = held.travelled + dy;
+    // Ctrl moves it a tenth as far, as the speed line does.
+    final travelled = held.travelled +
+        dy * (HardwareKeyboard.instance.isControlPressed ? 0.1 : 1);
     final tall = max(3.0, held.height - 4);
     final db = (held.clip.gainDb - travelled / (tall - 2) * -volumeBandFloorDb)
         .clamp(volumeBandFloorDb, 0.0);
@@ -1974,8 +2017,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _gainLive.value = (clip: held.clip.id.toString(), db: db);
     _hint.value = (
       at: at,
-      row: _tracks.indexOf(held.track),
-      text: '${db.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
+      row: max(0, _tracks.indexWhere((t) => t.id == held.track.id)),
+      text: db <= volumeBandFloorDb
+          ? l10n.volumeNegInf
+          : '${db.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
     );
   }
 
@@ -2039,12 +2084,35 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }
 
   /// Nothing in flight: what Escape, the release and a cancel all leave.
+  /// The edge or handle lit under the pointer stays lit through the drag
+  /// and goes out here.
   void _clearDrag() {
     _press = null;
     _drag.value = null;
     _caught.value = null;
     _hint.value = null;
     _marquee.value = null;
+    _hover.value = null;
+  }
+
+  /// The pointer over the lanes: the resize arrows over an edge, a fade
+  /// handle or anything being trimmed, up and down over a gain line, a closed
+  /// hand while clips are carried, and the plain arrow otherwise.
+  MouseCursor _laneCursor(bool razor) {
+    if (razor) return SystemMouseCursors.none;
+    final held = _press;
+    if (_drag.value != null && held != null && held.clip != null) {
+      return held.fade != null || held.grab != BarGrab.move
+          ? SystemMouseCursors.resizeLeftRight
+          : SystemMouseCursors.grabbing;
+    }
+    final over = _hover.value;
+    if (over != null && (over.fade != null || over.grab != BarGrab.move)) {
+      return SystemMouseCursors.resizeLeftRight;
+    }
+    if (_overGain.value) return SystemMouseCursors.resizeUpDown;
+    if (_overBadge.value) return SystemMouseCursors.click;
+    return MouseCursor.defer;
   }
 
   /// The fade handle under [at] on [track], or null: only with Select.
@@ -2074,6 +2142,15 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final frames = cutFadeFrames(held.clip!, _ui?.model.fps ?? 0,
           into: into, shift: drag.shift);
       text = l10n.cutFadeLength('$frames');
+    } else if (held.stretch && held.clip != null) {
+      // A stretch says the speed it leaves, against the clip's speed now.
+      final clip = held.clip!;
+      final length = clip.endFrame.toInt() - clip.startFrame.toInt();
+      final now = held.grab == BarGrab.trimIn
+          ? length - drag.shift
+          : length + drag.shift;
+      final rate = now > 0 ? length / now * 100 : 0.0;
+      text = '${rate.toStringAsFixed(1)}${l10n.unitSymbolPercent}';
     } else if (drag.sub != 0) {
       // Between two frames: said to the hundredth of one.
       final gone = drag.shift + drag.sub;
@@ -2100,6 +2177,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         under != null &&
         _toolOf(ui) == CutTool.select &&
         _onGainLine(_tracks[row], row, under.clip, at);
+    _overBadge.value = _press == null &&
+        row != null &&
+        under != null &&
+        _toolOf(ui) == CutTool.select &&
+        _fadeAt(ui, _tracks[row], row, at, CutTool.select) == null &&
+        _badgeAt(_tracks[row], row, under.clip, at) != null;
     CutHover? next;
     if (_press == null && !HardwareKeyboard.instance.isAltPressed) {
       final tool = _toolOf(ui);
@@ -3595,15 +3678,32 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           bottom: 0,
           right: 0,
           width: 5,
-          child: MouseRegion(
+          child: HoverMark(
             cursor: SystemMouseCursors.resizeLeftRight,
-            child: GestureDetector(
+            builder: (context, lit) => GestureDetector(
               key: const ValueKey('ctl-head-edge'),
               behavior: HitTestBehavior.opaque,
-              onHorizontalDragUpdate: (d) => setState(() => _settings
-                  .cutHeadWidth = (width + d.delta.dx).clamp(120.0, 480.0)),
-              onHorizontalDragEnd: (_) => _ui?.workspace.settingsChanged(),
+              onHorizontalDragStart: (d) =>
+                  _startSizing(width, d.globalPosition.dx),
+              onHorizontalDragUpdate: (d) {
+                final from = _sizeFrom;
+                if (from == null) return;
+                setState(() => _settings.cutHeadWidth =
+                    (from.size + d.globalPosition.dx - from.at)
+                        .clamp(120.0, 480.0));
+              },
+              onHorizontalDragEnd: (_) {
+                _endSizing();
+                _ui?.workspace.settingsChanged();
+              },
+              onHorizontalDragCancel: _endSizing,
               onDoubleTap: () => _toggle((s) => s.cutHeadWidth = 180),
+              // Lit like the lower edges, so the five pixels read as live.
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                    width: 2, color: t.accent.withValues(alpha: lit)),
+              ),
             ),
           ),
         ),
@@ -3777,7 +3877,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }) =>
       LumitTooltip(
         message: tip,
-        child: GestureDetector(
+        // Lit under the pointer, as the other timelines' switches are.
+        child: HoverMark(
+          builder: (context, lit) => GestureDetector(
           key: ValueKey<String>('ctl-$name-${track.id}'),
           behavior: HitTestBehavior.opaque,
           onTap: () {
@@ -3798,8 +3900,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             height: height,
             child: Center(
               child: glyph.LumitIcon(on ? mark : offMark,
-                  size: iconSize, colour: on ? t.textPrimary : t.textMuted),
+                  size: iconSize,
+                  colour: Color.lerp(on ? t.textPrimary : t.textMuted,
+                      on ? t.textPrimary : t.textSecondary, lit)!),
             ),
+          ),
           ),
         ),
       );
@@ -3829,9 +3934,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             child: GestureDetector(
               key: ValueKey<String>('ctl-height-${track.id}'),
               behavior: HitTestBehavior.opaque,
-              onVerticalDragUpdate: (d) => _resizeTrack(track, d.delta.dy),
+              onVerticalDragStart: (d) =>
+                  _startSizing(_heightOf(track), d.globalPosition.dy),
+              onVerticalDragUpdate: (d) =>
+                  _resizeTrack(track, d.globalPosition.dy),
               // Written down once, when the edge is let go.
-              onVerticalDragEnd: (_) => _ui?.rememberSession(),
+              onVerticalDragEnd: (_) {
+                _endSizing();
+                _ui?.rememberSession();
+              },
+              onVerticalDragCancel: _endSizing,
               onDoubleTap: () => _resetTrack(track),
               child: ValueListenableBuilder<String?>(
                 valueListenable: _edge,
@@ -3842,6 +3954,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                           : _motion?.hoverOut)
                       ?.duration ??
                       Duration.zero,
+                  curve: (over == track.id
+                          ? _motion?.hoverIn
+                          : _motion?.hoverOut)
+                      ?.curve ??
+                      Curves.linear,
                   child: Align(
                     alignment: Alignment.bottomCenter,
                     child: Container(height: 2, color: t.accent),
@@ -4260,10 +4377,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                   }
                                   final x = hint.at.dx;
                                   final pill = hint.text.length * 5.0 + 8;
+                                  // Flipped by the window's right edge, not
+                                  // the comp's, so it never goes off screen.
+                                  final right = _hLane.hasClients
+                                      ? _hLane.offset +
+                                          _hLane.position.viewportDimension
+                                      : axis.width;
                                   return Positioned(
                                     key: const ValueKey<String>(
                                         'ctl-drag-hint'),
-                                    left: x + 8 + pill > axis.width
+                                    left: x + 8 + pill > right
                                         ? x - 8 - pill
                                         : x + 8,
                                     top: _tops[min(hint.row,
@@ -4281,18 +4404,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               // timeline's for the same handle.
                               Positioned.fill(
                                 child: ListenableBuilder(
-                                  listenable:
-                                      Listenable.merge([_hover, _overGain]),
+                                  listenable: Listenable.merge(
+                                      [_hover, _overGain, _overBadge, _drag]),
                                   builder: (context, child) => MouseRegion(
-                                    cursor: razor
-                                        ? SystemMouseCursors.none
-                                        : _hover.value?.fade != null
-                                            ? SystemMouseCursors
-                                                .resizeLeftRight
-                                            : _overGain.value
-                                                ? SystemMouseCursors
-                                                    .resizeUpDown
-                                                : MouseCursor.defer,
+                                    cursor: _laneCursor(razor),
                                     onHover: (e) =>
                                         _hoverAt(e.localPosition, ui),
                                     onExit: (_) => _hover.value = null,
