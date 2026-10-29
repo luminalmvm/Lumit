@@ -10957,6 +10957,14 @@
   "@cutPanEnvelope": {
     "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
   },
+  "cutSpeedLineHere": "Speed line",
+  "@cutSpeedLineHere": {
+    "description": "Cut timeline, a picture clip's Speed submenu: show or hide the line across this one clip that draws and edits its speed, as Vegas's velocity envelope on one event. Ticked while shown."
+  },
+  "cutSelectToEnd": "Select to end",
+  "@cutSelectToEnd": {
+    "description": "Cut timeline, right-click menu on a clip: select this clip and every clip after it, on the tracks in play, as Vegas's Select events to end."
+  },
   "cutDragDelta": "{delta} f",
   "@cutDragDelta": {
     "description": "Cut timeline: the small readout pill beside the pointer while a clip is moved, trimmed, rolled, slipped or slid, saying how far it has gone in frames. The number arrives with its sign, '+12' or '-3'. Very small mono type; 'f' is the Timeline's own abbreviation for frames.",

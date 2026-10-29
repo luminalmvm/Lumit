@@ -808,8 +808,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   // ------------------------------------------------------ the playhead keys
 
-  /// The tracks a playhead command works on: the picked clips' own, top
-  /// first, else every track.
+  /// The clips whose speed line is shown while the Speed switch is off, as
+  /// Vegas inserts a velocity envelope on one event.
+  final Set<String> _speedShown = {};
+
   /// The volume and pan lines across sound rows, by kind and row: shown
   /// once asked for or once the property has keys, and hidden when asked.
   final Set<String> _bandsShown = {};
@@ -3213,6 +3215,22 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // The line on this clip alone, with the switch off. A
+                  // retimed clip always shows it.
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-speed-line'),
+                    selected: _speedLines ||
+                        clip.retimed ||
+                        _speedShown.contains(id),
+                    enabled: !_speedLines && !clip.retimed,
+                    onPressed: () {
+                      close(null);
+                      setState(() {
+                        if (!_speedShown.remove(id)) _speedShown.add(id);
+                      });
+                    },
+                    child: Text(l10n.cutSpeedLineHere),
+                  ),
                   MenuRow(
                     key: const ValueKey('ctl-menu-speed-set'),
                     onPressed: () {
@@ -3376,6 +3394,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _deleteSelected(ripple: true);
           },
           child: Text(l10n.cutRippleDelete),
+        ),
+        // Vegas's Select events to end: this clip and everything after it,
+        // on the picked clips' tracks.
+        MenuRow(
+          key: const ValueKey('ctl-menu-select-to-end'),
+          onPressed: () {
+            close(null);
+            setState(() => _selected = {
+                  for (final row in _candidateTracks())
+                    for (final c in row.clips)
+                      if (c.startFrame >= clip.startFrame)
+                        ..._withMates(c.id.toString()),
+                });
+          },
+          child: Text(l10n.cutSelectToEnd),
         ),
       ],
     );
@@ -4545,7 +4578,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       fpsNum: fpsNum,
       fpsDen: fpsDen,
       onClip: true,
-      shows: (clip) => lines || clip.retimed,
+      shows: (clip) =>
+          lines || clip.retimed || _speedShown.contains(clip.id.toString()),
       // A clip's fx and Pan/Crop buttons keep their clicks; the line is
       // three pixels down the track.
       blocked: (local) {
