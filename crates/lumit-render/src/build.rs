@@ -3488,11 +3488,19 @@ fn comp_walk(
                         let rows = driven_rows(e)?;
                         let (graph, consumer, context) =
                             (layer.graph.clone(), e.id, context.clone());
-                        let flat = drive_projection;
+                        let (flat, doc, comp_id) = (drive_projection, doc.clone(), comp.id);
                         Some(lumit_core::fx::points::LateDrive(Arc::new(
                             move |stream: &mut lumit_core::fx::points::PointsStream| {
+                                // The comp's sound, so an Audio level wired in
+                                // hears the same mix here as anywhere else.
+                                let audio = doc.comp(comp_id).map(|comp| {
+                                    crate::audio_tap::DocumentAudio::new(&doc, comp, t_comp)
+                                });
+                                let audio = audio
+                                    .as_ref()
+                                    .map(|a| a as &dyn lumit_core::fx::registry::AudioTap);
                                 lumit_core::fx::drivers::per_copy::drive_rows(
-                                    &graph, consumer, stream, rows, t, &context, None, flat,
+                                    &graph, consumer, stream, rows, t, &context, audio, flat,
                                 );
                             },
                         )))
