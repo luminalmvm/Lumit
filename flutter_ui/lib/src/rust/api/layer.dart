@@ -22,6 +22,7 @@ import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
@@ -3458,6 +3459,12 @@ class LayerReference {
         that: this,
       );
 
+  /// The ties on this layer's graph.
+  List<BridgeWireTie> getGraphTies() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphTies(
+        that: this,
+      );
+
   /// One read for everything a row draws — see [`BridgeLayerInfo`]. One
   /// document lock and one crossing, where the per-field getters cost one of
   /// each per field.
@@ -4262,6 +4269,11 @@ class LayerReference {
   void setGraphNotes({required List<BridgeGraphNote> notes}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetGraphNotes(that: this, notes: notes);
+
+  /// Replace the ties on this layer's graph, as one undo step.
+  void setGraphTies({required List<BridgeWireTie> ties}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetGraphTies(that: this, ties: ties);
 
   /// Choose how in-between frames are found. One undo step.
   ///

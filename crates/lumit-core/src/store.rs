@@ -2638,6 +2638,7 @@ mod tests {
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![Edge {

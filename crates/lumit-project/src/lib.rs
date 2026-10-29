@@ -2961,6 +2961,7 @@ mod tests {
         let wiggle_id = wiggle.id;
         layer.graph = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![
@@ -3118,6 +3119,7 @@ mod tests {
         let (read_id, input_id, out_id) = (read.id(), input.id(), out.id());
         let wanted = CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![read, input, GraphNode::Fx(blur), GraphNode::Fx(wiggle), out],
             edges: vec![
                 GraphEdge {

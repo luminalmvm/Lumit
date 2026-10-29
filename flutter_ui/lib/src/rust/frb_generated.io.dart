@@ -41,6 +41,7 @@ import 'api/state.dart';
 import 'api/streams.dart';
 import 'api/system.dart';
 import 'api/track.dart';
+import 'api/wire_tie.dart';
 import 'api/wireframes.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -1455,6 +1456,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeWirePoint dco_decode_bridge_wire_point(dynamic raw);
 
   @protected
+  BridgeWireTie dco_decode_bridge_wire_tie(dynamic raw);
+
+  @protected
   BridgeWireframes dco_decode_bridge_wireframes(dynamic raw);
 
   @protected
@@ -1820,6 +1824,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeWireLight> dco_decode_list_bridge_wire_light(dynamic raw);
+
+  @protected
+  List<BridgeWireTie> dco_decode_list_bridge_wire_tie(dynamic raw);
 
   @protected
   List<CompositionReference> dco_decode_list_composition_reference(dynamic raw);
@@ -3792,6 +3799,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeWirePoint sse_decode_bridge_wire_point(SseDeserializer deserializer);
 
   @protected
+  BridgeWireTie sse_decode_bridge_wire_tie(SseDeserializer deserializer);
+
+  @protected
   BridgeWireframes sse_decode_bridge_wireframes(SseDeserializer deserializer);
 
   @protected
@@ -4244,6 +4254,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeWireLight> sse_decode_list_bridge_wire_light(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeWireTie> sse_decode_list_bridge_wire_tie(
       SseDeserializer deserializer);
 
   @protected
@@ -6403,6 +6417,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeWirePoint self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_wire_tie(BridgeWireTie self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_wireframes(
       BridgeWireframes self, SseSerializer serializer);
 
@@ -6864,6 +6881,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_wire_light(
       List<BridgeWireLight> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_wire_tie(
+      List<BridgeWireTie> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_composition_reference(
