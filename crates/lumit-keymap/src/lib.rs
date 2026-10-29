@@ -753,7 +753,17 @@ impl Keymap {
 
     /// Bind `chord` in `context` to `action`, replacing any existing binding for
     /// the exact same `(context, chord)` so a rebind never silently duplicates.
+    ///
+    /// An action that loses its only chord here is remembered as unbound on
+    /// purpose. Otherwise the next start would give it its default back, the
+    /// very chord just taken from it.
     pub fn bind(&mut self, context: KeyContext, chord: Chord, action: ActionId) {
+        let displaced: Vec<ActionId> = self
+            .bindings
+            .iter()
+            .filter(|b| b.context == context && b.chord == chord && b.action != action)
+            .map(|b| b.action.clone())
+            .collect();
         self.bindings
             .retain(|b| !(b.context == context && b.chord == chord));
         self.bindings.push(Binding {
@@ -761,6 +771,11 @@ impl Keymap {
             chord,
             action,
         });
+        for lost in displaced {
+            if self.binding_for(context, &lost).is_none() {
+                self.unbind_action(context, &lost);
+            }
+        }
     }
 
     /// Remove the binding for an exact `(context, chord)`, if any. Returns

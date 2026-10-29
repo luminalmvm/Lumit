@@ -191,11 +191,21 @@ pub fn keymap_groups() -> Vec<BridgeKeymapGroup> {
             .iter()
             .map(|context| {
                 // One row per action in this context, in the map's own order,
-                // which is the order docs/07 §15 lists them.
+                // which is the order docs/07 §15 lists them. Then any it has
+                // lost the key to, from the defaults or left unbound: a row
+                // that goes when its chord is taken can never be given one
+                // again.
+                let defaults = lumit_keymap::defaults::default_keymap();
                 let mut actions: Vec<ActionId> = Vec::new();
-                for b in &km.bindings {
-                    if b.context == *context && !actions.contains(&b.action) {
-                        actions.push(b.action.clone());
+                let known = km
+                    .bindings
+                    .iter()
+                    .chain(&defaults.bindings)
+                    .map(|b| (b.context, &b.action))
+                    .chain(km.unbound.iter().map(|(c, a)| (*c, a)));
+                for (c, action) in known {
+                    if c == *context && !actions.contains(action) {
+                        actions.push(action.clone());
                     }
                 }
                 BridgeKeymapGroup {

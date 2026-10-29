@@ -393,3 +393,29 @@ fn search_matches_the_words_the_table_shows() {
         .iter()
         .any(|b| b.action.0 == "tool.pen"));
 }
+
+// A chord taken by a rebind leaves its old action keyless, and that must
+// survive a save and a restart rather than come back as a clash.
+#[test]
+fn a_rebind_that_takes_a_chord_leaves_the_loser_unbound_through_a_restart() {
+    let mut km = default_keymap();
+    let zoom_in: ActionId = "timeline.zoom.in".into();
+    let zoom_out: ActionId = "timeline.zoom.out".into();
+    let taken = km
+        .binding_for(KeyContext::Timeline, &zoom_in)
+        .cloned()
+        .expect("zoom in has a default");
+    km.rebind_action(KeyContext::Timeline, &zoom_out, taken.clone());
+    assert_eq!(
+        km.binding_for(KeyContext::Timeline, &zoom_out),
+        Some(&taken)
+    );
+    assert_eq!(km.binding_for(KeyContext::Timeline, &zoom_in), None);
+
+    let restored = with_new_defaults(km.clone());
+    assert_eq!(restored.binding_for(KeyContext::Timeline, &zoom_in), None);
+    assert_eq!(
+        restored.binding_for(KeyContext::Timeline, &zoom_out),
+        Some(&taken)
+    );
+}
