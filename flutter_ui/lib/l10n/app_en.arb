@@ -10929,6 +10929,26 @@
   "@cutNoTracks": {
     "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
   },
+  "cutMixVolume": "Vol",
+  "@cutMixVolume": {
+    "description": "Cut timeline, a sound track's header: short label inside the slider that sets how loud the track is. Keep it to three or four letters."
+  },
+  "cutMixLevel": "Level",
+  "@cutMixLevel": {
+    "description": "Cut timeline, a picture track's header: short label inside the slider that sets how see-through the track is (its opacity). Keep it short."
+  },
+  "cutMenuSplit": "Split",
+  "@cutMenuSplit": {
+    "description": "Cut timeline, right-click menu on a clip: cut the picked clips in two at the playhead, as Vegas's Split."
+  },
+  "cutVolumeEnvelope": "Volume envelope",
+  "@cutVolumeEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its loudness over time, as Vegas's volume envelope. Ticked while shown."
+  },
+  "cutPanEnvelope": "Pan envelope",
+  "@cutPanEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
+  },
   "cutDragDelta": "{delta} f",
   "@cutDragDelta": {
     "description": "Cut timeline: the small readout pill beside the pointer while a clip is moved, trimmed, rolled, slipped or slid, saying how far it has gone in frames. The number arrives with its sign, '+12' or '-3'. Very small mono type; 'f' is the Timeline's own abbreviation for frames.",

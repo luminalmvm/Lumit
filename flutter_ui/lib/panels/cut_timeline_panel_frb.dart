@@ -67,6 +67,7 @@ import 'clip_fade_popover.dart' show clipFadeShapeName;
 import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
+import 'cut_track_mix.dart';
 import 'graph_maths.dart'
     show envelopeStretchedOnto, keysOf, rationalSeconds;
 import 'layer_fold_frb.dart' show asOneUndoStep, timeOfSubframe;
@@ -4048,19 +4049,24 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       CompositionReference comp, CutTrack track, double height) {
     final info = track.entry.info;
     final s = info.switches;
-    return SizedBox(
-      height: height,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: Row(children: [
-          // The track's colour, a bar down its left edge, as its clips wear
-          // it.
-          Container(
-            key: ValueKey<String>('ctl-label-${track.id}'),
-            width: 4,
-            color: t.labelColour(info.label),
-          ),
-          const SizedBox(width: outlineGap),
+    // Vegas's sliders under the name, where the track is tall enough: Vol
+    // and Pan on a sound row, stacked or side by side, and Level on a
+    // picture one.
+    final sound = track.below;
+    final room = height - _headTop(t) - 4;
+    final inline = sound && room < CutTrackMix.heightFor(true);
+    final mix = room >= CutTrackMix.heightFor(sound, inline: inline)
+        ? CutTrackMix(
+            key: ValueKey<String>('ctl-mix-${track.id}'),
+            comp: comp,
+            entry: track.entry,
+            sound: sound,
+            inline: inline,
+            onChanged: _afterSound,
+          )
+        : null;
+    final top = mix == null ? height : _headTop(t);
+    final row = Row(children: [
           Expanded(
             child: GestureDetector(
               // Dragged up or down, the track moves in the stack. A layer's
@@ -4108,14 +4114,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 BridgeLayerSwitch.audible,
                 mark: LumitIcons.audio,
                 offMark: LumitIcons.muted,
-                height: height,
+                height: top,
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
           if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,
                 mark: LumitIcons.audio,
                 offMark: LumitIcons.muted,
-                height: height,
+                height: top,
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
             // Not on a layer's own sound row: solo there would solo its
             // picture too.
@@ -4123,23 +4129,58 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
                   mark: LumitIcons.solo,
                   offMark: LumitIcons.solo,
-                  height: height,
+                  height: top,
                   tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
           ] else
             _switch(t, comp, track, 'visible', s.visible,
                 BridgeLayerSwitch.visible,
                 mark: LumitIcons.visible,
                 offMark: LumitIcons.hidden,
-                height: height,
+                height: top,
                 tip: s.visible ? l10n.switchVisible : l10n.switchHidden),
           _switch(t, comp, track, 'locked', s.locked, BridgeLayerSwitch.locked,
               mark: LumitIcons.lock,
               offMark: LumitIcons.unlocked,
-              height: height,
+              height: top,
               tip: s.locked ? l10n.switchLocked : l10n.switchLock),
+        ]);
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Row(children: [
+          // The track's colour, a bar down its left edge, as its clips wear
+          // it.
+          Container(
+            key: ValueKey<String>('ctl-label-${track.id}'),
+            width: 4,
+            color: t.labelColour(info.label),
+          ),
+          const SizedBox(width: outlineGap),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: top, child: row),
+                if (mix != null)
+                  Padding(padding: const EdgeInsets.only(right: 2), child: mix),
+              ],
+            ),
+          ),
         ]),
       ),
     );
+  }
+
+  /// How tall a head's name line stands when sliders sit under it.
+  double _headTop(LumitTheme t) => t.density.laneRow + 2;
+
+  /// A level or a pan written: the sound is made again, as the Mixer does.
+  void _afterSound() {
+    try {
+      _tracksComp?.audioPrepare();
+    } catch (_) {}
+    _afterWrite();
   }
 
   // ---------------------------------------------------------------- the lanes
