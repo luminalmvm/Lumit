@@ -1308,6 +1308,20 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final ui = _ui;
     final comp = ui?.selectedComp;
     if (!_keysAreOurs || ui == null || comp == null) return false;
+    return _pasteAtPlayhead(ui, comp);
+  }
+
+  /// Copy, or cut, from a menu: the keys' own, without asking whose they are.
+  void _copyFromMenu(LumitUiState ui, CompositionReference comp,
+      {required bool cut}) {
+    if (_selected.isEmpty) return;
+    final result =
+        _cut(() => comp.cutCopy(clips: _selectedIds(), linked: _linked));
+    ui.reportCut(result);
+    if (cut && result == BridgeCutResult.done) _deleteSelected(ripple: false);
+  }
+
+  bool _pasteAtPlayhead(LumitUiState ui, CompositionReference comp) {
     final BridgeCutPaste paste;
     try {
       paste = comp.cutPaste(
@@ -2780,13 +2794,65 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         picture: true, onDone: _afterWrite);
   }
 
-  /// A right click on a track's head: its label colour.
+  /// A right click on a track's head: its envelopes on a sound row, a new
+  /// layer, the layer duplicated or deleted, and its label colour.
   Future<void> _headMenu(LumitTheme t, CutTrack track, Offset global) =>
       showMenuAt<void>(
         context: context,
         position: global,
-        width: 160,
+        width: 180,
         rows: (close) => [
+          if (track.below)
+            for (final (kind, label) in [
+              (BandKind.volume, l10n.cutVolumeEnvelope),
+              (BandKind.pan, l10n.cutPanEnvelope),
+            ])
+              MenuRow.option(
+                key: ValueKey('ctl-head-${kind.name}'),
+                selected: _bandShown(track, kind),
+                onPressed: () {
+                  close(null);
+                  _lastTrack = track.id;
+                  setState(() => _selected = {});
+                  _toggleEnvelope(kind);
+                },
+                child: Text(label),
+              ),
+          MenuRow(
+            key: const ValueKey('ctl-head-new'),
+            onPressed: () {
+              close(null);
+              final ui = _ui;
+              if (ui != null) _insertMenu(ui, global);
+            },
+            child: Text(l10n.newLayer),
+          ),
+          // A layer's own sound row is the layer: it is duplicated and
+          // deleted from its picture row.
+          if (track.kind != CutTrackKind.layerSound) ...[
+            MenuRow(
+              key: const ValueKey('ctl-head-duplicate'),
+              onPressed: () {
+                close(null);
+                try {
+                  track.entry.layer.duplicate();
+                } catch (_) {}
+                _afterCut(BridgeCutResult.done);
+              },
+              child: Text(l10n.menuDuplicate),
+            ),
+            MenuRow(
+              key: const ValueKey('ctl-head-delete'),
+              onPressed: () {
+                close(null);
+                try {
+                  track.entry.layer.delete();
+                } catch (_) {}
+                _afterCut(BridgeCutResult.done);
+              },
+              child: Text(l10n.delete),
+            ),
+          ],
           SubmenuRow(
             key: const ValueKey('ctl-head-label'),
             closeParent: () => close(null),
@@ -2835,7 +2901,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final comp = ui.selectedComp;
     if (comp == null) return;
     if (clip == null) {
-      if (track.clips.isEmpty) return;
       final frame = _laneAxis.frameAt(at.dx);
       await showMenuAt<void>(
         context: context,
@@ -2843,6 +2908,27 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         width: 160,
         rows: (close) => [
           MenuRow(
+            key: const ValueKey('ctl-menu-paste-here'),
+            onPressed: () {
+              close(null);
+              _lastTrack = track.id;
+              _pasteAtPlayhead(ui, comp);
+            },
+            child: Text(l10n.menuPaste),
+          ),
+          MenuRow(
+            key: const ValueKey('ctl-menu-select-all'),
+            onPressed: () {
+              close(null);
+              setState(() => _selected = {
+                    for (final t in _tracks)
+                      for (final c in t.clips) c.id.toString(),
+                  });
+            },
+            child: Text(l10n.menuSelectAll),
+          ),
+          if (track.clips.isNotEmpty)
+            MenuRow(
             key: const ValueKey('ctl-menu-close-gap'),
             onPressed: () {
               close(null);
@@ -2896,6 +2982,39 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       position: global,
       width: 180,
       rows: (close) => [
+        // The edit rows Vegas puts first, on the selection the clip is in.
+        MenuRow(
+          key: const ValueKey('ctl-menu-cut'),
+          onPressed: () {
+            close(null);
+            _copyFromMenu(ui, comp, cut: true);
+          },
+          child: Text(l10n.menuCut),
+        ),
+        MenuRow(
+          key: const ValueKey('ctl-menu-copy'),
+          onPressed: () {
+            close(null);
+            _copyFromMenu(ui, comp, cut: false);
+          },
+          child: Text(l10n.menuCopy),
+        ),
+        MenuRow(
+          key: const ValueKey('ctl-menu-paste'),
+          onPressed: () {
+            close(null);
+            _pasteAtPlayhead(ui, comp);
+          },
+          child: Text(l10n.menuPaste),
+        ),
+        MenuRow(
+          key: const ValueKey('ctl-menu-split'),
+          onPressed: () {
+            close(null);
+            _addEdit(ui, comp, all: false);
+          },
+          child: Text(l10n.cutMenuSplit),
+        ),
         if (across)
           transition(
             close,
