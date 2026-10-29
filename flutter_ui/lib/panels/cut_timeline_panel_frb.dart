@@ -763,6 +763,15 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       case 'cut.speed.toggle':
         _toggle((s) => s.cutSpeedLines = !s.cutSpeedLines);
         _saySwitch(l10n.cutSpeedLines, _speedLines);
+      case 'cut.take.next' || 'cut.take.prev':
+        if (comp == null || _selected.isEmpty) return true;
+        _afterCut(_cut(() => comp.cutNextTake(
+            clips: _selectedIds(), back: action == 'cut.take.prev')));
+      case 'cut.paste.attributes':
+        if (comp == null || _selected.isEmpty) return true;
+        _afterCut(_cut(() => comp.cutPasteAttributes(clips: _selectedIds())));
+      case 'cut.tracks.minimise':
+        _minimiseTracks();
       case 'cut.envelope.volume':
         _toggleEnvelope(BandKind.volume);
       case 'cut.envelope.pan':
@@ -3475,6 +3484,56 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             child: Text(l10n.menuMergeAudioStreams),
           ),
         ],
+        // The clip's takes, the one showing ticked: picked to show it, or
+        // deleted. Takes come from footage dropped on the clip with Alt.
+        if (clip.takes.length > 1)
+          SubmenuRow(
+            key: const ValueKey('ctl-menu-takes'),
+            closeParent: () => close(null),
+            submenu: (_) => FloatSurface(
+              width: 220,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var n = 0; n < clip.takes.length; n++)
+                    MenuRow(
+                      key: ValueKey('ctl-menu-take-$n'),
+                      selected: n == 0,
+                      onPressed: () {
+                        close(null);
+                        if (n == 0) return;
+                        _afterCut(_cut(() =>
+                            comp.cutSetTake(clip: clip.id, take: n)));
+                      },
+                      child: Text(clip.takes[n],
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-take-delete'),
+                    onPressed: () {
+                      close(null);
+                      _afterCut(_cut(
+                          () => comp.cutDeleteTake(clip: clip.id, take: 0)));
+                    },
+                    child: Text(l10n.cutDeleteTake),
+                  ),
+                ],
+              ),
+            ),
+            child: Text(l10n.cutTakeMenu),
+          ),
+        // Vegas's Paste Event Attributes: the copied clip's effects, levels,
+        // fades and speed onto the picked clips.
+        MenuRow(
+          key: const ValueKey('ctl-menu-paste-attributes'),
+          onPressed: () {
+            close(null);
+            _afterCut(
+                _cut(() => comp.cutPasteAttributes(clips: _selectedIds())));
+          },
+          child: Text(l10n.cutPasteAttributes),
+        ),
         MenuRow(
           key: const ValueKey('ctl-menu-group'),
           onPressed: () {
@@ -3755,6 +3814,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             track.kind == CutTrackKind.layerSound
         ? null
         : track.entry.layer;
+    // Alt held over a clip: the footage becomes takes of it, as Vegas's Add
+    // as takes, the last one showing.
+    final under = track == null || at == null
+        ? null
+        : cutClipGrabAt(track, _laneAxis, at.dx)?.clip;
+    if (under != null && HardwareKeyboard.instance.isAltPressed) {
+      var result = BridgeCutResult.nothing;
+      asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+          () {
+        for (final f in footage) {
+          result = _cut(() => comp.cutAddTake(clip: under.id, footage: f));
+          if (result != BridgeCutResult.done) break;
+        }
+      });
+      _afterCut(result);
+      return;
+    }
     var frame = at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
     for (final f in footage) {
       // The item's length is what the Project panel has usually probed

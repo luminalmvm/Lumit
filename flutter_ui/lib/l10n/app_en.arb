@@ -11025,6 +11025,22 @@
   "@cutSpeedLineHere": {
     "description": "Cut timeline, a picture clip's Speed submenu: show or hide the line across this one clip that draws and edits its speed, as Vegas's velocity envelope on one event. Ticked while shown."
   },
+  "cutTakeMenu": "Take",
+  "@cutTakeMenu": {
+    "description": "Cut timeline, right-click menu on a clip that holds several takes: submenu listing them, the one showing ticked, as Vegas's Take submenu. A take is another piece of media the same clip can show in its place."
+  },
+  "cutDeleteTake": "Delete take",
+  "@cutDeleteTake": {
+    "description": "Cut timeline, a clip's Take submenu: remove the take showing from the clip, which then shows the next one."
+  },
+  "cutPasteAttributes": "Paste attributes",
+  "@cutPasteAttributes": {
+    "description": "Cut timeline, right-click menu on a clip: give the picked clips the copied clip's effects, gain, opacity, blend mode, fades and speed, as Vegas's Paste Event Attributes."
+  },
+  "cutMinimiseTracks": "Minimise all tracks",
+  "@cutMinimiseTracks": {
+    "description": "Cut timeline, right-click menu on a track's header: make every track as short as it goes, or, when they all already are, put them back to the usual height. As Vegas's Minimize All Tracks."
+  },
   "cutSelectToEnd": "Select to end",
   "@cutSelectToEnd": {
     "description": "Cut timeline, right-click menu on a clip: select this clip and every clip after it, on the tracks in play, as Vegas's Select events to end."
