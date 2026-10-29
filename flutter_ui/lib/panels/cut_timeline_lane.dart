@@ -9,7 +9,7 @@
 // It takes no pointer. The panel's one listener over the lanes does the hit
 // testing, through the same pure functions this draws from.
 
-import 'dart:math' show min, pi;
+import 'dart:math' show max, min, pi, pow;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -30,7 +30,7 @@ import 'timeline_extras_frb.dart'
         clipFillAlpha,
         clipFillSelectedAlpha,
         clipWaveColours;
-import 'audio_timeline_clips_frb.dart' show audioClipHeader;
+import 'audio_timeline_clips_frb.dart' show audioClipGainY, audioClipHeader;
 import 'waveform_frb.dart';
 
 /// The room a box leaves at the top and foot of its track.
@@ -111,6 +111,9 @@ class CutTrackPainter extends CustomPainter {
   /// so it is plain where the drop will land.
   final ValueListenable<String?> dropOn;
 
+  /// A sound clip's level while its gain line is in hand.
+  final ValueListenable<({String clip, double db})?> gain;
+
   /// The engine's blend mode names, for the chip a clip with a mode of its
   /// own wears.
   final List<String> blendNames;
@@ -136,6 +139,7 @@ class CutTrackPainter extends CustomPainter {
     required this.nameOf,
     required this.handles,
     required this.dropOn,
+    required this.gain,
     required this.blendNames,
     required this.colours,
     required this.style,
@@ -499,16 +503,22 @@ class CutTrackPainter extends CustomPainter {
             ..strokeWidth = 2
             ..color = colours.drop);
     }
+    final badges = cutBadges(box, picture: !sound);
     if (sound) {
-      final header = _soundHeader(box);
-      _wave(canvas, clip, box, held, label);
-      final chips = _chips(canvas, clip, box, band: header > 0 ? header : null);
+      // The wave has the whole box, as Vegas draws it, and the name stands
+      // over it on a ground of its own.
+      final header = min(_soundHeader(box), audioClipHeader);
+      _wave(canvas, clip, box, held, label, header: false);
+      _gainLine(canvas, clip, box);
+      final chips = _chips(canvas, clip, box,
+          band: header > 0 ? header : null, badges: badges);
       _name(canvas, clip.sourceName, box,
           band: header > 0 ? header : null,
-          ground: header == 0,
+          ground: true,
           room: chips,
           from: _glyph(canvas, clip, box,
               from: clipEdgeWidth + 4, band: header > 0 ? header : null));
+      _badges(canvas, clip, badges);
       return;
     }
     // A picture clip that is heard has its sound in a band along the foot
@@ -548,11 +558,70 @@ class CutTrackPainter extends CustomPainter {
       canvas.restore();
       from += wide + 2;
     }
-    final chips = _chips(canvas, clip, box, band: above.height);
+    final nameBand =
+        badges.isEmpty ? above.height : min(above.height, 20.0);
+    final chips = _chips(canvas, clip, box, band: nameBand, badges: badges);
     _name(canvas, clip.sourceName, box,
-        band: above.height,
+        band: nameBand,
         room: chips,
-        from: _glyph(canvas, clip, box, from: from, band: above.height));
+        from: _glyph(canvas, clip, box, from: from, band: nameBand));
+    _badges(canvas, clip, badges);
+  }
+
+  /// A sound clip's level, as a line across it: at the top for 0 dB, lower
+  /// as it is turned down, the Audio timeline's own line.
+  void _gainLine(Canvas canvas, BridgeClip clip, Rect box) {
+    final live = gain.value;
+    final db = live != null && live.clip == clip.id.toString()
+        ? live.db
+        : clip.gainDb;
+    final y = box.top -
+        cutClipInset +
+        audioClipGainY(db, box.height + cutClipInset * 2);
+    canvas.drawLine(
+        Offset(box.left + clipEdgeWidth, y),
+        Offset(box.right - 1, y),
+        Paint()
+          ..strokeWidth = 1.4
+          ..color = colours.rising);
+  }
+
+  /// The clip's buttons: fx, lit while it has effects that are on, and on a
+  /// picture clip Pan/Crop, drawn as a frame's two corners.
+  void _badges(Canvas canvas, BridgeClip clip, List<(CutBadge, Rect)> badges) {
+    for (final (kind, at) in badges) {
+      canvas.drawRRect(RRect.fromRectAndRadius(at, Radius.circular(radius)),
+          Paint()..color = colours.handleFill.withValues(alpha: 0.85));
+      switch (kind) {
+        case CutBadge.fx:
+          final text = nameOf('fx');
+          final lit = clip.effects.isNotEmpty && clip.fx;
+          if (!lit) {
+            canvas.saveLayer(
+                at, Paint()..color = colours.edge.withValues(alpha: 0.5));
+          }
+          text.paint(
+              canvas,
+              Offset(at.center.dx - text.width / 2,
+                  at.center.dy - text.height / 2));
+          if (!lit) canvas.restore();
+        case CutBadge.panCrop:
+          final r = at.deflate(at.width * 0.25);
+          final arm = r.width * 0.45;
+          canvas.drawPath(
+              Path()
+                ..moveTo(r.left, r.top + arm)
+                ..lineTo(r.left, r.top)
+                ..lineTo(r.left + arm, r.top)
+                ..moveTo(r.right, r.bottom - arm)
+                ..lineTo(r.right, r.bottom)
+                ..lineTo(r.right - arm, r.bottom),
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.2
+                ..color = colours.handle);
+      }
+    }
   }
 
   /// How tall the band a picture clip's sound is drawn in stands: none for a
@@ -573,20 +642,23 @@ class CutTrackPainter extends CustomPainter {
   /// far past the frame it starts, since at most zooms that is under a pixel
   /// and nothing else shows it. Answers the width they took, which the name
   /// gives up.
-  double _chips(Canvas canvas, BridgeClip clip, Rect box, {double? band}) {
+  double _chips(Canvas canvas, BridgeClip clip, Rect box,
+      {double? band, List<(CutBadge, Rect)> badges = const []}) {
     final past = clip.startExact - clip.startFrame.toInt();
     final words = <(TextPainter, bool)>[
       if (past.abs() >= 0.005)
         (nameOf('${past > 0 ? '+' : ''}${past.toStringAsFixed(2)}'), true),
       if (clip.blend case final blend? when blend < blendNames.length)
         (nameOf(blendNames[blend]), true),
-      if (clip.effects.isNotEmpty) (nameOf('fx'), clip.fx),
+      // Said by the fx button where the clip has room for one.
+      if (clip.effects.isNotEmpty && badges.isEmpty) (nameOf('fx'), clip.fx),
     ];
-    if (words.isEmpty) return 0;
     const pad = 4.0;
     const gap = 3.0;
+    final start = badges.isEmpty ? box.right - pad : badges.last.$2.left - gap;
+    if (words.isEmpty) return box.right - start;
     final tall = band ?? box.height;
-    var right = box.right - pad;
+    var right = start;
     canvas.save();
     canvas.clipRect(box.deflate(1));
     for (final (text, lit) in words.reversed) {
@@ -650,20 +722,30 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
-    _waveAt(canvas, summary, origin, box, label, header: header);
+    // Drawn at the clip's own level, as Vegas draws it, so a clip turned
+    // down looks quieter. The line in hand counts before it is let go.
+    final live = gain.value;
+    final db = live != null && live.clip == clip.id.toString()
+        ? live.db
+        : clip.gainDb;
+    _waveAt(canvas, summary, origin, box, label,
+        header: header, level: db >= 0 ? 1.0 : pow(10, db / 20).toDouble());
   }
 
   /// A wave across [box], whose left edge is [origin] on the peaks' clock,
   /// in a bright shade of [label].
   void _waveAt(Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box,
       Color label,
-      {bool header = true}) {
+      {bool header = true, double level = 1}) {
     // Under the name's header, so the wave never runs through the name.
     final top = header ? _soundHeader(box) : 0.0;
-    final tall = box.height - top;
+    final room = box.height - top;
+    final tall = max(2.0, room * level);
     canvas.save();
     canvas.clipRect(box.deflate(1));
-    canvas.translate(box.left, box.top + top);
+    // Shrunk about its middle, or onto the foot where waves stand on it.
+    final drop = style.fromBottom ? room - tall : (room - tall) / 2;
+    canvas.translate(box.left, box.top + top + drop);
     WaveformPainter(
       peaks: summary,
       originSeconds: origin,

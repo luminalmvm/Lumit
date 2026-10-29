@@ -62,6 +62,7 @@ import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'audio_streams_menu_frb.dart';
+import 'audio_timeline_clips_frb.dart' show audioClipGainY;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
 import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
@@ -80,6 +81,7 @@ import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart' show RazorOverlay;
 import 'timeline_snap.dart';
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
+import 'volume_band_frb.dart' show volumeBandFloorDb;
 import 'waveform_frb.dart';
 
 /// How wide the header column stands: a name and three switches.
@@ -235,6 +237,18 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   final ValueNotifier<({Offset at, int row, String text})?> _hint =
       ValueNotifier<({Offset at, int row, String text})?>(null);
   final ValueNotifier<CutHover?> _hover = ValueNotifier<CutHover?>(null);
+
+  /// A sound clip's level while its gain line is dragged, for the lanes.
+  final ValueNotifier<({String clip, double db})?> _gainLive =
+      ValueNotifier(null);
+
+  /// Whether the pointer rests on a gain line, for the cursor.
+  final ValueNotifier<bool> _overGain = ValueNotifier(false);
+
+  /// The gain line in hand: whose, the level it was taken at, how far the
+  /// pointer has gone, and the height of the box it is measured in.
+  ({CutTrack track, BridgeClip clip, double travelled, double height})?
+      _gainHeld;
   final ValueNotifier<Rect?> _marquee = ValueNotifier<Rect?>(null);
   final DragEscape _escape = DragEscape();
 
@@ -359,6 +373,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _caught.dispose();
     _hint.dispose();
     _hover.dispose();
+    _gainLive.dispose();
+    _overGain.dispose();
     _marquee.dispose();
     _pictures.dispose();
     _workPreview.dispose();
@@ -1746,6 +1762,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       return;
     }
     if (event.buttons != kPrimaryMouseButton) return;
+    // A clip's own buttons, before anything else the press could mean.
+    if (hit != null && index != null && track != null) {
+      if (_badgeAt(track, index, hit.clip, at) case final kind?) {
+        final id = hit.clip.id.toString();
+        _lastPressed = id;
+        setState(() => _selected = _withMates(id));
+        _badge(ui, track, hit.clip, kind);
+        return;
+      }
+    }
     final keys = HardwareKeyboard.instance;
     final vegas = _vegasDrags;
     var tool = _toolOf(ui);
@@ -1755,6 +1781,31 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // does. The edge is still trimmed from anywhere below the handle.
     final fade = _fadeAt(ui, track, index, at, tool);
     if (fade != null) hit = (clip: fade.clip, grab: fade.grab);
+    // A sound clip's gain line, with Select: dragged, the clip is turned
+    // down or back up, as Vegas's event level is.
+    if (fade == null &&
+        hit != null &&
+        index != null &&
+        track != null &&
+        tool == CutTool.select &&
+        _onGainLine(track, index, hit.clip, at)) {
+      final id = hit.clip.id.toString();
+      _lastPressed = id;
+      setState(() => _selected = _withMates(id));
+      _gainHeld = (
+        track: track,
+        clip: hit.clip,
+        travelled: 0,
+        height: _tops[index + 1] - _tops[index],
+      );
+      _gainLive.value = (clip: id, db: hit.clip.gainDb);
+      _escape.begin(() {
+        _gainHeld = null;
+        _gainLive.value = null;
+        _hint.value = null;
+      });
+      return;
+    }
     // Shift on an edge, with Select or Ripple, changes the clip's speed
     // instead of its trim, and leaves the selection alone. Vegas has Ctrl.
     final stretch = (vegas ? keys.isControlPressed : keys.isShiftPressed) &&
@@ -1839,6 +1890,88 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _escape.begin(_clearDrag);
   }
 
+  /// Whether [at] is on [clip]'s gain line: a sound clip, within a few pixels
+  /// of where the painter draws the line.
+  bool _onGainLine(CutTrack track, int index, BridgeClip clip, Offset at) {
+    if (!(track.sound || _soundOnPicture.contains(clip.id.toString()))) {
+      return false;
+    }
+    final y = _tops[index] +
+        audioClipGainY(clip.gainDb, _tops[index + 1] - _tops[index]);
+    return (at.dy - y).abs() <= 3.5;
+  }
+
+  /// The gain line followed: the level the drag asks for, from 0 dB down to
+  /// the band's floor, said beside the pointer.
+  void _gainMove(Offset at, double dy) {
+    final held = _gainHeld;
+    if (held == null || !_escape.running) return;
+    final travelled = held.travelled + dy;
+    final tall = max(3.0, held.height - 4);
+    final db = (held.clip.gainDb - travelled / (tall - 2) * -volumeBandFloorDb)
+        .clamp(volumeBandFloorDb, 0.0);
+    _gainHeld = (
+      track: held.track,
+      clip: held.clip,
+      travelled: travelled,
+      height: held.height,
+    );
+    _gainLive.value = (clip: held.clip.id.toString(), db: db);
+    _hint.value = (
+      at: at,
+      row: _tracks.indexOf(held.track),
+      text: '${db.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
+    );
+  }
+
+  /// Let go: the level is written once, and only where it moved.
+  void _gainUp() {
+    final held = _gainHeld;
+    final live = _gainLive.value;
+    final commit = _escape.end();
+    _gainHeld = null;
+    _gainLive.value = null;
+    _hint.value = null;
+    if (held == null || live == null || !commit) return;
+    if (live.db == held.clip.gainDb) return;
+    try {
+      held.track.entry.layer.setClipGain(clip: held.clip.id, db: live.db);
+    } catch (_) {}
+    _afterCut(BridgeCutResult.done);
+  }
+
+  /// The button of [clip] under [at], drawn where the lane painter draws it.
+  CutBadge? _badgeAt(CutTrack track, int index, BridgeClip clip, Offset at) {
+    final (left, width) = cutClipBox(
+        _laneAxis, clip.startFrame.toInt(), clip.endFrame.toInt());
+    final box = Rect.fromLTWH(left, _tops[index] + cutClipInset, width,
+        _tops[index + 1] - _tops[index] - cutClipInset * 2);
+    final picture =
+        !(track.sound || _soundOnPicture.contains(clip.id.toString()));
+    for (final (kind, rect) in cutBadges(box, picture: picture)) {
+      if (rect.inflate(1).contains(at)) return kind;
+    }
+    return null;
+  }
+
+  /// A clip's button pressed: its effects in Effect controls, and for
+  /// Pan/Crop a Transform at the head of them first where it has none, whose
+  /// position, scale and rotation pan, zoom and turn the clip.
+  void _badge(LumitUiState ui, CutTrack track, BridgeClip clip, CutBadge kind) {
+    if (kind == CutBadge.panCrop &&
+        !clip.effects.any((e) => e.name == 'transform')) {
+      try {
+        track.entry.layer.addClipEffect(clip: clip.id, name: 'transform');
+      } catch (_) {}
+      _afterCut(BridgeCutResult.done);
+    }
+    if (!panelVisible(ui.split, Panel.effectControls)) {
+      setPanelVisible(ui.split, Panel.effectControls, true);
+    }
+    activatePanelTab(ui.split, Panel.effectControls);
+    ui.workspace.touch();
+  }
+
   /// Nothing in flight: what Escape, the release and a cancel all leave.
   void _clearDrag() {
     _press = null;
@@ -1893,6 +2026,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// than the edge. Not with Alt held, which takes the one clip alone, and
   /// not with a tool that has no use for an edge.
   void _hoverAt(Offset at, LumitUiState ui) {
+    final row = cutTrackAt(_tracks, at.dy, _tops);
+    final under =
+        row == null ? null : cutClipGrabAt(_tracks[row], _laneAxis, at.dx);
+    _overGain.value = _press == null &&
+        row != null &&
+        under != null &&
+        _toolOf(ui) == CutTool.select &&
+        _onGainLine(_tracks[row], row, under.clip, at);
     CutHover? next;
     if (_press == null && !HardwareKeyboard.instance.isAltPressed) {
       final tool = _toolOf(ui);
@@ -1928,6 +2069,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }
 
   void _move(PointerMoveEvent event) {
+    if (_gainHeld != null) {
+      _gainMove(event.localPosition, event.delta.dy);
+      return;
+    }
     if (event.buttons == kMiddleMouseButton) {
       _scrollBy(_hLane, -event.delta.dx);
       _scrollBy(_vLane, -event.delta.dy);
@@ -1959,6 +2104,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }
 
   void _up(PointerUpEvent event, LumitUiState ui) {
+    if (_gainHeld != null) {
+      _gainUp();
+      return;
+    }
     final held = _press;
     final commit = _escape.end();
     _clearDrag();
@@ -2001,6 +2150,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }
 
   void _cancel() {
+    _gainHeld = null;
+    _gainLive.value = null;
     _escape.end();
     _clearDrag();
   }
@@ -3816,7 +3967,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       fromBottom: ui.workspace.interface.waveformsFromBottom,
     );
     final repaint =
-        Listenable.merge([_drag, _hover, _hLane, _pictures, _dropOn]);
+        Listenable.merge(
+            [_drag, _hover, _hLane, _pictures, _dropOn, _gainLive]);
     final divider = _tops[cutPictureCount(_tracks)];
     final blendNames = [for (final name in _blendNames) engineLabel(name)];
     return RazorOverlay(
@@ -3926,6 +4078,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                       nameOf: _nameOf,
                                       handles: _toolOf(ui) == CutTool.select,
                                       dropOn: _dropOn,
+                                      gain: _gainLive,
                                       blendNames: blendNames,
                                       colours: (
                                         label: t.labelColour(
@@ -4020,16 +4173,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               // fade handle the cursor is the Audio
                               // timeline's for the same handle.
                               Positioned.fill(
-                                child: ValueListenableBuilder<CutHover?>(
-                                  valueListenable: _hover,
-                                  builder: (context, hover, child) =>
-                                      MouseRegion(
+                                child: ListenableBuilder(
+                                  listenable:
+                                      Listenable.merge([_hover, _overGain]),
+                                  builder: (context, child) => MouseRegion(
                                     cursor: razor
                                         ? SystemMouseCursors.none
-                                        : hover?.fade != null
+                                        : _hover.value?.fade != null
                                             ? SystemMouseCursors
                                                 .resizeLeftRight
-                                            : MouseCursor.defer,
+                                            : _overGain.value
+                                                ? SystemMouseCursors
+                                                    .resizeUpDown
+                                                : MouseCursor.defer,
                                     onHover: (e) =>
                                         _hoverAt(e.localPosition, ui),
                                     onExit: (_) => _hover.value = null,

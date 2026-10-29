@@ -11,6 +11,7 @@
 // one of them is a layer, and the ones that hold clips are Sequence layers.
 
 import 'dart:math';
+import 'dart:ui' show Offset, Rect;
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -574,4 +575,20 @@ int cutClampShift({
   }
   if (lo > hi) return 0;
   return shift.clamp(lo, hi);
+}
+
+/// A button drawn on a clip, as Vegas puts its event buttons there.
+enum CutBadge { fx, panCrop }
+
+/// Where a clip's buttons sit in its [box]: fx at the top right of every
+/// clip, and Pan/Crop beside it on a picture clip. None on a box too small to
+/// keep room for its name.
+List<(CutBadge, Rect)> cutBadges(Rect box, {required bool picture}) {
+  final side = min(16.0, box.height - 4);
+  if (side < 10 || box.width < side * 4 + 24) return const [];
+  final fx = Rect.fromLTWH(box.right - 3 - side, box.top + 2, side, side);
+  return [
+    (CutBadge.fx, fx),
+    if (picture) (CutBadge.panCrop, fx.shift(Offset(-side - 2, 0))),
+  ];
 }
