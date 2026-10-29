@@ -1438,6 +1438,15 @@ Map<String, String> get _built => {
       "Show or hide speed lines": l10n.keyShowOrHideSpeedLines,
       "Show or hide the volume envelope": l10n.keyShowOrHideTheVolumeEnvelope,
       "Show or hide the pan envelope": l10n.keyShowOrHideThePanEnvelope,
+      "Switch the picked clips to their next take":
+          l10n.keySwitchThePickedClipsToTheirNextTake,
+      "Switch the picked clips to their previous take":
+          l10n.keySwitchThePickedClipsToTheirPreviousTake,
+      "Paste a clip's attributes onto the picked clips":
+          l10n.keyPasteAClipSAttributesOntoThePickedClips,
+      "Minimise every track, or restore them":
+          l10n.keyMinimiseEveryTrackOrRestoreThem,
+      "Add a region over the work area": l10n.keyAddARegionOverTheWorkArea,
       "Turn looping on or off": l10n.keyTurnLoopingOnOrOff,
       "Group the picked clips": l10n.keyGroupThePickedClips,
       "Take the picked clips out of their group":

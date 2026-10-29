@@ -349,6 +349,13 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "Shift+E", "cut.speed.toggle"),
         row(Cut, "Shift+V", "cut.envelope.volume"),
         row(Cut, "Shift+P", "cut.envelope.pan"),
+        // Vegas's own keys for takes and regions, free in every context live
+        // here. Minimising the tracks has none: Vegas puts it on the grave key,
+        // which maximises the panel here.
+        row(Cut, "T", "cut.take.next"),
+        row(Cut, "Shift+T", "cut.take.prev"),
+        row(Cut, "R", "marker.add.region"),
+        row(Cut, "Mod+Alt+V", "cut.paste.attributes"),
         row(Cut, "Mod+G", "cut.group"),
         row(Cut, "Mod+Shift+G", "cut.ungroup"),
         row(Cut, ";", "cut.lift"),
@@ -508,6 +515,7 @@ pub fn after_effects_preset() -> Keymap {
 /// - **Q** turns looping on and off, and **Mod+Shift+E** shows and hides the
 ///   speed lines on the clips, Vegas's chord for its envelopes.
 /// - **V** and **P** show and hide a track's volume and pan envelopes.
+/// - **Mod+Shift+V** pastes a clip's attributes. Takes and regions agree already.
 /// - The wheel zooms time with no key held, and Ctrl with it scrolls the
 ///   tracks.
 /// - **G** groups the picked clips and **U** takes them out of their group.
@@ -557,6 +565,7 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Shift+E", "cut.speed.toggle"),
         (Cut, "V", "cut.envelope.volume"),
         (Cut, "P", "cut.envelope.pan"),
+        (Cut, "Mod+Shift+V", "cut.paste.attributes"),
         (Cut, "Q", "playback.loop.toggle"),
         (Cut, "G", "cut.group"),
         (Cut, "U", "cut.ungroup"),

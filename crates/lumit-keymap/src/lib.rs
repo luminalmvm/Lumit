@@ -57,7 +57,12 @@ impl ActionId {
         // The numbered markers. Twenty actions, so they are described by
         // their shape rather than listed one by one below — a table of twenty
         // near-identical rows is exactly what this prefix form is for.
-        if let Some(n) = self.0.strip_prefix("marker.add.") {
+        // Digits only, so `marker.add.region` keeps its own row below.
+        if let Some(n) = self
+            .0
+            .strip_prefix("marker.add.")
+            .filter(|n| n.parse::<u8>().is_ok())
+        {
             return format!("Add marker {n} at the playhead");
         }
         if let Some(n) = self.0.strip_prefix("marker.goto.") {
@@ -130,6 +135,10 @@ impl ActionId {
             "cut.speed.toggle" => "Show or hide speed lines",
             "cut.envelope.volume" => "Show or hide the volume envelope",
             "cut.envelope.pan" => "Show or hide the pan envelope",
+            "cut.take.next" => "Switch the picked clips to their next take",
+            "cut.take.prev" => "Switch the picked clips to their previous take",
+            "cut.paste.attributes" => "Paste a clip's attributes onto the picked clips",
+            "cut.tracks.minimise" => "Minimise every track, or restore them",
             "cut.group" => "Group the picked clips",
             "cut.ungroup" => "Take the picked clips out of their group",
             "cut.lift" => "Lift the work area",
@@ -139,6 +148,7 @@ impl ActionId {
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",
             "marker.add" => "Add a marker at the playhead",
+            "marker.add.region" => "Add a region over the work area",
             "edit.delete.selection" => "Delete the selection",
             "edit.cut" => "Cut the selection",
             "edit.copy" => "Copy the selection",

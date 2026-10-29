@@ -5908,6 +5908,26 @@
   "@keyShowOrHideThePanEnvelope": {
     "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its left-right balance over time. Vegas puts this on P."
   },
+  "keySwitchThePickedClipsToTheirNextTake": "Switch the picked clips to their next take",
+  "@keySwitchThePickedClipsToTheirNextTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the next of its takes, the other recordings it holds of the same moment. Vegas puts this on T."
+  },
+  "keySwitchThePickedClipsToTheirPreviousTake": "Switch the picked clips to their previous take",
+  "@keySwitchThePickedClipsToTheirPreviousTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
+  },
+  "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
+  "@keyPasteAClipSAttributesOntoThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
+  },
+  "keyMinimiseEveryTrackOrRestoreThem": "Minimise every track, or restore them",
+  "@keyMinimiseEveryTrackOrRestoreThem": {
+    "description": "Keyboard shortcut action in the Cut timeline: every track goes to its smallest height, or back to the height it had."
+  },
+  "keyAddARegionOverTheWorkArea": "Add a region over the work area",
+  "@keyAddARegionOverTheWorkArea": {
+    "description": "Keyboard shortcut action: add a marker with a length, running from the start to the end of the work area. Vegas puts this on R."
+  },
   "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
