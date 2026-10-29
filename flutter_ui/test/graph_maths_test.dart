@@ -405,6 +405,10 @@ void envelopeTests() {
       expect(envelopeSpeeds(thin),
           [closeTo(300, 1e-6), closeTo(100, 1e-6), closeTo(150, 1e-6)]);
       expect(thin.last.value, closeTo(out.last.value, 1e-9));
+      // A gentle curve keeps its shape: 1s is near the line to 2s, but not
+      // the line to 3s, so 2s stays.
+      final gentle = envelopeToKeys(keys, [100, 100.0135, 100.009, 100]);
+      expect(thinEnvelope(gentle), hasLength(3));
     });
   });
 }

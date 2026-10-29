@@ -1173,11 +1173,17 @@ List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
     final a = keep.last;
     final t0 = rationalSeconds(keys[a].time);
     final t1 = rationalSeconds(keys[i + 1].time);
-    final f = t1 > t0 ? (rationalSeconds(keys[i].time) - t0) / (t1 - t0) : 0;
-    final straight = speeds[a] + (speeds[i + 1] - speeds[a]) * f;
     final linear = curves[i - 1] == SpeedCurve.linear &&
         curves[i] == SpeedCurve.linear;
-    if (!linear || (speeds[i] - straight).abs() > 0.01) keep.add(i);
+    // Every point dropped since the last one kept has to sit on the new
+    // line too, or a gentle curve thins away to a straight line.
+    var bent = !linear;
+    for (var j = a + 1; j <= i && !bent; j++) {
+      final f = t1 > t0 ? (rationalSeconds(keys[j].time) - t0) / (t1 - t0) : 0;
+      final straight = speeds[a] + (speeds[i + 1] - speeds[a]) * f;
+      bent = (speeds[j] - straight).abs() > 0.01;
+    }
+    if (bent) keep.add(i);
   }
   keep.add(keys.length - 1);
   if (keep.length == keys.length) return keys;
