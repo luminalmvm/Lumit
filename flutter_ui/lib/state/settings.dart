@@ -354,6 +354,9 @@ class InterfaceSettings {
   /// snapping off. Turned on with the Vegas key preset.
   bool cutVegasDrags;
 
+  /// How wide the Cut timeline's track heads are, dragged at their edge.
+  double cutHeadWidth;
+
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
@@ -573,6 +576,7 @@ class InterfaceSettings {
     this.cutAutoCrossfade = false,
     this.cutSpeedLines = true,
     this.cutVegasDrags = false,
+    this.cutHeadWidth = 180,
     this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
@@ -618,6 +622,7 @@ class InterfaceSettings {
         'cut_auto_crossfade': cutAutoCrossfade,
         'cut_speed_lines': cutSpeedLines,
         'cut_vegas_drags': cutVegasDrags,
+        'cut_head_width': cutHeadWidth,
         'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
@@ -684,6 +689,7 @@ class InterfaceSettings {
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
         cutSpeedLines: j['cut_speed_lines'] as bool? ?? true,
         cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
+        cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is

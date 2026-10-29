@@ -3117,7 +3117,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               child: LayoutBuilder(
                 builder: (context, box) {
                   final outlineWidth = min(
-                    cutTimelineOutlineWidth,
+                    _settings.cutHeadWidth,
                     max(100.0, box.maxWidth - scrollGutterWidth - _laneFloor),
                   );
                   final laneViewport =
@@ -3328,99 +3328,125 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final divider = _tops[cutPictureCount(_tracks)];
     return SizedBox(
       width: width,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Level with the lane side's navigator and ruler, so both halves
-          // spend the same height above their first track.
-          Container(
-            height: t.density.navigatorBand + t.density.ruler,
-            color: t.surface1,
+      child: Stack(children: [
+        Positioned.fill(child: _outlineColumn(t, ui, comp, heights, divider)),
+        // The heads' right edge: dragged, they grow or give the lanes room, as
+        // Vegas's track list does. A double-click puts them back.
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 5,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeLeftRight,
+            child: GestureDetector(
+              key: const ValueKey('ctl-head-edge'),
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragUpdate: (d) => setState(() => _settings
+                  .cutHeadWidth = (width + d.delta.dx).clamp(120.0, 480.0)),
+              onHorizontalDragEnd: (_) => _ui?.workspace.settingsChanged(),
+              onDoubleTap: () => _toggle((s) => s.cutHeadWidth = 180),
+            ),
           ),
-          Expanded(
-            child: Stack(
-              children: [
-                LayoutBuilder(
-                  builder: (context, box) => SingleChildScrollView(
-                    controller: _vOutline,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: box.maxHeight),
-                      // A right click under the last head, as on the lanes.
-                      child: Listener(
-                        behavior: HitTestBehavior.translucent,
-                        onPointerDown: (e) {
-                          if (e.buttons != kSecondaryMouseButton) return;
-                          final y = e.localPosition.dy;
-                          if (y >= _tops.last) {
-                            _insertMenu(ui, e.position);
+        ),
+      ]),
+    );
+  }
+
+  Widget _outlineColumn(LumitTheme t, LumitUiState ui,
+      CompositionReference comp, List<double> heights, double divider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Level with the lane side's navigator and ruler, so both halves
+        // spend the same height above their first track.
+        Container(
+          height: t.density.navigatorBand + t.density.ruler,
+          color: t.surface1,
+        ),
+        Expanded(
+          child: Stack(
+            children: [
+              LayoutBuilder(
+                builder: (context, box) => SingleChildScrollView(
+                  controller: _vOutline,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: box.maxHeight),
+                    // A right click under the last head, as on the lanes.
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (e) {
+                        if (e.buttons != kSecondaryMouseButton) return;
+                        final y = e.localPosition.dy;
+                        if (y >= _tops.last) {
+                          _insertMenu(ui, e.position);
+                          return;
+                        }
+                        for (var i = 0; i < _tracks.length; i++) {
+                          if (y < _tops[i + 1]) {
+                            _headMenu(t, _tracks[i], e.position);
                             return;
                           }
-                          for (var i = 0; i < _tracks.length; i++) {
-                            if (y < _tops[i + 1]) {
-                              _headMenu(t, _tracks[i], e.position);
-                              return;
-                            }
-                          }
-                        },
-                        child: LazyBlocks(
-                          key: const ValueKey<String>('ctl-outline-blocks'),
-                          controller: _vOutline,
-                          heights: heights,
-                          viewport: box.maxHeight,
-                          builder: (context, i) =>
-                              _trackHead(t, ui, comp, _tracks[i], heights[i]),
-                        ),
+                        }
+                      },
+                      child: LazyBlocks(
+                        key: const ValueKey<String>('ctl-outline-blocks'),
+                        controller: _vOutline,
+                        heights: heights,
+                        viewport: box.maxHeight,
+                        builder: (context, i) =>
+                            _trackHead(t, ui, comp, _tracks[i], heights[i]),
                       ),
                     ),
                   ),
                 ),
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedBuilder(
-                      animation: _vOutline,
-                      builder: (context, _) {
-                        final scrolled = positionOf(_vOutline)?.pixels ?? 0;
-                        return Stack(children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _SeamsPainter(
-                                tops: _tops,
-                                colour: rowSeamColour(t),
-                                scrolled: scrolled,
-                              ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _vOutline,
+                    builder: (context, _) {
+                      final scrolled = positionOf(_vOutline)?.pixels ?? 0;
+                      return Stack(children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _SeamsPainter(
+                              tops: _tops,
+                              colour: rowSeamColour(t),
+                              scrolled: scrolled,
                             ),
                           ),
-                          if (!_anyOrder && _tracks.any((track) => track.below))
-                            _divider(t, divider - scrolled),
-                          // Where a track whose header is in hand would land.
-                          ValueListenableBuilder<int?>(
-                            valueListenable: _reorderTo,
-                            builder: (context, to, _) {
-                              final from = _reorderFrom;
-                              if (to == null || from == null || to == from) {
-                                return const SizedBox.shrink();
-                              }
-                              final y = to > from ? _tops[to + 1] : _tops[to];
-                              return Positioned(
-                                left: 0,
-                                right: 0,
-                                top: y - scrolled - 1,
-                                height: 2,
-                                child: ColoredBox(color: t.accent),
-                              );
-                            },
-                          ),
-                        ]);
-                      },
-                    ),
+                        ),
+                        if (!_anyOrder && _tracks.any((track) => track.below))
+                          _divider(t, divider - scrolled),
+                        // Where a track whose header is in hand would land.
+                        ValueListenableBuilder<int?>(
+                          valueListenable: _reorderTo,
+                          builder: (context, to, _) {
+                            final from = _reorderFrom;
+                            if (to == null || from == null || to == from) {
+                              return const SizedBox.shrink();
+                            }
+                            final y = to > from ? _tops[to + 1] : _tops[to];
+                            return Positioned(
+                              left: 0,
+                              right: 0,
+                              top: y - scrolled - 1,
+                              height: 2,
+                              child: ColoredBox(color: t.accent),
+                            );
+                          },
+                        ),
+                      ]);
+                    },
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          SizedBox(height: t.density.secondaryRow),
-        ],
-      ),
+        ),
+        SizedBox(height: t.density.secondaryRow),
+      ],
     );
   }
 
