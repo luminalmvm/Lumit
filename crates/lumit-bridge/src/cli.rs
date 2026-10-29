@@ -384,6 +384,8 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
             .ok_or("This build of Lumit cannot export.")?,
     };
     let host = open(project)?;
+    // Extension effects draw in an export as they do in Lumit.
+    crate::api::extensions::register_effects();
     let comps = if how.all {
         host.comps()
     } else if how.comps.is_empty() {

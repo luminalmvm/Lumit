@@ -1,0 +1,43 @@
+---
+title: Dithering
+description: "Fewer colours, with the steps between them broken into a fine pattern."
+---
+
+Dithering is a **Stylise** effect.
+
+## What it does
+
+Cuts the picture down to a few levels and breaks the steps between them into a pattern.
+**Ordered** uses an 8 by 8 Bayer pattern, and **Noise** a fixed random one.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Method** | Dropdown | Ordered · Noise | Ordered | - |
+| **Levels** | Slider, whole numbers | 2 to 16 | 2 | - |
+| **Pixel size** | Slider | 1 to 32; any value by typing | 2 | Pixels at composition size |
+| **Colours** | Dropdown | Colour · Monochrome | Colour | - |
+| **Dark** | Colour | Each channel 0 to 1 | Near black | - |
+| **Light** | Colour | Each channel 0 to 1 | Warm white | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+## What each control does
+
+- **Method**: the pattern the steps are broken into.
+- **Levels**: how many levels each channel keeps, or the brightness on Monochrome.
+- **Pixel size**: how big the pattern's pixels are.
+- **Colours**: **Colour** dithers each channel, and **Monochrome** dithers the brightness
+  between Dark and Light.
+- **Dark** and **Light**: the two ends of Monochrome.
+- **Seed**: which pattern Noise uses.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Halftone](/effects/stylise/halftone/)
+- [Posterize](/effects/colour/posterize/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

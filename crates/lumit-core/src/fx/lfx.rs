@@ -55,6 +55,10 @@ pub struct LfxEffect {
     /// Empty means one pass called `shade`.
     pub passes: Vec<LfxPass>,
     pub input: Option<LfxInput>,
+    /// Drawn over the composite below, as an adjustment layer is, even when
+    /// the effect sits on a layer with a picture; that picture is then the
+    /// second input wherever its row picks no other layer.
+    pub backdrop: bool,
     /// The `.wgsl` file's text.
     pub shader: String,
 }
@@ -365,6 +369,7 @@ struct ShapeKey {
     category: FxCategory,
     version: u32,
     input: Option<LfxInput>,
+    backdrop: bool,
 }
 
 struct Shape {
@@ -380,6 +385,7 @@ fn def_for(name: &str, effect: &LfxEffect, category: FxCategory) -> &'static Lfx
         category,
         version: effect.version,
         input: effect.input.clone(),
+        backdrop: effect.backdrop,
     };
     let mut defs = match DEFS.lock() {
         Ok(defs) => defs,
@@ -486,6 +492,50 @@ impl EffectDef for LfxDef {
             &[]
         }
     }
+
+    fn backdrop(&self) -> bool {
+        match self.shape.read() {
+            Ok(shape) => shape.key.backdrop,
+            Err(poisoned) => poisoned.into_inner().key.backdrop,
+        }
+    }
+
+    /// The rows whose `@enabled_if` does not hold, greyed. The second input
+    /// gives a picture when its row names a layer, or when this is a backdrop
+    /// effect on a layer with a picture, which is then the input.
+    fn row_state_on(&self, inst: &EffectInstance, picture: bool) -> super::registry::RowState {
+        let Some(program) =
+            installed(self.match_name).and_then(|e| e.built.program.as_ref().ok().copied())
+        else {
+            return super::registry::RowState::default();
+        };
+        let input = inst.layer_ref("input2").is_some() || (picture && self.backdrop());
+        let holds = |term: &shader::RowTerm| match *term {
+            shader::RowTerm::Input(want) => input == want,
+            shader::RowTerm::Choice { field, index, is } => {
+                let on = match inst.param(field) {
+                    Some(crate::model::EffectValue::Choice(v)) => *v,
+                    Some(crate::model::EffectValue::Bool(b)) => u32::from(*b),
+                    _ => program
+                        .fields
+                        .iter()
+                        .find(|f| f.name == field)
+                        .map_or(0, |f| f.default[0] as u32),
+                };
+                (on == index) == is
+            }
+        };
+        let disabled = program
+            .fields
+            .iter()
+            .filter(|f| !f.enabled_if.iter().all(|any| any.iter().any(holds)))
+            .flat_map(|f| f.params.iter().map(|row| row.id))
+            .collect();
+        super::registry::RowState {
+            disabled,
+            ..Default::default()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -511,6 +561,7 @@ mod tests {
             api: API,
             passes: vec![pass("bleed", 0.5), pass("shade", 1.0)],
             input: None,
+            backdrop: false,
             shader: shader.into(),
         }
     }
@@ -555,5 +606,43 @@ mod tests {
         assert_eq!(rows(def), ["strength"]);
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);
+
+        // A rescan that turns `backdrop` on changes the def it already has.
+        assert!(!def.backdrop());
+        let mut glass = effect(&TWO_PASS.replace("amount", "strength"));
+        glass.backdrop = true;
+        let def = install(glass).expect("with backdrop");
+        assert!(def.backdrop());
+    }
+
+    /// `@enabled_if` greys a row while none of a rule's terms holds, and the
+    /// second input counts as there on a backdrop effect's own picture.
+    #[test]
+    fn enabled_if_greys_rows_by_shape_and_input() {
+        const SHADER: &str = "struct Params {\n\
+            /// @choice(\"Layer\", \"Box\") Shape\n    shape: u32,\n\
+            /// @enabled_if(shape != 0, !input) Width\n    width: f32,\n\
+            /// @enabled_if(shape = 0) @enabled_if(input) Channel\n    channel: f32,\n\
+            /// @enabled_if(colour) Typo\n    typo: f32,\n}\n\
+            fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv) * p.width; }\n";
+        let mut e = effect(SHADER);
+        e.id = "enabled-if".into();
+        e.passes = Vec::new();
+        e.backdrop = true;
+        let def = install(e).expect("it installs");
+        let mut inst = crate::fx::builtins::instantiate("custom_shader").expect("a built-in");
+        let greyed =
+            |inst: &EffectInstance, picture: bool| def.row_state_on(inst, picture).disabled;
+        // On an adjustment layer with nothing picked: the box's rows.
+        assert_eq!(greyed(&inst, false), ["channel"]);
+        // On a layer with a picture, that picture is the shape.
+        assert_eq!(greyed(&inst, true), ["width"]);
+        // A box wants its size and no channel, wherever it sits.
+        inst.params.push(crate::model::EffectParam {
+            id: "shape".into(),
+            value: crate::model::EffectValue::Choice(1),
+            extra: Default::default(),
+        });
+        assert_eq!(greyed(&inst, true), ["channel"]);
     }
 }

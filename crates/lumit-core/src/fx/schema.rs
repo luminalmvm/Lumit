@@ -727,6 +727,13 @@ pub enum FxCategory {
     /// every frame, and a menu that mixed the two would be a menu that could
     /// not say which.
     Drivers,
+    /// **Siceliot**: Stagger, Random, Oscillator, Value noise and Ring wave,
+    /// values in the manner of Cavalry's behaviours, under the name of
+    /// the set they came from.
+    /// A driver in every respect [`FxCategory::Drivers`] is, asked through
+    /// [`FxCategory::is_driver`], so it is found only where drivers are, in the
+    /// Node graph, under a heading of its own that says so.
+    SiceliotDrivers,
 }
 
 impl FxCategory {
@@ -745,7 +752,15 @@ impl FxCategory {
             FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
+            FxCategory::SiceliotDrivers => "Siceliot",
         }
+    }
+
+    /// Whether entries here are **drivers**: they make a value rather than a
+    /// picture, land on the layer's graph rather than its stack, and are wired
+    /// into parameters. The one question every "is this a driver?" asks.
+    pub const fn is_driver(self) -> bool {
+        matches!(self, FxCategory::Drivers | FxCategory::SiceliotDrivers)
     }
 
     /// The family this entry is **browsed** under — every category but
@@ -766,7 +781,7 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 12] = [
+    pub const ALL: [FxCategory; 13] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -790,6 +805,8 @@ impl FxCategory {
         // rather than from the Add-effect menu, so it sits after the family it
         // is kin to.
         FxCategory::Drivers,
+        // The Siceliot drivers after Lumit's own, under their own heading.
+        FxCategory::SiceliotDrivers,
     ];
 }
 

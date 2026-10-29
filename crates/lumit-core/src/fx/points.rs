@@ -1632,6 +1632,81 @@ impl Schedule {
     }
 }
 
+/// Where the points of a stream are, binned so a driver can ask
+/// whether a place is near one of them. Made once per per-point driver step
+/// ([`crate::fx::drivers::per_copy::drive_rows`]); Ring wave reads it
+/// to start its rings away from the points.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Cloud {
+    cell: f32,
+    bins: std::collections::HashMap<(i32, i32), Vec<[f32; 2]>>,
+}
+
+impl Cloud {
+    /// The bin size, px@comp.
+    const CELL: f32 = 32.0;
+
+    /// The points at `positions` (px@comp).
+    #[must_use]
+    pub fn new(positions: impl IntoIterator<Item = [f32; 2]>) -> Self {
+        let mut cloud = Self {
+            cell: Self::CELL,
+            bins: std::collections::HashMap::new(),
+        };
+        for p in positions {
+            if p.iter().all(|v| v.is_finite()) {
+                cloud.bins.entry(cloud.bin(p)).or_default().push(p);
+            }
+        }
+        cloud
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn bin(&self, p: [f32; 2]) -> (i32, i32) {
+        (
+            (p[0] / self.cell).floor().clamp(-1e6, 1e6) as i32,
+            (p[1] / self.cell).floor().clamp(-1e6, 1e6) as i32,
+        )
+    }
+
+    /// Whether any point is closer to `at` than `within` px.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn near(&self, at: [f32; 2], within: f32) -> bool {
+        let reach = (within.max(0.0) / self.cell).ceil().min(64.0) as i32;
+        let (bx, by) = self.bin(at);
+        let within2 = within * within;
+        (-reach..=reach).any(|dy| {
+            (-reach..=reach).any(|dx| {
+                self.bins.get(&(bx + dx, by + dy)).is_some_and(|ps| {
+                    ps.iter().any(|p| {
+                        let (x, y) = (p[0] - at[0], p[1] - at[1]);
+                        x * x + y * y < within2
+                    })
+                })
+            })
+        })
+    }
+}
+
+/// What a consumer's wired drivers write into a stream that is
+/// made on the card ([`PointsSchedule::late_drive`]). Carried, never compared:
+/// the drivers and the time it reads are already in the frame key.
+#[derive(Clone)]
+pub struct LateDrive(pub std::sync::Arc<dyn Fn(&mut PointsStream) + Send + Sync>);
+
+impl std::fmt::Debug for LateDrive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LateDrive")
+    }
+}
+
+impl PartialEq for LateDrive {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 /// **The schedule, threaded beside the op** (points-stream.md §3.3): one
 /// producer's birth scan and the layer time it was scanned for.
 ///
@@ -1691,6 +1766,12 @@ pub struct PointsSchedule {
     /// this list of the op that makes it. The walk asks that op for it on the
     /// card and fills the entry in.
     pub late: Vec<(u32, u32)>,
+    /// The per-point driver step for the first of those entries,
+    /// run by the walk once it has filled it in. A stream made only on the
+    /// card (a Pick points by Image, say) is not there when the drivers
+    /// wired into a consumer's rows are resolved per point, so they are
+    /// resolved when it arrives.
+    pub late_drive: Option<LateDrive>,
     /// For an effect with several Points inputs: which effect in the stack
     /// each input after the first is wired from, by index, and `u32::MAX` for
     /// none. Folded into the frame key as `input_from` is. `input` then holds
@@ -2458,6 +2539,14 @@ pub fn consumes_points(sig: crate::fx::registry::Signature) -> bool {
 #[must_use]
 pub fn wants_carriage(sig: crate::fx::registry::Signature) -> bool {
     wants_schedule(sig) || consumes_points(sig)
+}
+
+/// [`wants_carriage`] for an entry: its signature's reasons, or
+/// that it reads a Text layer's look, which rides in the same carriage. The
+/// one test the builder and the walk both ask, so their slots line up.
+#[must_use]
+pub fn wants_carriage_of(def: &dyn crate::fx::registry::EffectDef) -> bool {
+    wants_carriage(def.signature()) || def.reads_text_layer()
 }
 
 /// A mask path in the raster the frame is being drawn at.

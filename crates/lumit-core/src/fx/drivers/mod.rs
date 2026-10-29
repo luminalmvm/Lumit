@@ -63,8 +63,11 @@ pub mod expression;
 pub mod layer_points;
 pub mod math;
 pub mod measure;
+pub mod per_copy;
 pub mod points_sample;
 pub mod remap;
+pub mod ring_wave;
+pub mod siceliot;
 pub mod smooth;
 pub mod split;
 pub mod wiggle;
@@ -177,6 +180,8 @@ pub fn resolve_drivers_in(
         points::Projection::FLAT,
         stack,
         NO_CLONE,
+        None,
+        None,
     )
 }
 
@@ -201,7 +206,9 @@ pub fn resolve_drivers_projected(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None, NO_CLONE)
+    resolved(
+        graph, lt, context, audio, projection, None, NO_CLONE, None, None,
+    )
 }
 
 /// [`resolve_drivers_projected`] for a layer being rendered as one copy of
@@ -216,7 +223,37 @@ pub fn resolve_drivers_cloned(
     projection: points::Projection,
     clone: (u32, u32),
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None, clone)
+    resolved(
+        graph, lt, context, audio, projection, None, clone, None, None,
+    )
+}
+
+/// [`resolve_drivers_cloned`] for one **point** of a Clone to points stream:
+/// copy `clone`, standing at `point` (px@comp), so the Siceliot drivers can
+/// take their phase from where the copy is as well as from which it is.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_drivers_at_point(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    clone: (u32, u32),
+    point: [f32; 2],
+    cloud: Option<&points::Cloud>,
+) -> ResolvedDrivers {
+    resolved(
+        graph,
+        lt,
+        context,
+        audio,
+        projection,
+        None,
+        clone,
+        Some(point),
+        cloud,
+    )
 }
 
 /// What a Clone index driver reads outside a per-clone render: the first copy
@@ -225,6 +262,7 @@ pub const NO_CLONE: (u32, u32) = (0, 1);
 
 /// The one body behind [`resolve_drivers`] and its twins.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 fn resolved(
     graph: &LayerGraph,
     lt: f64,
@@ -233,6 +271,8 @@ fn resolved(
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
     clone: (u32, u32),
+    point: Option<[f32; 2]>,
+    cloud: Option<&points::Cloud>,
 ) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
@@ -248,6 +288,8 @@ fn resolved(
         cross: true,
         stack,
         clone,
+        point,
+        cloud,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -333,6 +375,8 @@ pub fn driven_volume_db(
         cross: true,
         stack: None,
         clone: NO_CLONE,
+        point: None,
+        cloud: None,
     };
     match ev.output(*node, port, lt, 0)? {
         // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
@@ -370,6 +414,8 @@ pub fn driven_param(
         cross: true,
         stack: None,
         clone: NO_CLONE,
+        point: None,
+        cloud: None,
     };
     let v = match from {
         OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
@@ -443,6 +489,8 @@ pub fn effect_stream_in(
             cross: true,
             stack,
             clone,
+            point: None,
+            cloud: None,
         };
         ev.stream(effect, t, 0)
     }?;
@@ -509,6 +557,8 @@ pub fn driver_stream_in(
             cross: true,
             stack,
             clone,
+            point: None,
+            cloud: None,
         };
         ev.tap_stream(node, t, 0)
     }?;
@@ -625,6 +675,12 @@ struct Eval<'a> {
     /// Which copy of how many this layer is being rendered as, for the Clone
     /// index driver. [`NO_CLONE`] on every walk but a per-clone render's.
     clone: (u32, u32),
+    /// Where that copy stands, px@comp, when the walk is for one point of a
+    /// Clone to points stream. `None` everywhere else.
+    point: Option<[f32; 2]>,
+    /// Where all the points of that stream are, for Ring wave to
+    /// start its rings away from them. `None` everywhere else.
+    cloud: Option<&'a points::Cloud>,
 }
 
 impl Eval<'_> {
@@ -721,6 +777,8 @@ impl Eval<'_> {
                 cross: self.cross,
                 stack: self.stack,
                 clone: self.clone,
+                point: self.point,
+                cloud: self.cloud,
             };
             let wired = ev.wires_into(effect, lt, depth);
             let rows = ev.with_arena(|bag| {
@@ -837,6 +895,8 @@ impl Eval<'_> {
                 sample_input: &sample,
                 points_input: &points,
                 clone: self.clone,
+                point: self.point,
+                cloud: self.cloud,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -920,6 +980,8 @@ impl Eval<'_> {
                 sample_input: &|_, _| None,
                 points_input: &|_| None,
                 clone: self.clone,
+                point: self.point,
+                cloud: self.cloud,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -1049,6 +1111,8 @@ impl Eval<'_> {
             // The far side is a layer, whatever this side is.
             stack: None,
             clone: self.clone,
+            point: None,
+            cloud: None,
         };
         let stream = far.stream(tapped, t, 0);
         self.budget.set(far.budget.get());
@@ -2445,6 +2509,8 @@ mod tests {
             cross: true,
             stack: Some(&stack),
             clone: NO_CLONE,
+            point: None,
+            cloud: None,
         };
         assert!(ev.stream(producer.id, 1.0, 0).is_some());
         let spent = EVAL_BUDGET - ev.budget.get();
@@ -2503,6 +2569,8 @@ mod tests {
             cross: true,
             stack: None,
             clone: NO_CLONE,
+            point: None,
+            cloud: None,
         };
         for _ in 0..64 {
             assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
@@ -2568,6 +2636,8 @@ mod tests {
             cross: true,
             stack: None,
             clone: NO_CLONE,
+            point: None,
+            cloud: None,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(
@@ -3132,6 +3202,8 @@ mod tests {
             cross: true,
             stack: None,
             clone: NO_CLONE,
+            point: None,
+            cloud: None,
         };
         ev.output(node.id, port, lt, 0)
             .expect("the port carries a number")
@@ -3250,5 +3322,72 @@ mod tests {
         set(&mut node, "hold_off", 30.0);
         let count = |lt| driver_out(&node, "count", lt, context.clone(), Some(&Steps));
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
+    }
+
+    /// A Stagger wired into Clone to points' Rotation gives each
+    /// point of the stream its own value, through the same resolve the frame
+    /// uses, and a stream with nothing wired is left alone. Guards every stamp
+    /// taking the value its copy is owed.
+    #[test]
+    fn a_stagger_into_clone_to_points_turns_each_stamp() {
+        use super::per_copy::{drive_rows, COPY_ROTATION, COPY_ROWS};
+        let mut stagger = inst("stagger");
+        set(&mut stagger, "maximum", 90.0);
+        let target = inst("clone_to_points");
+        let stream = || PointsStream {
+            position: vec![[0.0; 3]; 3],
+            speed: vec![[0.0; 3]; 3],
+            age: vec![0.0; 3],
+            life: vec![1.0; 3],
+            size: vec![10.0; 3],
+            rotation: vec![0.0; 3],
+            colour: vec![[1.0; 4]; 3],
+            id: vec![0, 1, 2],
+            ..PointsStream::default()
+        };
+
+        let unwired = LayerGraph {
+            nodes: vec![stagger.clone()],
+            ..LayerGraph::default()
+        };
+        let mut s = stream();
+        drive_rows(
+            &unwired,
+            target.id,
+            &mut s,
+            COPY_ROWS,
+            0.0,
+            &ctx(),
+            None,
+            points::Projection::FLAT,
+        );
+        assert!(s.named.is_empty(), "nothing wired, nothing written");
+
+        let graph = LayerGraph {
+            edges: vec![edge(
+                &stagger,
+                "value",
+                NodeRef::Effect(target.id),
+                "rotation",
+            )],
+            nodes: vec![stagger],
+            ..LayerGraph::default()
+        };
+        let mut s = stream();
+        drive_rows(
+            &graph,
+            target.id,
+            &mut s,
+            COPY_ROWS,
+            0.0,
+            &ctx(),
+            None,
+            points::Projection::FLAT,
+        );
+        let column = s.column(COPY_ROTATION);
+        let values: Vec<f32> = (0..3).map(|i| s.read(column, i).unwrap()).collect();
+        assert!((values[0] - 0.0).abs() < 1e-3, "{values:?}");
+        assert!((values[1] - 45.0).abs() < 0.5, "{values:?}");
+        assert!((values[2] - 90.0).abs() < 1e-3, "{values:?}");
     }
 }

@@ -1,0 +1,51 @@
+---
+title: Conical gradient
+description: "A ramp between two circles, the Start circle swelling and sliding into the End circle."
+---
+
+Conical gradient is a **Generate** effect.
+
+## What it does
+
+Paints a ramp from the Start circle to the End circle. With both centres on one spot it is
+a radial gradient. Where no circle between the two reaches, the result is clear.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Start centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Start radius** | Slider | 0 to 2000; any value by typing | 0 | Pixels at composition size |
+| **End centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **End radius** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
+| **Spread** | Dropdown | Pad · Repeat · Mirror | Pad | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Start centre** and **Start radius**: the circle the ramp starts from.
+- **End centre** and **End radius**: the circle the ramp ends on.
+- **Spread**: past the ends of the ramp, **Pad** holds the end colours, **Repeat** starts
+  the ramp again and **Mirror** runs it back.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
+  and where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Sweep gradient](/effects/generate/sweep-gradient/)
+- [Multi-point gradient](/effects/generate/multi-point-gradient/)
+- [Gradient](/effects/generate/gradient/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

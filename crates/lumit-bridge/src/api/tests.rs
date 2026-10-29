@@ -7517,6 +7517,38 @@ fn the_graph_reports_the_effect_stack_as_the_image_chain() {
     );
 }
 
+/// A blur driven by a Wiggle, copied off one layer and pasted on
+/// another, arrives with its own Wiggle wired into its radius, every id
+/// fresh, and the source left as it was.
+#[test]
+fn copied_effects_paste_with_their_drivers_and_wires() {
+    let (_project, source) = layer_to_wire();
+    let (blur, wiggle) = wiggle_into_blur(&source);
+    let text = source.copy_effects(vec![blur]).expect("copied");
+
+    let comp = CompositionReference::new(source.project_id(), source.comp_id());
+    let target = comp.add_solid_layer(None).expect("somewhere to paste");
+    target.paste_effects(text, 0).expect("pasted");
+
+    let pasted = target.get_effects().expect("stack");
+    assert_eq!(pasted.len(), 1);
+    assert_ne!(pasted[0].id(), blur, "a fresh blur");
+    let drivers = target.get_graph_drivers().expect("drivers");
+    assert_eq!(drivers.len(), 1, "the wiggle came along");
+    assert_ne!(drivers[0].id(), wiggle, "as a fresh one");
+    let graph = target.get_graph().expect("graph");
+    let blur_node = graph
+        .nodes
+        .iter()
+        .find(|n| n.node == BridgeNodeRef::Effect(pasted[0].id()))
+        .expect("the pasted blur is drawn");
+    assert!(
+        blur_node.inputs.iter().any(|p| p.id == "radius" && p.wired),
+        "and its radius is wired again"
+    );
+    assert_eq!(source.get_graph_drivers().expect("drivers").len(), 1);
+}
+
 /// Adding a driver, wiring it, placing it and growing a box are **one** write
 /// and therefore one undo step (§3).
 #[test]
@@ -8573,6 +8605,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
     let missing = crate::api::effect::read_instance_info(
         &instance(EffectNamespace::Ofx, "ofx:com.nobody.notinstalled"),
         lumit_core::time::Rational::ZERO,
+        false,
     );
     assert_eq!(missing.badge_reason.as_deref(), Some("plugin_missing"));
     assert_eq!(missing.badge_detail, None);
@@ -8591,6 +8624,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
         let absent = crate::api::effect::read_instance_info(
             &instance(EffectNamespace::Clap, name),
             lumit_core::time::Rational::ZERO,
+            false,
         );
         assert_eq!(
             absent.badge_reason.as_deref(),
@@ -8611,12 +8645,14 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
     let stranger = crate::api::effect::read_instance_info(
         &instance(EffectNamespace::Placeholder, "from_a_newer_lumit"),
         lumit_core::time::Rational::ZERO,
+        false,
     );
     assert_eq!(stranger.badge_reason.as_deref(), Some("unknown_effect"));
 
     // And a built-in wears no badge at all.
     let blur = lumit_core::fx::builtins::instantiate("blur").expect("Gaussian blur is built in");
-    let ordinary = crate::api::effect::read_instance_info(&blur, lumit_core::time::Rational::ZERO);
+    let ordinary =
+        crate::api::effect::read_instance_info(&blur, lumit_core::time::Rational::ZERO, false);
     assert_eq!(ordinary.badge_reason, None);
 
     // Every reason the engine can file has a name in the closed list the
@@ -8934,6 +8970,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
     let off = crate::api::effect::read_instance_info(
         &stack_of(&layer)[0],
         lumit_core::time::Rational::ZERO,
+        false,
     );
     assert_eq!(off.badge_reason.as_deref(), Some("plugin_disabled"));
     assert_eq!(off.badge_detail, None);
@@ -8942,6 +8979,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
     let back = crate::api::effect::read_instance_info(
         &stack_of(&layer)[0],
         lumit_core::time::Rational::ZERO,
+        false,
     );
     assert_eq!(back.badge_reason, None, "switching back on lifts the badge");
 }
@@ -9072,7 +9110,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
     );
 
     let badged =
-        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO, false);
     assert_eq!(badged.badge_reason.as_deref(), Some("plugin_failed"));
     assert_eq!(
         badged.badge_detail.as_deref(),
@@ -9097,7 +9135,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         &[],
     );
     let cleared =
-        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO, false);
     assert_eq!(cleared.badge_reason, None);
     assert_eq!(cleared.badge_detail, None);
 
@@ -9121,7 +9159,7 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
         &[],
     );
     let switched_off =
-        crate::api::effect::read_instance_info(&off, lumit_core::time::Rational::ZERO);
+        crate::api::effect::read_instance_info(&off, lumit_core::time::Rational::ZERO, false);
     assert_eq!(
         switched_off.badge_reason.as_deref(),
         Some("plugin_disabled")

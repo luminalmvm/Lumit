@@ -21,6 +21,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
+pub mod builtin;
 pub mod package;
 
 /// The file that makes a folder an extension.
@@ -145,6 +146,9 @@ pub struct ManifestEffect {
     pub passes: Vec<ManifestPass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<ManifestInput>,
+    /// Drawn over the composite below, with the layer it sits on as its shape.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backdrop: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<ManifestInterface>,
 }
@@ -187,7 +191,7 @@ pub struct ManifestInterface {
 }
 
 /// What the engine keeps of `effect`, with its shader's text.
-fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
+pub(crate) fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
     LfxEffect {
         extension: extension.to_owned(),
         id: effect.id.clone(),
@@ -210,6 +214,7 @@ fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEf
                 InputKind::Depth => LfxInputKind::Depth,
             },
         }),
+        backdrop: effect.backdrop,
         shader,
     }
 }

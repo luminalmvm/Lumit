@@ -220,6 +220,56 @@ pub struct ShaderField {
     pub params: &'static [ParamSchema],
     /// The default the bytes fall back to, per component.
     pub default: [f64; 4],
+    /// When its rows do anything (`@enabled_if`): every list must hold, each
+    /// by any one of its terms. Empty is always. The panel greys the rows
+    /// otherwise; the shader is not told.
+    pub enabled_if: &'static [&'static [RowTerm]],
+}
+
+/// One term of an `@enabled_if` annotation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowTerm {
+    /// `input` or `!input`: whether the second input gives a picture, that is
+    /// whether its row names a layer, or the effect is a backdrop on a layer
+    /// with a picture of its own.
+    Input(bool),
+    /// `field=N` or `field!=N`: whether a choice field is on option N
+    /// (a toggle is 0 off, 1 on).
+    Choice {
+        field: &'static str,
+        index: u32,
+        is: bool,
+    },
+}
+
+impl RowTerm {
+    /// `input`, `!input`, `field=N` or `field!=N`, spaces allowed.
+    fn parse(text: &str) -> Option<Self> {
+        let t: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        match t.as_str() {
+            "input" => return Some(Self::Input(true)),
+            "!input" => return Some(Self::Input(false)),
+            _ => {}
+        }
+        let (field, index, is) = if let Some((f, n)) = t.split_once("!=") {
+            (f, n, false)
+        } else {
+            let (f, n) = t.split_once('=')?;
+            (f, n, true)
+        };
+        if field.is_empty() || !field.chars().all(is_ident) {
+            return None;
+        }
+        Some(Self::Choice {
+            field: leak(field),
+            index: n_u32(index)?,
+            is,
+        })
+    }
+}
+
+fn n_u32(text: &str) -> Option<u32> {
+    text.parse().ok()
 }
 
 /// One user shader, read and wrapped: everything a render needs of it that is
@@ -1034,6 +1084,27 @@ fn read_fields(body: &str) -> Result<(Vec<ShaderField>, Vec<String>), ShaderRefu
         } else {
             label
         };
+        // A term that will not parse drops its whole rule, so the rows stay
+        // live rather than greyed for a typo.
+        let mut rules: Vec<&'static [RowTerm]> = Vec::new();
+        for ann in anns.iter().filter(|a| a.name == "enabled_if") {
+            match ann
+                .args
+                .iter()
+                .map(|a| RowTerm::parse(a))
+                .collect::<Option<Vec<_>>>()
+            {
+                Some(terms) if !terms.is_empty() => rules.push(Box::leak(terms.into_boxed_slice())),
+                _ => notes.push(format!(
+                    "`{name}`: `@enabled_if` takes input, !input, field=N or field!=N"
+                )),
+            }
+        }
+        let enabled_if: &'static [&'static [RowTerm]] = if rules.is_empty() {
+            &[]
+        } else {
+            Box::leak(rules.into_boxed_slice())
+        };
         match derive_rows(name, ty, &anns, &label) {
             Ok((params, default)) => fields.push(ShaderField {
                 name: leak(name),
@@ -1041,6 +1112,7 @@ fn read_fields(body: &str) -> Result<(Vec<ShaderField>, Vec<String>), ShaderRefu
                 offset: 0,
                 params: Box::leak(params.into_boxed_slice()),
                 default,
+                enabled_if,
             }),
             // A typo in a doc comment costs that row and nothing else (§2.2).
             Err(why) => {
@@ -1051,6 +1123,7 @@ fn read_fields(body: &str) -> Result<(Vec<ShaderField>, Vec<String>), ShaderRefu
                     offset: 0,
                     params: &[],
                     default: [0.0; 4],
+                    enabled_if,
                 });
             }
         }

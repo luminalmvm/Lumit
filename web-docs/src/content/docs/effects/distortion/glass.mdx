@@ -1,0 +1,86 @@
+---
+title: Glass
+description: "Refractive glass in the shape of a layer, bending everything behind it."
+---
+
+Glass is a **Distortion** effect.
+
+## What it does
+
+Bends what is behind a shape, as a piece of glass would. Put straight on a shape, text or
+image layer, it bends what is behind that layer, in the layer's own outline; the layer is
+then drawn as an adjustment layer, and its other effects work on what is behind it too. On
+an adjustment layer the outline is the layer picked in **Shape layer**, or with none picked,
+a built-in rounded rectangle or ellipse.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape layer** | Layer | Any layer in the composition | None | - |
+| **Shape** | Dropdown | Shape layer · Rounded rectangle · Ellipse | Shape layer | - |
+| **Shape channel** | Dropdown | Alpha · Luminance · Inverted alpha · Inverted luminance | Alpha | - |
+| **Centre X (%)**, **Centre Y (%)** | Slider | -50 to 150 | 50 | - |
+| **Width** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
+| **Height** | Slider | 0 to 4000; any value by typing | 450 | Pixels at composition size |
+| **Corner radius** | Slider | 0 to 1000; any value by typing | 90 | Pixels at composition size |
+| **Shape rotation** | Dial | Any angle | 0° | Degrees |
+| **Refraction** | Slider | 0 to 100; any value by typing | 50 | - |
+| **Depth** | Slider | 0 to 200; any value by typing | 30 | Pixels at composition size |
+| **Dispersion** | Slider | 0 to 100; any value by typing | 25 | - |
+| **Frost** | Slider | 0 to 100; any value by typing | 0 | Pixels at composition size |
+| **Splay** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Magnify** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Magnify falloff** | Slider | 0 to 100 | 100 | - |
+| **Effect scale** | Slider | 0.1 to 4 | 1 | - |
+| **Edge highlight** | Checkbox | On or off | On | - |
+| **Rim width** | Slider | 0.5 to 40; any value by typing | 3 | Pixels at composition size |
+| **Light angle** | Dial | Any angle | 315° | Degrees |
+| **Light intensity** | Slider | 0 to 200; any value by typing | 60 | - |
+| **Tint** | Colour | Each channel 0 to 1 | White | - |
+| **Tint amount** | Slider | 0 to 100 | 0 | - |
+
+In the Effect Controls panel:
+
+- **Shape channel** is editable while **Shape** is set to Shape layer and a layer gives the
+  outline.
+- **Centre X (%)**, **Centre Y (%)**, **Width**, **Height**, **Corner radius** and **Shape
+  rotation** are editable while **Shape** is a built-in shape, or no layer gives the outline.
+- **Corner radius** is editable while **Shape** is not Ellipse.
+- **Rim width** is editable while **Edge highlight** is on.
+
+## What each control does
+
+- **Shape layer**: the layer whose outline the glass takes, on an adjustment layer.
+- **Shape**: **Shape layer** takes the outline from a layer, and **Rounded rectangle** and
+  **Ellipse** draw a built-in shape.
+- **Shape channel**: what of the layer's picture makes the outline.
+- **Centre X (%)** and **Centre Y (%)**: the middle of the built-in shape, as a share of the
+  frame.
+- **Width** and **Height**: the size of the built-in shape.
+- **Corner radius**: how round the rectangle's corners are.
+- **Shape rotation**: turns the built-in shape.
+- **Refraction**: how strongly the glass bends what is behind it.
+- **Depth**: how far in from the edge the glass rises to its full height.
+- **Dispersion**: splits the colours where the glass bends, blue more than red.
+- **Frost**: blurs what is behind the glass.
+- **Splay**: pushes the bending away from the middle, or towards it below 0.
+- **Magnify**: enlarges what is behind the glass, or shrinks it below 0.
+- **Magnify falloff**: how much Magnify fades towards the edge.
+- **Effect scale**: scales Depth, Frost and Rim width together.
+- **Edge highlight**: a lit outline round the glass, and a highlight on its bevel.
+- **Rim width**: how wide the lit outline is.
+- **Light angle**: where the light comes from. 0° is above, and it turns clockwise.
+- **Light intensity**: how bright the edge light is.
+- **Tint**: the colour the glass is multiplied by.
+- **Tint amount**: how much of the Tint is given.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Lens distort](/effects/distortion/lens-distort/)
+- [Displacement map](/effects/distortion/displacement-map/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

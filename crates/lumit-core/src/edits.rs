@@ -366,6 +366,7 @@ pub fn fx_category_key(cat: lumit_core::fx::schema::FxCategory) -> &'static str 
         FxCategory::Compositing => "compositing",
         FxCategory::Controls => "controls",
         FxCategory::Drivers => "drivers",
+        FxCategory::SiceliotDrivers => "siceliot_drivers",
     }
 }
 

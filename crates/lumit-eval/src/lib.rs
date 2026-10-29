@@ -673,7 +673,7 @@ fn feed_comp_graph(
     let driven = graph.edges.iter().any(|e| {
         matches!(graph.node(e.from), Some(lumit_core::comp_graph::GraphNode::Fx(inst))
             if lumit_core::fx::builtins::def(&inst.effect.match_name)
-                .is_some_and(|d| d.schema().category == lumit_core::fx::schema::FxCategory::Drivers))
+                .is_some_and(|d| d.schema().category.is_driver()))
     });
     if driven {
         h.update(b"graph-drivers/");

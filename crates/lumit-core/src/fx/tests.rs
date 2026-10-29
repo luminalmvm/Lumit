@@ -6731,6 +6731,9 @@ fn every_parameter_declares_a_unit() {
             // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
+            ("type_fill", "row_gap"),
+            ("type_fill", "word_gap"),
+            ("type_fill", "min_width"),
             // Vary points and Pick points: the pattern's own distances, and
             // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),
@@ -6828,6 +6831,13 @@ fn every_parameter_declares_a_unit() {
             ("points_sample", "position_y"),
             ("measure", "padding_x"),
             ("measure", "padding_y"),
+            ("oscillator", "wavelength"),
+            ("value_noise", "noise_scale"),
+            ("ring_wave", "speed"),
+            ("ring_wave", "speed_variance"),
+            ("ring_wave", "thickness_min"),
+            ("ring_wave", "thickness_max"),
+            ("ring_wave", "clearance"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's
@@ -7336,11 +7346,9 @@ fn every_effect_carries_a_matte_row() {
         // them rather than drawing one.
         if matches!(
             s.category,
-            FxCategory::Controls
-                | FxCategory::Drivers
-                | FxCategory::Audio
-                | FxCategory::Compositing
-        ) || matches!(s.match_name, "camera_track" | "planar_track")
+            FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
+        ) || s.category.is_driver()
+            || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
                 s.matte,
@@ -10959,4 +10967,36 @@ fn a_collider_turned_in_3d_is_a_surface() {
         held.position.iter().all(|p| p[1] <= 800.01),
         "a particle went through the floor"
     );
+}
+
+/// The per-copy columns `drive_rows` writes replace Scale,
+/// Rotation and Opacity stamp by stamp, and a stream without them keeps the
+/// rows' one value. Guards each copy taking the value its driver gave it.
+#[test]
+fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
+    use crate::fx::drivers::per_copy::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
+    let e = clone_to_points(&[
+        ("rotation", EffectValue::Float(Property::fixed(10.0))),
+        ("tint", EffectValue::Float(Property::fixed(0.0))),
+    ]);
+    let plain = clone_stamps(&e, &two_points());
+    let ten = 10f32.to_radians();
+    assert!(plain.rotation.iter().all(|r| (r - ten).abs() < 1e-5));
+
+    let mut driven = two_points();
+    driven.named_mut(COPY_ROTATION, 1).expect("room")[1][0] = 90.0;
+    driven.named_mut(COPY_SCALE, 1).expect("room")[1][0] = 50.0;
+    driven.named_mut(COPY_OPACITY, 1).expect("room")[1][0] = 25.0;
+    for (column, first) in [
+        (COPY_ROTATION, 0.0),
+        (COPY_SCALE, 100.0),
+        (COPY_OPACITY, 100.0),
+    ] {
+        driven.named_mut(column, 1).expect("room")[0][0] = first;
+    }
+    let s = clone_stamps(&e, &driven);
+    assert!(s.rotation[0].abs() < 1e-5, "copy 0 turned by its own 0");
+    assert!((s.rotation[1] - 90f32.to_radians()).abs() < 1e-5);
+    assert!((s.size[0] - 10.0).abs() < 1e-4 && (s.size[1] - 5.0).abs() < 1e-4);
+    assert!((s.colour[0][3] - 1.0).abs() < 1e-5 && (s.colour[1][3] - 0.25).abs() < 1e-5);
 }

@@ -114,6 +114,7 @@ hold effects, a panel, or both. The other fields are as in
 | `shader` | The `.wgsl` file, inside the folder. |
 | `passes` | Optional. Up to 8, each `{name, scale}`, drawn in order. `scale` is `1`, `0.5` or `0.25`, and the last pass is `1`. With none, there is one pass called `shade`. |
 | `input` | Optional. `{label, kind}`: a second picture, as a layer row called `label`. `kind` is `image` or `depth`. A `depth` input is a Depth socket in the node graph. |
+| `backdrop` | Optional, `false` when left out. `true` runs the effect over the composite of everything below, even on a layer with a picture of its own. That layer is drawn as an adjustment layer, covering the whole frame, and every other effect on it works on the composite too. Its own picture, placed as it sits in the composition, is the second input wherever the `input` row names no other layer. |
 | `interface` | Optional. `{entry, width, height}`: the interface page, and the panel's opening size in pixels, 100 to 4096 each way. |
 
 A manifest with an unknown category, a higher `api`, a bad pass or a file outside the folder
@@ -183,6 +184,21 @@ struct Params {
 `@default(v)` is the starting value, and `@unit(px)`, `@unit(deg)` or `@unit(s)` the unit.
 The rest of the comment is the label, or the field's name when there is none. A
 `vec3<f32>` field is refused. An annotation that cannot be read loses its own row only.
+
+`@enabled_if(…)` greys a field's rows in Effect controls. Its terms are `input` and
+`!input`, whether the second input gives a picture, and `field=N` and `field!=N`, a choice
+on option N or a toggle at 0 or 1. The second input gives a picture when its row names a
+layer, or when a `backdrop` effect sits on a layer with a picture of its own. The rows stay
+live while any term holds, and every `@enabled_if` on a field must hold:
+
+```wgsl
+    /// @choice("Shape layer", "Rounded rectangle") Shape
+    shape: u32,
+    /// @enabled_if(shape != 0, !input) @unit(px) Width
+    width: f32,
+```
+
+A rule with a term that cannot be read is dropped, and its rows stay live.
 
 ### When it does not draw
 

@@ -597,6 +597,7 @@ impl CompositionReference {
                     crate::api::effect::read_instance_info(
                         &crate::api::effect::with_live_inputs(instance, &doc),
                         lumit_core::time::Rational::ZERO,
+                        false,
                     )
                 })
                 .collect(),
@@ -3580,7 +3581,7 @@ impl CompositionReference {
             .ok_or(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup))?;
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             return Err(BridgeError::UnknownEffectName);
         }
@@ -4121,7 +4122,11 @@ fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
                     .effects
                     .iter()
                     .map(|e| {
-                        crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO)
+                        crate::api::effect::read_instance_info(
+                            e,
+                            lumit_core::time::Rational::ZERO,
+                            false,
+                        )
                     })
                     .collect(),
             }

@@ -188,8 +188,15 @@ pub struct DriverCx<'a> {
     pub points_input: &'a dyn Fn(&str) -> Option<std::rc::Rc<super::points::PointsStream>>,
     /// Which copy of how many the layer is being rendered as, when Clone to
     /// points renders it once per stamp. The first copy of one everywhere
-    /// else. Only the Clone index driver reads it.
+    /// else. Clone index and the Siceliot drivers read it.
     pub clone: (u32, u32),
+    /// Where that copy stands, px@comp, when the drivers are resolved for one
+    /// point of a Clone to points stream; `None` everywhere else.
+    /// Oscillator and Value noise read it to vary by position.
+    pub point: Option<[f32; 2]>,
+    /// Where all the points of that stream are, for Ring wave to
+    /// start its rings away from them. `None` everywhere else.
+    pub cloud: Option<&'a super::points::Cloud>,
 }
 
 /// Where Audio level gets its samples.
@@ -429,6 +436,14 @@ pub trait EffectDef: Sync + Send + 'static {
         RowState::default()
     }
 
+    /// [`row_state`](Self::row_state) for an instance on a layer: `picture` is
+    /// whether that layer has a picture of its own, rather than being an
+    /// adjustment. An LFX effect reads it for its `@enabled_if` rows.
+    fn row_state_on(&self, inst: &EffectInstance, picture: bool) -> RowState {
+        let _ = picture;
+        self.row_state(inst)
+    }
+
     /// Let the effect react to an edit of its values, and hand back what it
     /// wrote in answer.
     ///
@@ -448,6 +463,14 @@ pub trait EffectDef: Sync + Send + 'static {
     /// registry-agreement test excuses from needing a GPU entry.
     fn is_image_op(&self) -> bool {
         true
+    }
+
+    /// Whether this effect reads a Text layer's look (its Text
+    /// layer row) without being a points effect, so the builder hands it the
+    /// carriage the points effects get, with the layer's document in it
+    /// ([`crate::fx::points::wants_carriage_of`]).
+    fn reads_text_layer(&self) -> bool {
+        false
     }
 
     /// What this entry produces and consumes. Every effect is
@@ -495,6 +518,14 @@ pub trait EffectDef: Sync + Send + 'static {
     /// between distances of its own. A node graph then lets a picture wire into
     /// the depth socket too.
     fn depth_takes_a_pass(&self) -> bool {
+        false
+    }
+
+    /// Whether the effect is drawn over the composite below wherever it sits,
+    /// as on an adjustment layer, with the layer's own picture as its second
+    /// input when that row picks no other layer (an LFX manifest's
+    /// `backdrop`).
+    fn backdrop(&self) -> bool {
         false
     }
 

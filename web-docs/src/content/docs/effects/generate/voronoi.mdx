@@ -1,0 +1,58 @@
+---
+title: Voronoi
+description: "A cellular pattern of scattered points, drawn as cells, distances or edges."
+---
+
+Voronoi is a **Generate** effect.
+
+## What it does
+
+Scatters one point in each cell of a grid and measures every pixel against the nearest
+points. The result is coloured from the ramp. **Evolution** moves the points round, and
+comes back to the start every 360°.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Cells · Distance · Edges | Cells | - |
+| **Cell size** | Slider | 4 to 1000; any value by typing | 160 | Pixels at composition size |
+| **Randomness** | Slider | 0 to 100 | 100 | - |
+| **Evolution** | Dial | Any angle | 0° | Degrees |
+| **Offset** | Point | Any position | 0, 0 | Pixels at composition size |
+| **Edge width** | Slider | 0 to 100; any value by typing | 4 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Mode**: **Cells** paints each cell one colour from the ramp, **Distance** shades from
+  each point at Position 0 outwards, and **Edges** draws the borders between cells at
+  Position 100.
+- **Cell size**: how big the cells are.
+- **Randomness**: how far the points stray from a grid. At 0 they line up.
+- **Evolution**: moves every point round a small circle.
+- **Offset**: slides the whole pattern.
+- **Edge width**: how thick the borders are, on Edges.
+- **Seed**: where the points fall.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
+  and where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Checkerboard](/effects/generate/checkerboard/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)
