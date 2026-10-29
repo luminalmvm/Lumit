@@ -3797,7 +3797,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 builder: (context, box) {
                   final outlineWidth = min(
                     _settings.cutHeadWidth,
-                    max(100.0, box.maxWidth - scrollGutterWidth - _laneFloor),
+                    // Room for the colour bar and a picture track's four
+                    // switches at the least.
+                    max(112.0, box.maxWidth - scrollGutterWidth - _laneFloor),
                   );
                   final laneViewport =
                       (box.maxWidth - outlineWidth - scrollGutterWidth)
@@ -4376,13 +4378,20 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               )),
           ),
           // A picture track may carry sound, and is muted as a sound track is.
-          if (track.kind == CutTrackKind.picture)
+          if (track.kind == CutTrackKind.picture) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,
                 mark: LumitIcons.audio,
                 offMark: LumitIcons.muted,
                 height: top,
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
+            // Solo, as a Vegas video track has.
+            _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
+                mark: LumitIcons.solo,
+                offMark: LumitIcons.solo,
+                height: top,
+                tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
+          ],
           if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,
