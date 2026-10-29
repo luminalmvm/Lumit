@@ -1,0 +1,42 @@
+---
+title: Checkerboard
+description: "Two colours in squares or rectangles, at any angle."
+---
+
+Checkerboard is a **Generate** effect.
+
+## What it does
+
+Draws a board of two colours, with a corner of four cells on **Centre**. The edges of the
+cells are smoothed over one pixel.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Cell width** | Slider | 1 to 1000; any value by typing | 120 | Pixels at composition size |
+| **Cell height** | Slider | 1 to 1000; any value by typing | 120 | Pixels at composition size |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Colour 1** | Colour | Each channel 0 to 1 | White | - |
+| **Colour 2** | Colour | Each channel 0 to 1 | Black | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Cell width** and **Cell height**: the size of each cell.
+- **Rotation**: turns the board.
+- **Centre**: where a corner of four cells sits.
+- **Colour 1** and **Colour 2**: the two colours.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Grid](/effects/generate/grid/)
+- [Stripes](/effects/stylise/stripes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

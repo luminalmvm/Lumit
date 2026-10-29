@@ -1,0 +1,93 @@
+---
+title: Ring wave
+description: "Rings that grow out across the frame and give each point a value as they cross it."
+---
+
+Ring wave is a **Siceliot** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Starts a ring every **Interval** and grows it outwards across the frame. Each point reads
+how strong the rings are where it stands, so Ring wave goes on the layer that holds
+[Clone to points](/effects/generate/clone-to-points/) or
+[Label points](/effects/generate/label-points/), wired into that effect's own rows: Clone to
+points' **Scale**, **Rotation** or **Opacity**, or Label points' **Change**, **Label
+scale**, **Text step** or **Label rotation**. Anywhere else it reads at the top left corner
+of the composition.
+
+It has four sockets:
+
+- **Value**: Minimum where no ring is, Maximum on a ring's middle line.
+- **Rotation**: the turn a ring gives what it crosses, in degrees clockwise, strongest on
+  its middle and following the way the ring travels.
+- **Passes**: how many rings have crossed the point. It goes up by one as each ring's
+  middle reaches the point, and never goes back.
+- **Grow**: how much bigger the rings make the point, per cent.
+
+The same frame always reads the same values.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Minimum** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Maximum** | Slider | -100 to 100; any value by typing | 100 | - |
+| **Interval** | Slider | 0.05 to 5; down to 0.01 and higher | 0.5 | - |
+| **Speed** | Slider | 10 to 2000; down to 1 and higher | 300 | Pixels at composition size |
+| **Speed variance** | Slider | 0 to 500; higher | 10 | Pixels at composition size |
+| **Thickness min** | Slider | 1 to 1000; higher | 60 | Pixels at composition size |
+| **Thickness max** | Slider | 1 to 1000; higher | 120 | Pixels at composition size |
+| **Origin** | Dropdown | Anywhere · Edges · Centre · Away from points | Anywhere | - |
+| **Clearance** | Slider | 0 to 400; higher | 20 | Pixels at composition size |
+| **Add up** | Checkbox | On or off | Off | - |
+| **Grow min** | Slider | 0 to 200; higher | 20 | Per cent |
+| **Grow max** | Slider | 0 to 200; higher | 50 | Per cent |
+| **Spin** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+In the Effect Controls panel:
+
+- **Clearance** is editable while **Origin** is set to Away from points.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Minimum**: the value where no ring is.
+- **Maximum**: the value on a ring's middle line.
+- **Interval**: seconds between one ring and the next.
+- **Speed**: how fast a ring grows, in pixels a second.
+- **Speed variance**: how much faster or slower each ring may be.
+- **Thickness min** and **Thickness max**: how far from its middle line a ring fades to
+  nothing. Each ring is somewhere between the two.
+- **Origin**: where the rings start. **Anywhere** on the frame, on its **Edges**, in its
+  **Centre**, or **Away from points**, at least Clearance from every point it is wired to.
+- **Clearance**: how far from every point a ring starts, on Away from points.
+- **Add up**: rings that overlap add up past Maximum. Off, they stop at Maximum.
+- **Grow min** and **Grow max**: the least and the most a ring makes what it crosses grow,
+  on the Grow socket. Each ring has its own amount between the two.
+- **Spin**: how much the rings turn what they cross, on the Rotation socket.
+- **Seed**: where each ring starts, how fast it grows and how thick it is.
+
+## With Label points
+
+On the layer that holds Label points, wire **Value** into Label points' **Change** and
+**Passes** into **Text step**. A label scrambles as a ring crosses it and keeps the text the
+ring leaves it with. **Grow**, plus 100 through a [Math](/effects/drivers/math/) set to
+Add, into **Label scale** swells each label as a ring passes.
+
+## Related
+
+- [Label points](/effects/generate/label-points/)
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Ripple](/effects/distortion/ripple/)
+- [Siceliot](/effects/#siceliot)
+- [Effects](/use/effects/)

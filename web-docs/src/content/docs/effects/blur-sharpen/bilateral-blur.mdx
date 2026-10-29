@@ -1,0 +1,33 @@
+---
+title: Bilateral blur
+description: "Smooths areas of similar colour and keeps the edges between them sharp."
+---
+
+Bilateral blur is a **Blur & sharpen** effect.
+
+## What it does
+
+Blurs each pixel with its neighbours, each neighbour counting less the more its colour
+differs. It is drawn across, then down.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Radius** | Slider | 0 to 100; any value by typing | 8 | Pixels at composition size |
+| **Tolerance** | Slider | 1 to 100 | 20 | - |
+
+## What each control does
+
+- **Radius**: how far the blur reaches.
+- **Tolerance**: how much a colour can differ and still count as similar.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Median](/effects/stylise/median/)
+- [Blur & sharpen](/effects/#blur--sharpen)
+- [Effects](/use/effects/)

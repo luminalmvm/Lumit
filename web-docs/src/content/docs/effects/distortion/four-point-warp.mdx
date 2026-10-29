@@ -1,0 +1,39 @@
+---
+title: Four point warp
+description: "Pins the layer's four corners to four points, and bows each edge in or out."
+---
+
+Four point warp is a **Distortion** effect.
+
+## What it does
+
+Moves the layer's corners to the four points and bows each edge by its **Curve**. The
+defaults match a 1920 by 1080 layer, so it starts with no change. Outside the warped shape
+the result is clear.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Top left** | Point | Any position | 0, 0 | Pixels at composition size |
+| **Top right** | Point | Any position | 1920, 0 | Pixels at composition size |
+| **Bottom right** | Point | Any position | 1920, 1080 | Pixels at composition size |
+| **Bottom left** | Point | Any position | 0, 1080 | Pixels at composition size |
+| **Curve top**, **Curve right**, **Curve bottom**, **Curve left** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+
+## What each control does
+
+- **Top left**, **Top right**, **Bottom right** and **Bottom left**: where each corner of
+  the layer goes.
+- **Curve top**, **Curve right**, **Curve bottom** and **Curve left**: how far the middle of
+  each edge bows, outwards above 0 and inwards below.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Corner pin](/effects/distortion/corner-pin/)
+- [Bezier warp](/effects/distortion/bezier-warp/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

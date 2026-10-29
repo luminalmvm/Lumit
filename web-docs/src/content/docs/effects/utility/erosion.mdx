@@ -1,0 +1,38 @@
+---
+title: Erosion
+description: "Shrinks the layer's shape, or grows it, by a number of pixels."
+---
+
+Erosion is a **Utility** effect.
+
+## What it does
+
+Above 0, each pixel takes the most transparent pixel within **Amount** and the shape
+shrinks. Below 0 it takes the most opaque one and the shape grows, carrying its edge colours
+out. Corners stay square.
+
+:::note[Limits]
+- Amount reaches 64 pixels at most.
+- Past the layer's edges counts as clear, and the shape cannot grow past the layer's own
+  picture.
+:::
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | -64 to 64 | 8 | Pixels at composition size |
+
+## What each control does
+
+- **Amount**: how far the shape shrinks, or grows below 0.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Set matte](/effects/utility/set-matte/)
+- [Inner shadow](/effects/stylise/inner-shadow/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

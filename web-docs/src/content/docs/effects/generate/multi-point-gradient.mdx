@@ -1,0 +1,44 @@
+---
+title: Multi-point gradient
+description: "Up to six coloured points, each pulling the colours round it."
+---
+
+Multi-point gradient is a **Generate** effect.
+
+## What it does
+
+Blends the colours of up to six points across the layer. Each point's colour reaches as far
+as its **Influence**, and **Power** sets how sharply it gives way to its neighbours'.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Points** | Slider, whole numbers | 2 to 6 | 4 | - |
+| **Power** | Slider | 0.5 to 8; any value by typing | 2 | - |
+| **Point 1** to **Point 6** | Point | Any position | The middles of the four quarters, the centre, and near the top | Pixels at composition size |
+| **Colour 1** to **Colour 6** | Colour | Each channel 0 to 1 | Orange, yellow, blue, purple, white, black | - |
+| **Influence 1** to **Influence 6** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Points**: how many points are used, from Point 1.
+- **Power**: how sharply one point's colour gives way to the next. Low blends wide, high
+  makes cells round each point.
+- **Point 1** to **Point 6**: where each point sits.
+- **Colour 1** to **Colour 6**: each point's colour.
+- **Influence 1** to **Influence 6**: how far each point reaches. Above 100 it reaches
+  further, below 100 less far.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Conical gradient](/effects/generate/conical-gradient/)
+- [Gradient](/effects/generate/gradient/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

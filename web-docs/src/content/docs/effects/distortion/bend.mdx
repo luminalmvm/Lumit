@@ -1,0 +1,38 @@
+---
+title: Bend
+description: "Curls the picture round a circle from a point along an angle."
+---
+
+Bend is a **Distortion** effect.
+
+## What it does
+
+From **Centre**, along **Angle**, a stretch **Length** long is bent through **Bend**
+degrees. What lies past it carries on straight in the new direction, and what lies behind
+Centre is left alone. Where nothing lands, the result is clear.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 0° | Degrees |
+| **Bend** | Slider | -360 to 360; any value by typing | 90 | Degrees |
+| **Length** | Slider | 1 to 4000; any value by typing | 600 | Pixels at composition size |
+
+## What each control does
+
+- **Centre**: where the bend starts.
+- **Angle**: the direction the bend runs from Centre.
+- **Bend**: how far the stretch turns. Below 0 it curls the other way.
+- **Length**: how long the bent stretch is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Twirl](/effects/distortion/twirl/)
+- [Warp](/effects/distortion/warp/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

@@ -1,0 +1,42 @@
+---
+title: Gradient map
+description: "Repaints each pixel from a ramp of up to five colours, by how bright it is."
+---
+
+Gradient map is a **Colour** effect.
+
+## What it does
+
+Reads how bright each pixel is and paints it from the ramp, dark from Position 0 and bright
+from Position 100. The layer keeps its own transparency.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source** | Dropdown | Luminance · Red · Green · Blue · Alpha | Luminance | - |
+| **Reverse** | Checkbox | On or off | Off | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Source**: what is read as brightness, the luminance or one channel.
+- **Reverse**: runs the ramp the other way, bright from Position 0.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
+  and where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Tritone](/effects/colour/tritone/)
+- [Falloff](/effects/generate/falloff/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

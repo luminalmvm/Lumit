@@ -62,15 +62,15 @@ camera has no label.
 | **Anchor** | Dropdown | Left · Centre · Right | Left | - |
 | **Vertical anchor** | Dropdown | Middle · Top · Bottom | Middle | - |
 | **Max labels** | Slider, whole numbers | 1 to 2000 | 300 | - |
-| **Change** | Slider | 0 to 100 | 0 | Per cent |
-| **Change above** | Slider | 0 to 100 | 50 | Per cent |
-| **Scramble rate** | Slider | 0 to 60 | 12 | - |
+| **Change** | Slider | 0 to 100; any value by typing | 0 | Per cent |
+| **Change above** | Slider | 0 to 100; any value by typing | 50 | Per cent |
+| **Scramble rate** | Slider | 0 to 60; higher | 12 | - |
 | **Text step** | Slider | 0 to 1000; any value by typing | 0 | - |
 | **Flash colour** | Dropdown | Off · Random hue · Two colours · By strength · Gradient | Off | - |
 | **Colour A** | Colour | Each channel 0 to 4, scene-linear | 1, 0.2, 0.1, 1 | - |
 | **Colour B** | Colour | Each channel 0 to 4, scene-linear | 0.1, 0.6, 1, 1 | - |
-| **Hue start** | Dial | Any angle | 0° | Degrees |
-| **Hue range** | Slider | 0 to 360 | 200 | - |
+| **Hue start** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Hue range** | Slider | 0 to 360; any value by typing | 200 | - |
 | **Saturation** | Slider | 0 to 100 | 80 | Per cent |
 | **Darken** | Slider | 0 to 100 | 50 | Per cent |
 | **Gradient stops** | Slider, whole numbers | 2 to 4 | 4 | - |
@@ -78,9 +78,9 @@ camera has no label.
 | **Gradient 2** | Colour | Each channel 0 to 4, scene-linear | 0.63, 0.67, 0.34, 1 | - |
 | **Gradient 3** | Colour | Each channel 0 to 4, scene-linear | 0.08, 0.41, 0.13, 1 | - |
 | **Gradient 4** | Colour | Each channel 0 to 4, scene-linear | 0.006, 0.11, 0.22, 1 | - |
-| **Label scale** | Slider | 0 to 400 | 100 | Per cent |
-| **Grow** | Slider | 0 to 200 | 0 | Per cent |
-| **Label rotation** | Dial | Any angle | 0° | Degrees |
+| **Label scale** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Grow** | Slider | 0 to 200; higher | 0 | Per cent |
+| **Label rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -90,10 +90,18 @@ camera has no label.
 In the Effect Controls panel:
 
 - **Group** is editable while **Apply to** is anything but All points.
-- **Colour A** and **Colour B** are editable while **Flash colour** is Two colours.
-- **Hue start**, **Hue range**, **Saturation** and **Darken** are editable while **Flash colour** is By strength.
-- **Gradient stops** and **Gradient 1** to **Gradient 4** are editable while **Flash colour** is Gradient.
 - **Threshold** is editable while **Apply to** is anything but All points.
+- **Colour A** is editable while **Flash colour** is set to Two colours.
+- **Colour B** is editable while **Flash colour** is set to Two colours.
+- **Hue start** is editable while **Flash colour** is set to By strength.
+- **Hue range** is editable while **Flash colour** is set to By strength.
+- **Saturation** is editable while **Flash colour** is set to By strength.
+- **Darken** is editable while **Flash colour** is set to By strength.
+- **Gradient stops** is editable while **Flash colour** is set to Gradient.
+- **Gradient 1** is editable while **Flash colour** is set to Gradient.
+- **Gradient 2** is editable while **Flash colour** is set to Gradient.
+- **Gradient 3** is editable while **Flash colour** is set to Gradient.
+- **Gradient 4** is editable while **Flash colour** is set to Gradient.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}

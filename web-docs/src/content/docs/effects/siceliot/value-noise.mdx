@@ -1,0 +1,73 @@
+---
+title: Value noise
+description: "A value that wanders smoothly between two numbers, differently for each copy."
+---
+
+Value noise is a **Siceliot** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Wanders smoothly between **Minimum** and **Maximum** over time. Each copy
+[Clone to points](/effects/generate/clone-to-points/) stamps can wander on its own path, or
+read a field of noise laid over where the copies stand.
+
+Wired into Clone to points' own **Scale**, **Rotation** or **Opacity**, or into
+[Label points](/effects/generate/label-points/)' **Change**, **Label scale**, **Text step**
+or **Label rotation**, it gives each stamp or label its own value, for up to 4096 points.
+In what a clone layer shows, it renders that layer once per copy, as
+[Clone index](/effects/drivers/clone-index/) does. Anywhere else it reads as the first copy
+of one.
+
+Where a copy stands is known only when the driver is wired into those rows. Anywhere else
+it reads as the top left corner of the composition.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Minimum** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Maximum** | Slider | -100 to 100; any value by typing | 100 | - |
+| **Frequency** | Slider | 0 to 20; higher | 1 | - |
+| **Detail** | Slider, whole numbers | 1 to 4 | 1 | - |
+| **Vary by** | Dropdown | Nothing · Copy · Position | Copy | - |
+| **Noise scale** | Slider | 10 to 4000; down to 1 and higher | 300 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+In the Effect Controls panel:
+
+- **Noise scale** is editable while **Vary by** is set to Position.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Minimum**: the lowest it wanders to.
+- **Maximum**: the highest it wanders to.
+- **Frequency**: how quickly it wanders, in turns a second.
+- **Detail**: layers of finer wander on top, each half as strong.
+- **Vary by**: what makes the copies differ. **Nothing** moves them together, **Copy** gives
+  each its own path, and **Position** lays a field of noise over the points, so neighbours
+  move alike and the pattern drifts with time.
+- **Noise scale**: the size of the field's features.
+- **Seed**: which path it wanders.
+
+## With Clone to points
+
+On the layer that holds Clone to points, Value noise from -20 to 20 with **Vary by** on
+Position and a **Noise scale** of 200, wired into Clone to points' **Rotation**, sways the
+copies together like grass in wind.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Wiggle](/effects/drivers/wiggle/)
+- [Siceliot](/effects/#siceliot)
+- [Effects](/use/effects/)

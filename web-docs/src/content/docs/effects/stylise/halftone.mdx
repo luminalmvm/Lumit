@@ -1,0 +1,45 @@
+---
+title: Halftone
+description: "Redraws the picture as a printed screen of dots, lines or squares."
+---
+
+Halftone is a **Stylise** effect.
+
+## What it does
+
+Cuts the picture into cells and draws a mark in each, bigger where the picture is darker.
+Each cell reads the picture once, at its middle. The layer keeps its own transparency.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Dots · Lines · Squares | Dots | - |
+| **Cell size** | Slider | 2 to 200; any value by typing | 16 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 45° | Degrees |
+| **Softness** | Slider | 0 to 10; any value by typing | 1 | Pixels at composition size |
+| **Keep colours** | Checkbox | On or off | Off | - |
+| **Ink** | Colour | Each channel 0 to 1 | Black | - |
+| **Paper** | Colour | Each channel 0 to 1 | White | - |
+| **Reverse** | Checkbox | On or off | Off | - |
+
+## What each control does
+
+- **Shape**: the mark each cell draws.
+- **Cell size**: how big the cells are.
+- **Angle**: turns the screen.
+- **Softness**: how far the edge of each mark fades.
+- **Keep colours**: prints each mark in the picture's own colour instead of Ink.
+- **Ink**: the colour of the marks.
+- **Paper**: the colour between them.
+- **Reverse**: gives the big marks to the bright parts.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Dithering](/effects/stylise/dithering/)
+- [Mosaic](/effects/stylise/mosaic/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

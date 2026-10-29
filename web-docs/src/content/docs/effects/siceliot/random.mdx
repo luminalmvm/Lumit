@@ -1,0 +1,59 @@
+---
+title: Random
+description: "A random value for each copy, kept or rolled again a set number of times a second."
+---
+
+Random is a **Siceliot** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Gives each copy [Clone to points](/effects/generate/clone-to-points/) stamps a random value
+of its own between **Minimum** and **Maximum**. The same frame always reads the same value.
+
+Wired into Clone to points' own **Scale**, **Rotation** or **Opacity**, or into
+[Label points](/effects/generate/label-points/)' **Change**, **Label scale**, **Text step**
+or **Label rotation**, it gives each stamp or label its own value, for up to 4096 points.
+In what a clone layer shows, it renders that layer once per copy, as
+[Clone index](/effects/drivers/clone-index/) does. Anywhere else it reads as the first copy
+of one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Minimum** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Maximum** | Slider | -100 to 100; any value by typing | 100 | - |
+| **Bias** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Rate** | Slider | 0 to 30; higher | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Minimum**: the lowest value it gives.
+- **Maximum**: the highest value it gives.
+- **Bias**: leans the values towards Minimum below 0, or towards Maximum above 0.
+- **Rate**: new values a second. At 0 each copy keeps one value for good.
+- **Seed**: which values come out.
+
+## With Clone to points
+
+Random from 40 to 160, on the layer that holds Clone to points and wired into its
+**Scale**, gives every copy a size of its own. At a **Rate** of 4 they change size four
+times a second.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Clone index](/effects/drivers/clone-index/)
+- [Siceliot](/effects/#siceliot)
+- [Effects](/use/effects/)

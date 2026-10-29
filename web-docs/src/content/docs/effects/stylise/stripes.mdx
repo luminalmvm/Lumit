@@ -1,0 +1,37 @@
+---
+title: Stripes
+description: "Repeats one band of pixels through the picture, pulling it out into streaks."
+---
+
+Stripes is a **Stylise** effect.
+
+## What it does
+
+Reads a band of pixels through **Centre** and repeats it along **Angle**. At a **Width** of
+1 every pixel of the line is pulled out into a streak.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 0° | Degrees |
+| **Width** | Slider | 1 to 1000; any value by typing | 1 | Pixels at composition size |
+| **Side** | Dropdown | Both sides · Front · Back | Both sides | - |
+
+## What each control does
+
+- **Centre**: a point on the band that is read.
+- **Angle**: the direction of the streaks. 0° runs left and right.
+- **Width**: how wide the repeated band is.
+- **Side**: which side of the line is drawn over. **Front** is the side Angle points to.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Scrape](/effects/stylise/scrape/)
+- [Pixel sort](/effects/stylise/pixel-sort/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

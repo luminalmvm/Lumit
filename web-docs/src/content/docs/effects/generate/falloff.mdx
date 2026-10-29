@@ -1,0 +1,66 @@
+---
+title: Falloff
+description: "Draws where an effect should act, from full to none, for another effect to take as its matte."
+---
+
+Falloff is a **Generate** effect.
+
+## What it does
+
+Draws a shape that fades from full to none. Picked as the **Matte** of another effect, it
+sets where that effect acts. On **Fade layer** it fades the layer's own picture instead.
+
+Several Falloffs on one layer combine through their **Blend** rows: Multiply keeps the
+overlap, Screen or Add joins them, and Subtract cuts one out of another.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Circle · Box · Linear · Sweep | Circle | - |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Width** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
+| **Height** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Softness** | Slider | 0 to 100 | 50 | - |
+| **Arc** | Slider | 1 to 360; any value by typing | 360 | Degrees |
+| **Repetitions** | Slider, whole numbers | 1 to 64 | 1 | - |
+| **Curve** | Dropdown | Linear · Smooth · Ease in · Ease out · Bell | Smooth | - |
+| **Strength** | Slider | 0 to 100 | 100 | - |
+| **Invert falloff** | Checkbox | On or off | Off | - |
+| **Binary** | Checkbox | On or off | Off | - |
+| **Cell size** | Slider | 1 to 200; any value by typing | 20 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Output** | Dropdown | Greyscale · Alpha · Fade layer | Greyscale | - |
+
+## What each control does
+
+- **Shape**: **Circle** and **Box** are full in the middle and fade towards the edge of an
+  ellipse or a rectangle Width by Height. **Linear** ramps from full to none across Width.
+  **Sweep** turns round Centre, clockwise, over Arc.
+- **Centre**: the middle of the shape.
+- **Width** and **Height**: the size of the shape.
+- **Rotation**: turns the shape, and sets the direction of Linear and where Sweep starts.
+- **Softness**: how much of a Circle or Box fades towards its edge.
+- **Arc**: how far Sweep turns.
+- **Repetitions**: how many times the Linear and Sweep ramps repeat inside their length.
+- **Curve**: the shape of the fade. **Bell** is full halfway, and none at the middle and the
+  edge.
+- **Strength**: scales the result.
+- **Invert falloff**: swaps full and none, before Strength.
+- **Binary**: cuts the picture into cells, each fully on with a chance equal to the falloff
+  there.
+- **Cell size**: the size of Binary's cells.
+- **Seed**: which cells Binary turns on.
+- **Output**: **Greyscale** draws an opaque grey picture, **Alpha** draws white whose
+  transparency is the falloff, and **Fade layer** fades the layer's own picture.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Gradient map](/effects/colour/gradient-map/)
+- [Mattes](/use/mattes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)
