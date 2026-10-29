@@ -18,7 +18,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../icons/icons.dart' show iconSize;
 import 'audio_timeline_fades_frb.dart' show ClipFadePainter;
-import 'clip_fades.dart' show ClipFadeRamp;
+import 'clip_fades.dart' show ClipFadeRamp, clipFadeGain;
 import 'cut_timeline_tracks.dart';
 import 'graph_maths.dart' show rationalSeconds;
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -211,20 +211,33 @@ class CutTrackPainter extends CustomPainter {
       }
       // Where two clips overlap the overlap is the transition, a dissolve
       // on a picture track and a crossfade on a sound track: the join,
-      // drawn as an X across the stretch both play.
+      // drawn as an X across the stretch both play, each side in the curve
+      // it takes, as Vegas draws a crossfade.
+      final paint = Paint()
+        ..color = colours.cross
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+      final top = cutClipInset;
+      final foot = size.height - cutClipInset;
       for (var i = lo; i < hi - 1; i++) {
         final (_, end) = spans[i - lo] ?? (0, 0);
         final (next, _) = spans[i - lo + 1] ?? (0, 0);
         if (next >= end) continue;
         final a = axis.xOf(next);
         final b = axis.xOf(end);
-        final paint = Paint()
-          ..color = colours.cross
-          ..strokeWidth = 1;
-        canvas.drawLine(Offset(a, cutClipInset),
-            Offset(b, size.height - cutClipInset), paint);
-        canvas.drawLine(Offset(a, size.height - cutClipInset),
-            Offset(b, cutClipInset), paint);
+        final out = track.clips[i].fadeOut.shape;
+        final into = track.clips[i + 1].fadeIn.shape;
+        final falling = Path()..moveTo(a, top);
+        final rising = Path()..moveTo(a, foot);
+        const steps = 16;
+        for (var k = 1; k <= steps; k++) {
+          final u = k / steps;
+          final x = a + (b - a) * u;
+          falling.lineTo(x, foot - clipFadeGain(out, 1 - u) * (foot - top));
+          rising.lineTo(x, foot - clipFadeGain(into, u) * (foot - top));
+        }
+        canvas.drawPath(falling, paint);
+        canvas.drawPath(rising, paint);
       }
       _fades(canvas, size, lo, hi, spans, held, mark);
     }
