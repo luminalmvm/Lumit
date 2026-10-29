@@ -4872,7 +4872,7 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     let (a, b) = (ids[0], ids[1]);
     let cut = [(0, join), (join, 2 * join), (2 * join, 3 * join)];
 
-    let over = comp.cut_trim(a, 0, join + 4, false, false);
+    let over = comp.cut_trim(a, 0, join + 4, false, false, false);
     assert_eq!(over.expect("answered"), BridgeCutResult::Overlap);
 
     // Eleven frames: five after the edit point and six before it.
@@ -4892,12 +4892,12 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     // Its edge drags, within the neighbour and within the clip's own media:
     // the incoming clip has a second of source before it, less the six
     // frames the dissolve took.
-    let done = comp.cut_trim(a, 0, join + 8, false, false);
+    let done = comp.cut_trim(a, 0, join + 8, false, false, false);
     assert_eq!(done.expect("dragged"), BridgeCutResult::Done);
     assert_eq!(row_frames(&top)[0], (0, join + 8));
-    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false);
+    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false, false);
     assert_eq!(past.expect("answered"), BridgeCutResult::Overlap);
-    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false);
+    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false, false);
     assert_eq!(dry.expect("answered"), BridgeCutResult::Limit);
 
     // An edge nothing meets fades on its own.
@@ -5049,7 +5049,7 @@ fn a_cut_through_a_group_leaves_two_groups() {
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
-    let done = comp.cut_trim(sound, 0, length, false, false);
+    let done = comp.cut_trim(sound, 0, length, false, false, false);
     assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
     let group = Uuid::now_v7();
     for row in [top, below] {
@@ -5086,7 +5086,7 @@ fn a_paste_links_the_copies_to_each_other_and_answers_where_they_end() {
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
-    let done = comp.cut_trim(sound, 0, length, false, false);
+    let done = comp.cut_trim(sound, 0, length, false, false, false);
     assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
     let link = Uuid::now_v7();
     for row in [top, below] {

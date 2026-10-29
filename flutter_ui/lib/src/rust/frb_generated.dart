@@ -611,7 +611,8 @@ abstract class BridgeLibApi extends BaseApi {
       required PlatformInt64 startFrame,
       required PlatformInt64 endFrame,
       required bool ripple,
-      required bool linked});
+      required bool linked,
+      required bool overlap});
 
   Future<BridgeBeatsResult> crateApiCompositionCompositionReferenceDetectBeats(
       {required CompositionReference that,
@@ -6517,7 +6518,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required PlatformInt64 startFrame,
       required PlatformInt64 endFrame,
       required bool ripple,
-      required bool linked}) {
+      required bool linked,
+      required bool overlap}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -6527,6 +6529,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_i_64(endFrame, serializer);
         sse_encode_bool(ripple, serializer);
         sse_encode_bool(linked, serializer);
+        sse_encode_bool(overlap, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 138)!;
       },
       codec: SseCodec(
@@ -6535,7 +6538,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceCutTrimConstMeta,
-      argValues: [that, clip, startFrame, endFrame, ripple, linked],
+      argValues: [that, clip, startFrame, endFrame, ripple, linked, overlap],
       apiImpl: this,
     ));
   }
@@ -6549,7 +6552,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           "startFrame",
           "endFrame",
           "ripple",
-          "linked"
+          "linked",
+          "overlap"
         ],
       );
 

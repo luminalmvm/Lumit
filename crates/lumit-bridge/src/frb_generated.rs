@@ -5471,6 +5471,7 @@ fn wire__crate__api__composition__composition_reference_cut_trim_impl(
             let api_end_frame = <i64>::sse_decode(&mut deserializer);
             let api_ripple = <bool>::sse_decode(&mut deserializer);
             let api_linked = <bool>::sse_decode(&mut deserializer);
+            let api_overlap = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::cut_trim(
@@ -5480,6 +5481,7 @@ fn wire__crate__api__composition__composition_reference_cut_trim_impl(
                     api_end_frame,
                     api_ripple,
                     api_linked,
+                    api_overlap,
                 )?;
                 Ok(output_ok)
             })())

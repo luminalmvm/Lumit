@@ -1240,24 +1240,26 @@ class CompositionReference {
   /// With `ripple` everything after the clip follows its change of length,
   /// and a trimmed head leaves the clip starting where it did. Without it
   /// nothing else moves, and on a picture layer an edge is refused where it
-  /// would cover a neighbour it only met. An edge that already overlaps its
-  /// neighbour is a dissolve, and is dragged longer or shorter: it stays
-  /// within the neighbour's span, and is refused as `Limit` past the end
-  /// of its own media. With `linked` the clips linked to it take the same
-  /// change at the same edges.
+  /// would cover a neighbour it only met, unless `overlap` (Auto
+  /// crossfade) makes that a dissolve. An edge that overlaps its neighbour
+  /// is a dissolve, and is dragged longer or shorter: it stays within the
+  /// neighbour's span, and is refused as `Limit` past the end of its own
+  /// media. With `linked` the clips linked to it take the same change.
   BridgeCutResult cutTrim(
           {required UuidValue clip,
           required PlatformInt64 startFrame,
           required PlatformInt64 endFrame,
           required bool ripple,
-          required bool linked}) =>
+          required bool linked,
+          required bool overlap}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutTrim(
           that: this,
           clip: clip,
           startFrame: startFrame,
           endFrame: endFrame,
           ripple: ripple,
-          linked: linked);
+          linked: linked,
+          overlap: overlap);
 
   /// Detect beats and replace this comp's beat markers.
   ///

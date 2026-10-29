@@ -909,6 +909,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           endFrame: start ? clip.endFrame : at,
           ripple: ripple,
           linked: _linked,
+          overlap: _autoCrossfade,
         )));
   }
 
@@ -2833,6 +2834,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               endFrame: pressed.endFrame,
               ripple: drag.tool == CutTool.ripple,
               linked: linked,
+              overlap: _autoCrossfade,
             ),
           (_, BarGrab.trimOut) => comp.cutTrim(
               clip: pressed.id,
@@ -2840,6 +2842,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               endFrame: pressed.endFrame + drag.shift,
               ripple: drag.tool == CutTool.ripple,
               linked: linked,
+              overlap: _autoCrossfade,
             ),
           // Alt held at the press duplicates: the same move, made by copies.
           (_, BarGrab.move) =>

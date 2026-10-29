@@ -1260,6 +1260,7 @@ impl<'a> Edit<'a> {
         end_frame: i64,
         ripple: bool,
         linked: bool,
+        overlap: bool,
     ) -> Cut {
         let (r, c) = self.find(clip)?;
         let was = self.rows[r].clips[c].clone();
@@ -1271,15 +1272,15 @@ impl<'a> Edit<'a> {
             let old = &row.clips[c];
             let next = retrimmed(old, by_start, by_end, ripple).ok_or(BridgeCutResult::Limit)?;
             // A picture row shows one clip at a time outside a dissolve, so
-            // an edge is not pulled over a neighbour it only met. A ripple
-            // moves the neighbour instead. An edge already dissolving into
-            // its neighbour is dragged longer or shorter within that clip's
-            // span, and no further out than its own media runs.
+            // an edge is not pulled over a neighbour it only met, unless
+            // `overlap` makes that a dissolve. A ripple moves the neighbour
+            // instead. An edge dissolving into its neighbour is dragged
+            // within that clip's span, no further out than its media runs.
             let (start, end) = (next.place_start, next.place_end());
             let over = |o: &&Clip| o.id != id && covers(o, start, end);
             let picture = !ripple && !row.audio_only;
             for o in row.clips.iter().filter(over).filter(|_| picture) {
-                let was = covers(o, old.place_start, old.place_end());
+                let was = overlap || covers(o, old.place_start, old.place_end());
                 let (at_start, grown) = if was && follows(old, o) && follows(&next, o) {
                     (false, by_end)
                 } else if was && follows(o, old) && follows(o, &next) {
@@ -1963,11 +1964,11 @@ impl CompositionReference {
     /// With `ripple` everything after the clip follows its change of length,
     /// and a trimmed head leaves the clip starting where it did. Without it
     /// nothing else moves, and on a picture layer an edge is refused where it
-    /// would cover a neighbour it only met. An edge that already overlaps its
-    /// neighbour is a dissolve, and is dragged longer or shorter: it stays
-    /// within the neighbour's span, and is refused as `Limit` past the end
-    /// of its own media. With `linked` the clips linked to it take the same
-    /// change at the same edges.
+    /// would cover a neighbour it only met, unless `overlap` (Auto
+    /// crossfade) makes that a dissolve. An edge that overlaps its neighbour
+    /// is a dissolve, and is dragged longer or shorter: it stays within the
+    /// neighbour's span, and is refused as `Limit` past the end of its own
+    /// media. With `linked` the clips linked to it take the same change.
     #[frb(sync)]
     pub fn cut_trim(
         &self,
@@ -1976,9 +1977,10 @@ impl CompositionReference {
         end_frame: i64,
         ripple: bool,
         linked: bool,
+        overlap: bool,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
-            edit.trim(clip, start_frame, end_frame, ripple, linked)
+            edit.trim(clip, start_frame, end_frame, ripple, linked, overlap)
         })
     }
 
