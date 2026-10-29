@@ -6103,15 +6103,17 @@ fn stamp_box(
     )
 }
 
-/// A word laid out by the text engine at `doc`'s look, `k` times its size,
-/// as scene-linear premultiplied texels.
+/// A word laid out by the text engine at `doc`'s look, `k` times its size and
+/// `wide` times its width, as scene-linear premultiplied texels.
 fn word_drawing(
     doc: &lumit_core::model::TextDocument,
     k: f32,
+    wide: f32,
     text: &str,
 ) -> lumit_core::fx::effects::label_drawing::LabelDrawing {
     let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
-    let sized = label_document(doc, k);
+    let mut sized = label_document(doc, k);
+    sized.style.scale_x *= f64::from(wide);
     let r = lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, text), &[]);
     lumit_core::fx::effects::label_drawing::LabelDrawing {
         width: r.width as usize,
@@ -6203,27 +6205,49 @@ impl GpuEffect for TypeFill {
         // letters: its natural width a px of height, and the drawing that
         // is stretched into its boxes.
         let row = bands.first().map_or(0.0, |b| b[1] - b[0]).max(1.0);
-        let drawings: Vec<_> = words
+        let sizes: Vec<f32> = words
             .iter()
             .map(|word| {
-                let probe = word_drawing(doc, px_scale, word).trimmed();
+                let probe = word_drawing(doc, px_scale, 1.0, word).trimmed();
                 let k = if probe.height > 0 {
                     px_scale * row / probe.height as f32
                 } else {
                     px_scale
                 };
-                word_drawing(doc, k.clamp(0.01, 64.0), word).trimmed()
+                k.clamp(0.01, 64.0)
             })
+            .collect();
+        let drawings: Vec<_> = words
+            .iter()
+            .zip(&sizes)
+            .map(|(word, k)| word_drawing(doc, *k, 1.0, word).trimmed())
             .collect();
         let natural: Vec<f32> = drawings
             .iter()
             .map(|d| d.width as f32 / d.height.max(1) as f32)
             .collect();
         let pieces = inst.pieces(&bands, &free, &natural, w as f32, px_scale);
+        // Each word is set again as wide as its boxes want it, in quarter
+        // octaves, so a wide column gets wide letters instead of a smear.
+        let step = |piece: &lumit_core::fx::effects::type_fill::Piece| -> i32 {
+            let [x0, y0, x1, y1] = piece.rect;
+            let natural = natural.get(piece.word).copied().unwrap_or(1.0).max(1e-3);
+            let stretch = ((x1 - x0) / (y1 - y0).max(1e-3) / natural).max(1e-3);
+            (stretch.log2() * 4.0).round().clamp(-16.0, 24.0) as i32
+        };
+        let mut wide: std::collections::HashMap<(usize, i32), _> = std::collections::HashMap::new();
+        for piece in &pieces {
+            let (Some(word), Some(k)) = (words.get(piece.word), sizes.get(piece.word)) else {
+                continue;
+            };
+            wide.entry((piece.word, step(piece))).or_insert_with(|| {
+                word_drawing(doc, *k, 2f32.powf(step(piece) as f32 / 4.0), word).trimmed()
+            });
+        }
         let placed: Vec<Placed<'_>> = pieces
             .iter()
             .filter_map(|piece| {
-                Placed::boxed(drawings.get(piece.word)?, piece.rect, None)
+                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None)
                     .map(|p| p.clipped_x(piece.clip))
             })
             .collect();
