@@ -71,6 +71,8 @@ const _bannedWordIsAnotherSense = {
   'keyMoveClipsDownATrack',
   'cutRefusedLocked',
   'cutSoundOnItsOwnTrack',
+  // The Cut and Audio timelines' clip menu, handing a clip back its row's.
+  'clipColourFromTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.
