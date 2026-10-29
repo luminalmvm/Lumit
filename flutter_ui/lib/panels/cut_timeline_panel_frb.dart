@@ -67,6 +67,7 @@ import 'clip_fade_popover.dart' show clipFadeShapeName;
 import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
+import 'cut_pan_crop.dart' show showCutPanCrop;
 import 'cut_track_mix.dart';
 import 'graph_maths.dart'
     show envelopeStretchedOnto, keysOf, rationalSeconds;
@@ -2207,22 +2208,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// The Crop takes edges off the picture, and the Transform's position,
   /// scale and rotation pan, zoom and turn what is left.
   void _badge(LumitUiState ui, CutTrack track, BridgeClip clip, CutBadge kind) {
+    // Pan/Crop opens its own window, as Vegas's does: the clip's frame with
+    // the area shown boxed on it.
     if (kind == CutBadge.panCrop) {
-      final missing = [
-        for (final name in const ['crop', 'transform'])
-          if (!clip.effects.any((e) => e.name == name)) name,
-      ];
-      if (missing.isNotEmpty) {
-        asOneUndoStep(
-            Provider.of<LumitState>(context, listen: false).project, () {
-          for (final name in missing) {
-            try {
-              track.entry.layer.addClipEffect(clip: clip.id, name: name);
-            } catch (_) {}
-          }
-        });
-        _afterCut(BridgeCutResult.done);
-      }
+      final comp = ui.selectedComp;
+      if (comp == null) return;
+      showCutPanCrop(context,
+          comp: comp,
+          layer: track.entry.layer,
+          clip: clip,
+          onChanged: () => _afterCut(BridgeCutResult.done));
+      return;
     }
     if (!panelVisible(ui.split, Panel.effectControls)) {
       setPanelVisible(ui.split, Panel.effectControls, true);

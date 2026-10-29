@@ -10965,6 +10965,38 @@
   "@cutMixLevel": {
     "description": "Cut timeline, a picture track's header: short label inside the slider that sets how see-through the track is (its opacity). Keep it short."
   },
+  "cutPanCropTitle": "Pan/Crop",
+  "@cutPanCropTitle": {
+    "description": "Cut timeline: title of the window that sets which part of a clip's picture fills the frame, as Vegas's Pan/Crop window."
+  },
+  "cutPanCropX": "X",
+  "@cutPanCropX": {
+    "description": "Cut timeline, Pan/Crop window: label beside the across position of the box's centre, in pixels."
+  },
+  "cutPanCropY": "Y",
+  "@cutPanCropY": {
+    "description": "Cut timeline, Pan/Crop window: label beside the up-and-down position of the box's centre, in pixels."
+  },
+  "cutPanCropWidth": "Width",
+  "@cutPanCropWidth": {
+    "description": "Cut timeline, Pan/Crop window: label beside the width of the box, the part of the picture that fills the frame, in pixels."
+  },
+  "cutPanCropHeight": "Height",
+  "@cutPanCropHeight": {
+    "description": "Cut timeline, Pan/Crop window: label beside the height of the box, in pixels."
+  },
+  "cutPanCropRotation": "Rotation",
+  "@cutPanCropRotation": {
+    "description": "Cut timeline, Pan/Crop window: label beside how far the box is turned, in degrees."
+  },
+  "cutPanCropLockAspect": "Lock aspect",
+  "@cutPanCropLockAspect": {
+    "description": "Cut timeline, Pan/Crop window: checkbox that keeps the box's width and height in proportion while it is resized."
+  },
+  "cutPanCropFill": "Fill frame",
+  "@cutPanCropFill": {
+    "description": "Cut timeline, Pan/Crop window: button that puts the box back over the whole picture, unturned, so the clip fills the frame as it was."
+  },
   "cutMenuSplit": "Split",
   "@cutMenuSplit": {
     "description": "Cut timeline, right-click menu on a clip: cut the picked clips in two at the playhead, as Vegas's Split."
