@@ -4084,8 +4084,8 @@ fn collect_comp_footage(
                 descend_into_comp(doc, *nested, found, walked);
             }
             LayerKind::Sequence { clips } => {
-                for clip in clips {
-                    match clip.source {
+                for source in clips.iter().flat_map(crate::sequence::Clip::sources) {
+                    match source {
                         crate::sequence::ClipSource::Footage(item) => {
                             if !found.contains(&item) {
                                 found.push(item);
@@ -4214,7 +4214,7 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
         LayerKind::Footage { item } => *item == id,
         LayerKind::Solid { def } => *def == id,
         LayerKind::Precomp { comp } => *comp == id,
-        LayerKind::Sequence { clips } => clips.iter().any(|c| match c.source {
+        LayerKind::Sequence { clips } => clips.iter().flat_map(|c| c.sources()).any(|s| match s {
             crate::sequence::ClipSource::Footage(item) => item == id,
             crate::sequence::ClipSource::Comp(comp) => comp == id,
         }),

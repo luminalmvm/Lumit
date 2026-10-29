@@ -3020,15 +3020,22 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
     }) {
         for layer in &comp.layers {
             let removed = if let LayerKind::Sequence { clips } = &layer.kind {
+                let lives = |s: &ClipSource| {
+                    let (ClipSource::Footage(id) | ClipSource::Comp(id)) = s;
+                    !gone.contains(id)
+                };
+                // A clip goes with the item it shows; a take of a removed
+                // item just leaves the clip.
                 let kept: Vec<_> = clips
                     .iter()
-                    .filter(|c| {
-                        let (ClipSource::Footage(id) | ClipSource::Comp(id)) = &c.source;
-                        !gone.contains(id)
+                    .filter(|c| lives(&c.source))
+                    .map(|c| {
+                        let mut c = c.clone();
+                        c.takes.retain(|t| lives(&t.source));
+                        c
                     })
-                    .cloned()
                     .collect();
-                if !kept.is_empty() && kept.len() < clips.len() {
+                if !kept.is_empty() && kept != *clips {
                     ops.push(Op::SetSequenceClips {
                         comp: comp.id,
                         layer: layer.id,

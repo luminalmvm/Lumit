@@ -4874,6 +4874,11 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
 
     let over = comp.cut_trim(a, 0, join + 4, false, false, false);
     assert_eq!(over.expect("answered"), BridgeCutResult::Overlap);
+    // With overlap on, the same edge makes a dissolve.
+    let over = comp.cut_trim(a, 0, join + 4, false, false, true);
+    assert_eq!(over.expect("answered"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top)[..2], [(0, join + 4), cut[1]]);
+    project.undo().expect("undo");
 
     // Eleven frames: five after the edit point and six before it.
     let done = comp.cut_transition(a, true, 11, false);
@@ -4905,6 +4910,32 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     assert_eq!(done.expect("faded"), BridgeCutResult::Done);
     let half = lumit_core::time::Rational::new(1, 2).expect("½ s");
     assert_eq!(row_clips(&top)[0].fade_in.seconds, half);
+}
+
+/// Paste attributes gives a clip the copied clip's opacity and speed, and
+/// leaves its place and its trim in.
+#[test]
+fn paste_attributes_gives_the_look_and_keeps_the_place() {
+    use crate::api::cut::BridgeCutResult;
+    let (_project, comp, top, join) = cut_row(2);
+    let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
+    let nothing = comp.cut_paste_attributes(vec![ids[1]]);
+    assert_eq!(nothing.expect("answered"), BridgeCutResult::Nothing);
+    top.set_clip_opacity(ids[0], 0.5).expect("opacity");
+    top.set_clip_speed(ids[0], 200.0, 200.0).expect("speed");
+    assert_eq!(
+        comp.cut_copy(vec![ids[0]], false).expect("copied"),
+        BridgeCutResult::Done
+    );
+    let done = comp.cut_paste_attributes(vec![ids[1]]);
+    assert_eq!(done.expect("pasted"), BridgeCutResult::Done);
+    let b = row_clips(&top).remove(1);
+    assert_eq!((b.opacity, b.constant_speed()), (0.5, Some(2.0)));
+    assert_eq!(
+        b.source_in,
+        lumit_core::time::Rational::new(1, 1).expect("1 s")
+    );
+    assert_eq!(row_frames(&top)[1], (join, 2 * join));
 }
 
 /// An extract cuts at both ends of a span, takes out what lies between and

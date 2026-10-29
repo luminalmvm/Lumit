@@ -30,7 +30,9 @@ use crate::api::{
     BridgeError,
 };
 
+mod attributes;
 mod streams;
+mod takes;
 
 /// How a Cut edit ended. Anything but `Done` left the document untouched, and
 /// says why in a form the panel can put words to.
@@ -2164,6 +2166,62 @@ impl CompositionReference {
             } else {
                 at_frame
             },
+        })
+    }
+
+    /// **Paste attributes**: give each of `clips` the effects, fx switch,
+    /// gain, opacity, blend mode and fades of the first clip copied, and its
+    /// speed line laid along each one's length. `Nothing` when nothing is
+    /// copied in this project.
+    #[frb(sync)]
+    pub fn cut_paste_attributes(&self, clips: Vec<Uuid>) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.paste_attributes(&clips))
+    }
+
+    /// **Takes.** A clip's takes are numbered with the one it shows as
+    /// nought and the rest in the order T steps through them, as
+    /// `BridgeClip::takes` lists them. A linked clip playing the same media
+    /// takes the same change. Add `footage` to `clip` as a take, from its
+    /// marked In or its start, and show it.
+    #[frb(sync)]
+    pub fn cut_add_take(
+        &self,
+        clip: Uuid,
+        footage: &FootageReference,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.add_take(clip, footage))
+    }
+
+    /// Show take number `take` of `clip`. `Nothing` for take nought or one
+    /// it does not hold.
+    #[frb(sync)]
+    pub fn cut_set_take(&self, clip: Uuid, take: u32) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.turn_takes(&[clip], |c| c.showing_take(take as usize))
+        })
+    }
+
+    /// Show each clip's next take, or with `back` the one before, round
+    /// from the last to the first. `Nothing` when none holds another.
+    #[frb(sync)]
+    pub fn cut_next_take(
+        &self,
+        clips: Vec<Uuid>,
+        back: bool,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.turn_takes(&clips, |c| {
+                c.showing_take(if back { c.takes.len() } else { 1 })
+            })
+        })
+    }
+
+    /// Take away take number `take` of `clip`. Taking away the one shown
+    /// shows the next.
+    #[frb(sync)]
+    pub fn cut_delete_take(&self, clip: Uuid, take: u32) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.turn_takes(&[clip], |c| c.without_take(take as usize))
         })
     }
 

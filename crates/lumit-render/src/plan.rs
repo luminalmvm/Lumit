@@ -704,6 +704,7 @@ pub fn collect_comp_jobs(
                             outgoing,
                             incoming,
                             gain,
+                            ..
                         } => {
                             let under = footage_job(outgoing, lt, whole);
                             // An incoming clip with no picture of its own

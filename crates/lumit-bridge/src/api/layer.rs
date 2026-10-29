@@ -1502,6 +1502,12 @@ pub struct BridgeClip {
     /// Carried so the clip's header strip draws with no bridge call; empty
     /// when the document no longer holds that source.
     pub source_name: String,
+    /// The clip's own opacity, nought to one, taken with its fades.
+    pub opacity: f64,
+    /// The names of the takes the clip holds, the one it shows first and the
+    /// rest in the order T steps through them: the take numbers
+    /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
+    pub takes: Vec<String>,
     /// The link this clip shares with the clips that move, trim and cut with
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
@@ -1599,6 +1605,13 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
+    let name = |source| match source {
+        lumit_core::sequence::ClipSource::Footage(id)
+        | lumit_core::sequence::ClipSource::Comp(id) => doc
+            .item(id)
+            .map(|i| i.name().to_string())
+            .unwrap_or_default(),
+    };
     BridgeClip {
         id: clip.id,
         place_start: rational_of(clip.place_start),
@@ -1626,12 +1639,14 @@ fn bridge_clip(
             .collect(),
         fx: clip.fx,
         gain_db: clip.gain_db,
-        source_name: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => doc
-                .item(id)
-                .map(|i| i.name().to_string())
-                .unwrap_or_default(),
+        source_name: name(clip.source),
+        opacity: clip.opacity,
+        takes: match clip.takes.is_empty() {
+            true => Vec::new(),
+            false => std::iter::once(clip.source)
+                .chain(clip.takes.iter().map(|t| t.source))
+                .map(name)
+                .collect(),
         },
         link: clip.link,
         audible: clip.audible,
@@ -4659,6 +4674,18 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Set one picture clip's own opacity, nought to one, Vegas's event
+    /// opacity. It is taken where the clip's fades are.
+    #[frb(sync)]
+    pub fn set_clip_opacity(&self, clip: Uuid, opacity: f64) -> Result<(), BridgeError> {
+        if !opacity.is_finite() {
+            return Err(BridgeError::InvalidTime);
+        }
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].opacity = opacity.clamp(0.0, 1.0);
+        self.commit_clips(clips)
+    }
+
     /// Put a footage item down on this Sequence layer as a clip starting at
     /// `at_frame` - the drop from the Project panel, and the only way a clip
     /// reaches a row that already exists.
@@ -5421,6 +5448,8 @@ impl LayerReference {
                 blend: None,
                 label: None,
                 group: None,
+                opacity: 1.0,
+                takes: Vec::new(),
                 extra: serde_json::Map::new(),
             }],
         };
