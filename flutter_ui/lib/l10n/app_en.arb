@@ -14072,6 +14072,42 @@
   "@menuSetSpeed": {
     "description": "Context-menu item on a point of a speed envelope: opens a small box to type the point's exact playback speed in per cent."
   },
+  "speedCurveLinear": "Linear",
+  "@speedCurveLinear": {
+    "description": "Speed envelope, right-click a line between two points: the speed changes evenly from one point to the next. Vegas calls this Linear."
+  },
+  "speedCurveFast": "Fast",
+  "@speedCurveFast": {
+    "description": "Speed envelope curve: the speed changes quickly just after the first point, then settles into the next. Vegas calls this Fast."
+  },
+  "speedCurveSlow": "Slow",
+  "@speedCurveSlow": {
+    "description": "Speed envelope curve: the speed changes slowly at first, then quickly into the next point. Vegas calls this Slow."
+  },
+  "speedCurveSmooth": "Smooth",
+  "@speedCurveSmooth": {
+    "description": "Speed envelope curve: the speed eases out of the first point and into the next. Vegas calls this Smooth."
+  },
+  "speedCurveSharp": "Sharp",
+  "@speedCurveSharp": {
+    "description": "Speed envelope curve: the speed changes fastest near both points and slowest between them. Vegas calls this Sharp."
+  },
+  "speedCurveHold": "Hold",
+  "@speedCurveHold": {
+    "description": "Speed envelope curve: the speed stays as it is until the next point, then jumps. Vegas calls this Hold."
+  },
+  "speedPointAdd": "Add point",
+  "@speedPointAdd": {
+    "description": "Speed envelope, right-click the line: put a new point where the click was."
+  },
+  "speedPointReset": "Reset to 100%",
+  "@speedPointReset": {
+    "description": "Speed envelope, right-click a point: put the point back to normal speed, 100 per cent."
+  },
+  "speedPointDelete": "Delete point",
+  "@speedPointDelete": {
+    "description": "Speed envelope, right-click a point: remove it. The two points at a clip's ends can't be removed."
+  },
   "speedGuideEveryFrame": "Every frame {speed}",
   "@speedGuideEveryFrame": {
     "description": "A tiny label at the left end of a dashed guide line across a speed envelope. The line marks the playback speed at which footage with a higher frame rate than the composition shows each of its frames exactly once. Two words at most, then the speed, such as 8%.",

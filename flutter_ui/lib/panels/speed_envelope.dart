@@ -2,15 +2,19 @@
 // cent, the editor under the sequence view.
 //
 // The envelope is the same editor as the graph's Vegas lens, over the same
-// keyframes: a point per key, its height the playback speed in
-// per cent, straight lines between. `Ctrl`-click or double-click the line
-// plants a point; `Alt`-click lifts one. Double-click a point, or right-click
-// it, to type its speed. `Ctrl` held through a drag moves the point a tenth as
-// far. A clip that has never been retimed draws the flat 100% it is playing
-// at, and the first edit gives it a real map.
+// keyframes: a point per key, its height the playback speed in per cent, and
+// between two points the curve the span was given (Linear, Fast, Slow,
+// Smooth, Sharp or Hold, from the right-click menu on the line).
+// `Ctrl`-click or double-click the line plants a point; `Alt`-click lifts
+// one. Double-click a point to put it back to 100%; right-click it to type its
+// speed. `Ctrl` held through a drag moves the point a tenth as far and keeps
+// it at its time; `Shift` or `Alt` move it in time alone. A clip that has
+// never been retimed draws the flat 100% it is playing at, and the first edit
+// gives it a real map.
 
 import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -41,6 +45,11 @@ class SpeedEnvelope extends StatefulWidget {
   /// Reports a click and answers whether it was the second of a double.
   final bool Function() onTapped;
 
+  /// Laid over the clips themselves, as Vegas draws them: only the lines and
+  /// their points take the pointer, and everything else falls through to the
+  /// clip underneath.
+  final bool onClip;
+
   const SpeedEnvelope({
     super.key,
     required this.entry,
@@ -53,6 +62,7 @@ class SpeedEnvelope extends StatefulWidget {
     required this.onChanged,
     this.onPreview,
     required this.onTapped,
+    this.onClip = false,
   });
 
   @override
@@ -273,6 +283,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                       viewportLeft: (widget.hScroll?.hasClients ?? false)
                           ? widget.hScroll!.offset
                           : 0,
+                      bare: widget.onClip,
                     ),
                   ),
                 ),
@@ -311,7 +322,13 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
               // had travelled far enough for them to claim it and had to be
               // started again. A `Listener` is not in the arena at all, so
               // the first drag is the one that works.
-              child: Listener(
+              child: _HitWhere(
+                test: (local) =>
+                    !widget.onClip ||
+                    _drag != null ||
+                    _pointAt(local, height) != null ||
+                    _onALine(local, height),
+                child: Listener(
                 key: const ValueKey('seq-envelope'),
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) {
@@ -339,11 +356,14 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                   if (held == null) return;
                   _moving = true;
                   // `Ctrl` is the value well's own fine rung, a tenth of the
-                  // pointer's rate. Taken off each move as it is added, so
-                  // pressing or letting go mid-drag changes what the next
-                  // pixel is worth and moves nothing.
-                  final fine = HardwareKeyboard.instance.isControlPressed;
-                  _travelled += e.delta.dy * (fine ? 0.1 : 1);
+                  // pointer's rate, with the point held to its time. Taken
+                  // off each move as it is added, so pressing or letting go
+                  // mid-drag changes what the next pixel is worth and moves
+                  // nothing. `Shift` or `Alt` move it in time alone.
+                  final keys = HardwareKeyboard.instance;
+                  final fine = keys.isControlPressed;
+                  final timeOnly = keys.isShiftPressed || keys.isAltPressed;
+                  if (!timeOnly) _travelled += e.delta.dy * (fine ? 0.1 : 1);
                   final (lo, hi) = _range;
                   final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
                   final perPixel = span / (height <= 0 ? 1 : height);
@@ -360,7 +380,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                             asked,
                             _everyFrame[held.clip.id.toString()],
                             envelopeSnapReach * perPixel),
-                    dx: held.dx + e.delta.dx,
+                    dx: fine ? held.dx : held.dx + e.delta.dx,
                     fine: fine,
                   );
                   // The picture follows the point. A retime decides *which*
@@ -398,6 +418,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                   _box = null;
                   _secondary = false;
                 }),
+              ),
               ),
             ),
           ],
@@ -525,8 +546,12 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       final x1 = _xOfKey(clip, keys[i + 1]);
       if (local.dx < x0 - _lineGrab || local.dx > x1 + _lineGrab) continue;
       final f = x1 > x0 ? ((local.dx - x0) / (x1 - x0)).clamp(0.0, 1.0) : 0.0;
-      final at = _y(speeds[i] + (speeds[i + 1] - speeds[i]) * f, height);
-      if ((local.dy - at).abs() <= _lineGrab) return true;
+      final t0 = rationalSeconds(keys[i].time);
+      final t1 = rationalSeconds(keys[i + 1].time);
+      final speed = f <= 0 || f >= 1
+          ? speeds[f <= 0 ? i : i + 1]
+          : evaluateKeysSpeed(keys, t0 + (t1 - t0) * f) * 100;
+      if ((local.dy - _y(speed, height)).abs() <= _lineGrab) return true;
     }
     return false;
   }
@@ -625,10 +650,16 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     return (at - local).distance < 14 ? found : null;
   }
 
-  /// Right-click a point for what can be done to it.
+  /// Right-click a point for what can be done to it, or the line between two
+  /// for the curve it takes, as Vegas's envelope menu has them.
   Future<void> _pointMenu(Offset local, Offset global, double height) async {
     final found = _pointAt(local, height);
-    if (found == null) return;
+    if (found == null) {
+      _lineMenu(local, global, height);
+      return;
+    }
+    final inner =
+        found.index > 0 && found.index < _keysOf(found.clip).length - 1;
     final picked = await showMenuAt<String>(
       context: context,
       position: global,
@@ -637,10 +668,96 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
             key: const ValueKey('seq-envelope-set-speed'),
             onPressed: () => close('speed'),
             child: Text(l10n.menuSetSpeed)),
+        MenuRow(
+            key: const ValueKey('seq-envelope-reset-point'),
+            onPressed: () => close('reset'),
+            child: Text(l10n.speedPointReset)),
+        if (inner)
+          MenuRow(
+              key: const ValueKey('seq-envelope-delete-point'),
+              onPressed: () => close('delete'),
+              child: Text(l10n.speedPointDelete)),
       ],
     );
     if (!mounted || picked == null) return;
-    _typeSpeed(found.clip, found.index, height);
+    switch (picked) {
+      case 'speed':
+        _typeSpeed(found.clip, found.index, height);
+      case 'reset':
+        _resetPoint(found.clip, found.index);
+      case 'delete':
+        final all = _keysOf(found.clip);
+        _write(found.clip, [
+          for (var i = 0; i < all.length; i++)
+            if (i != found.index) all[i],
+        ]);
+    }
+  }
+
+  /// The menu on the line between two points: plant one there, or choose
+  /// the curve the speed takes across it.
+  Future<void> _lineMenu(Offset local, Offset global, double height) async {
+    if (!_onALine(local, height)) return;
+    final clip = _clipAt(local.dx);
+    if (clip == null) return;
+    final keys = _keysOf(clip);
+    final at = (widget.axis.frameAt(local.dx) - clip.startFrame) / widget.fps;
+    var span = 0;
+    while (span + 2 < keys.length &&
+        at >= rationalSeconds(keys[span + 1].time)) {
+      span++;
+    }
+    if (span + 1 >= keys.length) return;
+    final current = speedCurveOf(keys[span].interpOut);
+    final names = {
+      SpeedCurve.linear: l10n.speedCurveLinear,
+      SpeedCurve.fast: l10n.speedCurveFast,
+      SpeedCurve.slow: l10n.speedCurveSlow,
+      SpeedCurve.smooth: l10n.speedCurveSmooth,
+      SpeedCurve.sharp: l10n.speedCurveSharp,
+      SpeedCurve.hold: l10n.speedCurveHold,
+    };
+    final picked = await showMenuAt<Object>(
+      context: context,
+      position: global,
+      width: 170,
+      rows: (close) => [
+        MenuRow(
+            key: const ValueKey('seq-envelope-add-point'),
+            onPressed: () => close('add'),
+            child: Text(l10n.speedPointAdd)),
+        for (final MapEntry(key: curve, value: name) in names.entries)
+          MenuRow.option(
+            key: ValueKey<String>('seq-envelope-curve-${curve.name}'),
+            onPressed: () => close(curve),
+            child: Row(children: [
+              menuTick(curve == current),
+              Expanded(child: Text(name)),
+            ]),
+          ),
+        MenuRow(
+            key: const ValueKey('seq-envelope-reset-clip'),
+            onPressed: () => close('reset'),
+            child: Text(l10n.clipResetSpeed)),
+      ],
+    );
+    if (!mounted || picked == null) return;
+    switch (picked) {
+      case 'add':
+        _plant(local);
+      case 'reset':
+        _write(clip, envelopeToKeys(keys, [for (final _ in keys) 100.0],
+            curves: [for (var i = 1; i < keys.length; i++) SpeedCurve.linear]));
+      case final SpeedCurve curve:
+        _write(clip, setEnvelopeCurve(keys, span, curve));
+    }
+  }
+
+  /// One point back to 100%: the whole clip when it has never been retimed.
+  void _resetPoint(BridgeClip clip, int index) {
+    final keys = _keysOf(clip);
+    if (index < 0 || index >= keys.length) return;
+    _write(clip, _withSpeed(clip, keys, index, 100));
   }
 
   /// Open the box that types one point's speed, beside the point.
@@ -694,15 +811,20 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       return;
     }
     if (!doubled && !keys.isControlPressed) return;
-    // Double-click a point to type its speed. Anywhere else on the line it
-    // plants one, as `Ctrl`-click does everywhere.
+    // Double-click a point to put it back to 100%, as Vegas does. Anywhere
+    // else on the line it plants one, as `Ctrl`-click does everywhere.
     if (doubled && !keys.isControlPressed) {
       if (_pointAt(local, height) case final on?) {
-        _typeSpeed(on.clip, on.index, height);
+        _resetPoint(on.clip, on.index);
         return;
       }
     }
 
+    _plant(local);
+  }
+
+  /// Plant a point on the line at [local], on the curve it is following.
+  void _plant(Offset local) {
     final clip = _clipAt(local.dx);
     if (clip == null) return;
     final all = _keysOf(clip);
@@ -716,17 +838,15 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       }
     }
     if (index == 0 || index == all.length) return; // only between the ends
-    final t0 = rationalSeconds(all[index - 1].time);
-    final t1 = rationalSeconds(all[index].time);
-    final f = t1 > t0 ? (at - t0) / (t1 - t0) : 0.0;
-    final planted = speeds[index - 1] + (speeds[index] - speeds[index - 1]) * f;
+    final planted = evaluateKeysSpeed(all, at) * 100;
+    // Both halves keep the curve the span had.
     final grown = [...all]..insert(
         index,
         BridgeKeyframe(
           time: timeOfSubframe(at * widget.fps, widget.fpsNum, widget.fpsDen),
           value: 0,
           interpIn: const BridgeSideInterp.linear(),
-          interpOut: const BridgeSideInterp.linear(),
+          interpOut: all[index - 1].interpOut,
         ));
     _write(clip, envelopeToKeys(grown, [...speeds]..insert(index, planted)));
   }
@@ -798,6 +918,9 @@ class _SpeedEnvelopePainter extends CustomPainter {
   /// Where the viewport's left edge sits in the canvas's own coordinates.
   final double viewportLeft;
 
+  /// Drawn over clips, with only the lines and their points.
+  final bool bare;
+
   const _SpeedEnvelopePainter({
     required this.lanes,
     required this.xOfKey,
@@ -815,11 +938,14 @@ class _SpeedEnvelopePainter extends CustomPainter {
     this.caught,
     required this.label,
     required this.viewportLeft,
+    this.bare = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final (speed, text) in [(100.0, '100%'), (0.0, '0')]) {
+    for (final (speed, text) in [
+      if (!bare) ...[(100.0, '100%'), (0.0, '0')],
+    ]) {
       final at = y(speed);
       if (at < 0 || at > size.height) continue;
       // Dotted, so the graph's own reference lines never read as the row
@@ -841,7 +967,7 @@ class _SpeedEnvelopePainter extends CustomPainter {
       painter.paint(canvas, Offset(viewportLeft + 2, at - painter.height));
     }
 
-    _paintGuides(canvas, size);
+    if (!bare) _paintGuides(canvas, size);
 
     final stroke = Paint()
       ..color = curve
@@ -854,11 +980,7 @@ class _SpeedEnvelopePainter extends CustomPainter {
           Offset(xOfKey(lane.clip, lane.keys[i]), y(speeds[i])),
       ];
       if (points.length < 2) continue;
-      final path = Path()..moveTo(points.first.dx, points.first.dy);
-      for (final p in points.skip(1)) {
-        path.lineTo(p.dx, p.dy);
-      }
-      canvas.drawPath(path, stroke);
+      canvas.drawPath(_curvePath(lane.keys, points), stroke);
       for (var i = 0; i < points.length; i++) {
         final id = '${lane.clip.id}#$i';
         if (id == typing) {
@@ -881,6 +1003,28 @@ class _SpeedEnvelopePainter extends CustomPainter {
         );
       }
     }
+  }
+
+  /// The line through [points], following each span's curve: sampled inside
+  /// the span, then down to where it arrives (a Hold arrives at the speed it
+  /// left with) and up to the next point.
+  Path _curvePath(List<BridgeKeyframe> keys, List<Offset> points) {
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 0; i + 1 < points.length; i++) {
+      final (a, b) = (points[i], points[i + 1]);
+      final t0 = rationalSeconds(keys[i].time);
+      final t1 = rationalSeconds(keys[i + 1].time);
+      final n = ((b.dx - a.dx) / 3).clamp(1, 64).round();
+      for (var k = 1; k < n; k++) {
+        final t = t0 + (t1 - t0) * k / n;
+        path.lineTo(a.dx + (b.dx - a.dx) * k / n,
+            y(evaluateKeysSpeed(keys, t) * 100));
+      }
+      path
+        ..lineTo(b.dx, y(sideSpeedAtKey(keys, i + 1, isOut: false) * 100))
+        ..lineTo(b.dx, b.dy);
+    }
+    return path;
   }
 
   /// The every-frame guide: one faint dashed line across each clip whose
@@ -933,5 +1077,32 @@ class _SpeedEnvelopePainter extends CustomPainter {
       old.selected != selected ||
       old.typing != typing ||
       old.caught != caught ||
-      old.viewportLeft != viewportLeft;
+      old.viewportLeft != viewportLeft ||
+      old.bare != bare;
+}
+
+/// Takes the pointer only where [test] says, so a line drawn over clips can be
+/// grabbed without covering them.
+class _HitWhere extends SingleChildRenderObjectWidget {
+  final bool Function(Offset local) test;
+
+  const _HitWhere({required this.test, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderHitWhere(test);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderHitWhere renderObject) =>
+      renderObject.test = test;
+}
+
+class _RenderHitWhere extends RenderProxyBox {
+  bool Function(Offset local) test;
+
+  _RenderHitWhere(this.test);
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) =>
+      test(position) && super.hitTest(result, position: position);
 }
