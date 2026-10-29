@@ -36,9 +36,15 @@ Drag the lower edge of a track's header to make the track taller or shorter. Dou
 the edge to put it back. Heights are saved with the project. Drag the headers' right edge to
 make them wider or narrower, from 120 to 480 pixels.
 
+A track's header has a **Vol** and a **Pan** slider on a sound track and a **Level** slider on
+a picture track, where the track is tall enough. Drag across one to change it, with `Ctrl`
+for finer steps. Double-click puts it back. On a keyed property the slider sets a key at the
+playhead.
+
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
-drawn in it. Right-click a track's header for **Label colour**. **Clip colour** on a clip's
-menu gives the picked clips a colour of their own, and **Track colour** hands it back.
+drawn in it. Right-click a track's header for **Volume envelope**, **Pan envelope**, **New
+layer**, **Duplicate**, **Delete** and **Label colour**. **Clip colour** on a clip's menu
+gives the picked clips a colour of their own, and **Track colour** hands it back.
 
 A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
 
@@ -153,9 +159,17 @@ beside the pointer counts the frames moved.
 | `Alt`+drag a clip | Slips it. |
 | `Ctrl`+`Alt`+drag a clip | Slides it. |
 | `Shift` held | Suspends snapping. |
+| Drag on empty track space | Sets the work area. `Ctrl` held draws a selection box. |
+| `Shift`+click a clip | Selects every clip from the last one clicked, across the tracks between. |
+
+A click on the tracks also moves the playhead there.
 
 With the Vegas preset the wheel zooms with no key held and scrolls the tracks with `Ctrl`,
-`Q` turns looping on and off, and `G` and `U` group and ungroup.
+`Q` turns looping on and off, `G` and `U` group and ungroup, and `V` and `P` show and hide
+the volume and pan envelopes.
+
+Choosing **Vegas** when Lumit first opens loads the Vegas preset and turns on **Clip drags in
+Cut** and **Auto crossfade**.
 
 ## Switches
 
@@ -179,7 +193,7 @@ the Audio timeline and Audio layers in the Timeline follow it.
 | `Q`, `W` | Removes the clip's start, or its end, up to the playhead and closes the cut. With nothing selected it acts across every track, to the nearest edit point. |
 | `Alt`+`Q`, `Alt`+`W` | The same, leaving the gap. |
 | `Shift`+`Q`, `Shift`+`W` | Rolls the previous, or the next, edit point to the playhead. |
-| `Ctrl`+`K` | Cuts the selected clips' tracks at the playhead, or every track with nothing selected. |
+| `Ctrl`+`K` | Cuts the selected clips' tracks at the playhead, or every track with nothing selected. The pieces stay selected. |
 | `Ctrl`+`Shift`+`K` | Cuts every track at the playhead. |
 | `D` | Selects the clip under the playhead. |
 | `↑`, `↓` | Moves the playhead to the previous or the next edit point. |
@@ -191,9 +205,9 @@ the Audio timeline and Audio layers in the Timeline follow it.
 - `Delete` removes the selected clips and leaves a gap. `Shift`+`Delete` removes them and
   closes it. With no clip selected, `Delete` removes nothing, unless the track was picked by
   its header.
-- A clip's menu has **Delete clip**, which leaves a gap, and **Ripple delete**, which closes
-  it.
-- Right-click a gap for **Close gap**.
+- A clip's menu has **Cut**, **Copy**, **Paste** and **Split**, **Delete clip**, which
+  leaves a gap, and **Ripple delete**, which closes it.
+- Right-click a gap for **Paste**, **Select all** and **Close gap**.
 - `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
   it: the gap is closed.
 - `Ctrl`+`C` copies the selected clips, `Ctrl`+`X` cuts them, and `Ctrl`+`V` pastes at the
@@ -245,8 +259,8 @@ of the clip that is more than half of the picture.
 ## Speed
 
 Each picture clip carries its speed as a line across it, in per cent, which is edited where it
-lies. The **Speed** switch on the strip shows and hides the lines. A retimed clip shows its
-line either way. The points and curves behave as in the
+lies. The **Speed** switch on the strip shows the lines on every clip. It is off to begin
+with, and a retimed clip shows its line either way. The points and curves behave as in the
 [speed envelope](/use/retime/#speed-on-a-clip).
 
 | On a picture clip's **Speed** menu | What it does |
@@ -261,13 +275,26 @@ A picture clip's linked sound clip plays at normal speed.
 ## Gain
 
 A sound clip's level is a line across it, at the top for 0 dB. Drag it down to turn the clip
-down. A readout beside the pointer gives the level, and the waveform shrinks with it.
+down, with `Ctrl` for finer steps. Double-click it to put it back at 0 dB. A readout beside
+the pointer gives the level, and the waveform shrinks with it.
+
+## Envelopes
+
+A sound track's volume and pan can be drawn as lines across the whole track, as in the
+[Audio timeline](/use/audio/). `Shift`+`V` shows and hides the volume envelope and
+`Shift`+`P` the pan envelope, on the selected clips' tracks or the track last clicked. A track
+whose volume or pan has keys shows its envelope to begin with.
+
+- Drag the line up or down. With keys, the nearest one moves.
+- `Ctrl`+click plants a key on the line, and `Alt`+click removes one.
+- Double-click the line, or a key, to put it back at 0 dB or centre.
+- `Ctrl` held while dragging moves it in finer steps.
 
 ## Groups
 
 `Ctrl`+`G`, or **Group** on a clip's menu, puts the selected clips in a group. While
-**Linked** is on, selecting one clip in a group selects the rest, so they move, trim and
-delete together. `Ctrl`+`Shift`+`G`, or **Ungroup**, takes the selected clips out of their
+**Linked** is on, selecting one clip in a group selects the rest, so they move, trim, cut and
+delete together. A cut through a group leaves two groups, one each side. `Ctrl`+`Shift`+`G`, or **Ungroup**, takes the selected clips out of their
 group. A copy of a clip is outside the original's group.
 
 ## Clips as compositions
@@ -289,7 +316,8 @@ so. Lock the track holding that clip, or clear the space.
 ## View
 
 `=` and `-` zoom about the playhead. `\` fits the whole composition, and again returns to
-the zoom before. During playback the view pages along when the playhead leaves it.
+the zoom before. During playback, or after a key moves the playhead, the view pages along
+when the playhead leaves it.
 
 :::note[Not built yet]
 Multicam, captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
