@@ -834,7 +834,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   }
 
   Widget _clip(LumitTheme t, BridgeClip clip) {
-    final label = t.labelColour(widget.track.entry.info.label);
+    // The clip's own colour where it has one, its track's where not.
+    final label = t.labelColour(clip.label ?? widget.track.entry.info.label);
     final (left, width) = _place(clip);
     // After layout, since a zoom only moves the scroll there and the offset
     // read during build is the last frame's.
@@ -1006,7 +1007,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                   secondsPerPixel: secondsPerPixel,
                   left: 0,
                   right: width,
-                  colours: t.waveform,
+                  colours: clipWaveColours(label, t.textPrimary),
                   style: widget.style,
                   height: height,
                 ),

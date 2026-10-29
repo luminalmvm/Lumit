@@ -219,6 +219,10 @@ pub struct Clip {
     /// the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blend: Option<crate::model::BlendMode>,
+    /// The clip's own label colour, worn in place of its layer's. Unset is
+    /// "the layer's", and is left out of the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<u8>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -252,6 +256,7 @@ impl Clip {
             audio_streams: crate::model::AudioStreams::default(),
             audible: true,
             blend: None,
+            label: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -727,6 +732,7 @@ impl Clip {
             audio_streams: self.audio_streams.clone(),
             audible: self.audible,
             blend: self.blend,
+            label: self.label,
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -755,6 +761,7 @@ impl Clip {
             audio_streams: self.audio_streams.clone(),
             audible: self.audible,
             blend: self.blend,
+            label: self.label,
             extra: self.extra.clone(),
         };
         Some((left, right))

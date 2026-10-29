@@ -494,6 +494,9 @@ class BridgeClip {
   /// `None` while it takes its layer's.
   final int? blend;
 
+  /// The clip's own label colour, or `None` while it wears its layer's.
+  final int? label;
+
   /// Where the clip starts and ends on the comp's clock in frames, with the
   /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
   /// may sit between two frames, and this is where it is drawn.
@@ -523,6 +526,7 @@ class BridgeClip {
     required this.sourceOut,
     required this.sourceIsComp,
     this.blend,
+    this.label,
     required this.startExact,
     required this.endExact,
   });
@@ -551,6 +555,7 @@ class BridgeClip {
       sourceOut.hashCode ^
       sourceIsComp.hashCode ^
       blend.hashCode ^
+      label.hashCode ^
       startExact.hashCode ^
       endExact.hashCode;
 
@@ -581,6 +586,7 @@ class BridgeClip {
           sourceOut == other.sourceOut &&
           sourceIsComp == other.sourceIsComp &&
           blend == other.blend &&
+          label == other.label &&
           startExact == other.startExact &&
           endExact == other.endExact;
 }
@@ -4082,6 +4088,12 @@ class LayerReference {
   void setClipGain({required UuidValue clip, required double db}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetClipGain(that: this, clip: clip, db: db);
+
+  /// Give one clip a label colour of its own, or hand it back to the
+  /// layer's with `None`.
+  void setClipLabel({required UuidValue clip, int? label}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipLabel(
+          that: this, clip: clip, label: label);
 
   /// Replace one clip's whole retime map, keyed in clip-local time.
   ///

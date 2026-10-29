@@ -475,36 +475,67 @@ Future<int?> showLabelPicker(
     context: context,
     position: position,
     builder: (close) => FloatSurface(
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < LumitTheme.labelCount; i++)
-              GestureDetector(
-                key: ValueKey<String>('$keyPrefix-chip-$i'),
-                onTap: () => close(i),
-                child: HoverMark(
-                  swells: true,
-                  builder: (context, lit) => Container(
-                    width: 14,
-                    height: 14,
-                    margin: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: t.labelColour(i),
-                      borderRadius:
-                          BorderRadius.circular(t.tokens.controlRadius),
-                    ),
-                    foregroundDecoration: chipRing(t, lit),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+      child: labelChips(t, keyPrefix: keyPrefix, onPick: close),
     ),
   );
 }
+
+/// The label picker's row of chips, [onPick] told which was tapped. The
+/// colour submenus on the Cut and Audio timelines wear the same row.
+Widget labelChips(
+  LumitTheme t, {
+  required String keyPrefix,
+  required void Function(int) onPick,
+}) =>
+    Padding(
+      padding: const EdgeInsets.all(6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < LumitTheme.labelCount; i++)
+            GestureDetector(
+              key: ValueKey<String>('$keyPrefix-chip-$i'),
+              onTap: () => onPick(i),
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: t.labelColour(i),
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                  foregroundDecoration: chipRing(t, lit),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+/// The Clip colour submenu on the Cut and Audio timelines: back to the
+/// track's colour, which [onPick] is told as null, then the label chips.
+Widget clipColourMenu(
+  LumitTheme t, {
+  required String keyPrefix,
+  required void Function(int?) onPick,
+}) =>
+    FloatSurface(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MenuRow(
+            key: ValueKey<String>('$keyPrefix-track'),
+            onPressed: () => onPick(null),
+            child: Text(l10n.clipColourFromTrack),
+          ),
+          labelChips(t, keyPrefix: keyPrefix, onPick: onPick),
+        ],
+      ),
+    );
 
 /// The right-click menu on a marker flag: edit what it says, take it away, or
 /// — for a layer's own markers — clear the lot. Shared by the ruler's comp
@@ -4191,6 +4222,17 @@ const double workAreaLaneFillAlpha = 0.04;
 /// value here is applied to the token, never written as a second hex, so a
 /// recoloured layer recolours its bar and its clips in any theme.
 const double clipFillAlpha = 0.38;
+
+/// The waveform of a clip on the Cut or Audio timeline, in the clip's own
+/// colour: the label lifted toward the text colour, so it reads bright on the
+/// tint the clip is filled with, and dark on a light scheme. The bands keep
+/// the theme's order, a dim body under a bright treble.
+WaveformColours clipWaveColours(Color label, Color text) => WaveformColours(
+      rest: Color.lerp(label, text, 0.5)!,
+      low: Color.lerp(label, text, 0.15)!,
+      mid: Color.lerp(label, text, 0.45)!,
+      high: Color.lerp(label, text, 0.8)!,
+    );
 
 /// A bar's corner radius on a flush pane: **none**, as the mockup draws it.
 /// It was 2, which rounded nothing visibly and softened every bar end by a

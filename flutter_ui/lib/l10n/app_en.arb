@@ -10841,6 +10841,14 @@
   "@clipBlendFromLayer": {
     "description": "The first choice in a clip's Blend mode list, in the Effect controls panel with one clip of a Sequence layer picked and on the clip's menu in the Cut timeline. The clip uses its layer's blend mode and has none of its own."
   },
+  "clipColour": "Clip colour",
+  "@clipColour": {
+    "description": "Submenu on a clip's right-click menu in the Cut timeline and the Audio timeline. It gives the picked clips a colour of their own, in place of their track's."
+  },
+  "clipColourFromTrack": "Track colour",
+  "@clipColourFromTrack": {
+    "description": "The first row of the Clip colour submenu. The clip takes its track's colour again and has none of its own."
+  },
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."

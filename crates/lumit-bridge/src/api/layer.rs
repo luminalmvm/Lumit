@@ -1518,6 +1518,8 @@ pub struct BridgeClip {
     /// The clip's own blend mode as an index into [`list_blend_modes`], or
     /// `None` while it takes its layer's.
     pub blend: Option<u32>,
+    /// The clip's own label colour, or `None` while it wears its layer's.
+    pub label: Option<u8>,
     /// Where the clip starts and ends on the comp's clock in frames, with the
     /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
     /// may sit between two frames, and this is where it is drawn.
@@ -1640,6 +1642,7 @@ fn bridge_clip(
                 .position(|b| *b == blend)
                 .unwrap_or(0) as u32
         }),
+        label: clip.label,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
     }
@@ -4621,6 +4624,15 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Give one clip a label colour of its own, or hand it back to the
+    /// layer's with `None`.
+    #[frb(sync)]
+    pub fn set_clip_label(&self, clip: Uuid, label: Option<u8>) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].label = label;
+        self.commit_clips(clips)
+    }
+
     /// Set one clip's own level in dB - what the gain line across the box
     /// writes when it is let go (docs/impl/audio-timeline.md §2).
     ///
@@ -5396,6 +5408,7 @@ impl LayerReference {
                 audio_streams: layer.audio_streams.clone(),
                 audible: true,
                 blend: None,
+                label: None,
                 extra: serde_json::Map::new(),
             }],
         };

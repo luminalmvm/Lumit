@@ -2292,6 +2292,54 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         picture: true, onDone: _afterWrite);
   }
 
+  /// A right click on a track's head: its label colour.
+  Future<void> _headMenu(LumitTheme t, CutTrack track, Offset global) =>
+      showMenuAt<void>(
+        context: context,
+        position: global,
+        width: 160,
+        rows: (close) => [
+          SubmenuRow(
+            key: const ValueKey('ctl-head-label'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => FloatSurface(
+              child: labelChips(t, keyPrefix: 'ctl-head-label',
+                  onPick: (label) {
+                dismiss();
+                try {
+                  track.entry.layer.setLabel(label: label);
+                } catch (_) {}
+                Provider.of<LumitState>(context, listen: false)
+                    .notifyDocumentChanged();
+                _afterWrite();
+              }),
+            ),
+            child: Text(l10n.tipLabelColour),
+          ),
+        ],
+      );
+
+  /// Give the picked clips a colour of their own, or hand them back to their
+  /// track's with null. One undo step for all of them.
+  void _setClipLabel(int? label) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    asOneUndoStep(app.project, () {
+      for (final id in _selected) {
+        final at = _trackOfClip[id];
+        if (at == null) continue;
+        final clip = _tracks[at].clip(id);
+        if (clip == null) continue;
+        try {
+          _tracks[at].entry.layer.setClipLabel(clip: clip.id, label: label);
+        } catch (_) {
+          // A locked track refuses, and the rest still take it.
+        }
+      }
+    });
+    app.notifyDocumentChanged();
+    _afterWrite();
+  }
+
   /// A right click: on a clip, its delete and ripple delete; on the room
   /// between clips, closing the gap.
   Future<void> _menu(LumitUiState ui, CutTrack track, BridgeClip? clip,
@@ -2441,6 +2489,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             ),
             child: Text(l10n.tipBlendMode),
           ),
+        SubmenuRow(
+          key: const ValueKey('ctl-menu-clip-colour'),
+          closeParent: () => close(null),
+          submenu: (dismiss) => clipColourMenu(
+            ThemeScope.of(context).theme,
+            keyPrefix: 'ctl-menu-clip-colour',
+            onPick: (label) {
+              dismiss();
+              _setClipLabel(label);
+            },
+          ),
+          child: Text(l10n.clipColour),
+        ),
         if (clip.effects.isNotEmpty)
           MenuRow.option(
             key: const ValueKey('ctl-menu-bypass-fx'),
@@ -3033,9 +3094,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                       child: Listener(
                         behavior: HitTestBehavior.translucent,
                         onPointerDown: (e) {
-                          if (e.buttons == kSecondaryMouseButton &&
-                              e.localPosition.dy >= _tops.last) {
+                          if (e.buttons != kSecondaryMouseButton) return;
+                          final y = e.localPosition.dy;
+                          if (y >= _tops.last) {
                             _insertMenu(ui, e.position);
+                            return;
+                          }
+                          for (var i = 0; i < _tracks.length; i++) {
+                            if (y < _tops[i + 1]) {
+                              _headMenu(t, _tracks[i], e.position);
+                              return;
+                            }
                           }
                         },
                         child: LazyBlocks(
@@ -3254,15 +3323,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     return SizedBox(
       height: height,
       child: Padding(
-        padding: const EdgeInsets.only(left: outlineGap, right: 4),
+        padding: const EdgeInsets.only(right: 4),
         child: Row(children: [
+          // The track's colour, a bar down its left edge, as its clips wear
+          // it.
           Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: t.labelColour(info.label),
-              borderRadius: BorderRadius.circular(3),
-            ),
+            key: ValueKey<String>('ctl-label-${track.id}'),
+            width: 4,
+            color: t.labelColour(info.label),
           ),
           const SizedBox(width: outlineGap),
           Expanded(
@@ -3430,7 +3498,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       handle: t.textSecondary,
       handleFill: t.surface1,
       drop: t.accent,
-      wave: t.waveform,
     );
     final style = WaveformStyle(
       multiwave: true,
@@ -3552,6 +3619,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                       colours: (
                                         label: t.labelColour(
                                             _tracks[i].entry.info.label),
+                                        labels: t.labels,
                                         edge: colours.edge,
                                         picked: colours.picked,
                                         cross: colours.cross,
@@ -3561,7 +3629,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                         handle: colours.handle,
                                         handleFill: colours.handleFill,
                                         drop: colours.drop,
-                                        wave: colours.wave,
                                       ),
                                       style: style,
                                       radius: clipRadius(t),

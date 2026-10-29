@@ -5576,6 +5576,7 @@ mod tests {
             audio_streams: Default::default(),
             audible: true,
             blend: None,
+            label: None,
             extra: serde_json::Map::new(),
         };
         push_layer(

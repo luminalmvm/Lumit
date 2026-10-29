@@ -343,6 +343,15 @@ class AudioTrackOutlineRow extends StatelessWidget {
       child: AudioRowGround(
         selected: selected && !track.dimmed,
         child: Stack(children: [
+        // The track's colour, a bar down its left edge, as its clips wear it.
+        Positioned(
+          key: ValueKey<String>('atl-label-${track.id}'),
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          child: ColoredBox(color: t.labelColour(info.label)),
+        ),
         Positioned.fill(
             child: Padding(
           padding: const EdgeInsets.only(
@@ -463,18 +472,6 @@ class AudioTrackOutlineRow extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.visible),
-        ),
-        const SizedBox(width: identityGap),
-        // The label dot, the same 6px bullet the layer Timeline marks a row
-        // with. A readout here: the label picker belongs to the outline
-        // that owns the layer.
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: t.labelColour(info.label),
-            borderRadius: BorderRadius.circular(3),
-          ),
         ),
         const SizedBox(width: identityGap),
         // The name, or the field Enter turns it into. The picked track's name

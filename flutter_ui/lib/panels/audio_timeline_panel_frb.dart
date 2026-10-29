@@ -2105,6 +2105,22 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           child: Text(l10n.clipSplitAtPlayhead),
         ),
         keepPitch(() => close(null)),
+        SubmenuRow(
+          key: ValueKey<String>('atl-clip-colour-menu-${clip.id}'),
+          closeParent: () => close(null),
+          submenu: (dismiss) => clipColourMenu(
+            ThemeScope.of(context).theme,
+            keyPrefix: 'atl-clip-colour-menu',
+            onPick: (label) {
+              dismiss();
+              try {
+                track.entry.layer.setClipLabel(clip: clip.id, label: label);
+              } catch (_) {}
+              _afterWrite();
+            },
+          ),
+          child: Text(l10n.clipColour),
+        ),
         // A file with several audio streams: which of them this clip plays,
         // a clip to each on a track of its own, and back onto one.
         if (streams != null && streams.streams.length > 1 && comp != null) ...[

@@ -17,7 +17,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../icons/icons.dart' show iconSize;
-import '../theme/theme.dart';
 import 'audio_timeline_fades_frb.dart' show ClipFadePainter;
 import 'clip_fades.dart' show ClipFadeRamp;
 import 'cut_timeline_tracks.dart';
@@ -29,7 +28,8 @@ import 'timeline_extras_frb.dart'
         clipEdgeHoverLift,
         clipEdgeWidth,
         clipFillAlpha,
-        clipFillSelectedAlpha;
+        clipFillSelectedAlpha,
+        clipWaveColours;
 import 'audio_timeline_clips_frb.dart' show audioClipHeader;
 import 'waveform_frb.dart';
 
@@ -41,10 +41,13 @@ const double cutClipInset = 2;
 const double cutReachAlpha = 0.25;
 
 /// The colours a track is drawn in, read off the theme once by the panel so
-/// the painter has no context to ask. [handle] and [handleFill] are the fade
-/// handle's outline and inside, the Audio timeline's own.
+/// the painter has no context to ask. [label] is the track's own, and
+/// [labels] the palette a clip with a colour of its own takes from.
+/// [handle] and [handleFill] are the fade handle's outline and inside, the
+/// Audio timeline's own.
 typedef CutLaneColours = ({
   Color label,
+  List<Color> labels,
   Color edge,
   Color picked,
   Color cross,
@@ -54,7 +57,6 @@ typedef CutLaneColours = ({
   Color handle,
   Color handleFill,
   Color drop,
-  WaveformColours wave,
 });
 
 /// The composition glyph as a picture the painters can draw, made once by
@@ -373,7 +375,7 @@ class CutTrackPainter extends CustomPainter {
     final (left, width) = cutClipBox(axis, start, end);
     final box =
         Rect.fromLTWH(left, cutClipInset, width, size.height - cutClipInset * 2);
-    _fill(canvas, box, picked: false);
+    _fill(canvas, box, colours.label, picked: false);
     // A layer's own sound row: its wave under its name. The peaks are on the
     // layer's clock, which starts where its source does.
     final own = track.kind == CutTrackKind.layerSound;
@@ -384,7 +386,8 @@ class CutTrackPainter extends CustomPainter {
           summary,
           rationalSeconds(info.span.inPoint) -
               rationalSeconds(info.span.startOffset),
-          box);
+          box,
+          colours.label);
     }
     final header = own ? _soundHeader(box) : 0.0;
     _name(canvas, info.name, box,
@@ -413,26 +416,26 @@ class CutTrackPainter extends CustomPainter {
   /// The edge under the pointer, and the same edge of the clips linked to
   /// it: the leading edge lifted a step toward the text colour, as a hovered
   /// bar's is in the Timeline, and the trailing edge given the same strip.
-  void _hoverEdge(Canvas canvas, Rect box, CutHover mark) {
+  void _hoverEdge(Canvas canvas, Rect box, CutHover mark, Color label) {
     final left =
         mark.grab == BarGrab.trimIn ? box.left : box.right - clipEdgeWidth;
     canvas.drawRect(
       Rect.fromLTWH(left, box.top, clipEdgeWidth, box.height),
       Paint()
-        ..color = Color.lerp(colours.label, colours.lift, clipEdgeHoverLift)!,
+        ..color = Color.lerp(label, colours.lift, clipEdgeHoverLift)!,
     );
   }
 
-  void _fill(Canvas canvas, Rect box, {required bool picked}) {
+  void _fill(Canvas canvas, Rect box, Color label, {required bool picked}) {
     final rrect = RRect.fromRectAndRadius(box, Radius.circular(radius));
     canvas.drawRRect(
         rrect,
         Paint()
-          ..color = colours.label.withValues(
+          ..color = label.withValues(
               alpha: picked ? clipFillSelectedAlpha : clipFillAlpha));
     canvas.drawRect(
         Rect.fromLTWH(box.left, box.top, clipEdgeWidth, box.height),
-        Paint()..color = colours.label);
+        Paint()..color = label);
     canvas.drawRRect(
         rrect,
         Paint()
@@ -478,10 +481,15 @@ class CutTrackPainter extends CustomPainter {
       CutHover? mark,
       {required bool sound}) {
     final id = clip.id.toString();
+    // The clip's own colour where it has one, its track's where not.
+    final label = switch (clip.label) {
+      final own? => colours.labels[own % colours.labels.length],
+      null => colours.label,
+    };
     if (held != null) _reach(canvas, clip, box, held);
-    _fill(canvas, box, picked: selected.contains(id));
+    _fill(canvas, box, label, picked: selected.contains(id));
     if (mark != null && mark.fade == null && mark.clips.contains(id)) {
-      _hoverEdge(canvas, box, mark);
+      _hoverEdge(canvas, box, mark, label);
     }
     if (dropOn.value == id) {
       canvas.drawRRect(
@@ -493,7 +501,7 @@ class CutTrackPainter extends CustomPainter {
     }
     if (sound) {
       final header = _soundHeader(box);
-      _wave(canvas, clip, box, held);
+      _wave(canvas, clip, box, held, label);
       final chips = _chips(canvas, clip, box, band: header > 0 ? header : null);
       _name(canvas, clip.sourceName, box,
           band: header > 0 ? header : null,
@@ -512,6 +520,7 @@ class CutTrackPainter extends CustomPainter {
           clip,
           Rect.fromLTRB(box.left, box.bottom - band, box.right, box.bottom),
           held,
+          label,
           header: false);
     }
     final above =
@@ -626,7 +635,8 @@ class CutTrackPainter extends CustomPainter {
   /// The clip's own sound across its box. The peaks are bucketed on the
   /// clip's placed clock, which starts at its place start, so a slid clip
   /// carries its wave along with nothing refetched.
-  void _wave(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held,
+  void _wave(
+      Canvas canvas, BridgeClip clip, Rect box, CutDrag? held, Color label,
       {bool header = true}) {
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;
@@ -640,11 +650,13 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
-    _waveAt(canvas, summary, origin, box, header: header);
+    _waveAt(canvas, summary, origin, box, label, header: header);
   }
 
-  /// A wave across [box], whose left edge is [origin] on the peaks' clock.
+  /// A wave across [box], whose left edge is [origin] on the peaks' clock,
+  /// in a bright shade of [label].
   void _waveAt(Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box,
+      Color label,
       {bool header = true}) {
     // Under the name's header, so the wave never runs through the name.
     final top = header ? _soundHeader(box) : 0.0;
@@ -658,7 +670,7 @@ class CutTrackPainter extends CustomPainter {
       secondsPerPixel: 1 / (axis.perFrame * fps),
       left: 0,
       right: box.width,
-      colours: colours.wave,
+      colours: clipWaveColours(label, colours.lift),
       style: style,
       height: tall,
     ).paint(canvas, Size(box.width, tall));
