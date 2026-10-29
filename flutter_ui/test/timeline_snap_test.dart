@@ -150,8 +150,9 @@ void main() {
             .where((t) => t.kind == SnapKind.editPoint)
             .map((t) => t.frame)
             .toList(),
-        [90.0],
-        reason: "a row's in point is not its start offset",
+        [90.0, 150.0],
+        reason: "a row's in point is not its start offset, and a clip's end "
+            'is a place to land as much as its start',
       );
     });
   });
