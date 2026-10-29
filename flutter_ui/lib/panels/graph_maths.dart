@@ -957,6 +957,49 @@ const (double, double) envelopeDefaultRange = (-25.0, 125.0);
 /// is what makes its straight lines exactly straight (see [envelopeToKeys]).
 const double _chordInfluence = 1 / 3;
 
+/// The shape the speed takes between two envelope points, by Vegas's names.
+/// Fast changes most at the start, Slow most at the end, Smooth eases at
+/// both ends, Sharp at neither, and Hold keeps the first speed to the next
+/// point.
+enum SpeedCurve { linear, fast, slow, smooth, sharp, hold }
+
+/// The influence each curve is written at, which is also how it is read back.
+/// Nothing else in a key can carry the choice, so each curve gets its own
+/// value. Fast, Slow and Hold sit just beside ⅓, where their speed is all but
+/// exactly the parabola (or flat line) the name promises.
+const Map<SpeedCurve, double> _curveInfluence = {
+  SpeedCurve.linear: _chordInfluence,
+  SpeedCurve.fast: 0.34,
+  SpeedCurve.slow: 0.35,
+  SpeedCurve.hold: 0.36,
+  SpeedCurve.smooth: 0.6,
+  SpeedCurve.sharp: 0.12,
+};
+
+/// The curve a span is written in, read from the side leaving its first key.
+/// A side shaped some other way, in the Time lens, reads as Linear.
+SpeedCurve speedCurveOf(BridgeSideInterp side) {
+  if (side is! BridgeSideInterp_Bezier) return SpeedCurve.linear;
+  for (final MapEntry(:key, :value) in _curveInfluence.entries) {
+    if ((side.field0.influence - value).abs() < 0.002) return key;
+  }
+  return SpeedCurve.linear;
+}
+
+/// One curve per span of [keys].
+List<SpeedCurve> envelopeCurves(List<BridgeKeyframe> keys) => [
+      for (var i = 0; i + 1 < keys.length; i++) speedCurveOf(keys[i].interpOut),
+    ];
+
+/// How much of the step from one speed to the next a curve's span plays at,
+/// on average: the area under it. Fast is 2u − u², Slow u², Hold none of it.
+double _stepShare(SpeedCurve curve) => switch (curve) {
+      SpeedCurve.fast => 2 / 3,
+      SpeedCurve.slow => 1 / 3,
+      SpeedCurve.hold => 0,
+      _ => 0.5,
+    };
+
 /// The envelope's points for [keys]: the playback speed at each key, in per
 /// cent, where 100 is source rate and a negative value runs backwards.
 ///
@@ -965,9 +1008,20 @@ const double _chordInfluence = 1 / 3;
 /// Time lens instead can disagree at a key; the point then reads the side
 /// facing *into* the clip — the outgoing speed, or the incoming one at the
 /// last key — because that is the speed the span it governs is played at.
+///
+/// The last point after a Hold span arrives at the held speed, so its own
+/// is kept on its outgoing side, which plays nothing.
 List<double> envelopeSpeeds(List<BridgeKeyframe> keys) => [
       for (var i = 0; i < keys.length; i++)
-        sideSpeedAtKey(keys, i, isOut: i < keys.length - 1) * 100,
+        switch (keys[i].interpOut) {
+          BridgeSideInterp_Bezier(:final field0)
+              when i == keys.length - 1 &&
+                  i > 0 &&
+                  speedCurveOf(keys[i - 1].interpOut) == SpeedCurve.hold =>
+            field0.speed,
+          _ => sideSpeedAtKey(keys, i, isOut: i < keys.length - 1),
+        } *
+            100,
     ];
 
 /// Keys carrying [speeds] (per cent, one per key), with the source positions
@@ -979,43 +1033,59 @@ List<double> envelopeSpeeds(List<BridgeKeyframe> keys) => [
 /// trim-in whatever its speed, so re-speeding never moves where it starts.
 ///
 /// **Why the trapezoid is exact rather than an approximation.** Between two
-/// points the envelope draws a straight line, so the source advanced across a
-/// span is the area under that line: the average of the two speeds times the
+/// points a Linear span draws a straight line, so the source advanced across
+/// it is the area under that line: the average of the two speeds times the
 /// span. Setting a cubic's value change to exactly that, with its endpoint
 /// slopes at the two speeds and influence ⅓, makes the cubic's own derivative
 /// come out *exactly* that straight line — the u² term cancels. So the
 /// envelope is not a simplified view of the curve underneath; it is the same
 /// curve, read the other way round. (Substitute Δ/d = (m₀+m₁)/2 into a cubic
-/// Hermite's derivative and the quadratic coefficient is zero.)
+/// Hermite's derivative and the quadratic coefficient is zero.) Fast and Slow
+/// move the area to two thirds and one third of the step, which leaves the
+/// parabola leaning the named way; Smooth and Sharp keep the half and lean
+/// on the influence instead.
+///
+/// [curves], one per span, defaults to the curves [keys] are written in.
 List<BridgeKeyframe> envelopeToKeys(
-    List<BridgeKeyframe> keys, List<double> speeds) {
+    List<BridgeKeyframe> keys, List<double> speeds,
+    {List<SpeedCurve>? curves}) {
   if (keys.isEmpty || speeds.length != keys.length) return keys;
+  final shapes = curves ?? envelopeCurves(keys);
+  if (shapes.length != keys.length - 1) return keys;
   // Every key's new source position first, so each side can be compared
   // against the chord of the span it governs.
   final values = <double>[keys.first.value];
   for (var i = 1; i < keys.length; i++) {
     final dt =
         rationalSeconds(keys[i].time) - rationalSeconds(keys[i - 1].time);
+    final from = speeds[i - 1], to = speeds[i];
     // Non-positive only for keys sharing a time, which the editing ops
     // forbid; treated as no advance rather than as a reason to fail.
     values.add(dt > 0
-        ? values[i - 1] + (speeds[i - 1] + speeds[i]) / 2 / 100 * dt
+        ? values[i - 1] +
+            (from + (to - from) * _stepShare(shapes[i - 1])) / 100 * dt
         : values[i - 1]);
   }
 
-  /// The side governing the span between `a` and `b`, as seen from whichever
-  /// end this is. **Linear when the speed is the span's own chord** — the two
-  /// are then the same curve, and writing the bezier form anyway would change
-  /// how the key *looks* (a diamond becomes a circle) for no change in what it
-  /// does. Dragging one point of a flat envelope used to re-shape every key on
-  /// the channel that way.
-  BridgeSideInterp side(int at, int a, int b) {
-    final dt = rationalSeconds(keys[b].time) - rationalSeconds(keys[a].time);
-    final chord = dt > 0 ? (values[b] - values[a]) / dt : 0.0;
+  /// The side governing span `s` (keys `s` and `s + 1`), from its start when
+  /// [isOut]. **A Linear span is linear when its speed is the chord** — the
+  /// two are then the same curve, and writing the bezier form anyway would
+  /// change how the key *looks* (a diamond becomes a circle) for no change in
+  /// what it does. Dragging one point of a flat envelope used to re-shape
+  /// every key on the channel that way.
+  BridgeSideInterp side(int s, {required bool isOut}) {
+    final curve = shapes[s];
+    // Hold arrives at the next point still at the speed it left with.
+    final at = isOut || curve == SpeedCurve.hold ? s : s + 1;
     final speed = speeds[at] / 100;
-    if ((speed - chord).abs() < 1e-9) return const BridgeSideInterp.linear();
+    if (curve == SpeedCurve.linear) {
+      final dt =
+          rationalSeconds(keys[s + 1].time) - rationalSeconds(keys[s].time);
+      final chord = dt > 0 ? (values[s + 1] - values[s]) / dt : 0.0;
+      if ((speed - chord).abs() < 1e-9) return const BridgeSideInterp.linear();
+    }
     return BridgeSideInterp.bezier(
-      BridgeBezierSide(speed: speed, influence: _chordInfluence),
+      BridgeBezierSide(speed: speed, influence: _curveInfluence[curve]!),
     );
   }
 
@@ -1026,12 +1096,110 @@ List<BridgeKeyframe> envelopeToKeys(
         value: values[i],
         // The first key has no span before it and the last none after it;
         // those sides govern nothing, so they stay as plain as possible.
-        interpIn: i == 0 ? const BridgeSideInterp.linear() : side(i, i - 1, i),
-        interpOut: i == keys.length - 1
+        interpIn: i == 0
             ? const BridgeSideInterp.linear()
-            : side(i, i, i + 1),
+            : side(i - 1, isOut: false),
+        interpOut: i < keys.length - 1
+            ? side(i, isOut: true)
+            : i > 0 && shapes[i - 1] == SpeedCurve.hold
+                ? BridgeSideInterp.bezier(BridgeBezierSide(
+                    speed: speeds[i] / 100, influence: _chordInfluence))
+                : const BridgeSideInterp.linear(),
       ),
   ];
+}
+
+/// [source]'s speed line laid onto a clip [seconds] long whose map starts at
+/// [startValue]: every point at the same share of the length, keeping its
+/// speed and the curve after it. [timeAt] rounds a clip time the way the
+/// clip's keys are written. Empty when there is nothing to lay down.
+List<BridgeKeyframe> envelopeStretchedOnto(
+  List<BridgeKeyframe> source,
+  double seconds,
+  double startValue,
+  BridgeRational Function(double seconds) timeAt,
+) {
+  if (source.length < 2 || seconds <= 0) return const [];
+  final from = rationalSeconds(source.first.time);
+  final length = rationalSeconds(source.last.time) - from;
+  if (length <= 0) return const [];
+  final speeds = envelopeSpeeds(source);
+  final curves = envelopeCurves(source);
+  final keys = <BridgeKeyframe>[];
+  final kept = <double>[];
+  final shapes = <SpeedCurve>[];
+  for (var i = 0; i < source.length; i++) {
+    final time = timeAt(
+        (rationalSeconds(source[i].time) - from) / length * seconds);
+    // A short clip can round two points onto one time. The later goes, but
+    // never the clip's own end, which takes the place of the one before it.
+    if (keys.isNotEmpty &&
+        rationalSeconds(time) <= rationalSeconds(keys.last.time)) {
+      if (i < source.length - 1 || keys.length < 2) continue;
+      keys.removeLast();
+      kept.removeLast();
+      shapes.removeLast();
+    }
+    if (keys.isNotEmpty) shapes.add(curves[i - 1]);
+    keys.add(BridgeKeyframe(
+      time: time,
+      value: startValue,
+      interpIn: const BridgeSideInterp.linear(),
+      interpOut: const BridgeSideInterp.linear(),
+    ));
+    kept.add(speeds[i]);
+  }
+  if (keys.length < 2) return const [];
+  return envelopeToKeys(keys, kept, curves: shapes);
+}
+
+/// [keys] with every point's speed mirrored about 100%, as Vegas's Flip does:
+/// a slow-down becomes the same speed-up. Curves and times stay.
+List<BridgeKeyframe> flipEnvelope(List<BridgeKeyframe> keys) => envelopeToKeys(
+      keys,
+      [for (final s in envelopeSpeeds(keys)) 200 - s],
+      curves: envelopeCurves(keys),
+    );
+
+/// [keys] without the points that change nothing, as Vegas's Thin does: an
+/// inner point between two Linear spans whose speed is already where the
+/// straight line between its neighbours would put it.
+List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
+  if (keys.length < 3) return keys;
+  final speeds = envelopeSpeeds(keys);
+  final curves = envelopeCurves(keys);
+  final keep = <int>[0];
+  for (var i = 1; i < keys.length - 1; i++) {
+    final a = keep.last;
+    final t0 = rationalSeconds(keys[a].time);
+    final t1 = rationalSeconds(keys[i + 1].time);
+    final linear = curves[i - 1] == SpeedCurve.linear &&
+        curves[i] == SpeedCurve.linear;
+    // Every point dropped since the last one kept has to sit on the new
+    // line too, or a gentle curve thins away to a straight line.
+    var bent = !linear;
+    for (var j = a + 1; j <= i && !bent; j++) {
+      final f = t1 > t0 ? (rationalSeconds(keys[j].time) - t0) / (t1 - t0) : 0;
+      final straight = speeds[a] + (speeds[i + 1] - speeds[a]) * f;
+      bent = (speeds[j] - straight).abs() > 0.01;
+    }
+    if (bent) keep.add(i);
+  }
+  keep.add(keys.length - 1);
+  if (keep.length == keys.length) return keys;
+  return envelopeToKeys(
+    [for (final i in keep) keys[i]],
+    [for (final i in keep) speeds[i]],
+    curves: [for (var k = 0; k + 1 < keep.length; k++) curves[keep[k + 1] - 1]],
+  );
+}
+
+/// [keys] with span [span] played in [curve].
+List<BridgeKeyframe> setEnvelopeCurve(
+    List<BridgeKeyframe> keys, int span, SpeedCurve curve) {
+  if (span < 0 || span + 1 >= keys.length) return keys;
+  final curves = envelopeCurves(keys)..[span] = curve;
+  return envelopeToKeys(keys, envelopeSpeeds(keys), curves: curves);
 }
 
 /// [keys] with the envelope point at [index] moved to [time], keeping the
@@ -1061,7 +1229,7 @@ List<BridgeKeyframe> moveEnvelopePoint(
       else
         keys[i],
   ];
-  return envelopeToKeys(moved, speeds);
+  return envelopeToKeys(moved, speeds, curves: envelopeCurves(keys));
 }
 
 /// [keys] with the envelope point at [index] moved to [percent].

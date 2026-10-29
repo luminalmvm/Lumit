@@ -10,8 +10,9 @@
 
 use std::fmt;
 
+use crate::defaults::after_effects_preset;
 use crate::KeyContext::{Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
-use crate::{after_effects_preset, ActionId, Chord, KeyContext, Keymap, Modifiers};
+use crate::{ActionId, Chord, KeyContext, Keymap, Modifiers};
 
 /// A keymap read from an After Effects shortcut file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -784,7 +785,7 @@ mod tests {
         assert_eq!(km.binding_for(KeyContext::Tools, &hand), None);
         assert!(km.unbound.contains(&(KeyContext::Tools, hand)));
         // And it stays that way through the stored file.
-        let restored = crate::with_new_defaults(km);
+        let restored = crate::defaults::with_new_defaults(km);
         assert_eq!(restored.lookup(KeyContext::Tools, &chord("H")), None);
     }
 
@@ -834,7 +835,7 @@ mod tests {
             None
         );
         assert!(km.conflicts().is_empty());
-        let restored = crate::with_new_defaults(km);
+        let restored = crate::defaults::with_new_defaults(km);
         assert!(
             restored.conflicts().is_empty(),
             "the razor must not get C back on top of the camera"

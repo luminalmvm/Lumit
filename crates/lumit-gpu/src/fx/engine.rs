@@ -425,6 +425,7 @@ impl FxEngine {
         let set_matte_mod = module(include_str!("../fx_setmatte.wgsl"), "fx-set-matte");
         let set_channels_mod = module(include_str!("../fx_setchannels.wgsl"), "fx-set-channels");
         let linear_wipe_mod = module(include_str!("../fx_linearwipe.wgsl"), "fx-linear-wipe");
+        let crop_mod = module(include_str!("../fx_crop.wgsl"), "fx-crop");
         let radial_wipe_mod = module(include_str!("../fx_radialwipe.wgsl"), "fx-radial-wipe");
         let venetian_blinds_mod = module(
             include_str!("../fx_venetianblinds.wgsl"),
@@ -567,6 +568,7 @@ impl FxEngine {
         let set_matte = pipeline(&set_matte_mod, "fx-set-matte", "set_matte");
         let set_channels = pipeline(&set_channels_mod, "fx-set-channels", "set_channels");
         let linear_wipe = pipeline(&linear_wipe_mod, "fx-linear-wipe", "linear_wipe");
+        let crop = pipeline(&crop_mod, "fx-crop", "crop");
         let radial_wipe = pipeline(&radial_wipe_mod, "fx-radial-wipe", "radial_wipe");
         let venetian_blinds = pipeline(
             &venetian_blinds_mod,
@@ -723,6 +725,7 @@ impl FxEngine {
             set_matte: set_matte.wait(),
             set_channels: set_channels.wait(),
             linear_wipe: linear_wipe.wait(),
+            crop: crop.wait(),
             radial_wipe: radial_wipe.wait(),
             venetian_blinds: venetian_blinds.wait(),
             iris_wipe: iris_wipe.wait(),

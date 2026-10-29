@@ -28,6 +28,7 @@ BridgeAudioPeaks peaks({
       bands: bands,
       buckets: values.length ~/ (3 * bands),
       values: Float32List.fromList(values.map((v) => v.toDouble()).toList()),
+      channels: 1,
     );
 
 /// One full-scale bucket, repeated.

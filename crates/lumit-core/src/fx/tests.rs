@@ -6532,6 +6532,7 @@ fn every_parameter_declares_a_unit() {
             ("transform", "anchor_y"),
             ("transform", "position_x"),
             ("transform", "position_y"),
+            ("crop", "feather"),
             ("glow", "radius"),
             ("shake", "amplitude"),
             ("block_glitch", "block_size"),

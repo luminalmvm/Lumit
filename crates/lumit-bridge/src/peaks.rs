@@ -126,6 +126,49 @@ pub(crate) fn pyramid_for(sound: &SoundSource) -> Option<Arc<PeakPyramid>> {
     Some(pyramid)
 }
 
+/// A sound's left and right summaries, or `None` for a mono sound, kept apart
+/// from the mixed ones and asked for only by a lane that draws them stacked.
+/// The answer is kept either way, so a mono file is decoded once to find out.
+#[cfg(feature = "media")]
+pub(crate) fn channel_pyramids_for(sound: &SoundSource) -> Option<Arc<[PeakPyramid; 2]>> {
+    let cache = channels_cache();
+    if let Ok(held) = cache.lock() {
+        if let Some((_, found)) = held.iter().find(|(s, _)| s == sound) {
+            return found.clone();
+        }
+    }
+    let built = lumit_audio::stereo_peaks::load_or_build_channels(
+        sound,
+        PEAK_RATE,
+        lumit_project::media_index_dir().as_deref(),
+    )
+    .map(Arc::new);
+    if let Ok(mut held) = cache.lock() {
+        held.retain(|(s, _)| s != sound);
+        held.push((sound.clone(), built.clone()));
+        // Oldest out, past half the mixed cache's budget.
+        let bytes = |held: &Held| -> usize {
+            held.iter()
+                .flat_map(|(_, p)| p.iter().flat_map(|both| both.iter()))
+                .map(PeakPyramid::bytes)
+                .sum()
+        };
+        while held.len() > 1 && (held.len() > MAX_ENTRIES || bytes(&held) > MAX_BYTES / 2) {
+            held.remove(0);
+        }
+    }
+    built
+}
+
+#[cfg(feature = "media")]
+type Held = Vec<(SoundSource, Option<Arc<[PeakPyramid; 2]>>)>;
+
+#[cfg(feature = "media")]
+fn channels_cache() -> &'static Mutex<Held> {
+    static CHANNELS: OnceLock<Mutex<Held>> = OnceLock::new();
+    CHANNELS.get_or_init(Mutex::default)
+}
+
 #[cfg(feature = "media")]
 impl PeakCache {
     /// Drop the stalest entries until both budgets are met again, never the
@@ -270,6 +313,10 @@ pub(crate) fn clear() {
     #[cfg(feature = "media")]
     if let Ok(mut held) = spectra_cache().lock() {
         held.entries.clear();
+    }
+    #[cfg(feature = "media")]
+    if let Ok(mut held) = channels_cache().lock() {
+        held.clear();
     }
 }
 

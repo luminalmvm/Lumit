@@ -1502,6 +1502,12 @@ pub struct BridgeClip {
     /// Carried so the clip's header strip draws with no bridge call; empty
     /// when the document no longer holds that source.
     pub source_name: String,
+    /// The clip's own opacity, nought to one, taken with its fades.
+    pub opacity: f64,
+    /// The names of the takes the clip holds, the one it shows first and the
+    /// rest in the order T steps through them: the take numbers
+    /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
+    pub takes: Vec<String>,
     /// The link this clip shares with the clips that move, trim and cut with
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
@@ -1518,6 +1524,10 @@ pub struct BridgeClip {
     /// The clip's own blend mode as an index into [`list_blend_modes`], or
     /// `None` while it takes its layer's.
     pub blend: Option<u32>,
+    /// The clip's own label colour, or `None` while it wears its layer's.
+    pub label: Option<u8>,
+    /// The group the clip is in, or `None`.
+    pub group: Option<Uuid>,
     /// Where the clip starts and ends on the comp's clock in frames, with the
     /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
     /// may sit between two frames, and this is where it is drawn.
@@ -1595,6 +1605,13 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
+    let name = |source| match source {
+        lumit_core::sequence::ClipSource::Footage(id)
+        | lumit_core::sequence::ClipSource::Comp(id) => doc
+            .item(id)
+            .map(|i| i.name().to_string())
+            .unwrap_or_default(),
+    };
     BridgeClip {
         id: clip.id,
         place_start: rational_of(clip.place_start),
@@ -1622,12 +1639,14 @@ fn bridge_clip(
             .collect(),
         fx: clip.fx,
         gain_db: clip.gain_db,
-        source_name: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => doc
-                .item(id)
-                .map(|i| i.name().to_string())
-                .unwrap_or_default(),
+        source_name: name(clip.source),
+        opacity: clip.opacity,
+        takes: match clip.takes.is_empty() {
+            true => Vec::new(),
+            false => std::iter::once(clip.source)
+                .chain(clip.takes.iter().map(|t| t.source))
+                .map(name)
+                .collect(),
         },
         link: clip.link,
         audible: clip.audible,
@@ -1640,6 +1659,8 @@ fn bridge_clip(
                 .position(|b| *b == blend)
                 .unwrap_or(0) as u32
         }),
+        label: clip.label,
+        group: clip.group,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
     }
@@ -2255,8 +2276,11 @@ pub struct BridgeAudioPeaks {
     /// Buckets per band.
     pub buckets: u32,
     /// Band-major triples: band `b`'s bucket `i` is `min`, `max`, `rms` at
-    /// `3 * (b * buckets + i)`, each in −1..1.
+    /// `3 * (b * buckets + i)`, each in −1..1. With two channels, the left's
+    /// bands come first and then the right's.
     pub values: Vec<f32>,
+    /// 1 for the sound mixed, or 2 for left and right apart.
+    pub channels: u32,
 }
 
 impl BridgeAudioPeaks {
@@ -2271,6 +2295,7 @@ impl BridgeAudioPeaks {
             bands: 0,
             buckets: 0,
             values: Vec::new(),
+            channels: 1,
         }
     }
 
@@ -4621,6 +4646,15 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Give one clip a label colour of its own, or hand it back to the
+    /// layer's with `None`.
+    #[frb(sync)]
+    pub fn set_clip_label(&self, clip: Uuid, label: Option<u8>) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].label = label;
+        self.commit_clips(clips)
+    }
+
     /// Set one clip's own level in dB - what the gain line across the box
     /// writes when it is let go (docs/impl/audio-timeline.md §2).
     ///
@@ -4637,6 +4671,18 @@ impl LayerReference {
         }
         let (mut clips, index) = self.clips_and_index(clip)?;
         clips[index].gain_db = db;
+        self.commit_clips(clips)
+    }
+
+    /// Set one picture clip's own opacity, nought to one, Vegas's event
+    /// opacity. It is taken where the clip's fades are.
+    #[frb(sync)]
+    pub fn set_clip_opacity(&self, clip: Uuid, opacity: f64) -> Result<(), BridgeError> {
+        if !opacity.is_finite() {
+            return Err(BridgeError::InvalidTime);
+        }
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].opacity = opacity.clamp(0.0, 1.0);
         self.commit_clips(clips)
     }
 
@@ -4958,7 +5004,7 @@ impl LayerReference {
 
     /// This layer's clips and the index of `clip` among them.
     #[frb(ignore)]
-    fn clips_and_index(
+    pub(crate) fn clips_and_index(
         &self,
         clip: Uuid,
     ) -> Result<(Vec<lumit_core::sequence::Clip>, usize), BridgeError> {
@@ -4980,6 +5026,9 @@ impl LayerReference {
     /// which clip is which. The moment is read through the clip's own map, so
     /// a re-speeded clip still shows the frame it actually opens on.
     ///
+    /// `along` asks for the frame that many seconds into the clip instead,
+    /// for the pictures drawn across it.
+    ///
     /// `None` when the media will not open, when the source is a comp rather
     /// than footage (there is nothing on disk to decode), or in a build with
     /// no media feature. Decoded once per (item, size, frame) and cached.
@@ -4987,15 +5036,16 @@ impl LayerReference {
         &self,
         clip: Uuid,
         max_edge: u32,
+        along: Option<f64>,
     ) -> Result<Option<crate::api::state::BridgeRenderedFrame>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let clip = &clips[index];
         let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
             return Ok(None);
         };
-        // The clip's own opening source moment, through whatever map it plays
-        // by — which is the identity when it has none of its own.
-        let opens_at = clip.source_time(clip.place_start.to_f64());
+        // The clip's own source moment, through whatever map it plays by —
+        // which is the identity when it has none of its own.
+        let opens_at = clip.source_time(clip.place_start.to_f64() + along.unwrap_or(0.0));
 
         #[cfg(feature = "media")]
         {
@@ -5054,7 +5104,7 @@ impl LayerReference {
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, opens_at, max_edge);
+            let _ = (item, opens_at, max_edge, along);
             Ok(None)
         }
     }
@@ -5396,6 +5446,10 @@ impl LayerReference {
                 audio_streams: layer.audio_streams.clone(),
                 audible: true,
                 blend: None,
+                label: None,
+                group: None,
+                opacity: 1.0,
+                takes: Vec::new(),
                 extra: serde_json::Map::new(),
             }],
         };
@@ -5521,7 +5575,10 @@ impl LayerReference {
     /// because the op's inverse is "the clips as they were" and a span quietly
     /// changed inside it would not come back on undo. A batch inverts
     /// member-wise, so both halves undo together for free.
-    fn commit_clips(&self, clips: Vec<lumit_core::sequence::Clip>) -> Result<(), BridgeError> {
+    pub(crate) fn commit_clips(
+        &self,
+        clips: Vec<lumit_core::sequence::Clip>,
+    ) -> Result<(), BridgeError> {
         let offset = self.item()?.start_offset;
         self.commit_clips_with_offset(clips, offset)
     }
@@ -6260,6 +6317,7 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: 1,
             })
         }
 
@@ -6380,6 +6438,7 @@ impl LayerReference {
         end_seconds: f64,
         buckets: u32,
         multiwave: bool,
+        stereo: bool,
     ) -> Result<BridgeAudioPeaks, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let Some(clip) = clips.get(index) else {
@@ -6433,15 +6492,27 @@ impl LayerReference {
                 .map(|i| clip.source_time(start + step * i as f64))
                 .collect();
             let bands = BridgeAudioPeaks::bands_of(multiwave);
-            let mut values = Vec::with_capacity(bands.len() * buckets * 3);
-            for band in &bands {
-                for i in 0..buckets {
-                    let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
-                        values.extend_from_slice(&[0.0, 0.0, 0.0]);
-                        continue;
-                    };
-                    let block = pyramid.window(*band, a, b);
-                    values.extend_from_slice(&[block.min, block.max, block.rms]);
+            // Left over right where asked and the sound has two channels.
+            let sides = if stereo {
+                crate::peaks::channel_pyramids_for(&sound)
+            } else {
+                None
+            };
+            let summaries: Vec<&lumit_audio::peaks::PeakPyramid> = match &sides {
+                Some(both) => both.iter().collect(),
+                None => vec![&pyramid],
+            };
+            let mut values = Vec::with_capacity(summaries.len() * bands.len() * buckets * 3);
+            for summary in &summaries {
+                for band in &bands {
+                    for i in 0..buckets {
+                        let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
+                            values.extend_from_slice(&[0.0, 0.0, 0.0]);
+                            continue;
+                        };
+                        let block = summary.window(*band, a, b);
+                        values.extend_from_slice(&[block.min, block.max, block.rms]);
+                    }
                 }
             }
             Ok(BridgeAudioPeaks {
@@ -6451,12 +6522,13 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: summaries.len() as u32,
             })
         }
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, start_seconds, end_seconds, buckets, multiwave);
+            let _ = (item, start_seconds, end_seconds, buckets, multiwave, stereo);
             Ok(BridgeAudioPeaks::empty())
         }
     }

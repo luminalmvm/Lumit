@@ -123,6 +123,7 @@ impl CompositionReference {
                     bands: 1,
                     buckets,
                     values,
+                    channels: 1,
                 });
             }
         }

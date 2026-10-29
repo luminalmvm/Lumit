@@ -2419,7 +2419,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
-        _deleteSelectedEffects();
+        _deleteSelectedEffects() ||
+        _deleteSequenceClip();
+  }
+
+  /// The clip picked in an open sequence view goes, and leaves a gap: what
+  /// follows keeps the beat it was cut to. Its layer stays.
+  bool _deleteSequenceClip() {
+    final pick = sequenceClipPick.value;
+    if (pick == null) return false;
+    try {
+      pick.layer.deleteClip(clip: pick.clip);
+    } catch (_) {
+      // Gone between the click and the key.
+    }
+    sequenceClipPick.value = null;
+    _ui?.cutClip.value = null;
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    _ui?.model.refresh();
+    return true;
   }
 
   /// Delete every picked effect row, returning whether there was one.

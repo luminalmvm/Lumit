@@ -369,5 +369,6 @@ enum BridgeWheelModifier {
   ctrl,
   alt,
   shift,
+  bare,
   ;
 }

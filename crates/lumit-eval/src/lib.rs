@@ -1958,6 +1958,7 @@ fn feed_layer(
                         outgoing,
                         incoming,
                         gain,
+                        ..
                     } => {
                         feed_clip(h, outgoing);
                         h.update(b"dissolve/");
@@ -2522,9 +2523,14 @@ fn feed_source(
                     outgoing,
                     incoming,
                     gain,
+                    opacity,
                 } => {
                     h.update(b"seq-dissolve/");
                     feed_f64(h, gain);
+                    // The clips' own opacity, drawn as the layer's.
+                    if opacity < 1.0 {
+                        feed_f64(h, opacity);
+                    }
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }

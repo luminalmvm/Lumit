@@ -355,6 +355,61 @@ void envelopeTests() {
         }
       }
     });
+
+    // A span's curve decides which frames play, and it has to survive the
+    // drags that re-integrate the keys around it.
+    test('a span keeps its curve through speed and time edits', () {
+      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
+      var out = setEnvelopeCurve(keys, 0, SpeedCurve.fast);
+      out = setEnvelopeCurve(out, 1, SpeedCurve.hold);
+      out = setEnvelopeSpeed(out, 1, 300);
+      out = moveEnvelopePoint(out, 1, rat(1, 1));
+      expect(envelopeCurves(out), [SpeedCurve.fast, SpeedCurve.hold]);
+      expect(envelopeSpeeds(out), [
+        closeTo(100, 1e-6),
+        closeTo(300, 1e-6),
+        closeTo(100, 1e-6),
+      ]);
+      // Fast covers two thirds of its step on average: 1s at 100 → 300.
+      expect(out[1].value, closeTo((100 + 200 * 2 / 3) / 100, 1e-9));
+      // Hold plays the whole of the next span at 300%.
+      expect(evaluateKeysSpeed(out, 2.5), closeTo(3, 1e-6));
+      expect(out[2].value - out[1].value, closeTo(3 * 3, 1e-9));
+    });
+
+    // Flip and Thin rewrite every point, so a slip in either changes which
+    // frames the whole clip plays.
+    test('Flip mirrors about 100% and Thin drops only points that do nothing',
+        () {
+      final keys = [
+        key(0, 1, 0.0),
+        key(1, 1, 1.0),
+        key(2, 1, 2.0),
+        key(3, 1, 3.0),
+      ];
+      var out = setEnvelopeSpeed(keys, 0, 300);
+      out = setEnvelopeSpeed(out, 1, 200);
+      out = setEnvelopeSpeed(out, 2, 100);
+      out = setEnvelopeSpeed(out, 3, 150);
+      final flipped = flipEnvelope(out);
+      expect(envelopeSpeeds(flipped), [
+        closeTo(-100, 1e-6),
+        closeTo(0, 1e-6),
+        closeTo(100, 1e-6),
+        closeTo(50, 1e-6),
+      ]);
+      expect(envelopeSpeeds(flipEnvelope(flipped)),
+          [for (final s in envelopeSpeeds(out)) closeTo(s, 1e-6)]);
+      // 200 at 1s is on the line from 300 to 100, 100 at 2s is a bend.
+      final thin = thinEnvelope(out);
+      expect(envelopeSpeeds(thin),
+          [closeTo(300, 1e-6), closeTo(100, 1e-6), closeTo(150, 1e-6)]);
+      expect(thin.last.value, closeTo(out.last.value, 1e-9));
+      // A gentle curve keeps its shape: 1s is near the line to 2s, but not
+      // the line to 3s, so 2s stays.
+      final gentle = envelopeToKeys(keys, [100, 100.0135, 100.009, 100]);
+      expect(thinEnvelope(gentle), hasLength(3));
+    });
   });
 }
 

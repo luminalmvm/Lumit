@@ -11,6 +11,7 @@
 // one of them is a layer, and the ones that hold clips are Sequence layers.
 
 import 'dart:math';
+import 'dart:ui' show Offset, Rect;
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -171,10 +172,39 @@ int cutPictureCount(List<CutTrack> tracks) {
   return at < 0 ? tracks.length : at;
 }
 
-/// What a clip's thumbnail is filed under: the frame it opens on is part of
-/// the key, so a cut or a re-speed fetches the frame the clip now starts on.
+/// Where a picture clip's opacity line stands in a track [height] tall: at
+/// the box's top at full, at its foot at none, as Vegas draws event opacity.
+double cutOpacityY(double opacity, double height) =>
+    2 + (1 - opacity.clamp(0.0, 1.0)) * max(0.0, height - 4);
+
+/// What a clip's thumbnail is filed under: the source frame it opens on is
+/// part of the key, so a head trim, a slip or a re-speed fetches again, and a
+/// move along the comp keeps the pictures it has.
 String cutThumbKey(BridgeClip clip) =>
-    '${clip.id}@${clip.startFrame}@${clip.retimed}';
+    '${clip.id}@${clip.sourceIn.num}/${clip.sourceIn.den}@${clip.retime.hashCode}';
+
+/// How far apart the pictures along a clip are asked for, in pixels. The
+/// painter draws whole frames and takes the nearest one it has.
+const double cutFilmStep = 48;
+
+/// How many comp frames apart the pictures along a clip are at [perFrame]
+/// pixels a frame: a power of two at least [cutFilmStep] wide, so nearby
+/// zooms share their pictures.
+int cutFilmFrames(double perFrame) {
+  if (perFrame <= 0) return 1;
+  var frames = 1;
+  while (frames * perFrame < cutFilmStep && frames < 1 << 20) {
+    frames *= 2;
+  }
+  return frames;
+}
+
+/// How many comp frames into its clip picture [k] along shows.
+int cutFilmOffset(int k, double perFrame) => k * cutFilmFrames(perFrame);
+
+/// The key a picture [offset] comp frames into [clip] is held under.
+String cutFilmKey(BridgeClip clip, int offset) =>
+    '${cutThumbKey(clip)}+$offset';
 
 /// Where each track's top stands, measured down from the top of the first,
 /// with the foot of the last on the end: one more entry than [heights].
@@ -574,4 +604,23 @@ int cutClampShift({
   }
   if (lo > hi) return 0;
   return shift.clamp(lo, hi);
+}
+
+/// A button drawn on a clip, as Vegas puts its event buttons there.
+enum CutBadge { fx, panCrop }
+
+/// Where a clip's buttons sit in its [box]: fx at the top right of every
+/// clip, and Pan/Crop beside it on a picture clip. None on a box too small to
+/// keep room for its name.
+List<(CutBadge, Rect)> cutBadges(Rect box, {required bool picture}) {
+  // Below the band the fade handles are taken in, so a short fade-out's
+  // handle and the fx button never share a pixel.
+  final top = box.top + cutFadeHandleHeight - 1;
+  final side = min(16.0, box.bottom - top - 2);
+  if (side < 10 || box.width < side * 4 + 24) return const [];
+  final fx = Rect.fromLTWH(box.right - 3 - side, top, side, side);
+  return [
+    (CutBadge.fx, fx),
+    if (picture) (CutBadge.panCrop, fx.shift(Offset(-side - 2, 0))),
+  ];
 }
