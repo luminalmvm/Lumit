@@ -1113,10 +1113,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       } else if (at == keys.length) {
         planted = speeds.last;
       } else {
-        final t0 = rationalSeconds(keys[at - 1].time);
-        final t1 = rationalSeconds(keys[at].time);
-        final f = t1 > t0 ? (seconds - t0) / (t1 - t0) : 0.0;
-        planted = speeds[at - 1] + (speeds[at] - speeds[at - 1]) * f;
+        // On the span's own curve, which is a straight line only for Linear.
+        planted = evaluateKeysSpeed(keys, seconds) * 100;
       }
       final grown = [...keys]..insert(at, keyframeAmong(keys, time, 0));
       final withSpeed = [...speeds]..insert(at, planted);
@@ -2432,6 +2430,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// on, or null for the value lens's one key.
   Future<void> _showKeyMenu(GraphChannel channel, int index, Offset position,
       {bool? side}) async {
+    if (isEnvelope(channel)) {
+      await _showSpeedPointMenu(channel, index, position);
+      return;
+    }
     final picked = await showLumitPopup<String>(
       context: context,
       position: position,
@@ -2514,6 +2516,71 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       },
     );
     widget.onChanged();
+  }
+
+  /// A speed point's menu: type its speed, put it back to 100%, choose the
+  /// curve the speed takes to the next point, or delete it. The easing rows
+  /// a key has would bend the envelope out of the shape its points describe.
+  Future<void> _showSpeedPointMenu(
+      GraphChannel channel, int index, Offset position) async {
+    final keys = channel.keys;
+    final current =
+        index + 1 < keys.length ? speedCurveOf(keys[index].interpOut) : null;
+    final names = {
+      SpeedCurve.linear: l10n.speedCurveLinear,
+      SpeedCurve.fast: l10n.speedCurveFast,
+      SpeedCurve.slow: l10n.speedCurveSlow,
+      SpeedCurve.smooth: l10n.speedCurveSmooth,
+      SpeedCurve.sharp: l10n.speedCurveSharp,
+      SpeedCurve.hold: l10n.speedCurveHold,
+    };
+    final picked = await showLumitPopup<Object>(
+      context: context,
+      position: position,
+      builder: (close) => FloatSurface(
+        width: 170,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+                key: const ValueKey<String>('graph-key-menu-speed'),
+                onPressed: () => close('speed'),
+                child: Text(l10n.menuSetSpeed)),
+            MenuRow(
+                onPressed: () => close('reset'),
+                child: Text(l10n.speedPointReset)),
+            if (current != null)
+              for (final MapEntry(key: curve, value: name) in names.entries)
+                MenuRow.option(
+                  key: ValueKey<String>('graph-speed-curve-${curve.name}'),
+                  onPressed: () => close(curve),
+                  child: Row(children: [
+                    menuTick(curve == current),
+                    Expanded(child: Text(name)),
+                  ]),
+                ),
+            MenuRow(
+                onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'speed':
+        await _openKeyFields(channel, index, position);
+      case 'reset':
+        _applySpeedPoint(channel.id, index,
+            percent: 100, frame: keyFrame(keys[index], widget.fps));
+      case 'delete':
+        _deleteSelection(fallback: '${channel.id}#$index');
+      case final SpeedCurve curve:
+        commitChannelEdits({
+          channel: BridgeScalar.keyframed(setEnvelopeCurve(keys, index, curve)),
+        });
+        widget.onChanged();
+    }
   }
 
   /// Delete the selected keys (or [fallback] when none) — the last key of a
@@ -3072,6 +3139,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 _keyTapId = id;
                 if (again) {
                   _keyTapId = null;
+                  // A speed point goes back to 100%, as Vegas has it; its
+                  // exact speed is typed from the right-click menu.
+                  if (isEnvelope(channel)) {
+                    _applySpeedPoint(channel.id, i,
+                        percent: 100,
+                        frame: keyFrame(channel.keys[i], widget.fps));
+                    return;
+                  }
                   _openKeyFields(channel, i, d.globalPosition);
                   return;
                 }
