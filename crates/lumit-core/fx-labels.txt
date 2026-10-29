@@ -253,6 +253,7 @@ Count
 Count nested inputs
 Create corner pin
 Create transform keys
+Crop
 Curl noise
 Curve
 Curves

@@ -442,6 +442,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &LensFlare,
     &DropShadow,
     &LinearWipe,
+    &crate::gpufx_crop::Crop,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,

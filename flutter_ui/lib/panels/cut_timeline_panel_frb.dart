@@ -1994,15 +1994,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   }
 
   /// A clip's button pressed: its effects in Effect controls, and for
-  /// Pan/Crop a Transform at the head of them first where it has none, whose
-  /// position, scale and rotation pan, zoom and turn the clip.
+  /// Pan/Crop a Crop and a Transform on the clip first where it has none.
+  /// The Crop takes edges off the picture, and the Transform's position,
+  /// scale and rotation pan, zoom and turn what is left.
   void _badge(LumitUiState ui, CutTrack track, BridgeClip clip, CutBadge kind) {
-    if (kind == CutBadge.panCrop &&
-        !clip.effects.any((e) => e.name == 'transform')) {
-      try {
-        track.entry.layer.addClipEffect(clip: clip.id, name: 'transform');
-      } catch (_) {}
-      _afterCut(BridgeCutResult.done);
+    if (kind == CutBadge.panCrop) {
+      final missing = [
+        for (final name in const ['crop', 'transform'])
+          if (!clip.effects.any((e) => e.name == name)) name,
+      ];
+      if (missing.isNotEmpty) {
+        asOneUndoStep(
+            Provider.of<LumitState>(context, listen: false).project, () {
+          for (final name in missing) {
+            try {
+              track.entry.layer.addClipEffect(clip: clip.id, name: name);
+            } catch (_) {}
+          }
+        });
+        _afterCut(BridgeCutResult.done);
+      }
     }
     if (!panelVisible(ui.split, Panel.effectControls)) {
       setPanelVisible(ui.split, Panel.effectControls, true);

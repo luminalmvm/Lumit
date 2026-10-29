@@ -1012,6 +1012,7 @@ Map<String, String> get _built => {
       "Line period": l10n.fxLinePeriod,
       "Linear": l10n.fxLinear,
       "Linear wipe": l10n.fxLinearWipe,
+      "Crop": l10n.fxCrop,
       "Low": l10n.fxLow,
       "Lower left x": l10n.fxLowerLeftX,
       "Lower left y": l10n.fxLowerLeftY,

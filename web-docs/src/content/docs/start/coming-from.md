@@ -52,7 +52,7 @@ imported from **Settings ▸ General ▸ After Effects presets**. See
 | Cursor | **Playhead** |
 | Split | `S` with the Vegas shortcuts, or the **razor** tool |
 | Event FX | A clip's **fx** button and its own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
-| Pan/Crop | A clip's **Pan/Crop** button, a Transform on the clip. It does not crop |
+| Pan/Crop | A clip's **Pan/Crop** button: a [Crop](/effects/utility/crop/) and a Transform on the clip |
 | Group, Ungroup | **Group** and **Ungroup**, `G` and `U` with the Vegas shortcuts |
 | Auto ripple | **Auto ripple**, on the [Cut timeline](/use/cutting/#switches) |
 | Automatic crossfades | **Auto crossfade**, on the Cut timeline |

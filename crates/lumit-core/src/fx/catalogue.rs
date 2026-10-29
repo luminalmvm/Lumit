@@ -84,6 +84,7 @@ use super::effects::{
     connect_points::{ConnectPoints, ConnectPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
+    crop::{Crop, CropDef},
     curves::{Curves, CurvesDef},
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
@@ -228,6 +229,8 @@ crate::catalogue![
     ChannelBlurDef => ChannelBlur,
     VectorBlurDef => VectorBlur,
     TransformDef => Transform,
+    // Crop, beside Transform: the two halves of Vegas's Pan/Crop.
+    CropDef => Crop,
     GlowDef => Glow,
     ShakeDef => Shake,
     BlockGlitchDef => BlockGlitch,

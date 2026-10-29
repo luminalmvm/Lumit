@@ -259,6 +259,8 @@ pub struct FxEngine {
     set_channels: wgpu::ComputePipeline,
     /// Linear wipe (docs/08 §3.46): a straight edge swept across the frame.
     linear_wipe: wgpu::ComputePipeline,
+    /// Crop: the picture taken away past four edges.
+    crop: wgpu::ComputePipeline,
     /// Radial wipe (docs/08 §3.47): a wedge swept round a centre.
     radial_wipe: wgpu::ComputePipeline,
     /// Venetian blinds (docs/08 §3.70): §3.46's straight edge, folded into one

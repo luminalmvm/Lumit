@@ -4184,6 +4184,10 @@
   "@fxLinearWipe": {
     "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
   },
+  "fxCrop": "Crop",
+  "@fxCrop": {
+    "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
+  },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
     "description": "Effect controls — a depth-channel option on Depth of field."
