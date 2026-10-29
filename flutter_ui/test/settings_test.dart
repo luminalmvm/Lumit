@@ -63,7 +63,7 @@ void main() {
       markerLines: false,
       cutAutoRipple: true,
       cutAutoCrossfade: true,
-      cutSpeedLines: false,
+      cutSpeedLines: true,
       cutVegasDrags: true,
       cutHeadWidth: 240,
       quantiseSound: false,
@@ -102,7 +102,7 @@ void main() {
     expect(back.markerLines, isFalse);
     expect(back.cutAutoRipple, isTrue);
     expect(back.cutAutoCrossfade, isTrue);
-    expect(back.cutSpeedLines, isFalse);
+    expect(back.cutSpeedLines, isTrue);
     expect(back.cutVegasDrags, isTrue);
     expect(back.cutHeadWidth, 240);
     expect(back.quantiseSound, isFalse);
