@@ -21,8 +21,10 @@
 //
 // The same band draws Pan when asked ([BandKind.pan]): centre in the middle,
 // left at the top and right at the bottom, as Vegas draws it. A double-click
-// on the line puts the level, or the key under the pointer, back to 0 dB or
-// centre, and `Ctrl` held during a drag moves it at a tenth of the speed.
+// on a key puts it back to 0 dB or centre, and anywhere else on the line
+// plants one. `Ctrl` held during a drag moves it at
+// a tenth of the speed. An expression's value or a locked layer is not
+// for dragging: the first draws nothing, the second only the line.
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout;
@@ -114,6 +116,9 @@ class VolumeBandState extends State<VolumeBand> {
   double _grabbedAt = 0;
   double _travelled = 0;
 
+  /// Where a static level was taken hold of, so its readout sits there.
+  double _grabX = 0;
+
   /// The last plain click, so a second one close by makes a double-click
   /// without holding every single click back the way a double-tap gesture
   /// would.
@@ -124,6 +129,17 @@ class VolumeBandState extends State<VolumeBand> {
   /// on the bare line). The painter listens, so hover repaints and rebuilds
   /// nothing.
   final ValueNotifier<({int? key})?> _hover = ValueNotifier(null);
+
+  @override
+  void didUpdateWidget(VolumeBand oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The value changed under a held drag (an undo, say): let go, write
+    // nothing.
+    final was = oldWidget.kind == BandKind.pan
+        ? oldWidget.entry.info.pan
+        : oldWidget.entry.info.volumeDb;
+    if (_drag != null && was != _scalar) _drag = null;
+  }
 
   @override
   void dispose() {
@@ -220,6 +236,7 @@ class VolumeBandState extends State<VolumeBand> {
     final at = index == null ? _staticValue : keys[index].value;
     setState(() {
       _grabbedAt = at;
+      _grabX = local.dx;
       _travelled = 0;
       _drag = (index: index, value: at);
     });
@@ -281,20 +298,22 @@ class VolumeBandState extends State<VolumeBand> {
 
   void _write(BridgeScalar next) {
     final layer = widget.entry.layer;
-    _pan ? layer.setPan(value: next) : layer.setVolumeDb(value: next);
+    try {
+      _pan ? layer.setPan(value: next) : layer.setVolumeDb(value: next);
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+      return;
+    }
     widget.onChanged();
   }
 
-  /// A double-click puts the level back to 0 dB or centre: the whole level
-  /// while it is static, the key under the pointer once it is keyed.
+  /// A double-click, as in Vegas: on a key it puts that key back to 0 dB or
+  /// centre, and anywhere else on the line it plants one.
   void _reset(Offset local) {
     final keys = _keys;
-    if (keys.isEmpty) {
-      if (_staticValue != 0) _write(const BridgeScalar.static_(0));
-      return;
-    }
-    final index = _keyNear(local);
-    if (index == null || keys[index].value == 0) return;
+    final index = keys.isEmpty ? null : _keyNear(local);
+    if (index == null) return _plant(local);
+    if (keys[index].value == 0) return;
     _write(_withKey(keys, index, 0));
   }
 
@@ -302,7 +321,7 @@ class VolumeBandState extends State<VolumeBand> {
   /// the band already draws there — a place to grab, not a change.
   /// `Alt`-click lifts the diamond under the pointer; lifting the last one
   /// leaves the level as a static at that key's value, which is what the
-  /// curve read anyway. Two plain clicks close together reset.
+  /// curve read anyway. Two plain clicks close together are a double-click.
   void _tap(Offset local) {
     final keyboard = HardwareKeyboard.instance;
     final keys = _keys;
@@ -329,6 +348,12 @@ class VolumeBandState extends State<VolumeBand> {
       if (twice) _reset(local);
       return;
     }
+    _plant(local);
+  }
+
+  /// A key planted on the line at [local], at the value the line reads there.
+  void _plant(Offset local) {
+    final keys = _keys;
     final frame = widget.axis.frameAtExact(local.dx) - widget.barShift;
     final time = timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
     final value = _valueAt(local.dx, _points());
@@ -354,14 +379,13 @@ class VolumeBandState extends State<VolumeBand> {
 
   @override
   Widget build(BuildContext context) {
+    // An expression drives the value: nothing here may write over it.
+    if (_scalar is BridgeScalar_Expression) {
+      return SizedBox(width: widget.axis.width, height: widget.rowHeight);
+    }
     final t = ThemeScope.of(context).theme;
     final points = _points();
     final held = _drag;
-    final readout = held != null
-        ? _readoutText(held.value)
-        : _keys.isEmpty
-            ? _readoutText(_staticValue)
-            : null;
     final id = widget.entry.layer.internallayerId;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeUpDown,
@@ -370,7 +394,10 @@ class VolumeBandState extends State<VolumeBand> {
       opaque: false,
       hitTestBehavior: HitTestBehavior.deferToChild,
       onHover: (e) => _hover.value = (key: _keyNear(e.localPosition)),
-      onExit: (_) => _hover.value = null,
+      // A held drag keeps the line lit wherever the pointer wanders.
+      onExit: (_) {
+        if (_drag == null) _hover.value = null;
+      },
       child: GestureDetector(
         key: ValueKey<String>(
             _pan ? 'tl-pan-band-$id' : 'tl-volume-band-$id'),
@@ -390,11 +417,18 @@ class VolumeBandState extends State<VolumeBand> {
             line: _pan ? t.warning : t.accent,
             halo: t.surface0.withValues(alpha: 0.75),
             diamond: t.animated,
-            readout: readout,
+            readout: held == null ? null : _readoutText(held.value),
+            readoutAt: held == null
+                ? null
+                : Offset(held.index == null ? _grabX : points[held.index!].dx,
+                    _y(held.value)),
             readoutStyle:
                 t.mono.copyWith(fontSize: 9, color: t.textMuted),
             keyed: _keys.isNotEmpty,
             hover: _hover,
+            held: held != null,
+            // A locked layer shows its line and takes no hold of it.
+            grabbable: !widget.entry.info.switches.locked,
           ),
         ),
       ),
@@ -405,7 +439,7 @@ class VolumeBandState extends State<VolumeBand> {
       ? panLabel(value)
       : value <= volumeBandFloorDb
           ? l10n.volumeNegInf
-          : '${value.toStringAsFixed(1)} dB';
+          : '${value.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
 }
 
 /// The band's line, its diamonds, and the readout — and the hit test that
@@ -417,6 +451,16 @@ class VolumeBandPainter extends CustomPainter {
   final Color diamond;
   final String? readout;
   final TextStyle readoutStyle;
+
+  /// The held point the readout sits beside.
+  final Offset? readoutAt;
+
+  /// A drag is held: the band answers everywhere until it lets go, so the
+  /// line stays lit and the cursor stays put.
+  final bool held;
+
+  /// False on a locked layer: the line draws and takes no pointer.
+  final bool grabbable;
 
   /// A darker edge drawn under the line, so it reads over a busy waveform.
   final Color? halo;
@@ -438,6 +482,9 @@ class VolumeBandPainter extends CustomPainter {
     required this.keyed,
     this.halo,
     this.hover,
+    this.readoutAt,
+    this.held = false,
+    this.grabbable = true,
   }) : super(repaint: hover);
 
   @override
@@ -484,12 +531,17 @@ class VolumeBandPainter extends CustomPainter {
       }
     }
 
-    if (readout case final text?) {
+    if ((readout, readoutAt) case (final text?, final at?)) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: readoutStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      painter.paint(canvas, Offset(size.width - painter.width - 6, 1));
+      // Just right of the held point and above the line, flipped left where
+      // it would run off the end and below where it would leave the top.
+      var x = at.dx + 8;
+      if (x + painter.width > size.width) x = at.dx - 8 - painter.width;
+      final above = at.dy - painter.height - 2;
+      painter.paint(canvas, Offset(x, above >= 0 ? above : at.dy + 2));
     }
   }
 
@@ -497,7 +549,8 @@ class VolumeBandPainter extends CustomPainter {
   /// marquee and the lane ground keep the rest of the row.
   @override
   bool? hitTest(Offset position) {
-    if (points.isEmpty) return false;
+    if (!grabbable || points.isEmpty) return false;
+    if (held) return true;
     for (final p in points) {
       if ((p - position).distance <= 7) return true;
     }
@@ -523,6 +576,9 @@ class VolumeBandPainter extends CustomPainter {
       old.halo != halo ||
       old.diamond != diamond ||
       old.readout != readout ||
+      old.readoutAt != readoutAt ||
+      old.held != held ||
+      old.grabbable != grabbable ||
       old.keyed != keyed ||
       old.hover != hover;
 }
