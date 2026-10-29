@@ -657,6 +657,7 @@ pub(crate) fn wiring_into(
         // The wiring carries none. Whoever commits it puts the document's
         // own back.
         notes: Vec::new(),
+        ties: Vec::new(),
         out_unwired: wiring.out_unwired,
     }
 }

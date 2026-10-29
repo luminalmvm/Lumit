@@ -51,3 +51,4 @@ pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
+pub mod wire_tie;

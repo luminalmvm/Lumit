@@ -2182,6 +2182,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -2217,6 +2218,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read_comp,
@@ -2285,6 +2287,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
                 edges: vec![wire(box_id, "output", out3, "input")],
                 layout: Vec::new(),
@@ -2359,6 +2362,7 @@ mod tests {
                 Vec::new(),
                 Some(CompGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     nodes,
                     edges,
                     layout: Vec::new(),
