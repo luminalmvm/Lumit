@@ -2033,8 +2033,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       // selection, and one on a picked clip keeps the set so the whole of
       // it can be dragged.
       final these = keys.isAltPressed && !vegas ? {id} : _withMates(id);
+      final range = vegas && keys.isShiftPressed && !keys.isControlPressed
+          ? _rangeTo(id)
+          : null;
       setState(() {
-        if (additive &&
+        if (range != null) {
+          _selected = range;
+        } else if (additive &&
             vegas &&
             keys.isControlPressed &&
             _selected.contains(id)) {
@@ -2077,6 +2082,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       CutTool.slip || CutTool.slide => grab == BarGrab.move,
       _ => true,
     };
+    _ranging = vegas &&
+        hit == null &&
+        tool == CutTool.select &&
+        !keys.isControlPressed &&
+        !keys.isShiftPressed;
     _press = (
       from: at,
       at: at,
@@ -2206,7 +2216,15 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _hint.value = null;
     _marquee.value = null;
     _hover.value = null;
+    if (_ranging) {
+      _ranging = false;
+      _workPreview.value = null;
+    }
   }
+
+  /// A drag on empty track space with Vegas's mouse draws a time selection
+  /// rather than a box. Ctrl held keeps the box.
+  bool _ranging = false;
 
   /// The pointer over the lanes: the resize arrows over an edge, a fade
   /// handle or anything being trimmed, up and down over a gain line, a closed
@@ -2359,7 +2377,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       stretch: held.stretch,
     );
     if (!moved) return;
-    if (held.marquee) {
+    if (held.marquee && _ranging) {
+      // Vegas: a drag over empty track space draws the time selection,
+      // which is the work area here, snapped as an edge is.
+      final a = _razorFrameAt(held.from.dx).toInt();
+      final b = _razorFrameAt(at.dx).toInt();
+      _workPreview.value = (start: min(a, b), end: max(a, b), whole: false);
+    } else if (held.marquee) {
       _marquee.value = Rect.fromPoints(held.from, at);
     } else if (held.clip != null) {
       _showDrag(_press!);
@@ -2372,9 +2396,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       return;
     }
     final held = _press;
+    final ranging = _ranging;
+    final range = _workPreview.value;
     final commit = _escape.end();
     _clearDrag();
     if (held == null || !commit) return;
+    if (ranging && held.moved) {
+      final comp = ui.selectedComp;
+      if (comp != null && range != null && range.end > range.start) {
+        try {
+          comp.setWorkArea(
+              span: BridgeSpan(
+            inPoint: comp.timeOfFrame(frame: range.start),
+            outPoint: comp.timeOfFrame(frame: range.end),
+            startOffset: comp.timeOfFrame(frame: 0),
+          ));
+        } catch (_) {}
+        _afterWrite();
+      }
+      return;
+    }
     if (held.tool == CutTool.razor) {
       if (held.moved || held.track == null) return;
       _razorCut(_tracks[held.track!].entry, _razorFrameAt(held.at.dx).round());
@@ -2398,6 +2439,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (_toggleOnUp case final id? when !held.moved) {
       setState(() => _selected = {..._selected}..removeAll(_withMates(id)));
+    }
+    // Vegas's mouse: a click on the tracks puts the cursor there as well,
+    // snapped as an edge is.
+    if (_vegasDrags && !held.moved && held.tool == CutTool.select) {
+      final last = max(0, ui.model.durationFrames - 1);
+      ui.scrubTo(_razorFrameAt(held.from.dx).round().clamp(0, last));
     }
     if (held.marquee) {
       if (!held.moved) {
@@ -2443,6 +2490,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (source is! ItemReference_Composition) return;
     ui.openNestedComp(track.entry.layer, source.field0);
+  }
+
+  /// Shift and a click with Vegas's mouse: every clip from the one last
+  /// pressed to [id], across the tracks between them and the time between
+  /// them, or null with nothing pressed before.
+  Set<String>? _rangeTo(String id) {
+    final anchor = _lastPressed;
+    final a = anchor == null ? null : _trackOfClip[anchor];
+    final b = _trackOfClip[id];
+    if (a == null || b == null) return null;
+    final first = _tracks[a].clip(anchor!);
+    final last = _tracks[b].clip(id);
+    if (first == null || last == null) return null;
+    final from = min(first.startFrame.toInt(), last.startFrame.toInt());
+    final to = max(first.endFrame.toInt(), last.endFrame.toInt());
+    return {
+      for (var i = min(a, b); i <= max(a, b); i++)
+        for (final clip in cutClipsBetween(_tracks[i], from, to))
+          ..._withMates(clip),
+    };
   }
 
   /// Every clip the box crossed, on every track it spans.
