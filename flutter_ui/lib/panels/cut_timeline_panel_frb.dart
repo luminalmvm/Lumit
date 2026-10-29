@@ -4944,7 +4944,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             ],
           ),
           // Each marker's line, from the ruler down through every track.
-          MarkerLinesGround(comp: comp, axis: axis, hScroll: _hLane),
+          MarkerLinesGround(
+              comp: comp, axis: axis, hScroll: _hLane, regions: true),
           PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
         ],
       ),

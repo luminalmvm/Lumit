@@ -2916,6 +2916,10 @@ final ValueNotifier<MarkerPreview?> markerDragPreview = ValueNotifier(null);
 const double markerLineAlpha = 0.6;
 const double beatLineAlpha = 0.3;
 
+/// How faintly [MarkerLinesGround] washes a region, over clips rather than
+/// under bars, so lighter than [markerRegionFillAlpha].
+const double markerRegionBandAlpha = 0.08;
+
 /// How far apart beats have to stand, in pixels, before their lines are drawn
 /// at all, and how far apart before they are drawn at full strength.
 const double beatLineMinGap = 8;
@@ -2943,6 +2947,7 @@ class MarkerLinesGround extends StatelessWidget {
     required this.comp,
     required this.axis,
     this.hScroll,
+    this.regions = false,
   });
 
   final CompositionReference comp;
@@ -2950,6 +2955,10 @@ class MarkerLinesGround extends StatelessWidget {
 
   /// The scroll the lanes ride sideways, when they ride one.
   final ScrollController? hScroll;
+
+  /// Whether each region is washed in faintly too, with a line at its end,
+  /// for a view with no [MarkerRegionsGround] of its own.
+  final bool regions;
 
   @override
   Widget build(BuildContext context) {
@@ -2987,6 +2996,17 @@ class MarkerLinesGround extends StatelessWidget {
             colour: t.animated.withValues(alpha: beatAlpha),
           ),
     ];
+    final spans = [
+      if (regions)
+        for (final m in markers)
+          if ((m.durationFrames ?? 0) > 0 && !m.isBeat)
+            (
+              id: m.id,
+              frame: frameAtTime(comp, m.time),
+              span: m.durationFrames!,
+              colour: markerColour(t, m),
+            ),
+    ];
     return Positioned.fill(
       top: t.density.ruler,
       child: RepaintBoundary(
@@ -2995,9 +3015,32 @@ class MarkerLinesGround extends StatelessWidget {
             animation: Listenable.merge([markerDragPreview, hScroll]),
             builder: (context, _) {
               final staged = markerDragPreview.value;
+              // Each region's two ends, following a drag as its flag does.
+              final ends = [
+                for (final r in spans)
+                  staged != null && staged.id == r.id
+                      ? (
+                          axis.xOf(staged.frame),
+                          axis.xOf(staged.frame + staged.span),
+                          r.colour
+                        )
+                      : (
+                          axis.xOf(r.frame),
+                          axis.xOf(r.frame + r.span),
+                          r.colour
+                        ),
+              ];
               return CustomPaint(
                 key: const ValueKey<String>('tl-marker-lines'),
                 painter: _MarkerLinesPainter(
+                  bands: [
+                    for (final (from, to, colour) in ends)
+                      (
+                        from,
+                        to,
+                        colour.withValues(alpha: markerRegionBandAlpha)
+                      ),
+                  ],
                   lines: [
                     for (final line in lines)
                       (
@@ -3010,6 +3053,8 @@ class MarkerLinesGround extends StatelessWidget {
                             ? line.colour.withValues(alpha: 1)
                             : line.colour,
                       ),
+                    for (final (_, to, colour) in ends)
+                      (to, colour.withValues(alpha: markerLineAlpha)),
                   ],
                   // Only the fraction: rounding is the same under a whole
                   // pixel of scroll, so one changes nothing and repaints
@@ -3033,14 +3078,28 @@ class _MarkerLinesPainter extends CustomPainter {
   /// Each line's place in the view's own pixels, and its colour.
   final List<(double, Color)> lines;
 
+  /// Each region's two edges and its wash, drawn under the lines.
+  final List<(double, double, Color)> bands;
+
   /// Where this painter's left edge sits against the panel's pixel grid: the
   /// fraction of a pixel the lanes are scrolled by, negated.
   final double origin;
 
-  const _MarkerLinesPainter({required this.lines, required this.origin});
+  const _MarkerLinesPainter({
+    required this.lines,
+    required this.origin,
+    this.bands = const [],
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    for (final (from, to, colour) in bands) {
+      final left = from.clamp(0.0, size.width);
+      final right = to.clamp(0.0, size.width);
+      if (right <= left) continue;
+      canvas.drawRect(Rect.fromLTRB(left, 0, right, size.height),
+          Paint()..color = colour);
+    }
     for (final (x, colour) in lines) {
       if (x < 0 || x > size.width) continue;
       // A filled pixel column and not a stroke, put on the panel's grid: a
@@ -3055,7 +3114,9 @@ class _MarkerLinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MarkerLinesPainter old) =>
-      old.origin != origin || !listEquals(old.lines, lines);
+      old.origin != origin ||
+      !listEquals(old.lines, lines) ||
+      !listEquals(old.bands, bands);
 
   /// Never takes the pointer, it is the ground and not a control.
   @override

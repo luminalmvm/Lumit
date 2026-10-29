@@ -49,6 +49,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
+import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/keymap.dart' show chordText;
 import 'package:lumit_flutter/state/settings.dart'
@@ -1157,6 +1158,20 @@ class _LumitAppViewState extends State<LumitAppView> {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
           state.notifyDocumentChanged();
         }
+      // A region over the work area, as Vegas makes one over its time
+      // selection. Ahead of the numbered markers, which share the prefix.
+      case 'marker.add.region':
+        if (comp == null) {
+          handled = false;
+        } else {
+          final work = workAreaFrames(comp);
+          final list = markersWithFrb(comp, frame: work.start, label: '');
+          writeMarkers(comp, [
+            ...list.take(list.length - 1),
+            list.last.withSpan(work.end - work.start),
+          ]);
+          state.notifyDocumentChanged();
+        }
       case final id when id.startsWith('marker.add.'):
         if (comp == null) {
           handled = false;
@@ -1376,6 +1391,7 @@ bool _pressedOnce(String action) =>
       'mask.feather',
       'mask.invert',
       'comp.trim.workarea',
+      'marker.add.region',
       'export.queue.open',
       'help.open',
       'viewer.controls.toggle',
