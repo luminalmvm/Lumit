@@ -701,6 +701,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       endSeconds: request.endSeconds,
       buckets: request.buckets,
       multiwave: widget.style.needsBands,
+      stereo: true,
     )
         .then((peaks) {
       if (!mounted || _keys[id] != key) return;

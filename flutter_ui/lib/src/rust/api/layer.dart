@@ -107,8 +107,12 @@ class BridgeAudioPeaks {
   final int buckets;
 
   /// Band-major triples: band `b`'s bucket `i` is `min`, `max`, `rms` at
-  /// `3 * (b * buckets + i)`, each in −1..1.
+  /// `3 * (b * buckets + i)`, each in −1..1. With two channels, the left's
+  /// bands come first and then the right's.
   final Float32List values;
+
+  /// 1 for the sound mixed, or 2 for left and right apart.
+  final int channels;
 
   const BridgeAudioPeaks({
     required this.durationSeconds,
@@ -117,6 +121,7 @@ class BridgeAudioPeaks {
     required this.bands,
     required this.buckets,
     required this.values,
+    required this.channels,
   });
 
   @override
@@ -126,7 +131,8 @@ class BridgeAudioPeaks {
       endSeconds.hashCode ^
       bands.hashCode ^
       buckets.hashCode ^
-      values.hashCode;
+      values.hashCode ^
+      channels.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -138,7 +144,8 @@ class BridgeAudioPeaks {
           endSeconds == other.endSeconds &&
           bands == other.bands &&
           buckets == other.buckets &&
-          values == other.values;
+          values == other.values &&
+          channels == other.channels;
 }
 
 /// How one two-axis property is shown and edited
@@ -2943,14 +2950,16 @@ class LayerReference {
           required double startSeconds,
           required double endSeconds,
           required int buckets,
-          required bool multiwave}) =>
+          required bool multiwave,
+          required bool stereo}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioPeaks(
           that: this,
           clip: clip,
           startSeconds: startSeconds,
           endSeconds: endSeconds,
           buckets: buckets,
-          multiwave: multiwave);
+          multiwave: multiwave,
+          stereo: stereo);
 
   /// One Sequence clip's audio as a **spectrogram** - the twin of
   /// [`Self::clip_audio_peaks`] for the spectral lane mode, and the

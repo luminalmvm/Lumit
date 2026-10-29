@@ -1492,7 +1492,8 @@ abstract class BridgeLibApi extends BaseApi {
       required double startSeconds,
       required double endSeconds,
       required int buckets,
-      required bool multiwave});
+      required bool multiwave,
+      required bool stereo});
 
   Future<BridgeSpectrogram> crateApiLayerLayerReferenceClipAudioSpectrogram(
       {required LayerReference that,
@@ -13156,7 +13157,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required double startSeconds,
       required double endSeconds,
       required int buckets,
-      required bool multiwave}) {
+      required bool multiwave,
+      required bool stereo}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -13166,6 +13168,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_f_64(endSeconds, serializer);
         sse_encode_u_32(buckets, serializer);
         sse_encode_bool(multiwave, serializer);
+        sse_encode_bool(stereo, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 368, port: port_);
       },
@@ -13175,7 +13178,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiLayerLayerReferenceClipAudioPeaksConstMeta,
-      argValues: [that, clip, startSeconds, endSeconds, buckets, multiwave],
+      argValues: [
+        that,
+        clip,
+        startSeconds,
+        endSeconds,
+        buckets,
+        multiwave,
+        stereo
+      ],
       apiImpl: this,
     ));
   }
@@ -13189,7 +13200,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           "startSeconds",
           "endSeconds",
           "buckets",
-          "multiwave"
+          "multiwave",
+          "stereo"
         ],
       );
 
@@ -23376,8 +23388,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeAudioPeaks dco_decode_bridge_audio_peaks(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return BridgeAudioPeaks(
       durationSeconds: dco_decode_f_64(arr[0]),
       startSeconds: dco_decode_f_64(arr[1]),
@@ -23385,6 +23397,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       bands: dco_decode_u_32(arr[3]),
       buckets: dco_decode_u_32(arr[4]),
       values: dco_decode_list_prim_f_32_strict(arr[5]),
+      channels: dco_decode_u_32(arr[6]),
     );
   }
 
@@ -30630,13 +30643,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_bands = sse_decode_u_32(deserializer);
     var var_buckets = sse_decode_u_32(deserializer);
     var var_values = sse_decode_list_prim_f_32_strict(deserializer);
+    var var_channels = sse_decode_u_32(deserializer);
     return BridgeAudioPeaks(
         durationSeconds: var_durationSeconds,
         startSeconds: var_startSeconds,
         endSeconds: var_endSeconds,
         bands: var_bands,
         buckets: var_buckets,
-        values: var_values);
+        values: var_values,
+        channels: var_channels);
   }
 
   @protected
@@ -39282,6 +39297,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.bands, serializer);
     sse_encode_u_32(self.buckets, serializer);
     sse_encode_list_prim_f_32_strict(self.values, serializer);
+    sse_encode_u_32(self.channels, serializer);
   }
 
   @protected

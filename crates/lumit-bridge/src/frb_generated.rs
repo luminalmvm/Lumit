@@ -13285,6 +13285,7 @@ fn wire__crate__api__layer__layer_reference_clip_audio_peaks_impl(
             let api_end_seconds = <f64>::sse_decode(&mut deserializer);
             let api_buckets = <u32>::sse_decode(&mut deserializer);
             let api_multiwave = <bool>::sse_decode(&mut deserializer);
+            let api_stereo = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, BridgeError>((move || {
@@ -13295,6 +13296,7 @@ fn wire__crate__api__layer__layer_reference_clip_audio_peaks_impl(
                         api_end_seconds,
                         api_buckets,
                         api_multiwave,
+                        api_stereo,
                     )?;
                     Ok(output_ok)
                 })())
@@ -24831,6 +24833,7 @@ impl SseDecode for crate::api::layer::BridgeAudioPeaks {
         let mut var_bands = <u32>::sse_decode(deserializer);
         let mut var_buckets = <u32>::sse_decode(deserializer);
         let mut var_values = <Vec<f32>>::sse_decode(deserializer);
+        let mut var_channels = <u32>::sse_decode(deserializer);
         return crate::api::layer::BridgeAudioPeaks {
             duration_seconds: var_durationSeconds,
             start_seconds: var_startSeconds,
@@ -24838,6 +24841,7 @@ impl SseDecode for crate::api::layer::BridgeAudioPeaks {
             bands: var_bands,
             buckets: var_buckets,
             values: var_values,
+            channels: var_channels,
         };
     }
 }
@@ -35351,6 +35355,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeAudioPeaks {
             self.bands.into_into_dart().into_dart(),
             self.buckets.into_into_dart().into_dart(),
             self.values.into_into_dart().into_dart(),
+            self.channels.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -43906,6 +43911,7 @@ impl SseEncode for crate::api::layer::BridgeAudioPeaks {
         <u32>::sse_encode(self.bands, serializer);
         <u32>::sse_encode(self.buckets, serializer);
         <Vec<f32>>::sse_encode(self.values, serializer);
+        <u32>::sse_encode(self.channels, serializer);
     }
 }
 

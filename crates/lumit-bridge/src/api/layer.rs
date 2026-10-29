@@ -2261,8 +2261,11 @@ pub struct BridgeAudioPeaks {
     /// Buckets per band.
     pub buckets: u32,
     /// Band-major triples: band `b`'s bucket `i` is `min`, `max`, `rms` at
-    /// `3 * (b * buckets + i)`, each in −1..1.
+    /// `3 * (b * buckets + i)`, each in −1..1. With two channels, the left's
+    /// bands come first and then the right's.
     pub values: Vec<f32>,
+    /// 1 for the sound mixed, or 2 for left and right apart.
+    pub channels: u32,
 }
 
 impl BridgeAudioPeaks {
@@ -2277,6 +2280,7 @@ impl BridgeAudioPeaks {
             bands: 0,
             buckets: 0,
             values: Vec::new(),
+            channels: 1,
         }
     }
 
@@ -6284,6 +6288,7 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: 1,
             })
         }
 
@@ -6404,6 +6409,7 @@ impl LayerReference {
         end_seconds: f64,
         buckets: u32,
         multiwave: bool,
+        stereo: bool,
     ) -> Result<BridgeAudioPeaks, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let Some(clip) = clips.get(index) else {
@@ -6457,15 +6463,27 @@ impl LayerReference {
                 .map(|i| clip.source_time(start + step * i as f64))
                 .collect();
             let bands = BridgeAudioPeaks::bands_of(multiwave);
-            let mut values = Vec::with_capacity(bands.len() * buckets * 3);
-            for band in &bands {
-                for i in 0..buckets {
-                    let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
-                        values.extend_from_slice(&[0.0, 0.0, 0.0]);
-                        continue;
-                    };
-                    let block = pyramid.window(*band, a, b);
-                    values.extend_from_slice(&[block.min, block.max, block.rms]);
+            // Left over right where asked and the sound has two channels.
+            let sides = if stereo {
+                crate::peaks::channel_pyramids_for(&sound)
+            } else {
+                None
+            };
+            let summaries: Vec<&lumit_audio::peaks::PeakPyramid> = match &sides {
+                Some(both) => both.iter().collect(),
+                None => vec![&pyramid],
+            };
+            let mut values = Vec::with_capacity(summaries.len() * bands.len() * buckets * 3);
+            for summary in &summaries {
+                for band in &bands {
+                    for i in 0..buckets {
+                        let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
+                            values.extend_from_slice(&[0.0, 0.0, 0.0]);
+                            continue;
+                        };
+                        let block = summary.window(*band, a, b);
+                        values.extend_from_slice(&[block.min, block.max, block.rms]);
+                    }
                 }
             }
             Ok(BridgeAudioPeaks {
@@ -6475,6 +6493,7 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: summaries.len() as u32,
             })
         }
 

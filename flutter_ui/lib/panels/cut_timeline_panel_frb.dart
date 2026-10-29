@@ -1517,6 +1517,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           endSeconds: request.endSeconds,
           buckets: request.buckets,
           multiwave: true,
+          stereo: true,
         )
             .then((peaks) {
           if (!mounted || _peakKeys[id] != key) return;

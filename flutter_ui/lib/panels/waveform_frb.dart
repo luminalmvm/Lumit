@@ -227,6 +227,21 @@ class WaveformStyle {
 /// canvas x to that clock: `time(x) = originSeconds + x * secondsPerPixel`.
 /// Both callers are straight lines in x, which is what lets a bar be dragged
 /// or a clip slid with the wave following it and nothing refetched.
+/// One channel of [peaks] alone, for a lane that draws them stacked.
+BridgeAudioPeaks peaksChannel(BridgeAudioPeaks peaks, int channel) {
+  final size = peaks.bands * peaks.buckets * 3;
+  return BridgeAudioPeaks(
+    durationSeconds: peaks.durationSeconds,
+    startSeconds: peaks.startSeconds,
+    endSeconds: peaks.endSeconds,
+    bands: peaks.bands,
+    buckets: peaks.buckets,
+    values: Float32List.sublistView(
+        peaks.values, channel * size, (channel + 1) * size),
+    channels: 1,
+  );
+}
+
 class WaveformPainter extends CustomPainter {
   final BridgeAudioPeaks? peaks;
 
@@ -293,6 +308,28 @@ class WaveformPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final held = peaks;
     if (held == null || held.buckets == 0 || held.values.isEmpty) return;
+    // Two channels: the left over the right, each in half the room, as
+    // Vegas stacks them.
+    if (held.channels == 2) {
+      final half = Size(size.width, size.height / 2);
+      for (var c = 0; c < 2; c++) {
+        canvas.save();
+        canvas.translate(0, half.height * c);
+        WaveformPainter(
+          peaks: peaksChannel(held, c),
+          originSeconds: originSeconds,
+          secondsPerPixel: secondsPerPixel,
+          left: left,
+          right: right,
+          colours: colours,
+          style: style,
+          inset: inset,
+          height: height == null ? null : height! / 2,
+        ).paint(canvas, half);
+        canvas.restore();
+      }
+      return;
+    }
     if (!(held.endSeconds > held.startSeconds)) return;
     // No zoom is no mapping from a column to a moment, so there is no wave to
     // draw — the spectral lane refuses the same reading.

@@ -305,6 +305,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
       endSeconds: request.endSeconds,
       buckets: request.buckets,
       multiwave: widget.style.needsBands,
+      stereo: false,
     )
         .then((peaks) {
       if (!mounted || _peakKeys[id] != key) return;
