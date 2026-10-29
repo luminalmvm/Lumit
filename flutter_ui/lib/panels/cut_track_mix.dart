@@ -90,6 +90,11 @@ class CutTrackMix extends StatelessWidget {
       onChanged();
     }
 
+    // A locked track, or a value an expression drives, is shown and not
+    // dragged.
+    bool live(BridgeScalar s) =>
+        !info.switches.locked && s is! BridgeScalar_Expression;
+
     if (!sound) {
       final level = info.transform.opacity;
       return _MixBar(
@@ -100,7 +105,8 @@ class CutTrackMix extends StatelessWidget {
         max: 100,
         reset: 100,
         fill: t.accent,
-        text: (v) => '${v.round()} ${l10n.unitSymbolPercent}',
+        enabled: live(level),
+        text: (v) => '${v.round()}${l10n.unitSymbolPercent}',
         onCommit: (v) => write(
             level,
             v,
@@ -119,9 +125,10 @@ class CutTrackMix extends StatelessWidget {
         max: volumeBandTopDb,
         reset: 0,
         fill: t.accent,
+        enabled: live(volume),
         text: (v) => v <= volumeBandFloorDb
             ? l10n.volumeNegInf
-            : '${v.toStringAsFixed(1)} dB',
+            : '${v.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
         onCommit: (v) => write(volume, v, (s) => layer.setVolumeDb(value: s)),
       ),
       // The pan band's colour, so the bar and the line on the lane match.
@@ -134,6 +141,7 @@ class CutTrackMix extends StatelessWidget {
         reset: 0,
         origin: 0,
         fill: t.warning,
+        enabled: live(pan),
         text: panLabel,
         onCommit: (v) => write(pan, v, (s) => layer.setPan(value: s)),
       ),
@@ -168,6 +176,9 @@ class _MixBar extends StatefulWidget {
   final String Function(double) text;
   final ValueChanged<double> onCommit;
 
+  /// False shows the value dimmed and takes no drag.
+  final bool enabled;
+
   const _MixBar({
     super.key,
     required this.label,
@@ -178,6 +189,7 @@ class _MixBar extends StatefulWidget {
     required this.fill,
     required this.text,
     required this.onCommit,
+    required this.enabled,
     this.origin,
   });
 
@@ -193,7 +205,7 @@ class _MixBarState extends State<_MixBar> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final shown = _live ?? widget.value;
-    final label = t.mono.copyWith(fontSize: 9, color: t.textMuted);
+    final value = t.mono.copyWith(fontSize: 9, color: t.textPrimary);
     return LayoutBuilder(builder: (context, box) {
       final width = box.maxWidth.isFinite ? box.maxWidth : 120.0;
       double xOf(double v) =>
@@ -201,7 +213,7 @@ class _MixBarState extends State<_MixBar> {
           width;
       final from = xOf(widget.origin ?? widget.min);
       final to = xOf(shown);
-      return HoverMark(
+      final bar = HoverMark(
         cursor: SystemMouseCursors.resizeLeftRight,
         builder: (context, lit) => GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -240,17 +252,31 @@ class _MixBarState extends State<_MixBar> {
                 bottom: 0,
                 // Lifts a shade under the pointer.
                 child: ColoredBox(
-                    color: widget.fill.withValues(alpha: 0.4 + 0.2 * lit)),
+                    color: widget.fill.withValues(alpha: 0.25 + 0.2 * lit)),
               ),
+              // The origin, so Pan at centre reads as a centred slider.
+              if (widget.origin != null)
+                Positioned(
+                  left: from - 0.5,
+                  width: 1,
+                  top: 0,
+                  bottom: 0,
+                  child: ColoredBox(color: t.textMuted),
+                ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 child: Row(children: [
-                  Text(widget.label, style: label, maxLines: 1),
-                  const SizedBox(width: 4),
+                  // Too narrow for both, the value wins.
+                  if (width >= 72) ...[
+                    Text(widget.label,
+                        style: t.small.copyWith(color: t.textMuted),
+                        maxLines: 1),
+                    const SizedBox(width: 4),
+                  ],
                   Expanded(
                     child: Text(
                       widget.text(shown),
-                      style: label.copyWith(color: t.textPrimary),
+                      style: value,
                       textAlign: TextAlign.right,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -261,6 +287,10 @@ class _MixBarState extends State<_MixBar> {
             ]),
           ),
         ),
+      );
+      return IgnorePointer(
+        ignoring: !widget.enabled,
+        child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: bar),
       );
     });
   }
