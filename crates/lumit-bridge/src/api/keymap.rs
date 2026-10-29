@@ -159,7 +159,7 @@ static KEYMAP: OnceLock<Mutex<Keymap>> = OnceLock::new();
 /// be a far worse outcome than carrying on with the map as it stands.
 #[frb(ignore)]
 fn with_keymap<R>(f: impl FnOnce(&mut Keymap) -> R) -> R {
-    let mutex = KEYMAP.get_or_init(|| Mutex::new(lumit_keymap::default_keymap()));
+    let mutex = KEYMAP.get_or_init(|| Mutex::new(lumit_keymap::defaults::default_keymap()));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
     f(&mut guard)
 }
@@ -313,7 +313,7 @@ pub fn keymap_unbind(context: BridgeKeyContext, action: String) -> Vec<BridgeKey
 pub fn keymap_reset_binding(context: BridgeKeyContext, action: String) -> Vec<BridgeKeymapGroup> {
     let action = ActionId(action);
     let ctx: KeyContext = context.into();
-    match lumit_keymap::default_keymap()
+    match lumit_keymap::defaults::default_keymap()
         .binding_for(ctx, &action)
         .cloned()
     {
@@ -334,9 +334,9 @@ pub fn keymap_load_preset(preset: BridgeKeymapPreset) -> Vec<BridgeKeymapGroup> 
 #[frb(ignore)]
 fn preset_map(preset: BridgeKeymapPreset) -> Keymap {
     match preset {
-        BridgeKeymapPreset::Lumit => lumit_keymap::default_keymap(),
-        BridgeKeymapPreset::AfterEffects => lumit_keymap::after_effects_preset(),
-        BridgeKeymapPreset::Vegas => lumit_keymap::vegas_preset(),
+        BridgeKeymapPreset::Lumit => lumit_keymap::defaults::default_keymap(),
+        BridgeKeymapPreset::AfterEffects => lumit_keymap::defaults::after_effects_preset(),
+        BridgeKeymapPreset::Vegas => lumit_keymap::defaults::vegas_preset(),
     }
 }
 
@@ -481,7 +481,7 @@ pub fn keymap_from_json(json: String) -> Result<Vec<BridgeKeymapGroup>, BridgeEr
             "the file holds no bindings".to_string(),
         ));
     }
-    with_keymap(|km| *km = lumit_keymap::with_new_defaults(parsed));
+    with_keymap(|km| *km = lumit_keymap::defaults::with_new_defaults(parsed));
     Ok(keymap_groups())
 }
 
