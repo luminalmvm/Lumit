@@ -355,6 +355,27 @@ void envelopeTests() {
         }
       }
     });
+
+    // A span's curve decides which frames play, and it has to survive the
+    // drags that re-integrate the keys around it.
+    test('a span keeps its curve through speed and time edits', () {
+      final keys = [key(0, 1, 0.0), key(2, 1, 2.0), key(4, 1, 4.0)];
+      var out = setEnvelopeCurve(keys, 0, SpeedCurve.fast);
+      out = setEnvelopeCurve(out, 1, SpeedCurve.hold);
+      out = setEnvelopeSpeed(out, 1, 300);
+      out = moveEnvelopePoint(out, 1, rat(1, 1));
+      expect(envelopeCurves(out), [SpeedCurve.fast, SpeedCurve.hold]);
+      expect(envelopeSpeeds(out), [
+        closeTo(100, 1e-6),
+        closeTo(300, 1e-6),
+        closeTo(100, 1e-6),
+      ]);
+      // Fast covers two thirds of its step on average: 1s at 100 → 300.
+      expect(out[1].value, closeTo((100 + 200 * 2 / 3) / 100, 1e-9));
+      // Hold plays the whole of the next span at 300%.
+      expect(evaluateKeysSpeed(out, 2.5), closeTo(3, 1e-6));
+      expect(out[2].value - out[1].value, closeTo(3 * 3, 1e-9));
+    });
   });
 }
 
