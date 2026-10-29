@@ -95,9 +95,13 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
           speedGraph: true, sequenceLayers: answer!.sequenceLayers);
       if (answer.shortcuts) {
         await keymap?.loadPreset(BridgeKeymapPreset.vegas);
-        workspace.interface.cutVegasDrags = true;
-        workspace.settingsChanged();
       }
+      // Vegas's mouse, and a clip dropped over another crossfading into it
+      // rather than cutting it away.
+      workspace.interface
+        ..cutVegasDrags = true
+        ..cutAutoCrossfade = true;
+      workspace.settingsChanged();
       // Cut is where a Vegas editor works: tracks, clips and a split that
       // stays on its track.
       workspace.applyWorkspacePreset(WorkspacePreset.cut);
@@ -129,10 +133,11 @@ class _FirstRunState extends State<_FirstRun> {
   /// together are what the card describes.
   bool _retimeOnly = false;
 
-  /// The ticks for loading After Effects' or Vegas' own shortcuts. Clear to
-  /// begin with: Lumit's keys stay unless asked.
+  /// The ticks for loading After Effects' or Vegas' own shortcuts. After
+  /// Effects' is clear to begin with, so Lumit's keys stay unless asked;
+  /// Vegas's is ticked, since S has to split for a Vegas hand from the start.
   bool _aeKeys = false;
-  bool _vegasKeys = false;
+  bool _vegasKeys = true;
 
   /// Ticked to begin with. Nothing is downloaded either way — this is
   /// permission to look, not permission to fetch.
