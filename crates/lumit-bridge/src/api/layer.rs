@@ -6499,7 +6499,7 @@ impl LayerReference {
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, start_seconds, end_seconds, buckets, multiwave);
+            let _ = (item, start_seconds, end_seconds, buckets, multiwave, stereo);
             Ok(BridgeAudioPeaks::empty())
         }
     }
