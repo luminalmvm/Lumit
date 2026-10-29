@@ -177,6 +177,19 @@ int cutPictureCount(List<CutTrack> tracks) {
 String cutThumbKey(BridgeClip clip) =>
     '${clip.id}@${clip.startFrame}@${clip.retimed}';
 
+/// How far apart the pictures along a clip are asked for, in pixels. The
+/// painter draws whole frames and takes the nearest one it has.
+const double cutFilmStep = 48;
+
+/// How many comp frames into its clip picture [k] along shows, at [perFrame]
+/// pixels a frame.
+int cutFilmOffset(int k, double perFrame) =>
+    perFrame <= 0 ? 0 : (k * cutFilmStep / perFrame).round();
+
+/// The key a picture [offset] comp frames into [clip] is held under.
+String cutFilmKey(BridgeClip clip, int offset) =>
+    '${cutThumbKey(clip)}+$offset';
+
 /// Where each track's top stands, measured down from the top of the first,
 /// with the foot of the last on the end: one more entry than [heights].
 List<double> cutTrackTops(List<double> heights) {

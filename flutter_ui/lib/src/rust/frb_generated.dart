@@ -1510,7 +1510,8 @@ abstract class BridgeLibApi extends BaseApi {
   Future<BridgeRenderedFrame?> crateApiLayerLayerReferenceClipThumbnail(
       {required LayerReference that,
       required UuidValue clip,
-      required int maxEdge});
+      required int maxEdge,
+      double? along});
 
   void crateApiLayerLayerReferenceConvertFromSequenced(
       {required LayerReference that});
@@ -13281,13 +13282,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   Future<BridgeRenderedFrame?> crateApiLayerLayerReferenceClipThumbnail(
       {required LayerReference that,
       required UuidValue clip,
-      required int maxEdge}) {
+      required int maxEdge,
+      double? along}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(clip, serializer);
         sse_encode_u_32(maxEdge, serializer);
+        sse_encode_opt_box_autoadd_f_64(along, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 372, port: port_);
       },
@@ -13297,7 +13300,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiLayerLayerReferenceClipThumbnailConstMeta,
-      argValues: [that, clip, maxEdge],
+      argValues: [that, clip, maxEdge, along],
       apiImpl: this,
     ));
   }
@@ -13305,7 +13308,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiLayerLayerReferenceClipThumbnailConstMeta =>
       const TaskConstMeta(
         debugName: "layer_reference_clip_thumbnail",
-        argNames: ["that", "clip", "maxEdge"],
+        argNames: ["that", "clip", "maxEdge", "along"],
       );
 
   @override

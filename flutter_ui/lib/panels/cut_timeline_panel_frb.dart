@@ -1343,7 +1343,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         if (of.containsKey(id)) id
     };
     _thumbs.removeWhere((key, image) {
-      if (keys.contains(key)) return false;
+      // The pictures along a clip go with the clip.
+      if (keys.contains(key.split('+').first)) return false;
       image?.dispose();
       return true;
     });
@@ -1468,6 +1469,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final id = clip.id.toString();
         if (!track.sound && !_soundOnPicture.contains(id)) {
           _wantThumb(track, clip);
+          _wantFilm(track, clip, axis, fps, viewLeft, viewRight);
           // A picture clip that is heard brings its sound as well, for the
           // band along the foot of its box.
           final heard = track.entry.info.switches.audible &&
@@ -1548,12 +1550,34 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     });
   }
 
-  void _wantThumb(CutTrack track, BridgeClip clip) {
-    final key = cutThumbKey(clip);
+  void _wantThumb(CutTrack track, BridgeClip clip) =>
+      _fetchThumb(track, clip, cutThumbKey(clip), null);
+
+  /// The pictures along a picture clip, as Vegas draws its frames across an
+  /// event: one a step apart, for the steps on screen. A retimed clip's are
+  /// read through its speed, so a ramp shows in its pictures.
+  void _wantFilm(CutTrack track, BridgeClip clip, TimelineAxis axis,
+      double fps, double viewLeft, double viewRight) {
+    if (clip.sourceIsComp || fps <= 0) return;
+    final start = clip.startFrame.toInt();
+    final length = clip.endFrame.toInt() - start;
+    final (left, width) = cutClipBox(axis, start, clip.endFrame.toInt());
+    final count = min(40, (width / cutFilmStep).floor());
+    for (var k = 1; k <= count; k++) {
+      final x = left + k * cutFilmStep;
+      if (x + cutFilmStep < viewLeft || x > viewRight) continue;
+      final offset = cutFilmOffset(k, axis.perFrame);
+      if (offset >= length) break;
+      _fetchThumb(track, clip, cutFilmKey(clip, offset), offset / fps);
+    }
+  }
+
+  void _fetchThumb(
+      CutTrack track, BridgeClip clip, String key, double? along) {
     if (_thumbs.containsKey(key)) return;
     _thumbs[key] = null;
     track.entry.layer
-        .clipThumbnail(clip: clip.id, maxEdge: _thumbEdge)
+        .clipThumbnail(clip: clip.id, maxEdge: _thumbEdge, along: along)
         .then((frame) {
       if (!mounted || frame == null || frame.width == 0) return;
       ui.decodeImageFromPixels(

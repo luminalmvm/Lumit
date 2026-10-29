@@ -13437,6 +13437,7 @@ fn wire__crate__api__layer__layer_reference_clip_thumbnail_impl(
             let api_that = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_clip = <uuid::Uuid>::sse_decode(&mut deserializer);
             let api_max_edge = <u32>::sse_decode(&mut deserializer);
+            let api_along = <Option<f64>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, BridgeError>((move || {
@@ -13444,6 +13445,7 @@ fn wire__crate__api__layer__layer_reference_clip_thumbnail_impl(
                         &api_that,
                         api_clip,
                         api_max_edge,
+                        api_along,
                     )?;
                     Ok(output_ok)
                 })())

@@ -535,8 +535,10 @@ class CutTrackPainter extends CustomPainter {
     }
     final above =
         Rect.fromLTRB(box.left, box.top, box.right, box.bottom - band);
-    // The frame the clip opens on, at the head of the box, then the name.
+    // The frame the clip opens on, at the head of the box, then the frames
+    // along it as Vegas draws them, and the name over them at the top.
     var from = clipEdgeWidth + 4;
+    var strip = false;
     final image = thumbs[cutThumbKey(clip)];
     if (image != null && image.height > 0) {
       final inner = above.height - 2;
@@ -555,15 +557,35 @@ class CutTrackPainter extends CustomPainter {
         Rect.fromLTWH(box.left + clipEdgeWidth, box.top + 1, wide, inner),
         Paint()..filterQuality = FilterQuality.low,
       );
+      // Each later frame is the nearest one fetched, or the one before it
+      // until it arrives, so the strip never shows a hole.
+      var last = image;
+      for (var x = box.left + clipEdgeWidth + wide; x < box.right - 1;
+          x += wide) {
+        final k = ((x - box.left) / cutFilmStep).round();
+        final frame = k < 1
+            ? null
+            : thumbs[cutFilmKey(clip, cutFilmOffset(k, axis.perFrame))];
+        if (frame != null && frame.height > 0) last = frame;
+        canvas.drawImageRect(
+          last,
+          Rect.fromLTWH((last.width - shown) / 2, 0, shown,
+              last.height.toDouble()),
+          Rect.fromLTWH(x, box.top + 1, wide, inner),
+          Paint()..filterQuality = FilterQuality.low,
+        );
+        strip = true;
+      }
       canvas.restore();
-      from += wide + 2;
+      if (!strip) from += wide + 2;
     }
     final nameBand =
-        badges.isEmpty ? above.height : min(above.height, 20.0);
+        badges.isEmpty && !strip ? above.height : min(above.height, 20.0);
     final chips = _chips(canvas, clip, box, band: nameBand, badges: badges);
     _name(canvas, clip.sourceName, box,
         band: nameBand,
         room: chips,
+        ground: strip,
         from: _glyph(canvas, clip, box, from: from, band: nameBand));
     _badges(canvas, clip, badges);
   }

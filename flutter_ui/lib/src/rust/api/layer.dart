@@ -2991,13 +2991,16 @@ class LayerReference {
   /// which clip is which. The moment is read through the clip's own map, so
   /// a re-speeded clip still shows the frame it actually opens on.
   ///
+  /// `along` asks for the frame that many seconds into the clip instead,
+  /// for the pictures drawn across it.
+  ///
   /// `None` when the media will not open, when the source is a comp rather
   /// than footage (there is nothing on disk to decode), or in a build with
   /// no media feature. Decoded once per (item, size, frame) and cached.
   Future<BridgeRenderedFrame?> clipThumbnail(
-          {required UuidValue clip, required int maxEdge}) =>
+          {required UuidValue clip, required int maxEdge, double? along}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceClipThumbnail(
-          that: this, clip: clip, maxEdge: maxEdge);
+          that: this, clip: clip, maxEdge: maxEdge, along: along);
 
   /// Turn a Sequence layer back into a plain Footage layer.
   ///

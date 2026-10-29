@@ -243,7 +243,9 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
     final key = '${clip.id}@${clip.startFrame}@${clip.retimed}';
     if (_thumbs.containsKey(key)) return;
     _thumbs[key] = null;
-    widget.entry.layer.clipThumbnail(clip: clip.id, maxEdge: 96).then((frame) {
+    widget.entry.layer
+        .clipThumbnail(clip: clip.id, maxEdge: 96, along: null)
+        .then((frame) {
       if (!mounted || frame == null || frame.width == 0) return;
       ui.decodeImageFromPixels(
         frame.rgba,

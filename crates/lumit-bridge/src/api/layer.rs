@@ -4992,6 +4992,9 @@ impl LayerReference {
     /// which clip is which. The moment is read through the clip's own map, so
     /// a re-speeded clip still shows the frame it actually opens on.
     ///
+    /// `along` asks for the frame that many seconds into the clip instead,
+    /// for the pictures drawn across it.
+    ///
     /// `None` when the media will not open, when the source is a comp rather
     /// than footage (there is nothing on disk to decode), or in a build with
     /// no media feature. Decoded once per (item, size, frame) and cached.
@@ -4999,15 +5002,16 @@ impl LayerReference {
         &self,
         clip: Uuid,
         max_edge: u32,
+        along: Option<f64>,
     ) -> Result<Option<crate::api::state::BridgeRenderedFrame>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let clip = &clips[index];
         let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
             return Ok(None);
         };
-        // The clip's own opening source moment, through whatever map it plays
-        // by — which is the identity when it has none of its own.
-        let opens_at = clip.source_time(clip.place_start.to_f64());
+        // The clip's own source moment, through whatever map it plays by —
+        // which is the identity when it has none of its own.
+        let opens_at = clip.source_time(clip.place_start.to_f64() + along.unwrap_or(0.0));
 
         #[cfg(feature = "media")]
         {
@@ -5066,7 +5070,7 @@ impl LayerReference {
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, opens_at, max_edge);
+            let _ = (item, opens_at, max_edge, along);
             Ok(None)
         }
     }
