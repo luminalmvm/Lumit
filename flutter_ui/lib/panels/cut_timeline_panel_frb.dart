@@ -1333,6 +1333,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         if (mounted) _clearDrag();
       });
     }
+    // The picked clips as they stood, so a cut that gives a picked clip new
+    // pieces leaves the pieces picked: an S on the selection keeps it.
+    final picked = <String, (String, int, int)>{
+      for (final track in _tracks)
+        for (final clip in track.clips)
+          if (_selected.contains(clip.id.toString()))
+            clip.id.toString(): (
+              track.id,
+              clip.startFrame.toInt(),
+              clip.endFrame.toInt()
+            ),
+    };
+    final known = _trackOfClip;
     _tracksRevision = revision;
     _tracksComp = comp;
     _anyOrder = anyOrder;
@@ -1400,10 +1413,24 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       for (final MapEntry(key: id, value: near) in direct.entries)
         id: {for (final m in near) ...?direct[m]},
     };
-    _selected = {
+    final kept = {
       for (final id in _selected)
         if (of.containsKey(id)) id
     };
+    for (final MapEntry(key: id, value: (row, from, to)) in picked.entries) {
+      if (of.containsKey(id)) continue;
+      for (final track in _tracks) {
+        if (track.id != row) continue;
+        for (final clip in track.clips) {
+          final piece = clip.id.toString();
+          if (known.containsKey(piece)) continue;
+          if (clip.startFrame.toInt() < to && clip.endFrame.toInt() > from) {
+            kept.add(piece);
+          }
+        }
+      }
+    }
+    _selected = kept;
     _thumbs.removeWhere((key, image) {
       // The pictures along a clip go with the clip.
       if (keys.contains(key.split('+').first)) return false;
