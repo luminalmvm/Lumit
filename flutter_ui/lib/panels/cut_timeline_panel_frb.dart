@@ -2004,8 +2004,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         return;
       }
     }
-    // A sound clip's gain line, with Select: dragged, the clip is turned
-    // down or back up, as Vegas's event level is.
+    // A clip's level line, with Select: gain on a sound clip, opacity on a
+    // picture clip. Dragged, the clip is turned down or back up, as Vegas's
+    // event level and opacity are.
     if (fade == null &&
         hit != null &&
         index != null &&
@@ -2015,13 +2016,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final id = hit.clip.id.toString();
       _lastPressed = id;
       setState(() => _selected = _withMates(id));
-      // Two clicks put the level back at 0 dB, as Vegas's envelopes do.
+      // Two clicks put the level back at 0 dB or full, as Vegas's envelopes
+      // do.
       if (_gainTaps.tap(at: at, slop: _clickSlop * 2)) {
-        if (hit.clip.gainDb != 0) {
-          try {
-            track.entry.layer.setClipGain(clip: hit.clip.id, db: 0);
-          } catch (_) {}
-          _afterCut(BridgeCutResult.done);
+        final full = _heard(track, hit.clip) ? 0.0 : 1.0;
+        if (_levelOf(track, hit.clip) != full) {
+          _setLevel(track, hit.clip, full);
         }
         return;
       }
@@ -2031,7 +2031,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         travelled: 0,
         height: _tops[index + 1] - _tops[index],
       );
-      _gainLive.value = (clip: id, db: hit.clip.gainDb);
+      _gainLive.value = (clip: id, db: _levelOf(track, hit.clip));
       _escape.begin(() {
         _gainHeld = null;
         _gainLive.value = null;
@@ -2133,19 +2133,30 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _escape.begin(_clearDrag);
   }
 
-  /// Whether [at] is on [clip]'s gain line: a sound clip, within a few pixels
-  /// of where the painter draws the line.
+  /// Whether [clip] is drawn as sound, so its line is gain rather than
+  /// opacity.
+  bool _heard(CutTrack track, BridgeClip clip) =>
+      track.sound || _soundOnPicture.contains(clip.id.toString());
+
+  /// A clip's level as its line reads it: gain in dB on a sound clip, opacity
+  /// from 0 to 1 on a picture clip.
+  double _levelOf(CutTrack track, BridgeClip clip) =>
+      _heard(track, clip) ? clip.gainDb : clip.opacity;
+
+  /// Whether [at] is on [clip]'s level line, within a few pixels of where the
+  /// painter draws it: gain on a sound clip, opacity on a picture clip.
   bool _onGainLine(CutTrack track, int index, BridgeClip clip, Offset at) {
-    if (!(track.sound || _soundOnPicture.contains(clip.id.toString()))) {
-      return false;
-    }
+    if (track.kind != CutTrackKind.picture && !track.sound) return false;
+    final tall = _tops[index + 1] - _tops[index];
     final y = _tops[index] +
-        audioClipGainY(clip.gainDb, _tops[index + 1] - _tops[index]);
+        (_heard(track, clip)
+            ? audioClipGainY(clip.gainDb, tall)
+            : cutOpacityY(clip.opacity, tall));
     return (at.dy - y).abs() <= 3.5;
   }
 
-  /// The gain line followed: the level the drag asks for, from 0 dB down to
-  /// the band's floor, said beside the pointer.
+  /// The level line followed: gain from 0 dB down to the band's floor, or
+  /// opacity from 100% down to none, said beside the pointer.
   void _gainMove(Offset at, double dy) {
     final held = _gainHeld;
     if (held == null || !_escape.running) return;
@@ -2154,22 +2165,39 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final fine = keys.isControlPressed || keys.isMetaPressed;
     final travelled = held.travelled + dy * (fine ? 0.1 : 1);
     final tall = max(3.0, held.height - 4);
-    final db = (held.clip.gainDb - travelled / (tall - 2) * -volumeBandFloorDb)
-        .clamp(volumeBandFloorDb, 0.0);
+    final heard = _heard(held.track, held.clip);
+    final value = heard
+        ? (held.clip.gainDb - travelled / (tall - 2) * -volumeBandFloorDb)
+            .clamp(volumeBandFloorDb, 0.0)
+        : (held.clip.opacity - travelled / (tall - 2)).clamp(0.0, 1.0);
     _gainHeld = (
       track: held.track,
       clip: held.clip,
       travelled: travelled,
       height: held.height,
     );
-    _gainLive.value = (clip: held.clip.id.toString(), db: db);
+    _gainLive.value = (clip: held.clip.id.toString(), db: value);
     _hint.value = (
       at: at,
       row: max(0, _tracks.indexWhere((t) => t.id == held.track.id)),
-      text: db <= volumeBandFloorDb
-          ? l10n.volumeNegInf
-          : '${db.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
+      text: !heard
+          ? '${(value * 100).round()}${l10n.unitSymbolPercent}'
+          : value <= volumeBandFloorDb
+              ? l10n.volumeNegInf
+              : '${value.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
     );
+  }
+
+  /// A clip's level written: gain on a sound clip, opacity on a picture one.
+  void _setLevel(CutTrack track, BridgeClip clip, double value) {
+    try {
+      if (_heard(track, clip)) {
+        track.entry.layer.setClipGain(clip: clip.id, db: value);
+      } else {
+        track.entry.layer.setClipOpacity(clip: clip.id, opacity: value);
+      }
+    } catch (_) {}
+    _afterCut(BridgeCutResult.done);
   }
 
   /// Let go: the level is written once, and only where it moved.
@@ -2182,11 +2210,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _hint.value = null;
     _overGain.value = false;
     if (held == null || live == null || !commit) return;
-    if (live.db == held.clip.gainDb) return;
-    try {
-      held.track.entry.layer.setClipGain(clip: held.clip.id, db: live.db);
-    } catch (_) {}
-    _afterCut(BridgeCutResult.done);
+    if (live.db == _levelOf(held.track, held.clip)) return;
+    _setLevel(held.track, held.clip, live.db);
   }
 
   /// The button of [clip] under [at], drawn where the lane painter draws it.

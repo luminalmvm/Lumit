@@ -614,6 +614,26 @@ class CutTrackPainter extends CustomPainter {
         ground: strip,
         from: _glyph(canvas, clip, box, from: from, band: nameBand));
     _badges(canvas, clip, badges);
+    _opacityLine(canvas, clip, box);
+  }
+
+  /// A picture clip's opacity as a line across it, once it is below full or
+  /// while it is dragged: at the top for full, at the foot for none. At full
+  /// it is the box's own top edge, where the pointer still finds it.
+  void _opacityLine(Canvas canvas, BridgeClip clip, Rect box) {
+    final live = gain.value;
+    final mine = live != null && live.clip == clip.id.toString();
+    final opacity = mine ? live.db : clip.opacity;
+    if (!mine && opacity >= 1) return;
+    final y = box.top -
+        cutClipInset +
+        cutOpacityY(opacity, box.height + cutClipInset * 2);
+    canvas.drawLine(
+        Offset(box.left + clipEdgeWidth, y),
+        Offset(box.right - 1, y),
+        Paint()
+          ..strokeWidth = 1.4
+          ..color = colours.rising);
   }
 
   /// A sound clip's level, as a line across it: at the top for 0 dB, lower

@@ -172,6 +172,11 @@ int cutPictureCount(List<CutTrack> tracks) {
   return at < 0 ? tracks.length : at;
 }
 
+/// Where a picture clip's opacity line stands in a track [height] tall: at
+/// the box's top at full, at its foot at none, as Vegas draws event opacity.
+double cutOpacityY(double opacity, double height) =>
+    2 + (1 - opacity.clamp(0.0, 1.0)) * max(0.0, height - 4);
+
 /// What a clip's thumbnail is filed under: the source frame it opens on is
 /// part of the key, so a head trim, a slip or a re-speed fetches again, and a
 /// move along the comp keeps the pictures it has.
