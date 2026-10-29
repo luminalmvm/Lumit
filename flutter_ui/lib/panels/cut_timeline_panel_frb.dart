@@ -1318,6 +1318,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         anyOrder == _anyOrder) {
       return;
     }
+    // The document changed under a gesture, an undo mid-drag say: the
+    // gesture is let go, since the rows and clips it holds may be gone. The
+    // painters are told now; the readouts after the frame.
+    if (_tracksRevision != null &&
+        revision != _tracksRevision &&
+        (_press != null || _gainHeld != null)) {
+      _press = null;
+      _gainHeld = null;
+      _escape.end();
+      _drag.value = null;
+      _gainLive.value = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _clearDrag();
+      });
+    }
     _tracksRevision = revision;
     _tracksComp = comp;
     _anyOrder = anyOrder;
@@ -1556,7 +1571,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           if (!mounted || _peakKeys[id] != key) return;
           _peaks[id] = peaks;
           _pictures.value++;
-        });
+        }, onError: (Object _) {});
       }
     }
     // A clip that has left the view keeps nothing: its window is stale by
@@ -1602,7 +1617,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       if (!mounted || _peakKeys[track.id] != key) return;
       _peaks[track.id] = peaks;
       _pictures.value++;
-    });
+    }, onError: (Object _) {});
   }
 
   void _wantThumb(CutTrack track, BridgeClip clip) =>
@@ -1648,7 +1663,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _thumbs[key] = image;
         _pictures.value++;
       });
-    });
+    }, onError: (Object _) {});
   }
 
   // ---------------------------------------------------------------- the zoom
@@ -2342,6 +2357,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final axis = _laneAxis;
     final from = axis.frameAtExact(box.left).floor();
     final to = axis.frameAtExact(box.right).ceil();
+    // A box wholly under the last track catches nothing.
+    if (_tracks.isEmpty || box.top >= _tops[_tracks.length]) {
+      setState(() => _selected = additive ? _selected : {});
+      return;
+    }
     final first = cutTrackAt(_tracks, max(0.0, box.top), _tops) ?? 0;
     final last = cutTrackAt(_tracks, box.bottom, _tops) ?? _tracks.length - 1;
     final caught = <String>{if (additive) ..._selected};
