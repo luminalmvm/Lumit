@@ -14,7 +14,7 @@
 import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show mapEquals, setEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -166,8 +166,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// The clip an effect or a preset in hand is over.
   final ValueNotifier<String?> _dropOn = ValueNotifier<String?>(null);
 
-  /// The engine's blend mode names, read once.
+  /// The engine's blend mode names, read once, and as they are said, made
+  /// once so the lanes' painters see the same list from one build to the
+  /// next and repaint only for what changed.
   List<String> _blendNames = const [];
+  late final List<String> _blendLabels = [
+    for (final name in _blendNames) engineLabel(name)
+  ];
 
   double get _zoom => _zoomMotion.value;
   double get _maxZoom => max(1.0, _laneFrames / _framesAtFullZoom.toDouble());
@@ -479,7 +484,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   BridgeCutMove _how({double sub = 0, bool copy = false}) => BridgeCutMove(
         overlap: _autoCrossfade,
         ripple: _autoRipple && !copy,
-        nudgeTicks: (sub / max(1e-9, _ui?.model.fps ?? 0) * 48000).round(),
+        nudgeTicks: (sub / max(1e-9, _ui?.model.heldFps ?? 0) * 48000).round(),
       );
 
   // -------------------------------------------------------- the track heights
@@ -2121,7 +2126,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       CutTrack? track, int? index, Offset at, CutTool tool) {
     if (track == null || index == null || tool != CutTool.select) return null;
     final fade = cutFadeGrabAt(
-        track, _laneAxis, at.dx, at.dy - _tops[index], ui.model.fps);
+        track, _laneAxis, at.dx, at.dy - _tops[index], ui.model.heldFps);
     if (fade == null) return null;
     return (
       clip: fade.clip,
@@ -2135,11 +2140,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// clip has gone, or how long a fade in hand now is.
   void _showDrag(_Press held) {
     final drag = _dragOf(held);
-    _drag.value = drag;
+    final was = _drag.value;
+    if (was == null || !_sameDrag(was, drag)) _drag.value = drag;
     final row = cutTrackAt(_tracks, held.at.dy, _tops) ?? held.track ?? 0;
     final String text;
     if (held.fade case final into?) {
-      final frames = cutFadeFrames(held.clip!, _ui?.model.fps ?? 0,
+      final frames = cutFadeFrames(held.clip!, _ui?.model.heldFps ?? 0,
           into: into, shift: drag.shift);
       text = l10n.cutFadeLength('$frames');
     } else if (held.stretch && held.clip != null) {
@@ -2396,7 +2402,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // A fade handle moves the ramp's inner end, held inside the clip, and
     // no box at all.
     if (held.fade case final into?) {
-      final fps = _ui?.model.fps ?? 0;
+      final fps = _ui?.model.heldFps ?? 0;
       final now = cutFadeFrames(clip, fps, into: into);
       final snapped = snappedDelta(
         rawFrames: rawFrames,
@@ -2514,11 +2520,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       rippleFrom: tool == CutTool.ripple && held.grab != BarGrab.move
           ? to
           : moveRipple,
-      others: others,
+      others: others.isEmpty ? const {} : others,
       fade: null,
       sub: sub,
     );
   }
+
+  /// Whether two drags draw the same, so a pointer move that changes no
+  /// frame repaints no lane.
+  static bool _sameDrag(CutDrag a, CutDrag b) =>
+      a.tool == b.tool &&
+      a.grab == b.grab &&
+      a.shift == b.shift &&
+      a.sub == b.sub &&
+      a.track == b.track &&
+      a.trackShift == b.trackShift &&
+      a.editPoint == b.editPoint &&
+      a.rippleFrom == b.rippleFrom &&
+      a.fade == b.fade &&
+      setEquals(a.clips, b.clips) &&
+      mapEquals(a.others, b.others);
 
   /// Whether every one of [clips] stands on a sound track.
   bool _soundAlone(Set<String> clips) {
@@ -4194,7 +4215,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         Listenable.merge(
             [_drag, _hover, _hLane, _pictures, _dropOn, _gainLive]);
     final divider = _tops[cutPictureCount(_tracks)];
-    final blendNames = [for (final name in _blendNames) engineLabel(name)];
+    final blendNames = _blendLabels;
     return RazorOverlay(
       active: razor,
       snapX: (x) => axis.xOf(_razorFrameAt(x)),
@@ -4438,8 +4459,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                     width: axis.width,
                                     top: _tops[i] + 3,
                                     height: max(0, heights[i] - 6),
-                                    child: _speedLine(ui, comp, _tracks[i],
-                                        axis: axis, fps: fps),
+                                    // Its own layer, so a readout or a box
+                                    // moving over the lanes repaints none of
+                                    // the lines.
+                                    child: RepaintBoundary(
+                                      child: _speedLine(ui, comp, _tracks[i],
+                                          axis: axis, fps: fps),
+                                    ),
                                   ),
                             ],
                           ),

@@ -172,11 +172,11 @@ int cutPictureCount(List<CutTrack> tracks) {
   return at < 0 ? tracks.length : at;
 }
 
-/// What a clip's thumbnail is filed under: the frame it opens on is part of
-/// the key, so a cut or a re-speed fetches the frame the clip now starts on.
-// Keyed on the clip's map as well, which a slip or a speed edit changes.
+/// What a clip's thumbnail is filed under: the source frame it opens on is
+/// part of the key, so a head trim, a slip or a re-speed fetches again, and a
+/// move along the comp keeps the pictures it has.
 String cutThumbKey(BridgeClip clip) =>
-    '${clip.id}@${clip.startFrame}@${clip.retime.hashCode}';
+    '${clip.id}@${clip.sourceIn.num}/${clip.sourceIn.den}@${clip.retime.hashCode}';
 
 /// How far apart the pictures along a clip are asked for, in pixels. The
 /// painter draws whole frames and takes the nearest one it has.
