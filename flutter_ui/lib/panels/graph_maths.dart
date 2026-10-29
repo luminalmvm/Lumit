@@ -1014,7 +1014,10 @@ double _stepShare(SpeedCurve curve) => switch (curve) {
 List<double> envelopeSpeeds(List<BridgeKeyframe> keys) => [
       for (var i = 0; i < keys.length; i++)
         switch (keys[i].interpOut) {
-          BridgeSideInterp_Bezier(:final field0) when i == keys.length - 1 =>
+          BridgeSideInterp_Bezier(:final field0)
+              when i == keys.length - 1 &&
+                  i > 0 &&
+                  speedCurveOf(keys[i - 1].interpOut) == SpeedCurve.hold =>
             field0.speed,
           _ => sideSpeedAtKey(keys, i, isOut: i < keys.length - 1),
         } *

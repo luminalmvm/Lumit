@@ -174,17 +174,28 @@ int cutPictureCount(List<CutTrack> tracks) {
 
 /// What a clip's thumbnail is filed under: the frame it opens on is part of
 /// the key, so a cut or a re-speed fetches the frame the clip now starts on.
+// Keyed on the clip's map as well, which a slip or a speed edit changes.
 String cutThumbKey(BridgeClip clip) =>
-    '${clip.id}@${clip.startFrame}@${clip.retimed}';
+    '${clip.id}@${clip.startFrame}@${clip.retime.hashCode}';
 
 /// How far apart the pictures along a clip are asked for, in pixels. The
 /// painter draws whole frames and takes the nearest one it has.
 const double cutFilmStep = 48;
 
-/// How many comp frames into its clip picture [k] along shows, at [perFrame]
-/// pixels a frame.
-int cutFilmOffset(int k, double perFrame) =>
-    perFrame <= 0 ? 0 : (k * cutFilmStep / perFrame).round();
+/// How many comp frames apart the pictures along a clip are at [perFrame]
+/// pixels a frame: a power of two at least [cutFilmStep] wide, so nearby
+/// zooms share their pictures.
+int cutFilmFrames(double perFrame) {
+  if (perFrame <= 0) return 1;
+  var frames = 1;
+  while (frames * perFrame < cutFilmStep && frames < 1 << 20) {
+    frames *= 2;
+  }
+  return frames;
+}
+
+/// How many comp frames into its clip picture [k] along shows.
+int cutFilmOffset(int k, double perFrame) => k * cutFilmFrames(perFrame);
 
 /// The key a picture [offset] comp frames into [clip] is held under.
 String cutFilmKey(BridgeClip clip, int offset) =>

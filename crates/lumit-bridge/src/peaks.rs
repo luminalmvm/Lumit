@@ -131,9 +131,7 @@ pub(crate) fn pyramid_for(sound: &SoundSource) -> Option<Arc<PeakPyramid>> {
 /// The answer is kept either way, so a mono file is decoded once to find out.
 #[cfg(feature = "media")]
 pub(crate) fn channel_pyramids_for(sound: &SoundSource) -> Option<Arc<[PeakPyramid; 2]>> {
-    type Held = Vec<(SoundSource, Option<Arc<[PeakPyramid; 2]>>)>;
-    static CHANNELS: OnceLock<Mutex<Held>> = OnceLock::new();
-    let cache = CHANNELS.get_or_init(Mutex::default);
+    let cache = channels_cache();
     if let Ok(held) = cache.lock() {
         if let Some((_, found)) = held.iter().find(|(s, _)| s == sound) {
             return found.clone();
@@ -160,6 +158,15 @@ pub(crate) fn channel_pyramids_for(sound: &SoundSource) -> Option<Arc<[PeakPyram
         }
     }
     built
+}
+
+#[cfg(feature = "media")]
+type Held = Vec<(SoundSource, Option<Arc<[PeakPyramid; 2]>>)>;
+
+#[cfg(feature = "media")]
+fn channels_cache() -> &'static Mutex<Held> {
+    static CHANNELS: OnceLock<Mutex<Held>> = OnceLock::new();
+    CHANNELS.get_or_init(Mutex::default)
 }
 
 #[cfg(feature = "media")]
@@ -306,6 +313,10 @@ pub(crate) fn clear() {
     #[cfg(feature = "media")]
     if let Ok(mut held) = spectra_cache().lock() {
         held.entries.clear();
+    }
+    #[cfg(feature = "media")]
+    if let Ok(mut held) = channels_cache().lock() {
+        held.clear();
     }
 }
 

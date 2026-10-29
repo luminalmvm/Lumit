@@ -43,6 +43,12 @@ pub fn load_or_build_channels(
         if let (Some(left), Some(right)) = (read("l"), read("r")) {
             return Some([left, right]);
         }
+        // A mono sound leaves a marker naming the file as it was, so the next
+        // run does not decode it again to find that out.
+        let mono = std::fs::read_to_string(channel_path(dir, fp, sound, sample_rate, "mono"));
+        if mono.is_ok_and(|key| key == fp.cache_key()) {
+            return None;
+        }
     }
     let mut reader = lumit_media::audio::SoundReader::open(sound, sample_rate).ok()?;
     let mut left = PyramidBuilder::new(sample_rate);
@@ -70,6 +76,14 @@ pub fn load_or_build_channels(
         right.push(&r);
     }
     if !differs {
+        if let (Some(dir), Some(fp)) = (cache_dir, &fingerprint) {
+            if std::fs::create_dir_all(dir).is_ok() {
+                let _ = std::fs::write(
+                    channel_path(dir, fp, sound, sample_rate, "mono"),
+                    fp.cache_key(),
+                );
+            }
+        }
         return None;
     }
     let pyramids = [left.finish(), right.finish()];

@@ -560,9 +560,19 @@ class CutTrackPainter extends CustomPainter {
       // Each later frame is the nearest one fetched, or the one before it
       // until it arrives, so the strip never shows a hole.
       var last = image;
-      for (var x = box.left + clipEdgeWidth + wide; x < box.right - 1;
+      final step = cutFilmFrames(axis.perFrame) * axis.perFrame;
+      final first = box.left + clipEdgeWidth + wide;
+      strip = first < box.right - 1;
+      // Only the frames on screen are drawn.
+      final view = hScroll.hasClients ? hScroll.offset : box.left;
+      final viewEnd = hScroll.hasClients
+          ? view + hScroll.position.viewportDimension
+          : box.right;
+      final end = min(box.right - 1, viewEnd);
+      for (var x = first + max(0, ((view - first) / wide).floor()) * wide;
+          x < end;
           x += wide) {
-        final k = ((x - box.left) / cutFilmStep).round();
+        final k = step > 0 ? ((x - box.left) / step).round() : 0;
         final frame = k < 1
             ? null
             : thumbs[cutFilmKey(clip, cutFilmOffset(k, axis.perFrame))];
@@ -574,7 +584,6 @@ class CutTrackPainter extends CustomPainter {
           Rect.fromLTWH(x, box.top + 1, wide, inner),
           Paint()..filterQuality = FilterQuality.low,
         );
-        strip = true;
       }
       canvas.restore();
       if (!strip) from += wide + 2;

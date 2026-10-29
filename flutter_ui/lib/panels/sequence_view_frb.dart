@@ -201,6 +201,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
     _picking = false;
     sequenceClipPick.value = (layer: widget.entry.layer, clip: clip.id);
     _ui?.cutClip.value = (layer: widget.entry.layer, clip: clip.id);
+    // Delete is about the clip now, not an effect row picked before it.
+    _ui?.clearEffectSelection();
   }
   /// The clip being dragged, what the gesture is doing to it, and how far it
   /// has travelled — so the drag previews and commits once, on release.

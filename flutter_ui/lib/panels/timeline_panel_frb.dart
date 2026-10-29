@@ -2418,9 +2418,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
-        _deleteSequenceClip() ||
         _deleteSelectedMasks() ||
-        _deleteSelectedEffects();
+        _deleteSelectedEffects() ||
+        _deleteSequenceClip();
   }
 
   /// The clip picked in an open sequence view goes, and leaves a gap: what

@@ -340,8 +340,9 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                 test: (local) =>
                     !widget.onClip ||
                     _drag != null ||
-                    _pointAt(local, height) != null ||
-                    _onALine(local, height),
+                    (!_nearClipEdge(local.dx) &&
+                        (_pointAt(local, height) != null ||
+                            _onALine(local, height))),
                 // Over a clip, the line is found by the cursor changing.
                 child: MouseRegion(
                   cursor: widget.onClip
@@ -357,9 +358,11 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                         return;
                       }
                       _downAt = e.localPosition;
-                      if (_onALine(e.localPosition, height)) {
+                      if (_onALine(e.localPosition, height) ||
+                          (widget.onClip &&
+                              _pointAt(e.localPosition, height) != null)) {
                         _startDrag(e.localPosition, height);
-                      } else {
+                      } else if (!widget.onClip) {
                         setState(() => _box =
                             Rect.fromPoints(e.localPosition, e.localPosition));
                       }
@@ -575,6 +578,17 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
           ? speeds[f <= 0 ? i : i + 1]
           : evaluateKeysSpeed(keys, t0 + (t1 - t0) * f) * 100;
       if ((local.dy - _y(speed, height)).abs() <= reach) return true;
+    }
+    return false;
+  }
+
+  /// Whether [x] is within reach of a clip's edge, which over the clips is
+  /// the clip's to trim rather than the line's to take.
+  bool _nearClipEdge(double x) {
+    for (final c in _clips) {
+      for (final frame in [c.startFrame, c.endFrame]) {
+        if ((widget.axis.xOf(frame.toInt()) - x).abs() < 8) return true;
+      }
     }
     return false;
   }

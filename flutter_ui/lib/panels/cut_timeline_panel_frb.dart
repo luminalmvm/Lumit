@@ -1470,6 +1470,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final to = axis.frameAtExact(viewRight).ceil();
     final secondsPerPixel = 1 / (axis.perFrame * fps);
     final live = <String>{};
+    final film = <String>{};
     for (var i = first; i < last; i++) {
       final track = _tracks[i];
       if (track.kind == CutTrackKind.layerSound) {
@@ -1484,7 +1485,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final id = clip.id.toString();
         if (!track.sound && !_soundOnPicture.contains(id)) {
           _wantThumb(track, clip);
-          _wantFilm(track, clip, axis, fps, viewLeft, viewRight);
+          _wantFilm(track, clip, axis, fps, viewLeft, viewRight, film);
           // A picture clip that is heard brings its sound as well, for the
           // band along the foot of its box.
           final heard = track.entry.info.switches.audible &&
@@ -1530,6 +1531,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // the time it comes back.
     _peaks.removeWhere((id, _) => !live.contains(id));
     _peakKeys.removeWhere((id, _) => !live.contains(id));
+    // So do the pictures along a clip: only the steps on screen are kept.
+    _thumbs.removeWhere((key, image) {
+      if (!key.contains('+') || film.contains(key)) return false;
+      image?.dispose();
+      return true;
+    });
   }
 
   /// The peaks of a layer's own sound row over the comp seconds in view,
@@ -1573,18 +1580,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// event: one a step apart, for the steps on screen. A retimed clip's are
   /// read through its speed, so a ramp shows in its pictures.
   void _wantFilm(CutTrack track, BridgeClip clip, TimelineAxis axis,
-      double fps, double viewLeft, double viewRight) {
-    if (clip.sourceIsComp || fps <= 0) return;
+      double fps, double viewLeft, double viewRight, Set<String> wanted) {
+    if (clip.sourceIsComp || fps <= 0 || axis.perFrame <= 0) return;
     final start = clip.startFrame.toInt();
     final length = clip.endFrame.toInt() - start;
-    final (left, width) = cutClipBox(axis, start, clip.endFrame.toInt());
-    final count = min(40, (width / cutFilmStep).floor());
-    for (var k = 1; k <= count; k++) {
-      final x = left + k * cutFilmStep;
-      if (x + cutFilmStep < viewLeft || x > viewRight) continue;
+    final (left, _) = cutClipBox(axis, start, clip.endFrame.toInt());
+    final step = cutFilmFrames(axis.perFrame) * axis.perFrame;
+    // The steps on screen, and one either side.
+    final first = max(1, ((viewLeft - left) / step).floor() - 1);
+    final last = ((viewRight - left) / step).ceil() + 1;
+    for (var k = first; k <= last; k++) {
       final offset = cutFilmOffset(k, axis.perFrame);
       if (offset >= length) break;
-      _fetchThumb(track, clip, cutFilmKey(clip, offset), offset / fps);
+      final key = cutFilmKey(clip, offset);
+      wanted.add(key);
+      _fetchThumb(track, clip, key, offset / fps);
     }
   }
 
@@ -1802,16 +1812,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       return;
     }
     if (event.buttons != kPrimaryMouseButton) return;
-    // A clip's own buttons, before anything else the press could mean.
-    if (hit != null && index != null && track != null) {
-      if (_badgeAt(track, index, hit.clip, at) case final kind?) {
-        final id = hit.clip.id.toString();
-        _lastPressed = id;
-        setState(() => _selected = _withMates(id));
-        _badge(ui, track, hit.clip, kind);
-        return;
-      }
-    }
     final keys = HardwareKeyboard.instance;
     final vegas = _vegasDrags;
     var tool = _toolOf(ui);
@@ -1821,6 +1821,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // does. The edge is still trimmed from anywhere below the handle.
     final fade = _fadeAt(ui, track, index, at, tool);
     if (fade != null) hit = (clip: fade.clip, grab: fade.grab);
+    // A clip's own buttons, with Select, after its fade handles, which share
+    // the clip's top corners with them.
+    if (fade == null &&
+        tool == CutTool.select &&
+        hit != null &&
+        index != null &&
+        track != null) {
+      if (_badgeAt(track, index, hit.clip, at) case final kind?) {
+        final id = hit.clip.id.toString();
+        _lastPressed = id;
+        setState(() => _selected = _withMates(id));
+        _badge(ui, track, hit.clip, kind);
+        return;
+      }
+    }
     // A sound clip's gain line, with Select: dragged, the clip is turned
     // down or back up, as Vegas's event level is.
     if (fade == null &&
@@ -2983,10 +2998,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       ],
     );
     if (shape == null || !mounted) return;
+    // Each fade keeps its own length: an overlap takes its length from the
+    // clips, and a stored 0 stays 0 when they are pulled apart.
     void write(CutTrack on, BridgeClip c, {required bool rising}) {
       final held = rising ? c.fadeIn : c.fadeOut;
-      final fade = BridgeClipFade(
-          seconds: held.seconds > 0 ? held.seconds : 1, shape: shape);
+      final fade = BridgeClipFade(seconds: held.seconds, shape: shape);
       try {
         on.entry.layer.setClipFade(
             clip: c.id,
@@ -3001,10 +3017,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final each = at == null ? null : _tracks[at].clip(id);
         if (at == null || each == null) continue;
         final on = _tracks[at];
+        final other = clipFadePartner(on.clips, each, into: into);
+        // A clip the menu reaches through its links or its group, with no
+        // fade or overlap at that end, is left as it is.
+        final held = into ? each.fadeIn : each.fadeOut;
+        if (each.id != clip.id && held.seconds <= 0 && other == null) continue;
         write(on, each, rising: into);
-        if (clipFadePartner(on.clips, each, into: into) case final other?) {
-          write(on, other, rising: !into);
-        }
+        if (other != null) write(on, other, rising: !into);
       }
     });
     _afterCut(BridgeCutResult.done);
