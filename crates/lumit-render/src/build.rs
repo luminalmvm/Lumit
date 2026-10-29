@@ -4000,6 +4000,10 @@ fn comp_walk(
             })
         });
 
+        // How much of the layer's opacity a composition clip inside a fade is
+        // showing, or a dissolve between clips with an opacity of their own.
+        // One everywhere else.
+        let mut clip_share = 1.0f32;
         // What a Sequence layer shows where a composition is one of the clips
         // showing. `None` at every other moment, where the decoded pixels
         // are the layer's source as they always were.
@@ -4011,6 +4015,9 @@ fn comp_walk(
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
                 let shown = lumit_core::sequence::shown_at(clips, lt);
+                if let Shown::Two { opacity, .. } = shown {
+                    clip_share = opacity as f32;
+                }
                 match shown {
                     Shown::One { clip, .. } if plays(clip) => Some(shown),
                     Shown::Two {
@@ -4022,9 +4029,6 @@ fn comp_walk(
             _ => None,
         };
 
-        // How much of the layer's opacity a composition clip inside a fade is
-        // showing. One everywhere else.
-        let mut clip_share = 1.0f32;
         let (source, natural) = match &layer.kind {
             // **A Sequence clip that plays a composition** draws that comp
             // as a Precomp layer draws its own: walked at the moment the clip
@@ -4111,6 +4115,7 @@ fn comp_walk(
                         outgoing,
                         incoming,
                         gain,
+                        ..
                     }) => (
                         picture(outgoing).map(|p| (p, 1.0 - gain)),
                         picture(incoming).map(|p| (p, gain)),
@@ -4123,7 +4128,7 @@ fn comp_walk(
                     // and a fade is taken where the layer is composited.
                     (Some(((source, size), share)), None)
                     | (None, Some(((source, size), share))) => {
-                        clip_share = share as f32;
+                        clip_share *= share as f32;
                         (source, size)
                     }
                     // A dissolve: both, each at its share and fitted about

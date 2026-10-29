@@ -4872,8 +4872,13 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     let (a, b) = (ids[0], ids[1]);
     let cut = [(0, join), (join, 2 * join), (2 * join, 3 * join)];
 
-    let over = comp.cut_trim(a, 0, join + 4, false, false);
+    let over = comp.cut_trim(a, 0, join + 4, false, false, false);
     assert_eq!(over.expect("answered"), BridgeCutResult::Overlap);
+    // With overlap on, the same edge makes a dissolve.
+    let over = comp.cut_trim(a, 0, join + 4, false, false, true);
+    assert_eq!(over.expect("answered"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top)[..2], [(0, join + 4), cut[1]]);
+    project.undo().expect("undo");
 
     // Eleven frames: five after the edit point and six before it.
     let done = comp.cut_transition(a, true, 11, false);
@@ -4892,12 +4897,12 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     // Its edge drags, within the neighbour and within the clip's own media:
     // the incoming clip has a second of source before it, less the six
     // frames the dissolve took.
-    let done = comp.cut_trim(a, 0, join + 8, false, false);
+    let done = comp.cut_trim(a, 0, join + 8, false, false, false);
     assert_eq!(done.expect("dragged"), BridgeCutResult::Done);
     assert_eq!(row_frames(&top)[0], (0, join + 8));
-    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false);
+    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false, false);
     assert_eq!(past.expect("answered"), BridgeCutResult::Overlap);
-    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false);
+    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false, false);
     assert_eq!(dry.expect("answered"), BridgeCutResult::Limit);
 
     // An edge nothing meets fades on its own.
@@ -4905,6 +4910,32 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     assert_eq!(done.expect("faded"), BridgeCutResult::Done);
     let half = lumit_core::time::Rational::new(1, 2).expect("½ s");
     assert_eq!(row_clips(&top)[0].fade_in.seconds, half);
+}
+
+/// Paste attributes gives a clip the copied clip's opacity and speed, and
+/// leaves its place and its trim in.
+#[test]
+fn paste_attributes_gives_the_look_and_keeps_the_place() {
+    use crate::api::cut::BridgeCutResult;
+    let (_project, comp, top, join) = cut_row(2);
+    let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
+    let nothing = comp.cut_paste_attributes(vec![ids[1]]);
+    assert_eq!(nothing.expect("answered"), BridgeCutResult::Nothing);
+    top.set_clip_opacity(ids[0], 0.5).expect("opacity");
+    top.set_clip_speed(ids[0], 200.0, 200.0).expect("speed");
+    assert_eq!(
+        comp.cut_copy(vec![ids[0]], false).expect("copied"),
+        BridgeCutResult::Done
+    );
+    let done = comp.cut_paste_attributes(vec![ids[1]]);
+    assert_eq!(done.expect("pasted"), BridgeCutResult::Done);
+    let b = row_clips(&top).remove(1);
+    assert_eq!((b.opacity, b.constant_speed()), (0.5, Some(2.0)));
+    assert_eq!(
+        b.source_in,
+        lumit_core::time::Rational::new(1, 1).expect("1 s")
+    );
+    assert_eq!(row_frames(&top)[1], (join, 2 * join));
 }
 
 /// An extract cuts at both ends of a span, takes out what lies between and
@@ -4935,8 +4966,8 @@ fn extracting_a_span_cuts_both_ends_and_closes_it_in_one_step() {
 }
 
 /// A move follows the timeline's three switches. With overlap a clip dragged
-/// across the end of another keeps both, and one that would cover another is
-/// refused. With ripple everything after the moved clip goes as far. A part
+/// across the end of another keeps both, and one that would cover another
+/// overwrites it. With ripple everything after the moved clip goes as far. A part
 /// of a frame is taken by sound alone.
 #[test]
 fn a_move_follows_the_timelines_switches() {
@@ -4967,9 +4998,11 @@ fn a_move_follows_the_timelines_switches() {
         "nothing was cut away, and the two share ten frames"
     );
     project.undo().expect("undo");
-    // Right on top of the middle clip is not a crossfade.
+    // Right on top of the middle clip is not a crossfade: it overwrites.
     let done = comp.cut_move(vec![], ids[2], -length, None, false, over);
-    assert_eq!(done.expect("answered"), BridgeCutResult::Overlap);
+    assert_eq!(done.expect("moved"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&top), [(0, length), (length, 2 * length)]);
+    project.undo().expect("undo");
     assert_eq!(row_frames(&top), rest);
 
     // Ripple: the first clip moves later and the two after it go with it.
@@ -5030,6 +5063,41 @@ fn a_move_follows_the_timelines_switches() {
     );
 }
 
+/// A cut through a grouped clip cuts the rest of its group with it, and the
+/// later pieces make a group of their own.
+#[test]
+fn a_cut_through_a_group_leaves_two_groups() {
+    use crate::api::cut::BridgeCutResult;
+    let (project, comp, top, length) = cut_row(1);
+    let footage = FootageReference {
+        project: project.id,
+        id: match row_clips(&top)[0].source {
+            lumit_core::sequence::ClipSource::Footage(id) => id,
+            other => panic!("a footage clip, not {other:?}"),
+        },
+    };
+    comp.add_audio_layer(&footage, None).expect("placed");
+    let below = comp.get_layers().expect("layers").remove(0);
+    below.convert_to_sequenced().expect("a row of clips");
+    let sound = row_clips(&below)[0].id;
+    let done = comp.cut_trim(sound, 0, length, false, false, false);
+    assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
+    let group = Uuid::now_v7();
+    for row in [top, below] {
+        let clip = row_clips(&row)[0].id;
+        row.set_clip_group(clip, Some(group)).expect("grouped");
+    }
+    let done = comp.cut_razor(vec![top], length / 2, true);
+    assert_eq!(done.expect("cut"), BridgeCutResult::Done);
+    let groups = |at: usize| [top, below].map(|row| row_clips(&row)[at].group);
+    assert_eq!(groups(0), [Some(group); 2], "the earlier pieces keep it");
+    let [a, b] = groups(1);
+    assert!(
+        a.is_some() && a == b && a != Some(group),
+        "the later share a new one"
+    );
+}
+
 /// A paste puts copies down as clips of their own, linked to each other and
 /// not to the clips they were copied from, and answers where they end. With
 /// no layer to land on it makes one for the picture and one for the sound.
@@ -5049,7 +5117,7 @@ fn a_paste_links_the_copies_to_each_other_and_answers_where_they_end() {
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
-    let done = comp.cut_trim(sound, 0, length, false, false);
+    let done = comp.cut_trim(sound, 0, length, false, false, false);
     assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
     let link = Uuid::now_v7();
     for row in [top, below] {

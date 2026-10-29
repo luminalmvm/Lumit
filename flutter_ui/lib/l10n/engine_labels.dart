@@ -1012,6 +1012,7 @@ Map<String, String> get _built => {
       "Line period": l10n.fxLinePeriod,
       "Linear": l10n.fxLinear,
       "Linear wipe": l10n.fxLinearWipe,
+      "Crop": l10n.fxCrop,
       "Low": l10n.fxLow,
       "Lower left x": l10n.fxLowerLeftX,
       "Lower left y": l10n.fxLowerLeftY,
@@ -1581,6 +1582,22 @@ Map<String, String> get _built => {
       "Move clips down a track": l10n.keyMoveClipsDownATrack,
       "Select the clip at the playhead": l10n.keySelectTheClipAtThePlayhead,
       "Turn snapping on or off": l10n.keyTurnSnappingOnOrOff,
+      "Show or hide speed lines": l10n.keyShowOrHideSpeedLines,
+      "Show or hide the volume envelope": l10n.keyShowOrHideTheVolumeEnvelope,
+      "Show or hide the pan envelope": l10n.keyShowOrHideThePanEnvelope,
+      "Switch the picked clips to their next take":
+          l10n.keySwitchThePickedClipsToTheirNextTake,
+      "Switch the picked clips to their previous take":
+          l10n.keySwitchThePickedClipsToTheirPreviousTake,
+      "Paste a clip's attributes onto the picked clips":
+          l10n.keyPasteAClipSAttributesOntoThePickedClips,
+      "Minimise every track, or restore them":
+          l10n.keyMinimiseEveryTrackOrRestoreThem,
+      "Add a region over the work area": l10n.keyAddARegionOverTheWorkArea,
+      "Turn looping on or off": l10n.keyTurnLoopingOnOrOff,
+      "Group the picked clips": l10n.keyGroupThePickedClips,
+      "Take the picked clips out of their group":
+          l10n.keyTakeThePickedClipsOutOfTheirGroup,
       "Turn linked selection on or off": l10n.keyTurnLinkedSelectionOnOrOff,
       "Turn auto ripple on or off": l10n.keyTurnAutoRippleOnOrOff,
       "Turn automatic crossfades on or off":

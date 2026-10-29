@@ -226,6 +226,36 @@ impl FxEngine {
         out
     }
 
+    /// Apply one Crop to a linear working texture, returning a new texture of
+    /// the same size. One pass, one multiply a pixel.
+    pub fn crop(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &CropOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-crop-out");
+        self.dispatch_matted(
+            ctx,
+            &self.crop,
+            src,
+            src,
+            None,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&CropParams {
+                edges: op.edges,
+                band: op.band,
+                mix_amt: op.mix,
+                _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+
     /// Apply one Radial wipe (docs/08 §3.47) to a linear working texture,
     /// returning a new texture of the same size. One pass: one `atan2` and one
     /// multiply a pixel.
@@ -551,4 +581,25 @@ impl FxEngine {
         );
         out
     }
+}
+
+/// One Crop's parameters, as the host packs them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CropOp {
+    /// Left, top, right and bottom, each 0..1 from its own side.
+    pub edges: [f32; 4],
+    /// The feather's width in raster pixels, floored above zero.
+    pub band: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Crop's uniform, laid out as `fx_crop.wgsl` reads it.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CropParams {
+    edges: [f32; 4],
+    band: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
 }

@@ -896,6 +896,11 @@ pub fn visit_comp_refs(comp: &mut lumit_core::model::Composition, f: &mut dyn Fn
                     if let lumit_core::sequence::ClipSource::Comp(id) = &mut clip.source {
                         f(id);
                     }
+                    for take in &mut clip.takes {
+                        if let lumit_core::sequence::ClipSource::Comp(id) = &mut take.source {
+                            f(id);
+                        }
+                    }
                 }
             }
             _ => {}

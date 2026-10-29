@@ -107,8 +107,12 @@ class BridgeAudioPeaks {
   final int buckets;
 
   /// Band-major triples: band `b`'s bucket `i` is `min`, `max`, `rms` at
-  /// `3 * (b * buckets + i)`, each in −1..1.
+  /// `3 * (b * buckets + i)`, each in −1..1. With two channels, the left's
+  /// bands come first and then the right's.
   final Float32List values;
+
+  /// 1 for the sound mixed, or 2 for left and right apart.
+  final int channels;
 
   const BridgeAudioPeaks({
     required this.durationSeconds,
@@ -117,6 +121,7 @@ class BridgeAudioPeaks {
     required this.bands,
     required this.buckets,
     required this.values,
+    required this.channels,
   });
 
   @override
@@ -126,7 +131,8 @@ class BridgeAudioPeaks {
       endSeconds.hashCode ^
       bands.hashCode ^
       buckets.hashCode ^
-      values.hashCode;
+      values.hashCode ^
+      channels.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -138,7 +144,8 @@ class BridgeAudioPeaks {
           endSeconds == other.endSeconds &&
           bands == other.bands &&
           buckets == other.buckets &&
-          values == other.values;
+          values == other.values &&
+          channels == other.channels;
 }
 
 /// How one two-axis property is shown and edited
@@ -473,6 +480,14 @@ class BridgeClip {
   /// when the document no longer holds that source.
   final String sourceName;
 
+  /// The clip's own opacity, nought to one, taken with its fades.
+  final double opacity;
+
+  /// The names of the takes the clip holds, the one it shows first and the
+  /// rest in the order T steps through them: the take numbers
+  /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
+  final List<String> takes;
+
   /// The link this clip shares with the clips that move, trim and cut with
   /// it, a picture clip and the clip that carries its sound. `None` for a
   /// clip on its own.
@@ -493,6 +508,12 @@ class BridgeClip {
   /// The clip's own blend mode as an index into [`list_blend_modes`], or
   /// `None` while it takes its layer's.
   final int? blend;
+
+  /// The clip's own label colour, or `None` while it wears its layer's.
+  final int? label;
+
+  /// The group the clip is in, or `None`.
+  final UuidValue? group;
 
   /// Where the clip starts and ends on the comp's clock in frames, with the
   /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
@@ -517,12 +538,16 @@ class BridgeClip {
     required this.fx,
     required this.gainDb,
     required this.sourceName,
+    required this.opacity,
+    required this.takes,
     this.link,
     required this.audible,
     required this.sourceIn,
     required this.sourceOut,
     required this.sourceIsComp,
     this.blend,
+    this.label,
+    this.group,
     required this.startExact,
     required this.endExact,
   });
@@ -545,12 +570,16 @@ class BridgeClip {
       fx.hashCode ^
       gainDb.hashCode ^
       sourceName.hashCode ^
+      opacity.hashCode ^
+      takes.hashCode ^
       link.hashCode ^
       audible.hashCode ^
       sourceIn.hashCode ^
       sourceOut.hashCode ^
       sourceIsComp.hashCode ^
       blend.hashCode ^
+      label.hashCode ^
+      group.hashCode ^
       startExact.hashCode ^
       endExact.hashCode;
 
@@ -575,12 +604,16 @@ class BridgeClip {
           fx == other.fx &&
           gainDb == other.gainDb &&
           sourceName == other.sourceName &&
+          opacity == other.opacity &&
+          takes == other.takes &&
           link == other.link &&
           audible == other.audible &&
           sourceIn == other.sourceIn &&
           sourceOut == other.sourceOut &&
           sourceIsComp == other.sourceIsComp &&
           blend == other.blend &&
+          label == other.label &&
+          group == other.group &&
           startExact == other.startExact &&
           endExact == other.endExact;
 }
@@ -2931,14 +2964,16 @@ class LayerReference {
           required double startSeconds,
           required double endSeconds,
           required int buckets,
-          required bool multiwave}) =>
+          required bool multiwave,
+          required bool stereo}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioPeaks(
           that: this,
           clip: clip,
           startSeconds: startSeconds,
           endSeconds: endSeconds,
           buckets: buckets,
-          multiwave: multiwave);
+          multiwave: multiwave,
+          stereo: stereo);
 
   /// One Sequence clip's audio as a **spectrogram** - the twin of
   /// [`Self::clip_audio_peaks`] for the spectral lane mode, and the
@@ -2985,13 +3020,16 @@ class LayerReference {
   /// which clip is which. The moment is read through the clip's own map, so
   /// a re-speeded clip still shows the frame it actually opens on.
   ///
+  /// `along` asks for the frame that many seconds into the clip instead,
+  /// for the pictures drawn across it.
+  ///
   /// `None` when the media will not open, when the source is a comp rather
   /// than footage (there is nothing on disk to decode), or in a build with
   /// no media feature. Decoded once per (item, size, frame) and cached.
   Future<BridgeRenderedFrame?> clipThumbnail(
-          {required UuidValue clip, required int maxEdge}) =>
+          {required UuidValue clip, required int maxEdge, double? along}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceClipThumbnail(
-          that: this, clip: clip, maxEdge: maxEdge);
+          that: this, clip: clip, maxEdge: maxEdge, along: along);
 
   /// Turn a Sequence layer back into a plain Footage layer.
   ///
@@ -4086,6 +4124,23 @@ class LayerReference {
   void setClipGain({required UuidValue clip, required double db}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetClipGain(that: this, clip: clip, db: db);
+
+  /// Put one clip in `group`, or take it out of any with `None`.
+  void setClipGroup({required UuidValue clip, UuidValue? group}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipGroup(
+          that: this, clip: clip, group: group);
+
+  /// Give one clip a label colour of its own, or hand it back to the
+  /// layer's with `None`.
+  void setClipLabel({required UuidValue clip, int? label}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipLabel(
+          that: this, clip: clip, label: label);
+
+  /// Set one picture clip's own opacity, nought to one, Vegas's event
+  /// opacity. It is taken where the clip's fades are.
+  void setClipOpacity({required UuidValue clip, required double opacity}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipOpacity(
+          that: this, clip: clip, opacity: opacity);
 
   /// Replace one clip's whole retime map, keyed in clip-local time.
   ///

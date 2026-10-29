@@ -63,6 +63,9 @@ void main() {
       markerLines: false,
       cutAutoRipple: true,
       cutAutoCrossfade: true,
+      cutSpeedLines: true,
+      cutVegasDrags: true,
+      cutHeadWidth: 240,
       quantiseSound: false,
       projectThumbnails: true,
       timelineMinimap: true,
@@ -99,6 +102,9 @@ void main() {
     expect(back.markerLines, isFalse);
     expect(back.cutAutoRipple, isTrue);
     expect(back.cutAutoCrossfade, isTrue);
+    expect(back.cutSpeedLines, isTrue);
+    expect(back.cutVegasDrags, isTrue);
+    expect(back.cutHeadWidth, 240);
     expect(back.quantiseSound, isFalse);
     expect(back.projectThumbnails, isTrue);
     expect(back.timelineMinimap, isTrue);
@@ -114,7 +120,7 @@ void main() {
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 37);
+    expect(all.toJson().keys.length, 40);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

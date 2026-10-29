@@ -2811,6 +2811,9 @@ pub struct RenderCompRequestWithPreview {
     /// pointer is let go, which is the one edit where watching it matters
     /// most.
     pub clip_retime: Option<(Uuid, crate::api::effect::BridgeScalar)>,
+    /// One clip's edges as comp frames, while one of them is being dragged,
+    /// so the Viewer shows the frame at the edge.
+    pub clip_span: Option<(Uuid, i64, i64)>,
     /// The layer's own Retime map, while a key of it is being dragged
     /// in the graph editor. Exactly `clip_retime`'s reason, for the property
     /// rather than a clip: the map decides which source frame is decoded, so
@@ -5150,6 +5153,21 @@ fn render_comp_with_preview(
                         animation,
                         extra: serde_json::Map::new(),
                     });
+                }
+            }
+        }
+    }
+    if let Some((clip, start, end)) = req.clip_span {
+        // The row's own zero comes off, then the same trim the commit makes.
+        let offset = comp.layers[index].start_offset.0;
+        let rate = comp.frame_rate;
+        let at = |f: i64| rate.time_of_frame(f).ok()?.0.checked_sub(offset).ok();
+        if let (Some(start), Some(end), lumit_core::model::LayerKind::Sequence { clips }) =
+            (at(start), at(end), &mut comp.layers[index].kind)
+        {
+            if let Some(c) = clips.iter_mut().find(|c| c.id == clip) {
+                if let Some(next) = crate::api::layer::trimmed(c, start, end) {
+                    *c = next;
                 }
             }
         }

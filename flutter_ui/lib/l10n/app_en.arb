@@ -4184,6 +4184,10 @@
   "@fxLinearWipe": {
     "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
   },
+  "fxCrop": "Crop",
+  "@fxCrop": {
+    "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
+  },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
     "description": "Effect controls — a depth-channel option on Depth of field."
@@ -6096,6 +6100,50 @@
   "@keyTurnSnappingOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
+  "keyTurnLoopingOnOrOff": "Turn looping on or off",
+  "@keyTurnLoopingOnOrOff": {
+    "description": "Keyboard shortcut action: switch playback between looping the work area and playing it once. Vegas puts this on Q."
+  },
+  "keyGroupThePickedClips": "Group the picked clips",
+  "@keyGroupThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: put the picked clips in one group, so they are picked and moved together. Vegas puts this on G."
+  },
+  "keyTakeThePickedClipsOutOfTheirGroup": "Take the picked clips out of their group",
+  "@keyTakeThePickedClipsOutOfTheirGroup": {
+    "description": "Keyboard shortcut action in the Cut timeline: the picked clips leave the group they are in. Vegas puts this on U."
+  },
+  "keyShowOrHideSpeedLines": "Show or hide speed lines",
+  "@keyShowOrHideSpeedLines": {
+    "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
+  },
+  "keyShowOrHideTheVolumeEnvelope": "Show or hide the volume envelope",
+  "@keyShowOrHideTheVolumeEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its volume over time. Vegas puts this on V."
+  },
+  "keyShowOrHideThePanEnvelope": "Show or hide the pan envelope",
+  "@keyShowOrHideThePanEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its left-right balance over time. Vegas puts this on P."
+  },
+  "keySwitchThePickedClipsToTheirNextTake": "Switch the picked clips to their next take",
+  "@keySwitchThePickedClipsToTheirNextTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the next of its takes, the other recordings it holds of the same moment. Vegas puts this on T."
+  },
+  "keySwitchThePickedClipsToTheirPreviousTake": "Switch the picked clips to their previous take",
+  "@keySwitchThePickedClipsToTheirPreviousTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
+  },
+  "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
+  "@keyPasteAClipSAttributesOntoThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
+  },
+  "keyMinimiseEveryTrackOrRestoreThem": "Minimise every track, or restore them",
+  "@keyMinimiseEveryTrackOrRestoreThem": {
+    "description": "Keyboard shortcut action in the Cut timeline: every track goes to its smallest height, or back to the height it had."
+  },
+  "keyAddARegionOverTheWorkArea": "Add a region over the work area",
+  "@keyAddARegionOverTheWorkArea": {
+    "description": "Keyboard shortcut action: add a marker with a length, running from the start to the end of the work area. Vegas puts this on R."
+  },
   "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
@@ -6538,6 +6586,10 @@
   "@keymapDragBreakHandles": {
     "description": "Dragging row: the modifier that, held as a handle drag begins in the Graph editor, lets one handle of a keyframe move without the other, or joins two that were apart."
   },
+  "keymapDragCut": "Clip drags in Cut",
+  "@keymapDragCut": {
+    "description": "Dragging row in Settings → Shortcuts: which editor's mouse habits the Cut timeline follows. Lumit: Alt drags a copy and Shift stretches an edge. Vegas: Ctrl drags a copy or stretches an edge, Alt slips and Ctrl+Alt slides."
+  },
   "keymapExported": "Keymap exported.",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -6614,6 +6666,10 @@
   "keymapWheelShift": "Shift",
   "@keymapWheelShift": {
     "description": "Scroll wheel modifier choice: the Shift key."
+  },
+  "keymapWheelBare": "No key",
+  "@keymapWheelBare": {
+    "description": "Scroll wheel modifier choice: the wheel on its own, with no key held. Vegas zooms the timeline this way."
   },
   "keymapWheelZoomTime": "Zoom the Timeline",
   "@keymapWheelZoomTime": {
@@ -11031,6 +11087,30 @@
   "@cutQuantise": {
     "description": "A toggle on the Cut timeline's strip: while on, sound clips move in whole frames. Off, a sound clip can sit between two frames. One word."
   },
+  "cutSpeedLines": "Speed",
+  "@cutSpeedLines": {
+    "description": "A toggle on the Cut timeline's strip: while on, each picture clip shows its playback speed as a line across it that can be dragged, like Vegas's velocity envelope. One word. Speed, never velocity."
+  },
+  "cutGroup": "Group",
+  "@cutGroup": {
+    "description": "Cut timeline, clip right-click menu: put the picked clips in one group, so picking or moving one takes the rest. One word."
+  },
+  "cutUngroup": "Ungroup",
+  "@cutUngroup": {
+    "description": "Cut timeline, clip right-click menu: take the picked clips out of their group. One word."
+  },
+  "cutSpeedMenu": "Speed",
+  "@cutSpeedMenu": {
+    "description": "Cut timeline, clip right-click menu: the submenu holding the clip's speed commands. One word."
+  },
+  "cutCopySpeed": "Copy speed",
+  "@cutCopySpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: remember this clip's speed line, its points and curves, to paste onto other clips."
+  },
+  "cutPasteSpeed": "Paste speed",
+  "@cutPasteSpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: give every picked picture clip the speed line copied last, stretched to each clip's length."
+  },
   "cutSwitchOn": "{name} on",
   "@cutSwitchOn": {
     "description": "Status line, after a Cut timeline switch is turned on from the keyboard. {name} is the switch's own label, such as Auto ripple.",
@@ -11056,6 +11136,14 @@
   "clipBlendFromLayer": "From layer",
   "@clipBlendFromLayer": {
     "description": "The first choice in a clip's Blend mode list, in the Effect controls panel with one clip of a Sequence layer picked and on the clip's menu in the Cut timeline. The clip uses its layer's blend mode and has none of its own."
+  },
+  "clipColour": "Clip colour",
+  "@clipColour": {
+    "description": "Submenu on a clip's right-click menu in the Cut timeline and the Audio timeline. It gives the picked clips a colour of their own, in place of their track's."
+  },
+  "clipColourFromTrack": "Track colour",
+  "@clipColourFromTrack": {
+    "description": "The first row of the Clip colour submenu. The clip takes its track's colour again and has none of its own."
   },
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {
@@ -11084,6 +11172,94 @@
   "cutNoTracks": "Drop footage here.",
   "@cutNoTracks": {
     "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
+  },
+  "cutMixVolume": "Vol",
+  "@cutMixVolume": {
+    "description": "Cut timeline, a sound track's header: short label inside the slider that sets how loud the track is. Keep it to three or four letters."
+  },
+  "cutMixLevel": "Level",
+  "@cutMixLevel": {
+    "description": "Cut timeline, a picture track's header: short label inside the slider that sets how see-through the track is (its opacity). Keep it short."
+  },
+  "cutPanCropTitle": "Pan/Crop",
+  "@cutPanCropTitle": {
+    "description": "Cut timeline: title of the window that sets which part of a clip's picture fills the frame, as Vegas's Pan/Crop window."
+  },
+  "cutPanCropX": "X",
+  "@cutPanCropX": {
+    "description": "Cut timeline, Pan/Crop window: label beside the across position of the box's centre, in pixels."
+  },
+  "cutPanCropY": "Y",
+  "@cutPanCropY": {
+    "description": "Cut timeline, Pan/Crop window: label beside the up-and-down position of the box's centre, in pixels."
+  },
+  "cutPanCropWidth": "Width",
+  "@cutPanCropWidth": {
+    "description": "Cut timeline, Pan/Crop window: label beside the width of the box, the part of the picture that fills the frame, in pixels."
+  },
+  "cutPanCropHeight": "Height",
+  "@cutPanCropHeight": {
+    "description": "Cut timeline, Pan/Crop window: label beside the height of the box, in pixels."
+  },
+  "cutPanCropRotation": "Rotation",
+  "@cutPanCropRotation": {
+    "description": "Cut timeline, Pan/Crop window: label beside how far the box is turned, in degrees."
+  },
+  "cutPanCropLockAspect": "Lock aspect",
+  "@cutPanCropLockAspect": {
+    "description": "Cut timeline, Pan/Crop window: checkbox that keeps the box's width and height in proportion while it is resized."
+  },
+  "cutPanCropFill": "Fill frame",
+  "@cutPanCropFill": {
+    "description": "Cut timeline, Pan/Crop window: button that puts the box back over the whole picture, unturned, so the clip fills the frame as it was."
+  },
+  "cutMenuSplit": "Split",
+  "@cutMenuSplit": {
+    "description": "Cut timeline, right-click menu on a clip: cut the picked clips in two at the playhead, as Vegas's Split."
+  },
+  "cutVolumeEnvelope": "Volume envelope",
+  "@cutVolumeEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its loudness over time, as Vegas's volume envelope. Ticked while shown."
+  },
+  "cutPanEnvelope": "Pan envelope",
+  "@cutPanEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
+  },
+  "envelopePointReset": "Reset",
+  "@envelopePointReset": {
+    "description": "Volume or pan envelope, right-click a point: put it back to 0 dB, or to centre for pan."
+  },
+  "envelopeFlipAll": "Flip all points",
+  "@envelopeFlipAll": {
+    "description": "Volume or pan envelope, right-click the line: mirror every point, louder becomes quieter by the same amount, or left swaps with right. Vegas calls this Flip All Points."
+  },
+  "envelopeResetAll": "Reset all",
+  "@envelopeResetAll": {
+    "description": "Volume or pan envelope, right-click the line: remove every point and put the level back to 0 dB, or to centre for pan. Vegas calls this Reset All."
+  },
+  "cutSpeedLineHere": "Speed line",
+  "@cutSpeedLineHere": {
+    "description": "Cut timeline, a picture clip's Speed submenu: show or hide the line across this one clip that draws and edits its speed, as Vegas's velocity envelope on one event. Ticked while shown."
+  },
+  "cutTakeMenu": "Take",
+  "@cutTakeMenu": {
+    "description": "Cut timeline, right-click menu on a clip that holds several takes: submenu listing them, the one showing ticked, as Vegas's Take submenu. A take is another piece of media the same clip can show in its place."
+  },
+  "cutDeleteTake": "Delete take",
+  "@cutDeleteTake": {
+    "description": "Cut timeline, a clip's Take submenu: remove the take showing from the clip, which then shows the next one."
+  },
+  "cutPasteAttributes": "Paste attributes",
+  "@cutPasteAttributes": {
+    "description": "Cut timeline, right-click menu on a clip: give the picked clips the copied clip's effects, gain, opacity, blend mode, fades and speed, as Vegas's Paste Event Attributes."
+  },
+  "cutMinimiseTracks": "Minimise all tracks",
+  "@cutMinimiseTracks": {
+    "description": "Cut timeline, right-click menu on a track's header: make every track as short as it goes, or, when they all already are, put them back to the usual height. As Vegas's Minimize All Tracks."
+  },
+  "cutSelectToEnd": "Select to end",
+  "@cutSelectToEnd": {
+    "description": "Cut timeline, right-click menu on a clip: select this clip and every clip after it, on the tracks in play, as Vegas's Select events to end."
   },
   "cutDragDelta": "{delta} f",
   "@cutDragDelta": {
@@ -14287,6 +14463,50 @@
   "menuSetSpeed": "Set speed…",
   "@menuSetSpeed": {
     "description": "Context-menu item on a point of a speed envelope: opens a small box to type the point's exact playback speed in per cent."
+  },
+  "speedCurveLinear": "Linear",
+  "@speedCurveLinear": {
+    "description": "Speed envelope, right-click a line between two points: the speed changes evenly from one point to the next. Vegas calls this Linear."
+  },
+  "speedCurveFast": "Fast",
+  "@speedCurveFast": {
+    "description": "Speed envelope curve: the speed changes quickly just after the first point, then settles into the next. Vegas calls this Fast."
+  },
+  "speedCurveSlow": "Slow",
+  "@speedCurveSlow": {
+    "description": "Speed envelope curve: the speed changes slowly at first, then quickly into the next point. Vegas calls this Slow."
+  },
+  "speedCurveSmooth": "Smooth",
+  "@speedCurveSmooth": {
+    "description": "Speed envelope curve: the speed eases out of the first point and into the next. Vegas calls this Smooth."
+  },
+  "speedCurveSharp": "Sharp",
+  "@speedCurveSharp": {
+    "description": "Speed envelope curve: the speed changes fastest near both points and slowest between them. Vegas calls this Sharp."
+  },
+  "speedCurveHold": "Hold",
+  "@speedCurveHold": {
+    "description": "Speed envelope curve: the speed stays as it is until the next point, then jumps. Vegas calls this Hold."
+  },
+  "speedFlip": "Flip",
+  "@speedFlip": {
+    "description": "Speed line, right-click menu: mirror every point's speed about 100 per cent, so a slow-down becomes the same speed-up. Vegas calls this Flip."
+  },
+  "speedThin": "Thin",
+  "@speedThin": {
+    "description": "Speed line, right-click menu: remove the points that change nothing, those already on the straight line between their neighbours. Vegas calls this Thin."
+  },
+  "speedPointAdd": "Add point",
+  "@speedPointAdd": {
+    "description": "Speed envelope, right-click the line: put a new point where the click was."
+  },
+  "speedPointReset": "Reset to 100%",
+  "@speedPointReset": {
+    "description": "Speed envelope, right-click a point: put the point back to normal speed, 100 per cent."
+  },
+  "speedPointDelete": "Delete point",
+  "@speedPointDelete": {
+    "description": "Speed envelope, right-click a point: remove it. The two points at a clip's ends can't be removed."
   },
   "speedGuideEveryFrame": "Every frame {speed}",
   "@speedGuideEveryFrame": {

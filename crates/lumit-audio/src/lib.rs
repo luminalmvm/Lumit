@@ -29,6 +29,7 @@ pub mod peaks;
 mod slow;
 pub mod spectra;
 pub mod speed;
+pub mod stereo_peaks;
 pub mod stream;
 
 #[derive(Debug, thiserror::Error)]
