@@ -3050,6 +3050,10 @@ class LayerReference {
   /// Deliberately the **same document a preset is**, so an effect copied from
   /// one layer can be saved as a preset and a preset can be pasted as an
   /// effect — one shape, not two that drift.
+  ///
+  /// The wires between the copied effects and the drivers that
+  /// feed them ride along ([`lumit_core::preset::wiring_of`]), so a points
+  /// rig copied off one layer works on the next.
   String copyEffects({required List<UuidValue> effects}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceCopyEffects(that: this, effects: effects);
