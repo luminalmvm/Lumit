@@ -893,6 +893,16 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceCropToRegion(
           that: this, region: region);
 
+  /// **Takes.** A clip's takes are numbered with the one it shows as
+  /// nought and the rest in the order T steps through them, as
+  /// `BridgeClip::takes` lists them. A linked clip playing the same media
+  /// takes the same change. Add `footage` to `clip` as a take, from its
+  /// marked In or its start, and show it.
+  BridgeCutResult cutAddTake(
+          {required UuidValue clip, required FootageReference footage}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutAddTake(
+          that: this, clip: clip, footage: footage);
+
   /// **Attach audio**: each silent picture clip named takes back the sound
   /// of the clips linked to it that are still the same stretch, and those
   /// clips go. `Nothing` when no clip named has such a clip beside it.
@@ -945,6 +955,13 @@ class CompositionReference {
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutDelete(
           that: this, clips: clips, ripple: ripple, linked: linked);
+
+  /// Take away take number `take` of `clip`. Taking away the one shown
+  /// shows the next.
+  BridgeCutResult cutDeleteTake({required UuidValue clip, required int take}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutDeleteTake(
+              that: this, clip: clip, take: take);
 
   /// **Detach audio**: each heard picture clip named goes silent, and its
   /// sound goes down as a clip of its own on a sound row, linked to it.
@@ -1020,6 +1037,13 @@ class CompositionReference {
           linked: linked,
           how: how);
 
+  /// Show each clip's next take, or with `back` the one before, round
+  /// from the last to the first. `Nothing` when none holds another.
+  BridgeCutResult cutNextTake(
+          {required List<UuidValue> clips, required bool back}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutNextTake(
+          that: this, clips: clips, back: back);
+
   /// Paste the copied clips with the earliest of them at `at_frame`,
   /// overwriting what they land on. They arrive as clips of their own,
   /// linked to each other as the copied ones were.
@@ -1040,6 +1064,15 @@ class CompositionReference {
           {required PlatformInt64 atFrame, LayerReference? target}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPaste(
           that: this, atFrame: atFrame, target: target);
+
+  /// **Paste attributes**: give each of `clips` the effects, fx switch,
+  /// gain, opacity, blend mode and fades of the first clip copied, and its
+  /// speed line laid along each one's length. `Nothing` when nothing is
+  /// copied in this project.
+  BridgeCutResult cutPasteAttributes({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPasteAttributes(
+              that: this, clips: clips);
 
   /// Put a span of a footage item down at `at_frame`: the Cut workspace's
   /// insert and overwrite, and the drop from its Source viewer.
@@ -1151,6 +1184,12 @@ class CompositionReference {
           endEdge: endEdge,
           toFrame: toFrame,
           linked: linked);
+
+  /// Show take number `take` of `clip`. `Nothing` for take nought or one
+  /// it does not hold.
+  BridgeCutResult cutSetTake({required UuidValue clip, required int take}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSetTake(
+          that: this, clip: clip, take: take);
 
   /// Slide a clip between its neighbours by `by_frames`: it keeps its
   /// length and its frames, and the clips either side trim and extend to
@@ -1928,6 +1967,27 @@ class CompositionReference {
               layer: layer,
               clip: clip,
               retime: retime);
+
+  /// Ask for `frame` with one clip trimmed to `start_frame..end_frame`, as
+  /// `LayerReference::trim_clip` would leave it: the live edge drag, which
+  /// never touches the document. A moved head moves the source in-point
+  /// with it, so the Viewer shows the frame at the edge.
+  void renderFrameWithClipSpan(
+          {required BigInt frame,
+          required double scale,
+          required LayerReference layer,
+          required UuidValue clip,
+          required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderFrameWithClipSpan(
+              that: this,
+              frame: frame,
+              scale: scale,
+              layer: layer,
+              clip: clip,
+              startFrame: startFrame,
+              endFrame: endFrame);
 
   /// Ask for `frame` with `layer`'s **driver graph nodes** replaced by
   /// `drivers` — the live drag on a driver's number, which never touches the

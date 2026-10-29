@@ -480,6 +480,14 @@ class BridgeClip {
   /// when the document no longer holds that source.
   final String sourceName;
 
+  /// The clip's own opacity, nought to one, taken with its fades.
+  final double opacity;
+
+  /// The names of the takes the clip holds, the one it shows first and the
+  /// rest in the order T steps through them: the take numbers
+  /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
+  final List<String> takes;
+
   /// The link this clip shares with the clips that move, trim and cut with
   /// it, a picture clip and the clip that carries its sound. `None` for a
   /// clip on its own.
@@ -530,6 +538,8 @@ class BridgeClip {
     required this.fx,
     required this.gainDb,
     required this.sourceName,
+    required this.opacity,
+    required this.takes,
     this.link,
     required this.audible,
     required this.sourceIn,
@@ -560,6 +570,8 @@ class BridgeClip {
       fx.hashCode ^
       gainDb.hashCode ^
       sourceName.hashCode ^
+      opacity.hashCode ^
+      takes.hashCode ^
       link.hashCode ^
       audible.hashCode ^
       sourceIn.hashCode ^
@@ -592,6 +604,8 @@ class BridgeClip {
           fx == other.fx &&
           gainDb == other.gainDb &&
           sourceName == other.sourceName &&
+          opacity == other.opacity &&
+          takes == other.takes &&
           link == other.link &&
           audible == other.audible &&
           sourceIn == other.sourceIn &&
@@ -4117,6 +4131,12 @@ class LayerReference {
   void setClipLabel({required UuidValue clip, int? label}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipLabel(
           that: this, clip: clip, label: label);
+
+  /// Set one picture clip's own opacity, nought to one, Vegas's event
+  /// opacity. It is taken where the clip's fades are.
+  void setClipOpacity({required UuidValue clip, required double opacity}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipOpacity(
+          that: this, clip: clip, opacity: opacity);
 
   /// Replace one clip's whole retime map, keyed in clip-local time.
   ///

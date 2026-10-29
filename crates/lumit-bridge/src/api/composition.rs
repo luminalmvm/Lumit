@@ -2567,6 +2567,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2602,6 +2603,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2638,6 +2640,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2673,6 +2676,40 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: Some((clip, retime)),
+            clip_span: None,
+            retime: None,
+        }))
+    }
+
+    /// Ask for `frame` with one clip trimmed to `start_frame..end_frame`, as
+    /// `LayerReference::trim_clip` would leave it: the live edge drag, which
+    /// never touches the document. A moved head moves the source in-point
+    /// with it, so the Viewer shows the frame at the edge.
+    #[frb(sync)]
+    pub fn render_frame_with_clip_span(
+        &self,
+        frame: u64,
+        scale: f32,
+        layer: LayerReference,
+        clip: Uuid,
+        start_frame: i64,
+        end_frame: i64,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {
+            comp: self.clone(),
+            frame,
+            scale,
+            layer: Some(layer),
+            graph_instances: None,
+            effects: None,
+            drivers: None,
+            transform: None,
+            text: None,
+            paint: None,
+            contents: None,
+            masks: None,
+            clip_retime: None,
+            clip_span: Some((clip, start_frame, end_frame)),
             retime: None,
         }))
     }
@@ -2711,6 +2748,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: Some(retime),
         }))
     }
@@ -2981,6 +3019,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3014,6 +3053,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3050,6 +3090,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3084,6 +3125,7 @@ impl CompositionReference {
             contents: Some(contents),
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3111,6 +3153,7 @@ impl CompositionReference {
             paint: None,
             contents: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
             masks: Some(masks),
         }))
