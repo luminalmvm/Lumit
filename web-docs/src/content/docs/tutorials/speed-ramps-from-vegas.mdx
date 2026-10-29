@@ -7,17 +7,20 @@ sidebar:
 
 import Clip from "../../../components/Clip.astro";
 
-A Vegas velocity envelope is a **speed envelope** in Lumit. It sits under the clips of a
-[Sequence layer](/use/sequence-layers/), one line per clip, in per cent. Everything else on
-this page is in [Retiming and speed](/use/retime/).
+A Vegas velocity envelope is a **speed line** in Lumit, drawn across each picture clip in the
+[Cut timeline](/use/cutting/), in per cent. The same line is the speed envelope under a
+[Sequence layer](/use/sequence-layers/)'s clips in the Timeline. Everything else on this page
+is in [Retiming and speed](/use/retime/).
 
 ## Vegas to Lumit
 
 | Vegas | Lumit |
 | --- | --- |
-| Velocity envelope | The speed envelope under a Sequence layer's clips |
-| Playback rate, in Event properties | **Speed…** on the clip's right-click menu |
-| `Ctrl`+drag an event's edge | `Shift`+drag either end of a layer, or **Stretch…** on its right-click menu |
+| Velocity envelope | The speed line across a clip in the Cut timeline |
+| Fade types on an envelope segment | **Linear**, **Fast**, **Slow**, **Smooth**, **Sharp** and **Hold** on the line's right-click menu |
+| Paste event attributes | **Speed ▸ Copy speed** and **Paste speed** on a clip's right-click menu |
+| Playback rate, in Event properties | **Speed ▸ Speed…** on the clip's right-click menu |
+| `Ctrl`+drag an event's edge | The same in Cut with the Vegas preset, or **Stretch…** on a layer's right-click menu |
 | Reverse | A speed below 0% |
 | Insert freeze frame at cursor | A point at 0%, or **Freeze frame at playhead** on a layer |
 | Resample mode: Disable resample | **In-between frames ▸ Nearest** |
@@ -30,45 +33,51 @@ A velocity envelope in Vegas runs from −100% to 300%. A speed envelope runs fr
 ## 1. Set Lumit up the Vegas way
 
 On the first run, choose **Vegas** under **Editing style**. Tick **Use the Vegas shortcuts**
-for the keys you know.
+for the keys and mouse drags you know. Lumit opens in the **Cut** workspace.
 
-Already past the first run, the same three choices are in Settings:
+Already past the first run, the same choices are in Settings:
 
 - **Settings ▸ Timeline ▸ Editing ▸ Video arrives as a Sequence layer**
 - **Settings ▸ Timeline ▸ Editing ▸ Retime opens to Speed**
-- The **Vegas** preset in **Settings ▸ Shortcuts**
+- The **Vegas** preset in **Settings ▸ Shortcuts**, which also sets **Clip drags in Cut** to
+  **Vegas**
 
-## 2. Put the footage on a Sequence layer
+## 2. Put the footage in the Cut timeline
 
-Drag the footage from the Project panel into the composition. With **Video arrives as a
-Sequence layer** on, it arrives as one.
+Drag the footage from the Project panel onto the Cut timeline. Its picture lands on a picture
+track with the speed line across it at 100%, and its sound on a track below. **S** splits the
+clip at the playhead. The **Speed** switch on the strip shows and hides the lines, and so does
+`Ctrl+Shift+E` with the Vegas preset.
 
-A footage layer already in the composition becomes one with **Convert to sequence layer** on
-its right-click menu.
-
-## 3. Open the layer
-
-Double-click the Sequence layer's row in the Timeline. The clips open in place, and the speed
-envelope runs under them at 100%. Drag the divider above the envelope to make it taller.
+In the Timeline the same line runs under a Sequence layer's clips: double-click the layer's
+row to open it.
 
 <Clip name="retime-envelope" caption="A point added where the slow motion starts, and the clip's end dragged down to 25%." />
 
-## 4. Add points
+## 3. Add points
 
 Double-click the line where the ramp should start, and again where it should end. A new point
-takes the speed already there, so nothing changes yet.
+takes the speed already there.
 
-## 5. Set the speed
+## 4. Set the speed
 
 Drag the second point down. The readout beside it gives the speed. Hold `Ctrl` for a tenth of
-the movement.
+the movement with the point held at its time, or `Shift` to move it in time only.
 
-For an exact number, double-click the point and type it into **Set speed…**.
+For an exact number, right-click the point and choose **Set speed…**. Double-click a point to
+put it back to 100%.
 
-Between two points the speed changes in a straight line. The clip keeps its start and its
-length.
+## 5. Shape the ramp
 
-## 6. Play it
+Right-click the line between two points and choose its curve: **Linear**, **Fast**, **Slow**,
+**Smooth**, **Sharp** or **Hold**. The clip keeps its start and its length.
+
+## 6. Give the ramp to other clips
+
+Right-click the ramped clip and choose **Speed ▸ Copy speed**. Pick the other clips, right-click
+one, and choose **Speed ▸ Paste speed**. Each takes the ramp stretched to its own length.
+
+## 7. Play it
 
 Press `Space`. A clip with spare media after its end can be lengthened by dragging its edge,
 and carries on at the speed of its last point.
@@ -79,11 +88,12 @@ Drag a point to 0%. The frame there holds until the next point.
 
 ## Play backwards
 
-Drag a point below 0%, or type a negative speed into **Set speed…**.
+Drag a point below 0%, or give it a negative speed with **Set speed…**.
 
 ## One speed for the whole clip
 
-Right-click the clip and choose **Speed…**. **Reset speed** puts it back to 100%.
+Right-click the clip and choose **Speed ▸ Speed…**. **Speed ▸ Reset speed** puts it back to
+100%.
 
 For a layer, right-click its row and choose **Stretch…**. It sets a speed and gives the layer
 the length that goes with it. Holding `Shift` while you drag either end of the layer does the same.
@@ -101,8 +111,10 @@ had. See [Frames in between](/use/retime/#frames-in-between).
 
 ## Sound
 
-A retimed clip is silent. **Detach audio** on the layer's right-click menu, before retiming,
-moves the sound to an Audio layer of its own at normal speed.
+In the Cut timeline a picture clip's sound is a clip of its own, and plays at normal speed
+whatever the picture's speed. In the Timeline a retimed clip is silent. **Detach audio** on
+the layer's right-click menu, before retiming, moves the sound to an Audio layer of its own at
+normal speed.
 
 ## Related
 

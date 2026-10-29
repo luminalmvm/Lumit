@@ -33,7 +33,14 @@ composition's layer order and there is no line. Drag a track's name up or down t
 With the setting off, a track moves only among the tracks on its side of the line.
 
 Drag the lower edge of a track's header to make the track taller or shorter. Double-click
-the edge to put it back. Heights are saved with the project.
+the edge to put it back. Heights are saved with the project. Drag the headers' right edge to
+make them wider or narrower, from 120 to 480 pixels.
+
+A track wears its layer's label colour: its clips are tinted with it and their waveforms
+drawn in it. Right-click a track's header for **Label colour**. **Clip colour** on a clip's
+menu gives the picked clips a colour of their own, and **Track colour** hands it back.
+
+A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
 
 Right-click the empty ground under the tracks for **Insert audio layer**, **Insert video
 layer** and **Insert adjustment layer**. Each adds an empty track above the selected one, or
@@ -118,7 +125,7 @@ tool before on release.
 
 | Tool | Key | What a drag does |
 | --- | --- | --- |
-| **Select** | `V` | Moves clips in time and between tracks. An edge trims, and `Shift`+drag on an edge stretches. A drag over empty ground selects every clip it crosses. `Alt`+drag leaves the clips and moves copies. |
+| **Select** | `V` | Moves clips in time and between tracks. An edge trims, and `Shift`+drag on an edge stretches. A drag over empty ground selects every clip it crosses. `Alt`+drag leaves the clips and moves copies. `Ctrl`+`A` selects every clip. |
 | **Razor** | `C` | A click cuts the clip under the pointer. `Shift`+click cuts every track. |
 | **Ripple** | `B` | An edge trims, or with `Shift` stretches, and everything after the clip follows. |
 | **Roll** | `N` | An edit point moves: one clip trims as the next extends. |
@@ -131,8 +138,24 @@ releasing it turns it off.
 While an edge is dragged the clip draws a faint outline of its whole source, and a readout
 beside the pointer counts the frames moved.
 
-**Snap** holds a dragged edge to edit points, the playhead and markers. `S` turns it on and
-off, and `Ctrl` suspends it. `Esc` abandons a drag.
+**Snap** holds a dragged edge to the start and end of every clip, the playhead and markers.
+`S` turns it on and off, and `Ctrl` suspends it. `Esc` abandons a drag.
+
+## Vegas drags
+
+**Settings ▸ Shortcuts ▸ Clip drags in Cut** set to **Vegas** changes what a drag with
+**Select** does. The **Vegas** shortcut preset sets it.
+
+| Drag | What it does |
+| --- | --- |
+| `Ctrl`+drag a clip | Moves copies. A `Ctrl`+click still adds to the selection. |
+| `Ctrl`+drag an edge | Stretches the clip. |
+| `Alt`+drag a clip | Slips it. |
+| `Ctrl`+`Alt`+drag a clip | Slides it. |
+| `Shift` held | Suspends snapping. |
+
+With the Vegas preset the wheel zooms with no key held and scrolls the tracks with `Ctrl`,
+`Q` turns looping on and off, and `G` and `U` group and ungroup.
 
 ## Switches
 
@@ -166,7 +189,8 @@ the Audio timeline and Audio layers in the Timeline follow it.
 ## Removing and copying
 
 - `Delete` removes the selected clips and leaves a gap. `Shift`+`Delete` removes them and
-  closes it.
+  closes it. With no clip selected, `Delete` removes nothing, unless the track was picked by
+  its header.
 - A clip's menu has **Delete clip**, which leaves a gap, and **Ripple delete**, which closes
   it.
 - Right-click a gap for **Close gap**.
@@ -188,6 +212,8 @@ that overlap crossfade.
   down to transparent, and a sound clip from or to silence.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   Dragged back to the corner, the fade is removed.
+- Right-click a fade, a dissolve or a crossfade for its curve: **Linear**, **Fast**,
+  **Slow**, **Smooth** or **Sharp**.
 - A dissolve between two clips with no spare media at the cut is **refused**.
 
 ## Effects and blend mode on a clip
@@ -198,8 +224,13 @@ effect or a preset dragged from [Effects & presets](/panels/effects-presets/) on
 lands on that clip, and a double-click there applies to the selected clip. Click a track's
 name to see the track's own stack.
 
-A clip with effects wears an **fx** mark. **Bypass effects** on the clip's menu turns its
-stack off.
+Every clip has an **fx** button at its top right, lit while the clip has effects that are on.
+Clicking it selects the clip and shows its stack. **Bypass effects** on the clip's menu turns
+the stack off.
+
+A picture clip also has a **Pan/Crop** button. It puts a **Transform** at the head of the
+clip's stack, where it has none, and shows it. Its position, scale and rotation pan, zoom
+and turn the clip, with handles in the Viewer.
 
 **Blend mode** on a picture clip's menu gives the clip a blend mode of its own. **From
 layer** hands it back to the track's.
@@ -209,6 +240,34 @@ the stack.
 
 Inside a dissolve each clip's effects fade out or in with the clip. The blend mode is that
 of the clip that is more than half of the picture.
+
+## Speed
+
+Each picture clip carries its speed as a line across it, in per cent, which is edited where it
+lies. The **Speed** switch on the strip shows and hides the lines. A retimed clip shows its
+line either way. The points and curves behave as in the
+[speed envelope](/use/retime/#speed-on-a-clip).
+
+| On a picture clip's **Speed** menu | What it does |
+| --- | --- |
+| **Speed…** | Sets the selected picture clips to one speed. |
+| **Reset speed** | Sets them back to 100%. |
+| **Copy speed** | Copies this clip's speed line. |
+| **Paste speed** | Gives the selected picture clips the copied line, stretched to each one's length. |
+
+A picture clip's linked sound clip plays at normal speed.
+
+## Gain
+
+A sound clip's level is a line across it, at the top for 0 dB. Drag it down to turn the clip
+down. A readout beside the pointer gives the level, and the waveform shrinks with it.
+
+## Groups
+
+`Ctrl`+`G`, or **Group** on a clip's menu, puts the selected clips in a group. While
+**Linked** is on, selecting one clip in a group selects the rest, so they move, trim and
+delete together. `Ctrl`+`Shift`+`G`, or **Ungroup**, takes the selected clips out of their
+group. A copy of a clip is outside the original's group.
 
 ## Clips as compositions
 

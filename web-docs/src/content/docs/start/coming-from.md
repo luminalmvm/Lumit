@@ -45,19 +45,21 @@ imported from **Settings ▸ General ▸ After Effects presets**. See
 
 | Vegas | Lumit |
 | --- | --- |
-| Event | **Clip**, inside a [Sequence layer](/use/sequence-layers/) |
-| Track | **Layer**; the Sequence layer is the Vegas-style row you can cut on |
-| Velocity envelope | The **speed envelope** under a Sequence layer's clips. See [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/) |
-| Playback rate | **Speed…** on a clip's right-click menu |
+| Event | **Clip**, on a track of the [Cut timeline](/use/cutting/) |
+| Track | A track of the Cut timeline, which is a [Sequence layer](/use/sequence-layers/) |
+| Velocity envelope | The **speed line** across a clip. See [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/) |
+| Playback rate | **Speed ▸ Speed…** on a clip's right-click menu |
 | Cursor | **Playhead** |
-| Split | **Edit ▸ Split layer**, or the **razor** tool on the [toolbar](/panels/toolbar/) |
-| Event FX | A clip's own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
+| Split | `S` with the Vegas shortcuts, or the **razor** tool |
+| Event FX | A clip's **fx** button and its own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
+| Pan/Crop | A clip's **Pan/Crop** button, a Transform on the clip. It does not crop |
+| Group, Ungroup | **Group** and **Ungroup**, `G` and `U` with the Vegas shortcuts |
 | Auto ripple | **Auto ripple**, on the [Cut timeline](/use/cutting/#switches) |
 | Automatic crossfades | **Auto crossfade**, on the Cut timeline |
 | Quantize to frames | **Quantise**, on the Cut timeline |
 
-Choosing **Vegas** on the first run makes video arrive as a Sequence layer and opens the
-Retime graph to speed. **Only change default Retime graph** leaves video arriving as footage
+Choosing **Vegas** on the first run opens the **Cut** workspace, makes video arrive as a
+Sequence layer and opens the Retime graph to speed. **Only change default Retime graph** leaves video arriving as footage
 layers. Tick **Use the Vegas shortcuts** to load those too. They are also the **Vegas**
 preset in [Settings ▸ Shortcuts](/use/settings/).
 
