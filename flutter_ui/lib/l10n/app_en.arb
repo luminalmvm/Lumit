@@ -5880,6 +5880,10 @@
   "@keyTurnSnappingOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
+  "keyShowOrHideSpeedLines": "Show or hide speed lines",
+  "@keyShowOrHideSpeedLines": {
+    "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
+  },
   "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
@@ -10814,6 +10818,22 @@
   "cutQuantise": "Quantise",
   "@cutQuantise": {
     "description": "A toggle on the Cut timeline's strip: while on, sound clips move in whole frames. Off, a sound clip can sit between two frames. One word."
+  },
+  "cutSpeedLines": "Speed",
+  "@cutSpeedLines": {
+    "description": "A toggle on the Cut timeline's strip: while on, each picture clip shows its playback speed as a line across it that can be dragged, like Vegas's velocity envelope. One word. Speed, never velocity."
+  },
+  "cutSpeedMenu": "Speed",
+  "@cutSpeedMenu": {
+    "description": "Cut timeline, clip right-click menu: the submenu holding the clip's speed commands. One word."
+  },
+  "cutCopySpeed": "Copy speed",
+  "@cutCopySpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: remember this clip's speed line, its points and curves, to paste onto other clips."
+  },
+  "cutPasteSpeed": "Paste speed",
+  "@cutPasteSpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: give every picked picture clip the speed line copied last, stretched to each clip's length."
   },
   "cutSwitchOn": "{name} on",
   "@cutSwitchOn": {

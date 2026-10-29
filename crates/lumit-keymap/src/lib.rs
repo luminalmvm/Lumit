@@ -126,6 +126,7 @@ impl ActionId {
             "cut.ripple.toggle" => "Turn auto ripple on or off",
             "cut.crossfade.toggle" => "Turn automatic crossfades on or off",
             "cut.quantise.toggle" => "Turn quantise to frames on or off",
+            "cut.speed.toggle" => "Show or hide speed lines",
             "cut.lift" => "Lift the work area",
             "cut.extract" => "Extract the work area",
             "cut.match.frame" => "Match frame",

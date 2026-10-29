@@ -22,7 +22,8 @@ import 'package:flutter_svg/flutter_svg.dart' show SvgStringLoader, SvgTheme, vg
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeKeyframe, BridgeRational, BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -39,6 +40,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb, showInsertLayerMenu;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
+import '../shell/stretch_dialog_frb.dart';
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
@@ -62,9 +64,11 @@ import '../widgets/zoom_anchored_scroll.dart';
 import 'audio_streams_menu_frb.dart';
 import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
-import 'graph_maths.dart' show rationalSeconds;
-import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'graph_maths.dart'
+    show envelopeStretchedOnto, keysOf, rationalSeconds;
+import 'layer_fold_frb.dart' show asOneUndoStep, timeOfSubframe;
 import 'placeholder.dart';
+import 'speed_envelope.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
 import 'timeline_extras_frb.dart';
 import 'timeline_lane_bottom_bar_frb.dart';
@@ -108,6 +112,10 @@ typedef _Press = ({
   CutTool tool,
   bool stretch,
 });
+
+/// The speed line Copy speed took, in its clip's own time. For this run of
+/// the app only.
+List<BridgeKeyframe>? cutSpeedClipboard;
 
 class CutTimelinePanelFrb extends StatefulWidget {
   const CutTimelinePanelFrb({super.key});
@@ -256,6 +264,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// Two clicks on a clip close together open it.
   final DoubleTap _doubleTap = DoubleTap();
+
+  /// Clicks on the speed lines, counted apart from the clips' own.
+  final DoubleTap _speedTaps = DoubleTap();
 
   /// The work area, held between document revisions.
   ({int start, int end, bool whole})? _workArea;
@@ -411,6 +422,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   bool get _autoRipple => _settings.cutAutoRipple;
   bool get _autoCrossfade => _settings.cutAutoCrossfade;
   bool get _quantise => _settings.quantiseSound;
+  bool get _speedLines => _settings.cutSpeedLines;
 
   void _toggle(void Function(InterfaceSettings s) flip) {
     flip(_settings);
@@ -652,6 +664,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       case 'cut.quantise.toggle':
         _toggle((s) => s.quantiseSound = !s.quantiseSound);
         _saySwitch(l10n.cutQuantise, _quantise);
+      case 'cut.speed.toggle':
+        _toggle((s) => s.cutSpeedLines = !s.cutSpeedLines);
+        _saySwitch(l10n.cutSpeedLines, _speedLines);
       case 'cut.delete.ripple':
         _deleteSelected(ripple: true);
       case 'cut.lift':
@@ -2489,6 +2504,56 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             ),
             child: Text(l10n.tipBlendMode),
           ),
+        // The picked picture clips' speed: one number for all of them, back
+        // to normal, or one clip's line carried onto the rest.
+        if (track.kind == CutTrackKind.picture)
+          SubmenuRow(
+            key: const ValueKey('ctl-menu-speed'),
+            closeParent: () => close(null),
+            submenu: (_) => FloatSurface(
+              width: 180,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-speed-set'),
+                    onPressed: () {
+                      close(null);
+                      _askSpeed(ui);
+                    },
+                    child: Text(l10n.menuClipSpeed),
+                  ),
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-speed-reset'),
+                    onPressed: () {
+                      close(null);
+                      _setSpeed(100);
+                    },
+                    child: Text(l10n.clipResetSpeed),
+                  ),
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-speed-copy'),
+                    onPressed: () {
+                      close(null);
+                      cutSpeedClipboard = keysOf(clip.retime);
+                    },
+                    child: Text(l10n.cutCopySpeed),
+                  ),
+                  MenuRow(
+                    key: const ValueKey('ctl-menu-speed-paste'),
+                    enabled: cutSpeedClipboard != null,
+                    onPressed: () {
+                      close(null);
+                      _pasteSpeed(ui);
+                    },
+                    child: Text(l10n.cutPasteSpeed),
+                  ),
+                ],
+              ),
+            ),
+            child: Text(l10n.cutSpeedMenu),
+          ),
         SubmenuRow(
           key: const ValueKey('ctl-menu-clip-colour'),
           closeParent: () => close(null),
@@ -2600,6 +2665,64 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ),
       ],
     );
+  }
+
+  /// The picked clips on picture tracks, which are the ones with a speed.
+  List<(CutTrack, BridgeClip)> _pickedPicture() => [
+        for (final id in _selected)
+          if (_trackOfClip[id] case final at?)
+            if (_tracks[at].kind == CutTrackKind.picture)
+              if (_tracks[at].clip(id) case final clip?) (_tracks[at], clip),
+      ];
+
+  /// Ask one speed for the picked picture clips.
+  Future<void> _askSpeed(LumitUiState ui) async {
+    final percent = await showStretchDialogFrb(
+        context: context, durationFrames: null, fps: ui.model.fps);
+    if (percent != null && mounted) _setSpeed(percent);
+  }
+
+  /// Every picked picture clip at one constant speed, in one undo step.
+  void _setSpeed(double percent) {
+    final picked = _pickedPicture();
+    if (picked.isEmpty) return;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final (track, clip) in picked) {
+        try {
+          track.entry.layer.setClipSpeed(
+              clip: clip.id, percent: percent, endPercent: percent);
+        } catch (_) {}
+      }
+    });
+    _afterCut(BridgeCutResult.done);
+  }
+
+  /// The copied speed line onto every picked picture clip, stretched to
+  /// each one's length, so a ramp cut to one beat can be given to the rest.
+  void _pasteSpeed(LumitUiState ui) {
+    final copied = cutSpeedClipboard;
+    final picked = _pickedPicture();
+    if (copied == null || picked.isEmpty) return;
+    final fps = ui.model.fps;
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final (track, clip) in picked) {
+        final own = keysOf(clip.retime);
+        if (own.isEmpty || fps <= 0) continue;
+        final keys = envelopeStretchedOnto(
+          copied,
+          (clip.endFrame - clip.startFrame).toDouble() / fps,
+          own.first.value,
+          (seconds) => timeOfSubframe(seconds * fps, fpsNum, fpsDen),
+        );
+        if (keys.isEmpty) continue;
+        try {
+          track.entry.layer.setClipRetime(
+              clip: clip.id, value: BridgeScalar.keyframed(keys));
+        } catch (_) {}
+      }
+    });
+    _afterCut(BridgeCutResult.done);
   }
 
   /// Give the picked picture clips a blend mode of their own, by its place
@@ -3043,6 +3166,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
           const SizedBox(width: 4),
           word(
+            'ctl-speed',
+            l10n.cutSpeedLines,
+            on: _speedLines,
+            onPressed: () =>
+                _toggle((s) => s.cutSpeedLines = !s.cutSpeedLines),
+          ),
+          const SizedBox(width: 4),
+          word(
             'ctl-snap',
             l10n.cutSnap,
             on: _snap,
@@ -3475,6 +3606,35 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ],
       );
 
+  /// One picture track's speed lines. A clip shows its line while the Speed
+  /// switch is on, and always once it has been retimed, so a ramp is never
+  /// hidden.
+  Widget _speedLine(LumitUiState ui, CompositionReference comp, CutTrack track,
+      {required TimelineAxis axis, required double fps}) {
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
+    final lines = _speedLines;
+    return SpeedEnvelope(
+      entry: track.entry,
+      comp: comp,
+      axis: axis,
+      hScroll: _hLane,
+      fps: fps,
+      fpsNum: fpsNum,
+      fpsDen: fpsDen,
+      onClip: true,
+      shows: (clip) => lines || clip.retimed,
+      onTapped: _speedTaps.tap,
+      onPreview: (clip, keys) => comp.renderFrameWithClipRetime(
+        frame: BigInt.from(ui.playheadFrame.value),
+        scale: 1.0,
+        layer: track.entry.layer,
+        clip: clip.id,
+        retime: BridgeScalar.keyframed(keys),
+      ),
+      onChanged: () => _afterCut(BridgeCutResult.done),
+    );
+  }
+
   Widget _laneArea(
     LumitTheme t,
     LumitUiState ui,
@@ -3734,6 +3894,24 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                   ),
                                 ),
                               ),
+                              // Each picture clip's speed, drawn across it and
+                              // taken hold of there, as Vegas draws velocity.
+                              // Above the lanes' pointer, but only a line or a
+                              // point takes a press: the rest falls through.
+                              for (var i = 0; i < _tracks.length; i++)
+                                if (_tracks[i].kind == CutTrackKind.picture &&
+                                    _tracks[i].clips.isNotEmpty &&
+                                    _toolOf(ui) == CutTool.select)
+                                  Positioned(
+                                    key: ValueKey<String>(
+                                        'ctl-speed-${_tracks[i].id}'),
+                                    left: 0,
+                                    width: axis.width,
+                                    top: _tops[i] + 3,
+                                    height: max(0, heights[i] - 6),
+                                    child: _speedLine(ui, comp, _tracks[i],
+                                        axis: axis, fps: fps),
+                                  ),
                             ],
                           ),
                         ),

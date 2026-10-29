@@ -345,6 +345,10 @@ class InterfaceSettings {
   /// another keeps the overlap, which is a dissolve or a crossfade.
   bool cutAutoCrossfade;
 
+  /// The Cut timeline's Speed switch: each picture clip carries its speed as
+  /// a line across it, edited where it lies, as Vegas draws velocity.
+  bool cutSpeedLines;
+
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
@@ -562,6 +566,7 @@ class InterfaceSettings {
     this.videoAsSequenceLayer = false,
     this.cutAutoRipple = false,
     this.cutAutoCrossfade = false,
+    this.cutSpeedLines = true,
     this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
@@ -605,6 +610,7 @@ class InterfaceSettings {
         'video_as_sequence_layer': videoAsSequenceLayer,
         'cut_auto_ripple': cutAutoRipple,
         'cut_auto_crossfade': cutAutoCrossfade,
+        'cut_speed_lines': cutSpeedLines,
         'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
@@ -669,6 +675,7 @@ class InterfaceSettings {
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
         cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
+        cutSpeedLines: j['cut_speed_lines'] as bool? ?? true,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is

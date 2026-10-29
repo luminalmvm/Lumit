@@ -50,6 +50,9 @@ class SpeedEnvelope extends StatefulWidget {
   /// clip underneath.
   final bool onClip;
 
+  /// Which clips draw a line, where not every one does.
+  final bool Function(BridgeClip clip)? shows;
+
   const SpeedEnvelope({
     super.key,
     required this.entry,
@@ -63,6 +66,7 @@ class SpeedEnvelope extends StatefulWidget {
     this.onPreview,
     required this.onTapped,
     this.onClip = false,
+    this.shows,
   });
 
   @override
@@ -170,7 +174,10 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
   /// selection box.
   static const double _lineGrab = 10;
 
-  List<BridgeClip> get _clips => widget.entry.info.clips;
+  List<BridgeClip> get _clips => switch (widget.shows) {
+        final shows? => widget.entry.info.clips.where(shows).toList(),
+        null => widget.entry.info.clips,
+      };
 
   /// A clip's envelope keys — the map it actually plays by, which the engine
   /// hands over whether or not the clip has one of its own.
@@ -197,12 +204,19 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
   (double, double) get _range {
     final frozen = _frozen;
     if (frozen != null) return frozen;
-    final (lo, hi) = fitEnvelopeRange([for (final c in _clips) _keysOf(c)]);
+    var (lo, hi) = fitEnvelopeRange([for (final c in _clips) _keysOf(c)]);
     // A little air past whatever the curves reach, so a point at the extreme
     // is not drawn half outside its own row. The *default* range carries its
     // own headroom, so an ordinary clip needs none added.
     const air = 8.0;
-    final (dlo, dhi) = envelopeDefaultRange;
+    var (dlo, dhi) = envelopeDefaultRange;
+    // Over a clip, 100% runs through the middle, clear of the clip's name
+    // and buttons along its top, with room to ramp either way.
+    if (widget.onClip) {
+      (dlo, dhi) = (-50.0, 250.0);
+      lo = lo < dlo ? lo : dlo;
+      hi = hi > dhi ? hi : dhi;
+    }
     return (lo < dlo ? lo - air : dlo, hi > dhi ? hi + air : dhi);
   }
 
@@ -328,97 +342,103 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
                     _drag != null ||
                     _pointAt(local, height) != null ||
                     _onALine(local, height),
-                child: Listener(
-                key: const ValueKey('seq-envelope'),
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (e) {
-                  if (e.buttons & kSecondaryMouseButton != 0) {
-                    _secondary = true;
-                    _pointMenu(e.localPosition, e.position, height);
-                    return;
-                  }
-                  _downAt = e.localPosition;
-                  if (_onALine(e.localPosition, height)) {
-                    _startDrag(e.localPosition, height);
-                  } else {
-                    setState(() => _box =
-                        Rect.fromPoints(e.localPosition, e.localPosition));
-                  }
-                },
-                onPointerMove: (e) => setState(() {
-                  final from = _downAt;
-                  if (_box != null && from != null) {
-                    _moving = true;
-                    _box = Rect.fromPoints(from, e.localPosition);
-                    return;
-                  }
-                  final held = _drag;
-                  if (held == null) return;
-                  _moving = true;
-                  // `Ctrl` is the value well's own fine rung, a tenth of the
-                  // pointer's rate, with the point held to its time. Taken
-                  // off each move as it is added, so pressing or letting go
-                  // mid-drag changes what the next pixel is worth and moves
-                  // nothing. `Shift` or `Alt` move it in time alone.
-                  final keys = HardwareKeyboard.instance;
-                  final fine = keys.isControlPressed;
-                  final timeOnly = keys.isShiftPressed || keys.isAltPressed;
-                  if (!timeOnly) _travelled += e.delta.dy * (fine ? 0.1 : 1);
-                  final (lo, hi) = _range;
-                  final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
-                  final perPixel = span / (height <= 0 ? 1 : height);
-                  // Down is slower: the axis runs fast at the top.
-                  final asked = _grabbedAt - _travelled * perPixel;
-                  _drag = (
-                    clip: held.clip,
-                    index: held.index,
-                    // Onto the every-frame guide when it comes near, which a
-                    // fine drag is too exact to want.
-                    speed: fine
-                        ? asked
-                        : snapEnvelopeSpeed(
-                            asked,
-                            _everyFrame[held.clip.id.toString()],
-                            envelopeSnapReach * perPixel),
-                    dx: fine ? held.dx : held.dx + e.delta.dx,
-                    fine: fine,
-                  );
-                  // The picture follows the point. A retime decides *which*
-                  // frame is decoded, so this is the one drag where nothing
-                  // moves on screen until it is asked to.
-                  widget.onPreview?.call(held.clip, _shown(held.clip));
-                }),
-                onPointerUp: (e) {
-                  if (_secondary) {
-                    _secondary = false;
-                    return;
-                  }
-                  setState(() => _frozen = null);
-                  final box = _box;
-                  if (box != null) {
-                    setState(() {
+                // Over a clip, the line is found by the cursor changing.
+                child: MouseRegion(
+                  cursor: widget.onClip
+                      ? SystemMouseCursors.resizeUpDown
+                      : MouseCursor.defer,
+                  child: Listener(
+                    key: const ValueKey('seq-envelope'),
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (e) {
+                      if (e.buttons & kSecondaryMouseButton != 0) {
+                        _secondary = true;
+                        _pointMenu(e.localPosition, e.position, height);
+                        return;
+                      }
+                      _downAt = e.localPosition;
+                      if (_onALine(e.localPosition, height)) {
+                        _startDrag(e.localPosition, height);
+                      } else {
+                        setState(() => _box =
+                            Rect.fromPoints(e.localPosition, e.localPosition));
+                      }
+                    },
+                    onPointerMove: (e) => setState(() {
+                      final from = _downAt;
+                      if (_box != null && from != null) {
+                        _moving = true;
+                        _box = Rect.fromPoints(from, e.localPosition);
+                        return;
+                      }
+                      final held = _drag;
+                      if (held == null) return;
+                      _moving = true;
+                      // `Ctrl` is the value well's own fine rung, a tenth of the
+                      // pointer's rate, with the point held to its time. Taken
+                      // off each move as it is added, so pressing or letting go
+                      // mid-drag changes what the next pixel is worth and moves
+                      // nothing. `Shift` or `Alt` move it in time alone.
+                      final keys = HardwareKeyboard.instance;
+                      final fine = keys.isControlPressed;
+                      final timeOnly = keys.isShiftPressed || keys.isAltPressed;
+                      if (!timeOnly) _travelled += e.delta.dy * (fine ? 0.1 : 1);
+                      final (lo, hi) = _range;
+                      final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
+                      final perPixel = span / (height <= 0 ? 1 : height);
+                      // Down is slower: the axis runs fast at the top.
+                      final asked = _grabbedAt - _travelled * perPixel;
+                      _drag = (
+                        clip: held.clip,
+                        index: held.index,
+                        // Onto the every-frame guide when it comes near, which a
+                        // fine drag is too exact to want.
+                        speed: fine
+                            ? asked
+                            : snapEnvelopeSpeed(
+                                asked,
+                                _everyFrame[held.clip.id.toString()],
+                                envelopeSnapReach * perPixel),
+                        dx: fine ? held.dx : held.dx + e.delta.dx,
+                        fine: fine,
+                      );
+                      // The picture follows the point. A retime decides *which*
+                      // frame is decoded, so this is the one drag where nothing
+                      // moves on screen until it is asked to.
+                      widget.onPreview?.call(held.clip, _shown(held.clip));
+                    }),
+                    onPointerUp: (e) {
+                      if (_secondary) {
+                        _secondary = false;
+                        return;
+                      }
+                      setState(() => _frozen = null);
+                      final box = _box;
+                      if (box != null) {
+                        setState(() {
+                          _box = null;
+                          if (_moving) _catch(box, height);
+                        });
+                      } else if (!_moving) {
+                        // A press that never moved is a click: plant a point, lift
+                        // one, or nothing at all.
+                        setState(() => _drag = null);
+                        _tap(_downAt ?? e.localPosition, height);
+                      } else {
+                        _commit();
+                      }
+                      _moving = false;
+                      _downAt = null;
+                    },
+                    onPointerCancel: (_) => setState(() {
+                      _drag = null;
+                      _moving = false;
+                      _frozen = null;
                       _box = null;
-                      if (_moving) _catch(box, height);
-                    });
-                  } else if (!_moving) {
-                    // A press that never moved is a click: plant a point, lift
-                    // one, or nothing at all.
-                    setState(() => _drag = null);
-                    _tap(_downAt ?? e.localPosition, height);
-                  } else {
-                    _commit();
-                  }
-                  _moving = false;
-                  _downAt = null;
-                },
-                onPointerCancel: (_) => setState(() {
-                  _drag = null;
-                  _moving = false;
-                  _frozen = null;
-                  _box = null;
-                  _secondary = false;
-                }),
-              ),
+                      _secondary = false;
+                    }),
+                  ),
+                ),
               ),
             ),
           ],
@@ -541,6 +561,9 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     if (clip == null) return false;
     final keys = _keysOf(clip);
     final speeds = envelopeSpeeds(keys);
+    // Tighter over a clip, where everything else under the line is a clip
+    // to take hold of.
+    final reach = widget.onClip ? _lineGrab / 2 : _lineGrab;
     for (var i = 0; i + 1 < keys.length; i++) {
       final x0 = _xOfKey(clip, keys[i]);
       final x1 = _xOfKey(clip, keys[i + 1]);
@@ -551,7 +574,7 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       final speed = f <= 0 || f >= 1
           ? speeds[f <= 0 ? i : i + 1]
           : evaluateKeysSpeed(keys, t0 + (t1 - t0) * f) * 100;
-      if ((local.dy - _y(speed, height)).abs() <= _lineGrab) return true;
+      if ((local.dy - _y(speed, height)).abs() <= reach) return true;
     }
     return false;
   }

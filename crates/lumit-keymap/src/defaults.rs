@@ -346,6 +346,7 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "Shift+B", "cut.ripple.toggle"),
         row(Cut, "Shift+X", "cut.crossfade.toggle"),
         row(Cut, "Alt+F8", "cut.quantise.toggle"),
+        row(Cut, "Shift+E", "cut.speed.toggle"),
         row(Cut, ";", "cut.lift"),
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),

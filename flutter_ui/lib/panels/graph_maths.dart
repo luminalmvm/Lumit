@@ -1106,6 +1106,50 @@ List<BridgeKeyframe> envelopeToKeys(
   ];
 }
 
+/// [source]'s speed line laid onto a clip [seconds] long whose map starts at
+/// [startValue]: every point at the same share of the length, keeping its
+/// speed and the curve after it. [timeAt] rounds a clip time the way the
+/// clip's keys are written. Empty when there is nothing to lay down.
+List<BridgeKeyframe> envelopeStretchedOnto(
+  List<BridgeKeyframe> source,
+  double seconds,
+  double startValue,
+  BridgeRational Function(double seconds) timeAt,
+) {
+  if (source.length < 2 || seconds <= 0) return const [];
+  final from = rationalSeconds(source.first.time);
+  final length = rationalSeconds(source.last.time) - from;
+  if (length <= 0) return const [];
+  final speeds = envelopeSpeeds(source);
+  final curves = envelopeCurves(source);
+  final keys = <BridgeKeyframe>[];
+  final kept = <double>[];
+  final shapes = <SpeedCurve>[];
+  for (var i = 0; i < source.length; i++) {
+    final time = timeAt(
+        (rationalSeconds(source[i].time) - from) / length * seconds);
+    // A short clip can round two points onto one time. The later goes, but
+    // never the clip's own end, which takes the place of the one before it.
+    if (keys.isNotEmpty &&
+        rationalSeconds(time) <= rationalSeconds(keys.last.time)) {
+      if (i < source.length - 1 || keys.length < 2) continue;
+      keys.removeLast();
+      kept.removeLast();
+      shapes.removeLast();
+    }
+    if (keys.isNotEmpty) shapes.add(curves[i - 1]);
+    keys.add(BridgeKeyframe(
+      time: time,
+      value: startValue,
+      interpIn: const BridgeSideInterp.linear(),
+      interpOut: const BridgeSideInterp.linear(),
+    ));
+    kept.add(speeds[i]);
+  }
+  if (keys.length < 2) return const [];
+  return envelopeToKeys(keys, kept, curves: shapes);
+}
+
 /// [keys] with span [span] played in [curve].
 List<BridgeKeyframe> setEnvelopeCurve(
     List<BridgeKeyframe> keys, int span, SpeedCurve curve) {
