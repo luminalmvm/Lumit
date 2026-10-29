@@ -69,6 +69,7 @@ const _bannedWordIsAnotherSense = {
   'keyCutEveryTrackAtThePlayhead',
   'keyMoveClipsUpATrack',
   'keyMoveClipsDownATrack',
+  'keyMinimiseEveryTrackOrRestoreThem',
   'cutRefusedLocked',
   'cutSoundOnItsOwnTrack',
   // The Cut and Audio timelines' clip menu, handing a clip back its row's.
