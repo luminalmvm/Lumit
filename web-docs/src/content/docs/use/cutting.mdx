@@ -42,8 +42,9 @@ for finer steps. Double-click puts it back. On a keyed property the slider sets 
 playhead.
 
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
-drawn in it. Right-click a track's header for **Volume envelope**, **Pan envelope**, **New
-layer**, **Duplicate**, **Delete** and **Label colour**. **Clip colour** on a clip's menu
+drawn in it. Right-click a track's header for **Volume envelope**, **Pan envelope**,
+**Minimise all tracks**, **New layer**, **Duplicate**, **Delete** and **Label colour**.
+**Minimise all tracks** again puts them back. **Clip colour** on a clip's menu
 gives the picked clips a colour of their own, and **Track colour** hands it back.
 
 A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
@@ -141,8 +142,8 @@ tool before on release.
 Pressing `B` during an edge drag with **Select** turns the ripple on for that drag, and
 releasing it turns it off.
 
-While an edge is dragged the clip draws a faint outline of its whole source, and a readout
-beside the pointer counts the frames moved.
+While an edge is dragged the Viewer shows the frame at the edge, the clip draws a faint
+outline of its whole source, and a readout beside the pointer counts the frames moved.
 
 **Snap** holds a dragged edge to the start and end of every clip, the playhead and markers.
 `S` turns it on and off, and `Ctrl` suspends it. `Esc` abandons a drag.
@@ -166,7 +167,9 @@ A click on the tracks also moves the playhead there.
 
 With the Vegas preset the wheel zooms with no key held and scrolls the tracks with `Ctrl`,
 `Q` turns looping on and off, `G` and `U` group and ungroup, and `V` and `P` show and hide
-the volume and pan envelopes.
+the volume and pan envelopes. `T` and `Shift`+`T` switch the picked clips to their next and
+previous take, `Ctrl`+`Shift`+`V` pastes a clip's attributes onto them, and `R` adds a region
+over the work area.
 
 Choosing **Vegas** when Lumit first opens loads the Vegas preset and turns on **Clip drags in
 Cut** and **Auto crossfade**.
@@ -245,9 +248,15 @@ Clicking it selects the clip and shows its stack. **Bypass effects** on the clip
 the stack off.
 
 A picture clip also has a **Pan/Crop** button. It puts a [Crop](/effects/utility/crop/) and a
-**Transform** on the clip, where it has none, and shows them. The Crop takes edges off the
-picture. The Transform's position, scale and rotation pan, zoom and turn the clip, with
-handles in the Viewer.
+**Transform** on the clip, where it has none, and opens the **Pan/Crop** window: the clip's
+frame with a box over the part that fills the picture.
+
+- Drag inside the box to pan, a corner or an edge to zoom, and the knob above it to turn it.
+- **X**, **Y**, **Width**, **Height** and **Rotation** type the box exactly.
+- **Lock aspect** keeps its proportions, and **Fill frame** puts it back over the whole frame.
+
+The box writes the Transform's anchor, scale and rotation, at the playhead on a keyed
+property. The Crop's edges are set in Effect controls.
 
 **Blend mode** on a picture clip's menu gives the clip a blend mode of its own. **From
 layer** hands it back to the track's.
@@ -281,6 +290,28 @@ A sound clip's level is a line across it, at the top for 0 dB. Drag it down to t
 down, with `Ctrl` for finer steps. Double-click it to put it back at 0 dB. A readout beside
 the pointer gives the level, and the waveform shrinks with it.
 
+A picture clip's opacity is the same line along its top edge. Drag it down to make the clip
+see-through, and double-click it to put it back at full. Below full the line shows across
+the clip.
+
+## Takes
+
+A clip can hold several takes: other footage shown in the same place, as in Vegas.
+
+- Drop footage on a clip with `Alt` held to add it as a take. The clip shows it.
+- `T` shows the next take and `Shift`+`T` the previous one, on the selected clips.
+- **Take** on a clip's menu lists them, with the one showing ticked. **Delete take** removes
+  the one showing.
+
+A take keeps the clip's place, length, speed, effects and fades. A linked sound clip of the
+same footage changes take with it.
+
+## Paste attributes
+
+**Paste attributes** on a clip's menu, or `Ctrl`+`Alt`+`V`, gives the selected clips the
+copied clip's effects, gain, opacity, blend mode, fades and speed. Copy the clip first with
+`Ctrl`+`C`.
+
 ## Envelopes
 
 A sound track's volume and pan can be drawn as lines across the whole track, as in the
@@ -288,11 +319,16 @@ A sound track's volume and pan can be drawn as lines across the whole track, as 
 `Shift`+`P` the pan envelope, on the selected clips' tracks or the track last clicked. A track
 whose volume or pan has keys shows its envelope to begin with.
 
-- Drag the line up or down. With keys, the nearest one moves.
+- Drag the line up or down. Between two keys both move.
+- Drag a key to move it in time and value. `Shift` or `Alt` held moves it in time only, and
+  `Ctrl` gives finer steps with its time held.
 - Double-click the line, or `Ctrl`+click it, to plant a key. `Alt`+click removes one.
 - Double-click a key to put it back at 0 dB or centre.
-- `Ctrl` held while dragging moves it in finer steps.
 - The value shows beside the pointer while dragging.
+
+Right-click a key for **Reset** and **Delete**. Right-click the line for **Add point**, the
+curve of the stretch under the pointer (**Linear**, **Fast**, **Slow**, **Smooth**,
+**Sharp** or **Hold**), **Flip all points** and **Reset all**.
 
 An envelope shows on a track tall enough to take it, under the fade handles. A locked
 track's envelope cannot be dragged, and a property driven by an expression has none.
@@ -325,6 +361,9 @@ so. Lock the track holding that clip, or clear the space.
 `=` and `-` zoom about the playhead. `\` fits the whole composition, and again returns to
 the zoom before. During playback, or after a key moves the playhead, the view pages along
 when the playhead leaves it.
+
+Markers run as lines down through the tracks, and a region, a marker with a length, as a
+faint band. `R` adds a region over the work area.
 
 :::note[Not built yet]
 Multicam, captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
