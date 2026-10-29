@@ -12,6 +12,7 @@ pub mod audio;
 // needs the audio pipeline and says so calmly when the build has none.
 pub mod beats;
 pub mod cache;
+pub mod clip_group;
 pub mod colour;
 pub mod comp_graph;
 pub mod composition;

@@ -497,6 +497,9 @@ class BridgeClip {
   /// The clip's own label colour, or `None` while it wears its layer's.
   final int? label;
 
+  /// The group the clip is in, or `None`.
+  final UuidValue? group;
+
   /// Where the clip starts and ends on the comp's clock in frames, with the
   /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
   /// may sit between two frames, and this is where it is drawn.
@@ -527,6 +530,7 @@ class BridgeClip {
     required this.sourceIsComp,
     this.blend,
     this.label,
+    this.group,
     required this.startExact,
     required this.endExact,
   });
@@ -556,6 +560,7 @@ class BridgeClip {
       sourceIsComp.hashCode ^
       blend.hashCode ^
       label.hashCode ^
+      group.hashCode ^
       startExact.hashCode ^
       endExact.hashCode;
 
@@ -587,6 +592,7 @@ class BridgeClip {
           sourceIsComp == other.sourceIsComp &&
           blend == other.blend &&
           label == other.label &&
+          group == other.group &&
           startExact == other.startExact &&
           endExact == other.endExact;
 }
@@ -4091,6 +4097,11 @@ class LayerReference {
   void setClipGain({required UuidValue clip, required double db}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetClipGain(that: this, clip: clip, db: db);
+
+  /// Put one clip in `group`, or take it out of any with `None`.
+  void setClipGroup({required UuidValue clip, UuidValue? group}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipGroup(
+          that: this, clip: clip, group: group);
 
   /// Give one clip a label colour of its own, or hand it back to the
   /// layer's with `None`.

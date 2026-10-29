@@ -223,6 +223,12 @@ pub struct Clip {
     /// "the layer's", and is left out of the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<u8>,
+    /// The group the clip is in, as Vegas groups events: clips sharing one
+    /// are picked, moved and trimmed together. Apart from `link`, which pairs
+    /// a picture clip with its sound one to one. Left out of the file while
+    /// unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<Uuid>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -257,6 +263,7 @@ impl Clip {
             audible: true,
             blend: None,
             label: None,
+            group: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -630,6 +637,8 @@ impl Clip {
         Clip {
             id: Uuid::now_v7(),
             effects: respawn(&self.effects),
+            // A copy is out of the original's group.
+            group: None,
             ..self.clone()
         }
     }
@@ -733,6 +742,7 @@ impl Clip {
             audible: self.audible,
             blend: self.blend,
             label: self.label,
+            group: self.group,
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -762,6 +772,7 @@ impl Clip {
             audible: self.audible,
             blend: self.blend,
             label: self.label,
+            group: self.group,
             extra: self.extra.clone(),
         };
         Some((left, right))

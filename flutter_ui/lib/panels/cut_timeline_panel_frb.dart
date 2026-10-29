@@ -31,7 +31,7 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeAudioStreams;
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart' show UuidValue;
+import 'package:uuid/uuid.dart' show Uuid, UuidValue;
 
 import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
@@ -702,6 +702,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       case 'cut.speed.toggle':
         _toggle((s) => s.cutSpeedLines = !s.cutSpeedLines);
         _saySwitch(l10n.cutSpeedLines, _speedLines);
+      case 'cut.group':
+        _group(join: true);
+      case 'cut.ungroup':
+        _group(join: false);
       case 'cut.delete.ripple':
         _deleteSelected(ripple: true);
       case 'cut.lift':
@@ -1298,6 +1302,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         if (clip.link case final link?) {
           byLink.putIfAbsent(link.toString(), () => {}).add(id);
         }
+        if (clip.group case final group?) {
+          byLink.putIfAbsent('group $group', () => {}).add(id);
+        }
       }
     }
     _trackOfClip = of;
@@ -1334,9 +1341,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       for (final track in _tracks) ...[track.id, '${track.id}-sound'],
     };
     _heightsHere?.removeWhere((id, _) => !rows.contains(id));
+    // A clip's link and its group, and the links of the clips in its group,
+    // so a grouped picture clip brings its sound along.
+    final direct = <String, Set<String>>{};
+    for (final set in byLink.values) {
+      for (final id in set) {
+        (direct[id] ??= {}).addAll(set);
+      }
+    }
     _mates = {
-      for (final group in byLink.values)
-        for (final id in group) id: group,
+      for (final MapEntry(key: id, value: near) in direct.entries)
+        id: {for (final m in near) ...?direct[m]},
     };
     _selected = {
       for (final id in _selected)
@@ -2882,6 +2897,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
         ],
         MenuRow(
+          key: const ValueKey('ctl-menu-group'),
+          onPressed: () {
+            close(null);
+            _group(join: true);
+          },
+          child: Text(l10n.cutGroup),
+        ),
+        if (clip.group != null)
+          MenuRow(
+            key: const ValueKey('ctl-menu-ungroup'),
+            onPressed: () {
+              close(null);
+              _group(join: false);
+            },
+            child: Text(l10n.cutUngroup),
+          ),
+        MenuRow(
           key: const ValueKey('ctl-menu-delete'),
           onPressed: () {
             close(null);
@@ -2961,6 +2993,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         if (clipFadePartner(on.clips, each, into: into) case final other?) {
           write(on, other, rising: !into);
         }
+      }
+    });
+    _afterCut(BridgeCutResult.done);
+  }
+
+  /// The picked clips into one new group, or out of the groups they are in.
+  /// One undo step.
+  void _group({required bool join}) {
+    final picked = [
+      for (final id in _selected)
+        if (_trackOfClip[id] case final at?)
+          if (_tracks[at].clip(id) case final clip?) (_tracks[at], clip),
+    ];
+    if (picked.isEmpty || (join && picked.length < 2)) return;
+    final group = join ? UuidValue.fromString(const Uuid().v4()) : null;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final (track, clip) in picked) {
+        try {
+          track.entry.layer.setClipGroup(clip: clip.id, group: group);
+        } catch (_) {}
       }
     });
     _afterCut(BridgeCutResult.done);

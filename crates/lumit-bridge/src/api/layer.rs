@@ -1520,6 +1520,8 @@ pub struct BridgeClip {
     pub blend: Option<u32>,
     /// The clip's own label colour, or `None` while it wears its layer's.
     pub label: Option<u8>,
+    /// The group the clip is in, or `None`.
+    pub group: Option<Uuid>,
     /// Where the clip starts and ends on the comp's clock in frames, with the
     /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
     /// may sit between two frames, and this is where it is drawn.
@@ -1643,6 +1645,7 @@ fn bridge_clip(
                 .unwrap_or(0) as u32
         }),
         label: clip.label,
+        group: clip.group,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
     }
@@ -4970,7 +4973,7 @@ impl LayerReference {
 
     /// This layer's clips and the index of `clip` among them.
     #[frb(ignore)]
-    fn clips_and_index(
+    pub(crate) fn clips_and_index(
         &self,
         clip: Uuid,
     ) -> Result<(Vec<lumit_core::sequence::Clip>, usize), BridgeError> {
@@ -5413,6 +5416,7 @@ impl LayerReference {
                 audible: true,
                 blend: None,
                 label: None,
+                group: None,
                 extra: serde_json::Map::new(),
             }],
         };
@@ -5538,7 +5542,10 @@ impl LayerReference {
     /// because the op's inverse is "the clips as they were" and a span quietly
     /// changed inside it would not come back on undo. A batch inverts
     /// member-wise, so both halves undo together for free.
-    fn commit_clips(&self, clips: Vec<lumit_core::sequence::Clip>) -> Result<(), BridgeError> {
+    pub(crate) fn commit_clips(
+        &self,
+        clips: Vec<lumit_core::sequence::Clip>,
+    ) -> Result<(), BridgeError> {
         let offset = self.item()?.start_offset;
         self.commit_clips_with_offset(clips, offset)
     }

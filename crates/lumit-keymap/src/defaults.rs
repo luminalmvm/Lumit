@@ -347,6 +347,8 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "Shift+X", "cut.crossfade.toggle"),
         row(Cut, "Alt+F8", "cut.quantise.toggle"),
         row(Cut, "Shift+E", "cut.speed.toggle"),
+        row(Cut, "Mod+G", "cut.group"),
+        row(Cut, "Mod+Shift+G", "cut.ungroup"),
         row(Cut, ";", "cut.lift"),
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),
@@ -505,6 +507,8 @@ pub fn after_effects_preset() -> Keymap {
 ///   speed lines on the clips, Vegas's chord for its envelopes.
 /// - The wheel zooms time with no key held, and Ctrl with it scrolls the
 ///   tracks.
+/// - **G** groups the picked clips and **U** takes them out of their group.
+///   Slide keeps no key, as Vegas slides with Ctrl+Alt held.
 /// - **M** adds a marker, anywhere.
 /// - **Mod+Q**, **Mod+Shift+Q** and **Mod+Alt+Shift+Q** add an empty Audio,
 ///   Sequence or Adjustment layer, anywhere. Not on a Mac, where Cmd+Q quits
@@ -549,6 +553,8 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),
         (Cut, "Mod+Shift+E", "cut.speed.toggle"),
         (Cut, "Q", "playback.loop.toggle"),
+        (Cut, "G", "cut.group"),
+        (Cut, "U", "cut.ungroup"),
         (Global, "M", "marker.add"),
         (Timeline, "Shift+M", "reveal.masks"),
         (Timeline, "Shift+S", "reveal.scale"),

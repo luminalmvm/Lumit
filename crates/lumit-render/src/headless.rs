@@ -5577,6 +5577,7 @@ mod tests {
             audible: true,
             blend: None,
             label: None,
+            group: None,
             extra: serde_json::Map::new(),
         };
         push_layer(

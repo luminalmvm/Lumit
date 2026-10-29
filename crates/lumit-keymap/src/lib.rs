@@ -128,6 +128,8 @@ impl ActionId {
             "cut.crossfade.toggle" => "Turn automatic crossfades on or off",
             "cut.quantise.toggle" => "Turn quantise to frames on or off",
             "cut.speed.toggle" => "Show or hide speed lines",
+            "cut.group" => "Group the picked clips",
+            "cut.ungroup" => "Take the picked clips out of their group",
             "cut.lift" => "Lift the work area",
             "cut.extract" => "Extract the work area",
             "cut.match.frame" => "Match frame",

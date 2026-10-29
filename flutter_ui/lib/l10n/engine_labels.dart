@@ -1436,6 +1436,9 @@ Map<String, String> get _built => {
       "Turn snapping on or off": l10n.keyTurnSnappingOnOrOff,
       "Show or hide speed lines": l10n.keyShowOrHideSpeedLines,
       "Turn looping on or off": l10n.keyTurnLoopingOnOrOff,
+      "Group the picked clips": l10n.keyGroupThePickedClips,
+      "Take the picked clips out of their group":
+          l10n.keyTakeThePickedClipsOutOfTheirGroup,
       "Turn linked selection on or off": l10n.keyTurnLinkedSelectionOnOrOff,
       "Turn auto ripple on or off": l10n.keyTurnAutoRippleOnOrOff,
       "Turn automatic crossfades on or off":

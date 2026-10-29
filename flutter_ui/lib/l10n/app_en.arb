@@ -5884,6 +5884,14 @@
   "@keyTurnLoopingOnOrOff": {
     "description": "Keyboard shortcut action: switch playback between looping the work area and playing it once. Vegas puts this on Q."
   },
+  "keyGroupThePickedClips": "Group the picked clips",
+  "@keyGroupThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: put the picked clips in one group, so they are picked and moved together. Vegas puts this on G."
+  },
+  "keyTakeThePickedClipsOutOfTheirGroup": "Take the picked clips out of their group",
+  "@keyTakeThePickedClipsOutOfTheirGroup": {
+    "description": "Keyboard shortcut action in the Cut timeline: the picked clips leave the group they are in. Vegas puts this on U."
+  },
   "keyShowOrHideSpeedLines": "Show or hide speed lines",
   "@keyShowOrHideSpeedLines": {
     "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
@@ -10834,6 +10842,14 @@
   "cutSpeedLines": "Speed",
   "@cutSpeedLines": {
     "description": "A toggle on the Cut timeline's strip: while on, each picture clip shows its playback speed as a line across it that can be dragged, like Vegas's velocity envelope. One word. Speed, never velocity."
+  },
+  "cutGroup": "Group",
+  "@cutGroup": {
+    "description": "Cut timeline, clip right-click menu: put the picked clips in one group, so picking or moving one takes the rest. One word."
+  },
+  "cutUngroup": "Ungroup",
+  "@cutUngroup": {
+    "description": "Cut timeline, clip right-click menu: take the picked clips out of their group. One word."
   },
   "cutSpeedMenu": "Speed",
   "@cutSpeedMenu": {
