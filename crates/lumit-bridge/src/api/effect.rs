@@ -2245,6 +2245,9 @@ pub struct BridgeEffectInstance {
     /// commit. A row leaves this list when the user writes to it or presses
     /// Sync.
     offered: Vec<String>,
+    /// Whether the layer it came from has a picture of its own, which an LFX
+    /// effect's `@enabled_if(input)` rows read.
+    picture: bool,
 }
 
 /// What the Sync and Remove affordances would do to one instance
@@ -2903,13 +2906,22 @@ impl BridgeEffectInstance {
             effect,
             offset,
             offered,
+            picture: false,
         }
+    }
+
+    /// This handle, read off a layer that has a picture of its own when
+    /// `picture` is set.
+    #[frb(ignore)]
+    pub(crate) fn on_picture(mut self, picture: bool) -> Self {
+        self.picture = picture;
+        self
     }
 
     /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
     #[frb(sync)]
     pub fn get_info(&self) -> BridgeEffectInstanceInfo {
-        read_instance_info(&self.effect, self.offset, false)
+        read_instance_info(&self.effect, self.offset, self.picture)
     }
 
     /// This instance's own id — what the stack ops on

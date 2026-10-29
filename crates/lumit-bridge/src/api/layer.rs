@@ -7452,6 +7452,7 @@ impl LayerReference {
                     crate::api::effect::with_live_inputs(f, &doc).into_owned(),
                     layer.start_offset.0,
                 )
+                .on_picture(!layer.is_adjustment())
             })
             .collect())
     }
