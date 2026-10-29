@@ -3069,6 +3069,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.lumit);
+                      _vegasDrags(false);
                       _presetLoaded(l10n.keymapLumitDefault);
                     },
                     child: Text(l10n.keymapLumitDefault, style: t.small),
@@ -3079,6 +3080,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.afterEffects);
+                      _vegasDrags(false);
                       _presetLoaded(l10n.keymapAfterEffects);
                     },
                     child: Text(l10n.keymapAfterEffects, style: t.small),
@@ -3089,6 +3091,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.vegas);
+                      _vegasDrags(true);
                       _presetLoaded(l10n.firstRunVegasName);
                     },
                     child: Text(l10n.firstRunVegasName, style: t.small),
@@ -3222,6 +3225,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               BridgeWheelModifier.ctrl => l10n.keymapWheelCtrl,
               BridgeWheelModifier.alt => l10n.keymapWheelAlt,
               BridgeWheelModifier.shift => l10n.keymapWheelShift,
+              BridgeWheelModifier.bare => l10n.keymapWheelBare,
             },
             onChanged: (m) async {
               await km.setWheel(row.action, m);
@@ -3236,6 +3240,23 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// Which modifier changes what a drag does, under the scroll wheel's.
   List<Widget> _dragSection(LumitTheme t, KeymapState km) {
+    final workspace =
+        Provider.of<LumitUiState>(context, listen: false).workspace;
+    final cut = _row(
+      t,
+      l10n.keymapDragCut,
+      _dropdown<bool>(
+        key: 'keymap-drag-cut',
+        value: workspace.interface.cutVegasDrags,
+        options: const [false, true],
+        label: (vegas) =>
+            vegas ? l10n.firstRunVegasName : l10n.keymapLumitDefault,
+        onChanged: (vegas) {
+          _vegasDrags(vegas);
+          setState(() {});
+        },
+      ),
+    );
     final row = _row(
       t,
       l10n.keymapDragBreakHandles,
@@ -3253,8 +3274,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         },
       ),
     );
-    if (row == null) return const [];
-    return [settingsSection(t, l10n.keymapDrag, [row])];
+    final rows = [row, cut].whereType<Widget>().toList();
+    if (rows.isEmpty) return const [];
+    return [settingsSection(t, l10n.keymapDrag, rows)];
+  }
+
+  /// The Cut timeline's drags, which follow the preset last loaded.
+  void _vegasDrags(bool on) {
+    final workspace =
+        Provider.of<LumitUiState>(context, listen: false).workspace;
+    workspace.interface.cutVegasDrags = on;
+    workspace.settingsChanged();
   }
 
   /// What the last import or export said, shown under the buttons.

@@ -30985,6 +30985,7 @@ impl SseDecode for crate::api::keymap::BridgeWheelModifier {
             0 => crate::api::keymap::BridgeWheelModifier::Ctrl,
             1 => crate::api::keymap::BridgeWheelModifier::Alt,
             2 => crate::api::keymap::BridgeWheelModifier::Shift,
+            3 => crate::api::keymap::BridgeWheelModifier::Bare,
             _ => unreachable!("Invalid variant for BridgeWheelModifier: {}", inner),
         };
     }
@@ -43109,6 +43110,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::keymap::BridgeWheelModifier {
             Self::Ctrl => 0.into_dart(),
             Self::Alt => 1.into_dart(),
             Self::Shift => 2.into_dart(),
+            Self::Bare => 3.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -48499,6 +48501,7 @@ impl SseEncode for crate::api::keymap::BridgeWheelModifier {
                 crate::api::keymap::BridgeWheelModifier::Ctrl => 0,
                 crate::api::keymap::BridgeWheelModifier::Alt => 1,
                 crate::api::keymap::BridgeWheelModifier::Shift => 2,
+                crate::api::keymap::BridgeWheelModifier::Bare => 3,
                 _ => {
                     unimplemented!("");
                 }

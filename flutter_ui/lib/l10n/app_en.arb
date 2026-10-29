@@ -5880,6 +5880,10 @@
   "@keyTurnSnappingOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
+  "keyTurnLoopingOnOrOff": "Turn looping on or off",
+  "@keyTurnLoopingOnOrOff": {
+    "description": "Keyboard shortcut action: switch playback between looping the work area and playing it once. Vegas puts this on Q."
+  },
   "keyShowOrHideSpeedLines": "Show or hide speed lines",
   "@keyShowOrHideSpeedLines": {
     "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
@@ -6326,6 +6330,10 @@
   "@keymapDragBreakHandles": {
     "description": "Dragging row: the modifier that, held as a handle drag begins in the Graph editor, lets one handle of a keyframe move without the other, or joins two that were apart."
   },
+  "keymapDragCut": "Clip drags in Cut",
+  "@keymapDragCut": {
+    "description": "Dragging row in Settings → Shortcuts: which editor's mouse habits the Cut timeline follows. Lumit: Alt drags a copy and Shift stretches an edge. Vegas: Ctrl drags a copy or stretches an edge, Alt slips and Ctrl+Alt slides."
+  },
   "keymapExported": "Keymap exported.",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -6402,6 +6410,10 @@
   "keymapWheelShift": "Shift",
   "@keymapWheelShift": {
     "description": "Scroll wheel modifier choice: the Shift key."
+  },
+  "keymapWheelBare": "No key",
+  "@keymapWheelBare": {
+    "description": "Scroll wheel modifier choice: the wheel on its own, with no key held. Vegas zooms the timeline this way."
   },
   "keymapWheelZoomTime": "Zoom the Timeline",
   "@keymapWheelZoomTime": {

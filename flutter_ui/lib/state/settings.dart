@@ -349,6 +349,11 @@ class InterfaceSettings {
   /// a line across it, edited where it lies, as Vegas draws velocity.
   bool cutSpeedLines;
 
+  /// Mouse drags in the Cut timeline the way Vegas has them: Ctrl drags a
+  /// copy or stretches an edge, Alt slips, Ctrl+Alt slides, and Shift holds
+  /// snapping off. Turned on with the Vegas key preset.
+  bool cutVegasDrags;
+
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
@@ -567,6 +572,7 @@ class InterfaceSettings {
     this.cutAutoRipple = false,
     this.cutAutoCrossfade = false,
     this.cutSpeedLines = true,
+    this.cutVegasDrags = false,
     this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
@@ -611,6 +617,7 @@ class InterfaceSettings {
         'cut_auto_ripple': cutAutoRipple,
         'cut_auto_crossfade': cutAutoCrossfade,
         'cut_speed_lines': cutSpeedLines,
+        'cut_vegas_drags': cutVegasDrags,
         'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
@@ -676,6 +683,7 @@ class InterfaceSettings {
         cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
         cutSpeedLines: j['cut_speed_lines'] as bool? ?? true,
+        cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is

@@ -74,6 +74,7 @@ impl ActionId {
             "playback.frame.next10" => "Forward ten frames",
             "playback.frame.prev10" => "Back ten frames",
             "playback.comp.start" => "Go to the start",
+            "playback.loop.toggle" => "Turn looping on or off",
             "playback.comp.end" => "Go to the end",
             "playback.workarea.start" => "Go to work-area start",
             "playback.workarea.end" => "Go to work-area end",
@@ -549,6 +550,8 @@ pub enum WheelModifier {
     Ctrl,
     Alt,
     Shift,
+    /// The wheel on its own, with no key held: Vegas zooms time on it.
+    Bare,
 }
 
 /// Something the scroll wheel does while a modifier is held.

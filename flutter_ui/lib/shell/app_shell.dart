@@ -51,7 +51,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/keymap.dart' show chordText;
-import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
+import 'package:lumit_flutter/state/settings.dart'
+    show LoopMode, ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
@@ -782,6 +783,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
+      // Vegas's loop key: the work area loops, or plays once and stops.
+      case 'playback.loop.toggle':
+        ui.workspace.setLoopMode(
+            ui.workspace.performance.loop == LoopMode.once
+                ? LoopMode.workArea
+                : LoopMode.once);
       case 'playback.comp.end':
         final last = (comp?.durationFrames() ?? 1) - 1;
         ui.playheadFrame.value = last < 0 ? 0 : last;

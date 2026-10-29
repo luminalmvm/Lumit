@@ -501,6 +501,10 @@ pub fn after_effects_preset() -> Keymap {
 ///   on and off, the chord that ignores event grouping there.
 /// - **Mod+L** turns auto ripple on and off and **Mod+Shift+X** automatic
 ///   crossfades. Quantise to frames is on Alt+F8 already.
+/// - **Q** turns looping on and off, and **Mod+Shift+E** shows and hides the
+///   speed lines on the clips, Vegas's chord for its envelopes.
+/// - The wheel zooms time with no key held, and Ctrl with it scrolls the
+///   tracks.
 /// - **M** adds a marker, anywhere.
 /// - **Mod+Q**, **Mod+Shift+Q** and **Mod+Alt+Shift+Q** add an empty Audio,
 ///   Sequence or Adjustment layer, anywhere. Not on a Mac, where Cmd+Q quits
@@ -543,6 +547,8 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Shift+U", "cut.linked.toggle"),
         (Cut, "Mod+L", "cut.ripple.toggle"),
         (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),
+        (Cut, "Mod+Shift+E", "cut.speed.toggle"),
+        (Cut, "Q", "playback.loop.toggle"),
         (Global, "M", "marker.add"),
         (Timeline, "Shift+M", "reveal.masks"),
         (Timeline, "Shift+S", "reveal.scale"),
@@ -564,5 +570,7 @@ pub fn vegas_preset() -> Keymap {
             km.rebind_action(context, &action.into(), chord);
         }
     }
+    // The wheel zooms time on its own, and Ctrl with it scrolls the tracks.
+    km.wheel.set(WheelAction::ZoomTime, WheelModifier::Bare);
     km
 }

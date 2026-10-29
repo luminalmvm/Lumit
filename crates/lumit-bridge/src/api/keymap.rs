@@ -369,6 +369,7 @@ pub enum BridgeWheelModifier {
     Ctrl,
     Alt,
     Shift,
+    Bare,
 }
 
 /// One row of the Scroll wheel section.
@@ -410,6 +411,7 @@ pub fn keymap_wheel() -> Vec<BridgeWheelBinding> {
                     WheelModifier::Ctrl => BridgeWheelModifier::Ctrl,
                     WheelModifier::Alt => BridgeWheelModifier::Alt,
                     WheelModifier::Shift => BridgeWheelModifier::Shift,
+                    WheelModifier::Bare => BridgeWheelModifier::Bare,
                 },
             })
             .collect()
@@ -426,6 +428,7 @@ pub fn keymap_set_wheel(
         BridgeWheelModifier::Ctrl => WheelModifier::Ctrl,
         BridgeWheelModifier::Alt => WheelModifier::Alt,
         BridgeWheelModifier::Shift => WheelModifier::Shift,
+        BridgeWheelModifier::Bare => WheelModifier::Bare,
     };
     with_keymap(|km| km.wheel.set(wheel_action(action), modifier));
     keymap_wheel()

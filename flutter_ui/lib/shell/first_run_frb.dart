@@ -95,7 +95,12 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
           speedGraph: true, sequenceLayers: answer!.sequenceLayers);
       if (answer.shortcuts) {
         await keymap?.loadPreset(BridgeKeymapPreset.vegas);
+        workspace.interface.cutVegasDrags = true;
+        workspace.settingsChanged();
       }
+      // Cut is where a Vegas editor works: tracks, clips and a split that
+      // stays on its track.
+      workspace.applyWorkspacePreset(WorkspacePreset.cut);
     case FirstRunEditor.cut:
       // Sequence layers, the Retime graph as it is, and no keymap preset: the
       // Cut timeline's own keys already follow an editor's habits. The

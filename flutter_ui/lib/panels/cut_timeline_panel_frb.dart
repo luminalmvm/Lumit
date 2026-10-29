@@ -1697,10 +1697,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   TimelineAxis get _laneAxis =>
       TimelineAxis(frames: _laneFrames, width: _laneViewport * _zoom);
 
-  bool get _magnet =>
-      _snap &&
-      !snapSuspended(
-          controlPressed: HardwareKeyboard.instance.isControlPressed);
+  /// Snapping, unless held off: by Ctrl, or by Shift with Vegas's drags,
+  /// where Ctrl drags a copy.
+  bool get _magnet {
+    final keys = HardwareKeyboard.instance;
+    return _snap &&
+        !snapSuspended(
+            controlPressed: _vegasDrags
+                ? keys.isShiftPressed
+                : keys.isControlPressed);
+  }
+
+  bool get _vegasDrags => _ui?.workspace.interface.cutVegasDrags ?? false;
+
+  /// A clip Ctrl was pressed on that was picked already. With Vegas's drags
+  /// a drag copies the selection, so the clip leaves it only if the press
+  /// turns out to be a click.
+  String? _toggleOnUp;
 
   /// Where a razor cut at lane x lands: the one answer the blade's line and
   /// the cut both read.
@@ -1734,15 +1747,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (event.buttons != kPrimaryMouseButton) return;
     final keys = HardwareKeyboard.instance;
+    final vegas = _vegasDrags;
     var tool = _toolOf(ui);
+    _toggleOnUp = null;
     // A fade handle, with Select: it takes its corner from the edge, the
     // body and the empty ground outside, as the Audio timeline's handle
     // does. The edge is still trimmed from anywhere below the handle.
     final fade = _fadeAt(ui, track, index, at, tool);
     if (fade != null) hit = (clip: fade.clip, grab: fade.grab);
     // Shift on an edge, with Select or Ripple, changes the clip's speed
-    // instead of its trim, and leaves the selection alone.
-    final stretch = keys.isShiftPressed &&
+    // instead of its trim, and leaves the selection alone. Vegas has Ctrl.
+    final stretch = (vegas ? keys.isControlPressed : keys.isShiftPressed) &&
         fade == null &&
         hit != null &&
         hit.grab != BarGrab.move &&
@@ -1756,9 +1771,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       // selection; a plain press on a clip not yet picked makes them the
       // selection, and one on a picked clip keeps the set so the whole of
       // it can be dragged.
-      final these = keys.isAltPressed ? {id} : _withMates(id);
+      final these = keys.isAltPressed && !vegas ? {id} : _withMates(id);
       setState(() {
-        if (additive) {
+        if (additive &&
+            vegas &&
+            keys.isControlPressed &&
+            _selected.contains(id)) {
+          _toggleOnUp = id;
+        } else if (additive) {
           _selected = {..._selected};
           if (!_selected.remove(id)) _selected.addAll(these);
         } else if (!_selected.contains(id)) {
@@ -1781,11 +1801,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _lastPressed = hit?.clip.id.toString();
     if (track != null) _lastTrack = track.id;
     // Alt on a body with Select: the drag puts copies down. A click without
-    // a drag has already picked the one clip alone.
-    _duplicating = hit != null &&
-        grab == BarGrab.move &&
-        tool == CutTool.select &&
-        keys.isAltPressed;
+    // a drag has already picked the one clip alone. Vegas copies on Ctrl,
+    // slips on Alt and slides on both.
+    final body = hit != null && grab == BarGrab.move && tool == CutTool.select;
+    _duplicating = body &&
+        (vegas
+            ? keys.isControlPressed && !keys.isAltPressed
+            : keys.isAltPressed);
+    if (body && vegas && keys.isAltPressed) {
+      tool = keys.isControlPressed ? CutTool.slide : CutTool.slip;
+    }
     final usable = switch (tool) {
       CutTool.roll => grab != BarGrab.move,
       CutTool.slip || CutTool.slide => grab == BarGrab.move,
@@ -1958,6 +1983,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final clip = track.clip(_lastPressed!);
       if (clip != null && comp != null) _openClip(ui, comp, track, clip);
       return;
+    }
+    if (_toggleOnUp case final id? when !held.moved) {
+      setState(() => _selected = {..._selected}..removeAll(_withMates(id)));
     }
     if (held.marquee) {
       if (!held.moved) {

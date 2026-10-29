@@ -222,6 +222,9 @@ class KeymapState extends ChangeNotifier {
         BridgeWheelModifier.ctrl => keys.isControlPressed,
         BridgeWheelModifier.alt => altActuallyHeld(),
         BridgeWheelModifier.shift => keys.isShiftPressed,
+        BridgeWheelModifier.bare => !keys.isControlPressed &&
+            !keys.isShiftPressed &&
+            !altActuallyHeld(),
       };
     }
     return false;
