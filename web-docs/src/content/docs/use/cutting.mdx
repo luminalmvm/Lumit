@@ -176,7 +176,7 @@ Cut** and **Auto crossfade**.
 | Switch | Key | While it is on |
 | --- | --- | --- |
 | **Auto ripple** | `Shift`+`B` | `Delete` closes the gap, an edge dragged with **Select** is a ripple trim, and a moved clip takes everything after it along. |
-| **Auto crossfade** | `Shift`+`X` | A clip dragged across the end of another keeps the overlap, which dissolves or crossfades. A clip dropped wholly over another is **refused**. |
+| **Auto crossfade** | `Shift`+`X` | A clip dragged across the end of another keeps the overlap, which dissolves or crossfades. A clip dropped over the whole of another, or inside one, overwrites it. |
 | **Quantise** | `Alt`+`F8` | Sound clips move in whole frames. Off, a sound clip dragged alone lands where the pointer is, between frames. |
 
 With **Auto crossfade** off, a moved clip overwrites what it lands on.
@@ -206,7 +206,9 @@ the Audio timeline and Audio layers in the Timeline follow it.
   closes it. With no clip selected, `Delete` removes nothing, unless the track was picked by
   its header.
 - A clip's menu has **Cut**, **Copy**, **Paste** and **Split**, **Delete clip**, which
-  leaves a gap, and **Ripple delete**, which closes it.
+  leaves a gap, and **Ripple delete**, which closes it. **Split** cuts at the playhead and
+  is there while the playhead is over the clip. **Select to end** selects the clip and
+  every clip after it.
 - Right-click a gap for **Paste**, **Select all** and **Close gap**.
 - `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
   it: the gap is closed.
@@ -260,7 +262,8 @@ of the clip that is more than half of the picture.
 
 Each picture clip carries its speed as a line across it, in per cent, which is edited where it
 lies. The **Speed** switch on the strip shows the lines on every clip. It is off to begin
-with, and a retimed clip shows its line either way. The points and curves behave as in the
+with. **Speed line** on a clip's **Speed** menu shows the line on that clip alone, and a
+retimed clip shows its line either way. The points and curves behave as in the
 [speed envelope](/use/retime/#speed-on-a-clip).
 
 | On a picture clip's **Speed** menu | What it does |
@@ -286,9 +289,13 @@ A sound track's volume and pan can be drawn as lines across the whole track, as 
 whose volume or pan has keys shows its envelope to begin with.
 
 - Drag the line up or down. With keys, the nearest one moves.
-- `Ctrl`+click plants a key on the line, and `Alt`+click removes one.
-- Double-click the line, or a key, to put it back at 0 dB or centre.
+- Double-click the line, or `Ctrl`+click it, to plant a key. `Alt`+click removes one.
+- Double-click a key to put it back at 0 dB or centre.
 - `Ctrl` held while dragging moves it in finer steps.
+- The value shows beside the pointer while dragging.
+
+An envelope shows on a track tall enough to take it, under the fade handles. A locked
+track's envelope cannot be dragged, and a property driven by an expression has none.
 
 ## Groups
 
