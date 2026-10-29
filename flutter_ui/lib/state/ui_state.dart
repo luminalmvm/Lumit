@@ -678,6 +678,7 @@ class LumitUiState extends ChangeNotifier {
     Panel.project,
     Panel.effectControls,
     Panel.graph,
+    Panel.cutTimeline,
   };
 
   /// Ask the focused panel to select everything, and say whether one was asked.

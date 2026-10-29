@@ -22,14 +22,18 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../l10n/strings.dart';
 import '../shell/stretch_dialog_frb.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import 'graph_maths.dart';
 import 'speed_envelope.dart';
 import 'timeline_extras_frb.dart';
@@ -150,7 +154,54 @@ class SequenceViewFrb extends StatefulWidget {
   State<SequenceViewFrb> createState() => _SequenceViewFrbState();
 }
 
+/// The clip picked in an open sequence view, which Delete takes before the
+/// layer it sits on. One at a time, across every open view.
+final ValueNotifier<({LayerReference layer, UuidValue clip})?>
+    sequenceClipPick = ValueNotifier(null);
+
 class _SequenceViewFrbState extends State<SequenceViewFrb> {
+  LumitUiState? _ui;
+  VoidCallback? _escapeRelease;
+
+  /// Set while this view picks a clip's layer, so the change it makes is not
+  /// read as the pick being let go.
+  bool _picking = false;
+
+  bool get _pickIsOurs =>
+      sequenceClipPick.value?.layer.internallayerId ==
+      widget.entry.layer.internallayerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _ui = Provider.of<LumitUiState>(context, listen: false);
+    _ui!.selectedLayers.addListener(_onLayersPicked);
+    sequenceClipPick.addListener(_onPick);
+    _escapeRelease = EscapeLadder.register(EscapeRung.selection, () {
+      if (!_pickIsOurs) return false;
+      sequenceClipPick.value = null;
+      return true;
+    });
+  }
+
+  /// Anything else picked lets the clip go.
+  void _onLayersPicked() {
+    if (!_picking && _pickIsOurs) sequenceClipPick.value = null;
+  }
+
+  void _onPick() {
+    if (mounted) setState(() {});
+  }
+
+  /// A click on a clip: its layer is picked, as before, and the clip itself,
+  /// so Delete takes the clip and Effect controls shows its own stack.
+  void _pickClip(BridgeClip clip) {
+    _picking = true;
+    widget.onSelect?.call();
+    _picking = false;
+    sequenceClipPick.value = (layer: widget.entry.layer, clip: clip.id);
+    _ui?.cutClip.value = (layer: widget.entry.layer, clip: clip.id);
+  }
   /// The clip being dragged, what the gesture is doing to it, and how far it
   /// has travelled — so the drag previews and commits once, on release.
   ({BridgeClip clip, _Grab grab, double dx})? _drag;
@@ -175,6 +226,10 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
 
   @override
   void dispose() {
+    _ui?.selectedLayers.removeListener(_onLayersPicked);
+    sequenceClipPick.removeListener(_onPick);
+    _escapeRelease?.call();
+    if (_pickIsOurs) sequenceClipPick.value = null;
     for (final image in _thumbs.values) {
       image?.dispose();
     }
@@ -566,6 +621,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
     // the trim commits and the peaks are asked for again.
     final originSeconds = rationalSeconds(clip.placeStart) +
         (moving && drag.grab == _Grab.start ? shift / widget.fps : 0);
+    final picked = _pickIsOurs && sequenceClipPick.value?.clip == clip.id;
+    final edge = picked ? t.accent : t.surface0;
 
     return Positioned(
       key: ValueKey<String>('seq-clip-${clip.id}'),
@@ -578,6 +635,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onSecondaryTapDown: (d) => _clipMenu(clip, d.globalPosition),
+          onTapUp: widget.razor ? null : (_) => _pickClip(clip),
           supportedDevices: dragDevices,
           onHorizontalDragStart: (d) => setState(() {
             final where = d.localPosition.dx;
@@ -612,7 +670,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
               color: t
                   .labelColour(widget.entry.info.label)
                   .withValues(alpha: clipFillAlpha),
-              border: Border.all(color: t.surface0, width: 1),
+              border: Border.all(color: edge, width: picked ? 2 : 1),
               // Stadium ends under Round (§12.1), clamped to half the
               // clip's own height by the control radius sentinel. **The hit
               // rect stays rectangular** — the gesture detector is outside
@@ -624,7 +682,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             // The edge again over the content, which would otherwise cover it where
             // the corner curves.
             foregroundDecoration: BoxDecoration(
-              border: Border.all(color: t.surface0, width: 1),
+              border: Border.all(color: edge, width: picked ? 2 : 1),
               borderRadius: BorderRadius.circular(clipRadius(t)),
             ),
             alignment: Alignment.center,

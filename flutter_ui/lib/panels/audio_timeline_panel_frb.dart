@@ -524,14 +524,20 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// took over before its own, so a claim held from before must stand down.
   bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
 
+  /// Whether the last pick was a track's head, the one time Delete may take
+  /// the whole track.
+  bool _headPicked = false;
+
   /// Delete: the picked keyframes, or else the picked clip. Keys first, as
-  /// they sit on the clip and picking one must not cost the clip.
+  /// they sit on the clip and picking one must not cost the clip. With
+  /// neither the key is taken and nothing goes, unless the track was picked
+  /// by its head: a clip let go of must not turn Delete on its track.
   bool _deleteClaim() {
     final picked = _selectedClip;
     final ui = _ui;
     if (!mounted || ui == null || !_keysAreOurs) return false;
     if (_laneKeys.value.isNotEmpty && _deleteKeys()) return true;
-    if (picked == null) return false;
+    if (picked == null) return !_headPicked;
     for (final track in _lastTracks) {
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
@@ -1569,7 +1575,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onToggleOpen: () => _toggleOpen(track.id),
               onCycleLaneMode: () => _cycleLaneMode(track.id),
               onDetach: () => _detachAudio(track.entry),
-              onSelect: () => ui.setSelection([track.entry.layer]),
+              onSelect: () {
+                _headPicked = true;
+                ui.setSelection([track.entry.layer]);
+              },
               onRenameCommit: () => _commitRename(track),
               onRenameCancel: _cancelRename,
               onChanged: _afterWrite,
@@ -2618,6 +2627,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       // Picking a clip picks its track too, as a bar picks its layer in the
       // Timeline, so the Mixer and the Audio panel follow it.
       onSelect: (clip) {
+        _headPicked = false;
         setState(() =>
             _selectedClip = (track: track.id, clip: clip.id.toString()));
         _ui?.setSelection([track.entry.layer]);

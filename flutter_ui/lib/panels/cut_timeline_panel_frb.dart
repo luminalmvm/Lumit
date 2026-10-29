@@ -268,6 +268,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Clicks on the speed lines, counted apart from the clips' own.
   final DoubleTap _speedTaps = DoubleTap();
 
+  /// Whether the last press was on a track's head rather than on its lane,
+  /// which is the one time Delete may take the track itself.
+  bool _headPicked = false;
+
   /// The work area, held between document revisions.
   ({int start, int end, bool whole})? _workArea;
   BigInt? _workRevision;
@@ -315,6 +319,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui!.cutLinked.addListener(_onToolChanged);
     _ui!.workspace.addListener(_onToolChanged);
     _ui!.selectedLayer.addListener(_onLayerPicked);
+    _ui!.selectAllRequest.addListener(_onSelectAll);
     // The playhead stays on screen while the transport runs, as it does in
     // the Timeline.
     _ui!.playheadFrame.addListener(_edgeFollow);
@@ -332,6 +337,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui?.cutLinked.removeListener(_onToolChanged);
     _ui?.workspace.removeListener(_onToolChanged);
     _ui?.selectedLayer.removeListener(_onLayerPicked);
+    _ui?.selectAllRequest.removeListener(_onSelectAll);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     // After the frame: letting go of the clip tells Effect controls, which
     // must not be told to rebuild while the tree is being taken down.
@@ -366,6 +372,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   void _onToolChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// Select all, asked of this panel: every clip on every track.
+  void _onSelectAll() {
+    if (!mounted || !(_ui?.selectAllRequestIsFor(Panel.cutTimeline) ?? false)) {
+      return;
+    }
+    setState(() => _selected = {
+          for (final track in _tracks)
+            for (final clip in track.clips) clip.id.toString(),
+        });
   }
 
   // --------------------------------------------------------- the picked clip
@@ -1147,8 +1164,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// Delete: the picked clips go, and leave a gap, or close it while the
   /// Ripple switch is on.
+  ///
+  /// With no clip picked the key is taken and nothing goes, unless the track
+  /// itself was picked by its head: a clip let go of must never turn the next
+  /// Delete into one that removes its whole track.
   bool _deleteClaim() {
     if (!_keysAreOurs) return false;
+    if (_selected.isEmpty) return !_headPicked;
     return _deleteSelected(ripple: _autoRipple);
   }
 
@@ -1695,6 +1717,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// arena from one.
   void _down(PointerDownEvent event, LumitUiState ui) {
     if (_press != null) return;
+    _headPicked = false;
     final at = event.localPosition;
     final index = cutTrackAt(_tracks, at.dy, _tops);
     final track = index == null ? null : _tracks[index];
@@ -3484,6 +3507,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               // shows the track's own stack.
               onPointerDown: (_) {
                 if (_selected.isNotEmpty) setState(() => _selected = {});
+                _headPicked = true;
                 ui.setSelection([track.entry.layer]);
               },
               child: ValueListenableBuilder<List<LayerReference>>(
