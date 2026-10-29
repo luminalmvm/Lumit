@@ -14156,6 +14156,14 @@
   "@speedCurveHold": {
     "description": "Speed envelope curve: the speed stays as it is until the next point, then jumps. Vegas calls this Hold."
   },
+  "speedFlip": "Flip",
+  "@speedFlip": {
+    "description": "Speed line, right-click menu: mirror every point's speed about 100 per cent, so a slow-down becomes the same speed-up. Vegas calls this Flip."
+  },
+  "speedThin": "Thin",
+  "@speedThin": {
+    "description": "Speed line, right-click menu: remove the points that change nothing, those already on the straight line between their neighbours. Vegas calls this Thin."
+  },
   "speedPointAdd": "Add point",
   "@speedPointAdd": {
     "description": "Speed envelope, right-click the line: put a new point where the click was."

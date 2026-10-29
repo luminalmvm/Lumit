@@ -759,6 +759,14 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
             ]),
           ),
         MenuRow(
+            key: const ValueKey('seq-envelope-flip'),
+            onPressed: () => close('flip'),
+            child: Text(l10n.speedFlip)),
+        MenuRow(
+            key: const ValueKey('seq-envelope-thin'),
+            onPressed: () => close('thin'),
+            child: Text(l10n.speedThin)),
+        MenuRow(
             key: const ValueKey('seq-envelope-reset-clip'),
             onPressed: () => close('reset'),
             child: Text(l10n.clipResetSpeed)),
@@ -768,6 +776,10 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     switch (picked) {
       case 'add':
         _plant(local);
+      case 'flip':
+        _write(clip, flipEnvelope(keys));
+      case 'thin':
+        _write(clip, thinEnvelope(keys));
       case 'reset':
         _write(clip, envelopeToKeys(keys, [for (final _ in keys) 100.0],
             curves: [for (var i = 1; i < keys.length; i++) SpeedCurve.linear]));

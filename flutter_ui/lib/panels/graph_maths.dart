@@ -1150,6 +1150,41 @@ List<BridgeKeyframe> envelopeStretchedOnto(
   return envelopeToKeys(keys, kept, curves: shapes);
 }
 
+/// [keys] with every point's speed mirrored about 100%, as Vegas's Flip does:
+/// a slow-down becomes the same speed-up. Curves and times stay.
+List<BridgeKeyframe> flipEnvelope(List<BridgeKeyframe> keys) => envelopeToKeys(
+      keys,
+      [for (final s in envelopeSpeeds(keys)) 200 - s],
+      curves: envelopeCurves(keys),
+    );
+
+/// [keys] without the points that change nothing, as Vegas's Thin does: an
+/// inner point between two Linear spans whose speed is already where the
+/// straight line between its neighbours would put it.
+List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
+  if (keys.length < 3) return keys;
+  final speeds = envelopeSpeeds(keys);
+  final curves = envelopeCurves(keys);
+  final keep = <int>[0];
+  for (var i = 1; i < keys.length - 1; i++) {
+    final a = keep.last;
+    final t0 = rationalSeconds(keys[a].time);
+    final t1 = rationalSeconds(keys[i + 1].time);
+    final f = t1 > t0 ? (rationalSeconds(keys[i].time) - t0) / (t1 - t0) : 0;
+    final straight = speeds[a] + (speeds[i + 1] - speeds[a]) * f;
+    final linear = curves[i - 1] == SpeedCurve.linear &&
+        curves[i] == SpeedCurve.linear;
+    if (!linear || (speeds[i] - straight).abs() > 0.01) keep.add(i);
+  }
+  keep.add(keys.length - 1);
+  if (keep.length == keys.length) return keys;
+  return envelopeToKeys(
+    [for (final i in keep) keys[i]],
+    [for (final i in keep) speeds[i]],
+    curves: [for (var k = 0; k + 1 < keep.length; k++) curves[keep[k + 1] - 1]],
+  );
+}
+
 /// [keys] with span [span] played in [curve].
 List<BridgeKeyframe> setEnvelopeCurve(
     List<BridgeKeyframe> keys, int span, SpeedCurve curve) {
