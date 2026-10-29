@@ -1632,9 +1632,9 @@ impl Schedule {
     }
 }
 
-/// SICELIOT: where the points of a stream are, binned so a driver can ask
+/// Where the points of a stream are, binned so a driver can ask
 /// whether a place is near one of them. Made once per per-point driver step
-/// ([`crate::fx::effects::clone_to_points::drive_rows`]); Ring wave reads it
+/// ([`crate::fx::drivers::per_copy::drive_rows`]); Ring wave reads it
 /// to start its rings away from the points.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Cloud {
@@ -1689,7 +1689,7 @@ impl Cloud {
     }
 }
 
-/// SICELIOT: what a consumer's wired drivers write into a stream that is
+/// What a consumer's wired drivers write into a stream that is
 /// made on the card ([`PointsSchedule::late_drive`]). Carried, never compared:
 /// the drivers and the time it reads are already in the frame key.
 #[derive(Clone)]
@@ -1766,7 +1766,7 @@ pub struct PointsSchedule {
     /// this list of the op that makes it. The walk asks that op for it on the
     /// card and fills the entry in.
     pub late: Vec<(u32, u32)>,
-    /// SICELIOT: the per-point driver step for the first of those entries,
+    /// The per-point driver step for the first of those entries,
     /// run by the walk once it has filled it in. A stream made only on the
     /// card (a Pick points by Image, say) is not there when the drivers
     /// wired into a consumer's rows are resolved per point, so they are
@@ -2541,7 +2541,7 @@ pub fn wants_carriage(sig: crate::fx::registry::Signature) -> bool {
     wants_schedule(sig) || consumes_points(sig)
 }
 
-/// [`wants_carriage`] for an entry: its signature's reasons, or (SICELIOT)
+/// [`wants_carriage`] for an entry: its signature's reasons, or
 /// that it reads a Text layer's look, which rides in the same carriage. The
 /// one test the builder and the walk both ask, so their slots line up.
 #[must_use]

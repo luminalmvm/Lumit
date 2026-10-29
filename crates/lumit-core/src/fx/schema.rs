@@ -687,11 +687,6 @@ pub enum FxCategory {
     /// wipe, Venetian blinds and Card wipe join when they land.
     Transition,
     Utility,
-    /// **Siceliot FX**: the Cavalry-style, non-destructive picture effects of
-    /// SICELIOT, its LFX extension's and its own (Type fill). A picture family
-    /// like the eight above, kept apart so its effects are found together in
-    /// one place.
-    Siceliot,
     /// The effects that process **sound** and draw nothing: Gain, EQ,
     /// Compressor, Reverb (docs/impl/audio-effects.md §2). A built-in here
     /// files under the same Audio heading a hosted plugin does, so the one
@@ -732,8 +727,9 @@ pub enum FxCategory {
     /// every frame, and a menu that mixed the two would be a menu that could
     /// not say which.
     Drivers,
-    /// **Siceliot Nodes**: SICELIOT's drivers, Stagger, Random, Oscillator,
-    /// Value noise and Ring wave, values in the manner of Cavalry's behaviours.
+    /// **Siceliot**: Stagger, Random, Oscillator, Value noise and Ring wave,
+    /// values in the manner of Cavalry's behaviours, under the name of
+    /// the set they came from.
     /// A driver in every respect [`FxCategory::Drivers`] is, asked through
     /// [`FxCategory::is_driver`], so it is found only where drivers are, in the
     /// Node graph, under a heading of its own that says so.
@@ -752,12 +748,11 @@ impl FxCategory {
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
-            FxCategory::Siceliot => "Siceliot FX",
             FxCategory::Audio => "Audio",
             FxCategory::Compositing => "Compositing",
             FxCategory::Controls => "Controls",
             FxCategory::Drivers => "Drivers",
-            FxCategory::SiceliotDrivers => "Siceliot Nodes",
+            FxCategory::SiceliotDrivers => "Siceliot",
         }
     }
 
@@ -786,7 +781,7 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 14] = [
+    pub const ALL: [FxCategory; 13] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -795,8 +790,6 @@ impl FxCategory {
         FxCategory::Temporal,
         FxCategory::Transition,
         FxCategory::Utility,
-        // Last of the picture families: an extension's own heading.
-        FxCategory::Siceliot,
         // After the picture's own families, because a menu opened to add a
         // blur is opened to add a blur, and the sound is a different errand.
         FxCategory::Audio,
@@ -812,7 +805,7 @@ impl FxCategory {
         // rather than from the Add-effect menu, so it sits after the family it
         // is kin to.
         FxCategory::Drivers,
-        // SICELIOT's drivers after Lumit's own, under their own heading.
+        // The Siceliot drivers after Lumit's own, under their own heading.
         FxCategory::SiceliotDrivers,
     ];
 }

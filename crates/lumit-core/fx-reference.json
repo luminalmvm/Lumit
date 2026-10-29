@@ -34,10 +34,6 @@
       "label": "Utility"
     },
     {
-      "slug": "siceliot-fx",
-      "label": "Siceliot FX"
-    },
-    {
       "slug": "audio",
       "label": "Audio"
     },
@@ -54,8 +50,8 @@
       "label": "Drivers"
     },
     {
-      "slug": "siceliot-nodes",
-      "label": "Siceliot Nodes"
+      "slug": "siceliot",
+      "label": "Siceliot"
     }
   ],
   "effects": [
@@ -15321,11 +15317,11 @@
     },
     {
       "slug": "type-fill",
-      "match_name": "siceliot_type_fill",
+      "match_name": "type_fill",
       "label": "Type fill",
       "version": 1,
-      "category": "Siceliot FX",
-      "category_slug": "siceliot-fx",
+      "category": "Generate",
+      "category_slug": "generate",
       "params": [
         {
           "id": "text_layer",
@@ -28404,11 +28400,11 @@
     },
     {
       "slug": "stagger",
-      "match_name": "siceliot_stagger",
+      "match_name": "stagger",
       "label": "Stagger",
       "version": 1,
-      "category": "Siceliot Nodes",
-      "category_slug": "siceliot-nodes",
+      "category": "Siceliot",
+      "category_slug": "siceliot",
       "params": [
         {
           "id": "minimum",
@@ -28473,11 +28469,11 @@
     },
     {
       "slug": "random",
-      "match_name": "siceliot_random",
+      "match_name": "random",
       "label": "Random",
       "version": 1,
-      "category": "Siceliot Nodes",
-      "category_slug": "siceliot-nodes",
+      "category": "Siceliot",
+      "category_slug": "siceliot",
       "params": [
         {
           "id": "minimum",
@@ -28528,11 +28524,11 @@
     },
     {
       "slug": "oscillator",
-      "match_name": "siceliot_oscillator",
+      "match_name": "oscillator",
       "label": "Oscillator",
       "version": 1,
-      "category": "Siceliot Nodes",
-      "category_slug": "siceliot-nodes",
+      "category": "Siceliot",
+      "category_slug": "siceliot",
       "params": [
         {
           "id": "shape",
@@ -28648,11 +28644,11 @@
     },
     {
       "slug": "value-noise",
-      "match_name": "siceliot_noise",
+      "match_name": "value_noise",
       "label": "Value noise",
       "version": 1,
-      "category": "Siceliot Nodes",
-      "category_slug": "siceliot-nodes",
+      "category": "Siceliot",
+      "category_slug": "siceliot",
       "params": [
         {
           "id": "minimum",
@@ -28736,11 +28732,11 @@
     },
     {
       "slug": "ring-wave",
-      "match_name": "siceliot_ring_wave",
+      "match_name": "ring_wave",
       "label": "Ring wave",
       "version": 1,
-      "category": "Siceliot Nodes",
-      "category_slug": "siceliot-nodes",
+      "category": "Siceliot",
+      "category_slug": "siceliot",
       "params": [
         {
           "id": "minimum",

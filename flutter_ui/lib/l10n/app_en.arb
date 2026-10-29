@@ -4832,225 +4832,221 @@
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxSiceliot": "Siceliot FX",
+  "fxSiceliot": "Siceliot",
   "@fxSiceliot": {
-    "description": "Add-effect menu category heading: the SICELIOT effects. Siceliot is a proper name: keep it as it is in every language."
-  },
-  "fxSiceliotNodes": "Siceliot Nodes",
-  "@fxSiceliotNodes": {
-    "description": "Node graph category heading: the SICELIOT drivers, which are found only in the Node graph. Siceliot is a proper name: keep it as it is in every language."
+    "description": "Node graph category heading: the Siceliot drivers, which are found only in the Node graph. Siceliot is a proper name: keep it as it is in every language."
   },
   "fxStagger": "Stagger",
   "@fxStagger": {
-    "description": "SICELIOT driver: a value that steps from Minimum to Maximum across the copies Clone to points stamps."
+    "description": "Node graph driver: a value that steps from Minimum to Maximum across the copies Clone to points stamps."
   },
   "fxOscillator": "Oscillator",
   "@fxOscillator": {
-    "description": "SICELIOT driver: a value that swings in a wave over time."
+    "description": "Node graph driver: a value that swings in a wave over time."
   },
   "fxValueNoise": "Value noise",
   "@fxValueNoise": {
-    "description": "SICELIOT driver: a value that wanders smoothly over time."
+    "description": "Node graph driver: a value that wanders smoothly over time."
   },
   "fxBias": "Bias",
   "@fxBias": {
-    "description": "Effect controls — a control on the SICELIOT Random driver: leans its values towards Minimum or Maximum."
+    "description": "Effect controls — a control on the Random driver: leans its values towards Minimum or Maximum."
   },
   "fxLoop": "Loop",
   "@fxLoop": {
-    "description": "Effect controls — a checkbox on the SICELIOT Stagger driver: start again from the first copy past the last."
+    "description": "Effect controls — a checkbox on the Stagger driver: start again from the first copy past the last."
   },
   "fxChangeAbove": "Change above",
   "@fxChangeAbove": {
-    "description": "Effect controls — a control on Label points (SICELIOT): above this Change a label is in the wave and scrambles."
+    "description": "Effect controls — a control on Label points: above this Change a label is in the wave and scrambles."
   },
   "fxScrambleRate": "Scramble rate",
   "@fxScrambleRate": {
-    "description": "Effect controls — a control on Label points (SICELIOT): new random text a second while a label is in the wave."
+    "description": "Effect controls — a control on Label points: new random text a second while a label is in the wave."
   },
   "fxFlashColour": "Flash colour",
   "@fxFlashColour": {
-    "description": "Effect controls — a menu on Label points (SICELIOT): the colour a label takes while it is in the wave."
+    "description": "Effect controls — a menu on Label points: the colour a label takes while it is in the wave."
   },
   "fxRandomHue": "Random hue",
   "@fxRandomHue": {
-    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): any hue, at random."
+    "description": "Effect controls — an option of Flash colour on Label points: any hue, at random."
   },
   "fxTwoColours": "Two colours",
   "@fxTwoColours": {
-    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): Colour A or Colour B, at random."
+    "description": "Effect controls — an option of Flash colour on Label points: Colour A or Colour B, at random."
   },
   "fxLabelScale": "Label scale",
   "@fxLabelScale": {
-    "description": "Effect controls — a control on Label points (SICELIOT): how big a label is drawn, per cent of the Text layer's size."
+    "description": "Effect controls — a control on Label points: how big a label is drawn, per cent of the Text layer's size."
   },
   "fxRingWave": "Ring wave",
   "@fxRingWave": {
-    "description": "Effect name (SICELIOT driver): rings that grow out from points on the frame one after another, giving each point a value, a turn and a count of the rings that have crossed it."
+    "description": "Effect name: rings that grow out from points on the frame one after another, giving each point a value, a turn and a count of the rings that have crossed it."
   },
   "fxInterval": "Interval",
   "@fxInterval": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): seconds between one ring and the next."
+    "description": "Effect controls — a control on Ring wave: seconds between one ring and the next."
   },
   "fxSpeedVariance": "Speed variance",
   "@fxSpeedVariance": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): how much faster or slower each ring may grow."
+    "description": "Effect controls — a control on Ring wave: how much faster or slower each ring may grow."
   },
   "fxThicknessMin": "Thickness min",
   "@fxThicknessMin": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): the thinnest a ring can be, in pixels."
+    "description": "Effect controls — a control on Ring wave: the thinnest a ring can be, in pixels."
   },
   "fxThicknessMax": "Thickness max",
   "@fxThicknessMax": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): the thickest a ring can be, in pixels."
+    "description": "Effect controls — a control on Ring wave: the thickest a ring can be, in pixels."
   },
   "fxPasses": "Passes",
   "@fxPasses": {
-    "description": "Node graph — an output port on Ring wave (SICELIOT): how many rings have crossed a point so far."
+    "description": "Node graph — an output port on Ring wave: how many rings have crossed a point so far."
   },
   "fxTextStep": "Text step",
   "@fxTextStep": {
-    "description": "Effect controls — a control on Label points (SICELIOT): each whole number gives the random text a new roll that stays."
+    "description": "Effect controls — a control on Label points: each whole number gives the random text a new roll that stays."
   },
   "fxByStrength": "By strength",
   "@fxByStrength": {
-    "description": "Effect controls — an option of Flash colour on Label points (SICELIOT): colour each label smoothly by how strong the wave is on it."
+    "description": "Effect controls — an option of Flash colour on Label points: colour each label smoothly by how strong the wave is on it."
   },
   "fxHueStart": "Hue start",
   "@fxHueStart": {
-    "description": "Effect controls — a control on Label points (SICELIOT): the hue a weak wave gives, with Flash colour on By strength."
+    "description": "Effect controls — a control on Label points: the hue a weak wave gives, with Flash colour on By strength."
   },
   "fxHueRange": "Hue range",
   "@fxHueRange": {
-    "description": "Effect controls — a control on Label points (SICELIOT): how far round the hues a full wave goes, in degrees."
+    "description": "Effect controls — a control on Label points: how far round the hues a full wave goes, in degrees."
   },
   "fxGrow": "Grow",
   "@fxGrow": {
-    "description": "Effect controls — a control on Label points (SICELIOT): how much bigger a full wave makes a label, per cent."
+    "description": "Effect controls — a control on Label points: how much bigger a full wave makes a label, per cent."
   },
   "fxLabelRotation": "Label rotation",
   "@fxLabelRotation": {
-    "description": "Effect controls — a control on Label points (SICELIOT): how far each label is turned about its anchor."
+    "description": "Effect controls — a control on Label points: how far each label is turned about its anchor."
   },
   "fxAddUp": "Add up",
   "@fxAddUp": {
-    "description": "Effect controls — a checkbox on Ring wave (SICELIOT): let the strengths of overlapping rings add up past Maximum."
+    "description": "Effect controls — a checkbox on Ring wave: let the strengths of overlapping rings add up past Maximum."
   },
   "fxAwayFromPoints": "Away from points",
   "@fxAwayFromPoints": {
-    "description": "Effect controls — an option of Origin on Ring wave (SICELIOT): rings start anywhere on the frame at least Clearance away from the points."
+    "description": "Effect controls — an option of Origin on Ring wave: rings start anywhere on the frame at least Clearance away from the points."
   },
   "fxClearance": "Clearance",
   "@fxClearance": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): how far from every point a ring starts, in pixels."
+    "description": "Effect controls — a control on Ring wave: how far from every point a ring starts, in pixels."
   },
   "fxGradient1": "Gradient 1",
   "@fxGradient1": {
-    "description": "Effect controls — a colour on Label points (SICELIOT): the first stop of the Gradient option of Flash colour."
+    "description": "Effect controls — a colour on Label points: the first stop of the Gradient option of Flash colour."
   },
   "fxGradient2": "Gradient 2",
   "@fxGradient2": {
-    "description": "Effect controls — a colour on Label points (SICELIOT): the second stop of the Gradient."
+    "description": "Effect controls — a colour on Label points: the second stop of the Gradient."
   },
   "fxGradient3": "Gradient 3",
   "@fxGradient3": {
-    "description": "Effect controls — a colour on Label points (SICELIOT): the third stop of the Gradient."
+    "description": "Effect controls — a colour on Label points: the third stop of the Gradient."
   },
   "fxGradient4": "Gradient 4",
   "@fxGradient4": {
-    "description": "Effect controls — a colour on Label points (SICELIOT): the fourth stop of the Gradient."
+    "description": "Effect controls — a colour on Label points: the fourth stop of the Gradient."
   },
   "fxGradientStops": "Gradient stops",
   "@fxGradientStops": {
-    "description": "Effect controls — a control on Label points (SICELIOT): how many colours the Gradient runs through, 2 to 4."
+    "description": "Effect controls — a control on Label points: how many colours the Gradient runs through, 2 to 4."
   },
   "fxGrowMax": "Grow max",
   "@fxGrowMax": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): the most a ring makes what it crosses grow, per cent."
+    "description": "Effect controls — a control on Ring wave: the most a ring makes what it crosses grow, per cent."
   },
   "fxGrowMin": "Grow min",
   "@fxGrowMin": {
-    "description": "Effect controls — a control on Ring wave (SICELIOT): the least a ring makes what it crosses grow, per cent."
+    "description": "Effect controls — a control on Ring wave: the least a ring makes what it crosses grow, per cent."
   },
   "fxMiddle": "Middle",
   "@fxMiddle": {
-    "description": "Effect controls — an option of Vertical anchor on Label points (SICELIOT): the middle of the label's height."
+    "description": "Effect controls — an option of Vertical anchor on Label points: the middle of the label's height."
   },
   "fxVerticalAnchor": "Vertical anchor",
   "@fxVerticalAnchor": {
-    "description": "Effect controls — a control on Label points (SICELIOT): which part of the label's height sits at its point and what it turns about."
+    "description": "Effect controls — a control on Label points: which part of the label's height sits at its point and what it turns about."
   },
   "fxTypeFill": "Type fill",
   "@fxTypeFill": {
-    "description": "Effect name (SICELIOT): rows of words, each stretched to fill the room a Region layer leaves along its row."
+    "description": "Effect name: rows of words, each stretched to fill the room a Region layer leaves along its row."
   },
   "fxWords": "Words",
   "@fxWords": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): the words, between bars, set left to right in every row."
+    "description": "Effect controls — a control on Type fill: the words, between bars, set left to right in every row."
   },
   "fxRegionLayer": "Region layer",
   "@fxRegionLayer": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): the layer that says where the words may go."
+    "description": "Effect controls — a control on Type fill: the layer that says where the words may go."
   },
   "fxRegionPlacement": "Region placement",
   "@fxRegionPlacement": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): where the Region layer's picture sits on this one."
+    "description": "Effect controls — a control on Type fill: where the Region layer's picture sits on this one."
   },
   "fxRegionFrom": "Region from",
   "@fxRegionFrom": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): whether the region is where the Region layer is opaque or where it is bright."
+    "description": "Effect controls — a control on Type fill: whether the region is where the Region layer is opaque or where it is bright."
   },
   "fxInvertRegion": "Invert region",
   "@fxInvertRegion": {
-    "description": "Effect controls — a checkbox on Type fill (SICELIOT): fill where the region is not."
+    "description": "Effect controls — a checkbox on Type fill: fill where the region is not."
   },
   "fxCutWords": "Cut words",
   "@fxCutWords": {
-    "description": "Effect controls — a checkbox on Type fill (Siceliot FX): keep each word at its column's width and let the region's edge cut it, instead of stretching it."
+    "description": "Effect controls — a checkbox on Type fill: keep each word at its column's width and let the region's edge cut it, instead of stretching it."
   },
   "fxRowGap": "Row gap",
   "@fxRowGap": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): the room between one row and the next, in pixels."
+    "description": "Effect controls — a control on Type fill: the room between one row and the next, in pixels."
   },
   "fxWordGap": "Word gap",
   "@fxWordGap": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): the room between the words of a row, in pixels."
+    "description": "Effect controls — a control on Type fill: the room between the words of a row, in pixels."
   },
   "fxMinWidth": "Min width",
   "@fxMinWidth": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): a stretch narrower than this is left empty, in pixels."
+    "description": "Effect controls — a control on Type fill: a stretch narrower than this is left empty, in pixels."
   },
   "fxOrder": "Order",
   "@fxOrder": {
-    "description": "Effect controls — a control on Type fill (SICELIOT): which word each column of a row has."
+    "description": "Effect controls — a control on Type fill: which word each column of a row has."
   },
   "fxInTurn": "In turn",
   "@fxInTurn": {
-    "description": "Effect controls — an option of Order on Type fill (SICELIOT): the same order of words in every row."
+    "description": "Effect controls — an option of Order on Type fill: the same order of words in every row."
   },
   "fxShiftPerRow": "Shift per row",
   "@fxShiftPerRow": {
-    "description": "Effect controls — an option of Order on Type fill (SICELIOT): the list of words moved on one word a row."
+    "description": "Effect controls — an option of Order on Type fill: the list of words moved on one word a row."
   },
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
-    "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."
+    "description": "Effect controls — a menu on the Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."
   },
   "fxCopy": "Copy",
   "@fxCopy": {
-    "description": "Effect controls — an option on the SICELIOT Oscillator and Value noise drivers: vary by the number of the copy."
+    "description": "Effect controls — an option on the Oscillator and Value noise drivers: vary by the number of the copy."
   },
   "fxPhaseFrom": "Phase from",
   "@fxPhaseFrom": {
-    "description": "Effect controls — a menu on the SICELIOT Oscillator driver: whether each copy's place on the wave comes from its number or its position."
+    "description": "Effect controls — a menu on the Oscillator driver: whether each copy's place on the wave comes from its number or its position."
   },
   "fxWaveAngle": "Wave angle",
   "@fxWaveAngle": {
-    "description": "Effect controls — a dial on the SICELIOT Oscillator driver: the direction the wave travels across the points."
+    "description": "Effect controls — a dial on the Oscillator driver: the direction the wave travels across the points."
   },
   "fxPhasePerCopy": "Phase per copy",
   "@fxPhasePerCopy": {
-    "description": "Effect controls — a control on the SICELIOT Oscillator driver: how much further along the wave each copy is."
+    "description": "Effect controls — a control on the Oscillator driver: how much further along the wave each copy is."
   },
   "fxSize": "Size",
   "@fxSize": {

@@ -6729,9 +6729,9 @@ fn every_parameter_declares_a_unit() {
             // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
-            ("siceliot_type_fill", "row_gap"),
-            ("siceliot_type_fill", "word_gap"),
-            ("siceliot_type_fill", "min_width"),
+            ("type_fill", "row_gap"),
+            ("type_fill", "word_gap"),
+            ("type_fill", "min_width"),
             // Vary points and Pick points: the pattern's own distances, and
             // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),
@@ -6829,13 +6829,13 @@ fn every_parameter_declares_a_unit() {
             ("points_sample", "position_y"),
             ("measure", "padding_x"),
             ("measure", "padding_y"),
-            ("siceliot_oscillator", "wavelength"),
-            ("siceliot_noise", "noise_scale"),
-            ("siceliot_ring_wave", "speed"),
-            ("siceliot_ring_wave", "speed_variance"),
-            ("siceliot_ring_wave", "thickness_min"),
-            ("siceliot_ring_wave", "thickness_max"),
-            ("siceliot_ring_wave", "clearance"),
+            ("oscillator", "wavelength"),
+            ("value_noise", "noise_scale"),
+            ("ring_wave", "speed"),
+            ("ring_wave", "speed_variance"),
+            ("ring_wave", "thickness_min"),
+            ("ring_wave", "thickness_max"),
+            ("ring_wave", "clearance"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's
@@ -10967,12 +10967,12 @@ fn a_collider_turned_in_3d_is_a_surface() {
     );
 }
 
-/// SICELIOT: the per-copy columns `drive_copies` writes replace Scale,
+/// The per-copy columns `drive_rows` writes replace Scale,
 /// Rotation and Opacity stamp by stamp, and a stream without them keeps the
 /// rows' one value. Guards each copy taking the value its driver gave it.
 #[test]
 fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
-    use crate::fx::effects::clone_to_points::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
+    use crate::fx::drivers::per_copy::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
     let e = clone_to_points(&[
         ("rotation", EffectValue::Float(Property::fixed(10.0))),
         ("tint", EffectValue::Float(Property::fixed(0.0))),

@@ -300,16 +300,10 @@ pub fn check(effect: &LfxEffect) -> Result<FxCategory, LfxError> {
             return Err(LfxError::BadId(id.clone()));
         }
     }
-    // SICELIOT: its heading was once called just "SICELIOT", and manifests
-    // written then still name it so.
-    let named = match effect.category.trim() {
-        old if old.eq_ignore_ascii_case("SICELIOT") => FxCategory::Siceliot.label(),
-        other => other,
-    };
     let category = PICTURE_CATEGORIES
         .iter()
         .copied()
-        .find(|c| c.label().eq_ignore_ascii_case(named))
+        .find(|c| c.label().eq_ignore_ascii_case(effect.category.trim()))
         .ok_or_else(|| LfxError::UnknownCategory(effect.category.clone()))?;
     if effect.api > API {
         return Err(LfxError::NewerApi(effect.api));
@@ -350,7 +344,6 @@ const PICTURE_CATEGORIES: &[FxCategory] = &[
     FxCategory::Temporal,
     FxCategory::Transition,
     FxCategory::Utility,
-    FxCategory::Siceliot,
 ];
 
 /// Everything that changes the pixels, hashed.
@@ -592,12 +585,6 @@ mod tests {
             refused(|e| e.category = "Sparkles".into()),
             LfxError::UnknownCategory(_)
         ));
-        let mut siceliot = effect(TWO_PASS);
-        siceliot.category = "Siceliot FX".into();
-        assert_eq!(check(&siceliot), Ok(FxCategory::Siceliot));
-        // The heading's old name still files under it.
-        siceliot.category = "SICELIOT".into();
-        assert_eq!(check(&siceliot), Ok(FxCategory::Siceliot));
         assert!(matches!(
             refused(|e| e.passes[1].scale = 0.5),
             LfxError::LastPassScaled(_)

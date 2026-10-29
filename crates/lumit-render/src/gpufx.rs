@@ -5977,9 +5977,9 @@ impl GpuEffect for LabelPoints {
         ) else {
             return tex.clone();
         };
-        use lumit_core::fx::effects::label_points::{composite, LabelDrawing, Placed};
+        use lumit_core::fx::effects::label_drawing::{composite, LabelDrawing, Placed};
         let labels = inst.labels(stream, inst.template(&doc.text), px_scale, L::time_of(p));
-        // SICELIOT: each label has its own size and turn. A wording is laid
+        // Each label has its own size and turn. A wording is laid
         // out once per half octave of size, at or just above the sizes it is
         // drawn at, and every label is resampled from that drawing, so sizes
         // run smoothly, labels sit between pixels and turn, and nothing is
@@ -6109,11 +6109,11 @@ fn word_drawing(
     doc: &lumit_core::model::TextDocument,
     k: f32,
     text: &str,
-) -> lumit_core::fx::effects::label_points::LabelDrawing {
+) -> lumit_core::fx::effects::label_drawing::LabelDrawing {
     let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
     let sized = label_document(doc, k);
     let r = lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, text), &[]);
-    lumit_core::fx::effects::label_points::LabelDrawing {
+    lumit_core::fx::effects::label_drawing::LabelDrawing {
         width: r.width as usize,
         height: r.height as usize,
         px: r
@@ -6132,7 +6132,7 @@ fn word_drawing(
     }
 }
 
-/// Type fill (SICELIOT): rows of words, each stretched to fill a free
+/// Type fill: rows of words, each stretched to fill a free
 /// stretch of the Region layer.
 ///
 /// The region is read back off the card once a frame; its value along the
@@ -6143,7 +6143,7 @@ fn word_drawing(
 struct TypeFill;
 impl GpuEffect for TypeFill {
     fn match_name(&self) -> &'static str {
-        "siceliot_type_fill"
+        "type_fill"
     }
     fn run(
         &self,
@@ -6155,7 +6155,7 @@ impl GpuEffect for TypeFill {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        use lumit_core::fx::effects::label_points::{composite, Placed};
+        use lumit_core::fx::effects::label_drawing::{composite, Placed};
         use lumit_core::fx::effects::type_fill::TypeFill as T;
         let inst = T::read(p);
         let px_scale = T::px_scale_of(p);

@@ -63,8 +63,10 @@ pub mod expression;
 pub mod layer_points;
 pub mod math;
 pub mod measure;
+pub mod per_copy;
 pub mod points_sample;
 pub mod remap;
+pub mod ring_wave;
 pub mod siceliot;
 pub mod smooth;
 pub mod split;
@@ -227,7 +229,7 @@ pub fn resolve_drivers_cloned(
 }
 
 /// [`resolve_drivers_cloned`] for one **point** of a Clone to points stream:
-/// copy `clone`, standing at `point` (px@comp), so SICELIOT's drivers can
+/// copy `clone`, standing at `point` (px@comp), so the Siceliot drivers can
 /// take their phase from where the copy is as well as from which it is.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
@@ -674,9 +676,9 @@ struct Eval<'a> {
     /// index driver. [`NO_CLONE`] on every walk but a per-clone render's.
     clone: (u32, u32),
     /// Where that copy stands, px@comp, when the walk is for one point of a
-    /// Clone to points stream (SICELIOT). `None` everywhere else.
+    /// Clone to points stream. `None` everywhere else.
     point: Option<[f32; 2]>,
-    /// Where all the points of that stream are (SICELIOT), for Ring wave to
+    /// Where all the points of that stream are, for Ring wave to
     /// start its rings away from them. `None` everywhere else.
     cloud: Option<&'a points::Cloud>,
 }
@@ -3322,14 +3324,14 @@ mod tests {
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
     }
 
-    /// SICELIOT: a Stagger wired into Clone to points' Rotation gives each
+    /// A Stagger wired into Clone to points' Rotation gives each
     /// point of the stream its own value, through the same resolve the frame
     /// uses, and a stream with nothing wired is left alone. Guards every stamp
     /// taking the value its copy is owed.
     #[test]
     fn a_stagger_into_clone_to_points_turns_each_stamp() {
-        use crate::fx::effects::clone_to_points::{drive_copies, COPY_ROTATION};
-        let mut stagger = inst("siceliot_stagger");
+        use super::per_copy::{drive_rows, COPY_ROTATION, COPY_ROWS};
+        let mut stagger = inst("stagger");
         set(&mut stagger, "maximum", 90.0);
         let target = inst("clone_to_points");
         let stream = || PointsStream {
@@ -3349,10 +3351,11 @@ mod tests {
             ..LayerGraph::default()
         };
         let mut s = stream();
-        drive_copies(
+        drive_rows(
             &unwired,
             target.id,
             &mut s,
+            COPY_ROWS,
             0.0,
             &ctx(),
             None,
@@ -3371,10 +3374,11 @@ mod tests {
             ..LayerGraph::default()
         };
         let mut s = stream();
-        drive_copies(
+        drive_rows(
             &graph,
             target.id,
             &mut s,
+            COPY_ROWS,
             0.0,
             &ctx(),
             None,

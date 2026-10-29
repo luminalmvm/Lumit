@@ -3348,7 +3348,7 @@ impl LayerReference {
     /// one layer can be saved as a preset and a preset can be pasted as an
     /// effect — one shape, not two that drift.
     ///
-    /// SICELIOT: the wires between the copied effects and the drivers that
+    /// The wires between the copied effects and the drivers that
     /// feed them ride along ([`lumit_core::preset::wiring_of`]), so a points
     /// rig copied off one layer works on the next.
     #[frb(sync)]
@@ -3419,7 +3419,7 @@ impl LayerReference {
             Ok(())
         };
 
-        // SICELIOT: copied with their wiring, the effects come back with
+        // Copied with their wiring, the effects come back with
         // their drivers and wires, every id fresh, set down to the right of
         // what the graph already holds. One commit, so one undo.
         if let Some(wiring) = &preset.wiring {

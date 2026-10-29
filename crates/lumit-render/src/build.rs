@@ -304,8 +304,6 @@ pub fn parent_world_placement(
     world
 }
 
-/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
-/// own pixels to comp pixels, as the compositor places it.
 /// Whether `layer` carries a live effect drawn over the composite below
 /// ([`EffectDef::backdrop`](lumit_core::fx::registry::EffectDef::backdrop)),
 /// which makes it an adjustment for this frame without being one in the
@@ -321,6 +319,8 @@ fn backdrop_fx(layer: &lumit_core::model::Layer) -> bool {
         })
 }
 
+/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
+/// own pixels to comp pixels, as the compositor places it.
 fn world_placement(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -1017,6 +1017,18 @@ fn points_room(
     (room != [0, 0]).then_some((room, scale))
 }
 
+/// The rows of a points consumer that wired drivers give each point
+/// its own value for, and the stream columns they are written into.
+fn driven_rows(
+    consumer: &lumit_core::model::EffectInstance,
+) -> Option<&'static [(&'static str, &'static str)]> {
+    match consumer.effect.match_name.as_str() {
+        "clone_to_points" => Some(lumit_core::fx::drivers::per_copy::COPY_ROWS),
+        "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
+        _ => None,
+    }
+}
+
 /// **The stream a points consumer's wire brings it** (points-stream.md §3.3),
 /// in px@comp, and which effect it came from.
 ///
@@ -1042,18 +1054,6 @@ fn points_room(
 /// An empty list with the producer still named is a stream that cannot be made
 /// yet, because its points depend on a picture (Scatter). The walk asks for it
 /// on the card.
-/// SICELIOT: the rows of a points consumer that wired drivers give each point
-/// its own value for, and the stream columns they are written into.
-fn driven_rows(
-    consumer: &lumit_core::model::EffectInstance,
-) -> Option<&'static [(&'static str, &'static str)]> {
-    match consumer.effect.match_name.as_str() {
-        "clone_to_points" => Some(lumit_core::fx::effects::clone_to_points::COPY_ROWS),
-        "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
-        _ => None,
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn points_input_for(
     layer: &lumit_core::model::Layer,
@@ -1205,11 +1205,11 @@ fn points_input_in(
         let Some(mut stream) = now else {
             break;
         };
-        // SICELIOT: drivers wired into Clone to points' Scale, Rotation or
+        // Drivers wired into Clone to points' Scale, Rotation or
         // Opacity give each stamp its own value, and into Label points'
         // Change or Label scale each label its own.
         if let Some(rows) = driven_rows(consumer) {
-            lumit_core::fx::effects::clone_to_points::drive_rows(
+            lumit_core::fx::drivers::per_copy::drive_rows(
                 graph,
                 consumer.id,
                 &mut stream,
@@ -1314,7 +1314,7 @@ fn text_carriage(
     Option<Box<lumit_core::model::TextDocument>>,
 ) {
     let name = e.effect.match_name.as_str();
-    if name != "text_to_points" && name != "label_points" && name != "siceliot_type_fill" {
+    if name != "text_to_points" && name != "label_points" && name != "type_fill" {
         return Default::default();
     }
     // An unset row means the layer the effect is on.
@@ -1338,7 +1338,7 @@ fn text_carriage(
         current_depth: 0,
         inputs: None,
     }));
-    if name == "label_points" || name == "siceliot_type_fill" {
+    if name == "label_points" || name == "type_fill" {
         // A label is set straight and still, so the path and the animators
         // are left behind.
         let label = lumit_core::model::TextDocument {
@@ -3480,7 +3480,7 @@ fn comp_walk(
                     text_carriage(comp, layer, e, t_comp, expr_doc)
                 });
                 let late = late(&wired);
-                // SICELIOT: a stream made on the card gets its drivers when
+                // A stream made on the card gets its drivers when
                 // it arrives, as one made here got them in points_input_for.
                 let late_drive = owner
                     .filter(|_| late.first().is_some_and(|(entry, _)| *entry == 0))
@@ -3491,7 +3491,7 @@ fn comp_walk(
                         let flat = drive_projection;
                         Some(lumit_core::fx::points::LateDrive(Arc::new(
                             move |stream: &mut lumit_core::fx::points::PointsStream| {
-                                lumit_core::fx::effects::clone_to_points::drive_rows(
+                                lumit_core::fx::drivers::per_copy::drive_rows(
                                     &graph, consumer, stream, rows, t, &context, None, flat,
                                 );
                             },

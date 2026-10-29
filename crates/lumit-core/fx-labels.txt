@@ -20,6 +20,7 @@ Add
 Add grain
 Add input
 Add to picked
+Add up
 Age
 Align to motion
 Align to path
@@ -50,6 +51,7 @@ Angle control
 Angle offset
 Animate
 Anticlockwise
+Anywhere
 Aperture
 Apply to
 Arc
@@ -64,6 +66,7 @@ Attack
 Audio
 Audio level
 Auto
+Away from points
 B
 Background
 Backwards
@@ -107,6 +110,7 @@ Bevel and emboss
 Bevel style
 Bezier warp
 BiRefNet
+Bias
 Black and white
 Blades
 Blend
@@ -151,6 +155,7 @@ Burst
 Burst count
 Burst interval
 Bursts
+By strength
 Bypass
 Camera track
 Cancel
@@ -163,6 +168,7 @@ Centre X
 Centre Y
 Centre bias
 Change
+Change above
 Channel
 Channel blur
 Channel offset
@@ -178,6 +184,7 @@ Chorus
 Chromatic aberration
 Circle
 Clamp
+Clearance
 Clip
 Clip black
 Clip rollback
@@ -241,6 +248,7 @@ Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
 Copies
+Copy
 Core colour
 Core radius
 Corner pin
@@ -260,6 +268,7 @@ Custom
 Custom controls
 Custom shader
 Cut
+Cut words
 Cyan
 Cyans
 Cycle
@@ -414,6 +423,7 @@ Fit to size
 Flag
 Flare options
 Flash
+Flash colour
 Flicker
 Flip axis
 Flip direction
@@ -465,7 +475,12 @@ Glow colour
 Glow opacity
 Glow radius
 Gradient
+Gradient 1
+Gradient 2
+Gradient 3
+Gradient 4
 Gradient overlay
+Gradient stops
 Gradient type
 Graphic EQ
 Gravity
@@ -480,6 +495,9 @@ Grid size y
 Grit
 Group
 Group name
+Grow
+Grow max
+Grow min
 H line rel width
 Hairs
 Half
@@ -515,7 +533,9 @@ Horizontal phase shift
 How to treat
 Hue
 Hue and saturation
+Hue range
 Hue shift
+Hue start
 Hysteresis
 Image
 Image layer
@@ -523,6 +543,7 @@ In front
 In high
 In low
 In order
+In turn
 Include spaces
 Index
 Inflate
@@ -542,10 +563,12 @@ Inside mask
 Intensity
 Interlace offset
 Interpolation
+Interval
 Inverse
 Invert
 Invert edges
 Invert noise
+Invert region
 Iris
 Iris centre x
 Iris centre y
@@ -565,6 +588,8 @@ Kill
 Knee
 LUT
 Label points
+Label rotation
+Label scale
 Latitude
 Layer
 Layer in to out
@@ -627,6 +652,7 @@ Lines
 Load from file…
 Look
 Lookahead
+Loop
 Low
 Lower left x
 Lower left y
@@ -679,11 +705,13 @@ Merge
 Merge points
 Method
 Micro Four Thirds
+Middle
 Middle colour
 Midtone contrast
 Midtones
 Min
 Min area
+Min width
 Minimum
 Minimum gap
 Mirror
@@ -718,6 +746,7 @@ Normal
 Normalised
 Not picked
 Note
+Nothing
 Number
 Number by input
 Number from
@@ -751,11 +780,13 @@ Open graph
 Operate on alpha
 Operation
 Orange
+Order
 Order by
 Orientation
 Origin
 Origin x
 Origin y
+Oscillator
 Out high
 Out low
 Outer bevel
@@ -780,6 +811,7 @@ Parametric EQ
 Particle
 Particle blend
 Particulate
+Passes
 Path
 Path overlap
 Pattern
@@ -790,7 +822,9 @@ Per-axis wobble
 Perlin
 Persistence
 Phase
+Phase from
 Phase offset
+Phase per copy
 Phaser
 Photo filter
 Pick
@@ -858,6 +892,7 @@ Radio waves
 Radius
 Ramp
 Random
+Random hue
 Random offset scale
 Random span offsets
 Randomness
@@ -879,6 +914,9 @@ Reduce brightness
 Reduce saturation
 Refine radius
 Refraction
+Region from
+Region layer
+Region placement
 Region size
 Relax points
 Release
@@ -913,6 +951,7 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Ring wave
 Rings
 Ripple
 Rise
@@ -932,6 +971,7 @@ Roto brush
 Roughen
 Roughen edges
 Roundness
+Row gap
 Rows
 Rows/columns jitter
 Same
@@ -950,6 +990,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scramble rate
 Scratches
 Screen
 Screen balance
@@ -989,12 +1030,14 @@ Shapes
 Share of frame
 Sharp colours
 Sharpen
+Shift per row
 Shift x
 Shift y
 Show points
 Shutter
 Shutter angle
 Shutter phase
+Siceliot
 Sides
 Sine
 Single
@@ -1044,6 +1087,7 @@ Speed
 Speed jitter
 Speed max
 Speed min
+Speed variance
 Spherize
 Spiky
 Spin
@@ -1058,6 +1102,7 @@ Sprite layer
 Square
 Squeeze
 Stages
+Stagger
 Standard
 Star
 Star depth
@@ -1111,12 +1156,15 @@ Temperature
 Temporal
 Text
 Text layer
+Text step
 Text to points
 Texture
 Texture contrast
 Texture layer
 Textures
 Texturize
+Thickness max
+Thickness min
 This comp
 Threshold
 Threshold softness
@@ -1171,10 +1219,12 @@ Twirl
 Twist
 Twitch frequency
 Twitchy
+Two colours
 Two layer, magenta
 Two points
 Two-way strike
 Type
+Type fill
 Ultra
 Uncircle
 Uncoated
@@ -1200,7 +1250,9 @@ Use source colour
 Utility
 V line rel width
 Value
+Value noise
 Variation
+Vary by
 Vary points
 Vector blur
 Vector scale
@@ -1209,6 +1261,7 @@ Vegas
 Venetian blinds
 Vertical
 Vertical amount
+Vertical anchor
 Vertical axis
 Vertical blocks
 Vertical channel
@@ -1228,6 +1281,7 @@ Warming filter (85)
 Warming filter (LBA)
 Warp
 Wave
+Wave angle
 Wave height
 Wave type
 Wave warp
@@ -1250,6 +1304,8 @@ Wipe angle
 Wipe centre x
 Wipe centre y
 Word
+Word gap
+Words
 Work area
 Wrap
 X

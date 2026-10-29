@@ -61,7 +61,7 @@ pub fn present(graph: &LayerGraph) -> bool {
         .any(|n| n.enabled && reads_copy(&n.effect.match_name))
 }
 
-/// Whether a driver reads which copy it is in: Clone index, and SICELIOT's
+/// Whether a driver reads which copy it is in: Clone index, and the Siceliot
 /// drivers, which give each copy its own value.
 pub fn reads_copy(match_name: &str) -> bool {
     match_name == MATCH_NAME || super::siceliot::MATCH_NAMES.contains(&match_name)

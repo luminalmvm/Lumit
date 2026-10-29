@@ -1168,7 +1168,7 @@ pub fn run_ops(
                     filled.input.resize(entry + 1, Default::default());
                 }
                 filled.input[entry] = stream.clone();
-                // SICELIOT: the drivers wired into this consumer's rows,
+                // The drivers wired into this consumer's rows,
                 // which could not see the stream until now.
                 if let (0, Some(drive)) = (entry, &s.late_drive) {
                     (drive.0)(&mut filled.input[entry]);

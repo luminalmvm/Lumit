@@ -31,9 +31,10 @@ use super::drivers::{
     measure::{Measure, MeasureDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
+    ring_wave::{RingWave, RingWaveDef},
     siceliot::{
-        Oscillator, OscillatorDef, Random, RandomDef, RingWave, RingWaveDef, Stagger, StaggerDef,
-        ValueNoise, ValueNoiseDef,
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
+        ValueNoiseDef,
     },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
@@ -297,7 +298,7 @@ crate::catalogue![
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
     LabelPointsDef => LabelPoints,
-    // SICELIOT: rows of words that fill the room a region leaves.
+    // Rows of words that fill the room a region leaves.
     TypeFillDef => TypeFill,
     // The modifiers: a points wire in and another out.
     VaryPointsDef => VaryPoints,
@@ -490,7 +491,7 @@ crate::catalogue![
     // The music as events rather than a level: markers, beats found in the
     // sound, or a band rising past a threshold.
     BeatTriggerDef => BeatTrigger,
-    // SICELIOT's drivers (docs/siceliot/): Cavalry's value behaviours, each
+    // The Siceliot drivers: Cavalry's value behaviours, each
     // reading the copy Clone to points stamps, as Clone index does.
     StaggerDef => Stagger,
     RandomDef => Random,

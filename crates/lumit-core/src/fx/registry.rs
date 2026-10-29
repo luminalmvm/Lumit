@@ -188,13 +188,13 @@ pub struct DriverCx<'a> {
     pub points_input: &'a dyn Fn(&str) -> Option<std::rc::Rc<super::points::PointsStream>>,
     /// Which copy of how many the layer is being rendered as, when Clone to
     /// points renders it once per stamp. The first copy of one everywhere
-    /// else. Clone index and SICELIOT's drivers read it.
+    /// else. Clone index and the Siceliot drivers read it.
     pub clone: (u32, u32),
     /// Where that copy stands, px@comp, when the drivers are resolved for one
-    /// point of a Clone to points stream; `None` everywhere else. SICELIOT's
+    /// point of a Clone to points stream; `None` everywhere else.
     /// Oscillator and Value noise read it to vary by position.
     pub point: Option<[f32; 2]>,
-    /// Where all the points of that stream are (SICELIOT), for Ring wave to
+    /// Where all the points of that stream are, for Ring wave to
     /// start its rings away from them. `None` everywhere else.
     pub cloud: Option<&'a super::points::Cloud>,
 }
@@ -465,7 +465,7 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
-    /// SICELIOT: whether this effect reads a Text layer's look (its Text
+    /// Whether this effect reads a Text layer's look (its Text
     /// layer row) without being a points effect, so the builder hands it the
     /// carriage the points effects get, with the layer's document in it
     /// ([`crate::fx::points::wants_carriage_of`]).

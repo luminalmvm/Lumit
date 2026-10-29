@@ -1,4 +1,4 @@
-//! Type fill (SICELIOT) fills the frame with rows of words that stretch to
+//! Type fill fills the frame with rows of words that stretch to
 //! fill the room a shape leaves them.
 //!
 //! **In plain terms.** The words, typed as `Flood|the|Grid`, are set in rows
@@ -35,10 +35,10 @@ const ORDER_ATTR: u32 = 130;
 /// Type fill's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
-    match_name = "siceliot_type_fill",
+    match_name = "type_fill",
     label = "Type fill",
     version = 1,
-    category = Siceliot,
+    category = Generate,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,
@@ -388,7 +388,7 @@ mod tests {
     use crate::fx::params::Params;
     use crate::fx::registry::EffectMetadata;
 
-    /// SICELIOT's Type fill: rows split the height, columns are as wide as
+    /// Type fill: rows split the height, columns are as wide as
     /// their words, a shape in the middle of a row leaves each column only
     /// the parts outside it (inset by Word gap), a part narrower than Min
     /// width stays empty, Invert region swaps inside and out, and the orders

@@ -7449,7 +7449,7 @@ fn the_graph_reports_the_effect_stack_as_the_image_chain() {
     );
 }
 
-/// SICELIOT: a blur driven by a Wiggle, copied off one layer and pasted on
+/// A blur driven by a Wiggle, copied off one layer and pasted on
 /// another, arrives with its own Wiggle wired into its radius, every id
 /// fresh, and the source left as it was.
 #[test]

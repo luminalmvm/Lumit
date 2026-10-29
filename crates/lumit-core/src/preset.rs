@@ -16,7 +16,7 @@ pub struct EffectPreset {
     pub format: u32,
     pub name: String,
     pub effects: Vec<EffectInstance>,
-    /// SICELIOT: the wires between the copied effects and the drivers that
+    /// The wires between the copied effects and the drivers that
     /// feed them, as a node group, so effects copied off one layer and pasted
     /// on another arrive wired ([`wiring_of`]). Absent when nothing is wired,
     /// and from every preset file, which reads and writes as it did; a Lumit
@@ -36,7 +36,7 @@ pub fn to_json(name: &str, effects: &[EffectInstance]) -> Result<String, String>
     to_json_wired(name, effects, None)
 }
 
-/// [`to_json`] with the wiring the effects were copied with (SICELIOT).
+/// [`to_json`] with the wiring the effects were copied with.
 pub fn to_json_wired(
     name: &str,
     effects: &[EffectInstance],
@@ -51,7 +51,7 @@ pub fn to_json_wired(
     .map_err(|e| e.to_string())
 }
 
-/// SICELIOT: what copying `effects` off a layer takes along of its `graph`:
+/// What copying `effects` off a layer takes along of its `graph`:
 /// the wires between them, and every driver that feeds one of them, directly
 /// or through other drivers, with that driver's own wires. `None` when no
 /// wire is among them, so a plain copy stays a plain preset.
@@ -964,7 +964,7 @@ mod tests {
         (graph, vec![blur], members)
     }
 
-    /// SICELIOT: copying the blur takes the smooth that feeds it and the
+    /// Copying the blur takes the smooth that feeds it and the
     /// wiggle that feeds the smooth, with the two wires between them, and
     /// leaves the third driver and the wire to it behind; the wiring rides
     /// in the copied text and comes back with every id fresh. Copying

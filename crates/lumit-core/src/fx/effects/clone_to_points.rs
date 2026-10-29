@@ -49,7 +49,7 @@
 //! for what gives way, and [`CloneToPoints::picture_of`] chooses a stamp's
 //! picture. The planner, the builder and the draw all go through them.
 
-use crate::fx::drivers::clone_index;
+use crate::fx::drivers::{clone_index, per_copy};
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, Column, PointsStream, SpriteFit};
 use crate::fx::{
@@ -558,20 +558,10 @@ impl CloneToPoints {
         out.keep_newest(most / count);
         let tint = (self.tint / 100.0).clamp(0.0, 1.0);
         // Scale, Rotation and Opacity, per stamp where a driver that reads
-        // the copy is wired into the row ([`drive_copies`] wrote the values),
-        // and the row's one value everywhere else.
-        let per_copy = |name: &str, row: f32| -> Vec<f32> {
-            let at = match out.column(name) {
-                Column::Named(at) => out.named.get(at),
-                _ => None,
-            };
-            (0..out.len())
-                .map(|i| at.and_then(|c| c.values.get(i)).map_or(row, |v| v[0]))
-                .collect()
-        };
-        let scales = per_copy(COPY_SCALE, self.scale);
-        let turns = per_copy(COPY_ROTATION, self.rotation);
-        let opacities = per_copy(COPY_OPACITY, self.opacity);
+        // the copy is wired into the row, and the row's one value elsewhere.
+        let scales = per_copy::column_or(&out, per_copy::COPY_SCALE, self.scale);
+        let turns = per_copy::column_or(&out, per_copy::COPY_ROTATION, self.rotation);
+        let opacities = per_copy::column_or(&out, per_copy::COPY_OPACITY, self.opacity);
         for (s, scale) in out.size.iter_mut().zip(&scales) {
             *s *= (scale / 100.0).max(0.0);
         }
@@ -958,139 +948,6 @@ impl CloneToPoints {
             feather: 0.0,
             streak_seconds: 0.0,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
-        }
-    }
-}
-
-/// The named columns [`drive_copies`] writes and [`CloneToPoints::stamps`]
-/// reads: Scale, Rotation and Opacity per stamp, in the rows' own units.
-pub const COPY_SCALE: &str = "siceliot:scale";
-pub const COPY_ROTATION: &str = "siceliot:rotation";
-pub const COPY_OPACITY: &str = "siceliot:opacity";
-
-/// The rows a driver can give each stamp its own value for, with the column
-/// each is written into.
-pub const COPY_ROWS: &[(&str, &str)] = &[
-    ("scale", COPY_SCALE),
-    ("rotation", COPY_ROTATION),
-    ("opacity", COPY_OPACITY),
-];
-
-/// The most points [`drive_copies`] evaluates one by one; past it the rest
-/// repeat the last value. Each point is a resolve of the layer's drivers.
-pub const COPY_DRIVE_MAX: usize = 4096;
-
-/// **Scale, Rotation and Opacity per copy** (SICELIOT, docs/siceliot/).
-///
-/// In plain terms: a Stagger, Random, Oscillator, Value noise or Clone index
-/// wired into Clone to points' own Scale, Rotation or Opacity gives every
-/// stamp its own value, as a Cavalry behaviour wired into a Duplicator does.
-/// The layer's drivers are resolved once per point, as copy `i` of `n`
-/// standing at the point's place (which Oscillator and Value noise can vary
-/// by), and the values are written into `stream` as the [`COPY_SCALE`],
-/// [`COPY_ROTATION`] and [`COPY_OPACITY`] columns, which `stamps` reads in
-/// place of the row. The stamp is turned and sized as a whole, so nothing is
-/// cropped the way a Transform on the cloned layer crops.
-///
-/// Does nothing unless one of the three rows is wired and the layer's graph
-/// holds a driver that reads the copy ([`clone_index::present`]); every other
-/// layer keeps its one value per row, as before.
-pub fn drive_copies(
-    graph: &crate::graph::LayerGraph,
-    consumer: uuid::Uuid,
-    stream: &mut PointsStream,
-    lt: f64,
-    context: &std::sync::Arc<crate::expression::ExpressionContext>,
-    audio: Option<&dyn crate::fx::registry::AudioTap>,
-    projection: points::Projection,
-) {
-    drive_rows(
-        graph, consumer, stream, COPY_ROWS, lt, context, audio, projection,
-    );
-}
-
-/// [`drive_copies`] for any points consumer: each of `rows` (a row id and the
-/// named column to write) that a wire drives, on a layer whose graph holds a
-/// driver that reads the copy, gets one value per point of `stream`, the
-/// layer's drivers resolved as copy `i` of `n` standing at the point. Label
-/// points' Change and Label scale go through here as well (SICELIOT).
-#[allow(clippy::too_many_arguments)]
-pub fn drive_rows(
-    graph: &crate::graph::LayerGraph,
-    consumer: uuid::Uuid,
-    stream: &mut PointsStream,
-    rows: &[(&'static str, &'static str)],
-    lt: f64,
-    context: &std::sync::Arc<crate::expression::ExpressionContext>,
-    audio: Option<&dyn crate::fx::registry::AudioTap>,
-    projection: points::Projection,
-) {
-    use crate::graph::{InputRef, NodeRef};
-    let wired: Vec<(&str, &str)> = rows
-        .iter()
-        .copied()
-        .filter(|(row, _)| {
-            graph
-                .wire_into(&InputRef::Param {
-                    node: NodeRef::Effect(consumer),
-                    port: (*row).to_owned(),
-                })
-                .is_some()
-        })
-        .collect();
-    if wired.is_empty() || !clone_index::present(graph) {
-        return;
-    }
-    let n = stream.len().min(COPY_DRIVE_MAX);
-    let count = u32::try_from(stream.len()).unwrap_or(u32::MAX);
-    // Each point resolves the whole graph on its own, so the points are
-    // shared out over the cores.
-    // Where every point is, for a driver that keeps away from them.
-    let cloud = points::Cloud::new(stream.position.iter().map(|p| [p[0], p[1]]));
-    use rayon::prelude::*;
-    let per_point: Vec<Vec<Option<f32>>> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            let index = u32::try_from(i).unwrap_or(u32::MAX);
-            let at = stream.position.get(i).map_or([0.0; 2], |p| [p[0], p[1]]);
-            let resolved = crate::fx::drivers::resolve_drivers_at_point(
-                graph,
-                lt,
-                context.clone(),
-                audio,
-                projection,
-                (index, count),
-                at,
-                Some(&cloud),
-            );
-            wired
-                .iter()
-                .map(|(row, _)| {
-                    match resolved.param(NodeRef::Effect(consumer), ParamId::new(row)) {
-                        Some(Value::Float(v)) => Some(v),
-                        #[allow(clippy::cast_precision_loss)]
-                        Some(Value::Int(v)) => Some(v as f32),
-                        _ => None,
-                    }
-                })
-                .collect()
-        })
-        .collect();
-    let values: Vec<Vec<Option<f32>>> = (0..wired.len())
-        .map(|r| per_point.iter().map(|p| p[r]).collect())
-        .collect();
-    for ((_, name), column) in wired.iter().zip(values) {
-        // A row the driver did not answer for keeps the column unwritten, and
-        // so its one value.
-        if column.iter().any(Option::is_none) {
-            continue;
-        }
-        let Some(cells) = stream.named_mut(name, 1) else {
-            continue;
-        };
-        let last = column.last().copied().flatten().unwrap_or(0.0);
-        for (i, cell) in cells.iter_mut().enumerate() {
-            cell[0] = column.get(i).copied().flatten().unwrap_or(last);
         }
     }
 }
