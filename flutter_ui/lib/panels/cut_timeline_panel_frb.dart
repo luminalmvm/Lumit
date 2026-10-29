@@ -2466,6 +2466,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     if (_toggleOnUp case final id? when !held.moved) {
       setState(() => _selected = {..._selected}..removeAll(_withMates(id)));
     }
+    // A plain click on a clip already in a larger selection: the press kept
+    // the selection so it could be dragged, and letting go without a drag
+    // narrows it to the clip, as every editor does.
+    if (held.clip case final clip?
+        when !held.moved && !held.additive && _toggleOnUp == null) {
+      final id = clip.id.toString();
+      final alone = HardwareKeyboard.instance.isAltPressed && !_vegasDrags
+          ? {id}
+          : _withMates(id);
+      if (!setEquals(_selected, alone)) setState(() => _selected = alone);
+    }
     // Vegas's mouse: a click on the tracks puts the cursor there as well,
     // snapped as an edge is.
     if (_vegasDrags && !held.moved && held.tool == CutTool.select) {
