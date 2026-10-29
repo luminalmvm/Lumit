@@ -90,6 +90,9 @@ pub struct CompGraph {
     /// The notes left on the canvas, as a layer's graph keeps them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::graph::Note>,
+    /// The ties on its wires, as a layer's graph keeps them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// One box on a node graph's canvas.
@@ -566,6 +569,7 @@ impl CompGraph {
         let id = Uuid::now_v7();
         CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![GraphNode::Output { id }],
             edges: Vec::new(),
             layout: vec![(id, [0.0, 0.0])],
@@ -1442,6 +1446,7 @@ impl CompGraph {
             exposed: Vec::new(),
             groups: Vec::new(),
             notes: Vec::new(),
+            ties: Vec::new(),
         };
         (graph, fed)
     }
@@ -1604,6 +1609,7 @@ mod tests {
     fn built(nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> CompGraph {
         CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes,
             edges,
             layout: Vec::new(),

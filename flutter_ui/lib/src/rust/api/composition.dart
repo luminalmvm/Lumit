@@ -26,6 +26,7 @@ import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'wire_tie.dart';
 import 'wireframes.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
@@ -1498,6 +1499,12 @@ class CompositionReference {
         that: this,
       );
 
+  /// The ties on this node graph.
+  List<BridgeWireTie> getNodeGraphTies() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraphTies(
+        that: this,
+      );
+
   /// Everything the Composition settings dialog shows.
   ///
   /// The frame rate crosses as an exact `{num, den}` pair and the duration as
@@ -2373,6 +2380,12 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetNodeGraphNotes(
               that: this, notes: notes);
+
+  /// Replace the ties on this node graph, as one undo step.
+  void setNodeGraphTies({required List<BridgeWireTie> ties}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraphTies(
+              that: this, ties: ties);
 
   /// Apply the Composition settings dialog, as one undo step.
   ///

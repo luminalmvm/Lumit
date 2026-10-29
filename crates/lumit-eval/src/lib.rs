@@ -3065,6 +3065,7 @@ mod tests {
 
         let wired = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -4876,6 +4877,7 @@ mod tests {
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

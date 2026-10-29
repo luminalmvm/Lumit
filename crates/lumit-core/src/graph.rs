@@ -184,6 +184,9 @@ pub struct LayerGraph {
     /// The notes left on the canvas. Presentation state as the groups are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<Note>,
+    /// The ties on its wires. Presentation state as the notes are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<crate::wire_tie::WireTie>,
     /// **The Layer out box's image socket is unplugged**: the layer
     /// makes no picture at all.
     ///
@@ -840,6 +843,7 @@ mod tests {
         (
             LayerGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 out_unwired: false,
                 nodes: vec![wiggle],
                 edges: vec![edge],

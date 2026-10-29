@@ -262,6 +262,7 @@ fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
     let mut graph = comp_of("Graph", Vec::new());
     graph.graph = Some(CompGraph {
         notes: Vec::new(),
+        ties: Vec::new(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

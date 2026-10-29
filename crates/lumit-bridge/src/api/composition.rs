@@ -1818,7 +1818,7 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
+    pub(crate) fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -3402,7 +3402,9 @@ impl CompositionReference {
             .collect();
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
-        graph.notes = self.graph_of(&doc)?.notes.clone();
+        let held = self.graph_of(&doc)?;
+        graph.notes = held.notes.clone();
+        graph.ties = held.ties.clone();
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),

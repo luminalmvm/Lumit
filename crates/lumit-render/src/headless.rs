@@ -4967,6 +4967,7 @@ mod tests {
             8,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     read(a, plate),
                     read(b, black),
@@ -5814,6 +5815,7 @@ mod tests {
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
             c.graph = Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes,
                 edges: vec![GraphEdge {
                     from: read,
@@ -6743,6 +6745,7 @@ mod tests {
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
@@ -7847,6 +7850,7 @@ mod tests {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
@@ -8549,6 +8553,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8599,6 +8604,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8661,6 +8667,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Input {
                         id: src,
@@ -8751,6 +8758,7 @@ mod tests {
 
         let graph = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],

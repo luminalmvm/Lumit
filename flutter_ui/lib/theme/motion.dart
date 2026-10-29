@@ -176,6 +176,10 @@ class Motion {
   /// loses it. Full only: at Minimal and None the next step is simply there.
   final MotionSpec tour;
 
+  /// Wires drawn into a tie on a graph canvas, or let out of one. Longer than
+  /// a settle, since a wire may travel a long way to its place.
+  final MotionSpec tie;
+
   const Motion._({
     required this.shape,
     required this.level,
@@ -211,6 +215,7 @@ class Motion {
     required this.revealRise,
     required this.swap,
     required this.tour,
+    required this.tie,
   });
 
   /// Whether nothing moves at all.
@@ -273,6 +278,7 @@ class Motion {
         revealRise: 0,
         swap: MotionSpec.still,
         tour: MotionSpec.still,
+        tie: MotionSpec.still,
       );
 
   /// Minimal is the same under every shape: what is left is too short to
@@ -317,6 +323,7 @@ class Motion {
       revealRise: 0,
       swap: snap,
       tour: MotionSpec.still,
+      tie: snap,
     );
   }
 
@@ -355,6 +362,7 @@ class Motion {
     revealRise: 4,
     swap: MotionSpec(_ms150, Curves.easeOut),
     tour: MotionSpec(_ms280, Curves.easeInOutCubic),
+    tie: MotionSpec(_ms220, _land),
   );
 
   static const Motion _desk = Motion._(
@@ -396,6 +404,7 @@ class Motion {
     revealRise: 0,
     swap: MotionSpec(_ms100, Curves.easeOut),
     tour: MotionSpec(_ms200, _detent),
+    tie: MotionSpec(_ms120, _detent),
   );
 
   static const Motion _lantern = Motion._(
@@ -433,5 +442,6 @@ class Motion {
     revealRise: 6,
     swap: MotionSpec(_ms150, Curves.easeOut),
     tour: MotionSpec(_ms320, Curves.easeInOutCubic),
+    tie: MotionSpec(_ms280, _landSoft),
   );
 }

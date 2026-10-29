@@ -9211,6 +9211,7 @@ mod render_below_at_tests {
         let mut graph = comp_with(10, Vec::new());
         graph.graph = Some(CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,
