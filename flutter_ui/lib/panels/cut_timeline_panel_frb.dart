@@ -496,6 +496,29 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   // -------------------------------------------------------- the track heights
 
   /// The fronted composition's row heights, which the session keeps.
+  /// How wide the heads stand this build.
+  double _outlineWidth = cutTimelineOutlineWidth;
+
+  /// Every track at its least height, as Vegas's Minimize All Tracks, or
+  /// back to the usual height when they already all are.
+  void _minimiseTracks() {
+    final heights = _heightsHere;
+    if (heights == null) return;
+    final least = _trackHeight * cutTrackMinScale;
+    final all = _tracks.every((t) => (heights[t.id] ?? _trackHeight) <= least);
+    setState(() {
+      if (all) {
+        heights.clear();
+      } else {
+        for (final track in _tracks) {
+          heights[track.id] = least;
+        }
+      }
+    });
+    _ui?.rememberSession();
+    _queueRefresh();
+  }
+
   Map<String, double>? get _heightsHere {
     final ui = _ui;
     final comp = ui?.selectedComp?.internalid.toString();
@@ -2998,6 +3021,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 child: Text(label),
               ),
           MenuRow(
+            key: const ValueKey('ctl-head-minimise'),
+            onPressed: () {
+              close(null);
+              _minimiseTracks();
+            },
+            child: Text(l10n.cutMinimiseTracks),
+          ),
+          MenuRow(
             key: const ValueKey('ctl-head-new'),
             onPressed: () {
               close(null);
@@ -3912,10 +3943,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 builder: (context, box) {
                   final outlineWidth = min(
                     _settings.cutHeadWidth,
-                    // Room for the colour bar and a picture track's four
-                    // switches at the least.
-                    max(112.0, box.maxWidth - scrollGutterWidth - _laneFloor),
+                    // Room for the colour bar and three switches at the least.
+                    max(100.0, box.maxWidth - scrollGutterWidth - _laneFloor),
                   );
+                  _outlineWidth = outlineWidth;
                   final laneViewport =
                       (box.maxWidth - outlineWidth - scrollGutterWidth)
                           .clamp(1.0, 1e6);
@@ -4500,12 +4531,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 offMark: LumitIcons.muted,
                 height: top,
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
-            // Solo, as a Vegas video track has.
-            _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
-                mark: LumitIcons.solo,
-                offMark: LumitIcons.solo,
-                height: top,
-                tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
+            // Solo, as a Vegas video track has, where the head is wide
+            // enough to leave the name readable beside four switches.
+            if (_outlineWidth >= 150 || s.solo)
+              _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
+                  mark: LumitIcons.solo,
+                  offMark: LumitIcons.solo,
+                  height: top,
+                  tip: s.solo ? l10n.switchSoloed : l10n.switchSolo),
           ],
           if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
