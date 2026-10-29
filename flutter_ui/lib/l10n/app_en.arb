@@ -22340,5 +22340,377 @@
   "fxMaskPoints": "Mask points",
   "@fxMaskPoints": {
     "description": "Effect controls, Sprite flare's Light from option: a light on each corner of one of the layer's masks."
+  },
+  "fxGlass": "Glass",
+  "@fxGlass": {
+    "description": "Effect name: the Glass effect, one of the effects that come with Lumit."
+  },
+  "fxShapeLayer": "Shape layer",
+  "@fxShapeLayer": {
+    "description": "Effect controls: the layer row on Glass."
+  },
+  "fxRoundedRectangle": "Rounded rectangle",
+  "@fxRoundedRectangle": {
+    "description": "Effect controls: an option of Shape on Glass."
+  },
+  "fxShapeChannel": "Shape channel",
+  "@fxShapeChannel": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxInvertedAlpha": "Inverted alpha",
+  "@fxInvertedAlpha": {
+    "description": "Effect controls: an option of Shape channel on Glass."
+  },
+  "fxInvertedLuminance": "Inverted luminance",
+  "@fxInvertedLuminance": {
+    "description": "Effect controls: an option of Shape channel on Glass."
+  },
+  "fxCentreXPercent": "Centre X (%)",
+  "@fxCentreXPercent": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxCentreYPercent": "Centre Y (%)",
+  "@fxCentreYPercent": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxShapeRotation": "Shape rotation",
+  "@fxShapeRotation": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxFrost": "Frost",
+  "@fxFrost": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxSplay": "Splay",
+  "@fxSplay": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxMagnify": "Magnify",
+  "@fxMagnify": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxMagnifyFalloff": "Magnify falloff",
+  "@fxMagnifyFalloff": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxEffectScale": "Effect scale",
+  "@fxEffectScale": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxEdgeHighlight": "Edge highlight",
+  "@fxEdgeHighlight": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxRimWidth": "Rim width",
+  "@fxRimWidth": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxLightAngle": "Light angle",
+  "@fxLightAngle": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxLightIntensity": "Light intensity",
+  "@fxLightIntensity": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxTintAmount": "Tint amount",
+  "@fxTintAmount": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxBox": "Box",
+  "@fxBox": {
+    "description": "Effect controls: an option of Shape on Falloff."
+  },
+  "fxSweep": "Sweep",
+  "@fxSweep": {
+    "description": "Effect controls: an option of Shape on Falloff."
+  },
+  "fxRepetitions": "Repetitions",
+  "@fxRepetitions": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxEaseIn": "Ease in",
+  "@fxEaseIn": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxEaseOut": "Ease out",
+  "@fxEaseOut": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxBell": "Bell",
+  "@fxBell": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxInvertFalloff": "Invert falloff",
+  "@fxInvertFalloff": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxBinary": "Binary",
+  "@fxBinary": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxCellSize": "Cell size",
+  "@fxCellSize": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxGreyscale": "Greyscale",
+  "@fxGreyscale": {
+    "description": "Effect controls: an option of Output on Falloff."
+  },
+  "fxFadeLayer": "Fade layer",
+  "@fxFadeLayer": {
+    "description": "Effect controls: an option of Output on Falloff."
+  },
+  "fxConicalGradient": "Conical gradient",
+  "@fxConicalGradient": {
+    "description": "Effect name: the Conical gradient effect, one of the effects that come with Lumit."
+  },
+  "fxStartCentre": "Start centre",
+  "@fxStartCentre": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxStartRadius": "Start radius",
+  "@fxStartRadius": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxEndCentre": "End centre",
+  "@fxEndCentre": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxEndRadius": "End radius",
+  "@fxEndRadius": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPad": "Pad",
+  "@fxPad": {
+    "description": "Effect controls: an option of Spread on Conical gradient."
+  },
+  "fxInsideLayer": "Inside layer",
+  "@fxInsideLayer": {
+    "description": "Effect controls: an option of Paint on Conical gradient."
+  },
+  "fxWholeFrame": "Whole frame",
+  "@fxWholeFrame": {
+    "description": "Effect controls: an option of Paint on Conical gradient."
+  },
+  "fxPosition1": "Position 1",
+  "@fxPosition1": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition2": "Position 2",
+  "@fxPosition2": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition3": "Position 3",
+  "@fxPosition3": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxColour4": "Colour 4",
+  "@fxColour4": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition4": "Position 4",
+  "@fxPosition4": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxColour5": "Colour 5",
+  "@fxColour5": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition5": "Position 5",
+  "@fxPosition5": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxSweepGradient": "Sweep gradient",
+  "@fxSweepGradient": {
+    "description": "Effect name: the Sweep gradient effect, one of the effects that come with Lumit."
+  },
+  "fxMultiPointGradient": "Multi-point gradient",
+  "@fxMultiPointGradient": {
+    "description": "Effect name: the Multi-point gradient effect, one of the effects that come with Lumit."
+  },
+  "fxPoint1": "Point 1",
+  "@fxPoint1": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence1": "Influence 1",
+  "@fxInfluence1": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint2": "Point 2",
+  "@fxPoint2": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence2": "Influence 2",
+  "@fxInfluence2": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint3": "Point 3",
+  "@fxPoint3": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence3": "Influence 3",
+  "@fxInfluence3": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint4": "Point 4",
+  "@fxPoint4": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence4": "Influence 4",
+  "@fxInfluence4": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint5": "Point 5",
+  "@fxPoint5": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence5": "Influence 5",
+  "@fxInfluence5": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint6": "Point 6",
+  "@fxPoint6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxColour6": "Colour 6",
+  "@fxColour6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence6": "Influence 6",
+  "@fxInfluence6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxGradientMap": "Gradient map",
+  "@fxGradientMap": {
+    "description": "Effect name: the Gradient map effect, one of the effects that come with Lumit."
+  },
+  "fxVoronoi": "Voronoi",
+  "@fxVoronoi": {
+    "description": "Effect name: the Voronoi effect, one of the effects that come with Lumit."
+  },
+  "fxCells": "Cells",
+  "@fxCells": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxCheckerboard": "Checkerboard",
+  "@fxCheckerboard": {
+    "description": "Effect name: the Checkerboard effect, one of the effects that come with Lumit."
+  },
+  "fxHalftone": "Halftone",
+  "@fxHalftone": {
+    "description": "Effect name: the Halftone effect, one of the effects that come with Lumit."
+  },
+  "fxSquares": "Squares",
+  "@fxSquares": {
+    "description": "Effect controls: an option of Shape on Halftone."
+  },
+  "fxKeepColours": "Keep colours",
+  "@fxKeepColours": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxInk": "Ink",
+  "@fxInk": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxPaper": "Paper",
+  "@fxPaper": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxDithering": "Dithering",
+  "@fxDithering": {
+    "description": "Effect name: the Dithering effect, one of the effects that come with Lumit."
+  },
+  "fxOrdered": "Ordered",
+  "@fxOrdered": {
+    "description": "Effect controls: an option of Method on Dithering."
+  },
+  "fxPixelSize": "Pixel size",
+  "@fxPixelSize": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxColours": "Colours",
+  "@fxColours": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxDark": "Dark",
+  "@fxDark": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxErosion": "Erosion",
+  "@fxErosion": {
+    "description": "Effect name: the Erosion effect, one of the effects that come with Lumit."
+  },
+  "fxLightSweep": "Light sweep",
+  "@fxLightSweep": {
+    "description": "Effect name: the Light sweep effect, one of the effects that come with Lumit."
+  },
+  "fxLighting": "Lighting",
+  "@fxLighting": {
+    "description": "Effect name: the Lighting effect, one of the effects that come with Lumit."
+  },
+  "fxDirectional": "Directional",
+  "@fxDirectional": {
+    "description": "Effect controls: an option of Light on Lighting."
+  },
+  "fxLightPosition": "Light position",
+  "@fxLightPosition": {
+    "description": "Effect controls: a control on Lighting."
+  },
+  "fxLightRadius": "Light radius",
+  "@fxLightRadius": {
+    "description": "Effect controls: a control on Lighting."
+  },
+  "fxSide": "Side",
+  "@fxSide": {
+    "description": "Effect controls: a control on Stripes."
+  },
+  "fxBothSides": "Both sides",
+  "@fxBothSides": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxFront": "Front",
+  "@fxFront": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxBack": "Back",
+  "@fxBack": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxScrape": "Scrape",
+  "@fxScrape": {
+    "description": "Effect name: the Scrape effect, one of the effects that come with Lumit."
+  },
+  "fxRoughness": "Roughness",
+  "@fxRoughness": {
+    "description": "Effect controls: a control on Scrape."
+  },
+  "fxBilateralBlur": "Bilateral blur",
+  "@fxBilateralBlur": {
+    "description": "Effect name: the Bilateral blur effect, one of the effects that come with Lumit."
+  },
+  "fxTolerance": "Tolerance",
+  "@fxTolerance": {
+    "description": "Effect controls: a control on Bilateral blur."
+  },
+  "fxFourPointWarp": "Four point warp",
+  "@fxFourPointWarp": {
+    "description": "Effect name: the Four point warp effect, one of the effects that come with Lumit."
+  },
+  "fxCurveTop": "Curve top",
+  "@fxCurveTop": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveRight": "Curve right",
+  "@fxCurveRight": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveBottom": "Curve bottom",
+  "@fxCurveBottom": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveLeft": "Curve left",
+  "@fxCurveLeft": {
+    "description": "Effect controls: a control on Four point warp."
   }
 }
