@@ -5030,6 +5030,41 @@ fn a_move_follows_the_timelines_switches() {
     );
 }
 
+/// A cut through a grouped clip cuts the rest of its group with it, and the
+/// later pieces make a group of their own.
+#[test]
+fn a_cut_through_a_group_leaves_two_groups() {
+    use crate::api::cut::BridgeCutResult;
+    let (project, comp, top, length) = cut_row(1);
+    let footage = FootageReference {
+        project: project.id,
+        id: match row_clips(&top)[0].source {
+            lumit_core::sequence::ClipSource::Footage(id) => id,
+            other => panic!("a footage clip, not {other:?}"),
+        },
+    };
+    comp.add_audio_layer(&footage, None).expect("placed");
+    let below = comp.get_layers().expect("layers").remove(0);
+    below.convert_to_sequenced().expect("a row of clips");
+    let sound = row_clips(&below)[0].id;
+    let done = comp.cut_trim(sound, 0, length, false, false);
+    assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
+    let group = Uuid::now_v7();
+    for row in [top, below] {
+        let clip = row_clips(&row)[0].id;
+        row.set_clip_group(clip, Some(group)).expect("grouped");
+    }
+    let done = comp.cut_razor(vec![top], length / 2, true);
+    assert_eq!(done.expect("cut"), BridgeCutResult::Done);
+    let groups = |at: usize| [top, below].map(|row| row_clips(&row)[at].group);
+    assert_eq!(groups(0), [Some(group); 2], "the earlier pieces keep it");
+    let [a, b] = groups(1);
+    assert!(
+        a.is_some() && a == b && a != Some(group),
+        "the later share a new one"
+    );
+}
+
 /// A paste puts copies down as clips of their own, linked to each other and
 /// not to the clips they were copied from, and answers where they end. With
 /// no layer to land on it makes one for the picture and one for the sound.

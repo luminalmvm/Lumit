@@ -440,23 +440,29 @@ impl<'a> Edit<'a> {
             .ok_or(Stop::Failed(BridgeError::InvalidLayer))
     }
 
-    /// The named clips, and with `linked` every clip sharing a link with one
-    /// of them.
+    /// The named clips, and with `linked` every clip sharing a link or a
+    /// group with one of them, and so on, so a group brings its sound along.
     fn with_linked(&self, clips: &[Uuid], linked: bool) -> Cut<Vec<Uuid>> {
         let mut ids: Vec<Uuid> = Vec::new();
-        let mut links: Vec<Uuid> = Vec::new();
         for id in clips {
-            let (r, c) = self.find(*id)?;
+            self.find(*id)?;
             if !ids.contains(id) {
                 ids.push(*id);
-                links.extend(self.rows[r].clips[c].link);
             }
         }
-        for c in self.rows.iter().flat_map(|row| &row.clips) {
-            let partner = linked && c.link.is_some_and(|l| links.contains(&l));
-            if partner && !ids.contains(&c.id) {
-                ids.push(c.id);
+        let all = || self.rows.iter().flat_map(|row| &row.clips);
+        let ties = |c: &Clip| c.link.into_iter().chain(c.group);
+        loop {
+            let held: Vec<Uuid> = all()
+                .filter(|c| ids.contains(&c.id))
+                .flat_map(ties)
+                .collect();
+            let tied = |c: &&Clip| !ids.contains(&c.id) && ties(c).any(|t| held.contains(&t));
+            let more: Vec<Uuid> = all().filter(tied).map(|c| c.id).collect();
+            if more.is_empty() || !linked {
+                break;
             }
+            ids.extend(more);
         }
         Ok(ids)
     }
@@ -575,29 +581,30 @@ impl<'a> Edit<'a> {
     }
 
     /// Cut every clip on `rows` that `at` falls inside, and with `linked` the
-    /// clips linked to those on any other unlocked row. Answers how many.
+    /// clips linked or grouped with those on any other unlocked row. Answers
+    /// how many. The later pieces of a group make a group of their own.
     ///
     /// The same cut `LayerReference::cut_clip_at` makes, through
     /// [`Clip::cut`], gathered here so several rows are one undo step.
     fn razor(&mut self, rows: &[usize], at: Rational, linked: bool) -> Cut<usize> {
         let inside = |c: &Clip| c.place_start < at && at < c.place_end();
-        let mut links: Vec<Uuid> = Vec::new();
-        if linked {
-            for r in rows {
-                let under = self.rows[*r].clips.iter().filter(|c| inside(c));
-                links.extend(under.filter_map(|c| c.link));
-            }
-        }
+        let under = rows
+            .iter()
+            .flat_map(|r| &self.rows[*r].clips)
+            .filter(|c| inside(c));
+        let cut = self.with_linked(&under.map(|c| c.id).collect::<Vec<_>>(), linked)?;
+        let mut regrouped: Vec<(Uuid, Uuid)> = Vec::new();
         let mut count = 0;
-        for (r, row) in self.rows.iter_mut().enumerate() {
-            if row.locked {
-                continue;
-            }
-            let named = rows.contains(&r);
+        for row in self.rows.iter_mut().filter(|row| !row.locked) {
             let mut next = Vec::with_capacity(row.clips.len() + 1);
             for c in &row.clips {
-                if inside(c) && (named || c.link.is_some_and(|l| links.contains(&l))) {
-                    let (left, right) = c.cut(at).ok_or(BridgeCutResult::Uncuttable)?;
+                if inside(c) && cut.contains(&c.id) {
+                    let (left, mut right) = c.cut(at).ok_or(BridgeCutResult::Uncuttable)?;
+                    right.group = right.group.map(|g| {
+                        let found = regrouped.iter().find(|(old, _)| *old == g);
+                        found.map_or_else(Uuid::now_v7, |(_, new)| *new)
+                    });
+                    regrouped.extend(c.group.zip(right.group));
                     next.extend([left, right]);
                     count += 1;
                 } else {
