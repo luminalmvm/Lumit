@@ -595,6 +595,21 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     final to = _target;
+    // Built here and not on every tick of the move: which card is shown
+    // changes once, at the swap, and nothing on either moves.
+    final cards = <int, Widget>{
+      _index: _card(t, widget.steps[_index], _index),
+      if (_fromIndex case final from?) from: _card(t, widget.steps[from], from),
+    };
+    // The last step's card fades out up to the swap, and this one's in after.
+    final fade = _fromIndex == null
+        ? kAlwaysCompleteAnimation
+        : _move.drive(TweenSequence<double>([
+            TweenSequenceItem(
+                tween: Tween(begin: 1.0, end: 0.0), weight: _cardSwap),
+            TweenSequenceItem(
+                tween: Tween(begin: 0.0, end: 1.0), weight: 1 - _cardSwap),
+          ]));
     return FocusScope(
       node: _focus,
       onKeyEvent: _onKey,
@@ -630,12 +645,8 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
                   ),
                   if (to != null && hole != null)
                     Positioned.fill(
-                      child: Opacity(
-                        opacity: leaving
-                            ? 1 - at / _cardSwap
-                            : _fromIndex == null
-                                ? 1
-                                : (at - _cardSwap) / (1 - _cardSwap),
+                      child: FadeTransition(
+                        opacity: fade,
                         child: Stack(
                           children: [
                             Positioned.fill(
@@ -653,7 +664,7 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
                                 ),
                                 child: KeyedSubtree(
                                   key: ValueKey<int>(showing),
-                                  child: _card(t, step, showing),
+                                  child: cards[showing]!,
                                 ),
                               ),
                             ),

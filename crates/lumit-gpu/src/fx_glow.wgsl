@@ -17,7 +17,7 @@ struct Params {
     intensity: f32,    // halo gain; 0 is the neutral point
     mix_amt: f32,      // 0..1, blended against the unprocessed input
     matte_on: f32,     // 1 = gate the bright pass by the matte
-    _pad0: f32,        // was Invert; the seam applies it once
+    rolloff: f32,      // 0..1, the top bends towards white; 0 is off
     _pad: vec2<f32>,
 };
 
@@ -89,11 +89,18 @@ fn glow_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let hl = textureLoad(src, xy, 0);
-    let glowed = vec3<f32>(
+    var glowed = vec3<f32>(
         o.r + p.intensity * (hl.r * p.tint.r),
         o.g + p.intensity * (hl.g * p.tint.g),
         o.b + p.intensity * (hl.b * p.tint.b),
     );
+    // Rolloff (== maths::glow_rolloff): the added light bends towards white
+    // past 1 − rolloff, and the picture's own highlights keep their value.
+    if (p.rolloff > 0.0) {
+        let k = 1.0 - p.rolloff;
+        let bent = k + p.rolloff * (1.0 - exp(-(glowed - vec3<f32>(k)) / p.rolloff));
+        glowed = max(o.rgb, select(glowed, bent, glowed > vec3<f32>(k)));
+    }
     let a = min(o.a + p.intensity * hl.a, 1.0);
     let outv = o.rgb * (1.0 - p.mix_amt) + glowed * p.mix_amt;
     let outa = o.a * (1.0 - p.mix_amt) + a * p.mix_amt;

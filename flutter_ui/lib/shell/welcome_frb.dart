@@ -24,6 +24,7 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -37,6 +38,8 @@ import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
+import '../widgets/middle_ellipsis.dart';
+import '../widgets/name_direction.dart';
 import 'about_window_frb.dart';
 import 'backups_window.dart';
 import 'menu_bar_frb.dart';
@@ -277,10 +280,16 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     _cards(),
                     const SizedBox(height: welcomeBlockGap),
                     _recents(app, workspace),
-                    if (_backedUp.isNotEmpty) ...[
-                      const SizedBox(height: welcomeBlockGap),
-                      _backups(app),
-                    ],
+                    _arriving(OpenReveal(
+                      open: _backedUp.isNotEmpty,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: welcomeBlockGap),
+                          _backups(app),
+                        ],
+                      ),
+                    )),
                     const SizedBox(height: welcomeBlockGap),
                     _footer(t, app),
                   ],
@@ -290,6 +299,20 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The backed-up projects come in after the page does, once the account
+  /// has answered, so the column grows to take them rather than jumping.
+  Widget _arriving(Widget block) {
+    final reveal = ThemeScope.of(context).motion.reveal;
+    // With motion off the spec has no length, which a size animation refuses.
+    if (reveal.isStill) return block;
+    return AnimatedSize(
+      duration: reveal.duration,
+      curve: reveal.curve,
+      alignment: Alignment.topCenter,
+      child: block,
     );
   }
 
@@ -742,19 +765,20 @@ class _RecentRowState extends State<_RecentRow> {
                   children: [
                     Text(
                       widget.name ?? projectDisplayName(widget.path),
+                      textDirection: nameDirection(
+                          widget.name ?? projectDisplayName(widget.path)),
                       style: t.bodyPrimary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    MiddleEllipsis(
                       widget.detail ?? shortenHomePath(widget.path),
                       style: t.mono.copyWith(
                         fontSize: 9,
                         color: t.textDisabled,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      tip: widget.detail ?? widget.path,
                     ),
                   ],
                 ),
@@ -990,11 +1014,19 @@ String shortenHomePath(String path) {
 }
 
 /// When the project was last opened on this machine: today says so in words,
-/// anything older is the day and the month.
+/// anything older is the day and the month, and anything from another year
+/// the month and the year.
 String recentWhen(DateTime? when) {
   if (when == null) return '';
   final now = DateTime.now();
-  final sameDay =
-      when.year == now.year && when.month == now.month && when.day == now.day;
+  if (when.year != now.year) {
+    final tag = l10n.localeName;
+    try {
+      return DateFormat.yMMM(tag == 'en' ? 'en_GB' : tag).format(when);
+    } catch (_) {
+      return DateFormat.yMMM().format(when);
+    }
+  }
+  final sameDay = when.month == now.month && when.day == now.day;
   return sameDay ? l10n.welcomeToday : l10n.welcomeRecentDate(when);
 }

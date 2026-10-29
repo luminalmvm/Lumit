@@ -47,6 +47,7 @@ import '../state/drag_payloads.dart';
 import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
@@ -60,7 +61,7 @@ import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
-import 'easing_curve.dart' show EasingCurve;
+import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
@@ -192,7 +193,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   double _zoomAnchorViewportX = 0;
   bool _zoomAnchorHeld = false;
   bool _pullingBackZoom = false;
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  MotionSpec _zoomFlight = MotionSpec.still;
 
   /// The lanes' viewport width and the comp's length as the last layout knew
   /// them: what a peak window is worked out from, and what the zoom's ceiling
@@ -305,7 +306,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   bool Function()? _heldDelete;
   bool Function()? _heldCopy;
   bool Function()? _heldPaste;
-  ValueChanged<EasingCurve>? _heldEasing;
+  ApplyEasing? _heldEasing;
 
   @override
   void initState() {
@@ -704,7 +705,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   /// A shape sent from the Easing panel, onto every span the picked keyframes
   /// cover - one press, one undo step.
-  void _applyEasing(EasingCurve curve) {
+  void _applyEasing(EasingCurve curve, EaseSides sides) {
     final ui = _ui;
     if (!mounted || ui == null) return;
     final channels = _keyChannels(ui);
@@ -713,7 +714,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     asOneUndoStep(
       Provider.of<LumitState>(context, listen: false).project,
       () => applyEasingToSelection(
-          channels: channels, selectedKeys: selection, curve: curve),
+          channels: channels,
+          selectedKeys: selection,
+          curve: curve,
+          sides: sides),
     );
     _afterWrite();
   }
@@ -958,8 +962,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   void _setZoom(double z, {bool fly = true}) {
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
-    _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+    _zoomMotion.goTo(z, motion: fly ? _zoomFlight : MotionSpec.still);
   }
 
   void _zoomDragStart() {
@@ -1034,7 +1037,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _zoomFlight,
       );
       return;
     }
@@ -1131,7 +1134,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       BuildContext context, LumitUiState ui, CompositionReference comp) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
@@ -2712,7 +2715,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             right: 8,
             bottom: 4,
             child: Text(reading,
-                style: t.mono.copyWith(fontSize: 8, color: t.textMuted)),
+                style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
           ),
         // The corners of the layer's own bar: the first fade dragged on to one
         // converts it, as the first trim does.

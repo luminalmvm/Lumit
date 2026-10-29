@@ -1008,8 +1008,7 @@ fn points_room(
         // To the further of the frame's two edges, and never past a frame's
         // width, however far off the layer has been moved.
         let px = corner.max(frame - corner - art).clamp(0.0, frame);
-        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(tex) / 2;
-        ((px * scale).ceil() as u32).min(most)
+        lumit_core::largest_picture::room((px * scale).ceil() as u32, tex)
     };
     let room = [
         side(corner.0, natural.0, frame.0, tex.0),
@@ -3535,7 +3534,6 @@ fn comp_walk(
                 if let Some(layer) =
                     owner.filter(|_| lumit_core::fx::points::stepped::trails(comp, e))
                 {
-                    use lumit_core::fx::points::stepped::{definition, target};
                     return lumit_core::fx::points::PointsSchedule {
                         schedule: lumit_core::fx::points::Schedule::default(),
                         t,
@@ -3549,14 +3547,14 @@ fn comp_walk(
                         label,
                         grow,
                         stepped: None,
-                        trails: Some(lumit_core::fx::points::Trails {
-                            key: definition(expr_doc, comp, layer, e, target(comp, e)),
-                            doc: expr_doc.clone(),
-                            comp: comp.id,
-                            layer: layer.id,
-                            clone: clone_number,
+                        trails: Some(crate::trails::carriage(
+                            expr_doc,
+                            comp,
+                            layer,
+                            e,
+                            clone_number,
                             inset,
-                        }),
+                        )),
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -4497,7 +4495,7 @@ fn comp_walk(
                         rotation_y_deg: 0.0,
                     }
                 };
-                draws.push(CompLayerDraw {
+                draws.push(crate::trails::with_sprites(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
                     natural_size: (comp.width as f32, comp.height as f32),
@@ -4614,7 +4612,7 @@ fn comp_walk(
                             keys,
                         )
                     },
-                });
+                }));
                 continue;
             }
             _ => {
@@ -4752,7 +4750,7 @@ fn comp_walk(
         };
 
         let placed = drawn(layer, lt, &context);
-        draws.push(CompLayerDraw {
+        draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
             natural_size: natural,
@@ -4843,7 +4841,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-        });
+        }));
     }
     // A live span reaching the top of the stack closes with the walk itself.
     if let Some((_, group, mark)) = open_unit {
@@ -4865,17 +4863,15 @@ fn comp_walk(
 
 /// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
 fn at_own_size(d: &mut CompLayerDraw) {
-    let max = crate::plan::MAX_TEXTURE_SIDE;
-    let (w, h) = (
-        (d.natural_size.0 as u32).min(max),
-        (d.natural_size.1 as u32).min(max),
-    );
+    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
     if let DrawSource::Pixels {
         rgba, tex_w, tex_h, ..
     } = &mut d.source
     {
         let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
-        if (*tex_w, *tex_h) == (8, 8) && (w, h) != (8, 8) && flat {
+        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
+            let fit = lumit_core::largest_picture::fit;
+            let (w, h) = (fit(natural.0), fit(natural.1));
             let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
             (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
         }
@@ -5014,21 +5010,29 @@ fn colour_tables(
 }
 
 /// The lens each enabled built-in lens effect reads other than its Lens row,
-/// 1:1 and in order with the stack's lens ops, as the LUT files are.
+/// 1:1 and in order with the stack's lens ops, as the LUT files are. A
+/// Sprite flare's kept design rides the same list as text.
 fn flare_lens_files(
     effects: &[lumit_core::model::EffectInstance],
     lt: f64,
 ) -> Vec<Option<lumit_core::fx::lens::LensSource>> {
     use lumit_core::fx::lens;
     use lumit_core::model::EffectNamespace;
+    let flare = |e: &lumit_core::model::EffectInstance| e.effect.match_name == "sprite_flare";
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && lens::takes_a_lens(&e.effect.match_name)
+                && (lens::takes_a_lens(&e.effect.match_name) || flare(e))
         })
-        .map(|e| lens::source_at(e, lt))
+        .map(|e| {
+            if flare(e) {
+                lumit_core::fx::flare::design::embedded_text(e).map(lens::LensSource::Text)
+            } else {
+                lens::source_at(e, lt)
+            }
+        })
         .collect()
 }
 

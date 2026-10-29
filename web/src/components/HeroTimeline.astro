@@ -54,6 +54,7 @@ const layers = [
       readonly
       spellcheck="false"
       autocomplete="off"
+      enterkeyhint="done"
       title="Drag to scrub. Click to type a frame, or seconds:frames."
       aria-label="Current time"
     />
@@ -157,12 +158,20 @@ const layers = [
     font-feature-settings: "zero";
     text-align: center;
     cursor: ew-resize;
+    touch-action: pan-y;
   }
   .hc-tc:not([readonly]) {
     border-color: var(--key);
     cursor: text;
     -webkit-user-select: text;
     user-select: text;
+  }
+  /* As wide as its longest reading, so it does not move what is beside it
+     as it counts. */
+  .hc-fr {
+    flex: none;
+    width: 8ch;
+    contain: layout;
   }
   .hc-fr,
   .hc-hint,
@@ -303,13 +312,22 @@ const layers = [
     inset: 5px;
     background: var(--key);
     transform: rotate(45deg);
-    transition: transform 0.12s;
   }
-  .hc-key:hover::before,
+  @media (prefers-reduced-motion: no-preference) {
+    .hc-key::before {
+      transition: transform 0.12s;
+    }
+  }
   .hc-key:focus-visible::before,
   .hc-key.drag::before {
     background: #fff;
     transform: rotate(45deg) scale(1.3);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .hc-key:hover::before {
+      background: #fff;
+      transform: rotate(45deg) scale(1.3);
+    }
   }
   .hc-key:focus-visible {
     outline: none;
@@ -351,6 +369,25 @@ const layers = [
     left: -4px;
     border: 4.5px solid transparent;
     border-top: 7px solid var(--color-accent-2);
+  }
+  /* A finger needs more to hold than a pointer, and a phone zooms in on a
+     box with text under 16px. */
+  @media (pointer: coarse) {
+    .hc-tc {
+      font-size: 16px;
+    }
+    .hc-name,
+    .hc-lane {
+      height: 30px;
+    }
+    .hc-key {
+      width: 26px;
+      height: 26px;
+      margin: -13px 0 0 -13px;
+    }
+    .hc-key::before {
+      inset: 9px;
+    }
   }
   @media (max-width: 520px) {
     .hc {
@@ -527,13 +564,20 @@ const layers = [
       play.innerHTML = playing ? PAUSE : PLAY;
       play.setAttribute("aria-label", playing ? "Pause" : "Play");
       if (!playing) announce();
+      run();
     };
+    // The first pass stops on the word. It loops from when the visitor
+    // presses Play or moves a keyframe.
+    let looping = false;
     const seek = (time: number) => {
       t = clamp(time, 0, SECONDS - STEP);
       render();
       announce();
     };
-    play.addEventListener("click", () => setPlaying(!playing));
+    play.addEventListener("click", () => {
+      looping = true;
+      setPlaying(!playing);
+    });
 
     // ---- the ruler and the keyframes ----
     const ruler = $<HTMLElement>("[data-ruler]");
@@ -557,6 +601,7 @@ const layers = [
       track[i][0] = clamp(Math.round(time * FPS) / FPS, lo, hi);
       place(key, track[i][0]);
       reset.hidden = false;
+      looping = true;
       render();
     };
     const build = () => {
@@ -628,6 +673,7 @@ const layers = [
     lanes.addEventListener("keydown", (e) => {
       if (e.key === " ") {
         e.preventDefault();
+        looping = true;
         setPlaying(!playing);
         return;
       }
@@ -717,27 +763,44 @@ const layers = [
 
     // ---- the clock ----
     // It waits for the field behind to have its picture (HeroField.astro says
-    // when), so the mark is not already moving when its light comes on.
-    let held = document.documentElement.classList.contains("hold");
+    // when), so the mark is not already moving when its light comes on. Two
+    // seconds at most.
+    let held = true;
     document.addEventListener("hero:ready", () => (held = false), { once: true });
+    setTimeout(() => (held = false), 2000);
     let seen = true;
-    new IntersectionObserver((entries) => {
-      seen = entries[0].isIntersecting;
-    }).observe(wm);
-    let last = performance.now();
+    let raf = 0;
+    let last = 0;
     const frame = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      if (playing && seen && !document.hidden && !hero.paused && !held) {
-        t = (t + dt) % SECONDS;
+      raf = requestAnimationFrame(frame);
+      if (document.hidden || hero.paused || held) return;
+      // Where the word starts to close back into the mark.
+      const rest = tracks.word[2][0];
+      if (!looping && t < rest && t + dt >= rest) {
+        t = rest;
         render();
+        setPlaying(false);
+        return;
       }
-      requestAnimationFrame(frame);
+      t = (t + dt) % SECONDS;
+      render();
     };
+    // Frames are only asked for while it plays and can be seen.
+    function run() {
+      cancelAnimationFrame(raf);
+      if (!playing || !seen) return;
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
+    new IntersectionObserver((entries) => {
+      seen = entries[0].isIntersecting;
+      run();
+    }).observe(wm);
 
     build();
     setPlaying(playing);
     render();
-    requestAnimationFrame(frame);
   }
 </script>

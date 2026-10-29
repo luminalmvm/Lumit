@@ -40,7 +40,6 @@ import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
-import '../icons/icon_style.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
@@ -63,6 +62,7 @@ import '../state/keymap.dart';
 import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
+import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
@@ -76,6 +76,7 @@ import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
+import 'layer_settings_frb.dart' show newSolidFrb;
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -227,12 +228,17 @@ class MenuEntry {
   /// How to rebuild this row when [live] fires. Null unless [live] is set.
   final MenuEntry Function()? rebuild;
 
+  /// What hovering the row says, where its label is a shortened name: the
+  /// full path of a recent project.
+  final String? tip;
+
   MenuEntry(
     this.label,
     this.onPressed, {
     this.action,
     this.needsPro = false,
     bool? checked,
+    this.tip,
   })  : isDivider = false,
         children = null,
         todo = false,
@@ -262,7 +268,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = checked,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// **An option row that leaves the menu open**, on the same terms as
   /// [MenuEntry.toggle] and for a narrower reason: the rows that pick one of
@@ -284,7 +291,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = checked,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   MenuEntry.divider()
       : label = null,
@@ -297,7 +305,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   MenuEntry.submenu(this.label, this.children)
       : onPressed = null,
@@ -308,7 +317,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// A command the specification has and the build has not.
   MenuEntry.todo(this.label, {this.action})
@@ -320,7 +330,8 @@ class MenuEntry {
         _checked = null,
         _checkedNow = null,
         live = null,
-        rebuild = null;
+        rebuild = null,
+        tip = null;
 
   /// A row that redraws itself while its menu is open, from [rebuild], every
   /// time [live] fires — and which does *not* close the menu when pressed.
@@ -341,7 +352,8 @@ class MenuEntry {
         todo = false,
         needsPro = false,
         _checked = null,
-        _checkedNow = null;
+        _checkedNow = null,
+        tip = null;
 
   /// The tick this row wears now: fixed for an ordinary row, re-read for a
   /// [MenuEntry.toggle] whose menu is still open after it was pressed.
@@ -445,7 +457,7 @@ class _CommandBox extends StatelessWidget {
           child: Row(
             children: [
               glyph.LumitIcon(
-                IconStyle.resolve('search', LumitIcons.search, t),
+                LumitIcons.search,
                 size: 12,
                 colour: Color.lerp(t.textMuted, t.textPrimary, lit),
               ),
@@ -561,7 +573,8 @@ class LumitMenuBarFrb extends StatelessWidget {
     final roomed = t.tokens.roomed;
     final onRail = ui.workspace.interface.toolBarPositionFor(ui.theme.shape) ==
         ToolBarPosition.left;
-    return Container(
+    // Named, so a style can dress the menu bar's buttons apart from others.
+    return StylePart(name: 'menubar', child: Container(
       height: t.density.menuBar,
       // **Load-bearing.** The scroll view above shrink-wraps to the width of
       // its Row, so without this the bar is only as wide as its nine headings
@@ -637,7 +650,7 @@ class LumitMenuBarFrb extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 
   /// The palette finds everything from one box: every menu command, and the
@@ -721,7 +734,7 @@ class LumitMenuBarFrb extends StatelessWidget {
         category: l10n.menuEffect,
         disabled: layer == null ? l10n.paletteNeedsLayer : null,
         run: () {
-          layer?.addEffect(name: effect.name);
+          if (layer != null) ui.addEffect(layer, effect.name);
           app.notifyDocumentChanged();
         },
       ));
@@ -794,7 +807,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       // The primary layer only, as the Effect menu does.
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
-      layer.addEffect(name: name);
+      ui.addEffect(layer, name);
       app.notifyDocumentChanged();
     }
 
@@ -963,7 +976,9 @@ List<MenuSection> lumitMenus(
                 MenuEntry(l10n.menuNothingYet, null)
               else
                 for (final path in ui.workspace.recentProjects)
-                  MenuEntry(path, () => app.openProject(path)),
+                  MenuEntry(projectDisplayName(path),
+                      () => app.openProject(path),
+                      tip: path),
             ]),
             MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
                 needsPro: needsPro()),
@@ -1266,7 +1281,14 @@ List<MenuSection> lumitMenus(
             // selected ([newLayerRow]).
             MenuEntry.submenu(l10n.menuNew, [
               MenuEntry(
-                  l10n.menuSolid, onComp((c) => c.addSolidLayer(row: row(c))),
+                  l10n.menuSolid,
+                  comp == null
+                      ? null
+                      : () => newSolidFrb(
+                          context: context,
+                          comp: comp,
+                          row: row(comp),
+                          onDone: app.notifyDocumentChanged),
                   action: 'layer.new.solid'),
               MenuEntry(
                   l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
@@ -1499,7 +1521,7 @@ List<MenuSection> lumitMenus(
                 action: 'layer.ungroup'),
           ]
     ),
-    (title: l10n.menuEffect, items: () => _effectMenu(app, layers)),
+    (title: l10n.menuEffect, items: () => _effectMenu(app, ui, layers)),
     (
       title: l10n.menuAnimation,
       items: () => [
@@ -1868,7 +1890,9 @@ List<MenuSection> lumitMenus(
 /// The Effect menu: one submenu per effect category, each applying its effect
 /// to the primary layer. Disabled outright with nothing selected, since there
 /// is nowhere for an effect to go.
-List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
+List<MenuEntry> _effectMenu(
+        LumitState app, LumitUiState ui, List<LayerReference> layers) =>
+    [
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
           for (final effect in group.value)
@@ -1877,12 +1901,17 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
               layers.isEmpty
                   ? null
                   : () {
-                      layers.first.addEffect(name: effect.name);
+                      ui.addEffect(layers.first, effect.name);
                       app.notifyDocumentChanged();
                     },
             ),
         ]),
     ];
+
+/// The Effect menu as a flyout, for a layer's own right-click menu.
+Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
+        VoidCallback close) =>
+    _MenuList(items: _effectMenu(app, ui, [layer]), close: close);
 
 /// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
@@ -2978,7 +3007,7 @@ class _RequestHotkeyState extends State<_RequestHotkey> {
 String? _openHeading;
 VoidCallback? _closeHeading;
 
-class _MenuButton extends StatelessWidget {
+class _MenuButton extends StatefulWidget {
   final String title;
 
   /// Built when the menu opens, not when the bar does — see [MenuSection].
@@ -2986,9 +3015,25 @@ class _MenuButton extends StatelessWidget {
   const _MenuButton({required this.title, required this.items});
 
   @override
+  State<_MenuButton> createState() => _MenuButtonState();
+}
+
+class _MenuButtonState extends State<_MenuButton> {
+  /// Whether this heading's menu is up. The heading keeps its hover face for
+  /// as long as it is, so the pointer moving into the menu still shows which
+  /// one is open.
+  bool _up = false;
+
+  /// Counts the menus this heading has opened, so the close of one it has
+  /// just replaced doesn't take the face off the one now up.
+  int _opens = 0;
+
+  String get title => widget.title;
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return MouseRegion(
+    final button = MouseRegion(
       // Only once a menu is already open: hovering the bar with nothing open
       // must not start dropping menus at a passing pointer.
       onEnter: (_) {
@@ -3011,6 +3056,17 @@ class _MenuButton extends StatelessWidget {
         },
       ),
     );
+    // HouseButton's own hover face, drawn under it while the pointer is away.
+    return DecoratedBox(
+      decoration: _up
+          ? BoxDecoration(
+              color: t.surface3,
+              border: Border.all(color: t.hairlineStrong),
+              borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+            )
+          : const BoxDecoration(),
+      child: button,
+    );
   }
 
   void _open(BuildContext context) {
@@ -3021,7 +3077,9 @@ class _MenuButton extends StatelessWidget {
     _openHeading = title;
     // Built here, once, rather than inside the popup's builder: the rows are
     // this menu's answer at the moment it was asked for.
-    final rows = items();
+    final rows = widget.items();
+    final mine = ++_opens;
+    setState(() => _up = true);
     showLumitPopup<void>(
       context: context,
       position: origin,
@@ -3035,7 +3093,9 @@ class _MenuButton extends StatelessWidget {
           child: _MenuList(items: rows, close: () => close(null)),
         );
       },
-    );
+    ).then((_) {
+      if (mounted && mine == _opens) setState(() => _up = false);
+    });
   }
 }
 
@@ -3127,6 +3187,7 @@ class _MenuListState extends State<_MenuList> {
                     builder: (context, _) {
                       final row = item.current;
                       return MenuRow(
+                        enabled: row.onPressed != null,
                         onPressed: row.onPressed ?? () {},
                         child: _label(t, row, ticks: ticks, shortcut: null),
                       );
@@ -3137,6 +3198,7 @@ class _MenuListState extends State<_MenuList> {
                     key: item.label == null
                         ? null
                         : ValueKey<String>('menu-row-${item.label}'),
+                    enabled: item.onPressed != null,
                     onPressed: item.onPressed == null
                         ? close
                         : item.keepsMenuOpen
@@ -3172,10 +3234,16 @@ class _MenuListState extends State<_MenuList> {
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
+    final text = Text(item.text,
+        style: style, maxLines: 1, overflow: TextOverflow.ellipsis);
     return Row(
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
-        Expanded(child: Text(item.text, style: style)),
+        Expanded(
+          child: item.tip == null
+              ? text
+              : LumitTooltip(message: item.tip!, child: text),
+        ),
         if (item.needsPro)
           const Padding(
             padding: EdgeInsets.only(left: 16),

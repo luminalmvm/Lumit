@@ -1,0 +1,21 @@
+{
+  "lumit_flare": 1,
+  "name": "Glint",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 22, "falloff": 0.3, "core": 2.0, "core_size": 0.25, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 90, "brightness": 0.08, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "values": {"points": 4, "size": 220, "thickness": 2.0, "brightness": 0.5}
+    }
+  ]
+}

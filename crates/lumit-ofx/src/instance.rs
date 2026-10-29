@@ -962,6 +962,25 @@ pub(crate) fn add_images_at(
     Ok(())
 }
 
+/// Take every picture off the instance, the other times' too, for a copy to or
+/// from the card that must not hold the host lock.
+pub(crate) fn take_all_images(handle: Handle) -> Result<ImagesAndTimes, Status> {
+    let mut state = state();
+    let instance = state
+        .effects
+        .get_mut(handle)?
+        .instance
+        .as_mut()
+        .ok_or(Status::ErrBadHandle)?;
+    Ok((
+        std::mem::take(&mut instance.images),
+        std::mem::take(&mut instance.images_at),
+    ))
+}
+
+/// The frame in hand by clip, and the other times by clip and [`time_key`].
+pub(crate) type ImagesAndTimes = (BTreeMap<String, Image>, BTreeMap<(String, i64), Image>);
+
 /// Take the pictures back off the instance at the end of a render. The caller
 /// owns them from here, which is how the output frame gets read out.
 pub(crate) fn take_images(handle: Handle) -> Result<BTreeMap<String, Image>, Status> {

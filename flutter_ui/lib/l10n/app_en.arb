@@ -1620,15 +1620,6 @@
       }
     }
   },
-  "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
-  },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
@@ -2151,10 +2142,6 @@
   "@settingsIconsFolder": {
     "description": "Settings window, Appearance: the row showing the folder a person's own icon files are read from, with a reload button."
   },
-  "reloadIcons": "Reload icons",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
-  },
   "iconsReplaced": "{count} replaced",
   "@iconsReplaced": {
     "description": "Beside the custom icons row: how many of the set's icons the folder currently replaces.",
@@ -2163,6 +2150,47 @@
         "type": "int"
       }
     }
+  },
+  "settingsStylesFolder": "Your styles",
+  "@settingsStylesFolder": {
+    "description": "Settings window, Appearance: the row showing the folder a person's own style files are read from, with a reload button."
+  },
+  "settingsReduceTransparency": "Reduce transparency",
+  "@settingsReduceTransparency": {
+    "description": "Settings window, Appearance: draws a style's see-through parts solid and blurs nothing behind them."
+  },
+  "styleProblem": "Line {line}: {problem}",
+  "@styleProblem": {
+    "description": "Under the Your styles row: one line of the style in use that Lumit skipped, then why.",
+    "placeholders": {
+      "line": {"type": "int"},
+      "problem": {"type": "String"}
+    }
+  },
+  "styleNoBase": "there's no style called {name}",
+  "@styleNoBase": {
+    "description": "Why a style file's @base line was skipped: it names a style that isn't Studio, Desk or Lantern.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleNoColon": "{text} has no colon",
+  "@styleNoColon": {
+    "description": "Why a line of a style file was skipped: a setting with no colon between its name and value.",
+    "placeholders": {"text": {"type": "String"}}
+  },
+  "styleRootDashes": "{name} needs to start with --",
+  "@styleRootDashes": {
+    "description": "Why a line of a style file was skipped: a variable in :root whose name doesn't start with two hyphens.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleBadSelector": "can't read {selector}",
+  "@styleBadSelector": {
+    "description": "Why a rule of a style file was skipped: its selector (the part before the brace) isn't one Lumit understands.",
+    "placeholders": {"selector": {"type": "String"}}
+  },
+  "styleNoProperty": "there's no setting called {name}",
+  "@styleNoProperty": {
+    "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
+    "placeholders": {"name": {"type": "String"}}
   },
   "styleChoice": "Style's choice",
   "@styleChoice": {
@@ -4040,6 +4068,10 @@
   "@fxIntensity": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxRolloff": "Rolloff",
+  "@fxRolloff": {
+    "description": "Effect controls — a control on Glow: how much of the top of the glow bends smoothly towards white instead of clipping, 0 to 1."
+  },
   "fxInterlaceOffset": "Interlace offset",
   "@fxInterlaceOffset": {
     "description": "Effect controls — a control on Scanlines."
@@ -4540,6 +4572,82 @@
   "@fxRotationFrequency": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxTwitchy": "Twitchy",
+  "@fxTwitchy": {
+    "description": "Effect controls — a Style option on Shake: the picture holds still between bursts of shaking."
+  },
+  "fxJumpy": "Jumpy",
+  "@fxJumpy": {
+    "description": "Effect controls — a Style option on Shake: the picture jumps from place to place instead of wobbling smoothly."
+  },
+  "fxStillness": "Stillness",
+  "@fxStillness": {
+    "description": "Effect controls — a control on Shake (Twitchy style): about how much of the time the picture is held still, 0 to 1."
+  },
+  "fxTwitchFrequency": "Twitch frequency",
+  "@fxTwitchFrequency": {
+    "description": "Effect controls — a control on Shake (Twitchy style): how often a burst of shaking can start or stop, per second."
+  },
+  "fxCentreBias": "Centre bias",
+  "@fxCentreBias": {
+    "description": "Effect controls — a control on Shake (Jumpy style): the chance that a jump lands back at the centre, 0 to 1."
+  },
+  "fxYEdges": "Y edges",
+  "@fxYEdges": {
+    "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
+  },
+  "fxSame": "Same",
+  "@fxSame": {
+    "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
+  },
+  "fxXWave": "X wave",
+  "@fxXWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth sideways goes."
+  },
+  "fxXWaveFrequency": "X wave frequency",
+  "@fxXWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the X wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxXWavePhase": "X wave phase",
+  "@fxXWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the X wave starts, in degrees."
+  },
+  "fxYWave": "Y wave",
+  "@fxYWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth up and down goes."
+  },
+  "fxYWaveFrequency": "Y wave frequency",
+  "@fxYWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Y wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxYWavePhase": "Y wave phase",
+  "@fxYWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Y wave starts, in degrees."
+  },
+  "fxZWave": "Z wave",
+  "@fxZWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in scale goes."
+  },
+  "fxZWaveFrequency": "Z wave frequency",
+  "@fxZWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Z wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxZWavePhase": "Z wave phase",
+  "@fxZWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Z wave starts, in degrees."
+  },
+  "fxRotationWave": "Rotation wave",
+  "@fxRotationWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in rotation goes."
+  },
+  "fxRotationWaveFrequency": "Rotation wave frequency",
+  "@fxRotationWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Rotation wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxRotationWavePhase": "Rotation wave phase",
+  "@fxRotationWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Rotation wave starts, in degrees."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."
@@ -4927,10 +5035,6 @@
   "fxVaryBy": "Vary by",
   "@fxVaryBy": {
     "description": "Effect controls — a menu on the SICELIOT Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."
-  },
-  "fxNothing": "Nothing",
-  "@fxNothing": {
-    "description": "Effect controls — an option of Vary by on the SICELIOT Value noise driver: every copy moves together."
   },
   "fxCopy": "Copy",
   "@fxCopy": {
@@ -7867,10 +7971,6 @@
       }
     }
   },
-  "projectEmpty": "No items yet — import footage or create a composition",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
     "description": "Project panel info line for sound-only footage, shown where a picture size would be. Lower case on purpose."
@@ -8242,6 +8342,28 @@
   "settingsHardwareDecode": "Hardware video decoding",
   "@settingsHardwareDecode": {
     "description": "Settings window: the name of the tick that lets the graphics card decode video. On by default. Turning it off is slower, and is what to try when importing video freezes the computer."
+  },
+  "settingsPluginsOnCard": "Render plugins on the graphics card",
+  "@settingsPluginsOnCard": {
+    "description": "Settings window: the name of the tick that lets OFX plugins render on the graphics card where they support it. On by default. Turning it off keeps them on the processor, which is what to try when a plugin misbehaves with the graphics driver."
+  },
+  "settingsLargestPicture": "Largest picture",
+  "@settingsLargestPicture": {
+    "description": "Settings window, Preview and cache: the name of the dropdown that sets the widest and tallest picture Lumit makes while rendering, in pixels. Bigger lets a node graph keep a picture that reaches far past the frame, at the cost of memory."
+  },
+  "settingsLargestPictureSize": "{side} px ({memory})",
+  "@settingsLargestPictureSize": {
+    "description": "Settings window, Preview and cache: one choice in the Largest picture dropdown, a side in pixels and the memory one picture that size holds.",
+    "placeholders": {
+      "side": {
+        "type": "String",
+        "example": "16384"
+      },
+      "memory": {
+        "type": "String",
+        "example": "2.0 GB"
+      }
+    }
   },
   "settingsFullResolutionWhileDragging": "Full resolution while dragging",
   "@settingsFullResolutionWhileDragging": {
@@ -12846,6 +12968,20 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
+  "viewerSpeed": "Playback speed",
+  "@viewerSpeed": {
+    "description": "Tooltip of the Viewer's playback speed picker: how fast playback runs, at the composition's own rate or slower. A preview setting, the export is unchanged."
+  },
+  "viewerSpeedTimes": "{times}×",
+  "@viewerSpeedTimes": {
+    "description": "One choice of the Viewer's playback speed, as a multiple of the composition's rate: 1×, 0.5× or 0.25×.",
+    "placeholders": {
+      "times": {
+        "type": "double",
+        "format": "decimalPattern"
+      }
+    }
+  },
   "viewerReadoutDegraded": "{source} → {preview}",
   "@viewerReadoutDegraded": {
     "description": "The size part of the Viewer bar's reading while the preview was made at fewer pixels than the composition has, set in mono and drawn in the warning colour: the composition's own pixel size, an arrow, and the pixel size the preview was actually made at. Both parts are numbers, so only the arrow is translatable.",
@@ -13924,10 +14060,6 @@
   "exportColourSpaceDisplayP3": "Display P3",
   "@exportColourSpaceDisplayP3": {
     "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
-  },
-  "exportColourStated": "The file states this space in its own header.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
   },
   "exportAudio44k": "44.100 kHz",
   "@exportAudio44k": {
@@ -16849,6 +16981,10 @@
   "@viewerGpuMismatch": {
     "description": "Shown in the middle of the Viewer, in place of the picture, on a Linux laptop with two graphics cards when the picture and the window have ended up on different cards and cannot be shared. 'NVIDIA Performance mode' and 'PRIME render offload' are the names the NVIDIA driver and Linux desktops use for the two fixes, so keep them recognisable."
   },
+  "viewerPictureCut": "Cut to the largest picture",
+  "@viewerPictureCut": {
+    "description": "Viewer, bottom right in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Clicking it opens that setting."
+  },
   "fxFoldCompositing": "Compositing",
   "@fxFoldCompositing": {
     "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
@@ -17962,10 +18098,6 @@
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
   },
-  "settingsShareLimitHint": "Applies to footage in shared projects.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
-  },
   "settingsShareNoLimit": "No limit",
   "@settingsShareNoLimit": {
     "description": "Option in the footage upload and download limit lists in Settings."
@@ -18022,10 +18154,6 @@
   "settingsExtensionsInstall": "Install from a folder",
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
-  },
-  "settingsExtensionsInstallHint": "Pick the folder containing extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
   },
   "settingsExtensionsFolder": "Extensions folder",
   "@settingsExtensionsFolder": {
@@ -18125,6 +18253,10 @@
   "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
+  },
+  "extensionNative": "Runs its own code on this computer",
+  "@extensionNative": {
+    "description": "Quiet note above extensionWebNote in the extension install question, for an extension that carries an OFX plugin: a program of its own, held to none of Lumit's limits. The It cannot list is left out then, as it would not hold."
   },
   "extensionInstall": "Install",
   "@extensionInstall": {
@@ -21876,5 +22008,341 @@
   "easingBuiltIn": "Built in",
   "@easingBuiltIn": {
     "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
+  },
+  "flareWindowTitle": "Flare",
+  "@flareWindowTitle": {
+    "description": "The Flare window, opened from Edit flare… on Sprite flare: its title."
+  },
+  "flareElements": "Elements",
+  "@flareElements": {
+    "description": "Flare window: heading over the list of elements (glows, rays, ghosts) the flare is made of."
+  },
+  "flareAdd": "Add",
+  "@flareAdd": {
+    "description": "Flare window: the button beside the Elements heading that opens the menu of element kinds to add. Shown with a plus."
+  },
+  "flareMovingLight": "Moving light",
+  "@flareMovingLight": {
+    "description": "Flare window, over the preview: the option that moves the light slowly round the frame so the flare's travel can be seen."
+  },
+  "flareStillLight": "Still",
+  "@flareStillLight": {
+    "description": "Flare window, over the preview: the option beside Moving light that holds the light where it was dragged."
+  },
+  "flareFit": "Fit",
+  "@flareFit": {
+    "description": "Flare window, over the preview: show the whole frame scaled to fit. Beside 100%."
+  },
+  "flareActualSize": "100%",
+  "@flareActualSize": {
+    "description": "Flare window, over the preview: show the flare at one comp pixel per screen pixel. Beside Fit."
+  },
+  "flareBuiltIn": "Built in",
+  "@flareBuiltIn": {
+    "description": "Flare window presets strip: the tab showing the flares that come with Lumit, beside the Yours tab. Very short."
+  },
+  "flareYours": "Yours",
+  "@flareYours": {
+    "description": "Flare window presets strip: the tab showing the flares the user has saved. Very short."
+  },
+  "flareAllGroups": "All",
+  "@flareAllGroups": {
+    "description": "Flare window presets strip: the chip that shows every group of built-in flares at once."
+  },
+  "flareDuplicate": "Duplicate",
+  "@flareDuplicate": {
+    "description": "Flare window: make a copy of the selected element, in its right-click menu and as a button over its controls."
+  },
+  "flareDelete": "Delete",
+  "@flareDelete": {
+    "description": "Flare window: remove the selected element or one of the user's saved flares, in a right-click menu and as a button."
+  },
+  "flareRename": "Rename…",
+  "@flareRename": {
+    "description": "Flare window presets strip: right-click on one of the user's saved flares, give it another name."
+  },
+  "flareNameTitle": "Flare name",
+  "@flareNameTitle": {
+    "description": "Flare window: the title of the small prompt asking what to call a flare being saved or renamed."
+  },
+  "flareImport": "Import…",
+  "@flareImport": {
+    "description": "Flare window, footer button: open a .flare file and take its elements."
+  },
+  "flareShare": "Share…",
+  "@flareShare": {
+    "description": "Flare window, footer button: opens a menu with Export to a file and Copy as text."
+  },
+  "flareExportFile": "Export to a file…",
+  "@flareExportFile": {
+    "description": "Flare window, Share menu: write the design to a .flare file."
+  },
+  "flareCopyJson": "Copy as text",
+  "@flareCopyJson": {
+    "description": "Flare window, Share menu: put the design's text on the clipboard."
+  },
+  "flareCopied": "Copied",
+  "@flareCopied": {
+    "description": "Flare window, footer line after Copy as text: the design's text is on the clipboard."
+  },
+  "flareSave": "Save to your flares",
+  "@flareSave": {
+    "description": "Flare window, footer button: save this design to the user's own flares, offered in every project."
+  },
+  "flareUse": "Use flare",
+  "@flareUse": {
+    "description": "Flare window, footer button: put this design on the effect and close the window."
+  },
+  "flareNotAFlare": "Not a flare file",
+  "@flareNotAFlare": {
+    "description": "Flare window, footer line: the file picked by Import is not a flare design."
+  },
+  "flareNotSaved": "Could not save",
+  "@flareNotSaved": {
+    "description": "Flare window, footer line: saving or exporting the design failed."
+  },
+  "flareFileType": "Flare",
+  "@flareFileType": {
+    "description": "File picker: the label of the .flare file type filter."
+  },
+  "flareBlack": "Black",
+  "@flareBlack": {
+    "description": "Flare window, preview background choice: the flare on black."
+  },
+  "flareFrame": "Frame",
+  "@flareFrame": {
+    "description": "Flare window, preview background choice: the flare over the composition's picture at the playhead."
+  },
+  "fxEditFlare": "Edit flare…",
+  "@fxEditFlare": {
+    "description": "Effect controls: Sprite flare's button row that opens the Flare window."
+  },
+  "fxFringe": "Fringe",
+  "@fxFringe": {
+    "description": "Flare window: a control on several elements, how much rainbow colour is pulled across the shape."
+  },
+  "fxThickness": "Thickness",
+  "@fxThickness": {
+    "description": "Flare window: a control on Rays, Star, Streak, Ring and Halo, the line's width in pixels."
+  },
+  "fxHalo": "Halo",
+  "@fxHalo": {
+    "description": "Flare window: the Halo kind of element, a rainbow arc round the light that grows away from the centre."
+  },
+  "fxRing": "Ring",
+  "@fxRing": {
+    "description": "Flare window: the Ring kind of element, a circle round the light."
+  },
+  "fxGhost": "Ghost",
+  "@fxGhost": {
+    "description": "Flare window: the Ghost kind of element, one iris shape on the axis through the centre."
+  },
+  "fxOrbs": "Orbs",
+  "@fxOrbs": {
+    "description": "Flare window: the Orbs kind of element, soft discs scattered across the whole frame."
+  },
+  "fxPicture": "Picture",
+  "@fxPicture": {
+    "description": "Flare window: the Picture kind of element, a texture placed anywhere."
+  },
+  "fxSolid": "Solid",
+  "@fxSolid": {
+    "description": "Flare window, colour mode: one colour."
+  },
+  "fxMixed": "Mixed",
+  "@fxMixed": {
+    "description": "Flare window, colour mode: each copy of the element picks one of a list of colours."
+  },
+  "fxRainbow": "Rainbow",
+  "@fxRainbow": {
+    "description": "Flare window, colour mode: a spectrum across the element."
+  },
+  "fxResponse": "Response",
+  "@fxResponse": {
+    "description": "Flare window: the group of controls saying how an element brightens as the light nears the centre or the edges."
+  },
+  "fxIgnore": "Ignore",
+  "@fxIgnore": {
+    "description": "Flare window: the group of switches that let an element ignore the effect's Size, Brightness, Rotation or Edge fade."
+  },
+  "fxNothing": "Nothing",
+  "@fxNothing": {
+    "description": "An option meaning no source. Flare window, Brighter near: the element does not respond to where the light is. Value noise driver, Vary by: every copy moves together."
+  },
+  "fxTheCentre": "The centre",
+  "@fxTheCentre": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's centre."
+  },
+  "fxTheEdges": "The edges",
+  "@fxTheEdges": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's edges."
+  },
+  "fxBrighterNear": "Brighter near",
+  "@fxBrighterNear": {
+    "description": "Flare window, Response group: which place the element brightens towards."
+  },
+  "fxSmudge": "Smudge",
+  "@fxSmudge": {
+    "description": "Flare window, Texture option: a smudged lens texture."
+  },
+  "fxCaustic": "Caustic",
+  "@fxCaustic": {
+    "description": "Flare window, Texture option: a rippling light texture."
+  },
+  "fxSpecks": "Specks",
+  "@fxSpecks": {
+    "description": "Flare window, Texture option: fine specks of dust."
+  },
+  "fxReach": "Reach",
+  "@fxReach": {
+    "description": "Flare window: a control on Orbs and Dirt, how far from the light in pixels they are still lit."
+  },
+  "fxCore": "Core",
+  "@fxCore": {
+    "description": "Flare window, Glow: the brightness of the tight hot centre."
+  },
+  "fxCoreSize": "Core size",
+  "@fxCoreSize": {
+    "description": "Flare window, Glow: the hot centre's size as a fraction of the glow."
+  },
+  "fxShimmer": "Shimmer",
+  "@fxShimmer": {
+    "description": "Flare window, Rays: how much the rays' lengths flicker as Evolution turns."
+  },
+  "fxEdgeFade": "Edge fade",
+  "@fxEdgeFade": {
+    "description": "Flare window, Ignore group: the switch that lets an element ignore the fade at the frame's edge."
+  },
+  "fxEdgeWidth": "Edge width",
+  "@fxEdgeWidth": {
+    "description": "Flare window, Ghost: the width of the bright rim."
+  },
+  "fxLengthVariation": "Length variation",
+  "@fxLengthVariation": {
+    "description": "Flare window, Rays: how much each ray's length differs from the others."
+  },
+  "fxSizeVariation": "Size variation",
+  "@fxSizeVariation": {
+    "description": "Flare window, Ghosts and Orbs: how much each copy's size differs from the others."
+  },
+  "fxBrightnessVariation": "Brightness variation",
+  "@fxBrightnessVariation": {
+    "description": "Flare window, Ghosts: how much each ghost's brightness differs from the others."
+  },
+  "fxArcFeather": "Arc feather",
+  "@fxArcFeather": {
+    "description": "Flare window, Ring: how softly the arc's two ends fade out."
+  },
+  "fxSecondSet": "Second set",
+  "@fxSecondSet": {
+    "description": "Flare window, Star: the brightness of a second set of points rotated half a step."
+  },
+  "fxSecondSetLength": "Second set length",
+  "@fxSecondSetLength": {
+    "description": "Flare window, Star: the second set's length as a fraction of the first."
+  },
+  "fxFacesTheLight": "Faces the light",
+  "@fxFacesTheLight": {
+    "description": "Flare window, Ghost and Picture: the switch that turns the shape with the axis from the light."
+  },
+  "fxPointsToTheCentre": "Points to the centre",
+  "@fxPointsToTheCentre": {
+    "description": "Flare window, Streak: the switch that turns the streak along the axis to the centre."
+  },
+  "fxGrowsAwayFromTheCentre": "Grows away from the centre",
+  "@fxGrowsAwayFromTheCentre": {
+    "description": "Flare window, Halo: how much the halo's radius grows as the light moves away from the centre."
+  },
+  "fxOnTheLight": "On the light",
+  "@fxOnTheLight": {
+    "description": "Flare window, Add menu heading: the kinds drawn on the light itself."
+  },
+  "fxAlongTheAxis": "Along the axis",
+  "@fxAlongTheAxis": {
+    "description": "Flare window, Add menu heading: the kinds placed on the line from the light through the centre."
+  },
+  "fxAcrossTheFrame": "Across the frame",
+  "@fxAcrossTheFrame": {
+    "description": "Flare window, Add menu heading: the kinds scattered over the whole frame."
+  },
+  "fxLightFrom": "Light from",
+  "@fxLightFrom": {
+    "description": "Effect controls: Sprite flare's choice of where the light comes from."
+  },
+  "fx3dPoint": "3D point",
+  "@fx3dPoint": {
+    "description": "Effect controls, Sprite flare's Light from option: the light is a point in the comp's 3D space."
+  },
+  "fxBrightSpots": "Bright spots",
+  "@fxBrightSpots": {
+    "description": "Effect controls, Sprite flare's Light from option: the lights are found in the bright parts of the layer's picture."
+  },
+  "fxLightZ": "Light z",
+  "@fxLightZ": {
+    "description": "Effect controls: Sprite flare's depth of its 3D point."
+  },
+  "fxUseLightColour": "Use light colour",
+  "@fxUseLightColour": {
+    "description": "Effect controls, Sprite flare: each light's own colour tints its flare."
+  },
+  "fxUseLightIntensity": "Use light intensity",
+  "@fxUseLightIntensity": {
+    "description": "Effect controls, Sprite flare: each Light layer's intensity scales its flare."
+  },
+  "fxSizeWithDistance": "Size with distance",
+  "@fxSizeWithDistance": {
+    "description": "Effect controls, Sprite flare: a light further from the camera draws a smaller flare."
+  },
+  "fxHiding": "Hiding",
+  "@fxHiding": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that hide the light behind a layer."
+  },
+  "fxFlicker": "Flicker",
+  "@fxFlicker": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that make the flare's brightness dip at random."
+  },
+  "fxHideBehind": "Hide behind",
+  "@fxHideBehind": {
+    "description": "Effect controls, Sprite flare: the layer that hides the light where it covers it."
+  },
+  "fxLuma": "Luma",
+  "@fxLuma": {
+    "description": "Effect controls, Sprite flare's Channel option: the layer's brightness hides the light."
+  },
+  "fxLightSize": "Light size",
+  "@fxLightSize": {
+    "description": "Effect controls, Sprite flare: how wide the light is, for how much of it a layer hides."
+  },
+  "fxEndWidth": "End width",
+  "@fxEndWidth": {
+    "description": "Flare window, Streak: how wide the line still is at its ends, as a fraction of its middle."
+  },
+  "fxNotches": "Notches",
+  "@fxNotches": {
+    "description": "Flare window, Ghost and Ghosts: how deep the small dents at each corner of the iris shape are, where a real lens's blades overlap."
+  },
+  "fxTextureLayer": "Texture layer",
+  "@fxTextureLayer": {
+    "description": "Effect controls, Sprite flare: the layer whose picture the flare's elements can take as their texture."
+  },
+  "fxTextures": "Textures",
+  "@fxTextures": {
+    "description": "Effect controls, Sprite flare: the twirl holding the Texture layer row."
+  },
+  "fxHexBokeh": "Hex bokeh",
+  "@fxHexBokeh": {
+    "description": "Flare window, Texture option: out-of-focus highlights shaped like hexagons."
+  },
+  "fxWaterDrops": "Water drops",
+  "@fxWaterDrops": {
+    "description": "Flare window, Texture option: rain drops on the lens."
+  },
+  "fxGrain": "Grain",
+  "@fxGrain": {
+    "description": "Flare window, Texture option: fine sparkling grain."
+  },
+  "fxMaskPoints": "Mask points",
+  "@fxMaskPoints": {
+    "description": "Effect controls, Sprite flare's Light from option: a light on each corner of one of the layer's masks."
   }
 }

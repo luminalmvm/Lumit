@@ -331,8 +331,9 @@ const [latest] = await releasesNewestFirst();
       for (const [key, re] of Object.entries(MATCH)) {
         const asset = rel.assets.find((a) => re.test(a.name));
         if (!asset) continue;
+        // A phone can't run an installer, so its buttons keep the releases page.
         const link = document.querySelector<HTMLAnchorElement>(`[data-link="${key}"]`);
-        if (link) link.href = asset.browser_download_url;
+        if (link && !handheld) link.href = asset.browser_download_url;
         set(`[data-size="${key}"]`, `${Math.round(asset.size / 1048576)} MB`);
       }
     })

@@ -207,9 +207,16 @@ const assets = [
     transform: translateX(calc(var(--shift) + var(--o) * var(--peek))) scale(calc(1 - var(--o) * 0.07));
     transform-origin: right center;
     transition:
-      transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.12),
       border-color 0.2s,
       filter 0.3s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ground {
+      transition:
+        transform 260ms var(--ease-out),
+        border-color 0.2s,
+        filter 0.3s;
+    }
   }
   .ground[aria-pressed="true"] {
     cursor: default;
@@ -273,7 +280,7 @@ const assets = [
       --shift: 52px;
     }
   }
-  @media (hover: hover) and (min-width: 640px) {
+  @media (hover: hover) and (pointer: fine) and (min-width: 640px) {
     .stack:hover,
     .stack:focus-within {
       --peek: 74px;
@@ -328,6 +335,11 @@ const assets = [
     transition:
       color 0.15s,
       background-color 0.15s;
+  }
+  @media (pointer: coarse) {
+    .pick button {
+      padding: 16px 14px;
+    }
   }
   .pick button:last-child {
     border-right: 0;
@@ -412,14 +424,26 @@ const assets = [
       const MOVE = 1258;
       const STAND = 2400;
       const LOOP = LEAD + MOVE + STAND;
+      // Only a pose that has changed is drawn, and only while one of them
+      // can be seen.
+      let drawn = -1;
+      let raf = 0;
       const frame = (now: number) => {
         const at = now % LOOP;
-        if (at < LEAD) pose(0);
-        else if (at < LEAD + MOVE) pose(marks[0].wmTiming!((at - LEAD) / MOVE));
-        else pose(1);
-        requestAnimationFrame(frame);
+        const p = at < LEAD ? 0 : at < LEAD + MOVE ? marks[0].wmTiming!((at - LEAD) / MOVE) : 1;
+        if (p !== drawn) pose((drawn = p));
+        raf = requestAnimationFrame(frame);
       };
-      requestAnimationFrame(frame);
+      const shown = new Set<Element>();
+      const seen = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) shown.add(e.target);
+          else shown.delete(e.target);
+        }
+        cancelAnimationFrame(raf);
+        if (shown.size) raf = requestAnimationFrame(frame);
+      });
+      for (const m of marks) seen.observe(m);
     }
   }
 </script>

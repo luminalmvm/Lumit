@@ -376,6 +376,8 @@ List<Widget> viewerPickers({
         _QualityDropdown(
             key: const ValueKey('viewer-resolution'), viewId: viewId),
         const SizedBox(width: viewerHeaderGap),
+        const ViewerSpeedPicker(),
+        const SizedBox(width: viewerHeaderGap),
       ],
       _ColourDropdown(
         key: const ValueKey('viewer-colour'),
@@ -384,6 +386,31 @@ List<Widget> viewerPickers({
         onToneMap: onToneMap,
       ),
     ];
+
+/// The Viewer's playback speeds, as how many times slower than the comp.
+const playbackSlows = [1, 2, 4];
+
+/// How fast the Viewer plays: the comp's own rate, or slower for watching
+/// motion or marking beats. A preview setting, the export is unchanged.
+class ViewerSpeedPicker extends StatelessWidget {
+  const ViewerSpeedPicker({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context);
+    return LumitTooltip(
+      message: l10n.viewerSpeed,
+      child: BareDropdown<int>(
+        key: const ValueKey('viewer-speed'),
+        dense: true,
+        value: ui.playbackSlow,
+        options: playbackSlows,
+        label: (slow) => l10n.viewerSpeedTimes(1 / slow),
+        onChanged: ui.setPlaybackSlow,
+      ),
+    );
+  }
+}
 
 /// **How good the preview is** — the header's middle picker.
 ///
@@ -623,9 +650,10 @@ class _ColourDropdown extends StatelessWidget {
                   key: ValueKey<String>(
                       'viewer-colour-view-${display.name}-$name'),
                   onPressed: () {},
+                  enabled: false,
                   child: Row(children: [
                     menuTick(false),
-                    Text(name, style: TextStyle(color: t.textDisabled)),
+                    Text(name),
                   ]),
                 ),
               )

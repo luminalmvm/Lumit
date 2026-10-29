@@ -631,6 +631,12 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
               // no curve. Deliberate: the ends are the smallest targets here.
               borderRadius: BorderRadius.circular(clipRadius(t)),
             ),
+            // The edge again over the content, which would otherwise cover it where
+            // the corner curves.
+            foregroundDecoration: BoxDecoration(
+              border: Border.all(color: t.surface0, width: 1),
+              borderRadius: BorderRadius.circular(clipRadius(t)),
+            ),
             alignment: Alignment.center,
             clipBehavior: Clip.hardEdge,
             child: Stack(

@@ -330,6 +330,18 @@ Script: `lumit.effect.list({ ... })`. MCP tool: `effect_list`.
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
 
+## effect.get
+
+One effect on a layer, with every control it has.
+
+Script: `lumit.effect.get({ ... })`. MCP tool: `effect_get`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `effect` | string or integer (at least 0) | yes | The effect's id or name, or its place in the stack, 0 the top |
+
 ## effect.add
 
 Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'.

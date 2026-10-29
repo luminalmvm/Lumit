@@ -1089,6 +1089,18 @@ class CompositionReference {
           withPicture: withPicture,
           arrival: arrival);
 
+  /// Put the whole of `comp` down at `at_frame` as one clip, the drop of a
+  /// composition from the Project panel. `target` is the picture Sequence
+  /// layer to place on, or `None` for a new one at the top of the stack.
+  /// The clip overwrites what it lands on.
+  BridgeCutResult cutPlaceComp(
+          {LayerReference? target,
+          required CompositionReference comp,
+          required PlatformInt64 atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceComp(
+              that: this, target: target, comp: comp, atFrame: atFrame);
+
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
   /// linked to one that was cut is cut too, and the later halves are
@@ -1700,6 +1712,10 @@ class CompositionReference {
   /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
   /// keeps time by skipping frames, in either direction, and is silent.
   ///
+  /// `slow` is how many times slower than the comp's rate the leg plays,
+  /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
+  /// the sound is slowed with its pitch kept.
+  ///
   /// `until` is the frame the leg ends on, the end of the work area going
   /// forwards and its start going back. Nothing past it is composited.
   /// `None` runs to the end of the composition.
@@ -1710,6 +1726,7 @@ class CompositionReference {
           required int view,
           required bool reverse,
           required int speed,
+          required int slow,
           BigInt? until}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
           that: this,
@@ -1719,6 +1736,7 @@ class CompositionReference {
           view: view,
           reverse: reverse,
           speed: speed,
+          slow: slow,
           until: until);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,
@@ -2488,6 +2506,23 @@ class CompositionReference {
   void startExport({required BridgeExportSpec spec, required String path}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceStartExport(
           that: this, spec: spec, path: path);
+
+  /// A still of this composition at `frame`, its longest edge `max_edge`
+  /// pixels, with effect `effect` switched off wherever it sits: the Flare
+  /// window's Frame background, which the flare preview is then added over.
+  /// Rides the welcome row's thumbnail road, so it is small and asked for
+  /// once. `None` on a machine with no graphics adapter. Not `sync`: it
+  /// renders.
+  ///
+  /// # Errors
+  /// [`BridgeError::InvalidComp`] when this is not a composition.
+  Future<BridgeRenderedFrame?> stillWithoutEffect(
+          {required BigInt frame,
+          required int maxEdge,
+          required UuidValue effect}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceStillWithoutEffect(
+              that: this, frame: frame, maxEdge: maxEdge, effect: effect);
 
   /// Stop playing, and silence the sound. Harmless when nothing is playing.
   void stopPlayback() => BridgeLib.instance.api

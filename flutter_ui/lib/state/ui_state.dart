@@ -16,7 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
+import 'package:lumit_flutter/panels/easing_curve.dart'
+    show ApplyEasing, EasingCurve;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
@@ -50,7 +51,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setAutosave,
         setDiscordStatus,
         setFullResDragPreviews,
-        setHardwareDecode;
+        setHardwareDecode,
+        setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
@@ -739,7 +741,7 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// The keyframe selection itself stays the Timeline's and is never published:
   /// the panel sends a shape and is told nothing about what it landed on.
-  final ValueNotifier<ValueChanged<EasingCurve>?> easingApply =
+  final ValueNotifier<ApplyEasing?> easingApply =
       ValueNotifier(null);
 
   /// The one selected keyframe, as its speed and influence on each side, with
@@ -1013,7 +1015,7 @@ class LumitUiState extends ChangeNotifier {
     // frames ahead of the first picture shown.
     if (workspace.performance.playback == PlaybackMode.adaptive) {
       _clockAnchor = null;
-      _clockFps = comp.fps() * _speed;
+      _clockFps = comp.fps() * _speed / _slow;
       _clockWatch
         ..reset()
         ..start();
@@ -1054,6 +1056,27 @@ class LumitUiState extends ChangeNotifier {
 
   /// How many times the comp's rate the run plays at.
   int get _speed => _shuttle == 0 ? 1 : _shuttle.abs();
+
+  /// How many times slower than the comp's rate playback runs: 1, 2 or 4,
+  /// from the Viewer. A preview setting, never saved. Every frame is shown,
+  /// and the sound is slowed with its pitch kept.
+  int playbackSlow = 1;
+
+  /// The run's own: a shuttle keeps its rung's speed.
+  int get _slow => _shuttle == 0 ? playbackSlow : 1;
+
+  /// Play `slow` times slower. A run already going carries on from where it
+  /// is at the new speed, and still goes back to where it started.
+  void setPlaybackSlow(int slow) {
+    if (slow == playbackSlow) return;
+    playbackSlow = slow;
+    notifyListeners();
+    if (!playing.value || _shuttle != 0) return;
+    final from = _playedFrom;
+    stopPlayback(restorePlayhead: false);
+    play();
+    _playedFrom = from;
+  }
 
   /// J and L: one step along the shuttle ladder, `direction` being -1 or 1.
   ///
@@ -1125,6 +1148,7 @@ class LumitUiState extends ChangeNotifier {
         view: views.previewing?.engineId ?? activeViewId,
         reverse: _reverse,
         speed: _speed,
+        slow: _slow,
         // Where the leg ends, so nothing past it is made.
         until: BigInt.from(_clockEnd),
       );
@@ -2213,6 +2237,31 @@ class LumitUiState extends ChangeNotifier {
     _publishPickedEffects();
   }
 
+  /// Put [name] on [layer]'s stack and pick it, as After Effects does, so its
+  /// points are on the picture to drag straight away. The one road every
+  /// add from a menu takes. False when the engine refused it.
+  bool addEffect(LayerReference layer, String name) {
+    final before = {
+      for (final fx
+          in model.byId(layer.internallayerId)?.info.effects ?? const [])
+        fx.id
+    };
+    try {
+      layer.addEffect(name: name);
+    } catch (_) {
+      return false;
+    }
+    model.refresh();
+    final added = model
+        .byId(layer.internallayerId)
+        ?.info
+        .effects
+        .where((fx) => !before.contains(fx.id))
+        .firstOrNull;
+    if (added != null) setEffectSelection(layer, [added.id]);
+    return true;
+  }
+
   /// Add [layer] to the selection, or take it out again — Shift-click.
   void toggleSelected(LayerReference layer) {
     final id = layer.internallayerId;
@@ -2686,6 +2735,8 @@ class LumitUiState extends ChangeNotifier {
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setHardwareDecode(on_: perf.hardwareDecode);
+    final largest = perf.largestPicture;
+    if (largest != null) setLargestPicture(side: largest);
     pushDiscordStatus();
     if (this.workspace.liveEndpoint) applyLiveEndpoint();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
@@ -2745,14 +2796,14 @@ class LumitUiState extends ChangeNotifier {
             previewTier.value = frame.field0.tier;
           }
           _showReach(frame.field0.view, frame.field0.reach,
-              frame.field0.reachAtLimit);
+              frame.field0.reachAtLimit, frame.field0.cut);
           _showDmabuf(frame.field0);
         case WorkerResponse_RenderedSharedTexture frame:
           if (!isViewport(frame.field0.view)) {
             previewTier.value = frame.field0.tier;
           }
           _showReach(frame.field0.view, frame.field0.reach,
-              frame.field0.reachAtLimit);
+              frame.field0.reachAtLimit, frame.field0.cut);
           _showSharedTexture(frame.field0);
         // Scope traces ride the same stream; the Scopes panel subscribes to it
         // directly, so there is nothing for the Viewer to do with one.
@@ -2858,7 +2909,14 @@ class LumitUiState extends ChangeNotifier {
   ValueNotifier<ViewerReach?> reachOf(int engineId) =>
       _viewReach.putIfAbsent(engineId, () => ValueNotifier<ViewerReach?>(null));
 
-  void _showReach(int engineId, F64Array4? rect, bool atLimit) {
+  /// Whether each view's last frame was cut to the largest picture.
+  final Map<int, ValueNotifier<bool>> _viewCut = {};
+
+  ValueNotifier<bool> cutOf(int engineId) =>
+      _viewCut.putIfAbsent(engineId, () => ValueNotifier<bool>(false));
+
+  void _showReach(int engineId, F64Array4? rect, bool atLimit, bool cut) {
+    cutOf(engineId).value = cut;
     reachOf(engineId).value = rect == null
         ? null
         : (
@@ -3936,14 +3994,16 @@ class LumitUiState extends ChangeNotifier {
   /// from the value it was *drawn* with would carry a stale reading for the
   /// other half into the write — two changes between two rebuilds, and the
   /// second undoes the first.
-  void setViewerStops(double stops) =>
-      setViewerLook((stops: stops, toneMap: viewerLook.toneMap));
+  void setViewerStops(double stops, {bool live = false}) =>
+      setViewerLook((stops: stops, toneMap: viewerLook.toneMap), live: live);
 
   void toggleViewerToneMap() =>
       setViewerLook((stops: viewerLook.stops, toneMap: !viewerLook.toneMap));
 
   /// Set how the fronted comp is looked at, tell the engine, and write it down.
-  void setViewerLook(ViewerLook look) {
+  /// A [live] change, a scrub still in hand, only tells the engine, and the
+  /// last one is written down when the scrub lets go.
+  void setViewerLook(ViewerLook look, {bool live = false}) {
     final id = _selectedComp?.internalid.toString();
     if (id == null) return;
     if (look == neutralLook) {
@@ -3952,6 +4012,7 @@ class LumitUiState extends ChangeNotifier {
       viewerLooks[id] = look;
     }
     pushViewerLook();
+    if (live) return;
     rememberSession();
     notifyListeners();
   }

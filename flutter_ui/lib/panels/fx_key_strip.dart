@@ -169,26 +169,35 @@ class FxKeyStripScope extends InheritedWidget {
                 ),
               ),
               Positioned.fill(child: lane),
+              // On a layer of its own and moved rather than laid out again, as
+              // [PlayheadOverlay] is, so playing does not redraw the keys.
               Positioned.fill(
                 child: IgnorePointer(
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: scope.playhead,
-                    builder: (context, frame, _) {
-                      final rel = frame - scope.spanStart;
-                      if (rel < 0 || rel > scope.axis.frames) {
-                        return const SizedBox.shrink();
-                      }
-                      return Stack(children: [
-                        Positioned(
-                          left: (scope.axis.xOf(rel) - 0.5)
-                              .clamp(0.0, scope.width - 1),
-                          top: 0,
-                          bottom: 0,
+                  child: RepaintBoundary(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: scope.playhead,
+                      builder: (context, frame, line) {
+                        final rel = frame - scope.spanStart;
+                        if (rel < 0 || rel > scope.axis.frames) {
+                          return const SizedBox.shrink();
+                        }
+                        return Transform.translate(
+                          offset: Offset(
+                              (scope.axis.xOf(rel) - 0.5)
+                                  .clamp(0.0, scope.width - 1),
+                              0),
+                          child: line,
+                        );
+                      },
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
                           width: 1,
+                          height: double.infinity,
                           child: ColoredBox(color: t.accent),
                         ),
-                      ]);
-                    },
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -258,6 +267,10 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
 
   /// How far open the strip is, 0 to 1. Runs on the theme's reveal.
   late final AnimationController _open = AnimationController(vsync: this);
+
+  /// Holds the effect cards while the strip around them changes shape, so
+  /// opening and closing it moves them rather than building them again.
+  final GlobalKey _rowsKey = GlobalKey();
 
   /// The divider's travel while it is in hand, or null at rest.
   double? _dragging;
@@ -602,21 +615,24 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final axis = TimelineAxis(frames: widget.spanFrames, width: width);
     final inset = fxKeyStripInset(t);
     final rulerHeight = fxKeyStripRulerHeight * open;
-    final rows = FxKeyStripScope._(
-      width: width,
-      stacked: false,
-      reveal: open,
-      playhead: ui.playheadFrame,
-      axis: axis,
-      spanStart: widget.spanStart,
-      keyOffset: widget.keyOffset,
-      fps: fps,
-      fpsNum: fpsNum,
-      fpsDen: fpsDen,
-      selected: _selected,
-      stretch: _stretch,
-      host: this,
-      child: widget.child,
+    final rows = KeyedSubtree(
+      key: _rowsKey,
+      child: FxKeyStripScope._(
+        width: width,
+        stacked: false,
+        reveal: open,
+        playhead: ui.playheadFrame,
+        axis: axis,
+        spanStart: widget.spanStart,
+        keyOffset: widget.keyOffset,
+        fps: fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        selected: _selected,
+        stretch: _stretch,
+        host: this,
+        child: widget.child,
+      ),
     );
     if (width <= 0) {
       return Column(

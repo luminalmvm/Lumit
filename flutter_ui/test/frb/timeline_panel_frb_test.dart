@@ -887,6 +887,11 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text(kind));
         await tester.pumpAndSettle();
+        // A solid asks for its settings first.
+        if (kind == 'Solid') {
+          await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
+          await tester.pumpAndSettle();
+        }
       }
 
       final layers = p.comp.getLayers();

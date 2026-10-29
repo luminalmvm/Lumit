@@ -417,6 +417,13 @@ pub fn describe_in(
     described?;
     let (params, clips) = gathered?;
 
+    // What it said about the graphics card, kept for the broker that will
+    // choose its path (`crate::gpu::declared`).
+    crate::gpu::note_declared(
+        &plugin.identifier,
+        plugin.version,
+        crate::gpu::GpuSupport::declared(&base_props),
+    );
     Ok(PluginDescriptor {
         identifier: plugin.identifier.clone(),
         version: plugin.version,

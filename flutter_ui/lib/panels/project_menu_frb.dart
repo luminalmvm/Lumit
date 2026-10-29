@@ -356,8 +356,8 @@ Future<void> showProjectMenuFrb({
               MenuRow(
                 key: const ValueKey('project-menu-share-original'),
                 onPressed: () {},
-                child: Text(l10n.shareOnlineNoOriginal,
-                    style: TextStyle(color: menuTheme.textDisabled)),
+                enabled: false,
+                child: Text(l10n.shareOnlineNoOriginal),
               ),
           ],
           // Footage this computer has not got, in a shared project where

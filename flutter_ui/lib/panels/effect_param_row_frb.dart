@@ -1558,6 +1558,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-clip-$id-${param.id}'),
+        value: current,
         label: chosenLayer == null
             ? l10n.fxClipNoLayer
             : current == null
@@ -1600,6 +1601,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-mask-$id-${param.id}'),
+        value: current,
         label: current == null
             ? l10n.firstMask
             : (masks
@@ -2052,10 +2054,14 @@ class EffectPointRowFrb extends StatelessWidget {
     }
 
     final pickPixels = _pickPixels;
+    // In the Effect controls the two wells give way when the column is too
+    // narrow for both at full width with the chain, unit and dropper. The
+    // Timeline's fold-out gives the row all the width it asks for.
+    Widget well(Widget w) => twoColumn ? Flexible(child: w) : w;
     final control = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        field(xParam, sx),
+        well(field(xParam, sx)),
         // The chain, **between** the two wells, which is where the mockup puts
         // it: it belongs to neither half and to both.
         if (onToggleLink != null) ...[
@@ -2087,7 +2093,7 @@ class EffectPointRowFrb extends StatelessWidget {
           ),
         ],
         const SizedBox(width: effectRiderGap),
-        field(yParam, sy),
+        well(field(yParam, sy)),
         // **One rider for the pair**, after both wells, as the mockup draws
         // it: x and y are two halves of one measurement, and stating the unit
         // twice would read as two.
@@ -3100,10 +3106,12 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
   void _redraw() => setState(() {});
 
-  double get _value => sampleScalarWithContext(
-      scalar: widget.value,
-      time: timeOfFrame(widget.comp, playhead.value),
-      layer: widget.layer,
+  // Held per time and document, so a rebuild at the same frame asks nothing.
+  double get _value => sampledExpression(
+      widget.value,
+      timeOfFrame(widget.comp, playhead.value),
+      widget.layer,
+      Provider.of<LumitUiState>(context, listen: false).model.heldRevision,
       row: widget.row);
 
   /// Open the editor over the row. The row itself may be rebuilt away while

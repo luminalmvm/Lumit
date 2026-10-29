@@ -20,6 +20,7 @@ import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/account.dart';
 import '../state/backup.dart';
 import '../state/file_dialogs.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
@@ -110,9 +111,15 @@ class _BackupsState extends State<_Backups> {
   BackupState get _backup => widget.ui.backup;
   AccountState get _account => widget.ui.account;
 
+  /// Whether the cards were in hand as the window opened. Then they arrive
+  /// with the window, and otherwise they come up into place when the server
+  /// answers.
+  late final bool _listedAtOpen;
+
   @override
   void initState() {
     super.initState();
+    _listedAtOpen = _backup.projects.isNotEmpty;
     _backup.addListener(_changed);
     _account.addListener(_changed);
     _search.addListener(_changed);
@@ -279,7 +286,13 @@ class _BackupsState extends State<_Backups> {
         else if (all.isEmpty)
           backupWaiting
         else ...[
-          _grid(t, all),
+          Entrance(
+            spec: _listedAtOpen
+                ? MotionSpec.still
+                : ThemeScope.of(context).motion.reveal,
+            rise: ThemeScope.of(context).motion.revealRise,
+            child: _grid(t, all),
+          ),
           // Said once, where a project is about to be relied on.
           Container(
             padding: const EdgeInsets.fromLTRB(_edge, 9, _edge, 10),
@@ -385,6 +398,7 @@ class _CardState extends State<_Card> {
     final t = scope.theme;
     final project = widget.project;
     final head = project.head;
+    final step = _hover ? scope.motion.hoverIn : scope.motion.hoverOut;
     return GestureDetector(
       onSecondaryTapDown: (press) => widget.onMenu(press.globalPosition),
       child: MouseRegion(
@@ -395,7 +409,8 @@ class _CardState extends State<_Card> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onOpen,
           child: AnimatedContainer(
-            duration: scope.motion.hoverIn.duration,
+            duration: step.duration,
+            curve: step.curve,
             padding: const EdgeInsets.all(_inset),
             decoration: BoxDecoration(
               color: _hover ? t.surface2 : t.surface1,

@@ -16,7 +16,8 @@ use std::sync::{Arc, Mutex};
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate as P;
 use lumit_core::fx::params::Params;
-use lumit_core::fx::points::{Projection, RenderMode, Trails};
+use lumit_core::fx::points::trails::Trails;
+use lumit_core::fx::points::{Projection, RenderMode};
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::model::LayerKind;
 use lumit_gpu::fx::points_draw::{DrawPoint, FieldTest, PointsDrawOp};
@@ -25,10 +26,99 @@ use lumit_gpu::fx::temporal::EchoOp;
 use lumit_gpu::fx::FxEngine;
 use lumit_gpu::GpuContext;
 
+use crate::draw::{CompLayerDraw, DofInputDraw, LayerInputDraw};
 use crate::fxops::CachedTex;
 use crate::gpufx::AuxSlot;
 
 type Tex = wgpu::Texture;
+
+/// What a Particulate with Trails on, `e` on `layer`, carries to the card.
+pub(crate) fn carriage(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    e: &lumit_core::model::EffectInstance,
+    clone: (u32, u32),
+    inset: [f32; 2],
+) -> Trails {
+    use lumit_core::fx::points::stepped::{definition, target};
+    Trails {
+        key: definition(doc, comp, layer, e, target(comp, e)),
+        doc: Arc::clone(doc),
+        comp: comp.id,
+        layer: layer.id,
+        clone,
+        inset,
+        sprite: None,
+    }
+}
+
+/// `d` with each trail's Sprite layer named by the picture it stamps. The ops'
+/// layer pictures and carriages are counted as `op_keys` counts them.
+pub(crate) fn with_sprites(mut d: CompLayerDraw) -> CompLayerDraw {
+    let (mut slot, mut sched) = (0, 0);
+    for op in d.fx.iter() {
+        let schema = op.def.schema();
+        let picture = schema.layer_input().map(|_| (slot, slot += 1).0);
+        let carried = lumit_core::fx::points::wants_carriage(op.def.signature())
+            .then(|| (sched, sched += 1).0);
+        let (Some(picture), Some(carried)) = (picture, carried) else {
+            continue;
+        };
+        let Some(at) = schema.layer_inputs().position(|row| row == "sprite_layer") else {
+            continue;
+        };
+        let sprite = match d.dof_inputs.get(picture) {
+            Some(LayerInputDraw::Several(list)) => list.get(at),
+            one => one.filter(|_| at == 0),
+        };
+        let trails = d.points_schedules.get_mut(carried);
+        if let (Some(LayerInputDraw::Layer(input)), Some(trails)) =
+            (sprite, trails.and_then(|s| s.trails.as_mut()))
+        {
+            trails.sprite = sprite_name(input);
+        }
+    }
+    d
+}
+
+/// A Sprite layer's picture named by what is in it: its pixels, or a
+/// precomp's own frame name, with its stack and where it is set down. `None`
+/// where something else goes into it that nothing here names.
+fn sprite_name(d: &DofInputDraw) -> Option<u128> {
+    if !d.graph_fx.is_empty()
+        || !d.colour_tables.is_empty()
+        || d.roto_mattes.iter().any(Option::is_some)
+        || d.planes.iter().any(Option::is_some)
+    {
+        return None;
+    }
+    let mut h = blake3::Hasher::new();
+    match &d.nested {
+        Some(nested) => h.update(&nested.key?.to_le_bytes()),
+        None => h.update(&d.rgba),
+    };
+    h.update(&d.tex_w.to_le_bytes());
+    h.update(&d.tex_h.to_le_bytes());
+    h.update(format!("{:?} {:?}", d.format, d.colour_space).as_bytes());
+    for v in d.natural {
+        h.update(&v.to_le_bytes());
+    }
+    if let Some(place) = &d.place {
+        for v in place.placed.iter().flatten().flatten() {
+            h.update(&v.to_le_bytes());
+        }
+        for v in place.ground {
+            h.update(&v.to_le_bytes());
+        }
+    }
+    d.fx.feed_hash(&mut |b| {
+        h.update(b);
+    });
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    Some(u128::from_le_bytes(out))
+}
 
 /// How often a walk keeps its picture, in frames.
 const KEEP_EVERY: i64 = 8;
@@ -331,9 +421,9 @@ pub(crate) fn draw(
         .and_then(|at| aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex))
         .filter(|_| style.mode == RenderMode::Sprite);
     // A walk that started late is not the walk from the in point. Every frame
-    // is stamped with the sprite as it is now, which another frame may not
-    // share, so a sprite walk keeps nothing.
-    let keeps = from == 0 && sprite.is_none();
+    // is stamped with the sprite as it is now, so a sprite walk is named by
+    // that picture, and keeps nothing when the picture has no name.
+    let keeps = from == 0 && (sprite.is_none() || trails.sprite.is_some());
 
     // The walk's name: what it reads, the raster it is drawn at, and the
     // camera a 3D layer is seen through.
@@ -349,6 +439,9 @@ pub(crate) fn draw(
         }
         h_.update(&trails.clone.0.to_le_bytes());
         h_.update(&trails.clone.1.to_le_bytes());
+        if let Some(name) = trails.sprite.filter(|_| sprite.is_some()) {
+            h_.update(&name.to_le_bytes());
+        }
         if layer.switches.three_d {
             for cam in comp
                 .layers
@@ -377,6 +470,7 @@ pub(crate) fn draw(
     while frame < target {
         // A frame nobody wants any more stops here, and keeps where it got to.
         if crate::cancel::requested() {
+            crate::cancel::cut_short();
             break;
         }
         let k = frame + 1;

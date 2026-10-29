@@ -34,9 +34,12 @@ void main() {
       expect(read.refusal, isNull);
       expect(read.theme!.name, 'Mine');
       expect(read.theme!.mode, ThemeMode2.dark);
+      // The file holds only what differs from its base, so compare the
+      // themes they build rather than the stored maps.
+      final want = made.build(ThemeShape.studio);
+      final got = read.theme!.build(ThemeShape.studio);
       for (final token in themeTokens) {
-        expect(read.theme!.colours[token.key], made.colours[token.key],
-            reason: token.key);
+        expect(token.read(got), token.read(want), reason: token.key);
       }
     });
 

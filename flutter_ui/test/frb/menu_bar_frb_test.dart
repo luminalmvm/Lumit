@@ -553,6 +553,12 @@ void main() {
         final before = comp.getLayers().length;
         await choose(tester, 'Layer', item, under: 'New');
         await tester.pump();
+        // A solid asks for its settings first.
+        if (item == 'Solid') {
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
+          await tester.pumpAndSettle();
+        }
         expect(comp.getLayers(), hasLength(before + 1),
             reason: '$item added one');
       }
@@ -804,10 +810,13 @@ void main() {
       await makeComp(tester);
       final comp = p.uiState.selectedComp!;
 
-      // Nothing selected: the rows are there and do nothing.
+      // Nothing selected: the rows are there and do nothing, and the menu
+      // stays up.
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(comp.getLayers(), isEmpty);
+      expect(find.text('Gaussian blur'), findsOneWidget);
+      await dismiss(tester);
 
       final a = comp.addSolidLayer();
       final b = comp.addSolidLayer();

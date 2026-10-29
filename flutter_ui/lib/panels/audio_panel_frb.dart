@@ -148,7 +148,10 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   @override
   void initState() {
     super.initState();
-    if (widget.feed == null) _feed.start();
+    if (widget.feed == null) {
+      final ui = Provider.of<LumitUiState>(context, listen: false);
+      _feed.start(wake: Listenable.merge([ui.playing, ui.playheadFrame]));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _settled = true);
   }
 
@@ -586,7 +589,11 @@ class _LevelsBlock extends StatelessWidget {
                 child: HoverMark(
                   builder: (context, over) => GestureDetector(
                     key: const ValueKey('audio-clip-lamp'),
-                    onTap: resetAudioClip,
+                    onTap: () {
+                      resetAudioClip();
+                      // A parked poll would leave the lamp lit.
+                      feed.wake();
+                    },
                     child: AnimatedContainer(
                       duration: ThemeScope.of(context).motion.mark.duration,
                       width: 8,

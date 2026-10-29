@@ -19,13 +19,14 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
 use lumit_media::audio::AudioBuffer;
 use parking_lot::RwLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub mod beat;
 pub mod meter;
 pub mod mix;
 pub mod peaks;
+mod slow;
 pub mod spectra;
 pub mod speed;
 pub mod stream;
@@ -76,6 +77,8 @@ struct Shared {
     starved: AtomicU64,
     /// Set when the engine goes, which is what ends the filling thread.
     closed: AtomicBool,
+    /// How many times slower than the mix the sound plays ([`slow`]).
+    slow: AtomicU32,
 }
 
 impl Shared {
@@ -92,6 +95,7 @@ impl Shared {
             scrub_wanted: AtomicU64::new(0),
             starved: AtomicU64::new(0),
             closed: AtomicBool::new(false),
+            slow: AtomicU32::new(1),
         }
     }
 
@@ -110,7 +114,8 @@ impl Shared {
         }
         let step = self.step.load(Ordering::Relaxed) as f64;
         let since = nanos().saturating_sub(self.stepped_at.load(Ordering::Relaxed));
-        let passed = since as f64 * f64::from(rate) / 1e9;
+        let slow = f64::from(self.slow.load(Ordering::Relaxed).max(1));
+        let passed = since as f64 * f64::from(rate) / 1e9 / slow;
         (playhead - step + passed.min(step)).max(0.0)
     }
 }
@@ -336,11 +341,14 @@ impl AudioEngine {
         let cb = shared.clone();
         let mut scrub = Scrub::default();
         let mut edge = Edge::default();
+        let mut stretch = slow::Stretch::new(device_rate);
 
         let stream = device
             .build_output_stream(
                 &config.config(),
-                move |out: &mut [f32], _| fill_smooth(&cb, &mut scrub, &mut edge, out, channels),
+                move |out: &mut [f32], _| {
+                    fill_smooth(&cb, &mut scrub, &mut edge, &mut stretch, out, channels)
+                },
                 |_err| { /* device hiccup: next callback continues; never panic */ },
                 None,
             )
@@ -587,12 +595,15 @@ fn fill_smooth(
     shared: &Shared,
     scrub: &mut Scrub,
     edge: &mut Edge,
+    stretch: &mut slow::Stretch,
     out: &mut [f32],
     channels: usize,
 ) {
     let playing = shared.playing.load(Ordering::Relaxed);
     let began = shared.playhead.load(Ordering::Relaxed);
-    fill(shared, scrub, out, channels);
+    if !stretch.fill(shared, scrub, out, channels) {
+        fill(shared, scrub, out, channels);
+    }
     if channels == 0 {
         return;
     }

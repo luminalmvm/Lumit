@@ -1,0 +1,93 @@
+---
+title: MCP
+description: Write a program that edits a project through lumit-cli over the Model Context Protocol.
+sidebar:
+  order: 5
+---
+
+A program edits a project by starting **lumit-cli mcp** and talking to it over standard input
+and output. Each message is one line of JSON-RPC 2.0, as the Model Context Protocol (MCP)
+sets out. Each of Lumit's commands is a tool, named with `_` for `.`: `comp.list` is
+`comp_list`. Setting an MCP client up to use Lumit is in
+[Command line](/use/command-line/#let-another-program-edit-a-project).
+
+## A first program
+
+`drive.mjs` renders a half-size frame of every composition in a project, with Node.js:
+
+```js
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+
+const [cli, project] = process.argv.slice(2);
+const lumit = spawn(cli, ["mcp", "--project", project], {
+  stdio: ["pipe", "pipe", "inherit"],
+});
+
+const waiting = new Map();
+let next = 1;
+createInterface({ input: lumit.stdout }).on("line", (line) => {
+  const message = JSON.parse(line);
+  waiting.get(message.id)?.(message);
+  waiting.delete(message.id);
+});
+
+function write(message) {
+  lumit.stdin.write(JSON.stringify(message) + "\n");
+}
+
+function send(method, params) {
+  const id = next++;
+  write({ jsonrpc: "2.0", id, method, params });
+  return new Promise((done) => waiting.set(id, done));
+}
+
+async function tool(name, args) {
+  const { result } = await send("tools/call", { name, arguments: args });
+  const text = result.content[0].text;
+  if (result.isError) throw new Error(text);
+  return JSON.parse(text);
+}
+
+await send("initialize", {
+  protocolVersion: "2025-06-18",
+  capabilities: {},
+  clientInfo: { name: "drive", version: "1.0.0" },
+});
+write({ jsonrpc: "2.0", method: "notifications/initialized" });
+
+const { comps } = await tool("comp_list", {});
+for (const comp of comps) {
+  const frame = await tool("comp_frame", { comp: comp.id, scale: 0.5 });
+  console.log(comp.name, frame.path);
+}
+lumit.stdin.end();
+```
+
+```
+node drive.mjs <path to lumit-cli> stripes.lum
+```
+
+Each frame is written beside the project. Closing standard input ends **lumit-cli**.
+
+## What the program sees
+
+- `tools/list` answers every tool with a JSON schema of its arguments. The
+  [Scripting reference](/reference/scripting/) lists the same commands.
+- A tool's answer is one `text` item holding the command's answer as JSON. `comp_frame`
+  adds an `image` item with the PNG when it is 2 MB or smaller.
+- A command that fails answers `isError: true`, and the text is the reason.
+- `script_run` takes `{ "source": "..." }` and runs JavaScript as one undo step, with the
+  `lumit` object of [Scripts](/make/scripts/#the-lumit-object).
+- Nothing is saved until `project_save` is called.
+
+The limits on files, saves and exports are in
+[Command line](/use/command-line/#let-another-program-edit-a-project). Without `--project`,
+**lumit-cli mcp** edits the project open in Lumit instead, once **Settings ▸ General ▸ Let
+other programs drive Lumit** is on.
+
+## Related
+
+- [Command line](/use/command-line/)
+- [Scripting reference](/reference/scripting/)
+- [Scripts](/make/scripts/)

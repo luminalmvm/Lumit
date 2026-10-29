@@ -50,10 +50,12 @@ import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
+import '../icons/icon_style.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/marquee.dart' show MarqueeBox;
+import '../widgets/name_direction.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
@@ -129,7 +131,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   double _zoomAnchorViewportX = 0;
   bool _zoomAnchorHeld = false;
   bool _pullingBackZoom = false;
-  AnimationLevel _animationLevel = AnimationLevel.all;
   Motion? _motion;
 
   /// The lanes' viewport and the comp's length as the last layout knew them.
@@ -442,7 +443,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final usual = _trackHeight;
     final settling = _settling;
     if (settling != null && settling.track == track.id) {
-      final curve = _motion?.settle.curve ?? Curves.linear;
+      final curve = _motion?.makeWay.curve ?? Curves.linear;
       return settling.from +
           (usual - settling.from) * curve.transform(_settle.value);
     }
@@ -467,7 +468,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _heightsHere?.remove(track.id);
     _ui!.rememberSession();
     if (from == _trackHeight) return;
-    final settle = _motion?.settle ?? MotionSpec.still;
+    // Every track below moves with it, so it eases in without the landing's
+    // overshoot, which wobbled them all.
+    final settle = _motion?.makeWay ?? MotionSpec.still;
     if (settle.isStill) {
       setState(() {});
       _queueRefresh();
@@ -661,19 +664,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _defaultTransition(ui, comp);
       // The zoom keys, as the Timeline answers them: `=` in and `-` out
       // about the playhead, `\` between the whole composition and wherever
-      // the zoom was before.
+      // the zoom was before. They land at once, as the Timeline's do.
       case 'timeline.zoom.in' || 'timeline.zoom.out':
         _zoomBeforeFit = null;
-        _setZoom(zoomNudged(_zoomMotion.target,
-            inward: action == 'timeline.zoom.in', maxZoom: _maxZoom));
+        _setZoom(
+            zoomNudged(_zoomMotion.target,
+                inward: action == 'timeline.zoom.in', maxZoom: _maxZoom),
+            fly: false);
       case 'timeline.zoom.fit':
         final was = _zoomBeforeFit;
         if (_zoomMotion.target > 1) {
           _zoomBeforeFit = _zoomMotion.target;
-          _setZoom(1);
+          _setZoom(1, fly: false);
         } else {
           _zoomBeforeFit = null;
-          _setZoom((was ?? 1).clamp(1.0, _maxZoom));
+          _setZoom((was ?? 1).clamp(1.0, _maxZoom), fly: false);
         }
       case 'edit.point.prev' || 'edit.point.next':
         _toEditPoint(ui, before: action.endsWith('prev'));
@@ -1317,7 +1322,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _glyphColour = colour;
     vg
         .loadPicture(
-            SvgStringLoader(LumitIcons.composition,
+            SvgStringLoader(
+                IconStyle.resolve(LumitIcons.composition, ThemeScope.of(context).theme),
                 theme: SvgTheme(currentColor: colour)),
             null)
         .then((info) {
@@ -1552,7 +1558,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _setZoom(double z, {bool fly = true}) {
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
     _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+        motion: fly ? _motion?.zoom ?? MotionSpec.still : MotionSpec.still);
   }
 
   void _zoomDragStart() {
@@ -1636,7 +1642,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _motion?.zoom ?? MotionSpec.still,
       );
       return;
     }
@@ -2660,6 +2666,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
   }
 
+  /// A comp dropped at [global] goes down whole as one clip, on the picture
+  /// track under the pointer or a new one.
+  void _dropComp(
+      CompositionReference comp, CompositionReference dropped, Offset global) {
+    final ui = _ui;
+    if (ui == null) return;
+    final at = _pointOnLanes(global);
+    final index = at == null ? null : cutTrackAt(_tracks, at.dy, _tops);
+    final track = index == null ? null : _tracks[index];
+    final target =
+        track?.kind == CutTrackKind.picture ? track!.entry.layer : null;
+    final frame =
+        at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    _afterCut(_cut(() =>
+        comp.cutPlaceComp(target: target, comp: dropped, atFrame: frame)));
+  }
+
   /// The clip under [global], with its track, or null on empty ground.
   ({CutTrack track, BridgeClip clip})? _clipAt(Offset global) {
     final at = _pointOnLanes(global);
@@ -2708,7 +2731,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       BuildContext context, LumitUiState ui, CompositionReference comp) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
     _motion = scope.motion;
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
@@ -2751,6 +2773,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
+                details.data is CompDragData ||
                 details.data is EffectDragData,
             // An effect in hand rings the clip it is over.
             onMove: (details) {
@@ -2762,6 +2785,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               switch (details.data) {
                 case FootageDragData(:final footage):
                   await _dropFootage(comp, footage, details.offset);
+                case CompDragData(comp: final dropped):
+                  _dropComp(comp, dropped, details.offset);
                 case final EffectDragData effect:
                   await _dropEffect(effect, details.offset);
               }
@@ -2771,11 +2796,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               // adding one only then rebuilt the lanes from nothing, which
               // lost their scroll and had two scroll views on one controller
               // for a frame.
-              // Footage lands anywhere on the table, so the table is ringed.
+              // Footage or a comp lands anywhere on the table, so the table
+              // is ringed.
               // An effect lands on one clip, and the clip is.
               foregroundDecoration: BoxDecoration(
                   border: Border.all(
-                      color: candidate.any((data) => data is FootageDragData)
+                      color: candidate.any((data) =>
+                              data is FootageDragData || data is CompDragData)
                           ? t.accent
                           : t.accent.withValues(alpha: 0),
                       width: 2)),
@@ -3265,6 +3292,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 builder: (context, picked, _) => Text(
                   info.name,
                   key: ValueKey<String>('ctl-name-${track.id}'),
+                  textDirection: nameDirection(info.name),
+                  textAlign: TextAlign.left,
                   style: picked.any((l) =>
                           l.internallayerId ==
                           track.entry.layer.internallayerId)

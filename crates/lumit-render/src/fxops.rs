@@ -883,9 +883,7 @@ fn spread_room(
     h: u32,
 ) -> [u32; 2] {
     let [across, down] = def.spread_px(p);
-    let texels = |px: f32, n: u32| {
-        (px.ceil() as u32).min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2)
-    };
+    let texels = |px: f32, n: u32| lumit_core::largest_picture::room(px.ceil() as u32, n);
     [texels(across, w), texels(down, h)]
 }
 

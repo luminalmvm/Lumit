@@ -25,6 +25,11 @@
 
   --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Paper Mono", ui-monospace, monospace;
+
+  /* Two curves for everything that moves: out for what arrives or answers a
+     pointer, in-out for what moves across the page. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 :root {
@@ -49,10 +54,13 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
+  /* Less motion: each part that moves drops its movement where it is
+     declared and keeps its fades, and anything that loops plays once. */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    *, *::before, *::after { animation-iteration-count: 1 !important; }
   }
   body {
     background: var(--color-ink);
@@ -63,7 +71,7 @@
      -0.03em, and nothing on the page is heavier than the copy it sits above. */
   h1, h2, h3 { color: var(--color-fg); font-weight: 400; letter-spacing: -0.03em; }
   ::selection { background: var(--color-accent); color: #fff; }
-  :focus-visible { outline: 1px solid var(--color-accent); outline-offset: 2px; border-radius: var(--radius-ctl); }
+  :focus-visible { outline: 1px solid var(--color-accent); outline-offset: 2px; }
 }
 
 @layer components {
@@ -88,7 +96,17 @@
   .btn {
     @apply inline-flex h-10 items-center justify-center gap-2 rounded-ctl border
            border-line-2 bg-transparent px-[18px] text-[15px] text-fg
-           no-underline transition-colors hover:bg-white/[0.05];
+           no-underline transition-colors hover:bg-white/[0.05]
+           select-none touch-manipulation;
+  }
+  /* A press sinks it a touch. */
+  .btn:active {
+    scale: 0.97;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn {
+      transition-property: color, background-color, border-color, scale;
+    }
   }
   .btn-ghost {
     @apply border-line;
@@ -201,10 +219,12 @@
   }
   .go::after {
     content: "\2192";
-    transition: transform 0.2s;
   }
-  .go:hover::after {
-    transform: translateX(3px);
+  /* Only a mouse moves things on hover: a tap leaves a hover behind. */
+  @media (hover: hover) and (pointer: fine) {
+    .go:hover::after {
+      transform: translateX(3px);
+    }
   }
 
   /* A card that lights under the pointer: its label colour runs along the top
@@ -222,7 +242,6 @@
     background: var(--c, var(--color-accent-2));
     transform: scaleX(0);
     transform-origin: left;
-    transition: transform 0.3s ease-out;
   }
   .lit::after {
     content: "";
@@ -233,15 +252,17 @@
     transition: opacity 0.3s;
     pointer-events: none;
   }
-  .lit:hover::before {
-    transform: scaleX(1);
-  }
-  .lit:hover::after {
-    opacity: 1;
+  @media (hover: hover) and (pointer: fine) {
+    .lit:hover::before {
+      transform: scaleX(1);
+    }
+    .lit:hover::after {
+      opacity: 1;
+    }
   }
 
   /* A screenshot is a button: a click brings it forward. Under the pointer it
-     grows a touch, frame and all, with a little spring in it. `scale` and not
+     grows a touch, frame and all. `scale` and not
      `transform`, which the reveal is already using on some of them. */
   .zoom {
     display: block;
@@ -251,12 +272,22 @@
     background: none;
     cursor: pointer;
   }
-  .shot {
-    transition: scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+  @media (prefers-reduced-motion: no-preference) {
+    .go::after {
+      transition: transform 0.2s;
+    }
+    .lit::before {
+      transition: transform 0.3s var(--ease-out);
+    }
+    .shot {
+      transition: scale 200ms var(--ease-out);
+    }
   }
-  .shot:has(.zoom:hover),
-  .zoom.shot:hover {
-    scale: 1.015;
+  @media (hover: hover) and (pointer: fine) {
+    .shot:has(.zoom:hover),
+    .zoom.shot:hover {
+      scale: 1.015;
+    }
   }
   /* A screenshot's clip lies over it and is not seen until it is playing, so
      the picture is what stands there while the clip loads. The button it is
@@ -274,7 +305,7 @@
   .clip.playing {
     opacity: 1;
   }
-  /* The strip a screenshot wears: what it is, and that it opens. */
+  /* The strip a screenshot wears: what it is. */
   .shot-bar {
     display: flex;
     align-items: center;
@@ -292,15 +323,13 @@
     text-transform: uppercase;
     white-space: nowrap;
   }
-  .shot-bar > span:last-child {
-    color: var(--color-fg-4);
-  }
 
   /* The Markdown body of a release note. The notes are plain Markdown, so every
      element they can produce is styled here from the tokens rather than in the
      note itself. */
   .release-prose {
     @apply text-[16px] leading-relaxed;
+    overflow-wrap: anywhere;
   }
   .release-prose > :first-child {
     @apply mt-0;
@@ -359,11 +388,12 @@
 
 /* Nothing marked for reveal is drawn until a script releases it - the wordmark
    coming home for the hero, scrolling into view for the rest. --i staggers the
-   pieces of one group against each other, 70ms apart. Only a page that sets
-   `anim` on <html> hides anything, so without script the page is simply there. */
+   pieces of one group against each other, 70ms apart, and --blur is softer on
+   the large pictures. Only a page that sets `anim` on <html> hides anything,
+   so without script the page is simply there. */
 html.anim [data-reveal] {
   opacity: 0;
-  filter: blur(10px);
+  filter: blur(var(--blur, 10px));
   transform: translateY(12px);
 }
 html.anim [data-reveal].shown {
@@ -373,15 +403,18 @@ html.anim [data-reveal].shown {
   filter: none;
   transform: none;
   transition:
-    opacity 500ms ease-out calc(var(--i, 0) * 70ms),
-    filter 500ms ease-out calc(var(--i, 0) * 70ms),
-    transform 500ms ease-out calc(var(--i, 0) * 70ms),
-    scale 350ms cubic-bezier(0.2, 0.8, 0.2, 1.3);
+    opacity 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    filter 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    transform 500ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    scale 200ms var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
   html.anim [data-reveal] {
     opacity: 1;
     filter: none;
     transform: none;
+  }
+  html.anim [data-reveal].shown {
+    transition: none;
   }
 }

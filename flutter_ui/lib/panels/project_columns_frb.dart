@@ -41,7 +41,9 @@ const double projectRowHeight = 22;
 /// row share — which is what makes a value sit under its own heading.
 const double projectItemsColumn = 36;
 const double projectSizeColumn = 64;
-const double projectFpsColumn = 22;
+/// Fps is sized for the widest rate it writes, `119.88`: six characters of the
+/// 10px mono.
+const double projectFpsColumn = 37;
 
 /// The Duration column: an item's length as the panel's own clock face, the
 /// one the preview card already writes. `00:00:00:00` is eleven characters of
@@ -192,7 +194,7 @@ const double _widthForDuration =
 
 /// **Path now goes first, before Name gives anything up.** It is drawn only
 /// once the panel can carry every column at its starting width, Name's 220
-/// included, which comes to 512. The docked panel opens narrower than that,
+/// included, which comes to 527. The docked panel opens narrower than that,
 /// and there the 40 Path was holding showed five letters of a folder while a
 /// name beside an `in use` badge was cut to "White s…". So the room goes to
 /// Name, and a name is shortened only once the panel is too narrow for Path

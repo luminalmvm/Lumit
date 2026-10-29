@@ -14,6 +14,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/updates.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
@@ -111,15 +112,50 @@ Widget? _changes(LumitTheme t, UpdateService updates) {
 
 /// The mark for where [updates] has got to. Quiet while there is nothing to
 /// do, and lit once there is an update to fetch or to finish.
-class UpdateMark extends StatelessWidget {
+class UpdateMark extends StatefulWidget {
   final UpdateService updates;
   const UpdateMark(this.updates, {super.key});
 
+  @override
+  State<UpdateMark> createState() => _UpdateMarkState();
+}
+
+class _UpdateMarkState extends State<UpdateMark> {
   static const double _size = 16;
+
+  /// The stage last drawn, and how many times it has changed while on screen.
+  /// The waiting dot and the restart glyph pop in as a tick does when the
+  /// stage moves on, and not when Lumit starts with one already there.
+  late UpdateStage _was;
+  int _moved = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _was = widget.updates.stage;
+  }
+
+  @override
+  void didUpdateWidget(UpdateMark old) {
+    super.didUpdateWidget(old);
+    final stage = widget.updates.stage;
+    if (stage != _was) {
+      _was = stage;
+      _moved++;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final updates = widget.updates;
+    Widget pop(Widget child) => Entrance(
+          key: ValueKey<int>(_moved),
+          spec: _moved == 0 ? MotionSpec.still : scope.motion.pop,
+          scale: scope.motion.popScale,
+          child: child,
+        );
     return SizedBox.square(
       dimension: _size,
       child: switch (updates.stage) {
@@ -135,7 +171,7 @@ class UpdateMark extends StatelessWidget {
               Positioned(
                 top: -2,
                 right: -3,
-                child: Container(
+                child: pop(Container(
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
@@ -143,7 +179,7 @@ class UpdateMark extends StatelessWidget {
                     color: t.accent,
                     border: Border.all(color: t.surface1),
                   ),
-                ),
+                )),
               ),
             ],
           ),
@@ -155,8 +191,8 @@ class UpdateMark extends StatelessWidget {
               arrow: t.textPrimary,
             ),
           ),
-        UpdateStage.ready => glyph.LumitIcon(LumitIcons.restartToUpdate,
-            size: _size, colour: t.accent),
+        UpdateStage.ready => pop(glyph.LumitIcon(LumitIcons.restartToUpdate,
+            size: _size, colour: t.accent)),
         _ => glyph.LumitIcon(LumitIcons.checkForUpdates,
             size: _size, colour: t.textMuted),
       },

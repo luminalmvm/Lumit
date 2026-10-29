@@ -365,6 +365,14 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
+/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes.
+pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    wgpu::Limits {
+        max_texture_dimension_2d: adapter.limits().max_texture_dimension_2d,
+        ..Default::default()
+    }
+}
+
 /// Which adapter was picked, as one line, published the first time a context
 /// opens one.
 ///
@@ -1202,10 +1210,14 @@ impl GpuContext {
         // not offer it gets the half-float upload instead (see
         // [`ColourEngine::upload_float_frame`]) — softer, never an error, the
         // same shape as the multisample fallback beside it.
+        //
+        // The widest texture is the card's own, so the largest picture setting
+        // can reach it. Every other limit stays what every card guarantees.
         let descriptor = wgpu::DeviceDescriptor {
             required_features: adapter.features()
                 & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                     | wgpu::Features::FLOAT32_FILTERABLE),
+            required_limits: widest_texture(&adapter),
             ..Default::default()
         };
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]

@@ -865,6 +865,15 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                   : t.surface0),
           borderRadius: BorderRadius.circular(clipRadius(t)),
         ),
+        // The edge again over the content, which would otherwise cover it where
+        // the corner curves.
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(
+              color: picked
+                  ? (t.shape == ThemeShape.desk ? t.accent : t.textPrimary)
+                  : t.surface0),
+          borderRadius: BorderRadius.circular(clipRadius(t)),
+        ),
         clipBehavior: Clip.hardEdge,
         child: Stack(children: [
           // The box's own pointer, under the header's controls: a press
@@ -946,7 +955,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
               held.db <= volumeBandFloorDb
                   ? l10n.volumeNegInf
                   : '${held.db.toStringAsFixed(1)} dB',
-              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+              style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
             ),
           ),
         ),

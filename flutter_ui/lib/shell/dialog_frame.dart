@@ -21,7 +21,9 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
+import '../theme/style_sheet.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 
 /// The title strip, over its hairline.
 const double dialogTitleStrip = 30;
@@ -86,32 +88,62 @@ class DialogFrame extends StatelessWidget {
     final t = scope.theme;
     return SizedBox(
       width: width,
-      child: Container(
-        decoration: BoxDecoration(
-          color: t.surface1,
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          boxShadow: t.floatShadow,
-        ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          border: Border.all(color: t.hairline),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          child: Entrance.content(
-            spec: scope.motion.content,
-            rise: scope.motion.contentRise,
-            blur: scope.motion.contentBlur,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
+      child: dialogSurface(
+        context,
+        t,
+        Entrance.content(
+          spec: scope.motion.content,
+          rise: scope.motion.contentRise,
+          blur: scope.motion.contentBlur,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         ),
       ),
     );
   }
+}
+
+/// A dialogue's box: `surface1` out to a hairline edge drawn over its outer
+/// pixel, the float corner and shadow, with a style's `dialog` rules over it.
+/// Shared by every dialogue and the Settings window.
+Widget dialogSurface(BuildContext context, LumitTheme t, Widget child) {
+  final style = partStyle(context, t, 'dialog');
+  final radius = BorderRadius.circular(style.radius ?? t.tokens.floatRadius);
+  return frosted(
+    style,
+    radius,
+    Container(
+      decoration: dress(
+        BoxDecoration(
+          color: t.surface1,
+          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          boxShadow: t.floatShadow,
+        ),
+        PartStyle(
+            background: style.background,
+            radius: style.radius,
+            shadows: style.shadows,
+            blur: style.blur),
+      ),
+      foregroundDecoration: dress(
+        BoxDecoration(
+          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+          border: Border.all(color: t.hairline),
+        ),
+        PartStyle(
+            borderColour: style.borderColour,
+            borderWidth: style.borderWidth,
+            radius: style.radius),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: StylePart(name: 'dialog', child: child),
+      ),
+    ),
+  );
 }
 
 /// The title strip: what this dialog is, what it is about, and the way out.
@@ -156,11 +188,7 @@ Widget dialogTitleBar(
   );
   final about = Padding(
     padding: const EdgeInsets.only(left: 10),
-    child: Text(
-      subject,
-      style: t.body.copyWith(color: t.textMuted),
-      overflow: TextOverflow.ellipsis,
-    ),
+    child: MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
   );
   final close = LumitTooltip(
     message: l10n.close,
@@ -366,10 +394,13 @@ Widget dialogRow(
       constraints: BoxConstraints(minHeight: minHeight),
       child: Row(
         children: [
+          // One line, cut with the whole word on hover: a long German word
+          // broke mid-letter onto a second line the row had no room for.
           SizedBox(
               width: labelColumn,
-              child: Text(label,
-                  style: dimmed
+              child: FittedText(
+                  label,
+                  dimmed
                       ? t.body.copyWith(color: t.textDisabled)
                       : t.body)),
           SizedBox(width: gap),

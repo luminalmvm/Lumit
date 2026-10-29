@@ -149,6 +149,18 @@ pub fn transform_op(
     }
 }
 
+/// Glow's Rolloff on one channel: values under `1 − rolloff` pass untouched
+/// and the rest bend smoothly towards 1, so a very bright halo goes white
+/// gradually instead of clipping with a hard edge. Rolloff 0 returns `x`.
+/// The WGSL combine pass spells the same arithmetic.
+pub fn glow_rolloff(x: f32, rolloff: f32) -> f32 {
+    let k = 1.0 - rolloff;
+    if rolloff <= 0.0 || x <= k {
+        return x;
+    }
+    k + rolloff * (1.0 - (-(x - k) / rolloff).exp())
+}
+
 /// The glow bright pass on one channel (docs/08 §3.3 step 1):
 /// `max(0, x − threshold)` with a soft knee — the hinge's onset is weighted
 /// by a smoothstep over `threshold ± knee`, so the bloom fades in over the
@@ -210,6 +222,50 @@ pub fn value_noise_1d(seed: u32, channel: u32, x: f64) -> f64 {
 /// independent channel each for x, y, rotation and zoom.
 pub fn shake_noise(seed: u32, channel: u32, x: f64) -> f64 {
     (value_noise_1d(seed, channel, x) + 0.5 * value_noise_1d(seed, channel + 4, x * 2.0)) / 1.5
+}
+
+/// Shake's Jumpy style: the picture holds a place, then jumps to the next,
+/// creeping `drift` of the way there first. Drift 0 is a plain hold, 1 a
+/// straight line from place to place with no jump left. Jumps come about once
+/// per whole step of `x`, each at a seeded point inside its step, so the holds
+/// are uneven the way a hand's are. One octave, since a second would jump twice
+/// as often. `centre` is the chance a place is the centre instead. The timing
+/// and centre draws (channels 10 and 9) are shared by every axis, so axes on
+/// the same frequency jump together. The nudge keeps a jump on the frame it
+/// lands on when frame times are not exact in binary.
+pub fn shake_jump_noise(seed: u32, channel: u32, x: f64, drift: f64, centre: f64) -> f64 {
+    let at = |i: i64| i as f64 + (noise_lattice(seed, 10, i) + 1.0) * 0.5;
+    let place = |i: i64| match (noise_lattice(seed, 9, i) + 1.0) * 0.5 < centre {
+        true => 0.0,
+        false => noise_lattice(seed, channel, i),
+    };
+    let x = x + 1e-9;
+    let k = x.floor() as i64;
+    let j = if x >= at(k) { k } else { k.wrapping_sub(1) };
+    let (start, end) = (at(j), at(j.wrapping_add(1)));
+    let a = place(j);
+    a + (place(j.wrapping_add(1)) - a) * drift * ((x - start) / (end - start)).clamp(0.0, 1.0)
+}
+
+/// Shake's Twitchy style: how much of the wobble gets through at `t` (local
+/// time × Twitch frequency). Each whole step is either moving or still, by a
+/// seeded draw against `stillness`, so Stillness is about the share of time
+/// spent still. The last quarter of a step eases into the next one, so a
+/// burst starts and stops without a hop. Channel 8 is clear of the four axes
+/// and their second octaves.
+pub fn shake_twitch_gate(seed: u32, t: f64, stillness: f64) -> f64 {
+    let t0 = t.floor();
+    let i0 = t0 as i64;
+    let moving = |i: i64| {
+        if (noise_lattice(seed, 8, i) + 1.0) * 0.5 >= stillness {
+            1.0
+        } else {
+            0.0
+        }
+    };
+    let a = moving(i0);
+    let f = ((t - t0 - 0.75) * 4.0).clamp(0.0, 1.0);
+    a + (moving(i0.wrapping_add(1)) - a) * f * f * (3.0 - 2.0 * f)
 }
 
 /// The time-independent configuration of one shake's wobble (docs/08 §3.4):
@@ -301,11 +357,11 @@ pub const SHAKE_MB_SPAN_BASE: f64 = 1.0;
 
 /// The signed base offsets of `count` motion-blur sub-frames across the shutter
 /// (T18), symmetric about 0 so an odd count's centre sample is the frame
-/// itself. `amount` is the shutter fraction, clamped to 0..1; `count` is
+/// itself. `amount` is the shutter fraction, clamped to 0..4; `count` is
 /// clamped to `2..=SHAKE_MB_SAMPLES`. More samples fill the same window more
 /// densely; the ends stay put.
 pub fn shake_mb_offsets(amount: f64, count: usize) -> impl Iterator<Item = f64> {
-    let window = amount.clamp(0.0, 1.0) * SHAKE_MB_SPAN_BASE;
+    let window = amount.clamp(0.0, 4.0) * SHAKE_MB_SPAN_BASE;
     let count = count.clamp(2, SHAKE_MB_SAMPLES);
     let last = (count - 1) as f64;
     (0..count).map(move |k| (k as f64 / last - 0.5) * window)

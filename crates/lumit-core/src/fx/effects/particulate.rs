@@ -778,7 +778,7 @@ pub struct Particulate {
         label = "Flock radius",
         min = 0.0,
         max = 500.0,
-        default = 50.0,
+        default = 150.0,
         hard_min = 0.0,
         unit = Px
     )]
@@ -831,7 +831,7 @@ pub struct Particulate {
 
     /// How much of the picture Particulate keeps is left after one second,
     /// per cent. Above nought each frame's particles are drawn over what the
-    /// frames before left ([`points::Trails`]). Nought keeps nothing.
+    /// frames before left ([`points::trails::Trails`]). Nought keeps nothing.
     #[slider(
         min = 0.0,
         max = 100.0,

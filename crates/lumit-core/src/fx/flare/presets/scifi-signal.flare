@@ -1,0 +1,48 @@
+{
+  "lumit_flare": 1,
+  "name": "Signal",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.9, 0.8], [1.0, 0.3, 0.1]]},
+      "values": {"size": 50, "falloff": 0.3, "core": 2.0, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.25, 0.1]]},
+      "values": {"size": 280, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.4, 0.2]]},
+      "values": {"size": 120, "thickness": 8, "brightness": 0.35, "softness": 0.6, "arc": 90, "arc_feather": 0.2}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.4, 0.2]]},
+      "values": {"size": 120, "thickness": 8, "brightness": 0.35, "softness": 0.6, "arc": 90, "arc_feather": 0.2, "rotation": 180}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.35, 0.2]]},
+      "values": {"size": 400, "thickness": 8.0, "brightness": 0.3, "taper": 0.7, "end_width": 0.3}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.5, 0.3]]},
+      "values": {"points": 4, "size": 350, "thickness": 2.0, "brightness": 0.4, "rotation": 45}
+    },
+    {
+      "kind": "dirt",
+      "name": "Specks",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.5, 0.3]]},
+      "values": {"texture": 5, "size": 1000, "reach": 700, "brightness": 0.5}
+    }
+  ]
+}

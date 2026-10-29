@@ -48,6 +48,12 @@ class ThemeSwatchStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         border: Border.all(color: t.hairlineStrong),
       ),
+      // The edge again over the content, which would otherwise cover it where
+      // the corner curves.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        border: Border.all(color: t.hairlineStrong),
+      ),
       clipBehavior: Clip.antiAlias,
       child: Row(
         mainAxisSize: MainAxisSize.min,

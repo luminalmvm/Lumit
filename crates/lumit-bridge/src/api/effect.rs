@@ -413,7 +413,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     lumit_ofx::discover::set_disabled(&prefs.disabled);
     let options = lumit_ofx::discover::ScanOptions {
         disabled: prefs.disabled.clone(),
-        ..lumit_ofx::discover::ScanOptions::standard()
+        ..crate::api::extensions::scan_options(&prefs)
     };
     // The bundle being opened, so an effect it adds can be named beside it.
     let opening = std::cell::RefCell::new((String::new(), 0, 0));

@@ -2457,10 +2457,6 @@
   "@exportColourSpaceSrgb": {
     "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
-  "exportColourStated": "Файл зазначає цей простір у власному заголовку.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportCrop": "Обрізка",
   "@exportCrop": {
     "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
@@ -2682,15 +2678,6 @@
   "exportGuideLayers": "Напрямні шари",
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
-  },
-  "exportImageSequenceNote": "Окремий нумерований {extension} на кожен кадр, поруч із вибраною назвою.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
   },
   "exportKeepBoth": "Зберегти обидва",
   "@exportKeepBoth": {
@@ -11527,10 +11514,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "Тут ще нічого немає: імпортуйте футаж або створіть композицію",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Композиція",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -11705,10 +11688,6 @@
   "relinkEllipsis": "Перепідключити…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
-  },
-  "reloadIcons": "Перезавантажити значки",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
   },
   "rememberInterpretation": "Запам'ятати інтерпретацію",
   "@rememberInterpretation": {
@@ -13123,10 +13102,6 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "Виберіть папку, що містить extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
-  },
   "settingsExtensionsInstallPackage": "Установити пакет",
   "@settingsExtensionsInstallPackage": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
@@ -13640,10 +13615,6 @@
   "settingsShareDownLimit": "Ліміт завантаження футажу",
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
-  },
-  "settingsShareLimitHint": "Стосується футажу в спільних проєктах.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
   },
   "settingsShareLimitValue": "{kilobytes} КБ/с",
   "@settingsShareLimitValue": {

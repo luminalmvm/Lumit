@@ -184,7 +184,7 @@ class _SpectralLaneState extends State<SpectralLane> {
         height: widget.height,
         // The board's own caption: what the picture's height spans.
         caption: l10n.spectralRange,
-        captionStyle: t.mono.copyWith(fontSize: 8, color: t.textMuted),
+        captionStyle: t.mono.copyWith(fontSize: 9, color: t.textMuted),
       ),
     );
   }

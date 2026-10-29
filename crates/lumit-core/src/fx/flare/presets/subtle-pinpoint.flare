@@ -1,0 +1,27 @@
+{
+  "lumit_flare": 1,
+  "name": "Pinpoint",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 18, "falloff": 0.35, "core": 2.5, "core_size": 0.3, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "values": {"size": 70, "brightness": 0.08, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "values": {"points": 4, "size": 260, "thickness": 1.5, "brightness": 0.5, "fringe": 0.4, "twin": 0.3, "twin_length": 0.4}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[0.85, 0.92, 1.0]]},
+      "values": {"place": 1.6, "size": 60, "brightness": 0.3, "sides": 6, "roundness": 0.1, "fill": 0.05, "edge": 0.5, "edge_width": 0.06, "softness": 0.1, "fringe": 0.0, "response": 2, "response_amount": 0.6, "response_range": 0.7, "notches": 0.5, "face": 1}
+    }
+  ]
+}

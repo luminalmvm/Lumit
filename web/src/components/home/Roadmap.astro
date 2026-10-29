@@ -197,10 +197,10 @@ const roadmap = [
       color-mix(in srgb, var(--k) 70%, var(--color-ink)) 0 6px,
       color-mix(in srgb, var(--k) 35%, var(--color-ink)) 6px 12px
     );
-    will-change: transform;
   }
   @media (prefers-reduced-motion: no-preference) {
     .seg-now i::before {
+      will-change: transform;
       animation: stripes 1.4s linear infinite;
     }
   }

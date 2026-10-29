@@ -80,9 +80,13 @@ class _HouseSliderState extends State<HouseSlider>
 
   double get _shown => _pending ?? widget.value;
 
+  /// The knob's radius at rest. Its centre runs this far in from each end, so
+  /// at 0 and at 1 it sits inside the track rather than hanging off it.
+  static const double _knob = 5;
+
   double _fromDx(double dx, double width) {
-    var v =
-        widget.min + (dx / width).clamp(0.0, 1.0) * (widget.max - widget.min);
+    final frac = ((dx - _knob) / (width - 2 * _knob)).clamp(0.0, 1.0);
+    var v = widget.min + frac * (widget.max - widget.min);
     final s = widget.step;
     if (s != null && s > 0) v = (v / s).round() * s;
     return v.clamp(widget.min, widget.max).toDouble();
@@ -148,7 +152,8 @@ class _HouseSliderState extends State<HouseSlider>
                 track: t.hairlineStrong,
                 fill: t.accent,
                 knob: Color.lerp(t.accent, t.textPrimary, _glow.light * 0.3)!,
-                knobRadius: 5 + _glow.swell(motion),
+                knobRadius: _knob + _glow.swell(motion),
+                inset: _knob,
                 frac: frac,
               ),
             ),
@@ -170,12 +175,14 @@ class _HouseSliderState extends State<HouseSlider>
 class _SliderPainter extends CustomPainter {
   final Color track, fill, knob;
   final double knobRadius;
+  final double inset;
   final double frac;
   const _SliderPainter({
     required this.track,
     required this.fill,
     required this.knob,
     required this.knobRadius,
+    required this.inset,
     required this.frac,
   });
 
@@ -187,15 +194,15 @@ class _SliderPainter extends CustomPainter {
       const Radius.circular(2),
     );
     canvas.drawRRect(trackRect, Paint()..color = track);
+    final x = inset + (size.width - 2 * inset) * frac;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, y - 2, size.width * frac, 4),
+        Rect.fromLTWH(0, y - 2, x, 4),
         const Radius.circular(2),
       ),
       Paint()..color = fill,
     );
-    canvas.drawCircle(
-        Offset(size.width * frac, y), knobRadius, Paint()..color = knob);
+    canvas.drawCircle(Offset(x, y), knobRadius, Paint()..color = knob);
   }
 
   @override
@@ -204,5 +211,6 @@ class _SliderPainter extends CustomPainter {
       old.fill != fill ||
       old.track != track ||
       old.knob != knob ||
-      old.knobRadius != knobRadius;
+      old.knobRadius != knobRadius ||
+      old.inset != inset;
 }

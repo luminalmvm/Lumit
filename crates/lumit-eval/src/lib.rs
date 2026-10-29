@@ -362,6 +362,13 @@ fn feed_comp(
         h.update(b"room");
         h.update(&doc.graph_room.frames().to_le_bytes());
     }
+    // The largest picture, which is the machine's and not the project's, but
+    // changes the pixels of anything it cuts all the same.
+    let side = lumit_core::largest_picture::side();
+    if side != lumit_core::largest_picture::DEFAULT_SIDE {
+        h.update(b"side");
+        h.update(&side.to_le_bytes());
+    }
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
     }
@@ -930,6 +937,22 @@ fn feed_effect_stack(
             h.update(b"lens/");
             h.update(&(text.len() as u64).to_le_bytes());
             h.update(text.as_bytes());
+        }
+        // A Sprite flare's design lives there as well.
+        if let Some(text) = lumit_core::fx::flare::design::embedded_text(e) {
+            h.update(b"flare/");
+            h.update(&(text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
+        }
+        // Across a blurred shutter it draws the light where it is either
+        // side of the frame, which this frame's rows alone don't say.
+        let shutter =
+            comp.motion_blur.enabled && marker_layer.is_some_and(|l| l.switches.motion_blur);
+        if e.effect.match_name == "sprite_flare"
+            && (shutter || lumit_core::fx::effects::sprite_flare::moves_with_time(e))
+        {
+            h.update(b"flare-time");
+            feed_f64(h, lt);
         }
         // Track points draws nothing until its analysis lands, and a landing
         // changes no row. Whether one is in hand for these rows joins the key,

@@ -1,10 +1,11 @@
 // A clip plays while it is on screen and stops when it is not, so a page of
 // them costs what the ones in view cost. Nothing is fetched until a clip
-// first comes into view. A visitor who has asked for less motion gets the
-// pictures. A workspace behind the front one in Meet the interface keeps
+// first comes into view. A visitor who has asked for less motion or to save
+// data gets the pictures. A workspace behind the front one in Meet the interface keeps
 // still, and its clip starts when it is brought forward.
 const clips = document.querySelectorAll<HTMLVideoElement>("[data-clip]");
-if (clips.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+if (clips.length && !saveData && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   const seen = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {

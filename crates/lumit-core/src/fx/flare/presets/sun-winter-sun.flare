@@ -1,0 +1,39 @@
+{
+  "lumit_flare": 1,
+  "name": "Winter sun",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 65, "falloff": 0.3, "core": 1.5, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.9, 0.95, 1.0]]},
+      "values": {"size": 240, "brightness": 0.03, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"points": 6, "size": 500, "thickness": 3.0, "brightness": 0.35}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "values": {"size": 340, "thickness": 24, "brightness": 0.3, "arc": 140, "grow": 0.5, "fringe": 1.0, "softness": 0.6, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "values": {"size": 480, "thickness": 40, "brightness": 0.05, "softness": 0.9, "fringe": 1.0}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[0.6, 0.8, 1.0], [0.8, 0.9, 1.0], [0.7, 0.75, 1.0]]},
+      "values": {"count": 6, "size": 50, "brightness": 0.4, "sides": 8, "roundness": 0.2, "fill": 0.12, "edge": 0.5477226, "edge_width": 0.06, "softness": 0.1, "fringe": 0.2, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 1.9}
+    }
+  ]
+}

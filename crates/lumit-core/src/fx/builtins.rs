@@ -285,8 +285,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // 540 is the middle of a 1080p comp and the top-left quarter of a
             // 4K one, and a fresh radial blur must spin about the middle of
             // whatever frame it landed on.
-            ("radial_blur", "centre_x") => w * 0.5,
-            ("radial_blur", "centre_y") => h * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_x") => w * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_y") => h * 0.5,
             // Card wipe's Transition width is a distance across the frame,
             // and its declared half-a-frame default is only *half a frame* on
             // the comp it landed on. The default Flip order runs left to
@@ -554,6 +554,11 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
         // Lens flare v11 → v12: Ghost softness was a per cent of the frame's
         // *diagonal*, the last exception to the px@comp rule, so the
         // diagonal is the basis it converts against.
+        // Sprite flare v1 → v2: its rows became a design, drawn about a
+        // centre that was always the middle of the comp.
+        if e.effect.match_name == "sprite_flare" && e.effect.version < 2 {
+            crate::fx::effects::sprite_flare::migrate_v1(e, w, h);
+        }
         if e.effect.match_name == "lens_flare" && e.effect.version < 12 {
             let diag = w.hypot(h);
             for p in &mut e.params {

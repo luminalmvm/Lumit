@@ -67,6 +67,7 @@ import 'effect_param_row_frb.dart'
 import 'graph_groups.dart';
 import 'graph_panel.dart';
 import 'placeholder.dart';
+import 'flare_window.dart';
 import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
@@ -753,6 +754,27 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           home: InstanceHome.graph(widget.comp),
           effect: effect,
           param: param,
+          onApplied: () {
+            ui.model.refresh();
+            _reload();
+          },
+        )) {
+          return;
+        }
+        if (pressFlareButton(
+          context: context,
+          home: InstanceHome.graph(
+            widget.comp,
+            draw: (staged) => widget.comp.renderFrameWithGraphPreview(
+              frame: BigInt.from(ui.playheadFrame.value),
+              scale: ui.viewerScale,
+              instances: staged,
+            ),
+          ),
+          effect: effect,
+          param: param,
+          comp: widget.comp,
+          frame: BigInt.from(ui.playheadFrame.value),
           onApplied: () {
             ui.model.refresh();
             _reload();

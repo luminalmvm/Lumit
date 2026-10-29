@@ -175,6 +175,12 @@ pub struct Glow {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub tint: [f32; 4],
 
+    /// How much of the top of the glow bends towards white instead of
+    /// clipping, so a hot core fades out rather than ending in a hard edge.
+    /// 0 is off.
+    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
+    pub rolloff: f32,
+
     /// On keeps the halo inside the layer's own picture, holding its strength
     /// along the edge. Off lets it spread past the edge, which is what a shape
     /// or a line of text wants: their picture is only as big as the art, and a
@@ -230,6 +236,7 @@ impl Glow {
                 fringe_wavelength: self.chromatic_wavelength,
                 // Rounded in f64, as every other spectral pack rounds it.
                 fringe_samples: f64::from(self.chromatic_samples).round() as i32,
+                rolloff: self.rolloff.clamp(0.0, 1.0),
             },
             self.threshold.max(0.0),
             self.knee.clamp(0.0, 1.0),

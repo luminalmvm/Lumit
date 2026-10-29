@@ -48,6 +48,10 @@ import Base from "../layouts/Base.astro";
     document.getElementById("join-open").href = link;
     document.getElementById("join-empty").hidden = true;
     document.getElementById("join-ready").hidden = false;
-    window.location.href = link;
+    // A phone or tablet has no Lumit to open, and says so in a way that looks
+    // broken (the same check as the hero's in index.astro).
+    const ua = navigator.userAgent;
+    const handheld = /Android|iPhone|iPad|iPod/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
+    if (!handheld) window.location.href = link;
   })();
 </script>

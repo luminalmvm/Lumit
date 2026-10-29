@@ -69,6 +69,7 @@ Future<void> showCommandPaletteFrb({
 }) =>
     showLumitModal<void>(
       context: context,
+      still: true,
       builder: (close) => _Palette(
         commands: commands,
         recent: recent,

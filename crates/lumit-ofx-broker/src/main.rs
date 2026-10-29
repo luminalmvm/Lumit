@@ -29,6 +29,7 @@ use interprocess::local_socket::SendHalf;
 use lumit_eval::epoch::Epoch;
 use lumit_ofx::bundle::Bundle;
 use lumit_ofx::describe::{describe, Context, PluginDescriptor};
+use lumit_ofx::gpu::{GpuRender, GPU_FAILURES_ALLOWED};
 use lumit_ofx::image::{Frame16, RectI};
 use lumit_ofx::instance::{time_key, Instance, ParamSnapshot};
 use lumit_ofx::ipc::pipe::{self};
@@ -36,7 +37,7 @@ use lumit_ofx::ipc::proto::{
     BrokerMessage, FrameWanted, HostMessage, InstanceId, PROTOCOL_VERSION,
 };
 use lumit_ofx::ipc::shm::Ring;
-use lumit_ofx::render::{render_with_prefetch, RenderError, RenderRequest};
+use lumit_ofx::render::{render_with_prefetch, HostCancelScope, RenderError, RenderRequest};
 
 /// The protocol version this broker announces. Normally
 /// [`PROTOCOL_VERSION`]; an environment variable overrides it so that a test
@@ -104,6 +105,10 @@ fn run(bundle_path: &std::ffi::OsStr, pipe_name: &str) -> Result<(), String> {
         },
     )?;
 
+    // The card first, so the host table the plugin reads at load says what
+    // this machine really has (`lumit_ofx::gpu`).
+    lumit_ofx::gpu::open_in_broker();
+
     let mut bundle = Bundle::open(bundle_path).map_err(|error| error.to_string())?;
     bundle.load();
 
@@ -114,6 +119,7 @@ fn run(bundle_path: &std::ffi::OsStr, pipe_name: &str) -> Result<(), String> {
         ring: None,
         described: Vec::new(),
         instances: BTreeMap::new(),
+        gpu_failures: BTreeMap::new(),
     };
     session.serve()
 }
@@ -127,6 +133,8 @@ fn say(sender: &mut SendHalf, message: &BrokerMessage) -> Result<(), String> {
 struct Live {
     plugin: usize,
     instance: Instance,
+    /// The graphics card path its plugin declared and this broker opened.
+    gpu: Option<GpuRender>,
 }
 
 /// The broker's whole state. One bundle, one pipe, one ring.
@@ -139,6 +147,9 @@ struct Session {
     /// bundle. The index into this list is what the host names.
     described: Vec<(usize, PluginDescriptor)>,
     instances: BTreeMap<InstanceId, Live>,
+    /// How many frames each plugin, by its place in the bundle, has failed on
+    /// the card. At [`GPU_FAILURES_ALLOWED`] it stays on the CPU.
+    gpu_failures: BTreeMap<usize, u32>,
 }
 
 impl Session {
@@ -188,7 +199,18 @@ impl Session {
             }
             HostMessage::Describe => {
                 let (plugins, refused) = self.describe_all();
-                self.reply(&BrokerMessage::Described { plugins, refused })
+                let paths = plugins
+                    .iter()
+                    .map(|plugin| {
+                        lumit_ofx::gpu::path_for(&plugin.identifier, plugin.version)
+                            .map(|gpu| gpu.api)
+                    })
+                    .collect();
+                self.reply(&BrokerMessage::Described {
+                    plugins,
+                    refused,
+                    paths,
+                })
             }
             HostMessage::CreateInstance {
                 instance,
@@ -310,6 +332,7 @@ impl Session {
                     Live {
                         plugin: bundle_index,
                         instance: created,
+                        gpu: lumit_ofx::gpu::path_for(&descriptor.identifier, descriptor.version),
                     },
                 );
                 self.reply(&BrokerMessage::Created)
@@ -348,6 +371,7 @@ impl Session {
             order,
             inputs: frames,
             neighbours,
+            gpu: None,
         }
     }
 
@@ -356,7 +380,7 @@ impl Session {
     fn render(
         &mut self,
         instance: InstanceId,
-        request: RenderRequest,
+        mut request: RenderRequest,
         output: u32,
     ) -> Result<(), String> {
         // The instance, the plugin and the two pipe halves are all borrowed out
@@ -373,17 +397,40 @@ impl Session {
         let sender = &mut self.sender;
         let receiver = &mut self.receiver;
 
-        // Never cancelled here: cancellation lives in the host, which drops the
-        // frame it no longer wants. Carrying the epoch across the pipe is worth
-        // doing only once there is a plugin slow enough to need it, and the
-        // watchdog covers the case that matters.
+        // The host's own epoch arrives as the ring's cancel word, which the
+        // plugin's `abort` and the driver's checks read for this render.
         let epoch = Epoch::new();
         let token = epoch.token();
+        let _cancel = ring.and_then(Ring::cancel_word).map(HostCancelScope::new);
+        let cancelled = || ring.is_some_and(Ring::cancel_raised);
 
         let mut prefetch = |wanted: &[FrameWanted]| fetch(sender, receiver, ring, wanted);
 
-        let rendered =
+        // On the card when the plugin can and has not kept failing there.
+        let failures = self.gpu_failures.get(&live.plugin).copied().unwrap_or(0);
+        request.gpu = live.gpu.filter(|_| failures < GPU_FAILURES_ALLOWED);
+        let on_card = request.gpu.is_some();
+        let mut rendered =
             render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
+        // A frame the card failed on is redone on the CPU, and is not a strike
+        // unless the CPU fails too.
+        if on_card && rendered.is_err() && !cancelled() {
+            request.gpu = None;
+            rendered =
+                render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
+            if rendered.is_ok() {
+                *self.gpu_failures.entry(live.plugin).or_insert(0) += 1;
+            }
+        }
+        // The path the next frame takes, which is what the frame key follows.
+        let failures = self.gpu_failures.get(&live.plugin).copied().unwrap_or(0);
+        let path = live
+            .gpu
+            .filter(|_| failures < GPU_FAILURES_ALLOWED)
+            .map(|gpu| gpu.api);
+        if cancelled() || matches!(rendered, Err(RenderError::Cancelled)) {
+            return self.reply(&BrokerMessage::Cancelled);
+        }
         let (frame, frames_needed, identity_of) = match rendered {
             Ok(rendered) => (rendered.frame, rendered.frames_needed, rendered.identity_of),
             Err(error) => return self.failed("render", &error.to_string()),
@@ -400,6 +447,7 @@ impl Session {
             slot: output,
             frames_needed,
             identity_of,
+            path,
         })
     }
 

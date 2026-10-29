@@ -132,6 +132,29 @@ fn drag_scale_for(full_res: bool, width: u32, height: u32, scale: f32) -> f32 {
     }
 }
 
+/// Drop every Lens flare in `document` to Draft for a drag frame. The flare
+/// renders about 6 times faster there, and the committed frame after the drag
+/// is drawn at its own quality. Left alone with full-resolution drags, which
+/// render a drag exactly as a committed frame.
+pub(crate) fn draft_flares(document: &mut lumit_core::model::Document) {
+    if FULL_RES_DRAGS.load(Ordering::Relaxed) {
+        return;
+    }
+    for item in &mut document.items {
+        let lumit_core::model::ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        for fx in comp.effects_mut() {
+            if fx.effect.match_name != "lens_flare" {
+                continue;
+            }
+            if let Some(quality) = fx.params.iter_mut().find(|p| p.id == "quality") {
+                quality.value = lumit_core::model::EffectValue::Choice(0);
+            }
+        }
+    }
+}
+
 /// Report one genuine render's measured `cost_secs` at frame rate `fps`, but
 /// only when it was issued at the controller's own tier scale (an Auto render) —
 /// a manual render at a different `scale` is not the controller's business and

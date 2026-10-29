@@ -321,7 +321,7 @@ class VolumeBandState extends State<VolumeBand> {
             diamond: t.animated,
             readout: readout,
             readoutStyle:
-                t.mono.copyWith(fontSize: 8, color: t.textMuted),
+                t.mono.copyWith(fontSize: 9, color: t.textMuted),
             keyed: _keys.isNotEmpty,
           ),
         ),

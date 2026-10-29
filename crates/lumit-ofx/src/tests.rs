@@ -1948,8 +1948,8 @@ fn a_plugins_memory_reaches_its_render() {
     let pushed = resolve(&inst);
     assert_eq!(
         pushed.len(),
-        1,
-        "the memory's hash rides in the bag: {pushed:?}"
+        2,
+        "the memory's hash and the render path ride in the bag: {pushed:?}"
     );
     assert_ne!(pushed[0].1, Value::Int(0));
     def.apply_cpu_at(inst.id, 0.0, &mut rgba, 2, 2, Params::EMPTY);

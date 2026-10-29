@@ -34,7 +34,7 @@ const links = [
           <a
             href={l.href}
             class:list={[
-              "text-fg no-underline transition-colors hover:text-accent-2",
+              "py-3 text-fg no-underline transition-colors hover:text-accent-2",
               !l.small && "hidden sm:inline",
             ]}
           >
@@ -44,7 +44,7 @@ const links = [
       }
       <a
         href="/download"
-        class="text-fg no-underline transition-colors hover:text-accent-2 sm:ml-[32px]"
+        class="py-3 text-fg no-underline transition-colors hover:text-accent-2 sm:ml-[32px]"
       >
         Download
       </a>
@@ -71,11 +71,17 @@ const links = [
     background: linear-gradient(to right, transparent, var(--color-accent-2));
     transform-origin: left;
   }
+  /* The marker sits at the left of a box as wide as the bar, and the box is
+     what moves, so it costs no layout. */
   .playhead i {
     position: absolute;
+    inset: 0;
+  }
+  .playhead i::before {
+    content: "";
+    position: absolute;
     top: 0;
-    left: 0;
-    margin-left: -5px;
+    left: -5px;
     border: 5px solid transparent;
     border-top: 7px solid var(--color-accent-2);
   }
@@ -97,8 +103,8 @@ const links = [
     to { transform: scaleX(1); }
   }
   @keyframes playhead-move {
-    from { left: 0; }
-    to { left: 100%; }
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
   }
 
   /* The bar always carries its own ground, on every page and at every scroll
@@ -140,5 +146,15 @@ const links = [
     backdrop-filter: blur(8px);
     -webkit-mask-image: linear-gradient(to top, transparent 72%, #000 100%);
     mask-image: linear-gradient(to top, transparent 72%, #000 100%);
+  }
+  /* A phone has less to spare, so it keeps one band, faded like the first. */
+  @media (pointer: coarse) {
+    .blur-stack > div:not(:last-child) {
+      display: none;
+    }
+    .blur-stack > div:last-child {
+      -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 45%);
+      mask-image: linear-gradient(to top, transparent 0%, #000 45%);
+    }
   }
 </style>

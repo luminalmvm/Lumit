@@ -1052,6 +1052,13 @@ pub fn lenses_dir() -> Option<PathBuf> {
     Some(dirs.data_dir().join("lenses"))
 }
 
+/// The user's own flare designs, as `.flare` files saved from the Flare
+/// window. Beside the lenses, and lazily made the same way.
+pub fn flares_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_dir().join("flares"))
+}
+
 /// Where the user's own **export** presets live (docs/07 §11) — one small
 /// JSON file beside the effect-preset library, in the same roaming app-data
 /// area, because a saved export setting should follow the user between

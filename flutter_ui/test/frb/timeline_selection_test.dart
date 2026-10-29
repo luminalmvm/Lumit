@@ -308,7 +308,8 @@ void main() {
       // callback a preset tile presses.
       final apply = p.uiState.easingApply.value;
       expect(apply, isNotNull, reason: 'lane view publishes the claim');
-      apply!(easingPresets.firstWhere((e) => e.id == 'sineIn').curve);
+      apply!(easingPresets.firstWhere((e) => e.id == 'sineIn').curve,
+          EaseSides.both);
       await tester.pumpAndSettle();
 
       for (final layer in [a, b]) {

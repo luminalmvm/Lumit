@@ -75,6 +75,7 @@ import 'effect_param_row_frb.dart'
 import 'graph_groups.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
+import 'flare_window.dart' show pressFlareButton;
 import 'lens_window.dart' show pressLensButton;
 import '../state/share.dart';
 import 'placeholder.dart';
@@ -1583,6 +1584,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         onApplied: applied)) {
       return;
     }
+    if (pressFlareButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied,
+        comp: comp,
+        frame: frame)) {
+      return;
+    }
     if (info.name == 'node_graph' && param == 'open') {
       final project = Provider.of<LumitState>(context, listen: false).project;
       final inner = graphCompById(project, info.nodeGraphComp);
@@ -2297,13 +2308,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// commits.
   void _addEffect(String name) {
     final layer = _layer;
-    if (layer == null) return;
-    try {
-      layer.addEffect(name: name);
-    } catch (_) {
-      return;
-    }
-    _ui?.model.refresh();
+    if (layer == null || !(_ui?.addEffect(layer, name) ?? false)) return;
     _reload();
   }
 
@@ -3540,7 +3545,7 @@ class GraphNodeCard extends StatelessWidget {
                     border: Border.all(color: t.warning),
                   ),
                   child: Text('!',
-                      style: t.mono.copyWith(fontSize: 8, color: t.warning)),
+                      style: t.mono.copyWith(fontSize: 9, color: t.warning)),
                 ),
               ),
             ],

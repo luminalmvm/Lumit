@@ -210,9 +210,9 @@ class BareDropdown<T> extends StatelessWidget {
                         message: why,
                         child: MenuRow(
                           selected: options[i] == value,
+                          enabled: false,
                           onPressed: () {},
-                          child: Text(label(options[i]),
-                              style: TextStyle(color: t.textDisabled)),
+                          child: Text(label(options[i])),
                         ),
                       )
                     else
@@ -397,11 +397,11 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
               width: 288,
               autofocus: true,
               hint: widget.hint,
+              // Enter takes the row that is lit: the first match as the
+              // search narrows, or wherever the arrow keys moved it.
               onSubmitted: (_) {
-                // Enter takes the only match, which is what a search that
-                // has narrowed to one thing means.
-                final only = _entries.where((e) => e.optionIndex != null);
-                if (only.length == 1) widget.onPick(only.first.optionIndex);
+                final lit = FloatSurface.litRow(context)?.value;
+                if (lit is int) widget.onPick(lit);
               },
             ),
           ),
@@ -432,6 +432,7 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
                       final idx = e.optionIndex!;
                       return MenuRow(
                         selected: idx == widget.value,
+                        hoverId: idx,
                         onPressed: () => widget.onPick(idx),
                         child: Text(
                           widget.options[idx],
@@ -453,6 +454,9 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
     super.initState();
     _query.addListener(() {
       setState(() => _entries = _build(_query.text));
+      final first = _entries.where((e) => e.optionIndex != null).firstOrNull;
+      FloatSurface.litRow(context)?.value =
+          _query.text.isEmpty ? null : first?.optionIndex;
     });
   }
 }
@@ -466,6 +470,11 @@ class BareLazyDropdown<T> extends StatelessWidget {
   /// What the closed button shows.
   final String label;
 
+  /// The value chosen, which the list marks. Two options can share a name,
+  /// two masks called Mask 1 for instance, so the mark goes by value. Left
+  /// out, it goes by [label].
+  final Object? value;
+
   /// The options, as (value, label) pairs — called when the menu opens.
   final List<(T, String)> Function() options;
   final ValueChanged<T> onChanged;
@@ -477,10 +486,13 @@ class BareLazyDropdown<T> extends StatelessWidget {
   const BareLazyDropdown({
     super.key,
     required this.label,
+    this.value = _byLabel,
     required this.options,
     required this.onChanged,
     this.dense = false,
   });
+
+  static const Object _byLabel = Object();
 
   @override
   Widget build(BuildContext context) {
@@ -503,7 +515,9 @@ class BareLazyDropdown<T> extends StatelessWidget {
                 children: [
                   for (final (value, optionLabel) in built)
                     MenuRow(
-                      selected: optionLabel == label,
+                      selected: identical(this.value, _byLabel)
+                          ? optionLabel == label
+                          : value == this.value,
                       // Wrapped in a record so a null value survives the
                       // popup's null-means-dismissed contract.
                       onPressed: () => close((value,)),

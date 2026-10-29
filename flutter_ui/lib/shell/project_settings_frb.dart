@@ -17,6 +17,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show largestPicture;
 
 import '../l10n/engine_labels.dart' show colourProblem;
 import '../l10n/strings.dart';
@@ -163,6 +164,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     final inUse = project.antiAliasingInUse();
     final depth = project.colourDepth();
     final depthInUse = project.colourDepthInUse();
+    final largest = largestPicture();
     final room = project.graphRoom();
     return [
       settingsSection(t, l10n.settingsGroupRendering, [
@@ -239,8 +241,8 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
             ),
           ),
         ),
-        // Maximum lets a box grow to the widest texture (8192 a side), so say
-        // what that costs at the depth the card is working in.
+        // Maximum lets a box grow to the largest picture, so say what that
+        // costs at the depth the card is working in.
         if (room == 0)
           Padding(
             key: const ValueKey('project-graph-room-memory'),
@@ -248,7 +250,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
                 settingsRowPadding, 0, settingsRowPadding, 6),
             child: Text(
               l10n.settingsGraphRoomMemory(
-                  writtenBytes(8192 * 8192 * depthInUse ~/ 2)),
+                  writtenBytes(largest * largest * depthInUse ~/ 2)),
               style: t.small.copyWith(color: t.warning),
             ),
           ),

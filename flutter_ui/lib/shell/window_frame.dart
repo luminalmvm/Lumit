@@ -24,7 +24,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../icons/icon_style.dart';
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
@@ -215,10 +214,7 @@ class _WindowButtonsState extends State<_WindowButtons>
       );
 }
 
-/// The four marks, named as a person's own icon folder names them
-/// (icons/icon_style.dart).
-///
-/// Each style draws its own (tool/icons/glyphs.json, Window): Studio in the
+/// The four marks. Each style draws its own (tool/icons/glyphs.json, Window): Studio in the
 /// set's ordinary hand, Desk square and mitred, Lantern smaller and rounder.
 enum _Mark {
   windowMinimise,
@@ -302,8 +298,7 @@ class _WindowButtonState extends State<_WindowButton> {
               ),
               child: Center(
                 child: LumitIcon(
-                  IconStyle.resolve(
-                      widget.mark.name, widget.mark.glyph(t.shape), t),
+                  widget.mark.glyph(t.shape),
                   // At rest on Lantern the button stands on the room, so its
                   // ink is the room's.
                   colour: closing

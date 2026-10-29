@@ -57,14 +57,14 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
 
 // Resolve a tap index under the edge policy; -1 means transparent (no tap).
 // == fx_transform.wgsl's edge_idx and cpu::edge_index.
-fn edge_idx(i: i32, len: i32) -> i32 {
+fn edge_idx(i: i32, len: i32, e: u32) -> i32 {
     if (i >= 0 && i < len) {
         return i;
     }
-    if (p.edge == 1u) {
+    if (e == 1u) {
         return clamp(i, 0, len - 1);
     }
-    if (p.edge == 2u) {
+    if (e == 2u) {
         var m = i;
         if (m < 0) {
             m = -m;
@@ -79,8 +79,10 @@ fn edge_idx(i: i32, len: i32) -> i32 {
 // One integer tap under the edge policy; transparent taps contribute 0 while
 // keeping their bilinear weight (== the cpu::bilinear_edge rule).
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
-    let xi = edge_idx(x, size.x);
-    let yi = edge_idx(y, size.y);
+    // Bits 2 and up hold a separate y policy plus one (== cpu::edge_y).
+    let ey = select((p.edge >> 2u) - 1u, p.edge & 3u, (p.edge >> 2u) == 0u);
+    let xi = edge_idx(x, size.x, p.edge & 3u);
+    let yi = edge_idx(y, size.y, ey);
     let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
     return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }

@@ -537,6 +537,7 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
         children: [
           AnimatedSwitcher(
             duration: ThemeScope.of(context).motion.swap.duration,
+            reverseDuration: Duration.zero,
             child: Text(
               heading,
               key: ValueKey<String>(heading),
@@ -670,6 +671,7 @@ Widget reviewLinkWell(LumitTheme t, String url,
       ),
       child: AnimatedSwitcher(
         duration: fade,
+        reverseDuration: Duration.zero,
         child: standIn == null
             ? Text(
                 url,

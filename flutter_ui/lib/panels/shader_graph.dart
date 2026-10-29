@@ -1199,6 +1199,13 @@ class _ShaderGraphThumbState extends State<ShaderGraphThumb> {
                 color: Color.lerp(t.hairline, t.textPrimary, 0.7 * lit)!),
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
           ),
+          // The edge again over the content, which would otherwise cover it where
+          // the corner curves.
+          foregroundDecoration: BoxDecoration(
+            border: Border.all(
+                color: Color.lerp(t.hairline, t.textPrimary, 0.7 * lit)!),
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          ),
           clipBehavior: Clip.antiAlias,
           child: drawn == null
               ? Center(

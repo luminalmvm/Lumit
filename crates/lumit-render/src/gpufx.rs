@@ -772,6 +772,10 @@ impl GpuEffect for SpriteFlare {
     fn match_name(&self) -> &'static str {
         "sprite_flare"
     }
+    /// The design kept in the effect rides the kept lens's carriage.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LensFile
+    }
     fn run(
         &self,
         fx: &FxEngine,
@@ -780,28 +784,71 @@ impl GpuEffect for SpriteFlare {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let s = effects::sprite_flare::SpriteFlare::read(p).packed();
+        use effects::sprite_flare::{design_of, SpriteFlare};
+        use lumit_core::fx::flare::{instances, textures};
+        // The layer rows' pictures arrive in row order.
+        let picture = |id: &str| {
+            let at = <SpriteFlare as EffectMetadata>::SCHEMA
+                .layer_inputs()
+                .position(|row| row == id)?;
+            aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
+        };
+        use lumit_gpu::fx::sprite_flare as sf;
+        let mut frame = SpriteFlare::frame(p);
+        if let Some(stream) = points_input_at(aux, 0, frame.px_scale) {
+            frame.lights = SpriteFlare::points_lights(p, &stream).unwrap_or(frame.lights);
+        }
+        let spots = SpriteFlare::spots(p);
+        if frame.lights.is_empty() && spots.is_none() {
+            return tex.clone();
+        }
+        let (luma, radius) = SpriteFlare::hiding(p);
+        let design = design_of(aux.lens_file());
+        let list: Vec<_> = instances::expand(&design, &frame, w, h)
+            .iter()
+            .map(instances::Instance::packed)
+            .collect();
+        let lights: Vec<[f32; 8]> = frame
+            .lights
+            .iter()
+            .map(|l| {
+                let [r, g, b] = l.colour;
+                [l.pos[0], l.pos[1], l.gain, l.scale, r, g, b, 0.0]
+            })
+            .collect();
         fx.sprite_flare(
             ctx,
             tex,
             w,
             h,
-            &lumit_gpu::fx::blur::SpriteFlareOp {
-                light: s.light,
-                intensity: s.intensity,
-                tint: s.tint,
-                glow_size: s.glow_size,
-                glow_intensity: s.glow_intensity,
-                ghosts: s.ghosts,
-                ghost_spacing: s.ghost_spacing,
-                ghost_size: s.ghost_size,
-                ghost_intensity: s.ghost_intensity,
-                streak_length: s.streak_length,
-                streak_intensity: s.streak_intensity,
-                streak_angle_deg: s.streak_angle_deg,
-                mix: s.mix,
+            &sf::SpriteFlareOp {
+                instances: &list,
+                lights: &lights,
+                centre: frame.centre,
+                edge_fade: frame.edge_fade * frame.px_scale,
+                spots: spots.map(|s| sf::SpotsOp {
+                    threshold: s.threshold,
+                    softness: s.softness,
+                    use_colour: s.use_colour,
+                    colour: s.colour,
+                    gain: s.gain,
+                }),
+                hide: picture("hide_behind").map(|picture| sf::HideOp {
+                    picture,
+                    luma,
+                    radius,
+                }),
+                depth: picture("depth_m").zip(SpriteFlare::light_distance(p)).map(
+                    |(picture, metres)| sf::DepthOp {
+                        picture,
+                        metres,
+                        radius,
+                    },
+                ),
+                layer: picture("texture_layer"),
+                textures: textures::all(),
             },
         )
     }
@@ -3515,6 +3562,7 @@ impl GpuEffect for Glow {
                 intensity,
                 tint,
                 mix,
+                rolloff: halo.rolloff,
             },
         )
     }

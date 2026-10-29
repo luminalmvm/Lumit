@@ -11,11 +11,6 @@ import Features from "../components/home/Features.astro";
 import Roadmap from "../components/home/Roadmap.astro";
 import Closing from "../components/home/Closing.astro";
 
-// The hero line arrives a word at a time. One span per word, each carrying its
-// own index; the delay is arithmetic in CSS rather than script.
-const tagline =
-  "Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.";
-const words = tagline.split(" ");
 ---
 
 <Base
@@ -24,22 +19,9 @@ const words = tagline.split(" ");
 >
   {/* Everything below the hero starts hidden and is revealed by the script at
       the foot of this page. Without script the class is never set and the page
-      is simply the page.
-
-      `hold` keeps the whole page unseen until the hero has all its parts, so
-      nothing of it shows half-made: the field says when (HeroField.astro).
-      Two seconds is as long as anyone is kept waiting for it. */}
+      is simply the page. */}
   <script is:inline>
-    (function () {
-      var root = document.documentElement;
-      root.classList.add("anim", "hold");
-      document.addEventListener("hero:ready", function () {
-        root.classList.remove("hold");
-      }, { once: true });
-      setTimeout(function () {
-        if (root.classList.contains("hold")) document.dispatchEvent(new Event("hero:ready"));
-      }, 2000);
-    })();
+    document.documentElement.classList.add("anim");
   </script>
 
   {/* ---------- hero ---------- */}
@@ -52,16 +34,9 @@ const words = tagline.split(" ");
         <span class="sr-only">Lumit - Compositing that adapts to your workflow.</span>
       </h1>
 
-      {/* The hero arrives once the wordmark is home, and the download button
-          leads: button, line, the two links under it. */}
-      <p class="words relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80" data-reveal style="--base:150ms">
-        {
-          words.map((word, i) => (
-            <Fragment>
-              <span class="word" style={`--i:${i}`}>{word}</span>{" "}
-            </Fragment>
-          ))
-        }
+      {/* The download button leads, then the line and the link under it. */}
+      <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80" data-reveal style="--i:2">
+        Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.
       </p>
 
       <div class="lead relative mt-7 flex flex-wrap items-center justify-center gap-3">
@@ -115,10 +90,6 @@ const words = tagline.split(" ");
         })();
       </script>
 
-      <p class="relative mt-6 text-[17px] text-fg-2" data-reveal style="--i:6">
-        Let your creativity flow. Free and open-source, forever.
-      </p>
-
       {/* The hero is a composition, and this is its timeline: what is above is
           drawn from these keyframes, and a visitor can move them. */}
       <div class="relative mt-12 flex w-full justify-center" data-reveal style="--i:8">
@@ -147,10 +118,11 @@ const words = tagline.split(" ");
       directions 45 degrees apart leave sixteen copies on two rings - the
       shape a point of light takes through an out-of-focus lens, where a
       Gaussian would only make a soft dot. The small blur first fills in
-      between the copies. The script sets every distance, so the blur can
-      open up and close down. Units are CSS pixels. The two tables either
-      side are the script's too: the picture is blurred through a curve that
-      makes its bright end count for more, and comes back through the inverse. */}
+      between the copies. The script sets every distance once, and the blur
+      is only switched on and off, since the veil over it is what fades.
+      Units are CSS pixels. The two tables either side are the script's too:
+      the picture is blurred through a curve that makes its bright end count
+      for more, and comes back through the inverse. */}
   <svg class="lens-defs" width="0" height="0" aria-hidden="true" focusable="false">
     <filter id="lens" color-interpolation-filters="sRGB">
       <feComponentTransfer in="SourceGraphic" result="lit">
@@ -181,10 +153,10 @@ const words = tagline.split(" ");
 </Base>
 
 <style>
-  /* The download button does not wait for the wordmark: it blurs in as the
-     page is shown, and the rest of the hero follows the lockup home. */
-  :global(html.anim:not(.hold)) .lead {
-    animation: piece-in 500ms both;
+  /* The download button blurs in as the page is shown, and the rest of the
+     hero follows it. */
+  :global(html.anim) .lead {
+    animation: piece-in 500ms var(--ease-out) both;
   }
   @keyframes piece-in {
     from {
@@ -199,42 +171,8 @@ const words = tagline.split(" ");
     }
   }
 
-  /* The hero line is the one that arrives a word at a time, so the paragraph
-     itself never blurs - its words do, each taking 500ms and starting 16ms
-     after the one before it, the line as a whole starting at --base. */
-  :global(html.anim) [data-reveal].words {
-    opacity: 1;
-    filter: none;
-    transform: none;
-    transition: none;
-  }
-  :global(html.anim) .words .word {
-    opacity: 0;
-  }
-  :global(html.anim) .words.shown .word {
-    animation: word-in 500ms both;
-    animation-delay: calc(var(--base, 0ms) + var(--i) * 16ms);
-  }
-  .word {
-    display: inline-block;
-  }
-  /* Both ends are written out. A keyframe list with no `to` takes the element's
-     own style as its end, and a word's own style is the hidden one above - so
-     an implicit end would animate it from invisible to invisible. */
-  @keyframes word-in {
-    from {
-      opacity: 0;
-      filter: blur(6px);
-    }
-    to {
-      opacity: 1;
-      filter: none;
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    :global(html.anim) .lead,
-    :global(html.anim) .words .word {
+    :global(html.anim) .lead {
       animation: none;
       opacity: 1;
       filter: none;
@@ -288,10 +226,6 @@ const words = tagline.split(" ");
     transform-origin: 0 0;
     user-select: none;
   }
-  /* It is forward already, so its strip does not say how to get it there. */
-  .lightbox :global(.forward .shot-bar > span:last-child) {
-    visibility: hidden;
-  }
 </style>
 
 <style is:global>
@@ -307,13 +241,6 @@ const words = tagline.split(" ");
      should be weighing light against dark. */
   html.lens body > main {
     background-color: var(--color-ink);
-  }
-  /* The page held back until the hero is ready, then let in quickly. */
-  html.anim body {
-    transition: opacity 200ms ease-out;
-  }
-  html.hold body {
-    opacity: 0;
   }
 </style>
 
@@ -382,7 +309,8 @@ const words = tagline.split(" ");
           if (!clip) return;
           clip.pause();
           clip.currentTime = 0;
-          if (on && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
+          const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+          if (on && !saveData && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
         });
       },
       true,
@@ -429,29 +357,13 @@ const words = tagline.split(" ");
       Array.from({ length: 65 }, (_, i) => Math.min(1, f(i / 64) + 0.5 / 255).toFixed(4)).join(" ");
     for (const el of document.querySelectorAll("[data-lens-in]")) el.setAttribute("tableValues", table(light));
     for (const el of document.querySelectorAll("[data-lens-out]")) el.setAttribute("tableValues", table(unlight));
-    let lens = 0;
-    let lensRun = 0;
-    const setLens = (k: number) => {
-      lens = k;
-      soft.setAttribute("stdDeviation", (2.4 * k).toFixed(2));
-      for (const o of offsets) {
-        o.el.setAttribute("dx", (o.x * REACH * k).toFixed(2));
-        o.el.setAttribute("dy", (o.y * REACH * k).toFixed(2));
-      }
-      root.classList.toggle("lens", k > 0);
-    };
-    const focusTo = (to: number, ms: number) => {
-      const run = ++lensRun;
-      const from = lens;
-      const t0 = performance.now();
-      const step = (now: number) => {
-        if (run !== lensRun) return;
-        const x = still ? 1 : Math.min(1, (now - t0) / ms);
-        setLens(from + (to - from) * (1 - Math.pow(1 - x, 3)));
-        if (x < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    };
+    soft.setAttribute("stdDeviation", "2.4");
+    for (const o of offsets) {
+      o.el.setAttribute("dx", (o.x * REACH).toFixed(2));
+      o.el.setAttribute("dy", (o.y * REACH).toFixed(2));
+    }
+    // The clips behind stop while a screenshot is forward.
+    let stopped: HTMLVideoElement[] = [];
 
     // ---- the grain ----
     // The hero field's own grain (HeroField.astro, `phash`), a screen pixel at
@@ -500,10 +412,10 @@ const words = tagline.split(" ");
     const from = (r: Box, x = 1) =>
       `translate(${((r.left - home.left) * x).toFixed(2)}px, ${((r.top - home.top) * x).toFixed(2)}px) ` +
       `scale(${((1 + (r.width / home.width - 1) * x) * grow).toFixed(4)})`;
-    // A spring that overshoots by about a fifteenth and has settled by 640ms.
+    // A spring with a little bounce in it, settled by 450ms.
     const spring = (time: number) => {
-      const z = 0.64;
-      const w = 13;
+      const z = 0.85;
+      const w = (2 * Math.PI) / 0.45;
       const wd = w * Math.sqrt(1 - z * z);
       return 1 - Math.exp(-z * w * time) * (Math.cos(wd * time) + ((z * w) / wd) * Math.sin(wd * time));
     };
@@ -512,6 +424,11 @@ const words = tagline.split(" ");
       const here = shot.closest<HTMLElement>(".shot");
       const small = shot.querySelector("img");
       if (!here || !small || box.open) return;
+      // On a phone it would only grow a little, so the capture itself opens.
+      if (innerWidth < 640) {
+        location.assign(shot.dataset.zoom!);
+        return;
+      }
       panel = here;
       closing = false;
       if (!grained) {
@@ -587,15 +504,22 @@ const words = tagline.split(" ");
       box.classList.add("open");
       here.style.visibility = "hidden";
       hero.paused = true;
-      focusTo(1, 280);
+      root.classList.add("lens");
+      stopped = [...document.querySelectorAll<HTMLVideoElement>("[data-clip]")].filter((v) => !v.paused);
+      for (const v of stopped) v.pause();
 
-      const frames: Keyframe[] = [];
-      const STEPS = 40;
-      for (let i = 0; i <= STEPS; i++) {
-        frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.64)) });
+      // Without motion it fades in where it ends up.
+      if (still) {
+        fwd.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
+      } else {
+        const frames: Keyframe[] = [];
+        const STEPS = 30;
+        for (let i = 0; i <= STEPS; i++) {
+          frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.45)) });
+        }
+        frames[STEPS] = { transform: from(home) };
+        fwd.animate(frames, { duration: 450, easing: "linear" });
       }
-      frames[STEPS] = { transform: from(home) };
-      fwd.animate(frames, { duration: still ? 1 : 640, easing: "linear" });
       addEventListener("scroll", close, { passive: true, once: true });
       addEventListener("resize", close, { once: true });
     };
@@ -612,17 +536,21 @@ const words = tagline.split(" ");
       fwd.getAnimations().forEach((a) => a.cancel());
       const back = here.getBoundingClientRect();
       box!.classList.remove("open");
-      focusTo(0, 260);
-      const going = fwd.animate(
-        [{ transform: from(now) }, { transform: from(back) }],
-        { duration: still ? 1 : 340, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
-      );
+      const going = still
+        ? fwd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: "ease-out", fill: "forwards" })
+        : fwd.animate([{ transform: from(now) }, { transform: from(back) }], {
+            duration: 340,
+            easing: "cubic-bezier(0.23, 1, 0.32, 1)", // --ease-out
+            fill: "forwards",
+          });
       going.onfinish = () => {
         here.style.visibility = "";
         box!.close();
         fwd.remove();
         copy = null;
-        setLens(0);
+        root.classList.remove("lens");
+        for (const v of stopped) v.play().catch(() => {});
+        stopped = [];
         hero.paused = false;
         closing = false;
       };
@@ -639,36 +567,17 @@ const words = tagline.split(" ");
     });
   }
 
-  // The page below the hero arrives once the wordmark has come home - the same
-  // cue the hero's own background waits for - and then a group at a time as it
-  // scrolls into view. The timeout is the safety net for a wordmark that never
-  // animates.
-  const reveal = () => {
-    const seen = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.classList.add("shown");
-          seen.unobserve(entry.target);
-        }
-      },
-      { rootMargin: "0px 0px -8% 0px" },
-    );
-    for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
-  };
-
-  let revealed = false;
-  const once = () => {
-    if (revealed) return;
-    revealed = true;
-    reveal();
-  };
-  // A visit that lands part-way down the page - an anchor from the header, a
-  // restored scroll position - has no hero animation to wait for.
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) once();
-  else if (location.hash || scrollY > 0) once();
-  else {
-    document.addEventListener("wordmark:home", once, { once: true });
-    setTimeout(once, 1800);
-  }
+  // The page arrives a group at a time as it scrolls into view, starting as
+  // soon as it is read.
+  const seen = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("shown");
+        seen.unobserve(entry.target);
+      }
+    },
+    { rootMargin: "0px 0px -8% 0px" },
+  );
+  for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
 </script>

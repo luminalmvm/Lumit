@@ -630,6 +630,10 @@ class BridgeSharedFrameInfo {
   /// was cut there.
   final bool reachAtLimit;
 
+  /// Whether some of the frame was cut, or made smaller, to fit the largest
+  /// picture.
+  final bool cut;
+
   const BridgeSharedFrameInfo({
     required this.handle,
     required this.frame,
@@ -639,6 +643,7 @@ class BridgeSharedFrameInfo {
     required this.view,
     this.reach,
     required this.reachAtLimit,
+    required this.cut,
   });
 
   @override
@@ -650,7 +655,8 @@ class BridgeSharedFrameInfo {
       tier.hashCode ^
       view.hashCode ^
       reach.hashCode ^
-      reachAtLimit.hashCode;
+      reachAtLimit.hashCode ^
+      cut.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -664,7 +670,8 @@ class BridgeSharedFrameInfo {
           tier == other.tier &&
           view == other.view &&
           reach == other.reach &&
-          reachAtLimit == other.reachAtLimit;
+          reachAtLimit == other.reachAtLimit &&
+          cut == other.cut;
 }
 
 class BridgeSharedFrameInfoLinux {
@@ -727,6 +734,10 @@ class BridgeSharedFrameInfoLinux {
   /// was cut there.
   final bool reachAtLimit;
 
+  /// Whether some of the frame was cut, or made smaller, to fit the largest
+  /// picture.
+  final bool cut;
+
   const BridgeSharedFrameInfoLinux({
     required this.fd,
     required this.frame,
@@ -742,6 +753,7 @@ class BridgeSharedFrameInfoLinux {
     required this.view,
     this.reach,
     required this.reachAtLimit,
+    required this.cut,
   });
 
   @override
@@ -759,7 +771,8 @@ class BridgeSharedFrameInfoLinux {
       tier.hashCode ^
       view.hashCode ^
       reach.hashCode ^
-      reachAtLimit.hashCode;
+      reachAtLimit.hashCode ^
+      cut.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -779,7 +792,8 @@ class BridgeSharedFrameInfoLinux {
           tier == other.tier &&
           view == other.view &&
           reach == other.reach &&
-          reachAtLimit == other.reachAtLimit;
+          reachAtLimit == other.reachAtLimit &&
+          cut == other.cut;
 }
 
 /// Which part of opening a project is under way.

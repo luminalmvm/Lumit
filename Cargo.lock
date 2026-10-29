@@ -2275,6 +2275,7 @@ dependencies = [
  "lumit-ofx-testplug",
  "lumit-peer",
  "memmap2",
+ "metal",
  "parking_lot",
  "rayon",
  "serde",
@@ -2288,7 +2289,9 @@ dependencies = [
 name = "lumit-ofx-broker"
 version = "0.10.0"
 dependencies = [
+ "cc",
  "interprocess",
+ "lumit-core",
  "lumit-eval",
  "lumit-ofx",
  "lumit-ofx-testplug",

@@ -2361,10 +2361,6 @@
   "@exportColourSpaceSrgb": {
     "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
-  "exportColourStated": "O arquivo declara este espaço no próprio cabeçalho.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportCrop": "Cortar",
   "@exportCrop": {
     "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
@@ -2602,15 +2598,6 @@
   "exportGuideLayers": "Camadas-guia",
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
-  },
-  "exportImageSequenceNote": "Um {extension} numerado por quadro, ao lado do nome escolhido.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
   },
   "exportKeepBoth": "Manter ambos",
   "@exportKeepBoth": {
@@ -11795,10 +11782,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "Nenhum item ainda — importe gravações ou crie uma composição",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Composição",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -11985,10 +11968,6 @@
   "relinkEllipsis": "Revincular…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
-  },
-  "reloadIcons": "Recarrega os ícones",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
   },
   "rememberInterpretation": "Lembrar interpretação",
   "@rememberInterpretation": {
@@ -13502,10 +13481,6 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "Escolha a pasta que contém extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
-  },
   "settingsExtensionsInstallPackage": "Instalar um pacote",
   "@settingsExtensionsInstallPackage": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
@@ -14031,10 +14006,6 @@
   "settingsShareDownLimit": "Limite de download de gravações",
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
-  },
-  "settingsShareLimitHint": "Vale para as gravações em projetos compartilhados.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
   },
   "settingsShareLimitValue": "{kilobytes} KB/s",
   "@settingsShareLimitValue": {
