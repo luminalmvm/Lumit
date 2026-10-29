@@ -189,28 +189,30 @@ fn read(manifest: Result<Manifest, ExtensionError>) -> BridgeExtensionOutcome {
 /// One rescan of the effects at a time.
 static REGISTERING: Mutex<()> = Mutex::new(());
 
-/// Register every installed extension's effects, and take out the ones no
-/// extension carries any more, so they read as missing. A changed shader is
-/// picked up at once. Answers the labels of the effects new since Lumit started
+/// Register the effects that come with Lumit and every installed extension's,
+/// and take out the ones no extension carries any more, so they read as
+/// missing. A changed shader is picked up at once. Answers the labels of the effects new since Lumit started
 /// and one line per effect turned away, for the plugin scan's report.
 #[frb(ignore)]
 pub(crate) fn register_effects() -> (Vec<String>, Vec<String>) {
     let _one = REGISTERING.lock();
     let (mut added, mut skipped) = (Vec::new(), Vec::new());
     let mut kept = BTreeSet::new();
-    for installed in lumit_extensions::scan() {
-        for effect in lumit_extensions::effects(&installed) {
-            let name = lfx::match_name(&effect.extension, &effect.id);
-            let (label, new) = (effect.label.clone(), !lfx::is_installed(&name));
-            match lumit_render::gpufx::lfx::register(effect) {
-                Ok(_) => {
-                    kept.insert(name);
-                    if new {
-                        added.push(label);
-                    }
+    let installed = lumit_extensions::scan();
+    let effects = lumit_extensions::builtin::effects()
+        .into_iter()
+        .chain(installed.iter().flat_map(lumit_extensions::effects));
+    for effect in effects {
+        let name = lfx::match_name(&effect.extension, &effect.id);
+        let (label, new) = (effect.label.clone(), !lfx::is_installed(&name));
+        match lumit_render::gpufx::lfx::register(effect) {
+            Ok(_) => {
+                kept.insert(name);
+                if new {
+                    added.push(label);
                 }
-                Err(why) => skipped.push(format!("{name}: {why}")),
             }
+            Err(why) => skipped.push(format!("{name}: {why}")),
         }
     }
     for gone in lfx::all() {

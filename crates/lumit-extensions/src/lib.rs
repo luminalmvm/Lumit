@@ -21,6 +21,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
+pub mod builtin;
 pub mod package;
 
 /// The file that makes a folder an extension.
@@ -190,7 +191,7 @@ pub struct ManifestInterface {
 }
 
 /// What the engine keeps of `effect`, with its shader's text.
-fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
+pub(crate) fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
     LfxEffect {
         extension: extension.to_owned(),
         id: effect.id.clone(),
