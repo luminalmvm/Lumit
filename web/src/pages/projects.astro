@@ -21,6 +21,10 @@ import pulseShot from "../assets/projects/pulse.png";
 import pulseClip from "../assets/projects/pulse.mp4";
 import morphShot from "../assets/projects/morph.png";
 import morphClip from "../assets/projects/morph.mp4";
+import floodShot from "../assets/projects/flood-the-grid.png";
+import floodClip from "../assets/projects/flood-the-grid.mp4";
+import decodeShot from "../assets/projects/decode.png";
+import decodeClip from "../assets/projects/decode.mp4";
 
 // A file's size is read off the file, from web/, which is where both
 // `astro dev` and `astro build` are run.
@@ -109,6 +113,35 @@ const projects = [
     fonts: [font("Nunito")],
     c: "coral",
   },
+  {
+    slug: "flood-the-grid",
+    shot: floodShot,
+    clip: floodClip,
+    name: "Flood the Grid",
+    tag: "Type fill",
+    p: "Bands of words that scroll through two shapes, squeezing round them and swelling inside.",
+    alt: "Rows of the words Flood the Grid in black on cream, framed by small captions, with the phrase set large in coral inside a black oval across the middle",
+    layers: 22,
+    fonts: [font("Bebas Neue"), font("IBM Plex Mono")],
+    credit: [
+      { name: "andrea68", href: "https://github.com/andrea68git" },
+      { pre: ", after ", name: "Submesh Boolean by Tim Klinke", href: "https://scenery.io/scenes/submesh-boolean-sXzoRIUKUVW/" },
+    ],
+    c: "violet",
+  },
+  {
+    slug: "decode",
+    shot: decodeShot,
+    clip: decodeClip,
+    name: "Decode",
+    tag: "Drivers and points",
+    p: "A word in characters that scramble and settle as rings pass.",
+    alt: "The word Decode spelt in small white characters on a deep blue ground, some turned and coloured where a ring is passing",
+    layers: 8,
+    fonts: [font("Bebas Neue"), font("IBM Plex Mono")],
+    credit: [{ name: "andrea68", href: "https://github.com/andrea68git" }],
+    c: "teal",
+  },
 ].map((project) => ({ ...project, file: file(project.slug) }));
 ---
 
@@ -120,7 +153,7 @@ const projects = [
     <div class="wrap flex flex-col gap-14">
       <SectionHead page kicker="Projects" title="Made in Lumit.">
         <Fragment slot="lede">
-          Six projects to download and take apart.
+          Eight projects to download and take apart.
         </Fragment>
       </SectionHead>
 
@@ -150,6 +183,15 @@ const projects = [
                     <dt>Length</dt>
                     <dd>10 seconds, {project.layers} layers</dd>
                   </div>
+                  {project.credit && (
+                    <div>
+                      <dt>By</dt>
+                      <dd>
+                        {/* Kept on one line, or a space lands before each comma. */}
+                        {project.credit.map((c) => <Fragment>{c.pre}<a href={c.href}>{c.name}</a></Fragment>)}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt>Fonts</dt>
                     <dd>
@@ -204,7 +246,7 @@ const projects = [
     background: var(--c);
   }
 
-  /* What a project is, in two short rows. */
+  /* What a project is, in a few short rows. */
   .facts {
     display: grid;
     gap: 8px;
@@ -240,9 +282,12 @@ const projects = [
       color 0.15s,
       text-decoration-color 0.15s;
   }
-  .facts a:hover {
-    color: var(--color-fg);
-    text-decoration-color: var(--color-accent);
+  /* Only where there is a real pointer: a tap would leave it lit. */
+  @media (hover: hover) and (pointer: fine) {
+    .facts a:hover {
+      color: var(--color-fg);
+      text-decoration-color: var(--color-accent);
+    }
   }
 
   /* The download sits at the foot of its card, whatever the card's height. */
