@@ -10977,6 +10977,18 @@
   "@cutPanEnvelope": {
     "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
   },
+  "envelopePointReset": "Reset",
+  "@envelopePointReset": {
+    "description": "Volume or pan envelope, right-click a point: put it back to 0 dB, or to centre for pan."
+  },
+  "envelopeFlipAll": "Flip all points",
+  "@envelopeFlipAll": {
+    "description": "Volume or pan envelope, right-click the line: mirror every point, louder becomes quieter by the same amount, or left swaps with right. Vegas calls this Flip All Points."
+  },
+  "envelopeResetAll": "Reset all",
+  "@envelopeResetAll": {
+    "description": "Volume or pan envelope, right-click the line: remove every point and put the level back to 0 dB, or to centre for pan. Vegas calls this Reset All."
+  },
   "cutSpeedLineHere": "Speed line",
   "@cutSpeedLineHere": {
     "description": "Cut timeline, a picture clip's Speed submenu: show or hide the line across this one clip that draws and edits its speed, as Vegas's velocity envelope on one event. Ticked while shown."
