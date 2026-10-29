@@ -2264,6 +2264,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _hover.value = null;
     _overGain.value = false;
     _overBadge.value = false;
+    // The Viewer goes back to the playhead's frame after a trim's preview.
+    if (_edgeShown) {
+      _edgeShown = false;
+      _ui?.requestFrame();
+    }
     if (_ranging) {
       _ranging = false;
       _workPreview.value = null;
@@ -2312,10 +2317,52 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// The drag as it stands, published for the lanes: the frames, what it
   /// snapped to, and the readout beside the pointer, which says how far a
   /// clip has gone, or how long a fade in hand now is.
+  /// A trim's edge frame is asked of the Viewer once a frame, the newest
+  /// edge, as Vegas shows it while an edge is dragged.
+  bool _edgeDue = false;
+  bool _edgeShown = false;
+
+  void _showEdge() {
+    if (_edgeDue) return;
+    _edgeDue = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      _edgeDue = false;
+      final held = _press;
+      final drag = _drag.value;
+      final comp = _ui?.selectedComp;
+      final clip = held?.clip;
+      final row = held?.track;
+      if (held == null || drag == null || comp == null || clip == null) return;
+      if (row == null || row >= _tracks.length) return;
+      final head = held.grab == BarGrab.trimIn;
+      final start = clip.startFrame.toInt() + (head ? drag.shift : 0);
+      final end = clip.endFrame.toInt() + (head ? 0 : drag.shift);
+      if (end <= start) return;
+      try {
+        comp.renderFrameWithClipSpan(
+          frame: BigInt.from(max(0, head ? start : end - 1)),
+          scale: 1.0,
+          layer: _tracks[row].entry.layer,
+          clip: clip.id,
+          startFrame: start,
+          endFrame: end,
+        );
+        _edgeShown = true;
+      } catch (_) {}
+    });
+  }
+
   void _showDrag(_Press held) {
     final drag = _dragOf(held);
     final was = _drag.value;
     if (was == null || !_sameDrag(was, drag)) _drag.value = drag;
+    if (held.fade == null &&
+        !held.stretch &&
+        held.clip != null &&
+        held.grab != BarGrab.move &&
+        (held.tool == CutTool.select || held.tool == CutTool.ripple)) {
+      _showEdge();
+    }
     final row = cutTrackAt(_tracks, held.at.dy, _tops) ?? held.track ?? 0;
     final String text;
     if (held.fade case final into?) {
