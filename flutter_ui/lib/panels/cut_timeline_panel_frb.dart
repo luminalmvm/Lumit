@@ -62,6 +62,8 @@ import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'audio_streams_menu_frb.dart';
+import 'clip_fade_popover.dart' show clipFadeShapeName;
+import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
 import 'graph_maths.dart'
@@ -2405,6 +2407,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       );
       return;
     }
+    // On a fade or a crossfade, the curve it takes, as Vegas's fade menu.
+    if (_fadeUnder(track, clip, _laneAxis.frameAtExact(at.dx), ui.model.fps)
+        case final into?) {
+      await _fadeMenu(track, clip, into, global);
+      return;
+    }
     // The menu acts on the selection the clip is in, or on the clip alone.
     final id = clip.id.toString();
     if (!_selected.contains(id)) setState(() => _selected = _withMates(id));
@@ -2688,6 +2696,71 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ),
       ],
     );
+  }
+
+  /// Which of [clip]'s fades [frame] is inside, counting an overlap with the
+  /// clip either side as the fade it is: true for the fade in, false for
+  /// the fade out, null for neither.
+  bool? _fadeUnder(CutTrack track, BridgeClip clip, double frame, double fps) {
+    final before = clipFadePartner(track.clips, clip, into: true);
+    final after = clipFadePartner(track.clips, clip, into: false);
+    final inEnd = max(clipFadeEdge(clip, into: true, fps: fps),
+        before?.endFrame.toDouble() ?? 0);
+    if (frame < inEnd) return true;
+    final outStart = min(clipFadeEdge(clip, into: false, fps: fps),
+        after?.startFrame.toDouble() ?? double.infinity);
+    if (frame > outStart) return false;
+    return null;
+  }
+
+  /// The five fade curves, for one end of [clip] and the clip it overlaps
+  /// there, and the same end of the clips linked to it while Linked is on.
+  /// One undo step.
+  Future<void> _fadeMenu(
+      CutTrack track, BridgeClip clip, bool into, Offset global) async {
+    final current = (into ? clip.fadeIn : clip.fadeOut).shape;
+    final shape = await showMenuAt<BridgeClipFadeShape>(
+      context: context,
+      position: global,
+      width: 160,
+      rows: (close) => [
+        for (final preset in clipFadeShapes)
+          MenuRow.option(
+            key: ValueKey<String>('ctl-fade-shape-${preset.id}'),
+            onPressed: () => close(preset.shape),
+            child: Row(children: [
+              menuTick(current == preset.shape),
+              Expanded(child: Text(clipFadeShapeName(preset.id))),
+            ]),
+          ),
+      ],
+    );
+    if (shape == null || !mounted) return;
+    void write(CutTrack on, BridgeClip c, {required bool rising}) {
+      final held = rising ? c.fadeIn : c.fadeOut;
+      final fade = BridgeClipFade(
+          seconds: held.seconds > 0 ? held.seconds : 1, shape: shape);
+      try {
+        on.entry.layer.setClipFade(
+            clip: c.id,
+            fadeIn: rising ? fade : null,
+            fadeOut: rising ? null : fade);
+      } catch (_) {}
+    }
+
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final id in _withMates(clip.id.toString())) {
+        final at = _trackOfClip[id];
+        final each = at == null ? null : _tracks[at].clip(id);
+        if (at == null || each == null) continue;
+        final on = _tracks[at];
+        write(on, each, rising: into);
+        if (clipFadePartner(on.clips, each, into: into) case final other?) {
+          write(on, other, rising: !into);
+        }
+      }
+    });
+    _afterCut(BridgeCutResult.done);
   }
 
   /// The picked clips on picture tracks, which are the ones with a speed.
