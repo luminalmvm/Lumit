@@ -152,6 +152,38 @@ pub fn stop_brokers(folder: &std::path::Path) {
     }
 }
 
+/// Start again every broker that would render another way now "Render plugins
+/// on the graphics card" has changed, after the frame each is drawing.
+/// Blocking, and not for the interface's thread.
+pub fn follow_gpu_setting() {
+    let Ok(brokers) = BROKERS.lock().map(|brokers| brokers.clone()) else {
+        return;
+    };
+    let env = crate::gpu::broker_env();
+    for (_, shared) in &brokers {
+        let mut broker = shared.broker.lock();
+        if !broker.disabled && broker.config.env != env {
+            broker.config.env.clone_from(&env);
+            let _ = broker.restart();
+        }
+    }
+    renote_paths();
+}
+
+/// Put each plugin's path back as the broker that renders it last said, which
+/// is what the frame key reads. A rescan's broker describes plugins an earlier
+/// one renders, and the earliest registered them, so it has the last word.
+fn renote_paths() {
+    let Ok(brokers) = BROKERS.lock().map(|brokers| brokers.clone()) else {
+        return;
+    };
+    for (_, shared) in brokers.iter().rev() {
+        let mut broker = shared.broker.lock();
+        let paths = broker.paths.clone();
+        broker.note_paths(paths);
+    }
+}
+
 /// Every plugin this session has registered, in registration order.
 #[must_use]
 pub fn discovered() -> Vec<DiscoveredPlugin> {
@@ -303,6 +335,7 @@ pub fn scan_reporting(
             Hosting::InProcess => scan_in_process(binary, options, register, &mut outcome),
         }
     }
+    renote_paths();
     outcome
 }
 

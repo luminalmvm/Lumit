@@ -252,7 +252,7 @@ pub struct BrokerRender {
 
 /// One plugin bundle, hosted in a process of its own.
 pub struct Broker {
-    config: BrokerConfig,
+    pub(crate) config: BrokerConfig,
     ring: Ring,
     /// The frame size the current ring was built for. `config.frame` is only
     /// the size it *started* at; `fit` grows it, and a restart has to rebuild
@@ -262,7 +262,7 @@ pub struct Broker {
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
     /// The graphics card path of each of `descriptors`, as the broker last said.
-    paths: Vec<Option<GpuApi>>,
+    pub(crate) paths: Vec<Option<GpuApi>>,
     refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
     /// The instances that have rendered a frame in this process. The first
@@ -470,7 +470,7 @@ impl Broker {
     }
 
     /// Keep each plugin's path, here and where the frame key reads it.
-    fn note_paths(&mut self, paths: Vec<Option<GpuApi>>) {
+    pub(crate) fn note_paths(&mut self, paths: Vec<Option<GpuApi>>) {
         self.paths = paths;
         for (index, descriptor) in self.descriptors.iter().enumerate() {
             let path = self.paths.get(index).copied().flatten();
@@ -1076,7 +1076,7 @@ impl Broker {
 
     /// Start a broker again and put it back where the last one was: describe
     /// the bundle, make every instance, with the values the host holds.
-    fn restart(&mut self) -> Result<(), BrokerError> {
+    pub(crate) fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
         // A new process loads everything again, so every instance warms up again.

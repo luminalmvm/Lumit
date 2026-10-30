@@ -75,8 +75,8 @@ void setLargestPicture({required int side}) =>
 bool pluginsOnGraphicsCard() =>
     BridgeLib.instance.api.crateApiShellPluginsOnGraphicsCard();
 
-/// Turn plugin rendering on the graphics card on or off. It reaches plugins
-/// whose broker starts from here on, so the next start or rescan.
+/// Turn plugin rendering on the graphics card on or off. Each plugin broker it
+/// changes starts again in the background, after the frame it is drawing.
 ///
 /// # Errors
 ///

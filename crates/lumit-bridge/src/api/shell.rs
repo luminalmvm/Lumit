@@ -163,8 +163,8 @@ pub fn plugins_on_graphics_card() -> bool {
     !lumit_project::plugins::PluginPrefs::load_default().plugins_on_cpu
 }
 
-/// Turn plugin rendering on the graphics card on or off. It reaches plugins
-/// whose broker starts from here on, so the next start or rescan.
+/// Turn plugin rendering on the graphics card on or off. Each plugin broker it
+/// changes starts again in the background, after the frame it is drawing.
 ///
 /// # Errors
 ///
@@ -172,6 +172,9 @@ pub fn plugins_on_graphics_card() -> bool {
 #[frb(sync)]
 pub fn set_plugins_on_graphics_card(on: bool) -> Result<(), BridgeError> {
     lumit_ofx::gpu::set_enabled(on);
+    let _ = std::thread::Builder::new()
+        .name("plugins on the card".to_owned())
+        .spawn(lumit_ofx::discover::follow_gpu_setting);
     let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
     if prefs.plugins_on_cpu != on {
         return Ok(());
