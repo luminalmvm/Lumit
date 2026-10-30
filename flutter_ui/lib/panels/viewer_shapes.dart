@@ -407,8 +407,8 @@ String maskName(ToolMode tool, int existing) => tool == ToolMode.pen
 /// vertex, and the one entering it is its reflection. Holding `Alt` during that
 /// drag breaks the pair: the entering handle stays where it was and only the
 /// leaving one follows, which is how a corner with one curved side is made.
-/// Clicking the first vertex again closes the path, and that is what commits
-/// it.
+/// Clicking the first vertex again closes the path and commits it. Enter
+/// commits it open.
 ///
 /// Immutable-ish by design: every gesture returns a new draft rather than
 /// mutating one, so the widget holds a value and the tests need no widget.

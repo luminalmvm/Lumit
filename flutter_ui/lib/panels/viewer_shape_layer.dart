@@ -6,8 +6,8 @@
 // rectangle, an ellipse, a polygon or a star, between the two corners you
 // dragged, with Shift keeping it square. The **Pen** is different: it builds a
 // path a point at a time, and clicking its first point again closes and applies
-// it. (That gesture was briefly on the polygon tool; it is After Effects' pen,
-// and it belongs on the Pen.)
+// it. Enter applies it as it is, open. (That gesture was briefly on the polygon
+// tool; it is After Effects' pen, and it belongs on the Pen.)
 //
 // **What it does with nothing selected.** Makes a *shape layer* — the art
 // itself rather than a hole in someone else's picture. It is the same
@@ -163,9 +163,17 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// sail past every point placed and undo whatever the user had done *before*
   /// picking up the Pen, which is never what was meant. It goes back to the
   /// document's own undo the moment the path is empty.
+  ///
+  /// Enter applies the path open, for a line rather than a shape.
   bool _onKey(KeyEvent event) {
     if (!widget.active || !_isPen || _draft.isEmpty) return false;
     if (event is! KeyDownEvent) return false;
+    if ((event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        _draft.vertices.length >= 2) {
+      _finishPath(closed: false);
+      return true;
+    }
     final undo = event.logicalKey == LogicalKeyboardKey.keyZ &&
         (HardwareKeyboard.instance.isControlPressed ||
             HardwareKeyboard.instance.isMetaPressed);
@@ -367,9 +375,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     );
     final box = _target;
     if (box == null) {
-      _commitShapeLayer(path, primitive);
+      _commitShapeLayer(path, primitive: primitive);
     } else {
-      _commit(box, path, primitive);
+      _commit(box, path, primitive: primitive);
     }
   }
 
@@ -394,17 +402,22 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     if (start != null &&
         _draft.canClose &&
         withinClosingDistance(at, start, screenScale: space.screenScale)) {
-      final path = _draft.vertices;
-      setState(() => _draft = const PathDraft());
-      final box = _target;
-      if (box == null) {
-        _commitShapeLayer(path);
-      } else {
-        _commit(box, path);
-      }
+      _finishPath(closed: true);
       return;
     }
     setState(() => _draft = _draft.withCorner(at));
+  }
+
+  /// Applies the path drawn so far and starts a new one.
+  void _finishPath({required bool closed}) {
+    final path = _draft.vertices;
+    setState(() => _draft = const PathDraft());
+    final box = _target;
+    if (box == null) {
+      _commitShapeLayer(path, closed: closed);
+    } else {
+      _commit(box, path, closed: closed);
+    }
   }
 
   /// A click that turned into a drag: the vertex is placed where the press was
@@ -430,12 +443,12 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// A new shape layer holding this art, at the top of the composition — what a
   /// shape tool or the Pen does with nothing selected.
   void _commitShapeLayer(List<BridgeVertex> path,
-      [BridgeShapePrimitive? primitive]) {
+      {BridgeShapePrimitive? primitive, bool closed = true}) {
     if (path.length < 2) return;
     try {
       final layer = widget.comp.addShapeLayer(
         name: shapeMaskName(widget.tool),
-        contents: [_item(path, primitive)],
+        contents: [_item(path, primitive, closed)],
       );
       widget.uiState.setSelection([layer]);
       widget.onChanged();
@@ -448,15 +461,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// with the toolbar's fill and its stroke when that has a width: the two
   /// swatches that had nothing to paint until there were shape layers.
   BridgeShapeItem _item(List<BridgeVertex> path,
-      BridgeShapePrimitive? primitive) {
+      BridgeShapePrimitive? primitive, bool closed) {
     final tools = widget.uiState.tools;
     return BridgeShapeItem(
       id: UuidValue.fromString(const Uuid().v4()),
       name: shapeMaskName(widget.tool),
       vertices: path,
-      // Always closed: a shape tool draws a closed figure, and the Pen
-      // commits only when its path has come back to its first point.
-      closed: true,
+      closed: closed,
       fill: stillColour(tools.fillRgba),
       stroke: tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
       strokeWidth: BridgeScalar.static_(tools.strokeWidth),
@@ -481,10 +492,10 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   }
 
   void _commit(LayerBox box, List<BridgeVertex> path,
-      [BridgeShapePrimitive? primitive]) {
+      {BridgeShapePrimitive? primitive, bool closed = true}) {
     if (path.length < 2) return;
     if (_drawsArt) {
-      _addArt(box, path, primitive);
+      _addArt(box, path, primitive, closed);
       return;
     }
     try {
@@ -492,6 +503,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         mask: shapeMask(
           vertices: path,
           name: maskName(widget.tool, box.masks.length),
+          closed: closed,
         ),
       );
       widget.onChanged();
@@ -505,7 +517,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// in the layer's pixels, and the art's own coordinates sit a bounding box
   /// away from those.
   void _addArt(LayerBox box, List<BridgeVertex> path,
-      BridgeShapePrimitive? primitive) {
+      BridgeShapePrimitive? primitive, bool closed) {
     final o = box.artOrigin;
     BridgeScalar moved(BridgeScalar s, double by) =>
         BridgeScalar.static_((s as BridgeScalar_Static).field0 + by);
@@ -536,7 +548,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
               outerRoundness: p.outerRoundness,
               innerRoundness: p.innerRoundness,
             ),
-        }),
+        }, closed),
       );
       widget.onChanged();
     } catch (_) {
@@ -659,11 +671,12 @@ class ShapePreviewPainter extends CustomPainter {
 
     if (draft.vertices.isNotEmpty) {
       // A path still being built is previewed filled too, so what the Pen is
-      // making looks like what it will make. Closed for the fill even though
-      // the path is open — an unclosed run of points has no inside otherwise,
-      // and the shape it commits to will be closed.
-      if (draft.vertices.length > 2) {
-        _paintPreview(canvas, _screenPath(draft.vertices, closed: true));
+      // making looks like what it will make. Closed for the fill, as the
+      // engine fills an open path too. The outline closes only when the
+      // click would close it.
+      if (draft.vertices.length > 1) {
+        _paintPreview(canvas, _screenPath(draft.vertices, closed: true),
+            _screenPath(draft.vertices, closed: closing));
       }
       canvas.drawPath(
         _screenPath(draft.vertices, closed: false),
@@ -753,7 +766,7 @@ class ShapePreviewPainter extends CustomPainter {
   /// document until the drag ends. Half opacity reads as "this is what you are
   /// about to get" while still showing the colour, which is the thing the fill
   /// swatch could not answer before.
-  void _paintPreview(Canvas canvas, Path path) {
+  void _paintPreview(Canvas canvas, Path path, [Path? outline]) {
     canvas.drawPath(
       path,
       Paint()
@@ -763,7 +776,7 @@ class ShapePreviewPainter extends CustomPainter {
     final edge = stroke;
     if (edge == null || strokeWidth <= 0) return;
     canvas.drawPath(
-      path,
+      outline ?? path,
       Paint()
         ..color = edge.withValues(alpha: edge.a * previewOpacity)
         ..style = PaintingStyle.stroke
