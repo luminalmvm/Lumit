@@ -7025,8 +7025,6 @@ pub fn set_channels(rgba: &mut [f32], source: &[f32], picks: [u32; 4], mix: f32)
 /// of the raster, which the kernel knows and the host does not (§3.39).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearWipeParams {
-    /// Where the wipe line pivots, raster pixels.
-    pub centre: [f32; 2],
     /// The sweep direction, host-computed `(sin θ, −cos θ)`.
     pub normal: [f32; 2],
     /// Completion ÷ 100.
@@ -7044,7 +7042,8 @@ pub struct LinearWipeParams {
 ///
 /// The edge travels half a feather *past* each end of the frame, which is what
 /// makes Completion 0 keep the whole frame exactly and 100 remove it exactly. A
-/// wipe that cannot fully finish is not a transition.
+/// wipe that cannot fully finish is not a transition. Distance is measured from
+/// the raster's own middle, so that holds on a layer of any size.
 ///
 /// `completion` is passed rather than read off `p` because the matte scales it
 /// per pixel: the wipe's own Completion for an unmatted pixel, and
@@ -7058,7 +7057,7 @@ pub fn linear_wipe_keep(
     completion: f32,
     p: &LinearWipeParams,
 ) -> f32 {
-    let d = (px - p.centre[0]) * p.normal[0] + (py - p.centre[1]) * p.normal[1];
+    let d = (px - w * 0.5) * p.normal[0] + (py - h * 0.5) * p.normal[1];
     let extent = 0.5 * ((w * p.normal[0]).abs() + (h * p.normal[1]).abs());
     let edge = -(extent + p.band * 0.5) + completion * (2.0 * extent + p.band);
     ((d - edge) / p.band + 0.5).clamp(0.0, 1.0)
