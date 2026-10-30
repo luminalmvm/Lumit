@@ -708,7 +708,8 @@ class ShapePreviewPainter extends CustomPainter {
       // open, its fill closed by a straight line, as the engine fills it.
       final open = _screenPath(draft.vertices, closed: false);
       if (draft.vertices.length > 1) {
-        _paintPreview(canvas, _screenPath(draft.vertices, closed: true),
+        _paintPreview(
+            canvas, _screenPath(draft.vertices, closed: false)..close(),
             edge: open);
       }
       canvas.drawPath(open, outline);

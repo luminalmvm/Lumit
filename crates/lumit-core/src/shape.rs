@@ -585,9 +585,22 @@ pub fn rasterise_contents(
                 } else {
                     joined = placed
                         .iter()
-                        .map(|p| BezierPath {
-                            vertices: p.vertices.clone(),
-                            closed: true,
+                        .map(|p| {
+                            let mut vertices = p.vertices.clone();
+                            // The closing edge is straight, so the ends'
+                            // handles don't bend it.
+                            if !p.closed {
+                                if let Some(first) = vertices.first_mut() {
+                                    first.tan_in = (0.0, 0.0);
+                                }
+                                if let Some(last) = vertices.last_mut() {
+                                    last.tan_out = (0.0, 0.0);
+                                }
+                            }
+                            BezierPath {
+                                vertices,
+                                closed: true,
+                            }
                         })
                         .collect();
                     &joined
