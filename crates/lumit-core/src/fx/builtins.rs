@@ -420,7 +420,8 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         // the whole layer reads the same from any pivot, and a centre left
         // off a small layer wiped all of it at 0%.
         if e.effect.match_name == "linear_wipe" {
-            e.params.retain(|p| p.id != "centre_x" && p.id != "centre_y");
+            e.params
+                .retain(|p| p.id != "centre_x" && p.id != "centre_y");
         }
         for p in s.params {
             let Some(mut value) = default_param_value(&p.kind) else {
