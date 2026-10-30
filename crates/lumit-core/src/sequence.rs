@@ -570,12 +570,12 @@ impl Clip {
     /// position holds at the clip's [source_in, source_out] boundary rather
     /// than running on into media past the trim (docs/04 §7.2). The raw map
     /// stays available through [`Self::source_time`] for overrun detection.
-    /// `.max().min()` avoids `f64::clamp`'s panics on a degenerate window or
-    /// a NaN map (engine crates never panic).
+    /// A clip played backwards ends before it starts, so the window is its
+    /// two ends whichever way round, as the sound holds it. `.max().min()`
+    /// avoids `f64::clamp`'s panic on a NaN map (engine crates never panic).
     pub fn held_source_time(&self, lt: f64) -> f64 {
-        self.source_time(lt)
-            .max(self.source_in.to_f64())
-            .min(self.source_out.to_f64())
+        let (a, b) = (self.source_in.to_f64(), self.source_out.to_f64());
+        self.source_time(lt).max(a.min(b)).min(a.max(b))
     }
 
     /// Which moment of `nested` a clip that plays it shows at layer time
@@ -606,7 +606,8 @@ impl Clip {
                 Rational::from_f64_on_grid(map.value_at(tau.to_f64()), Rational::FLICK_DEN).ok()?
             }
         };
-        Some(shown.max(self.source_in).min(self.source_out))
+        let (a, b) = (self.source_in, self.source_out);
+        Some(shown.max(a.min(b)).min(a.max(b)))
     }
 
     /// How far the clip's end, or its start with `at_start`, can be carried
@@ -2084,6 +2085,10 @@ mod tests {
         );
         assert_eq!(trimmed.source_at(rat(7, 2)), Some(rat(23, 2)));
         assert_eq!(trimmed.source_at(rat(5, 1)), Some(rat(12, 1)), "held");
+        // Run backwards it ends before it starts, and still plays.
+        let back = trimmed.with_ramp(rat(-1, 1), rat(-1, 1));
+        assert_eq!(back.source_at(rat(3, 1)), Some(rat(9, 1)), "backwards");
+        assert!((back.held_source_time(3.0) - 9.0).abs() < 1e-9);
         // Speed running 1x to 3x over four seconds has used three by two.
         let ramp = clip(src, 0, 4).with_ramp(rat(1, 1), rat(3, 1));
         let shown = ramp.source_at(rat(2, 1)).unwrap().to_f64();
