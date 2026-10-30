@@ -8,12 +8,14 @@
 // outside every open popup replaces the chain, opening one from *inside* a
 // popup extends it, and one click away — or one Escape — takes the lot.
 
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
+  var downs = 0;
   Widget host() => Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(
@@ -23,12 +25,16 @@ void main() {
           child: Overlay(
             initialEntries: [
               OverlayEntry(
-                builder: (_) => const Align(
-                  alignment: Alignment.topLeft,
-                  child: SizedBox(
-                    key: ValueKey('anchor'),
-                    width: 40,
-                    height: 20,
+                builder: (_) => Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) => downs++,
+                  child: const Align(
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(
+                      key: ValueKey('anchor'),
+                      width: 40,
+                      height: 20,
+                    ),
                   ),
                 ),
               ),
@@ -124,5 +130,34 @@ void main() {
     expect(find.text('flyout'), findsNothing);
     expect(lumitPopupOpen, isFalse,
         reason: 'one click away, not one per menu that happened to be open');
+  });
+
+  testWidgets('a right-click away with a flyout up reaches what is under it',
+      (tester) async {
+    await tester.pumpWidget(host());
+    final anchor = tester.element(find.byKey(const ValueKey('anchor')));
+
+    late BuildContext inside;
+    showLumitPopup<void>(
+      context: anchor,
+      position: Offset.zero,
+      builder: (close) => FloatSurface(
+        child: Builder(builder: (context) {
+          inside = context;
+          return const Text('parent');
+        }),
+      ),
+    );
+    await tester.pump();
+    open(inside, 'flyout', at: const Offset(60, 60));
+    await tester.pump();
+    downs = 0;
+
+    // Each barrier used to hand the press to the other until the stack ran
+    // out.
+    await tester.tapAt(const Offset(400, 500), buttons: kSecondaryButton);
+    await tester.pump();
+    expect(lumitPopupOpen, isFalse);
+    expect(downs, 1, reason: 'handed on once, to what was clicked');
   });
 }

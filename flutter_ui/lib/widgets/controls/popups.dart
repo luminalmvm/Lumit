@@ -288,7 +288,10 @@ class _Barrier extends SingleChildRenderObjectWidget {
 }
 
 class _RenderBarrier extends RenderProxyBox {
-  bool _passing = false;
+  /// Shared by every barrier: a closed popup's barrier stays in the tree
+  /// until the next frame, so with two up each would hand the press to the
+  /// other for ever.
+  static bool _passing = false;
 
   /// Whether the last press stopped here. A barrier that lets hover through
   /// lets presses through too, and those need nothing handing on.
