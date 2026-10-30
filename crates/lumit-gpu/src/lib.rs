@@ -1221,7 +1221,7 @@ impl GpuContext {
             ..Default::default()
         };
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
-        let (device, queue) = match shared_linux::open_device(&adapter) {
+        let (device, queue) = match shared_linux::open_device(&adapter, &descriptor) {
             Ok(dq) => dq,
             Err(_) => pollster::block_on(adapter.request_device(&descriptor, None))
                 .map_err(|e| GpuError::Device(e.to_string()))?,
