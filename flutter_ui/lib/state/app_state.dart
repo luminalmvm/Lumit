@@ -1405,6 +1405,7 @@ class LumitState extends ChangeNotifier {
   Future<CompositionReference?> newComposition(
     BuildContext context, {
     List<FootageReference> footage = const [],
+    bool endToEnd = false,
   }) async {
     final project = this.project;
     if (project == null) return null;
@@ -1412,6 +1413,7 @@ class LumitState extends ChangeNotifier {
       context: context,
       project: project,
       footage: footage,
+      endToEnd: endToEnd,
       asSequence: Provider.of<LumitUiState>(context, listen: false)
           .workspace
           .interface

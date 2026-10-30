@@ -31,6 +31,7 @@ pub mod keymap;
 pub mod layer;
 pub mod lens;
 pub mod notes;
+pub mod place;
 pub mod planes;
 pub mod presets;
 pub mod project;

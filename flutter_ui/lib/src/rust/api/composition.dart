@@ -626,6 +626,31 @@ class CompositionReference {
               row: row,
               arrival: arrival);
 
+  /// Place `footage` in this composition as new layers, the first given on
+  /// top, as one undo step.
+  ///
+  /// `end_to_end` lays them one after another, each starting where the one
+  /// before it ends, as Premiere and Vegas lay a multi-item drop. The
+  /// composition grows to the last one's end if it runs past it, as a cut
+  /// does. Without it they all start together, as After Effects stacks them.
+  ///
+  /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
+  /// `as_sequence` and `arrival` as there.
+  void addFootageLayers(
+          {required List<FootageReference> footage,
+          required bool asSequence,
+          int? row,
+          BridgeStreamsArrival? arrival,
+          required bool endToEnd}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddFootageLayers(
+              that: this,
+              footage: footage,
+              asSequence: asSequence,
+              row: row,
+              arrival: arrival,
+              endToEnd: endToEnd);
+
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every
   /// Add-effect surface drives.
