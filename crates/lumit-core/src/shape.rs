@@ -577,8 +577,23 @@ pub fn rasterise_contents(
             if let Some(fill) = item.fill.as_ref().map(|c| colour::at(c, t)) {
                 // All the contours at once, so a boolean's hole is a hole: the
                 // crossings have to be counted across the whole shape, not one
-                // ring at a time.
-                let coverage = crate::mask::rasterise_paths(&placed, w, h, sx, sy, true);
+                // ring at a time. An open path fills as if its ends were
+                // joined, as After Effects fills one. Only its outline keeps
+                // the two ends.
+                let joined: Vec<BezierPath>;
+                let filled = if placed.iter().all(|p| p.closed) {
+                    &placed
+                } else {
+                    joined = placed
+                        .iter()
+                        .map(|p| BezierPath {
+                            vertices: p.vertices.clone(),
+                            closed: true,
+                        })
+                        .collect();
+                    &joined
+                };
+                let coverage = crate::mask::rasterise_paths(filled, w, h, sx, sy, true);
                 // A gradient fill is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.

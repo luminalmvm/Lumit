@@ -8,3 +8,4 @@ section below, and when the release note is written the lines move into it.
 - OFX plugins now render on the graphics card where they support it, which can change a frame very slightly. **Render plugins on the graphics card** in Settings turns it off.
 - Sprite flares made before this version have slightly different ghosts. The glow and the streak are unchanged.
 - Label points labels sit where their points are, between pixels, instead of snapping to the nearest whole pixel, so they can look slightly softer.
+- An open shape path is filled as if its ends were joined, as in After Effects. Open masks no longer hide their layer.

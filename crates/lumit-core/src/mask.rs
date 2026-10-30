@@ -230,9 +230,12 @@ impl Mask {
     ///
     /// Time matters because opacity animates: a mask keyed from 0 % can be off
     /// for the first half of a shot and on for the second.
+    ///
+    /// An open path has no inside, so it is off too, as in After Effects. It
+    /// is still there for the effects that follow a path.
     #[must_use]
     pub fn does_something_at(&self, t: f64) -> bool {
-        self.mode != MaskMode::None && self.opacity.value_at(t) > 0.0
+        self.mode != MaskMode::None && self.opacity.value_at(t) > 0.0 && self.path_at(t).closed
     }
 
     /// The feather this mask asks for at `t`, in layer pixels: one width, and
@@ -1695,6 +1698,10 @@ mod tests {
             bare.iter().all(|&c| c == 255),
             "a switched-off mask is no mask, memo or not"
         );
+        let mut open = masks[0].clone();
+        open.path.closed = false;
+        let whole = combined_coverage(&[open], 32, 32, 32.0, 32.0, 0.0);
+        assert!(whole.iter().all(|&c| c == 255), "an open mask cuts nothing");
     }
 
     /// Two 16-wide-tall rectangles: A covers x 0..10, B covers x 6..16, so
