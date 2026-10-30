@@ -269,6 +269,9 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // are lengths, not positions, so they need no centring.
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_x") => w * 0.5,
             ("twirl" | "spherize" | "ripple" | "iris_wipe", "centre_y") => h * 0.5,
+            // These four said they were centred here and never were.
+            ("radial_wipe" | "lens_distort" | "mirror" | "radio_waves", "centre_x") => w * 0.5,
+            ("radial_wipe" | "lens_distort" | "mirror" | "radio_waves", "centre_y") => h * 0.5,
             // The Point control is the same default once more: a fresh
             // crosshair belongs in the middle of the frame, which is the only
             // guess that is never absurd, and a schema constant cannot know the
