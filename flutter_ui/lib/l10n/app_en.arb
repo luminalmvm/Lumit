@@ -8001,6 +8001,11 @@
     "description": "Project panel column heading: where a footage item's file is. Shown in capitals by the style, so write it sentence case.",
     "type": "text"
   },
+  "projectColumnDate": "Date",
+  "@projectColumnDate": {
+    "description": "Project panel column heading: when a footage item's file was last changed. Clicking it sorts by that. Shown in capitals by the style, so write it sentence case.",
+    "type": "text"
+  },
   "projectFooterComposition": "Composition",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."

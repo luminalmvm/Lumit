@@ -346,6 +346,14 @@ class FootageReference {
         that: this,
       );
 
+  /// When the file was last changed, in seconds since 1970, for the Project
+  /// panel's Date column. `None` for a file that is not there, and for a
+  /// numbered run of stills, which is no one file.
+  Future<PlatformInt64?> modified() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceModified(
+        that: this,
+      );
+
   /// A file fetched from Lumit's server for this footage item has been
   /// opened into [`Self::online_room`]. The project reads the item from
   /// it from now on, by the road a file sent by a person takes: an

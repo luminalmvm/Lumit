@@ -60,7 +60,10 @@ class EmptyTimelineDrop extends StatelessWidget {
       onAcceptWithDetails: (details) async {
         switch (details.data) {
           case FootageDragData(:final footage):
-            final comp = await state.newComposition(context, footage: footage);
+            // As a drop on a comp's Timeline: end to end, Shift stacks.
+            final comp = await state.newComposition(context,
+                footage: footage,
+                endToEnd: !HardwareKeyboard.instance.isShiftPressed);
             if (comp == null || !context.mounted) return;
             Provider.of<LumitUiState>(context, listen: false)
                 .setSelectedComp(comp);

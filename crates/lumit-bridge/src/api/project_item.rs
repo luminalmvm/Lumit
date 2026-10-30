@@ -406,3 +406,24 @@ impl Copier<'_> {
         Some(copy)
     }
 }
+
+impl FootageReference {
+    /// When the file was last changed, in seconds since 1970, for the Project
+    /// panel's Date column. `None` for a file that is not there, and for a
+    /// numbered run of stills, which is no one file.
+    pub fn modified(&self) -> Result<Option<i64>, BridgeError> {
+        let path = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let snapshot = proj.store.snapshot();
+            let Some(ProjectItem::Footage(f)) = snapshot.item(self.id()) else {
+                return Err(BridgeError::InvalidItem);
+            };
+            FootageReference::resolve_path(&proj, f)
+        };
+        Ok(path
+            .and_then(|path| std::fs::metadata(path).ok()?.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|d| i64::try_from(d.as_secs()).ok()))
+    }
+}

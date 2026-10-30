@@ -3831,7 +3831,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _afterCut(result);
       return;
     }
-    var frame = at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    // Shift lays each file on a track of its own, all at one frame, as
+    // Vegas's Add across tracks.
+    final across = HardwareKeyboard.instance.isShiftPressed;
+    final drops = <(FootageReference, BridgeMediaInfo)>[];
     for (final f in footage) {
       // The item's length is what the Project panel has usually probed
       // already. One it has not is probed here, and one that will not probe
@@ -3842,36 +3845,56 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       } catch (_) {
         continue;
       }
-      if (facts == null || !mounted) continue;
-      // A still has no length of its own, so it takes five seconds.
-      final length = facts.duration.num > 0 && facts.duration.den > 0
-          ? facts.duration
-          : const BridgeRational(num: 5, den: 1);
-      // A video brings the stretch marked on it with In and Out.
-      BridgeFootageTrim? trim;
-      if (LumitUiState.framesOf(facts) > 1) {
-        try {
-          trim = f.trim();
-        } catch (_) {}
+      if (facts != null) drops.add((f, facts));
+    }
+    if (!mounted) return;
+    var frame = at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    var onto = across ? null : target;
+    var result = BridgeCutResult.nothing;
+    var placed = false;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+        () {
+      for (final (f, facts) in drops) {
+        // A still has no length of its own, so it takes five seconds.
+        final length = facts.duration.num > 0 && facts.duration.den > 0
+            ? facts.duration
+            : const BridgeRational(num: 5, den: 1);
+        // A video brings the stretch marked on it with In and Out.
+        BridgeFootageTrim? trim;
+        if (LumitUiState.framesOf(facts) > 1) {
+          try {
+            trim = f.trim();
+          } catch (_) {}
+        }
+        final start = trim?.trimIn ?? const BridgeRational(num: 0, den: 1);
+        final end = trim?.trimOut ?? length;
+        result = _cut(() => comp.cutPlace(
+              target: onto,
+              footage: f,
+              sourceIn: start,
+              sourceOut: end,
+              atFrame: frame,
+              insert: false,
+              linked: _linked,
+              withPicture: ui.workspace.interface.cutSoundWithPicture,
+              arrival: ui.streamsArrival,
+            ));
+        if (result != BridgeCutResult.done) break;
+        placed = true;
+        if (across) continue;
+        // The rest follow on the track the first made, one after another in
+        // the order they were picked.
+        if (onto == null && facts.videoCodec != null) {
+          onto = comp.getLayers().firstOrNull;
+        }
+        frame += ((end.num / end.den - start.num / start.den) * ui.model.fps)
+            .round();
       }
-      final start = trim?.trimIn ?? const BridgeRational(num: 0, den: 1);
-      final end = trim?.trimOut ?? length;
-      final result = _cut(() => comp.cutPlace(
-            target: target,
-            footage: f,
-            sourceIn: start,
-            sourceOut: end,
-            atFrame: frame,
-            insert: false,
-            linked: _linked,
-            withPicture: ui.workspace.interface.cutSoundWithPicture,
-            arrival: ui.streamsArrival,
-          ));
-      _afterCut(result);
-      if (result != BridgeCutResult.done) return;
-      // Several files land one after another, in the order they were picked.
-      frame += ((end.num / end.den - start.num / start.den) * ui.model.fps)
-          .round();
+    });
+    _afterCut(result);
+    // A refusal part way leaves the files before it down.
+    if (placed && result != BridgeCutResult.done) {
+      _afterCut(BridgeCutResult.done);
     }
   }
 
