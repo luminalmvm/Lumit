@@ -4361,6 +4361,12 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
           that: this, parent: parent, frame: frame);
 
+  /// Close a mask's path or a shape item's, or open it, at every key it
+  /// has. `id` names either.
+  void setPathClosed({required UuidValue id, required bool closed}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetPathClosed(
+          that: this, id: id, closed: closed);
+
   /// Whether this layer's sound changes pitch when it plays faster or
   /// slower. Off keeps the pitch where it was.
   void setPitchFollowsSpeed({required bool follows}) =>
@@ -4410,8 +4416,8 @@ class LayerReference {
   /// of edit as a mask list or a paint list: an add, a delete, a recolour and
   /// a path edit are one kind of thing and each is one undo step.
   ///
-  /// A path of fewer than two vertices is refused, as a mask's is: it is not
-  /// a shape, and it would be a Timeline row with nothing behind it.
+  /// A path with no vertices is refused: it would be a Timeline row with
+  /// nothing behind it.
   ///
   /// **The art that was not edited does not move**. A shape layer's
   /// picture is its art's bounding box, and the layer's origin is that box's

@@ -7494,6 +7494,10 @@
   "@menuTogglePathKey": {
     "description": "Layer ▸ Mask and shape path submenu item: keys the picked path's shape at the playhead, or takes away the key already there."
   },
+  "menuPathClosed": "Closed",
+  "@menuPathClosed": {
+    "description": "Layer ▸ Mask and shape path submenu item, ticked while the picked path is closed: closes an open path or opens a closed one."
+  },
   "menuToggleHoldKeyframe": "Toggle hold keyframe",
   "@menuToggleHoldKeyframe": {
     "description": "Menu item."
@@ -16067,9 +16071,9 @@
   "@statusHintShape": {
     "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Alt and Shift keys do to it. The parts are separated by a middle dot."
   },
-  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
+  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Enter or Esc leaves the path open",
   "@statusHintPen": {
-    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
+    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace, Enter and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
   },
   "statusHintConvertVertex": "Click makes a point sharp or smooth · Drag from a point pulls out its handles · Drag a handle moves it alone",
   "@statusHintConvertVertex": {
