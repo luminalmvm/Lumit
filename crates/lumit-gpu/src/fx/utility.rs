@@ -61,8 +61,6 @@ struct SetChannelsParams {
 /// `lumit_core::fx::cpu::LinearWipeParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearWipeOp {
-    /// Where the wipe line pivots, raster pixels.
-    pub centre: [f32; 2],
     /// The sweep direction, host-computed `(sin θ, −cos θ)`.
     pub normal: [f32; 2],
     /// Completion ÷ 100.
@@ -76,12 +74,13 @@ pub struct LinearWipeOp {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct LinearWipeParams {
-    centre_normal: [f32; 4],
+    normal: [f32; 2],
     completion: f32,
     band: f32,
     mix_amt: f32,
     /// 1 = the matte scales Completion per pixel.
     matte_on: f32,
+    _pad: [f32; 2],
 }
 
 /// One resolved Radial wipe (docs/08 §3.47). Mirrors
@@ -216,11 +215,12 @@ impl FxEngine {
             w,
             h,
             bytemuck::bytes_of(&LinearWipeParams {
-                centre_normal: [op.centre[0], op.centre[1], op.normal[0], op.normal[1]],
+                normal: op.normal,
                 completion: op.completion,
                 band: op.band,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 2],
             }),
         );
         out

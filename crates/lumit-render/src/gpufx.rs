@@ -3142,7 +3142,6 @@ impl GpuEffect for LinearWipe {
             h,
             aux.matte(),
             &lumit_gpu::fx::utility::LinearWipeOp {
-                centre: l.centre,
                 normal: l.normal,
                 completion: l.completion,
                 band: l.band,

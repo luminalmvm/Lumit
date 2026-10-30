@@ -6801,8 +6801,6 @@ fn every_parameter_declares_a_unit() {
             ("texturize", "relief"),
             ("mood_lighting", "scale"),
             ("pixel_sort", "max_span"),
-            ("linear_wipe", "centre_x"),
-            ("linear_wipe", "centre_y"),
             ("linear_wipe", "feather"),
             ("radial_wipe", "centre_x"),
             ("radial_wipe", "centre_y"),

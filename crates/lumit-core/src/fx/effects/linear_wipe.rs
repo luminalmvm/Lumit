@@ -3,9 +3,11 @@
 //!
 //! **In plain terms.** A line is drawn across the picture and everything behind
 //! it is taken away. Completion says how far the line has travelled, Wipe angle
-//! which way it runs, Feather how soft its edge is, and Wipe centre where it
-//! pivots. Keyframe Completion from 0 to 100 and you have a cut made out of a
-//! move.
+//! which way it runs, and Feather how soft its edge is. Keyframe Completion from
+//! 0 to 100 and you have a cut made out of a move.
+//!
+//! There is no centre, as in AE. The edge always sweeps the whole layer, so
+//! where it pivots changes nothing.
 
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
@@ -17,7 +19,7 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "linear_wipe",
     label = "Linear wipe",
-    version = 1,
+    version = 2,
     category = Transition,
     cost = Trivial,
     roi = Exact,
@@ -35,16 +37,6 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct LinearWipe {
-    /// Where the wipe line pivots, px@comp (point parameters are PIXELS).
-    /// The schema default is nominal 1080p centre; `instantiate_for_raster`
-    /// centres a fresh instance on the actual comp.
-    #[slider(label = "Wipe centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
-    pub centre_x: f32,
-
-    /// px@comp; see [`centre_x`](Self::centre_x).
-    #[slider(label = "Wipe centre y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
-    pub centre_y: f32,
-
     /// How far the edge has travelled, per cent. **50 by default, where AE's is
     /// 0**, for docs/08 §3.39's reason: an effect whose default state has
     /// removed nothing is an effect that has not been applied (§1.2).
@@ -89,7 +81,6 @@ impl LinearWipe {
     pub fn packed(self) -> cpu::LinearWipeParams {
         let (sin, cos) = self.angle.to_radians().sin_cos();
         cpu::LinearWipeParams {
-            centre: [self.centre_x, self.centre_y],
             normal: [sin, -cos],
             completion: (self.completion / 100.0).clamp(0.0, 1.0),
             // Floored so the hard-edged case is a step rather than a divide by

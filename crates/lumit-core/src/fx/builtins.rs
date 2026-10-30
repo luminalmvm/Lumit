@@ -416,6 +416,12 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
             })
             .map(|p| p.id)
             .collect();
+        // Linear wipe lost its Wipe centre in version 2: a sweep that crosses
+        // the whole layer reads the same from any pivot, and a centre left
+        // off a small layer wiped all of it at 0%.
+        if e.effect.match_name == "linear_wipe" {
+            e.params.retain(|p| p.id != "centre_x" && p.id != "centre_y");
+        }
         for p in s.params {
             let Some(mut value) = default_param_value(&p.kind) else {
                 continue; // a button has nothing to backfill

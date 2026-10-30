@@ -577,8 +577,7 @@ fn channel_blur(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(6); // Blur Dimensions — Lumit's is always both
 }
 
-/// AE `ADBE Linear Wipe` → Linear wipe (docs/11 §5): direct. Lumit's Wipe
-/// centre is its own and defaults to the frame centre, which is AE's behaviour.
+/// AE `ADBE Linear Wipe` → Linear wipe (docs/11 §5): direct.
 fn linear_wipe(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "completion", Unit::Direct);
     fx.carry(2, "angle", Unit::Direct);
