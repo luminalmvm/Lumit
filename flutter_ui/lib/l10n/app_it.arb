@@ -4308,6 +4308,13 @@
     "description": "Effect controls — a Wipe option on Radial wipe."
   },
   "fxCloneLayer": "Livello da clonare",
+  "fxCloneLayer5": "Livello da clonare 5",
+  "fxCloneLayer6": "Livello da clonare 6",
+  "fxCloneLayer7": "Livello da clonare 7",
+  "fxCloneLayer8": "Livello da clonare 8",
+  "fxLayerIndex": "Indice livello",
+  "fxScaleX": "Scala x",
+  "fxScaleY": "Scala y",
   "@fxCloneLayer": {
     "description": "Effect controls — a control on Clone to points: which layer's picture is stamped at every point of the wired stream."
   },
@@ -4331,6 +4338,16 @@
   "@fxColour2": {
     "description": "Effect controls — a control on RGB split."
   },
+  "fxColour2Position": "Posizione colore 2",
+  "fxColour3Position": "Posizione colore 3",
+  "fxColour4Position": "Posizione colore 4",
+  "fxConical": "Conico",
+  "fxStartCentreX": "Centro iniziale x",
+  "fxStartCentreY": "Centro iniziale y",
+  "fxTwo": "Due",
+  "fxThree": "Tre",
+  "fxFour": "Quattro",
+  "fxFive": "Cinque",
   "fxColour3": "Colore 3",
   "@fxColour3": {
     "description": "Effect controls — a control on RGB split."
@@ -6984,6 +7001,8 @@
   "@fxTileWidth": {
     "description": "Effect controls — a control on Tile."
   },
+  "fxUnits": "Unità",
+  "fxSeconds": "Secondi",
   "fxTime": "Tempo",
   "@fxTime": {
     "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands."

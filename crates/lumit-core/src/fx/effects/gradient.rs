@@ -9,8 +9,42 @@
 
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    schema::ParamGroup,
 };
 use lumit_fx_macros::Effect;
+
+/// Conical's start circle shows only on Conical, and each colour in between
+/// only once Colours counts it.
+pub const GRADIENT_GROUPS: &[ParamGroup] = &[
+    ParamGroup {
+        label: "",
+        params: &["focus_x", "focus_y", "focus_radius"],
+        collapsed: false,
+        visible_when: Some(("shape", &[2])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["colour_2", "position_2"],
+        collapsed: false,
+        visible_when: Some(("colours", &[1, 2, 3])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["colour_3", "position_3"],
+        collapsed: false,
+        visible_when: Some(("colours", &[2, 3])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["colour_4", "position_4"],
+        collapsed: false,
+        visible_when: Some(("colours", &[3])),
+        visible_when_lens_elements: None,
+    },
+];
 
 /// Gradient's controls.
 ///
@@ -32,11 +66,13 @@ use lumit_fx_macros::Effect;
     // read and there is nothing to unpremultiply (§2.2).
     premultiplied = true,
     seeded = true,
+    groups = GRADIENT_GROUPS,
 )]
 pub struct Gradient {
     /// Linear projects onto the axis; Radial measures distance from Start, with
-    /// End sitting on the outer edge.
-    #[choice(options = ["Linear", "Radial"], default = 0)]
+    /// End sitting on the outer edge; Conical runs from a start circle of its
+    /// own out to that same outer circle.
+    #[choice(options = ["Linear", "Radial", "Conical"], default = 0)]
     pub shape: u32,
 
     /// px@comp. The default pair runs top-to-bottom down a 1080p frame.
@@ -62,6 +98,79 @@ pub struct Gradient {
     /// The colour at End.
     #[colour(label = "End colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],
+
+    /// Conical's start circle: its centre, px@comp. The ramp runs from this
+    /// circle out to the end circle, centred on Start with End on its edge.
+    #[slider(label = "Start centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
+    pub focus_x: f32,
+
+    /// See [`focus_x`](Self::focus_x).
+    #[slider(label = "Start centre y", min = 0.0, max = 2160.0, default = 0.0, unit = Px)]
+    pub focus_y: f32,
+
+    /// Conical's start circle: its radius, px@comp. Start colour fills it.
+    #[slider(
+        label = "Start radius",
+        min = 0.0,
+        max = 2000.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub focus_radius: f32,
+
+    /// How many colours the ramp runs through: Start colour, the colours
+    /// in between, End colour.
+    #[choice(label = "Colours", options = ["Two", "Three", "Four", "Five"], default = 0)]
+    pub colours: u32,
+
+    /// The first colour after Start colour.
+    #[colour(label = "Colour 2", default = [1.0, 0.5, 0.0, 1.0], max = 4.0)]
+    pub colour_2: [f32; 4],
+
+    /// Where Colour 2 sits along the ramp, per cent.
+    #[slider(
+        label = "Colour 2 position",
+        min = 0.0,
+        max = 100.0,
+        default = 50.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub position_2: f32,
+
+    /// The next colour, with Four or Five.
+    #[colour(label = "Colour 3", default = [0.0, 0.5, 1.0, 1.0], max = 4.0)]
+    pub colour_3: [f32; 4],
+
+    /// Where Colour 3 sits, per cent.
+    #[slider(
+        label = "Colour 3 position",
+        min = 0.0,
+        max = 100.0,
+        default = 75.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub position_3: f32,
+
+    /// The last colour before End colour, with Five.
+    #[colour(label = "Colour 4", default = [0.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub colour_4: [f32; 4],
+
+    /// Where Colour 4 sits, per cent.
+    #[slider(
+        label = "Colour 4 position",
+        min = 0.0,
+        max = 100.0,
+        default = 90.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub position_4: f32,
 
     /// Per cent: how far a pixel's position along the ramp may be dithered. A
     /// few per cent breaks banding without softening the ramp's ends.
@@ -128,7 +237,28 @@ impl Gradient {
             // ramp to the layer's coverage is the Gradient overlay *style*'s,
             // and false here is the picture this effect always drew.
             clip_to_alpha: false,
+            conical: self.shape == 2,
+            focus: [self.focus_x, self.focus_y],
+            radii: [self.focus_radius.max(0.0), len2.sqrt()],
+            mids: self.colours.min(3),
+            mid: self.mids(),
         }
+    }
+
+    /// The colours between Start colour and End colour, each with its place
+    /// along the ramp (0..1) in the last lane. Kept in order: a colour placed
+    /// before the one ahead of it sits where that one does.
+    fn mids(self) -> [[f32; 4]; 3] {
+        let mut at = 0.0f32;
+        [
+            (self.colour_2, self.position_2),
+            (self.colour_3, self.position_3),
+            (self.colour_4, self.position_4),
+        ]
+        .map(|(c, pos)| {
+            at = (pos / 100.0).clamp(at, 1.0);
+            [c[0], c[1], c[2], at]
+        })
     }
 }
 
@@ -142,5 +272,58 @@ impl EffectDef for GradientDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::gradient(rgba, w, h, &Gradient::read(p).packed());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plain() -> Gradient {
+        Gradient::read(Params::EMPTY)
+    }
+
+    #[test]
+    fn three_colours_pass_through_the_middle_one() {
+        let g = Gradient {
+            colours: 1,
+            start_colour: [1.0; 4],
+            colour_2: [1.0, 0.5, 0.0, 1.0],
+            end_colour: [1.0; 4],
+            ..plain()
+        }
+        .packed();
+        assert_eq!(cpu::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0]);
+        assert_eq!(cpu::gradient_ramp(&g, 0.0), [1.0, 1.0, 1.0]);
+        assert_eq!(cpu::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
+        let quarter = cpu::gradient_ramp(&g, 0.25);
+        assert!((quarter[1] - 0.75).abs() < 1e-6);
+        // Two colours ignore the ones in between.
+        let two = Gradient { colours: 0, ..plain() }.packed();
+        assert_eq!(cpu::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn conical_runs_from_the_start_circle_to_the_end_circle() {
+        // End circle: centre (100, 100), radius 100. Start circle: centre
+        // (120, 100), radius 10.
+        let g = Gradient {
+            shape: 2,
+            start_x: 100.0,
+            start_y: 100.0,
+            end_x: 200.0,
+            end_y: 100.0,
+            focus_x: 120.0,
+            focus_y: 100.0,
+            focus_radius: 10.0,
+            ..plain()
+        }
+        .packed();
+        assert!(cpu::conical_t(&g, 120.0, 100.0) <= 0.0, "inside the start circle");
+        assert!((cpu::conical_t(&g, 130.0, 100.0)).abs() < 1e-4, "on the start circle");
+        assert!((cpu::conical_t(&g, 200.0, 100.0) - 1.0).abs() < 1e-4, "on the end circle");
+        assert!((cpu::conical_t(&g, 0.0, 100.0) - 1.0).abs() < 1e-4, "on the end circle");
+        let mid = cpu::conical_t(&g, 165.0, 100.0);
+        assert!(mid > 0.0 && mid < 1.0, "between the two: {mid}");
     }
 }

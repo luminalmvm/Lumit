@@ -196,6 +196,10 @@ Clone layer
 Clone layer 2
 Clone layer 3
 Clone layer 4
+Clone layer 5
+Clone layer 6
+Clone layer 7
+Clone layer 8
 Clone to points
 Closed
 Coating
@@ -205,7 +209,11 @@ Collide with
 Colour
 Colour 1
 Colour 2
+Colour 2 position
 Colour 3
+Colour 3 position
+Colour 4
+Colour 4 position
 Colour A
 Colour B
 Colour balance
@@ -223,6 +231,7 @@ Colour noise
 Colour overlay
 Colour ramp
 Colour variation
+Colours
 Columns
 Combine
 Combine channels
@@ -237,6 +246,7 @@ Compositing
 Compressor
 Conductivity state
 Confidence
+Conical
 Connect points
 Connections
 Constant
@@ -421,6 +431,7 @@ Fish
 Fisheye
 Fit cell
 Fit to size
+Five
 Flag
 Flare options
 Flash
@@ -447,6 +458,7 @@ Force on all layers
 Forces
 Forking
 Forwards
+Four
 Fractal influence
 Fractal noise
 Fractal type
@@ -594,6 +606,7 @@ Label scale
 Latitude
 Layer
 Layer in to out
+Layer index
 Layer knocks out shadow
 Layer out
 Layer points
@@ -987,7 +1000,9 @@ Scale
 Scale height
 Scale sizes
 Scale width
+Scale x
 Scale x %
+Scale y
 Scale y %
 Scanlines
 Scatter
@@ -1004,6 +1019,7 @@ Screen softness
 Scribble
 Second input
 Second tint
+Seconds
 Seed
 Seed from
 Segment
@@ -1110,7 +1126,10 @@ Star depth
 Starburst intensity
 Start
 Start angle
+Start centre x
+Start centre y
 Start colour
+Start radius
 Start thickness
 Start x
 Start y
@@ -1167,6 +1186,7 @@ Texturize
 Thickness max
 Thickness min
 This comp
+Three
 Threshold
 Threshold softness
 Tile
@@ -1220,6 +1240,7 @@ Twirl
 Twist
 Twitch frequency
 Twitchy
+Two
 Two colours
 Two layer, magenta
 Two points
@@ -1232,6 +1253,7 @@ Uncoated
 Underwater
 Uniform
 Uniform scaling
+Units
 Unsharp mask
 Up
 Upper left x

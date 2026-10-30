@@ -33,8 +33,8 @@ use super::drivers::{
     remap::{Remap, RemapDef},
     ring_wave::{RingWave, RingWaveDef},
     siceliot::{
-        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
-        ValueNoiseDef,
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, TimeNode, TimeNodeDef,
+        ValueNode, ValueNodeDef, ValueNoise, ValueNoiseDef,
     },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
@@ -501,4 +501,8 @@ crate::catalogue![
     OscillatorDef => Oscillator,
     ValueNoiseDef => ValueNoise,
     RingWaveDef => RingWave,
+    // One number to wire into many parameters, and the clock itself: the
+    // two convenience drivers, the same for every copy.
+    ValueNodeDef => ValueNode,
+    TimeNodeDef => TimeNode,
 ];

@@ -512,6 +512,120 @@ pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64)
     between(p.minimum, p.maximum, 0.5 * (sum / weight + 1.0))
 }
 
+// ------------------------------------------------------------------ Value
+
+/// Value's control.
+#[derive(Debug, Clone, Copy, PartialEq, Effect)]
+#[effect(
+    match_name = "value",
+    label = "Value",
+    version = 1,
+    category = SiceliotDrivers,
+    cost = Trivial,
+    roi = Exact,
+    matte = false,
+)]
+pub struct ValueNode {
+    /// The number it hands out. Keyframe it once and wire it into as many
+    /// parameters as should move together.
+    #[slider(label = "Value", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
+    pub value: f32,
+}
+
+/// Value's behaviour.
+pub struct ValueNodeDef;
+
+impl EffectDef for ValueNodeDef {
+    fn schema(&self) -> &'static EffectSchema {
+        &<ValueNode as EffectMetadata>::SCHEMA
+    }
+
+    fn is_image_op(&self) -> bool {
+        false
+    }
+
+    fn signature(&self) -> Signature {
+        Signature::Data {
+            inputs: &[],
+            outputs: VALUE_OUT,
+        }
+    }
+
+    fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
+        push(VALUE_PORT, Value::Float(ValueNode::read(cx.params).value));
+    }
+}
+
+// ------------------------------------------------------------------- Time
+
+/// Time's controls.
+#[derive(Debug, Clone, Copy, PartialEq, Effect)]
+#[effect(
+    match_name = "time",
+    label = "Time",
+    version = 1,
+    category = SiceliotDrivers,
+    cost = Trivial,
+    roi = Exact,
+    matte = false,
+)]
+pub struct TimeNode {
+    /// Whether it counts in seconds or in the comp's frames.
+    #[choice(label = "Units", options = TIME_UNITS, default = 0)]
+    pub units: u32,
+
+    /// How fast it counts: 2 is twice as fast, a negative number counts down.
+    #[slider(label = "Speed", min = -10.0, max = 10.0, default = 1.0, unit = Raw)]
+    pub speed: f32,
+
+    /// Added after Speed, in the chosen units.
+    #[slider(label = "Offset", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
+    pub offset: f32,
+}
+
+/// What Time counts in.
+pub const TIME_UNITS: &[&str] = &["Seconds", "Frames"];
+
+/// Time's behaviour.
+pub struct TimeNodeDef;
+
+impl EffectDef for TimeNodeDef {
+    fn schema(&self) -> &'static EffectSchema {
+        &<TimeNode as EffectMetadata>::SCHEMA
+    }
+
+    fn is_image_op(&self) -> bool {
+        false
+    }
+
+    fn signature(&self) -> Signature {
+        Signature::Data {
+            inputs: &[],
+            outputs: VALUE_OUT,
+        }
+    }
+
+    fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
+        let ctx = cx.context;
+        let fps = ctx
+            .comp
+            .and_then(|id| ctx.document.comp(id))
+            .map_or(0.0, |c| c.frame_rate.fps());
+        push(
+            VALUE_PORT,
+            Value::Float(time_value(&TimeNode::read(cx.params), cx.lt, fps)),
+        );
+    }
+}
+
+/// The layer time `lt` counted in Time's units (frames at `fps`), times
+/// Speed, plus Offset. Without a comp, frames read as seconds.
+#[must_use]
+pub fn time_value(p: &TimeNode, lt: f64, fps: f64) -> f32 {
+    let count = if p.units == 1 && fps > 0.0 { lt * fps } else { lt };
+    (count * f64::from(p.speed) + f64::from(p.offset)) as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -672,5 +786,18 @@ mod tests {
             .fold(0.0f32, f32::max);
         assert!(near < 0.05, "neighbours differ by {near}");
         assert!(far > 0.1, "far points differ by at most {far}");
+    }
+
+    #[test]
+    fn time_counts_seconds_or_frames_with_speed_and_offset() {
+        let p = TimeNode {
+            units: 0,
+            speed: 2.0,
+            offset: 1.0,
+        };
+        assert!((time_value(&p, 1.5, 24.0) - 4.0).abs() < 1e-6);
+        let frames = TimeNode { units: 1, ..p };
+        assert!((time_value(&frames, 1.5, 24.0) - 73.0).abs() < 1e-4);
+        assert!((time_value(&frames, 1.5, 0.0) - 4.0).abs() < 1e-6, "no comp: seconds");
     }
 }

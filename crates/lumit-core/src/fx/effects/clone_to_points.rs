@@ -75,6 +75,10 @@ pub const MAX_PICTURES: usize = 32;
 /// Choose by's Every layer, by its place in the dropdown.
 const CHOOSE_EVERY: u32 = 3;
 
+/// Choose by's Layer index, which reads the Layer index row (or the copy's
+/// own value, where a driver is wired into it).
+const CHOOSE_INDEX: u32 = 4;
+
 /// Time offset's options, by their place in the dropdown.
 const TIME_OFF: u32 = 0;
 const TIME_IN_ORDER: u32 = 1;
@@ -167,8 +171,13 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
             "clone_layer_2",
             "clone_layer_3",
             "clone_layer_4",
+            "clone_layer_5",
+            "clone_layer_6",
+            "clone_layer_7",
+            "clone_layer_8",
             "choose_by",
             "choose_name",
+            "layer_index",
         ],
         collapsed: true,
         visible_when: None,
@@ -300,12 +309,29 @@ pub struct CloneToPoints {
     #[layer(label = "Clone layer 4")]
     pub clone_layer_4: bool,
 
+    /// A fifth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 5")]
+    pub clone_layer_5: bool,
+
+    /// A sixth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 6")]
+    pub clone_layer_6: bool,
+
+    /// A seventh. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 7")]
+    pub clone_layer_7: bool,
+
+    /// An eighth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 8")]
+    pub clone_layer_8: bool,
+
     /// How a point picks its layer when more than one is set: each in turn
-    /// down the stream, by its own dice, or by the number it carries. Every
-    /// layer stamps them all at every point, the first row at the bottom.
+    /// down the stream, by its own dice, by the number it carries, or by Layer
+    /// index. Every layer stamps them all at every point, the first row at
+    /// the bottom.
     #[choice(
         label = "Choose by",
-        options = ["In order", "Random", "Number", "Every layer"],
+        options = ["In order", "Random", "Number", "Every layer", "Layer index"],
         default = 0
     )]
     pub choose_by: u32,
@@ -314,6 +340,12 @@ pub struct CloneToPoints {
     /// or one of the `@` names. Empty is the number it carries.
     #[text(label = "Name", default = "")]
     pub choose_name: ShortText,
+
+    /// Which layer every point takes when Choose by is Layer index, counted
+    /// from 0 and wrapped round the layers that are set. Wire a Random, a
+    /// Stagger or Clone index in to pick a layer for each copy.
+    #[slider(label = "Layer index", min = 0.0, max = 7.0, default = 0.0, unit = Raw)]
+    pub layer_index: f32,
 
     /// Shows each stamp its layer at another moment, so one animated layer
     /// becomes a cascade. In order steps back once a stamp, Random shuffles
@@ -417,9 +449,42 @@ pub struct CloneToPoints {
     #[slider(min = 0.0, max = 1000.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub scale: f32,
 
+    /// Multiplies each stamp's width, per cent, on top of Scale and the
+    /// point's own stretch. Wire a Stagger in to give every copy its own.
+    #[slider(
+        label = "Scale x",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub scale_x: f32,
+
+    /// Multiplies each stamp's height, per cent. See
+    /// [`scale_x`](Self::scale_x).
+    #[slider(
+        label = "Scale y",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub scale_y: f32,
+
     /// Added to each point's own rotation, degrees.
     #[dial(label = "Rotation", default = 0.0)]
     pub rotation: f32,
+
+    /// Moves each stamp across from its point, px@comp. Wire a driver in to
+    /// move every copy by its own amount.
+    #[slider(label = "Offset x", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub offset_x: f32,
+
+    /// Moves each stamp down from its point, px@comp.
+    #[slider(label = "Offset y", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub offset_y: f32,
 
     /// Which place on the stamp sits on the point, per cent across it. 0 is
     /// its left edge. The stamp turns about this place.
@@ -556,20 +621,50 @@ impl CloneToPoints {
         // that many times and keeps all its stamps or none.
         let most = self.max_clones.clamp(0, points::CAP_HARD as i32) as usize;
         out.keep_newest(most / count);
-        let tint = (self.tint / 100.0).clamp(0.0, 1.0);
-        // Scale, Rotation and Opacity, per stamp where a driver that reads
-        // the copy is wired into the row, and the row's one value elsewhere.
+        // Scale, Scale x / y, Rotation, Offset x / y, Opacity and Tint, per
+        // stamp where a driver that reads the copy is wired into the row, and
+        // the row's one value elsewhere.
         let scales = per_copy::column_or(&out, per_copy::COPY_SCALE, self.scale);
+        let wides = per_copy::column_or(&out, per_copy::COPY_SCALE_X, self.scale_x);
+        let talls = per_copy::column_or(&out, per_copy::COPY_SCALE_Y, self.scale_y);
         let turns = per_copy::column_or(&out, per_copy::COPY_ROTATION, self.rotation);
         let opacities = per_copy::column_or(&out, per_copy::COPY_OPACITY, self.opacity);
+        let tints = per_copy::column_or(&out, per_copy::COPY_TINT, self.tint);
+        // A driver hands out px@comp, while the row is already in the
+        // stream's units: only a driven column is scaled.
+        let units = out.units();
+        let along = |name: &str, row: f32| -> Vec<f32> {
+            match out.column(name) {
+                points::Column::Named(_) => per_copy::column_or(&out, name, 0.0)
+                    .into_iter()
+                    .map(|v| v * units)
+                    .collect(),
+                _ => vec![row; out.len()],
+            }
+        };
+        let dxs = along(per_copy::COPY_OFFSET_X, self.offset_x);
+        let dys = along(per_copy::COPY_OFFSET_Y, self.offset_y);
         for (s, scale) in out.size.iter_mut().zip(&scales) {
             *s *= (scale / 100.0).max(0.0);
+        }
+        // Across and down in the stamp's own turned frame, on top of the
+        // point's own stretch. Left empty while nothing is stretched.
+        if wides.iter().chain(&talls).any(|s| *s != 100.0) {
+            for ((st, w), t) in out.stretch_mut().iter_mut().zip(&wides).zip(&talls) {
+                st[0] *= (w / 100.0).max(0.0);
+                st[1] *= (t / 100.0).max(0.0);
+            }
+        }
+        for ((p, dx), dy) in out.position.iter_mut().zip(&dxs).zip(&dys) {
+            p[0] += dx;
+            p[1] += dy;
         }
         for (r, turn) in out.rotation.iter_mut().zip(&turns) {
             *r += turn.to_radians();
         }
-        for (c, opacity) in out.colour.iter_mut().zip(&opacities) {
+        for ((c, opacity), tint) in out.colour.iter_mut().zip(&opacities).zip(&tints) {
             let opacity = (opacity / 100.0).clamp(0.0, 1.0);
+            let tint = (tint / 100.0).clamp(0.0, 1.0);
             // Towards opaque white, which is the identity of a premultiplied
             // tint: at Tint 0 a stamp is the layer's own picture, at 100 it is
             // the picture times the point's colour and alpha.
@@ -649,6 +744,14 @@ impl CloneToPoints {
                 // The number it carries, wrapped round the list. A NaN reads 0.
                 2 => {
                     let number = s.read(choose, i).unwrap_or(0.0);
+                    (number.floor() as i64).rem_euclid(n as i64) as usize
+                }
+                // The Layer index row, or the copy's own where a driver is
+                // wired into it.
+                CHOOSE_INDEX => {
+                    let column = s.column(per_copy::COPY_LAYER_INDEX);
+                    let number = s.read(column, i).unwrap_or(self.layer_index);
+                    let number = if number.is_finite() { number } else { 0.0 };
                     (number.floor() as i64).rem_euclid(n as i64) as usize
                 }
                 _ => i % n,

@@ -55,6 +55,14 @@ pub struct GradientOp {
     /// the Gradient overlay *style*, as against this effect's
     /// frame-flooding generator.
     pub clip_to_alpha: bool,
+    /// Conical: from the start circle (`focus`, `radii[0]`) to the end
+    /// circle (`start`, `radii[1]`), raster pixels.
+    pub conical: bool,
+    pub focus: [f32; 2],
+    pub radii: [f32; 2],
+    /// The colours in between in use (0..=3), rgb and place along the ramp.
+    pub mids: u32,
+    pub mid: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -71,7 +79,11 @@ struct GradientParams {
     radial: u32,
     /// 1 = clip the ramp to the layer's coverage and leave its alpha.
     clip_to_alpha: u32,
-    _pad1: u32,
+    /// How many of `mid` are in use; Conical when `radial` is 2.
+    mids: u32,
+    /// xy = Conical's start centre, z = start radius, w = end radius.
+    focus: [f32; 4],
+    mid: [[f32; 4]; 3],
 }
 
 /// One resolved Noise (docs/08 §3.36). `tick` arrives already discretised from
@@ -212,9 +224,11 @@ impl FxEngine {
                 scatter: op.scatter,
                 mix_amt: op.mix,
                 seed: op.seed,
-                radial: u32::from(op.radial),
+                radial: if op.conical { 2 } else { u32::from(op.radial) },
                 clip_to_alpha: u32::from(op.clip_to_alpha),
-                _pad1: 0,
+                mids: op.mids.min(3),
+                focus: [op.focus[0], op.focus[1], op.radii[0], op.radii[1]],
+                mid: op.mid,
             }),
         );
         out

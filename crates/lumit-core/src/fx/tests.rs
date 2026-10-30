@@ -6609,6 +6609,9 @@ fn every_parameter_declares_a_unit() {
             ("gradient", "start_y"),
             ("gradient", "end_x"),
             ("gradient", "end_y"),
+            ("gradient", "focus_x"),
+            ("gradient", "focus_y"),
+            ("gradient", "focus_radius"),
             ("fractal_noise", "scale"),
             ("fractal_noise", "scale_width"),
             ("fractal_noise", "scale_height"),
@@ -6718,6 +6721,8 @@ fn every_parameter_declares_a_unit() {
             // a stamp's corners are rounded.
             ("clone_to_points", "cell_width"),
             ("clone_to_points", "cell_height"),
+            ("clone_to_points", "offset_x"),
+            ("clone_to_points", "offset_y"),
             ("clone_to_points", "corner_radius"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
@@ -10997,4 +11002,32 @@ fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
     assert!((s.rotation[1] - 90f32.to_radians()).abs() < 1e-5);
     assert!((s.size[0] - 10.0).abs() < 1e-4 && (s.size[1] - 5.0).abs() < 1e-4);
     assert!((s.colour[0][3] - 1.0).abs() < 1e-5 && (s.colour[1][3] - 0.25).abs() < 1e-5);
+}
+
+/// Scale x / y and Offset x / y per copy (engine change 16): the columns
+/// `drive_rows` writes stretch and move each stamp on its own, and without
+/// them the rows' one value applies to all.
+#[test]
+fn clone_to_points_reads_per_copy_scale_xy_and_offset() {
+    use crate::fx::drivers::per_copy::{COPY_OFFSET_X, COPY_SCALE_X};
+    let e = clone_to_points(&[
+        ("scale_y", EffectValue::Float(Property::fixed(50.0))),
+        ("offset_y", EffectValue::Float(Property::fixed(7.0))),
+    ]);
+    let before = two_points();
+    let plain = clone_stamps(&e, &before);
+    for i in 0..2 {
+        assert_eq!(plain.stretch_of(i), [1.0, 0.5]);
+        assert!((plain.position[i][1] - before.position[i][1] - 7.0).abs() < 1e-4);
+    }
+    let mut driven = two_points();
+    for (i, (wide, dx)) in [(200.0, 0.0), (50.0, 30.0)].into_iter().enumerate() {
+        driven.named_mut(COPY_SCALE_X, 1).expect("room")[i][0] = wide;
+        driven.named_mut(COPY_OFFSET_X, 1).expect("room")[i][0] = dx;
+    }
+    let s = clone_stamps(&e, &driven);
+    assert_eq!(s.stretch_of(0), [2.0, 0.5]);
+    assert_eq!(s.stretch_of(1), [0.5, 0.5]);
+    assert!((s.position[1][0] - before.position[1][0] - 30.0).abs() < 1e-4);
+    assert!((s.position[0][0] - before.position[0][0]).abs() < 1e-4);
 }

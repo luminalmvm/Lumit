@@ -8573,7 +8573,8 @@
           "default": 0,
           "options": [
             "Linear",
-            "Radial"
+            "Radial",
+            "Conical"
           ],
           "dividers_after": []
         },
@@ -8640,6 +8641,123 @@
           ],
           "slider_min": 0.0,
           "slider_max": 4.0
+        },
+        {
+          "id": "focus_x",
+          "label": "Start centre x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "focus_y",
+          "label": "Start centre y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "focus_radius",
+          "label": "Start radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "colours",
+          "label": "Colours",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Two",
+            "Three",
+            "Four",
+            "Five"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "colour_2",
+          "label": "Colour 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.5,
+            0.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "position_2",
+          "label": "Colour 2 position",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour_3",
+          "label": "Colour 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.5,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "position_3",
+          "label": "Colour 3 position",
+          "kind": "float",
+          "unit": "percent",
+          "default": 75.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour_4",
+          "label": "Colour 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "position_4",
+          "label": "Colour 4 position",
+          "kind": "float",
+          "unit": "percent",
+          "default": 90.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "scatter",
@@ -8735,7 +8853,68 @@
           "dividers_after": []
         }
       ],
-      "groups": [],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "focus_x",
+            "focus_y",
+            "focus_radius"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "shape",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "colour_2",
+            "position_2"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colours",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "colour_3",
+            "position_3"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colours",
+            "values": [
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "colour_4",
+            "position_4"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colours",
+            "values": [
+              3
+            ]
+          }
+        }
+      ],
       "matte_role": "strength"
     },
     {
@@ -13864,6 +14043,34 @@
           "self_default": false
         },
         {
+          "id": "clone_layer_5",
+          "label": "Clone layer 5",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clone_layer_6",
+          "label": "Clone layer 6",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clone_layer_7",
+          "label": "Clone layer 7",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clone_layer_8",
+          "label": "Clone layer 8",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
           "id": "choose_by",
           "label": "Choose by",
           "kind": "choice",
@@ -13873,7 +14080,8 @@
             "In order",
             "Random",
             "Number",
-            "Every layer"
+            "Every layer",
+            "Layer index"
           ],
           "dividers_after": []
         },
@@ -13883,6 +14091,15 @@
           "kind": "text",
           "unit": "raw",
           "default": ""
+        },
+        {
+          "id": "layer_index",
+          "label": "Layer index",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 7.0
         },
         {
           "id": "time_offset",
@@ -13995,12 +14212,50 @@
           "hard_min": 0.0
         },
         {
+          "id": "scale_x",
+          "label": "Scale x",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "scale_y",
+          "label": "Scale y",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "rotation",
           "label": "Rotation",
           "kind": "angle",
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 15.0
+        },
+        {
+          "id": "offset_x",
+          "label": "Offset x",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "offset_y",
+          "label": "Offset y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
         },
         {
           "id": "anchor_x",
@@ -14160,8 +14415,13 @@
             "clone_layer_2",
             "clone_layer_3",
             "clone_layer_4",
+            "clone_layer_5",
+            "clone_layer_6",
+            "clone_layer_7",
+            "clone_layer_8",
             "choose_by",
-            "choose_name"
+            "choose_name",
+            "layer_index"
           ],
           "collapsed": true
         },
@@ -29007,6 +29267,69 @@
           "value": 3
         }
       ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "value",
+      "match_name": "value",
+      "label": "Value",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "value",
+          "label": "Value",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "time",
+      "match_name": "time",
+      "label": "Time",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "units",
+          "label": "Units",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Seconds",
+            "Frames"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        }
+      ],
+      "groups": [],
       "matte_role": "none"
     }
   ]

@@ -2198,9 +2198,67 @@ pub struct GradientParams {
     /// alpha, and the alpha itself left alone — which is the whole difference
     /// between the two, and why there is one kernel rather than two.
     pub clip_to_alpha: bool,
+    /// Conical: the ramp runs from the start circle (`focus`, `radii[0]`) out
+    /// to the end circle (`start`, `radii[1]`), raster pixels. Overrides
+    /// `radial`.
+    pub conical: bool,
+    pub focus: [f32; 2],
+    pub radii: [f32; 2],
+    /// How many of `mid` are in use, 0..=3: colours between `c0` and `c1`,
+    /// scene-linear rgb with the place along the ramp (0..1, ascending) in
+    /// the last lane.
+    pub mids: u32,
+    pub mid: [[f32; 4]; 3],
 }
 
-/// Gradient (docs/08 §3.35): a linear or radial two-colour ramp with optional
+/// How far along a Conical ramp the pixel `(x, y)` is: the largest `t` whose
+/// circle, between the start and the end circle, passes through it with a
+/// radius of nought or more. Outside every such circle it reads the end.
+#[must_use]
+pub fn conical_t(p: &GradientParams, x: f32, y: f32) -> f32 {
+    let pd = [x - p.focus[0], y - p.focus[1]];
+    let cd = [p.start[0] - p.focus[0], p.start[1] - p.focus[1]];
+    let (r0, dr) = (p.radii[0], p.radii[1] - p.radii[0]);
+    let a = cd[0] * cd[0] + cd[1] * cd[1] - dr * dr;
+    let b = pd[0] * cd[0] + pd[1] * cd[1] + r0 * dr;
+    let c = pd[0] * pd[0] + pd[1] * pd[1] - r0 * r0;
+    if a.abs() < 1e-4 {
+        return if b.abs() < 1e-6 { 1.0 } else { c / (2.0 * b) };
+    }
+    let disc = b * b - a * c;
+    if disc < 0.0 {
+        return 1.0;
+    }
+    let root = disc.sqrt();
+    let (hi, lo) = ((b + root) / a, (b - root) / a);
+    let (t0, t1) = if hi >= lo { (hi, lo) } else { (lo, hi) };
+    if r0 + t0 * dr >= 0.0 {
+        t0
+    } else if r0 + t1 * dr >= 0.0 {
+        t1
+    } else {
+        1.0
+    }
+}
+
+/// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
+/// then `c1`, each mixed with the next by how far between them `t` is.
+#[must_use]
+pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
+    let (mut at, mut from) = (0.0f32, p.c0);
+    for m in p.mid.iter().take(p.mids.min(3) as usize) {
+        let to = [m[0], m[1], m[2]];
+        if t <= m[3] {
+            let k = if m[3] > at { (t - at) / (m[3] - at) } else { 1.0 };
+            return std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k);
+        }
+        (at, from) = (m[3], to);
+    }
+    let k = if at < 1.0 { (t - at) / (1.0 - at) } else { 1.0 };
+    std::array::from_fn(|c| from[c] + (p.c1[c] - from[c]) * k)
+}
+
+/// Gradient (docs/08 §3.35): a linear, radial or conical ramp with optional
 /// scatter — a **generator**, so it replaces the frame edge to edge and writes
 /// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
 /// the ramp is photometrically even and can drive another effect's matte. Mix 0
@@ -2211,7 +2269,9 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             let i = ((y * w + x) * 4) as usize;
             let dx = x as f32 + 0.5 - p.start[0];
             let dy = y as f32 + 0.5 - p.start[1];
-            let mut t = if p.radial {
+            let mut t = if p.conical {
+                conical_t(p, x as f32 + 0.5, y as f32 + 0.5)
+            } else if p.radial {
                 (dx * dx + dy * dy).sqrt() * p.inv_len
             } else {
                 (dx * p.axis[0] + dy * p.axis[1]) * p.inv_len2
@@ -2224,8 +2284,9 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             // "this ramp at this coverage", so the overlay works on
             // premultiplied values with no round trip, exactly as `fill` does.
             let cover = if p.clip_to_alpha { rgba[i + 3] } else { 1.0 };
+            let ramp = gradient_ramp(p, t);
             for c in 0..3 {
-                let g = (p.c0[c] + (p.c1[c] - p.c0[c]) * t) * cover;
+                let g = ramp[c] * cover;
                 rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
             }
             if !p.clip_to_alpha {

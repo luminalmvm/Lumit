@@ -498,6 +498,11 @@ impl GradientOverlay {
             seed: 0,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             clip_to_alpha: true,
+            conical: false,
+            focus: [0.0; 2],
+            radii: [0.0; 2],
+            mids: 0,
+            mid: [[0.0; 4]; 3],
         }
     }
 }

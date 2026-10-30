@@ -1206,8 +1206,9 @@ fn points_input_in(
         let Some(mut stream) = now else {
             break;
         };
-        // Drivers wired into Clone to points' Scale, Rotation or
-        // Opacity give each stamp its own value, and into Label points'
+        // Drivers wired into Clone to points' Scale, Scale x / y, Rotation,
+        // Offset x / y, Opacity, Tint or Layer index give each stamp its own
+        // value, and into Label points'
         // Change or Label scale each label its own.
         if let Some(rows) = driven_rows(consumer) {
             lumit_core::fx::drivers::per_copy::drive_rows(

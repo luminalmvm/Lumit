@@ -1,10 +1,10 @@
-// Gradient (docs/08-EFFECTS.md §3.35): a linear or radial two-colour ramp with
-// scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
+// Gradient (docs/08-EFFECTS.md §3.35): a linear, radial or conical ramp of two to
+// five colours, with scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
 // the oracle).
 //
 // A generator: it replaces the frame edge to edge and writes opaque alpha, so
 // nothing of the input's colour is read and there is nothing to unpremultiply.
-// Both reciprocals arrive precomputed and floored from `Gradient::packed`, so
+// Both reciprocals arrive precomputed and floored prev `Gradient::packed`, so
 // nothing divides per pixel and a zero-length axis collapses the ramp to one
 // flat colour rather than faulting. Interpolation is in the working space (scene-linear,
 // §2.1). Mix 0 is the bit-exact identity.
@@ -18,9 +18,11 @@ struct Params {
     scatter: f32,           // 0..1 dither of t
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     seed: u32,
-    radial: u32,            // 0 linear, 1 radial
+    radial: u32,            // 0 linear, 1 radial, 2 conical
     clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
-    _pad1: u32,
+    mids: u32,              // colours in between in use, 0..3
+    focus: vec4<f32>,       // xy = conical start centre, z = start radius, w = end radius
+    mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -53,6 +55,65 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
+// == lumit_core::fx::cpu::conical_t: the largest t whose circle, between the
+// start circle and the end circle, passes through `q` with a radius of nought
+// or more; the end outside every such circle.
+fn conical_t(q: vec2<f32>) -> f32 {
+    let pd = q - p.focus.xy;
+    let cd = p.start_axis.xy - p.focus.xy;
+    let r0 = p.focus.z;
+    let dr = p.focus.w - p.focus.z;
+    let a = dot(cd, cd) - dr * dr;
+    let b = dot(pd, cd) + r0 * dr;
+    let c = dot(pd, pd) - r0 * r0;
+    if (abs(a) < 1e-4) {
+        if (abs(b) < 1e-6) {
+            return 1.0;
+        }
+        return c / (2.0 * b);
+    }
+    let disc = b * b - a * c;
+    if (disc < 0.0) {
+        return 1.0;
+    }
+    let root = sqrt(disc);
+    let hi = (b + root) / a;
+    let lo = (b - root) / a;
+    let t0 = max(hi, lo);
+    let t1 = min(hi, lo);
+    if (r0 + t0 * dr >= 0.0) {
+        return t0;
+    }
+    if (r0 + t1 * dr >= 0.0) {
+        return t1;
+    }
+    return 1.0;
+}
+
+// == lumit_core::fx::cpu::gradient_ramp: Start colour, the colours in
+// between that are in use, End colour.
+fn ramp(t: f32) -> vec3<f32> {
+    var at = 0.0;
+    var prev = p.c0.rgb;
+    for (var k = 0u; k < min(p.mids, 3u); k = k + 1u) {
+        let m = p.mid[k];
+        if (t <= m.w) {
+            var f = 1.0;
+            if (m.w > at) {
+                f = (t - at) / (m.w - at);
+            }
+            return prev + (m.rgb - prev) * f;
+        }
+        at = m.w;
+        prev = m.rgb;
+    }
+    var f = 1.0;
+    if (at < 1.0) {
+        f = (t - at) / (1.0 - at);
+    }
+    return prev + (p.c1.rgb - prev) * f;
+}
+
 @compute @workgroup_size(8, 8)
 fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -64,7 +125,9 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dx = f32(xy.x) + 0.5 - p.start_axis.x;
     let dy = f32(xy.y) + 0.5 - p.start_axis.y;
     var t: f32;
-    if (p.radial != 0u) {
+    if (p.radial == 2u) {
+        t = conical_t(vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5));
+    } else if (p.radial != 0u) {
         t = sqrt(dx * dx + dy * dy) * p.inv_len;
     } else {
         t = (dx * p.start_axis.z + dy * p.start_axis.w) * p.inv_len2;
@@ -83,7 +146,7 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
         cover = o.a;
         outa = o.a;
     }
-    let g = (p.c0.rgb + (p.c1.rgb - p.c0.rgb) * tc) * cover;
+    let g = ramp(tc) * cover;
     let outv = o.rgb * (1.0 - p.mix_amt) + g * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, outa));
 }
