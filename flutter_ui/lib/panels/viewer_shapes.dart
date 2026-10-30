@@ -300,7 +300,7 @@ Path bezierPath({
     final c2 = tangentIn(i);
     path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, at(i).dx, at(i).dy);
   }
-  if (closed && count > 2) {
+  if (closed && count > 1) {
     final c1 = tangentOut(count - 1);
     final c2 = tangentIn(0);
     path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, at(0).dx, at(0).dy);

@@ -249,9 +249,9 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
   ];
 }
 
-/// Layer ▸ Mask and shape path: keying the **shape** itself.
+/// Layer ▸ Mask and shape path: keying the **shape** itself, and closing it.
 ///
-/// One row, because a path key holds a whole path: it is planted at the
+/// One row keys, because a path key holds a whole path: it is planted at the
 /// playhead holding the shape the item already shows, or the key already there
 /// is taken away. Which path it means is the picked row's — a mask's, or a
 /// shape item's — so the two live under one heading, as the specification
@@ -290,7 +290,28 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
     return null;
   }
 
-  return [MenuEntry(l10n.menuTogglePathKey, toggle())];
+  // A drawn path can be opened and closed; a rectangle or a star is made
+  // from its numbers and is always closed.
+  final drawn = shape?.item.primitive == null ? shape : null;
+  final id = mask?.mask.id ?? drawn?.item.id;
+  final layer = mask?.layer ?? drawn?.layer;
+  final closed = mask?.mask.closed ?? drawn?.item.closed ?? true;
+  return [
+    MenuEntry(l10n.menuTogglePathKey, toggle()),
+    MenuEntry.toggle(
+      l10n.menuPathClosed,
+      id == null || layer == null
+          ? null
+          : () {
+              try {
+                layer.setPathClosed(id: id, closed: !closed);
+                app.notifyDocumentChanged();
+              } catch (_) {}
+            },
+      checked: () =>
+          pickedMask(ui)?.mask.closed ?? pickedShape(ui)?.item.closed ?? false,
+    ),
+  ];
 }
 
 /// Layer ▸ Expand all copies: every repeater on the selected shape layer made

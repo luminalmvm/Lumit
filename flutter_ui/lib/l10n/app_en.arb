@@ -7494,6 +7494,10 @@
   "@menuTogglePathKey": {
     "description": "Layer ▸ Mask and shape path submenu item: keys the picked path's shape at the playhead, or takes away the key already there."
   },
+  "menuPathClosed": "Closed",
+  "@menuPathClosed": {
+    "description": "Layer ▸ Mask and shape path submenu item, ticked while the picked path is closed: closes an open path or opens a closed one."
+  },
   "menuToggleHoldKeyframe": "Toggle hold keyframe",
   "@menuToggleHoldKeyframe": {
     "description": "Menu item."

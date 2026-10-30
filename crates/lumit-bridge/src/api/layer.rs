@@ -3614,7 +3614,8 @@ impl LayerReference {
         mask: BridgeMask,
         at: Option<BridgeRational>,
     ) -> Result<(), BridgeError> {
-        if mask.vertices.len() < 2 {
+        // A path keeps going while any point is left on it.
+        if mask.vertices.is_empty() {
             return Err(BridgeError::EmptyPath);
         }
         let layer = self.item()?;
@@ -4264,8 +4265,8 @@ impl LayerReference {
     /// of edit as a mask list or a paint list: an add, a delete, a recolour and
     /// a path edit are one kind of thing and each is one undo step.
     ///
-    /// A path of fewer than two vertices is refused, as a mask's is: it is not
-    /// a shape, and it would be a Timeline row with nothing behind it.
+    /// A path with no vertices is refused: it would be a Timeline row with
+    /// nothing behind it.
     ///
     /// **The art that was not edited does not move**. A shape layer's
     /// picture is its art's bounding box, and the layer's origin is that box's
