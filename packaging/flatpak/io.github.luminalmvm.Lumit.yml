@@ -92,6 +92,8 @@ modules:
         /app/share/mime/packages/io.github.luminalmvm.Lumit.xml
       - install -Dm644 io.github.luminalmvm.Lumit.metainfo.xml
         /app/share/metainfo/io.github.luminalmvm.Lumit.metainfo.xml
+      # Read by the runtime's fontconfig. See the file for why.
+      - install -Dm644 fonts.conf /app/etc/fonts/local.conf
       - rm -rf bundle/share
       - mkdir -p /app/lumit && cp -r bundle/* /app/lumit/
       - mkdir -p /app/bin && ln -s /app/lumit/lumit_flutter /app/bin/lumit_flutter
@@ -103,3 +105,5 @@ modules:
         dest: bundle
       - type: file
         path: io.github.luminalmvm.Lumit.metainfo.xml
+      - type: file
+        path: fonts.conf
