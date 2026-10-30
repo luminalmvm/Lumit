@@ -365,10 +365,13 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
-/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes.
+/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
+/// a buffer big enough to read one back.
 pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    let card = adapter.limits();
     wgpu::Limits {
-        max_texture_dimension_2d: adapter.limits().max_texture_dimension_2d,
+        max_texture_dimension_2d: card.max_texture_dimension_2d,
+        max_buffer_size: card.max_buffer_size,
         ..Default::default()
     }
 }
