@@ -3502,6 +3502,7 @@ impl LayerReference {
             )?;
             let mut effects = layer.effects;
             effects.extend(added.effects);
+            graph.prune_rows(&effects);
             let op = lumit_core::ops::Op::Batch {
                 ops: vec![
                     lumit_core::ops::Op::SetLayerEffects {
@@ -8421,6 +8422,10 @@ impl LayerReference {
             &mut added.effects,
             &lumit_core::fx::builtins::wired_in(&graph),
         )?;
+        let none_added = added.effects.is_empty();
+        let mut effects = layer.effects;
+        effects.extend(added.effects);
+        graph.prune_rows(&effects);
         let graph = lumit_core::ops::Op::SetLayerGraph {
             comp: self.comp_id,
             layer: self.layer_id,
@@ -8428,11 +8433,9 @@ impl LayerReference {
         };
         // The stack first, so the wires have their boxes by the time the
         // graph is checked.
-        let op = if added.effects.is_empty() {
+        let op = if none_added {
             graph
         } else {
-            let mut effects = layer.effects;
-            effects.extend(added.effects);
             lumit_core::ops::Op::Batch {
                 ops: vec![
                     lumit_core::ops::Op::SetLayerEffects {

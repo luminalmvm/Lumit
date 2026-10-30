@@ -632,6 +632,22 @@ impl LayerGraph {
         self.check_acyclic(effects)
     }
 
+    /// Drop the wires from or into a socket the boxes no longer have, and say
+    /// whether any went. A row a newer build took away leaves its wire naming
+    /// nothing, and every `SetLayerGraph` after would be refused for it, so a
+    /// stack that comes in from a file or the clipboard is pruned here.
+    pub fn prune_rows(&mut self, effects: &[EffectInstance]) -> bool {
+        let before = self.edges.len();
+        let edges = std::mem::take(&mut self.edges);
+        let gone = |r: Result<PortType, GraphError>| matches!(r, Err(GraphError::UnknownPort));
+        self.edges = (edges.into_iter())
+            .filter(|e| {
+                !gone(self.output_type(&e.from, effects)) && !gone(self.input_type(&e.to, effects))
+            })
+            .collect();
+        self.edges.len() != before
+    }
+
     /// The type a wire's source carries.
     fn output_type(
         &self,

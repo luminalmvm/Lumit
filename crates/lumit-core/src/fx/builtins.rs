@@ -693,6 +693,7 @@ pub fn migrate_document(doc: &mut crate::model::Document) {
             crate::fx::styles::normalise_styles(&mut layer.styles);
             migrate_in(layer.graph_inputs.as_mut_slice(), size, size, &none);
             migrate_in(&mut layer.graph.nodes, size, size, &none);
+            layer.graph.prune_rows(&layer.effects);
             if let LayerKind::Sequence { clips } = &mut layer.kind {
                 for clip in clips {
                     migrate_in(&mut clip.effects, size, size, &none);
