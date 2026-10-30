@@ -1926,6 +1926,8 @@ impl Walk<'static> {
 /// Something asked of a walk on its own, in place of its draws. Both are
 /// Clone to points': a picture at another moment or as one copy of several,
 /// and the whole list for a stream that was only made during the render.
+// One of these a walk, so the picture is kept inline.
+#[allow(clippy::large_enum_variant)]
 enum Probe<'a> {
     /// One layer row of an effect, as a picture.
     Picture {
@@ -2506,6 +2508,7 @@ fn comp_walk(
             format: lumit_media::decode::PixelFormat::Srgb8,
             fx: Default::default(),
             colour_tables: Vec::new(),
+            flare_lens_files: Vec::new(),
             // A comp reference runs no stack of its own here: its layers were
             // walked whole, each with its own carriages already filled.
             roto_mattes: Vec::new(),
@@ -2612,7 +2615,7 @@ fn comp_walk(
             // texture before resampling. Uses that layer's decode scale (its
             // px@comp radii stay honest), the same resolve export uses. Empty
             // otherwise.
-            let (fx, colour_tables) = if mode.folds_effects() && src.switches.fx {
+            let (fx, colour_tables, flare_lens_files) = if mode.folds_effects() && src.switches.fx {
                 let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = tex_w as f32 / natural.0.max(1.0);
@@ -2645,6 +2648,7 @@ fn comp_walk(
                     )
                     .1,
                     colour_tables(&src.effects, slt),
+                    flare_lens_files(&src.effects, slt),
                 )
             } else {
                 Default::default()
@@ -2669,6 +2673,7 @@ fn comp_walk(
                 format,
                 fx,
                 colour_tables,
+                flare_lens_files,
                 roto_mattes,
                 planes,
                 nested: None,
@@ -2925,6 +2930,7 @@ fn comp_walk(
                     format,
                     fx: Default::default(),
                     colour_tables: Default::default(),
+                    flare_lens_files: Vec::new(),
                     roto_mattes: Vec::new(),
                     planes: Vec::new(),
                     nested: None,
@@ -2964,6 +2970,7 @@ fn comp_walk(
             .1;
             let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
             input.colour_tables = colour_tables(&shape.effects, slt);
+            input.flare_lens_files = flare_lens_files(&shape.effects, slt);
             input.roto_mattes = roto_mattes_for(&shape.effects, src_frame);
             input.planes = planes_for(&shape.effects, src_frame);
         }
@@ -3960,7 +3967,7 @@ fn comp_walk(
             // (its px@comp radii stay honest under reduced-res preview), the same
             // §1.4 markers and the same resolve export uses. Empty for
             // None / Masks or when the source's fx switch is off.
-            let (fx, colour_tables) = if nested.is_some() {
+            let (fx, colour_tables, flare_lens_files) = if nested.is_some() {
                 // The nested render already ran every layer's own stack.
                 Default::default()
             } else if mr.source.folds_effects() && src.switches.fx {
@@ -3982,6 +3989,7 @@ fn comp_walk(
                     )
                     .1,
                     colour_tables(&src.effects, mlt),
+                    flare_lens_files(&src.effects, mlt),
                 )
             } else {
                 Default::default()
@@ -4019,6 +4027,7 @@ fn comp_walk(
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
                 colour_tables,
+                flare_lens_files,
                 // The graphs the matte source's own Node graph effects apply,
                 // as a layer read through an effect's row carries them. Their
                 // further pictures are fetched plainly, which is the same bound.

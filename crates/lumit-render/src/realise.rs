@@ -749,7 +749,7 @@ impl Realiser<'_> {
                         &[],
                         &tables,
                         &[],
-                        &[],
+                        &self.load_flare_lens(&d.flare_lens_files),
                         &[],
                         // No mask paths through a referenced layer's own stack
                         // — the same v1 boundary its mattes take.
@@ -1969,7 +1969,7 @@ impl Realiser<'_> {
                 &[],
                 &tables,
                 &[],
-                &[],
+                &self.load_flare_lens(&m.flare_lens_files),
                 &[],
                 // As above: a referenced layer's own stack walks no
                 // mask path, and carries no birth schedule, in v1.

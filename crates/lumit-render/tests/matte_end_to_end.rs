@@ -599,3 +599,66 @@ fn a_matte_lines_up_with_a_layer_that_is_not_full_frame() {
     assert_ne!(px(&rgba, w, 27), source, "x 27 is under the lit band");
     assert_eq!(px(&rgba, w, 36), source, "x 36 is past the band's edge");
 }
+
+/// **A layer read as a matte draws its Sprite flare's own design.** The
+/// matte source is a hidden black solid whose flare keeps an empty design, so
+/// its picture stays black and the grey plate it gates is left alone. Its
+/// stack once ran without the designs, so the default flare lit the matte at
+/// the light.
+#[test]
+fn a_matte_source_draws_its_sprite_flares_own_design() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (grey_def, black_def) = (Uuid::now_v7(), Uuid::now_v7());
+    let mut doc = Document::new();
+    doc.items
+        .push(solid(grey_def, "grey", [0.25, 0.25, 0.25, 1.0], COMP, COMP));
+    doc.items
+        .push(solid(black_def, "black", [0.0, 0.0, 0.0, 1.0], COMP, COMP));
+
+    let mut flare = lumit_core::fx::builtins::instantiate_for_raster(
+        "sprite_flare",
+        f64::from(COMP),
+        f64::from(COMP),
+    )
+    .expect("a built-in");
+    for p in &mut flare.params {
+        let v = match p.id.as_str() {
+            "light_x" => 16.0,
+            "light_y" => f64::from(COMP / 2),
+            _ => continue,
+        };
+        p.value = EffectValue::Float(lumit_core::anim::Property::fixed(v));
+    }
+    let empty = lumit_core::fx::flare::design::Design {
+        elements: Vec::new(),
+        ..lumit_core::fx::flare::presets::default_design()
+    };
+    lumit_core::fx::flare::design::set_embedded(&mut flare, Some(&empty));
+    let mut matte_layer = layer("flare", LayerKind::Solid { def: black_def });
+    matte_layer.effects = vec![flare];
+    matte_layer.switches.visible = false;
+
+    let mut base = layer("base", LayerKind::Solid { def: grey_def });
+    let mut exposure = lumit_core::fx::builtins::instantiate("exposure").expect("a built-in");
+    for p in &mut exposure.params {
+        if p.id == "stops" {
+            p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
+        }
+        if p.id == lumit_core::fx::schema::MATTE_PARAM {
+            p.value = EffectValue::Layer(Some(matte_layer.id));
+        }
+    }
+    base.effects = vec![exposure];
+    let comp = comp_of("Comp", vec![matte_layer, base]);
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+
+    let (rgba, w, _) = r
+        .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+        .expect("the render");
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    assert_eq!(px(&rgba, w, 16), source, "the light is under a black matte");
+}
