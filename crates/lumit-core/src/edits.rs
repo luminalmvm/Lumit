@@ -966,6 +966,16 @@ pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
             Value::String(s) => {
                 if let Some(id) = fresh.get(s.as_str()) {
                     s.clone_from(id);
+                } else if let Some((name, socket)) = s.split_once('/') {
+                    // A tie names a wire `kind:id/socket`, by the box it ends in.
+                    let (kind, id) = name.split_once(':').unwrap_or(("", name));
+                    if let Some(new) = fresh.get(id) {
+                        *s = if kind.is_empty() {
+                            format!("{new}/{socket}")
+                        } else {
+                            format!("{kind}:{new}/{socket}")
+                        };
+                    }
                 }
             }
             Value::Object(fields) => {
