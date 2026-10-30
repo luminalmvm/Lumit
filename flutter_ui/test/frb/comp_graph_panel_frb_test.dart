@@ -14,7 +14,7 @@
 import 'dart:typed_data' show Float64List;
 
 import 'package:flutter/gestures.dart'
-    show kDoubleTapMinTime, kSecondaryMouseButton;
+    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -736,6 +736,36 @@ void main() {
       expect(edges, hasLength(2), reason: 'the wire split in two');
       expect(edges.where((e) => e.from == read && e.to == blur), hasLength(1));
       expect(edges.where((e) => e.from == blur && e.to == out), hasLength(1));
+    });
+
+    testWidgets('a right-button drag ties wires, and a moved box keeps the tie',
+        (tester) async {
+      final p = withGraph();
+      final read = seedRead(p.graph, p.state, const Offset(40, 40));
+      final blur = seedFx(p.graph, 'blur', const Offset(500, 40));
+      final glow = seedFx(p.graph, 'glow', const Offset(500, 300));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await wire(tester, read, 'output', blur, 'input');
+      await wire(tester, read, 'output', glow, 'input');
+
+      // Down across both wires, halfway between the boxes.
+      final x = (tester.getCenter(socket(read, 'output')).dx +
+              tester.getCenter(socket(blur, 'input')).dx) /
+          2;
+      final mouse = await tester.createGesture(
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
+      await mouse.down(Offset(x, 30));
+      await mouse.moveTo(Offset(x, 580));
+      await mouse.up();
+      await mouse.removePointer();
+      await tester.pumpAndSettle();
+      expect(p.graph.getNodeGraphTies().single.wires, hasLength(2));
+
+      // Every box move rewrites the graph, and the tie rides along.
+      await tester.drag(card(glow), const Offset(0, 60));
+      await tester.pumpAndSettle();
+      expect(p.graph.getNodeGraphTies(), hasLength(1));
     });
 
     testWidgets('an Input box draws its five facts, and the label commits',

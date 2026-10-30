@@ -632,11 +632,14 @@ void main() {
       // The files are read off the interface's thread, and the panel hears of
       // them a turn after the document has them.
       await settleFrb(tester,
-          until: () => find.textContaining('No items yet').evaluate().isEmpty);
+          until: () => find
+              .byKey(const ValueKey('project-empty-import'))
+              .evaluate()
+              .isEmpty);
 
       expect(p.state.project!.getItems(), hasLength(1),
           reason: 'the import reached the document');
-      expect(find.textContaining('No items yet'), findsNothing,
+      expect(find.byKey(const ValueKey('project-empty-import')), findsNothing,
           reason: 'and the panel is showing it');
     });
 

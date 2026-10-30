@@ -2,6 +2,8 @@
 // leading mark, and the expression autofill list.
 
 import 'package:flutter/material.dart';
+
+import '../../theme/style_sheet.dart';
 import 'package:flutter/services.dart';
 
 import '../autofill.dart';
@@ -222,19 +224,7 @@ class _HouseTextFieldState extends State<HouseTextField>
 
       if (event.logicalKey == LogicalKeyboardKey.enter) {
         if (highlightedSuggestion != null) {
-          setState(() {
-            widget.autofill!.applySuggestion(
-                suggestions[highlightedSuggestion!], widget.controller);
-
-            highlightedSuggestion = null;
-          });
-
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            textFieldKey.currentState!.bringIntoView(
-                TextPosition(offset: widget.controller.selection.baseOffset));
-          });
-
-          hideOverlay();
+          _applySuggestion(highlightedSuggestion!);
           return KeyEventResult.handled;
         }
       }
@@ -258,6 +248,22 @@ class _HouseTextFieldState extends State<HouseTextField>
     }
 
     return KeyEventResult.ignored;
+  }
+
+  /// Put suggestion [i] into the text and close the list, from Enter or a
+  /// click on it.
+  void _applySuggestion(int i) {
+    setState(() {
+      widget.autofill!.applySuggestion(suggestions[i], widget.controller);
+      highlightedSuggestion = null;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      textFieldKey.currentState?.bringIntoView(
+          TextPosition(offset: widget.controller.selection.baseOffset));
+    });
+
+    hideOverlay();
   }
 
   /// Up to four spaces off the start of every line the selection touches,
@@ -306,7 +312,13 @@ class _HouseTextFieldState extends State<HouseTextField>
       builder: (c) {
         return Stack(
           children: [
-            Material(
+            // The follower outermost: it is hit tested where it is drawn, under
+            // the field, and anything around it would only be hit at the
+            // overlay's corner, where it is laid out.
+            CompositedTransformFollower(
+              link: layerLink,
+              offset: const Offset(-5, 16),
+              child: Material(
               // Fully transparent: the completion list draws its own surface
               // below, and Material is here only for the text style and ink.
               // Spelled as a zero colour rather than the Material palette's
@@ -317,9 +329,9 @@ class _HouseTextFieldState extends State<HouseTextField>
                   theme: t.theme,
                   animationLevel: t.animationLevel,
                   showTooltips: t.showTooltips,
-                  child: CompositedTransformFollower(
-                    link: layerLink,
-                    offset: const Offset(-5, 16),
+                    // Part of the field as far as clicks go, so pressing a
+                    // suggestion does not count as clicking away from it.
+                    child: TextFieldTapRegion(
                     child: Container(
                       decoration: BoxDecoration(
                           color: t.theme.surface0,
@@ -341,13 +353,14 @@ class _HouseTextFieldState extends State<HouseTextField>
                           for (int i = 0; i < suggestions.length; i++)
                             HouseButton(
                               frameless: i != highlightedSuggestion,
-                              onPressed: () {},
+                              onPressed: () => _applySuggestion(i),
                               child: widget.autofill?.buildSuggestion(
                                       suggestions[i], t.theme) ??
                                   Text(suggestions[i].word),
                             )
                         ],
                       ),
+                    ),
                     ),
                   )),
             ),
@@ -402,9 +415,16 @@ class _HouseTextFieldState extends State<HouseTextField>
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
       alignment: Alignment.centerLeft,
+      // A style's inner shadows, so a well can sit sunk into its panel.
+      foregroundDecoration: widget.frameless
+          ? null
+          : insetDecoration(
+              partStyle(context, t, 'well'),
+              BorderRadius.circular(
+                  partStyle(context, t, 'well').radius ?? t.tokens.wellRadius)),
       decoration: widget.frameless
           ? null
-          : BoxDecoration(
+          : dress(BoxDecoration(
               color: widget.fill ?? t.surface0,
               borderRadius: wellCorners(t),
               // `animated`, not `accent`: a focused well is the one focus that
@@ -416,7 +436,8 @@ class _HouseTextFieldState extends State<HouseTextField>
               border: wellBorder(
                   t, _focus.hasFocus ? t.animated : t.hairline,
                   lit: _focus.hasFocus),
-            ),
+            ), partStyle(context, t, 'well',
+                states: {if (_focus.hasFocus) 'focus'})),
       child: _withLeading(
         leading,
         widget.leadingInteractive,
@@ -428,8 +449,10 @@ class _HouseTextFieldState extends State<HouseTextField>
             // Focus on the *down* stroke, not the resolved tap: a press that
             // slides straight into a drag is someone selecting text in one
             // motion, and the field must already be theirs when the drag's
-            // highlight starts.
-            Listener(
+            // highlight starts. The I-beam says the text can be typed in.
+            MouseRegion(
+              cursor: SystemMouseCursors.text,
+              child: Listener(
               onPointerDown: (_) {
                 if (!_focus.hasFocus) _focus.requestFocus();
               },
@@ -490,7 +513,8 @@ class _HouseTextFieldState extends State<HouseTextField>
                   ),
                 ),
               ),
-            )
+            ),
+            ),
           ],
         ),
       ),

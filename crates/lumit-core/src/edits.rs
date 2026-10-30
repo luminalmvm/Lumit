@@ -366,6 +366,7 @@ pub fn fx_category_key(cat: lumit_core::fx::schema::FxCategory) -> &'static str 
         FxCategory::Compositing => "compositing",
         FxCategory::Controls => "controls",
         FxCategory::Drivers => "drivers",
+        FxCategory::SiceliotDrivers => "siceliot_drivers",
     }
 }
 
@@ -895,6 +896,11 @@ pub fn visit_comp_refs(comp: &mut lumit_core::model::Composition, f: &mut dyn Fn
                     if let lumit_core::sequence::ClipSource::Comp(id) = &mut clip.source {
                         f(id);
                     }
+                    for take in &mut clip.takes {
+                        if let lumit_core::sequence::ClipSource::Comp(id) = &mut take.source {
+                            f(id);
+                        }
+                    }
                 }
             }
             _ => {}
@@ -960,6 +966,16 @@ pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
             Value::String(s) => {
                 if let Some(id) = fresh.get(s.as_str()) {
                     s.clone_from(id);
+                } else if let Some((name, socket)) = s.split_once('/') {
+                    // A tie names a wire `kind:id/socket`, by the box it ends in.
+                    let (kind, id) = name.split_once(':').unwrap_or(("", name));
+                    if let Some(new) = fresh.get(id) {
+                        *s = if kind.is_empty() {
+                            format!("{new}/{socket}")
+                        } else {
+                            format!("{kind}:{new}/{socket}")
+                        };
+                    }
                 }
             }
             Value::Object(fields) => {

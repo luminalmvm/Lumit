@@ -1558,6 +1558,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-clip-$id-${param.id}'),
+        value: current,
         label: chosenLayer == null
             ? l10n.fxClipNoLayer
             : current == null
@@ -1600,6 +1601,7 @@ class EffectParamRowFrb extends StatelessWidget {
       width: effectCellWidth + 40,
       child: BareLazyDropdown<UuidValue?>(
         key: ValueKey<String>('fx-mask-$id-${param.id}'),
+        value: current,
         label: current == null
             ? l10n.firstMask
             : (masks
@@ -3104,10 +3106,12 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
 
   void _redraw() => setState(() {});
 
-  double get _value => sampleScalarWithContext(
-      scalar: widget.value,
-      time: timeOfFrame(widget.comp, playhead.value),
-      layer: widget.layer,
+  // Held per time and document, so a rebuild at the same frame asks nothing.
+  double get _value => sampledExpression(
+      widget.value,
+      timeOfFrame(widget.comp, playhead.value),
+      widget.layer,
+      Provider.of<LumitUiState>(context, listen: false).model.heldRevision,
       row: widget.row);
 
   /// Open the editor over the row. The row itself may be rebuilt away while

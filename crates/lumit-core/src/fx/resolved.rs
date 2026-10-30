@@ -520,6 +520,7 @@ pub(super) fn resolve_into_arena(
     // [`ResolvedStack::rescale_spatial`] can move the spatial ones too.
     let derived = def.derived(e);
     bags.set_derived(derived);
+    let mut wired: Vec<(&str, f64)> = Vec::new();
     for p in def.schema().params.iter().chain(derived) {
         let driven = if drivers.is_empty() {
             None
@@ -549,6 +550,9 @@ pub(super) fn resolve_into_arena(
             v.max(lo.unwrap_or(f64::NEG_INFINITY))
                 .min(hi.unwrap_or(f64::INFINITY))
         });
+        if let Some(v) = driven_num {
+            wired.push((p.id, v));
+        }
         // A number the instance does not carry reads its declared default: a
         // project saved before the parameter existed simply renders.
         let spatial = |v: f64| -> f32 {
@@ -650,6 +654,22 @@ pub(super) fn resolve_into_arena(
         };
         bags.push(ParamId::new(p.id), value);
     }
+    // A derivation reads the instance's own rows, so a wired one is handed
+    // the number its wire holds, as the bag was.
+    let held;
+    let e = if wired.is_empty() {
+        e
+    } else {
+        let mut copy = e.clone();
+        for p in &mut copy.params {
+            let v = wired.iter().find(|(id, _)| p.id == *id);
+            if let (EffectValue::Float(prop), Some((_, v))) = (&mut p.value, v) {
+                *prop = crate::anim::Property::fixed(*v);
+            }
+        }
+        held = copy;
+        &held
+    };
     def.resolve_derived(
         &ResolveCx {
             inst: e,

@@ -384,6 +384,8 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
             .ok_or("This build of Lumit cannot export.")?,
     };
     let host = open(project)?;
+    // Extension effects draw in an export as they do in Lumit.
+    crate::api::extensions::register_effects();
     let comps = if how.all {
         host.comps()
     } else if how.comps.is_empty() {
@@ -547,6 +549,9 @@ fn run(
         Some(path) => open(path)?,
         None => Headless::new_project(),
     };
+    // So a script can add an extension's effects. They are files read, not
+    // plugins started, so this costs next to nothing.
+    crate::api::extensions::register_effects();
     // Claimed before the script runs, so a file Lumit has open is found out
     // before any work is done, and Lumit does not open it meanwhile.
     let target = match &save {
@@ -611,6 +616,7 @@ fn run(
 /// standard output, until the client closes its end.
 fn mcp(project: &Path) -> Result<(), String> {
     let host = open(project)?;
+    crate::api::extensions::register_effects();
     // Held while the client is there, so Lumit does not open a project the
     // client may still save.
     let own = host.save_target(None).map_err(|e| e.to_string())?;

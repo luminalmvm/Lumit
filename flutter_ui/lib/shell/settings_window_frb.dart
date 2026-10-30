@@ -77,6 +77,7 @@ import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
+import 'dialog_frame.dart' show dialogSurface;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -256,9 +257,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// it makes a small entrance of its own (docs/15 §8).
   int _pageTurns = 0;
 
+  /// "Render plugins on the graphics card", read once as the window opens.
+  bool _pluginsOnCard = true;
+
+  /// The largest picture and the sizes this machine can take, read once as
+  /// the window opens.
+  int _largest = 8192;
+  List<int> _largestChoices = const [8192];
+
   @override
   void initState() {
     super.initState();
+    _pluginsOnCard = pluginsOnGraphicsCard();
+    _largest = largestPicture();
+    _largestChoices = largestPictureChoices();
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -519,19 +531,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // decoration so that it is painted *over* the outermost pixel rather than
     // insetting everything by one: the drawing's 760 is the room inside the
     // frame, not the room inside the frame less its border.
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surface1,
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        boxShadow: t.floatShadow,
-      ),
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        border: Border.all(color: t.hairline),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-        child: Entrance.content(
+    return dialogSurface(
+      context,
+      t,
+      Entrance.content(
           spec: ThemeScope.of(context).motion.content,
           rise: ThemeScope.of(context).motion.contentRise,
           blur: ThemeScope.of(context).motion.contentBlur,
@@ -561,7 +564,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -958,8 +960,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
           workspace.performance.hardwareDecode = shipped.hardwareDecode;
           setHardwareDecode(on_: shipped.hardwareDecode);
+          workspace.performance.largestPicture = null;
+          setLargestPicture(side: 8192);
+          _largest = largestPicture();
           workspace.settingsChanged();
           resetRealtime();
+          ui.requestFrame();
         });
       case SettingsPage.shortcuts:
         unawaited(_resetKeymap(ui.keymap));
@@ -1023,7 +1029,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsShareUpLimit,
               _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
                   (limit) => ui.workspace.setShareLimits(up: limit)),
-              description: l10n.settingsShareLimitHint,
             ),
             _row(
               t,
@@ -1369,7 +1374,61 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
               value: ui.workspace.themedSplash,
               set: ui.workspace.setThemedSplash),
-          _row(t, l10n.settingsShape, _shapeChips(t, ui)),
+          // The three built in, then the person's own from the styles folder.
+          _row(
+            t,
+            l10n.settingsShape,
+            _dropdown<String>(
+              key: 'settings-shape',
+              value: ui.workspace.customStyle == null
+                  ? ui.shape.name
+                  : 'style:${ui.workspace.customStyle}',
+              options: [
+                for (final shape in ThemeShape.values) shape.name,
+                for (final style in ui.workspace.styles) 'style:${style.name}',
+              ],
+              label: (v) => switch (v) {
+                'studio' => l10n.shapeStudio,
+                'desk' => l10n.shapeDesk,
+                'lantern' => l10n.shapeLantern,
+                _ => v.substring('style:'.length),
+              },
+              group: (v) =>
+                  v.startsWith('style:') ? l10n.settingsStylesFolder : null,
+              onChanged: (v) => setState(() {
+                if (v.startsWith('style:')) {
+                  ui.workspace.setCustomStyle(v.substring('style:'.length));
+                } else {
+                  ui.setShape(ThemeShape.values.byName(v));
+                }
+              }),
+            ),
+          ),
+          // A person's own styles: one file each, in the folder beside the
+          // workspace store. Read again when a file changes or the window
+          // comes back.
+          _row(
+            t,
+            l10n.settingsStylesFolder,
+            SizedBox(
+              width: 240,
+              child: Text(
+                Workspace.stylesFolder(),
+                key: const ValueKey('settings-styles-folder'),
+                style: t.small.copyWith(color: t.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            description: ui.workspace.activeStyle?.problems.firstOrNull ?? '',
+          ),
+          _flag(t, 'settings-reduce-transparency',
+              l10n.settingsReduceTransparency,
+              value: settings.reduceTransparency, set: (on) {
+            settings.reduceTransparency = on;
+            ui.workspace.recompose();
+            ui.workspace.settingsChanged();
+          }),
           // How labels are cased. Null is the style's own, and a file that
           // never chose stores nothing.
           _row(
@@ -1605,7 +1664,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ),
           // A person's own icons: one SVG per icon, named after it, in the
-          // folder beside the workspace store. Read at launch and on demand.
+          // folder beside the workspace store. Read at launch and whenever
+          // the window comes back.
           _row(
             t,
             l10n.settingsIconsFolder,
@@ -1613,24 +1673,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    HouseButton(
-                      key: const ValueKey('settings-icons-reload'),
-                      small: true,
-                      onPressed: () => setState(() {
-                        IconStyle.reload();
-                        ui.workspace.recompose();
-                      }),
-                      child: Text(l10n.reloadIcons),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      l10n.iconsReplaced(IconStyle.overrideCount),
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  ],
+                Text(
+                  l10n.iconsReplaced(IconStyle.overrideCount),
+                  style: t.small.copyWith(color: t.textMuted),
                 ),
                 const SizedBox(height: 4),
                 // The path is long; it takes a fixed slot and trims its end.
@@ -1737,36 +1782,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
     ]);
   }
-
-  /// Studio, Desk or Lantern, as the drawing draws it: kicker chips side by
-  /// side, the one in force outlined. Not an accent fill, because §3.1 spends
-  /// the accent on the tick beside the page name, and a second accent in the
-  /// same window would make neither of them mean anything.
-  Widget _shapeChips(LumitTheme t, LumitUiState ui) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final shape in ThemeShape.values) ...[
-            if (shape != ThemeShape.values.first) const SizedBox(width: 2),
-            SizedBox(
-              height: settingsControlHeight,
-              child: HouseButton(
-                key: ValueKey<String>('settings-shape-${shape.name}'),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                frameless: ui.shape != shape,
-                onPressed: () => setState(() => ui.setShape(shape)),
-                child: Text(
-                  t.kickerCase(switch (shape) {
-                    ThemeShape.studio => l10n.shapeStudio,
-                    ThemeShape.desk => l10n.shapeDesk,
-                    ThemeShape.lantern => l10n.shapeLantern,
-                  }),
-                  style: ui.shape == shape ? t.kickerOn : t.kicker,
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
 
   /// Puts the saved accent back while a swatch is being hovered.
   VoidCallback? _endAccentPreview;
@@ -1987,7 +2002,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       }
       return;
     }
-    final read = readThemeFile(text);
+    final file = path.split(RegExp(r'[\\/]')).last;
+    final read = readThemeFile(text,
+        name: file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file);
     if (!mounted) return;
     final theme = read.theme;
     if (theme == null) {
@@ -2007,8 +2024,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final path = await pickThemeSaveLocation(themeFileName(name));
     if (path == null) return;
     try {
-      await File(path)
-          .writeAsString(encodeThemeFile(CustomTheme.from(name, ui.theme)));
+      // Written over the scheme it came from, so the file holds only what
+      // differs.
+      final base = workspace.customThemeName == null
+          ? workspace.colorScheme
+          : workspace.activeCustomTheme?.base;
+      await File(path).writeAsString(
+          encodeThemeFile(CustomTheme.from(name, ui.theme, base: base)));
       if (mounted) setState(() => _themeMessage = l10n.themeExported(name));
     } catch (e) {
       if (mounted) {
@@ -2677,7 +2699,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   context, context.read<LumitState>(), service)),
           child: Text(l10n.chooseEllipsis, style: t.small),
         ),
-        description: l10n.settingsExtensionsInstallHint,
       ),
       _row(
         t,
@@ -3048,6 +3069,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.lumit);
+                      _vegasDrags(false);
                       _presetLoaded(l10n.keymapLumitDefault);
                     },
                     child: Text(l10n.keymapLumitDefault, style: t.small),
@@ -3058,6 +3080,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.afterEffects);
+                      _vegasDrags(false);
                       _presetLoaded(l10n.keymapAfterEffects);
                     },
                     child: Text(l10n.keymapAfterEffects, style: t.small),
@@ -3068,6 +3091,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.vegas);
+                      _vegasDrags(true);
                       _presetLoaded(l10n.firstRunVegasName);
                     },
                     child: Text(l10n.firstRunVegasName, style: t.small),
@@ -3201,6 +3225,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               BridgeWheelModifier.ctrl => l10n.keymapWheelCtrl,
               BridgeWheelModifier.alt => l10n.keymapWheelAlt,
               BridgeWheelModifier.shift => l10n.keymapWheelShift,
+              BridgeWheelModifier.bare => l10n.keymapWheelBare,
             },
             onChanged: (m) async {
               await km.setWheel(row.action, m);
@@ -3215,6 +3240,23 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// Which modifier changes what a drag does, under the scroll wheel's.
   List<Widget> _dragSection(LumitTheme t, KeymapState km) {
+    final workspace =
+        Provider.of<LumitUiState>(context, listen: false).workspace;
+    final cut = _row(
+      t,
+      l10n.keymapDragCut,
+      _dropdown<bool>(
+        key: 'keymap-drag-cut',
+        value: workspace.interface.cutVegasDrags,
+        options: const [false, true],
+        label: (vegas) =>
+            vegas ? l10n.firstRunVegasName : l10n.keymapLumitDefault,
+        onChanged: (vegas) {
+          _vegasDrags(vegas);
+          setState(() {});
+        },
+      ),
+    );
     final row = _row(
       t,
       l10n.keymapDragBreakHandles,
@@ -3232,8 +3274,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         },
       ),
     );
-    if (row == null) return const [];
-    return [settingsSection(t, l10n.keymapDrag, [row])];
+    final rows = [row, cut].whereType<Widget>().toList();
+    if (rows.isEmpty) return const [];
+    return [settingsSection(t, l10n.keymapDrag, rows)];
+  }
+
+  /// The Cut timeline's drags, which follow the preset last loaded.
+  void _vegasDrags(bool on) {
+    final workspace =
+        Provider.of<LumitUiState>(context, listen: false).workspace;
+    workspace.interface.cutVegasDrags = on;
+    workspace.settingsChanged();
   }
 
   /// What the last import or export said, shown under the buttons.
@@ -3427,6 +3478,35 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             setHardwareDecode(on_: on);
             ui.workspace.settingsChanged();
           }),
+          _flag(t, 'settings-plugins-on-card', l10n.settingsPluginsOnCard,
+              value: _pluginsOnCard, set: (on) {
+            _pluginsOnCard = on;
+            try {
+              setPluginsOnGraphicsCard(on_: on);
+            } catch (_) {
+              // Not kept, but in force until Lumit closes.
+            }
+          }),
+          _row(
+            t,
+            l10n.settingsLargestPicture,
+            _dropdown<int>(
+              key: 'settings-largest-picture',
+              value: _largest,
+              options: _largestChoices,
+              width: _ddWide,
+              // What one picture that size holds at 16-bit.
+              label: (side) => l10n.settingsLargestPictureSize(
+                  '$side', _bytes(BigInt.from(side * side * 8))),
+              onChanged: (side) => setState(() {
+                setLargestPicture(side: side);
+                _largest = largestPicture();
+                ui.workspace.performance.largestPicture = _largest;
+                ui.workspace.settingsChanged();
+                ui.requestFrame();
+              }),
+            ),
+          ),
           _row(
             t,
             l10n.settingsQualityTier,

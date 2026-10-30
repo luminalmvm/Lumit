@@ -74,6 +74,7 @@ import '../state/viewer_views.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'placeholder.dart';
@@ -375,9 +376,15 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   double? _zoomFrom;
   Offset _panFrom = Offset.zero;
 
-  /// How much motion the shell is set to show, read in [build] because that is
-  /// where the theme scope is in reach.
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  /// How a zoom flies under the shell's shape and motion setting, read in
+  /// [build] because that is where the theme scope is in reach.
+  MotionSpec _zoomFlight = MotionSpec.still;
+
+  /// How far through a zoom flight the picture is, eased, or null when none
+  /// is running.
+  double? get _flightAt => _zoomFrom != null && _zoomMotion.value < 1
+      ? _zoomFlight.curve.transform(_zoomMotion.value)
+      : null;
 
   // --- Snapshots (docs/07 §2.2 item 14) -------------------------------------
   //
@@ -495,20 +502,24 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// [from] is the magnification being left, which the caller already knows
   /// from the rectangle it measured — asking for it again here would need the
   /// constraints, which live in the layout builder.
-  void _goToZoom(double? scale, Offset pan, {required double from}) {
+  void _goToZoom(double? scale, Offset pan,
+      {required double from, bool fly = true}) {
+    // From the pan on screen, as the scale is, so a zoom sent mid-flight
+    // carries on from where the picture is rather than jumping.
+    final at = _flightAt;
+    final panFrom = at == null ? _pan : Offset.lerp(_panFrom, _pan, at)!;
     setState(() {
       _zoomFrom = from;
-      _panFrom = _pan;
+      _panFrom = panFrom;
       _zoom = scale;
       _pan = pan;
     });
-    final duration = animationDuration(_animationLevel);
-    if (duration == Duration.zero) {
+    if (!fly || _zoomFlight.isStill) {
       _zoomMotion.value = 1;
       _boundUi?.requestFrame();
       return;
     }
-    _zoomMotion.duration = duration;
+    _zoomMotion.duration = _zoomFlight.duration;
     _zoomMotion.forward(from: 0);
   }
 
@@ -581,17 +592,21 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// pointer: there is no pointer in a menu choice, and the middle is the one
   /// point a keyboard zoom can promise to keep. That is why the pan goes back
   /// to zero — the picture is re-centred, not left where a drag had pushed it.
+  /// A zoom command from a key or a menu lands at once. Keys repeat, and a
+  /// flight on every repeat makes a held key feel late.
   void _onZoomRequest() {
     final request = _boundUi?.viewerZoomRequest.value;
     if (request == null || !mounted) return;
     final from = _shownScale;
     switch (request.$2) {
       case ViewerZoomCommand.fit:
-        _goToZoom(null, Offset.zero, from: from);
+        _goToZoom(null, Offset.zero, from: from, fly: false);
       case ViewerZoomCommand.zoomIn:
-        _goToZoom(_clampZoom(from * zoomToolStep), Offset.zero, from: from);
+        _goToZoom(_clampZoom(from * zoomToolStep), Offset.zero,
+            from: from, fly: false);
       case ViewerZoomCommand.zoomOut:
-        _goToZoom(_clampZoom(from / zoomToolStep), Offset.zero, from: from);
+        _goToZoom(_clampZoom(from / zoomToolStep), Offset.zero,
+            from: from, fly: false);
     }
   }
 
@@ -656,7 +671,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     final footage = _footageOf(ui);
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     // Roomed panes part the bars from the picture and gather the transport
     // into one pill; flush panes weld the bars on.
     final round = t.tokens.roomed;
@@ -696,69 +711,67 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           )
         : null;
 
-    // Both notifiers, because the transport shows two things the engine owns:
-    // where the playhead is, and whether it is running.
+    // Whether the transport is running. Where the playhead is goes to the
+    // clock alone, so the bar is not rebuilt for every frame.
     final bar = ValueListenableBuilder<bool>(
       valueListenable: ui.playing,
       builder: (context, playing, _) => ValueListenableBuilder<int>(
-        valueListenable: ui.playheadFrame,
-        builder: (context, frame, _) => ValueListenableBuilder<int>(
-          valueListenable: ui.previewTier,
-          builder: (context, tier, _) => ViewerBar(
-            channel: _channel,
-            // Session state rather than panel state: the engine has to
-            // be told when it flips, and [LumitUiState] is what talks to it.
-            grid: ui.viewerGrid,
-            wireframes: ui.viewerLayerControls,
-            look: ui.viewerLook,
-            onStops: ui.setViewerStops,
-            playing: playing,
-            frame: frame,
-            settings: settings,
-            comp: comp,
-            compSize: facts.size,
-            tier: tier,
-            shownScale: _shownScale,
-            background: ui.model.heldBackground,
-            onChannel: (c) => setState(() => _channel = c),
-            onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
-            onWireframes: () =>
-                ui.setViewerLayerControls(!ui.viewerLayerControls),
-            onPlayPause: _togglePlay,
-            onSeek: (f) => _seek(comp, ui, f),
-            hasSnapshot: _snapshot != null,
-            onSnapshotTake: _takeSnapshot,
-            onSnapshotHold: _holdSnapshot,
-            detached: round,
-            transport: !deck,
-            loop: ui.workspace.performance.loop,
-            onLoop: ui.workspace.setLoopMode,
-            viewId: widget.view.engineId,
-            // Gathered: the header's contents lead the one strip, in the
-            // order the two strips read.
-            leading: split
-                ? const []
-                : [
-                    DockPaneHandle(
-                      child: Text(
-                          t.kickerCase(viewport
-                              ? l10n.panel3dViewport
-                              : l10n.panelViewer),
-                          style: t.kickerOn),
-                    ),
-                    viewerBarGapBox(viewerBarGap),
-                    ...viewerPickers(
-                      zoom: _zoom,
-                      shownScale: _shownScale,
-                      look: ui.viewerLook,
-                      showToneMap: ui.workspace.interface.showToneMap,
-                      onToneMap: ui.toggleViewerToneMap,
-                      onZoom: goToNamedZoom,
-                      quality: !deck,
-                      viewId: widget.view.engineId,
-                    ),
-                  ],
-          ),
+        valueListenable: ui.previewTier,
+        builder: (context, tier, _) => ViewerBar(
+          channel: _channel,
+          // Session state rather than panel state: the engine has to
+          // be told when it flips, and [LumitUiState] is what talks to it.
+          grid: ui.viewerGrid,
+          wireframes: ui.viewerLayerControls,
+          look: ui.viewerLook,
+          onStops: ui.setViewerStops,
+          onStopsLive: (stops) => ui.setViewerStops(stops, live: true),
+          playing: playing,
+          playhead: ui.playheadFrame,
+          settings: settings,
+          comp: comp,
+          compSize: facts.size,
+          tier: tier,
+          shownScale: _shownScale,
+          background: ui.model.heldBackground,
+          onChannel: (c) => setState(() => _channel = c),
+          onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
+          onWireframes: () =>
+              ui.setViewerLayerControls(!ui.viewerLayerControls),
+          onPlayPause: _togglePlay,
+          onSeek: (f) => _seek(comp, ui, f),
+          hasSnapshot: _snapshot != null,
+          onSnapshotTake: _takeSnapshot,
+          onSnapshotHold: _holdSnapshot,
+          detached: round,
+          transport: !deck,
+          loop: ui.workspace.performance.loop,
+          onLoop: ui.workspace.setLoopMode,
+          viewId: widget.view.engineId,
+          // Gathered: the header's contents lead the one strip, in the
+          // order the two strips read.
+          leading: split
+              ? const []
+              : [
+                  DockPaneHandle(
+                    child: Text(
+                        t.kickerCase(viewport
+                            ? l10n.panel3dViewport
+                            : l10n.panelViewer),
+                        style: t.kickerOn),
+                  ),
+                  viewerBarGapBox(viewerBarGap),
+                  ...viewerPickers(
+                    zoom: _zoom,
+                    shownScale: _shownScale,
+                    look: ui.viewerLook,
+                    showToneMap: ui.workspace.interface.showToneMap,
+                    onToneMap: ui.toggleViewerToneMap,
+                    onZoom: goToNamedZoom,
+                    quality: !deck,
+                    viewId: widget.view.engineId,
+                  ),
+                ],
         ),
       ),
     );
@@ -823,54 +836,51 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                       event.scrollDelta.dy, constraints, size, fitted));
             }
           },
-          child: ValueListenableBuilder<int>(
-            valueListenable: ui.playheadFrame,
-            builder: (context, frame, _) => ViewerStage(
-              comp: comp,
-              viewId: widget.view.engineId,
-              uiState: ui,
-              fitted: fitted,
-              pictureRect: canvas,
-              showPicture: !(viewport && widget.view.wireframeOnly),
-              grid: ui.viewerGrid,
-              overlays: ui.viewerOverlays,
-              pictureKey: _pictureKey,
-              snapshot: _showingSnapshot ? _snapshot : null,
-              snapshotArea: _snapshotArea,
-              wireframes: ui.viewerLayerControls,
-              channel: _channel,
-              compSize: size,
-              footage: footage,
-              onPan: _panBy,
-              // The model is *told* an edit landed, rather than the boxes
-              // checking for themselves as they draw: the Viewer
-              // commits its own edits, and the drawing path reads the held
-              // copy now, so this is what puts the new document on screen
-              // without waiting for the change stream's round trip. The same
-              // thing every other panel does after committing.
-              onChanged: () {
-                ui.model.refresh();
-                setState(() {});
-              },
-              // Both in the picture area's frame, for [_scrollZoom]'s
-              // reason: the pan that comes back is measured from the middle of
-              // what the rulers have left.
-              onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
-                cursor: at - _bandOffset,
-                factor: out ? 1 / zoomToolStep : zoomToolStep,
-                fitted: fitted.shift(-_bandOffset),
-                compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: _pictureArea(constraints),
-              )),
-              onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
-                box: box.shift(-_bandOffset),
-                out: out,
-                fitted: fitted.shift(-_bandOffset),
-                compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: _pictureArea(constraints),
-              )),
-              onZoom: goToNamedZoom,
-            ),
+          child: ViewerStage(
+            comp: comp,
+            viewId: widget.view.engineId,
+            uiState: ui,
+            fitted: fitted,
+            pictureRect: canvas,
+            showPicture: !(viewport && widget.view.wireframeOnly),
+            grid: ui.viewerGrid,
+            overlays: ui.viewerOverlays,
+            pictureKey: _pictureKey,
+            snapshot: _showingSnapshot ? _snapshot : null,
+            snapshotArea: _snapshotArea,
+            wireframes: ui.viewerLayerControls,
+            channel: _channel,
+            compSize: size,
+            footage: footage,
+            onPan: _panBy,
+            // The model is *told* an edit landed, rather than the boxes
+            // checking for themselves as they draw: the Viewer
+            // commits its own edits, and the drawing path reads the held
+            // copy now, so this is what puts the new document on screen
+            // without waiting for the change stream's round trip. The same
+            // thing every other panel does after committing.
+            onChanged: () {
+              ui.model.refresh();
+              setState(() {});
+            },
+            // Both in the picture area's frame, for [_scrollZoom]'s
+            // reason: the pan that comes back is measured from the middle of
+            // what the rulers have left.
+            onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
+              cursor: at - _bandOffset,
+              factor: out ? 1 / zoomToolStep : zoomToolStep,
+              fitted: fitted.shift(-_bandOffset),
+              compSize: Size(size.width.toDouble(), size.height.toDouble()),
+              panel: _pictureArea(constraints),
+            )),
+            onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
+              box: box.shift(-_bandOffset),
+              out: out,
+              fitted: fitted.shift(-_bandOffset),
+              compSize: Size(size.width.toDouble(), size.height.toDouble()),
+              panel: _pictureArea(constraints),
+            )),
+            onZoom: goToNamedZoom,
           ),
         );
       },
@@ -999,8 +1009,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     var scale = target;
     var pan = _pan;
     final from = _zoomFrom;
-    if (from != null && _zoomMotion.value < 1) {
-      final t = Curves.easeOutCubic.transform(_zoomMotion.value);
+    final t = _flightAt;
+    if (from != null && t != null) {
       // Geometric, not linear: magnification is a *ratio*, and lerping the
       // number itself makes the second half of a big zoom crawl while the
       // first half bolts. Interpolating the logarithm is what makes a 1x → 8x
@@ -1096,9 +1106,13 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       // percentage in the readout would sit at whatever it was until a frame
       // happened to arrive. After the frame, never during it: this runs inside
       // a layout, where a `setState` is an assertion rather than a rebuild.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() {});
-      });
+      // A zoom in flight already rebuilds the panel every tick, so it needs
+      // no second build, and the tick it lands on is not in flight.
+      if (!_zoomMotion.isAnimating) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
     }
     state.reportViewerScale(
       _shownScale > fit ? _shownScale : fit,

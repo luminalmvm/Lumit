@@ -31,6 +31,11 @@ use super::drivers::{
     measure::{Measure, MeasureDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
+    ring_wave::{RingWave, RingWaveDef},
+    siceliot::{
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
+        ValueNoiseDef,
+    },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
     wiggle::{Wiggle, WiggleDef},
@@ -84,6 +89,7 @@ use super::effects::{
     connect_points::{ConnectPoints, ConnectPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
+    crop::{Crop, CropDef},
     curves::{Curves, CurvesDef},
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
@@ -187,6 +193,7 @@ use super::effects::{
     tritone::{Tritone, TritoneDef},
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
     twirl::{Twirl, TwirlDef},
+    type_fill::{TypeFill, TypeFillDef},
     vary_points::{VaryPoints, VaryPointsDef},
     vector_blur::{VectorBlur, VectorBlurDef},
     vegas::{Vegas, VegasDef},
@@ -228,6 +235,8 @@ crate::catalogue![
     ChannelBlurDef => ChannelBlur,
     VectorBlurDef => VectorBlur,
     TransformDef => Transform,
+    // Crop, beside Transform: the two halves of Vegas's Pan/Crop.
+    CropDef => Crop,
     GlowDef => Glow,
     ShakeDef => Shake,
     BlockGlitchDef => BlockGlitch,
@@ -292,6 +301,8 @@ crate::catalogue![
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
     LabelPointsDef => LabelPoints,
+    // Rows of words that fill the room a region leaves.
+    TypeFillDef => TypeFill,
     // The modifiers: a points wire in and another out.
     VaryPointsDef => VaryPoints,
     PickPointsDef => PickPoints,
@@ -483,4 +494,11 @@ crate::catalogue![
     // The music as events rather than a level: markers, beats found in the
     // sound, or a band rising past a threshold.
     BeatTriggerDef => BeatTrigger,
+    // The Siceliot drivers: Cavalry's value behaviours, each
+    // reading the copy Clone to points stamps, as Clone index does.
+    StaggerDef => Stagger,
+    RandomDef => Random,
+    OscillatorDef => Oscillator,
+    ValueNoiseDef => ValueNoise,
+    RingWaveDef => RingWave,
 ];

@@ -20,13 +20,14 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show duplicateLayersFrb;
+import '../shell/menu_bar_frb.dart' show duplicateLayersFrb, effectFlyout;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
+import '../widgets/name_direction.dart';
 import 'audio_streams_menu_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
@@ -634,14 +635,17 @@ class _OutlineRowState extends State<OutlineRow> {
         ),
         const SizedBox(width: identityGap),
         // The layer number: **mono**, because it is a number (§7.1's rule has
-        // no exceptions), muted, and in the same 18px cell the header's `#`
+        // no exceptions), muted, and in the same cell the header's `#`
         // stands in. It comes **before** the label dot: the number is
         // the row's address and the dot belongs to the name it colours, which
         // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(
           width: numberCellWidth,
           child: Text('${widget.number}',
-              style: layerNumberStyle(t, 10)),
+              style: layerNumberStyle(t, 10),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible),
         ),
         const SizedBox(width: identityGap),
         LumitTooltip(
@@ -925,6 +929,8 @@ class _OutlineRowState extends State<OutlineRow> {
           // the selected row; every other row keeps `body`.
           child: Text(info.name,
               style: widget.selected ? t.bodyPrimary : t.body,
+              textDirection: nameDirection(info.name),
+              textAlign: TextAlign.left,
               overflow: TextOverflow.ellipsis),
         ),
       ),
@@ -1266,6 +1272,14 @@ class _OutlineRowState extends State<OutlineRow> {
           ),
         ),
         if (!locked) ...[
+          // The Effect menu itself, onto the layer that was clicked.
+          SubmenuRow(
+            key: const ValueKey('tl-row-effect'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => effectFlyout(context.read<LumitState>(),
+                context.read<LumitUiState>(), widget.entry.layer, dismiss),
+            child: Text(l10n.menuEffect),
+          ),
           if (index > 0)
             MenuRow(
                 onPressed: () => close('up'), child: Text(l10n.bringForward)),
@@ -1307,9 +1321,19 @@ class _OutlineRowState extends State<OutlineRow> {
               closeParent: () => close(null),
               streams: streams,
               onChoose: (places) {
-                try {
-                  widget.entry.layer.setAudioStreams(streams: places);
-                } catch (_) {}
+                setPickedAudioStreams(
+                  context.read<LumitState>().project,
+                  [
+                    for (final target in _menuTargets())
+                      if (!target.info.switches.locked)
+                        (
+                          streams: () => target.layer.audioStreams(),
+                          set: (List<int> places) =>
+                              target.layer.setAudioStreams(streams: places),
+                        ),
+                  ],
+                  places,
+                );
                 widget.onChanged();
               },
             ),

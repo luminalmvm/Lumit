@@ -230,9 +230,12 @@ impl Mask {
     ///
     /// Time matters because opacity animates: a mask keyed from 0 % can be off
     /// for the first half of a shot and on for the second.
+    ///
+    /// An open path has no inside, so it gates nothing either, as in After
+    /// Effects. An effect that follows the path still reads it.
     #[must_use]
     pub fn does_something_at(&self, t: f64) -> bool {
-        self.mode != MaskMode::None && self.opacity.value_at(t) > 0.0
+        self.mode != MaskMode::None && self.opacity.value_at(t) > 0.0 && self.path_at(t).closed
     }
 
     /// The feather this mask asks for at `t`, in layer pixels: one width, and
@@ -587,7 +590,9 @@ pub fn rasterise_paths(
     const SEGS: usize = 24;
     let mut contours: Vec<Vec<(f64, f64)>> = Vec::with_capacity(paths.len());
     for path in paths {
-        if path.vertices.len() < 3 || !path.closed {
+        // Two points close into a lens when either has a handle; with none
+        // they enclose nothing, and the walk below finds no crossings.
+        if path.vertices.len() < 2 || !path.closed {
             continue;
         }
         let n = path.vertices.len();
@@ -1695,6 +1700,10 @@ mod tests {
             bare.iter().all(|&c| c == 255),
             "a switched-off mask is no mask, memo or not"
         );
+        let mut open = masks[0].clone();
+        open.path.closed = false;
+        let whole = combined_coverage(&[open], 32, 32, 32.0, 32.0, 0.0);
+        assert!(whole.iter().all(|&c| c == 255), "an open mask cuts nothing");
     }
 
     /// Two 16-wide-tall rectangles: A covers x 0..10, B covers x 6..16, so

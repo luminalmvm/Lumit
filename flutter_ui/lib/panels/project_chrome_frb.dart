@@ -208,6 +208,7 @@ Widget projectColumnHeader(
             size: t.kickerCase(l10n.projectColumnSize),
             fps: t.kickerCase(l10n.unitFps),
             duration: t.kickerCase(l10n.duration),
+            date: t.kickerCase(l10n.projectColumnDate),
             path: t.kickerCase(l10n.projectColumnPath),
             style: t.kicker,
             // The heading is as quiet as its column: Path is context, not a

@@ -1502,6 +1502,12 @@ pub struct BridgeClip {
     /// Carried so the clip's header strip draws with no bridge call; empty
     /// when the document no longer holds that source.
     pub source_name: String,
+    /// The clip's own opacity, nought to one, taken with its fades.
+    pub opacity: f64,
+    /// The names of the takes the clip holds, the one it shows first and the
+    /// rest in the order T steps through them: the take numbers
+    /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
+    pub takes: Vec<String>,
     /// The link this clip shares with the clips that move, trim and cut with
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
@@ -1515,9 +1521,16 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// The footage item or composition the clip plays: its take's, when T
+    /// has stepped to another.
+    pub source: Uuid,
     /// The clip's own blend mode as an index into [`list_blend_modes`], or
     /// `None` while it takes its layer's.
     pub blend: Option<u32>,
+    /// The clip's own label colour, or `None` while it wears its layer's.
+    pub label: Option<u8>,
+    /// The group the clip is in, or `None`.
+    pub group: Option<Uuid>,
     /// Where the clip starts and ends on the comp's clock in frames, with the
     /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
     /// may sit between two frames, and this is where it is drawn.
@@ -1595,6 +1608,13 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
+    let name = |source| match source {
+        lumit_core::sequence::ClipSource::Footage(id)
+        | lumit_core::sequence::ClipSource::Comp(id) => doc
+            .item(id)
+            .map(|i| i.name().to_string())
+            .unwrap_or_default(),
+    };
     BridgeClip {
         id: clip.id,
         place_start: rational_of(clip.place_start),
@@ -1618,28 +1638,38 @@ fn bridge_clip(
         effects: clip
             .effects
             .iter()
-            .map(|e| crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO))
+            .map(|e| {
+                crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO, false)
+            })
             .collect(),
         fx: clip.fx,
         gain_db: clip.gain_db,
-        source_name: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => doc
-                .item(id)
-                .map(|i| i.name().to_string())
-                .unwrap_or_default(),
+        source_name: name(clip.source),
+        opacity: clip.opacity,
+        takes: match clip.takes.is_empty() {
+            true => Vec::new(),
+            false => std::iter::once(clip.source)
+                .chain(clip.takes.iter().map(|t| t.source))
+                .map(name)
+                .collect(),
         },
         link: clip.link,
         audible: clip.audible,
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
+        source: match clip.source {
+            lumit_core::sequence::ClipSource::Footage(id)
+            | lumit_core::sequence::ClipSource::Comp(id) => id,
+        },
         blend: clip.blend.map(|blend| {
             lumit_core::model::BlendMode::ALL
                 .iter()
                 .position(|b| *b == blend)
                 .unwrap_or(0) as u32
         }),
+        label: clip.label,
+        group: clip.group,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
     }
@@ -2052,6 +2082,7 @@ pub(crate) fn read_layer_info(
                 crate::api::effect::read_instance_info(
                     &crate::api::effect::with_live_inputs(e, doc),
                     layer.start_offset.0,
+                    !layer.is_adjustment(),
                 )
             })
             .collect(),
@@ -2062,6 +2093,7 @@ pub(crate) fn read_layer_info(
                 crate::api::effect::read_instance_info(
                     &crate::api::effect::with_live_inputs(s, doc),
                     layer.start_offset.0,
+                    !layer.is_adjustment(),
                 )
             })
             .collect(),
@@ -2069,6 +2101,7 @@ pub(crate) fn read_layer_info(
             crate::api::effect::read_instance_info(
                 &crate::api::effect::with_live_inputs(inputs, doc),
                 layer.start_offset.0,
+                !layer.is_adjustment(),
             )
         }),
         collapse_forced: lumit_core::model::collapse_state(
@@ -2255,8 +2288,11 @@ pub struct BridgeAudioPeaks {
     /// Buckets per band.
     pub buckets: u32,
     /// Band-major triples: band `b`'s bucket `i` is `min`, `max`, `rms` at
-    /// `3 * (b * buckets + i)`, each in −1..1.
+    /// `3 * (b * buckets + i)`, each in −1..1. With two channels, the left's
+    /// bands come first and then the right's.
     pub values: Vec<f32>,
+    /// 1 for the sound mixed, or 2 for left and right apart.
+    pub channels: u32,
 }
 
 impl BridgeAudioPeaks {
@@ -2271,6 +2307,7 @@ impl BridgeAudioPeaks {
             bands: 0,
             buckets: 0,
             values: Vec::new(),
+            channels: 1,
         }
     }
 
@@ -3233,6 +3270,25 @@ impl LayerReference {
             .ok_or(BridgeError::InvalidLayer)
     }
 
+    /// Bring effects from a preset or the clipboard up to this build, as a
+    /// project's are when it opens, for this layer. `wired` says whether an
+    /// instance's row has a wire into it.
+    fn migrate_in(
+        &self,
+        effects: &mut [EffectInstance],
+        wired: &dyn Fn(Uuid, &str) -> bool,
+    ) -> Result<(), BridgeError> {
+        use lumit_core::fx::builtins::{migrate_in, picture_size};
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        let layer = (comp.layers.iter())
+            .find(|l| l.id == self.layer_id)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let size = (f64::from(comp.width), f64::from(comp.height));
+        migrate_in(effects, size, picture_size(&doc, comp, layer), wired);
+        Ok(())
+    }
+
     /// This layer as it leaves the project, on the clipboard or in a preset.
     /// A file an effect reads has the path it had, and not its copy's in this
     /// machine's cache.
@@ -3342,9 +3398,16 @@ impl LayerReference {
     /// Deliberately the **same document a preset is**, so an effect copied from
     /// one layer can be saved as a preset and a preset can be pasted as an
     /// effect — one shape, not two that drift.
+    ///
+    /// The wires between the copied effects and the drivers that
+    /// feed them ride along ([`lumit_core::preset::wiring_of`]), so a points
+    /// rig copied off one layer works on the next.
     #[frb(sync)]
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
-        let stack = self.leaving()?.effects;
+        let layer = self.leaving()?;
+        let graph = layer.graph;
+        let stack = layer.effects;
+        let full = stack.clone();
         let taken: Vec<_> = if effects.is_empty() {
             stack
         } else {
@@ -3360,7 +3423,10 @@ impl LayerReference {
             .first()
             .map(|e| e.effect.match_name.clone())
             .unwrap_or_default();
-        lumit_core::preset::to_json(&name, &taken).map_err(|_| BridgeError::InvalidPreset)
+        let ids: Vec<Uuid> = taken.iter().map(|e| e.id).collect();
+        let wiring = lumit_core::preset::wiring_of(&graph, &full, &ids);
+        lumit_core::preset::to_json_wired(&name, &taken, wiring)
+            .map_err(|_| BridgeError::InvalidPreset)
     }
 
     /// Append copied effects to this layer's stack, **timed to the playhead**:
@@ -3380,7 +3446,6 @@ impl LayerReference {
     pub fn paste_effects(&self, text: String, at_frame: i64) -> Result<(), BridgeError> {
         let preset =
             lumit_core::preset::from_json(&text).map_err(|_| BridgeError::InvalidPreset)?;
-        let mut fresh = lumit_core::preset::instantiated(&preset);
 
         // Comp frame -> the layer's own clock, the space keyframes live in.
         let comp = self.composition()?;
@@ -3392,15 +3457,76 @@ impl LayerReference {
         let at_local = at_comp
             .delta(layer.start_offset)
             .map_err(|_| BridgeError::InvalidTime)?;
+        let land = |boxes: &mut [lumit_core::model::EffectInstance],
+                    first: Option<lumit_core::time::Rational>|
+         -> Result<(), BridgeError> {
+            if let Some(first) = first {
+                let delta = at_local
+                    .0
+                    .checked_sub(first)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+                lumit_core::preset::shift_keys(boxes, delta);
+            }
+            Ok(())
+        };
 
-        if let Some(first) = lumit_core::preset::first_key_time(&fresh) {
-            let delta = at_local
-                .0
-                .checked_sub(first)
-                .map_err(|_| BridgeError::InvalidTime)?;
-            lumit_core::preset::shift_keys(&mut fresh, delta);
+        // Copied with their wiring, the effects come back with
+        // their drivers and wires, every id fresh, set down to the right of
+        // what the graph already holds. One commit, so one undo.
+        if let Some(wiring) = &preset.wiring {
+            let right = layer
+                .graph
+                .layout
+                .iter()
+                .map(|(_, xy)| xy[0])
+                .fold(f64::MIN, f64::max);
+            let at = if right == f64::MIN {
+                [0.0, 0.0]
+            } else {
+                [right + 240.0, 0.0]
+            };
+            let mut added = lumit_core::preset::group_instantiated(wiring, at);
+            let first = [&added.effects, &added.nodes]
+                .into_iter()
+                .filter_map(|boxes| lumit_core::preset::first_key_time(boxes))
+                .min();
+            land(&mut added.effects, first)?;
+            land(&mut added.nodes, first)?;
+            let mut graph = layer.graph;
+            graph.nodes.extend(added.nodes);
+            graph.edges.extend(added.edges);
+            graph.layout.extend(added.layout);
+            self.migrate_in(
+                &mut added.effects,
+                &lumit_core::fx::builtins::wired_in(&graph),
+            )?;
+            let mut effects = layer.effects;
+            effects.extend(added.effects);
+            graph.prune_rows(&effects);
+            let op = lumit_core::ops::Op::Batch {
+                ops: vec![
+                    lumit_core::ops::Op::SetLayerEffects {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        effects,
+                    },
+                    lumit_core::ops::Op::SetLayerGraph {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        graph: Box::new(graph),
+                    },
+                ],
+            };
+            let proj = self.project()?;
+            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store.commit(op).map_err(BridgeError::OpError)?;
+            return Ok(());
         }
 
+        let mut fresh = lumit_core::preset::instantiated(&preset);
+        let first = lumit_core::preset::first_key_time(&fresh);
+        land(&mut fresh, first)?;
+        self.migrate_in(&mut fresh, &|_, _| false)?;
         self.with_effects(move |effects| {
             effects.extend(fresh);
             Ok(())
@@ -3456,7 +3582,7 @@ impl LayerReference {
         }
 
         let preset: Preset = serde_json::from_str(&text).map_err(|_| BridgeError::InvalidPreset)?;
-        let fresh: Vec<EffectInstance> = preset
+        let mut fresh: Vec<EffectInstance> = preset
             .effects
             .into_iter()
             .map(|mut effect| {
@@ -3464,6 +3590,7 @@ impl LayerReference {
                 effect
             })
             .collect();
+        self.migrate_in(&mut fresh, &|_, _| false)?;
 
         let home = clip.map_or(InstanceHome::Effects, InstanceHome::Clip);
         self.with_instances(home, move |effects| {
@@ -3520,7 +3647,8 @@ impl LayerReference {
         mask: BridgeMask,
         at: Option<BridgeRational>,
     ) -> Result<(), BridgeError> {
-        if mask.vertices.len() < 2 {
+        // A path keeps going while any point is left on it.
+        if mask.vertices.is_empty() {
             return Err(BridgeError::EmptyPath);
         }
         let layer = self.item()?;
@@ -4170,8 +4298,8 @@ impl LayerReference {
     /// of edit as a mask list or a paint list: an add, a delete, a recolour and
     /// a path edit are one kind of thing and each is one undo step.
     ///
-    /// A path of fewer than two vertices is refused, as a mask's is: it is not
-    /// a shape, and it would be a Timeline row with nothing behind it.
+    /// A path with no vertices is refused: it would be a Timeline row with
+    /// nothing behind it.
     ///
     /// **The art that was not edited does not move**. A shape layer's
     /// picture is its art's bounding box, and the layer's origin is that box's
@@ -4621,6 +4749,15 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Give one clip a label colour of its own, or hand it back to the
+    /// layer's with `None`.
+    #[frb(sync)]
+    pub fn set_clip_label(&self, clip: Uuid, label: Option<u8>) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].label = label;
+        self.commit_clips(clips)
+    }
+
     /// Set one clip's own level in dB - what the gain line across the box
     /// writes when it is let go (docs/impl/audio-timeline.md §2).
     ///
@@ -4637,6 +4774,18 @@ impl LayerReference {
         }
         let (mut clips, index) = self.clips_and_index(clip)?;
         clips[index].gain_db = db;
+        self.commit_clips(clips)
+    }
+
+    /// Set one picture clip's own opacity, nought to one, Vegas's event
+    /// opacity. It is taken where the clip's fades are.
+    #[frb(sync)]
+    pub fn set_clip_opacity(&self, clip: Uuid, opacity: f64) -> Result<(), BridgeError> {
+        if !opacity.is_finite() {
+            return Err(BridgeError::InvalidTime);
+        }
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].opacity = opacity.clamp(0.0, 1.0);
         self.commit_clips(clips)
     }
 
@@ -4958,7 +5107,7 @@ impl LayerReference {
 
     /// This layer's clips and the index of `clip` among them.
     #[frb(ignore)]
-    fn clips_and_index(
+    pub(crate) fn clips_and_index(
         &self,
         clip: Uuid,
     ) -> Result<(Vec<lumit_core::sequence::Clip>, usize), BridgeError> {
@@ -4980,6 +5129,9 @@ impl LayerReference {
     /// which clip is which. The moment is read through the clip's own map, so
     /// a re-speeded clip still shows the frame it actually opens on.
     ///
+    /// `along` asks for the frame that many seconds into the clip instead,
+    /// for the pictures drawn across it.
+    ///
     /// `None` when the media will not open, when the source is a comp rather
     /// than footage (there is nothing on disk to decode), or in a build with
     /// no media feature. Decoded once per (item, size, frame) and cached.
@@ -4987,15 +5139,16 @@ impl LayerReference {
         &self,
         clip: Uuid,
         max_edge: u32,
+        along: Option<f64>,
     ) -> Result<Option<crate::api::state::BridgeRenderedFrame>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let clip = &clips[index];
         let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
             return Ok(None);
         };
-        // The clip's own opening source moment, through whatever map it plays
-        // by — which is the identity when it has none of its own.
-        let opens_at = clip.source_time(clip.place_start.to_f64());
+        // The clip's own source moment, through whatever map it plays by —
+        // which is the identity when it has none of its own.
+        let opens_at = clip.source_time(clip.place_start.to_f64() + along.unwrap_or(0.0));
 
         #[cfg(feature = "media")]
         {
@@ -5054,7 +5207,7 @@ impl LayerReference {
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, opens_at, max_edge);
+            let _ = (item, opens_at, max_edge, along);
             Ok(None)
         }
     }
@@ -5396,6 +5549,10 @@ impl LayerReference {
                 audio_streams: layer.audio_streams.clone(),
                 audible: true,
                 blend: None,
+                label: None,
+                group: None,
+                opacity: 1.0,
+                takes: Vec::new(),
                 extra: serde_json::Map::new(),
             }],
         };
@@ -5521,7 +5678,10 @@ impl LayerReference {
     /// because the op's inverse is "the clips as they were" and a span quietly
     /// changed inside it would not come back on undo. A batch inverts
     /// member-wise, so both halves undo together for free.
-    fn commit_clips(&self, clips: Vec<lumit_core::sequence::Clip>) -> Result<(), BridgeError> {
+    pub(crate) fn commit_clips(
+        &self,
+        clips: Vec<lumit_core::sequence::Clip>,
+    ) -> Result<(), BridgeError> {
         let offset = self.item()?.start_offset;
         self.commit_clips_with_offset(clips, offset)
     }
@@ -6260,6 +6420,7 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: 1,
             })
         }
 
@@ -6380,6 +6541,7 @@ impl LayerReference {
         end_seconds: f64,
         buckets: u32,
         multiwave: bool,
+        stereo: bool,
     ) -> Result<BridgeAudioPeaks, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let Some(clip) = clips.get(index) else {
@@ -6433,15 +6595,27 @@ impl LayerReference {
                 .map(|i| clip.source_time(start + step * i as f64))
                 .collect();
             let bands = BridgeAudioPeaks::bands_of(multiwave);
-            let mut values = Vec::with_capacity(bands.len() * buckets * 3);
-            for band in &bands {
-                for i in 0..buckets {
-                    let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
-                        values.extend_from_slice(&[0.0, 0.0, 0.0]);
-                        continue;
-                    };
-                    let block = pyramid.window(*band, a, b);
-                    values.extend_from_slice(&[block.min, block.max, block.rms]);
+            // Left over right where asked and the sound has two channels.
+            let sides = if stereo {
+                crate::peaks::channel_pyramids_for(&sound)
+            } else {
+                None
+            };
+            let summaries: Vec<&lumit_audio::peaks::PeakPyramid> = match &sides {
+                Some(both) => both.iter().collect(),
+                None => vec![&pyramid],
+            };
+            let mut values = Vec::with_capacity(summaries.len() * bands.len() * buckets * 3);
+            for summary in &summaries {
+                for band in &bands {
+                    for i in 0..buckets {
+                        let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
+                            values.extend_from_slice(&[0.0, 0.0, 0.0]);
+                            continue;
+                        };
+                        let block = summary.window(*band, a, b);
+                        values.extend_from_slice(&[block.min, block.max, block.rms]);
+                    }
                 }
             }
             Ok(BridgeAudioPeaks {
@@ -6451,12 +6625,13 @@ impl LayerReference {
                 bands: bands.len() as u32,
                 buckets: buckets as u32,
                 values,
+                channels: summaries.len() as u32,
             })
         }
 
         #[cfg(not(feature = "media"))]
         {
-            let _ = (item, start_seconds, end_seconds, buckets, multiwave);
+            let _ = (item, start_seconds, end_seconds, buckets, multiwave, stereo);
             Ok(BridgeAudioPeaks::empty())
         }
     }
@@ -7383,6 +7558,7 @@ impl LayerReference {
                     crate::api::effect::with_live_inputs(f, &doc).into_owned(),
                     layer.start_offset.0,
                 )
+                .on_picture(!layer.is_adjustment())
             })
             .collect())
     }
@@ -7598,7 +7774,7 @@ impl LayerReference {
 
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             let mut graph = self.item()?.graph;
             graph.nodes.push(instance);
@@ -7949,7 +8125,7 @@ impl LayerReference {
     pub fn add_clip_effect(&self, clip: Uuid, name: String) -> Result<(), BridgeError> {
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             return Err(BridgeError::UnknownEffectName);
         }
@@ -8138,7 +8314,9 @@ impl LayerReference {
             .map(BridgeEffectInstance::get_effects)
             .collect();
         let mut graph = crate::api::graph::wiring_into(wiring, nodes);
-        graph.notes = self.item()?.graph.notes;
+        let held = self.item()?.graph;
+        graph.notes = held.notes;
+        graph.ties = held.ties;
 
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -8231,7 +8409,7 @@ impl LayerReference {
     pub fn insert_node_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
         let preset =
             lumit_core::preset::group_from_json(&text).map_err(|_| BridgeError::InvalidEffect)?;
-        let added = lumit_core::preset::group_instantiated(&preset, [x, y]);
+        let mut added = lumit_core::preset::group_instantiated(&preset, [x, y]);
 
         let layer = self.item()?;
         let mut graph = layer.graph;
@@ -8240,6 +8418,14 @@ impl LayerReference {
         graph.layout.extend(added.layout);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
+        self.migrate_in(
+            &mut added.effects,
+            &lumit_core::fx::builtins::wired_in(&graph),
+        )?;
+        let none_added = added.effects.is_empty();
+        let mut effects = layer.effects;
+        effects.extend(added.effects);
+        graph.prune_rows(&effects);
         let graph = lumit_core::ops::Op::SetLayerGraph {
             comp: self.comp_id,
             layer: self.layer_id,
@@ -8247,11 +8433,9 @@ impl LayerReference {
         };
         // The stack first, so the wires have their boxes by the time the
         // graph is checked.
-        let op = if added.effects.is_empty() {
+        let op = if none_added {
             graph
         } else {
-            let mut effects = layer.effects;
-            effects.extend(added.effects);
             lumit_core::ops::Op::Batch {
                 ops: vec![
                     lumit_core::ops::Op::SetLayerEffects {

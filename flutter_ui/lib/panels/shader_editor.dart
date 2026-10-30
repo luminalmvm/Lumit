@@ -696,23 +696,25 @@ class _CodeWell extends StatelessWidget {
           child: ClipRect(
             child: AnimatedBuilder(
               animation: scroll,
-              builder: (context, _) => OverflowBox(
+              // Built once and only moved, so a scroll lays out no numbers.
+              builder: (context, numbered) => OverflowBox(
                 alignment: Alignment.topRight,
                 maxHeight: double.infinity,
                 child: Transform.translate(
                   offset: Offset(
                       0, -(scroll.hasClients ? scroll.offset : 0.0)),
-                  child: Padding(
-                    // The 3 above matches the well's own inset, so line one
-                    // starts level with the caret; the 6 to the right is the
-                    // air between a number and its line.
-                    padding: const EdgeInsets.only(top: 3, right: 6),
-                    child: Text(
-                      [for (var i = 1; i <= lines; i++) '$i'].join('\n'),
-                      textAlign: TextAlign.right,
-                      style: numbers,
-                    ),
-                  ),
+                  child: numbered,
+                ),
+              ),
+              child: Padding(
+                // The 3 above matches the well's own inset, so line one
+                // starts level with the caret; the 6 to the right is the
+                // air between a number and its line.
+                padding: const EdgeInsets.only(top: 3, right: 6),
+                child: Text(
+                  [for (var i = 1; i <= lines; i++) '$i'].join('\n'),
+                  textAlign: TextAlign.right,
+                  style: numbers,
                 ),
               ),
             ),

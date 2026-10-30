@@ -330,6 +330,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
         intensity: 1.0,
         tint: [1.0; 4],
         mix: 1.0,
+        rolloff: 0.0,
     };
     // Invert arrives through the seam's prepare pass, both paths.
     for invert in [false, true] {
@@ -2346,6 +2347,7 @@ fn wgsl_glow_matches_the_cpu_oracle() {
             intensity,
             tint,
             mix,
+            rolloff: 0.0,
         };
         let out = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -2433,6 +2435,8 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             },
             fringe_wavelength: wavelength,
             fringe_samples: samples,
+            // One case runs Rolloff through both paths too.
+            rolloff: if name == "both" { 0.6 } else { 0.0 },
         };
         let mut cpu = img.clone();
         lumit_core::fx::cpu::glow_shaped(&mut cpu, w, h, &halo, 0.8, 0.5, 1.0, [1.0; 4], 1.0, &[]);
@@ -2471,6 +2475,7 @@ fn wgsl_glow_falloff_and_fringe_match_the_cpu_oracle() {
             intensity: 1.0,
             tint: [1.0; 4],
             mix: 1.0,
+            rolloff: halo.rolloff,
         };
         let out = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -5332,108 +5337,345 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
     }
 }
 
-/// **Sprite flare** (docs/08 §3.29): the WGSL agrees with the CPU
-/// reference, the neutral points pass through bit-exactly, and — the property
-/// the whole effect exists for — moving the light moves the flare *smoothly*,
-/// with no threshold to pop across.
+/// **Sprite flare**: the instanced draw agrees with the CPU twin for every
+/// kind of element, textures, a layer texture and a light half hidden by a
+/// layer or by depth included, is bit-stable, moving the light moves the
+/// flare smoothly, and with no light it is the input untouched.
 #[test]
 fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
+    use lumit_core::fx::flare::design::{ColourMode, Design, Element, Kind};
+    use lumit_core::fx::flare::{instances, raster};
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
     let fx = ctx.fx();
-    let (w, h) = (64u32, 48u32);
+    let (w, h) = (96u32, 64u32);
     let img = corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    let params = |lx: f32| lumit_core::fx::cpu::SpriteFlareParams {
-        light: [lx, 18.0],
-        intensity: 1.0,
-        tint: [1.0, 0.9, 0.7],
-        glow_size: 14.0,
-        glow_intensity: 1.0,
-        ghosts: 5,
-        ghost_spacing: 0.35,
-        ghost_size: 10.0,
-        ghost_intensity: 0.5,
-        streak_length: 30.0,
-        streak_intensity: 0.6,
-        streak_angle_deg: 12.0,
-        mix: 1.0,
-    };
-    let op = |p: &lumit_core::fx::cpu::SpriteFlareParams| crate::fx::blur::SpriteFlareOp {
-        light: p.light,
-        intensity: p.intensity,
-        tint: p.tint,
-        glow_size: p.glow_size,
-        glow_intensity: p.glow_intensity,
-        ghosts: p.ghosts,
-        ghost_spacing: p.ghost_spacing,
-        ghost_size: p.ghost_size,
-        ghost_intensity: p.ghost_intensity,
-        streak_length: p.streak_length,
-        streak_intensity: p.streak_intensity,
-        streak_angle_deg: p.streak_angle_deg,
-        mix: p.mix,
-    };
-
-    let p = params(20.0);
-    let mut cpu = img.clone();
-    lumit_core::fx::cpu::sprite_flare(&mut cpu, w, h, &p);
-    let out = fx.sprite_flare(&ctx, &tex, w, h, &op(&p));
-    let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
-
-    let added: f32 = gpu.iter().zip(&img).map(|(a, b)| (a - b).abs()).sum();
-    assert!(added > 1e-2, "the flare drew nothing ({added})");
-    let worst = worst_diff(&cpu, &gpu);
-    eprintln!("sprite_flare: worst {worst:.2e}");
-    assert!(worst < 5e-3, "worst |Δ| {worst}");
-
-    // Bit-stable.
-    let again = fx.sprite_flare(&ctx, &tex, w, h, &op(&p));
-    assert_eq!(
-        gpu,
-        readback_linear_f32(&ctx, &again, w, h).unwrap(),
-        "the sprite flare must be bit-stable"
-    );
-
-    // **It cannot pop.** This is the whole reason the effect exists beside the
-    // physically simulated one: there is no bright-pass, so nudging the light
-    // by a pixel nudges the picture by a little. A threshold-driven flare
-    // fails this — a source crossing the gate appears all at once.
-    let mut previous: Option<Vec<f32>> = None;
-    let mut worst_step = 0.0f32;
-    for step in 0..6 {
-        let q = params(20.0 + step as f32);
-        let mut frame = img.clone();
-        lumit_core::fx::cpu::sprite_flare(&mut frame, w, h, &q);
-        if let Some(prev) = &previous {
-            worst_step = worst_step.max(worst_diff(prev, &frame));
+    let el = |kind: Kind, values: &[(&str, f32)]| {
+        let mut e = Element::new(kind);
+        for (k, v) in values {
+            e.set(k, *v);
         }
-        previous = Some(frame);
-    }
-    assert!(
-        worst_step < 0.35,
-        "a one-pixel move of the light changed a pixel by {worst_step} — \
-         the flare must slide, not pop"
+        e
+    };
+    let mut ghosts = el(
+        Kind::Ghosts,
+        &[
+            ("size", 6.0),
+            ("count", 5.0),
+            ("brightness", 0.3),
+            ("scatter", 3.0),
+        ],
     );
+    ghosts.colour.mode = ColourMode::Mixed;
+    ghosts.colour.colours = vec![[1.0, 0.6, 0.3], [0.4, 0.7, 1.0]];
+    let mut ring = el(
+        Kind::Ring,
+        &[("size", 14.0), ("arc", 200.0), ("brightness", 0.5)],
+    );
+    ring.colour.mode = ColourMode::Gradient;
+    ring.colour.colours = vec![[1.0, 0.2, 0.2], [0.2, 0.2, 1.0]];
+    let design = Design {
+        elements: vec![
+            el(
+                Kind::Glow,
+                &[
+                    ("size", 10.0),
+                    ("falloff", 0.3),
+                    ("stretch", 1.5),
+                    ("fringe", 0.8),
+                ],
+            ),
+            el(
+                Kind::Rays,
+                &[
+                    ("size", 30.0),
+                    ("count", 40.0),
+                    ("thickness", 0.6),
+                    ("brightness", 0.4),
+                    ("fringe", 0.7),
+                ],
+            ),
+            el(
+                Kind::Star,
+                &[
+                    ("size", 20.0),
+                    ("points", 4.0),
+                    ("fringe", 0.7),
+                    ("twin", 0.5),
+                ],
+            ),
+            el(
+                Kind::Streak,
+                &[
+                    ("size", 40.0),
+                    ("lines", 3.0),
+                    ("spacing", 3.0),
+                    ("face", 1.0),
+                    ("brightness", 0.4),
+                    ("end_width", 0.3),
+                ],
+            ),
+            ring,
+            el(
+                Kind::Halo,
+                &[("size", 18.0), ("brightness", 0.4), ("softness", 1.0)],
+            ),
+            el(
+                Kind::Ghost,
+                &[
+                    ("size", 9.0),
+                    ("fringe", 1.0),
+                    ("edge", 0.8),
+                    ("stretch", 1.3),
+                    ("notches", 1.0),
+                ],
+            ),
+            ghosts,
+            el(
+                Kind::Orbs,
+                &[
+                    ("size", 4.0),
+                    ("count", 30.0),
+                    ("reach", 60.0),
+                    ("brightness", 0.3),
+                ],
+            ),
+            el(
+                Kind::Ghost,
+                &[("size", 12.0), ("place", 1.4), ("texture", 2.0)],
+            ),
+            // Small, so it reads from the smaller copies.
+            el(
+                Kind::Ghost,
+                &[("size", 5.0), ("place", 1.8), ("texture", 8.0)],
+            ),
+            el(
+                Kind::Ghost,
+                &[("size", 10.0), ("place", 0.3), ("texture", 11.0)],
+            ),
+            el(
+                Kind::Dirt,
+                &[("size", 50.0), ("reach", 70.0), ("brightness", 0.5)],
+            ),
+            el(
+                Kind::Picture,
+                &[("size", 24.0), ("place", 0.6), ("texture", 4.0)],
+            ),
+        ],
+        ..lumit_core::fx::flare::presets::default_design()
+    };
+    let frame = |lx: f32| {
+        let mut f = raster::Frame::preview(w, h, [lx, 20.0], 1.0);
+        f.lights[0].colour = [1.0, 0.9, 0.7];
+        f.edge_fade = 20.0;
+        f
+    };
+    // A wall over the left of the frame, up to the light's middle.
+    let wall: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let a = if i % w < 24 { 1.0 } else { 0.0 };
+            [a, a, a, a]
+        })
+        .collect();
+    let wall_tex = upload_linear_f32(&ctx, &wall, w, h);
+    // The Texture layer: a coloured ramp.
+    let (lw, lh) = (24u32, 16u32);
+    let layer: Vec<f32> = (0..lw * lh)
+        .flat_map(|i| {
+            let (x, y) = ((i % lw) as f32 / lw as f32, (i / lw) as f32 / lh as f32);
+            [x, y, 1.0 - x, 1.0]
+        })
+        .collect();
+    let layer_tex = upload_linear_f32(&ctx, &layer, lw, lh);
+    let picture = raster::Picture {
+        rgba: &layer,
+        w: lw,
+        h: lh,
+    };
+    let cpu_of = |f: &raster::Frame| {
+        let mut cpu = img.clone();
+        raster::draw_with(&design, f, w, h, &mut cpu, Some(picture));
+        cpu
+    };
+    let gpu_hidden = |f: &raster::Frame,
+                      hide: Option<crate::fx::sprite_flare::HideOp<'_>>,
+                      depth: Option<crate::fx::sprite_flare::DepthOp<'_>>| {
+        let list: Vec<_> = instances::expand(&design, f, w, h)
+            .iter()
+            .map(instances::Instance::packed)
+            .collect();
+        let lights: Vec<[f32; 8]> = f
+            .lights
+            .iter()
+            .map(|l| {
+                [
+                    l.pos[0],
+                    l.pos[1],
+                    l.gain,
+                    l.scale,
+                    l.colour[0],
+                    l.colour[1],
+                    l.colour[2],
+                    0.0,
+                ]
+            })
+            .collect();
+        let op = crate::fx::sprite_flare::SpriteFlareOp {
+            instances: &list,
+            lights: &lights,
+            centre: f.centre,
+            edge_fade: f.edge_fade * f.px_scale,
+            spots: None,
+            hide,
+            depth,
+            layer: Some(&layer_tex),
+            textures: lumit_core::fx::flare::textures::all(),
+        };
+        readback_linear_f32(&ctx, &fx.sprite_flare(&ctx, &tex, w, h, &op), w, h).unwrap()
+    };
+    let gpu_of = |f: &raster::Frame| gpu_hidden(f, None, None);
+    let worst_gap = |a: &[f32], b: &[f32]| {
+        a.iter()
+            .zip(b)
+            .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+            .fold(0.0f32, f32::max)
+    };
 
-    // Neutral points: Intensity 0 and Mix 0 are the input, untouched.
-    for neutral in [
-        lumit_core::fx::cpu::SpriteFlareParams {
-            intensity: 0.0,
-            ..p
-        },
-        lumit_core::fx::cpu::SpriteFlareParams { mix: 0.0, ..p },
-    ] {
-        let nout = fx.sprite_flare(&ctx, &tex, w, h, &op(&neutral));
-        assert_eq!(
-            readback_linear_f32(&ctx, &nout, w, h).unwrap(),
-            img,
-            "a neutral sprite flare must be the bit-exact input"
+    // Half behind the wall, the light flares at about half, the same on
+    // both sides.
+    let f = frame(24.0);
+    let radius = 6.0;
+    let covered = raster::covered(&wall, w, h, f.lights[0].pos, radius, false);
+    assert!((0.4..0.6).contains(&covered), "covered {covered}");
+    let mut hidden = f.clone();
+    hidden.lights[0].gain *= 1.0 - covered;
+    let hide = crate::fx::sprite_flare::HideOp {
+        picture: &wall_tex,
+        luma: false,
+        radius,
+    };
+    let gap = worst_gap(&cpu_of(&hidden), &gpu_hidden(&f, Some(hide), None));
+    assert!(gap < 5e-2, "hidden worst |Δ| {gap}");
+
+    // The same wall as a depth 5 m away, in front of a light 50 m away.
+    let near: Vec<f32> = wall
+        .chunks(4)
+        .flat_map(|px| {
+            let m = if px[3] > 0.5 { 5.0 } else { 900.0 };
+            [m, m, m, 1.0]
+        })
+        .collect();
+    let near_tex = upload_linear_f32(&ctx, &near, w, h);
+    let nearer = raster::nearer(&near, w, h, f.lights[0].pos, radius, 50.0);
+    assert!((covered - nearer).abs() < 1e-6, "nearer {nearer}");
+    let depth = crate::fx::sprite_flare::DepthOp {
+        picture: &near_tex,
+        metres: 50.0,
+        radius,
+    };
+    let gap = worst_gap(&cpu_of(&hidden), &gpu_hidden(&f, None, Some(depth)));
+    assert!(gap < 5e-2, "behind depth worst |Δ| {gap}");
+
+    let cpu = cpu_of(&f);
+    let gpu = gpu_of(&f);
+    let added: f32 = gpu.iter().zip(&img).map(|(a, b)| (a - b).abs()).sum();
+    assert!(added > 1.0, "the flare drew nothing ({added})");
+    // The quads are added up in half floats, so the gap grows with the
+    // light already there, and most where every ray meets on the light.
+    let (mut worst, mut worst_on_light) = (0.0f32, 0.0f32);
+    for (i, (a, b)) in cpu.iter().zip(&gpu).enumerate() {
+        let (x, y) = ((i / 4) as u32 % w, (i / 4) as u32 / w);
+        let gap = (a - b).abs() / a.abs().max(1.0);
+        if x.abs_diff(24) <= 2 && y.abs_diff(20) <= 2 {
+            worst_on_light = worst_on_light.max(gap);
+        } else {
+            worst = worst.max(gap);
+        }
+    }
+    eprintln!("sprite_flare: worst {worst:.2e}, on the light {worst_on_light:.2e}");
+    assert!(worst < 5e-3, "worst |Δ| {worst}");
+    assert!(
+        worst_on_light < 5e-2,
+        "worst |Δ| on the light {worst_on_light}"
+    );
+    assert_eq!(gpu, gpu_of(&f), "the sprite flare must be bit-stable");
+
+    // Nudging the light by a pixel nudges the light drawn by a little: no
+    // element pops in or out.
+    let total = |lx: f32| {
+        let mut frame_now = vec![0.0f32; img.len()];
+        raster::draw(&design, &frame(lx), w, h, &mut frame_now);
+        frame_now.iter().map(|v| f64::from(*v)).sum::<f64>()
+    };
+    for step in 0..6 {
+        let (a, b) = (total(24.0 + step as f32), total(25.0 + step as f32));
+        assert!(
+            (a - b).abs() < 0.02 * a,
+            "a one-pixel move changed the flare from {a} to {b}"
         );
     }
+
+    // No light (Brightness 0 or Mix 0) is the input, untouched.
+    let mut dark = frame(24.0);
+    dark.lights.clear();
+    assert_eq!(gpu_of(&dark), img, "no light must be the bit-exact input");
+
+    // Bright spots: three lamps on a dark picture are found on the GPU and
+    // flare as the CPU's detection says, each in its own colour.
+    let mut lamps = vec![0.02f32; (w * h * 4) as usize];
+    for (x0, y0, c) in [
+        (10u32, 8u32, [1.0f32, 0.5, 0.2]),
+        (60, 14, [0.3, 0.6, 1.0]),
+        (40, 44, [1.0, 1.0, 1.0]),
+    ] {
+        for y in y0..y0 + 4 {
+            for x in x0..x0 + 4 {
+                let i = ((y * w + x) * 4) as usize;
+                lamps[i..i + 3].copy_from_slice(&c);
+            }
+        }
+    }
+    let lamps_tex = upload_linear_f32(&ctx, &lamps, w, h);
+    let mut spotted = frame(24.0);
+    let found =
+        lumit_core::fx::lens_flare::detect_lights(&lamps, w, h, 0.3, 0.1, true, [1.0; 3], false);
+    assert_eq!(found.len(), 3);
+    spotted.lights = raster::spots(&found, w, h, true, [1.0, 0.9, 0.8], 0.7);
+    let mut cpu = lamps.clone();
+    raster::draw(&design, &spotted, w, h, &mut cpu);
+    let list: Vec<_> = instances::expand(&design, &spotted, w, h)
+        .iter()
+        .map(instances::Instance::packed)
+        .collect();
+    let op = crate::fx::sprite_flare::SpriteFlareOp {
+        instances: &list,
+        lights: &[],
+        centre: spotted.centre,
+        edge_fade: spotted.edge_fade * spotted.px_scale,
+        spots: Some(crate::fx::sprite_flare::SpotsOp {
+            threshold: 0.3,
+            softness: 0.1,
+            use_colour: true,
+            colour: [1.0, 0.9, 0.8],
+            gain: 0.7,
+        }),
+        hide: None,
+        depth: None,
+        layer: None,
+        textures: lumit_core::fx::flare::textures::all(),
+    };
+    let gpu =
+        readback_linear_f32(&ctx, &fx.sprite_flare(&ctx, &lamps_tex, w, h, &op), w, h).unwrap();
+    let gap = cpu
+        .iter()
+        .zip(&gpu)
+        .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+        .fold(0.0f32, f32::max);
+    assert!(gap < 5e-2, "bright spots worst |Δ| {gap}");
 }
 
 /// **Light wrap** (docs/08 §3.28): the WGSL agrees with the CPU

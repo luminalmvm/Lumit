@@ -8,6 +8,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../widgets/controls/base.dart' show ThemeScope;
+import 'icon_style.dart';
+
 class LumitIcon extends StatelessWidget {
   /// One of the [LumitIcons] constants — never a looked-up string, so a call
   /// site cannot misspell a glyph.
@@ -37,8 +40,11 @@ class LumitIcon extends StatelessWidget {
     final tint = colour ??
         DefaultTextStyle.of(context).style.color ??
         IconTheme.of(context).color;
+    // Restyled to the weight in force, or replaced by the person's own file.
+    // A glyph drawn outside any theme (a test, a bare probe) is the set's.
+    final scope = ThemeScope.maybeOf(context);
     return SvgPicture.string(
-      glyph,
+      scope == null ? glyph : IconStyle.resolve(glyph, scope.theme),
       width: size,
       height: size,
       colorFilter:

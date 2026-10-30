@@ -47,6 +47,7 @@ import '../state/drag_payloads.dart';
 import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
@@ -60,7 +61,7 @@ import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
-import 'easing_curve.dart' show EasingCurve;
+import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
@@ -192,7 +193,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   double _zoomAnchorViewportX = 0;
   bool _zoomAnchorHeld = false;
   bool _pullingBackZoom = false;
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  MotionSpec _zoomFlight = MotionSpec.still;
 
   /// The lanes' viewport width and the comp's length as the last layout knew
   /// them: what a peak window is worked out from, and what the zoom's ceiling
@@ -305,7 +306,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   bool Function()? _heldDelete;
   bool Function()? _heldCopy;
   bool Function()? _heldPaste;
-  ValueChanged<EasingCurve>? _heldEasing;
+  ApplyEasing? _heldEasing;
 
   @override
   void initState() {
@@ -523,14 +524,20 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// took over before its own, so a claim held from before must stand down.
   bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
 
+  /// Whether the last pick was a track's head, the one time Delete may take
+  /// the whole track.
+  bool _headPicked = false;
+
   /// Delete: the picked keyframes, or else the picked clip. Keys first, as
-  /// they sit on the clip and picking one must not cost the clip.
+  /// they sit on the clip and picking one must not cost the clip. With
+  /// neither the key is taken and nothing goes, unless the track was picked
+  /// by its head: a clip let go of must not turn Delete on its track.
   bool _deleteClaim() {
     final picked = _selectedClip;
     final ui = _ui;
     if (!mounted || ui == null || !_keysAreOurs) return false;
     if (_laneKeys.value.isNotEmpty && _deleteKeys()) return true;
-    if (picked == null) return false;
+    if (picked == null) return !_headPicked;
     for (final track in _lastTracks) {
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
@@ -704,7 +711,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   /// A shape sent from the Easing panel, onto every span the picked keyframes
   /// cover - one press, one undo step.
-  void _applyEasing(EasingCurve curve) {
+  void _applyEasing(EasingCurve curve, EaseSides sides) {
     final ui = _ui;
     if (!mounted || ui == null) return;
     final channels = _keyChannels(ui);
@@ -713,7 +720,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     asOneUndoStep(
       Provider.of<LumitState>(context, listen: false).project,
       () => applyEasingToSelection(
-          channels: channels, selectedKeys: selection, curve: curve),
+          channels: channels,
+          selectedKeys: selection,
+          curve: curve,
+          sides: sides),
     );
     _afterWrite();
   }
@@ -958,8 +968,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   void _setZoom(double z, {bool fly = true}) {
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
-    _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+    _zoomMotion.goTo(z, motion: fly ? _zoomFlight : MotionSpec.still);
   }
 
   void _zoomDragStart() {
@@ -1034,7 +1043,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _zoomFlight,
       );
       return;
     }
@@ -1131,7 +1140,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       BuildContext context, LumitUiState ui, CompositionReference comp) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
@@ -1566,7 +1575,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onToggleOpen: () => _toggleOpen(track.id),
               onCycleLaneMode: () => _cycleLaneMode(track.id),
               onDetach: () => _detachAudio(track.entry),
-              onSelect: () => ui.setSelection([track.entry.layer]),
+              onSelect: () {
+                _headPicked = true;
+                ui.setSelection([track.entry.layer]);
+              },
               onRenameCommit: () => _commitRename(track),
               onRenameCancel: _cancelRename,
               onChanged: _afterWrite,
@@ -2102,6 +2114,22 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           child: Text(l10n.clipSplitAtPlayhead),
         ),
         keepPitch(() => close(null)),
+        SubmenuRow(
+          key: ValueKey<String>('atl-clip-colour-menu-${clip.id}'),
+          closeParent: () => close(null),
+          submenu: (dismiss) => clipColourMenu(
+            ThemeScope.of(context).theme,
+            keyPrefix: 'atl-clip-colour-menu',
+            onPick: (label) {
+              dismiss();
+              try {
+                track.entry.layer.setClipLabel(clip: clip.id, label: label);
+              } catch (_) {}
+              _afterWrite();
+            },
+          ),
+          child: Text(l10n.clipColour),
+        ),
         // A file with several audio streams: which of them this clip plays,
         // a clip to each on a track of its own, and back onto one.
         if (streams != null && streams.streams.length > 1 && comp != null) ...[
@@ -2599,6 +2627,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       // Picking a clip picks its track too, as a bar picks its layer in the
       // Timeline, so the Mixer and the Audio panel follow it.
       onSelect: (clip) {
+        _headPicked = false;
         setState(() =>
             _selectedClip = (track: track.id, clip: clip.id.toString()));
         _ui?.setSelection([track.entry.layer]);
@@ -2712,7 +2741,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             right: 8,
             bottom: 4,
             child: Text(reading,
-                style: t.mono.copyWith(fontSize: 8, color: t.textMuted)),
+                style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
           ),
         // The corners of the layer's own bar: the first fade dragged on to one
         // converts it, as the first trim does.

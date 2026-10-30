@@ -701,6 +701,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       endSeconds: request.endSeconds,
       buckets: request.buckets,
       multiwave: widget.style.needsBands,
+      stereo: true,
     )
         .then((peaks) {
       if (!mounted || _keys[id] != key) return;
@@ -834,7 +835,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   }
 
   Widget _clip(LumitTheme t, BridgeClip clip) {
-    final label = t.labelColour(widget.track.entry.info.label);
+    // The clip's own colour where it has one, its track's where not.
+    final label = t.labelColour(clip.label ?? widget.track.entry.info.label);
     final (left, width) = _place(clip);
     // After layout, since a zoom only moves the scroll there and the offset
     // read during build is the last frame's.
@@ -859,6 +861,15 @@ class _AudioClipStripState extends State<AudioClipStrip> {
               alpha: picked ? clipFillSelectedAlpha : clipFillAlpha),
           // Desk marks a picked clip with its accent outline, the other
           // shapes with the foreground.
+          border: Border.all(
+              color: picked
+                  ? (t.shape == ThemeShape.desk ? t.accent : t.textPrimary)
+                  : t.surface0),
+          borderRadius: BorderRadius.circular(clipRadius(t)),
+        ),
+        // The edge again over the content, which would otherwise cover it where
+        // the corner curves.
+        foregroundDecoration: BoxDecoration(
           border: Border.all(
               color: picked
                   ? (t.shape == ThemeShape.desk ? t.accent : t.textPrimary)
@@ -946,7 +957,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
               held.db <= volumeBandFloorDb
                   ? l10n.volumeNegInf
                   : '${held.db.toStringAsFixed(1)} dB',
-              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+              style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
             ),
           ),
         ),
@@ -997,7 +1008,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                   secondsPerPixel: secondsPerPixel,
                   left: 0,
                   right: width,
-                  colours: t.waveform,
+                  colours: clipWaveColours(label, t.textPrimary),
                   style: widget.style,
                   height: height,
                 ),

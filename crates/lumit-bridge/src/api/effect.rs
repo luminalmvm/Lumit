@@ -119,7 +119,7 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
 #[frb(sync)]
 pub fn list_graph_nodes() -> Vec<BridgeEffectInfo> {
     use lumit_core::fx::schema::FxCategory;
-    catalogue(|category| matches!(category, FxCategory::Drivers | FxCategory::Compositing))
+    catalogue(|category| category.is_driver() || category == FxCategory::Compositing)
         .into_iter()
         .filter(|entry| lumit_core::comp_graph::offered_in_graph(&entry.name))
         .collect()
@@ -183,7 +183,7 @@ pub struct BridgeStyleInfo {
 /// reads as one more Controls entry wherever it is listed.
 #[frb(sync)]
 pub fn list_drivers() -> Vec<BridgeEffectInfo> {
-    catalogue(|category| category == lumit_core::fx::schema::FxCategory::Drivers)
+    catalogue(lumit_core::fx::schema::FxCategory::is_driver)
 }
 
 /// An entry Lumit itself declares.
@@ -413,7 +413,7 @@ pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> Bridg
     lumit_ofx::discover::set_disabled(&prefs.disabled);
     let options = lumit_ofx::discover::ScanOptions {
         disabled: prefs.disabled.clone(),
-        ..lumit_ofx::discover::ScanOptions::standard()
+        ..crate::api::extensions::scan_options(&prefs)
     };
     // The bundle being opened, so an effect it adds can be named beside it.
     let opening = std::cell::RefCell::new((String::new(), 0, 0));
@@ -2245,6 +2245,9 @@ pub struct BridgeEffectInstance {
     /// commit. A row leaves this list when the user writes to it or presses
     /// Sync.
     offered: Vec<String>,
+    /// Whether the layer it came from has a picture of its own, which an LFX
+    /// effect's `@enabled_if(input)` rows read.
+    picture: bool,
 }
 
 /// What the Sync and Remove affordances would do to one instance
@@ -2810,6 +2813,7 @@ pub(crate) fn with_live_inputs<'a>(
 pub(crate) fn read_instance_info(
     effect: &EffectInstance,
     offset: Rational,
+    picture: bool,
 ) -> BridgeEffectInstanceInfo {
     // Report every parameter the schema declares, not only the ones this
     // instance happens to carry — the same filling [`BridgeEffectInstance::new`]
@@ -2825,9 +2829,10 @@ pub(crate) fn read_instance_info(
     let effect = &filled;
     let (badge_reason, badge_detail) = badge_of(effect);
     // What the instance's plugin has done to its own rows, or nothing for a
-    // built-in.
+    // built-in. `picture`: the layer it is on has a picture of its own (not an
+    // adjustment), which an LFX effect's `@enabled_if` rows read.
     let rows = lumit_core::fx::builtins::def(effect.effect.match_name.as_str())
-        .map(|def| def.row_state(effect))
+        .map(|def| def.row_state_on(effect, picture))
         .unwrap_or_default();
     let owned = |ids: Vec<&'static str>| ids.into_iter().map(str::to_owned).collect();
     BridgeEffectInstanceInfo {
@@ -2901,13 +2906,22 @@ impl BridgeEffectInstance {
             effect,
             offset,
             offered,
+            picture: false,
         }
+    }
+
+    /// This handle, read off a layer that has a picture of its own when
+    /// `picture` is set.
+    #[frb(ignore)]
+    pub(crate) fn on_picture(mut self, picture: bool) -> Self {
+        self.picture = picture;
+        self
     }
 
     /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
     #[frb(sync)]
     pub fn get_info(&self) -> BridgeEffectInstanceInfo {
-        read_instance_info(&self.effect, self.offset)
+        read_instance_info(&self.effect, self.offset, self.picture)
     }
 
     /// This instance's own id — what the stack ops on

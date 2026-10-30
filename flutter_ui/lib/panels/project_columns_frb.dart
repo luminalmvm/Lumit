@@ -41,7 +41,9 @@ const double projectRowHeight = 22;
 /// row share — which is what makes a value sit under its own heading.
 const double projectItemsColumn = 36;
 const double projectSizeColumn = 64;
-const double projectFpsColumn = 22;
+/// Fps is sized for the widest rate it writes, `119.88`: six characters of the
+/// 10px mono.
+const double projectFpsColumn = 37;
 
 /// The Duration column: an item's length as the panel's own clock face, the
 /// one the preview card already writes. `00:00:00:00` is eleven characters of
@@ -49,6 +51,10 @@ const double projectFpsColumn = 22;
 /// sound file counts milliseconds, so the column is sized for twelve. Fixed,
 /// like fps: a clock face is as wide as the digits it writes.
 const double projectDurationColumn = 72;
+
+/// The Date column: when the file was last changed, `2026-10-29 22:27`,
+/// sixteen characters of the 10px mono.
+const double projectDateColumn = 108;
 
 /// The slot a footage row's poster frame takes when thumbnails are on, in
 /// place of the 13 the type glyph stands in: the row's own 22 tall at 16:9.
@@ -94,7 +100,7 @@ const double projectNameColumn = 220;
 ///
 /// Duration follows fps, which is the order the preview card's fact line
 /// already reads in: size, rate, length.
-enum ProjectColumn { name, items, size, fps, duration, path }
+enum ProjectColumn { name, items, size, fps, duration, date, path }
 
 /// Each column's width before anybody has dragged it.
 const Map<ProjectColumn, double> defaultProjectColumnWidths = {
@@ -103,6 +109,7 @@ const Map<ProjectColumn, double> defaultProjectColumnWidths = {
   ProjectColumn.size: projectSizeColumn,
   ProjectColumn.fps: projectFpsColumn,
   ProjectColumn.duration: projectDurationColumn,
+  ProjectColumn.date: projectDateColumn,
   ProjectColumn.path: projectPathColumn,
 };
 
@@ -117,6 +124,7 @@ bool projectColumnIsFixedWidth(ProjectColumn column) =>
     column == ProjectColumn.items ||
     column == ProjectColumn.fps ||
     column == ProjectColumn.duration ||
+    column == ProjectColumn.date ||
     column == ProjectColumn.path;
 
 /// How narrow a column may be dragged: enough for what cannot shrink.
@@ -133,6 +141,7 @@ double minProjectColumnWidth(ProjectColumn column) => switch (column) {
       ProjectColumn.size => 40,
       ProjectColumn.fps => projectFpsColumn,
       ProjectColumn.duration => projectDurationColumn,
+      ProjectColumn.date => projectDateColumn,
       ProjectColumn.path => projectPathColumn,
     };
 
@@ -192,7 +201,7 @@ const double _widthForDuration =
 
 /// **Path now goes first, before Name gives anything up.** It is drawn only
 /// once the panel can carry every column at its starting width, Name's 220
-/// included, which comes to 512. The docked panel opens narrower than that,
+/// included, which comes to 527. The docked panel opens narrower than that,
 /// and there the 40 Path was holding showed five letters of a folder while a
 /// name beside an `in use` badge was cut to "White s…". So the room goes to
 /// Name, and a name is shortened only once the panel is too narrow for Path
@@ -206,6 +215,8 @@ const double _widthForPath = projectHeaderPadLeft +
     projectFpsColumn +
     projectDurationColumn +
     projectPathColumn;
+/// Date comes last, once there is room for it beside everything else.
+const double _widthForDate = _widthForPath + projectRowGap + projectDateColumn;
 const double _widthForFps = 230;
 const double _widthForSize = 190;
 
@@ -217,6 +228,7 @@ class ProjectColumns {
   final bool size;
   final bool fps;
   final bool duration;
+  final bool date;
   final bool path;
 
   /// Each column's dragged width. Absent falls back to the default, so a map
@@ -232,6 +244,7 @@ class ProjectColumns {
     required this.size,
     required this.fps,
     required this.duration,
+    required this.date,
     required this.path,
     required this.panelWidth,
     this.widths = defaultProjectColumnWidths,
@@ -246,6 +259,7 @@ class ProjectColumns {
         size: width >= _widthForSize,
         fps: width >= _widthForFps,
         duration: width >= _widthForDuration,
+        date: width >= _widthForDate,
         path: width >= _widthForPath,
         panelWidth: width,
         widths: widths,
@@ -260,6 +274,7 @@ class ProjectColumns {
         ProjectColumn.size => size,
         ProjectColumn.fps => fps,
         ProjectColumn.duration => duration,
+        ProjectColumn.date => date,
         ProjectColumn.path => path,
       };
 
@@ -331,6 +346,7 @@ class ProjectColumns {
     String? size,
     String? fps,
     String? duration,
+    String? date,
     String? path,
     required TextStyle style,
     TextStyle? pathStyle,
@@ -348,6 +364,7 @@ class ProjectColumns {
                 ProjectColumn.size => size,
                 ProjectColumn.fps => fps,
                 ProjectColumn.duration => duration,
+                ProjectColumn.date => date,
                 ProjectColumn.path => path,
                 ProjectColumn.name => null,
               },
@@ -427,9 +444,21 @@ class ProjectCells {
   /// The item's length as a clock face, or null where there is none to state:
   /// a folder, a still, a solid, and footage that has not probed yet.
   final String? duration;
+
+  /// When the file was last changed, or null where there is none to state.
+  final String? date;
   final String? path;
   const ProjectCells(
-      {this.items, this.size, this.fps, this.duration, this.path});
+      {this.items, this.size, this.fps, this.duration, this.date, this.path});
+}
+
+/// A file's modified time as the Date column writes it, `2026-10-29 22:27`,
+/// in local time. Null when there is none.
+String? projectDateText(int? seconds) {
+  if (seconds == null) return null;
+  final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
 }
 
 /// A clock face back to seconds, for sorting the Duration column: the last

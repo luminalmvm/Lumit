@@ -198,6 +198,9 @@ pub struct HeadlessRenderer {
     /// outline without being walked again. Only frames that reach past the
     /// frame are in it.
     reach_by_frame: HashMap<u128, crate::realise::Reach>,
+    /// The named frames that were cut to the largest picture, so a frame
+    /// served from a cache still says so.
+    cut_frames: std::collections::HashSet<u128>,
     /// Bumped whenever the held set changes — see [`Self::frame_texture_version`].
     frame_texture_version: u64,
     /// Where "this frame is such-and-such far along" reports go, when the owner
@@ -673,6 +676,8 @@ pub struct PreparedFrame {
     /// How far a node graph composition's picture reaches past the frame, for
     /// the Viewer's outline. `None` for every other frame.
     reach: Option<crate::realise::Reach>,
+    /// Whether some of it was cut to the largest picture.
+    cut: bool,
 }
 
 impl PreparedFrame {
@@ -680,6 +685,12 @@ impl PreparedFrame {
     #[must_use]
     pub fn reach(&self) -> Option<crate::realise::Reach> {
         self.reach
+    }
+
+    /// See the field.
+    #[must_use]
+    pub fn cut(&self) -> bool {
+        self.cut
     }
 
     /// The frame's ACTUAL pixel dimensions — the comp size times the preview
@@ -759,6 +770,7 @@ impl HeadlessRenderer {
         fx: lumit_gpu::fx::FxEngine,
         scope: lumit_gpu::scope::ScopeEngine,
     ) -> Self {
+        lumit_core::largest_picture::set_card(gpu.device.limits().max_texture_dimension_2d);
         // The intermediate store holds frame-sized textures across frames, so
         // it is registered with the governor rather than spending the card
         // behind its back (docs/13 §3). Every other cache on this renderer is
@@ -807,6 +819,7 @@ impl HeadlessRenderer {
             frame_texture_hits: 0,
             reach_seen: None,
             reach_by_frame: HashMap::new(),
+            cut_frames: std::collections::HashSet::new(),
             progress: None,
             profile: None,
             watching: false,
@@ -2236,6 +2249,7 @@ impl HeadlessRenderer {
                 return Ok(PreparedFrame {
                     texture: held.texture.clone(),
                     reach: self.reach_by_frame.get(&key.0).copied(),
+                    cut: self.cut_frames.contains(&key.0),
                 });
             }
         }
@@ -2247,6 +2261,7 @@ impl HeadlessRenderer {
         // content, which no later edit or undo can clear. Counted, so
         // only the frames it actually happened to are dropped.
         let subs_before = self.flare_substitutions();
+        let cuts_before = lumit_core::largest_picture::cuts();
         let (texture, _, _) = self.preview_display_texture_fmt(
             doc,
             comp_id,
@@ -2257,6 +2272,11 @@ impl HeadlessRenderer {
         let key = key.filter(|_| self.flare_substitutions() == subs_before);
         let texture = std::sync::Arc::new(texture);
         let reach = self.reach_seen;
+        let cut = lumit_core::largest_picture::cuts() != cuts_before;
+        if let Some(key) = key.filter(|_| cut) {
+            // ponytail: never trimmed, as the reaches above.
+            self.cut_frames.insert(key.0);
+        }
         if let (Some(key), Some(reach)) = (key, reach) {
             // ponytail: never trimmed, about 40 bytes a frame for the life of
             // the renderer. Trim with the frame caches if a long session
@@ -2288,7 +2308,11 @@ impl HeadlessRenderer {
             self.frame_texture_version += 1;
             self.start_demotions();
         }
-        Ok(PreparedFrame { texture, reach })
+        Ok(PreparedFrame {
+            texture,
+            reach,
+            cut,
+        })
     }
 
     /// Start reading back whatever that insert pushed out of VRAM, so it can
@@ -2521,6 +2545,7 @@ impl HeadlessRenderer {
         Some(PreparedFrame {
             texture: std::sync::Arc::new(texture),
             reach: None,
+            cut: false,
         })
     }
 
@@ -2571,6 +2596,7 @@ impl HeadlessRenderer {
         Some(PreparedFrame {
             texture,
             reach: self.reach_by_frame.get(&frame.key).copied(),
+            cut: self.cut_frames.contains(&frame.key),
         })
     }
 
@@ -4941,6 +4967,7 @@ mod tests {
             8,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     read(a, plate),
                     read(b, black),
@@ -5550,6 +5577,10 @@ mod tests {
             audio_streams: Default::default(),
             audible: true,
             blend: None,
+            label: None,
+            group: None,
+            opacity: 1.0,
+            takes: Vec::new(),
             extra: serde_json::Map::new(),
         };
         push_layer(
@@ -5784,6 +5815,7 @@ mod tests {
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
             c.graph = Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes,
                 edges: vec![GraphEdge {
                     from: read,
@@ -6713,6 +6745,7 @@ mod tests {
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
@@ -7817,6 +7850,7 @@ mod tests {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
@@ -8519,6 +8553,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8569,6 +8604,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8631,6 +8667,7 @@ mod tests {
             h,
             CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Input {
                         id: src,
@@ -8721,6 +8758,7 @@ mod tests {
 
         let graph = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],

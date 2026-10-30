@@ -314,7 +314,6 @@ impl FxEngine {
             "fx-sharpen-simple",
         );
         let light_wrap_mod = module(include_str!("../fx_light_wrap.wgsl"), "fx-light-wrap");
-        let sprite_flare_mod = module(include_str!("../fx_sprite_flare.wgsl"), "fx-sprite-flare");
         let rgb_split_mod = module(include_str!("../fx_rgbsplit.wgsl"), "fx-rgb-split");
         let spectral_mod = module(include_str!("../fx_spectral.wgsl"), "fx-spectral-split");
         let chromatic_mod = module(
@@ -426,6 +425,7 @@ impl FxEngine {
         let set_matte_mod = module(include_str!("../fx_setmatte.wgsl"), "fx-set-matte");
         let set_channels_mod = module(include_str!("../fx_setchannels.wgsl"), "fx-set-channels");
         let linear_wipe_mod = module(include_str!("../fx_linearwipe.wgsl"), "fx-linear-wipe");
+        let crop_mod = module(include_str!("../fx_crop.wgsl"), "fx-crop");
         let radial_wipe_mod = module(include_str!("../fx_radialwipe.wgsl"), "fx-radial-wipe");
         let venetian_blinds_mod = module(
             include_str!("../fx_venetianblinds.wgsl"),
@@ -479,7 +479,6 @@ impl FxEngine {
         let sharpen_unpremultiply = pipeline(&sharpen_mod, "fx-sharpen-un", "unpremultiply");
         let sharpen_combine = pipeline(&sharpen_mod, "fx-sharpen", "sharpen_combine");
         let sharpen_simple = pipeline(&sharpen_simple_mod, "fx-sharpen-simple", "sharpen_simple");
-        let sprite_flare = pipeline(&sprite_flare_mod, "fx-sprite-flare", "sprite_flare");
         let light_wrap_pack = pipeline(&light_wrap_mod, "fx-light-wrap-pack", "pack");
         let light_wrap_combine = pipeline(&light_wrap_mod, "fx-light-wrap", "combine");
         let rgb_split = pipeline(&rgb_split_mod, "fx-rgb-split", "rgb_split");
@@ -569,6 +568,7 @@ impl FxEngine {
         let set_matte = pipeline(&set_matte_mod, "fx-set-matte", "set_matte");
         let set_channels = pipeline(&set_channels_mod, "fx-set-channels", "set_channels");
         let linear_wipe = pipeline(&linear_wipe_mod, "fx-linear-wipe", "linear_wipe");
+        let crop = pipeline(&crop_mod, "fx-crop", "crop");
         let radial_wipe = pipeline(&radial_wipe_mod, "fx-radial-wipe", "radial_wipe");
         let venetian_blinds = pipeline(
             &venetian_blinds_mod,
@@ -649,7 +649,6 @@ impl FxEngine {
             sharpen_unpremultiply: sharpen_unpremultiply.wait(),
             sharpen_combine: sharpen_combine.wait(),
             sharpen_simple: sharpen_simple.wait(),
-            sprite_flare: sprite_flare.wait(),
             light_wrap_pack: light_wrap_pack.wait(),
             light_wrap_combine: light_wrap_combine.wait(),
             rgb_split: rgb_split.wait(),
@@ -726,6 +725,7 @@ impl FxEngine {
             set_matte: set_matte.wait(),
             set_channels: set_channels.wait(),
             linear_wipe: linear_wipe.wait(),
+            crop: crop.wait(),
             radial_wipe: radial_wipe.wait(),
             venetian_blinds: venetian_blinds.wait(),
             iris_wipe: iris_wipe.wait(),
@@ -756,6 +756,7 @@ impl FxEngine {
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
+            sprite_flare: Default::default(),
             layout,
             adjust_layout,
             mb_layout,

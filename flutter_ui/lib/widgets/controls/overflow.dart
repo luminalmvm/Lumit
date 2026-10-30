@@ -9,6 +9,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../icons/icons.dart' show iconSize;
+import '../../icons/lumit_icon.dart';
+import '../../icons/lumit_icons.dart';
 import '../../l10n/strings.dart';
 import 'base.dart';
 import 'buttons.dart';
@@ -45,7 +47,8 @@ class OverflowMark extends StatelessWidget {
           child: SizedBox(
             width: width,
             height: height,
-            child: Center(child: Text('⋯', style: t.small)),
+            child: Center(
+                child: LumitIcon(LumitIcons.more, colour: t.textSecondary)),
           ),
         ),
       ),

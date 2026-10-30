@@ -20,6 +20,8 @@
 // in Lumit drags, for the places that were a drag field before they were a
 // clock (the Retime row).
 
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -213,7 +215,14 @@ class _TimeReadoutState extends State<TimeReadout>
     final t = ThemeScope.of(context).theme;
     // The well's hairline insets its own child, so a welled readout is two
     // pixels wider than a bare one and its slot holds the same digits.
-    final width = monoSlotWidth(widget.style, widget.widthChars) +
+    // Never narrower than the far ends it can reach: a comp of a hundred
+    // hours writes a third hour digit, and a slot cut for two would lose it.
+    final chars = [
+      widget.widthChars,
+      widget.format(_low).length,
+      widget.format(_high).length,
+    ].reduce(math.max);
+    final width = monoSlotWidth(widget.style, chars) +
         readoutPadding.horizontal +
         (widget.well ? 2 : 0);
 

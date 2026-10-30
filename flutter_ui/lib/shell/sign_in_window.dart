@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/external_links.dart';
 import '../state/ui_state.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
@@ -99,7 +100,18 @@ class _SignInState extends State<_SignIn> {
   final _year = TextEditingController();
   int? _month;
 
-  _Page _page = _Page.signIn;
+  _Page _shown = _Page.signIn;
+
+  /// How many times the page has changed since the window opened. The first
+  /// page arrives with the window, and every page after it makes a small
+  /// entrance of its own.
+  int _pageTurns = 0;
+
+  _Page get _page => _shown;
+  set _page(_Page page) {
+    if (page != _shown) _pageTurns++;
+    _shown = page;
+  }
 
   /// Whether the code page is finishing a new account or a new password.
   bool _resetting = false;
@@ -286,6 +298,7 @@ class _SignInState extends State<_SignIn> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final motion = ThemeScope.of(context).motion;
     final config = widget.account.config;
     return DialogFrame(
       width: signInWidth,
@@ -304,51 +317,65 @@ class _SignInState extends State<_SignIn> {
             children: [
               Center(child: LumitWordmark(height: 18, ground: t.surface1)),
               const SizedBox(height: 16),
-              Text(
-                switch (_page) {
-                  _Page.create => l10n.signInCreateHeading,
-                  _Page.code => l10n.signInCodeHeading,
-                  _Page.reset => l10n.signInResetHeading,
-                  _ => l10n.signInHeading,
-                },
-                key: const ValueKey('sign-in-heading'),
-                textAlign: TextAlign.center,
-                style: t.heading,
-              ),
-              // Only the pages that have something to say: where the code
-              // went, or that the browser is waiting.
-              if (switch (_page) {
-                _Page.code => l10n.signInCodeLead(_email.text.trim()),
-                _Page.reset => l10n.signInResetLead(_email.text.trim()),
-                _Page.browser => l10n.signInBrowser,
-                _ => null,
-              }
-                  case final words?) ...[
-                const SizedBox(height: 6),
-                Text(
-                  words,
-                  textAlign: TextAlign.center,
-                  style:
-                      t.small.copyWith(color: t.textSecondary, height: 1.4),
+              // Keyed by the page, so a new one comes up into place as a
+              // settings page does and the one left is gone at once.
+              Entrance(
+                key: ValueKey<_Page>(_page),
+                spec: _pageTurns == 0 ? MotionSpec.still : motion.reveal,
+                rise: motion.revealRise,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      switch (_page) {
+                        _Page.create => l10n.signInCreateHeading,
+                        _Page.code => l10n.signInCodeHeading,
+                        _Page.reset => l10n.signInResetHeading,
+                        _ => l10n.signInHeading,
+                      },
+                      key: const ValueKey('sign-in-heading'),
+                      textAlign: TextAlign.center,
+                      style: t.heading,
+                    ),
+                    // Only the pages that have something to say: where the
+                    // code went, or that the browser is waiting.
+                    if (switch (_page) {
+                      _Page.code => l10n.signInCodeLead(_email.text.trim()),
+                      _Page.reset => l10n.signInResetLead(_email.text.trim()),
+                      _Page.browser => l10n.signInBrowser,
+                      _ => null,
+                    }
+                        case final words?) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        words,
+                        textAlign: TextAlign.center,
+                        style: t.small
+                            .copyWith(color: t.textSecondary, height: 1.4),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    if (config == null && !_asked)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 18),
+                        child: Center(
+                            child: SizedBox(
+                                width: 18, height: 18, child: SyncRing())),
+                      )
+                    else if (config == null)
+                      _note(t, l10n.signInErrorOffline, warning: true)
+                    else if (!config.anySignIn)
+                      _note(t, l10n.signInUnavailable)
+                    else
+                      ..._pageRows(t, config),
+                    if (_error case final error?) ...[
+                      const SizedBox(height: 10),
+                      _note(t, error, warning: true),
+                    ],
+                  ],
                 ),
-              ],
-              const SizedBox(height: 16),
-              if (config == null && !_asked)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 18),
-                  child: Center(
-                      child: SizedBox(width: 18, height: 18, child: SyncRing())),
-                )
-              else if (config == null)
-                _note(t, l10n.signInErrorOffline, warning: true)
-              else if (!config.anySignIn)
-                _note(t, l10n.signInUnavailable)
-              else
-                ..._pageRows(t, config),
-              if (_error case final error?) ...[
-                const SizedBox(height: 10),
-                _note(t, error, warning: true),
-              ],
+              ),
             ],
           ),
         ),

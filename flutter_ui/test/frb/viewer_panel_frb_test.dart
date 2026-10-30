@@ -1285,7 +1285,7 @@ void main() {
       expect(xs.reduce((a, b) => a > b ? a : b), lessThan(1920));
     });
 
-    testWidgets('the Pen places points and closes on the first one',
+    testWidgets('the Pen closes on the first point, and Enter leaves a path open',
         (tester) async {
       final p = withLayer();
       p.uiState.tools.select(ToolMode.pen);
@@ -1313,6 +1313,17 @@ void main() {
       expect(masks.single.name, 'Mask 1');
       expect(masks.single.vertices, hasLength(3));
       expect(masks.single.closed, isTrue);
+
+      // Enter applies a path open.
+      await tester.tapAt(first);
+      await tester.pumpAndSettle();
+      await tester.tapAt(fitted.center + const Offset(80, 60));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      final open = p.layer.getMasks().last;
+      expect(open.vertices, hasLength(2));
+      expect(open.closed, isFalse);
     });
 
     /// Mask points are editable on the picture: they draw as squares on

@@ -57,14 +57,6 @@ enum WireStyle {
   hanging,
 }
 
-/// The duration owned widgets animate with under a level. All ≈ the egui
-/// 120 ms micro-motion budget; None is instant.
-Duration animationDuration(AnimationLevel level) => switch (level) {
-      AnimationLevel.all => const Duration(milliseconds: 120),
-      AnimationLevel.minimal => const Duration(milliseconds: 50),
-      AnimationLevel.none => Duration.zero,
-    };
-
 /// Every named colour scheme Lumit ships, in picker order.
 enum LumitColorScheme {
   dark,
@@ -827,10 +819,15 @@ class LumitTheme {
   /// time, per the §6.4 direction.
   final WaveformColours waveform;
 
-  /// What the Graph panel's wires and sockets draw in, by port type. Fixed
-  /// rather than per-scheme, and not offered to the theme editor — see
-  /// [PortColours].
+  /// What the Graph panel's wires and sockets draw in, by port type. The
+  /// same in every scheme and not offered to the theme editor, since the
+  /// legend says which colour is which (see [PortColours]). A theme file can
+  /// still change them, and the legend follows.
   final PortColours port;
+
+  /// The layer-label palette, in picker order. A theme file can recolour the
+  /// chips but not change how many there are.
+  final List<Color> labels;
 
   /// Comp markers on the time ruler. A plain grey, not a role colour: a marker
   /// says *here*, not *good* or *careful*, and the ruler already has the accent
@@ -884,6 +881,7 @@ class LumitTheme {
     required this.curve,
     required this.layer,
     this.port = PortColours.standard,
+    this.labels = defaultLabels,
     Color? timelineOutOfRange,
     Color? selectionFill,
     Color? marker,
@@ -1001,7 +999,7 @@ class LumitTheme {
   /// the theme's role colours, which were built to be quiet rather than
   /// tellable-apart. Index 0 is the neutral default; the Null layer took the
   /// ninth chip, since every one below it was already a kind's own.
-  static const _labelSet = [
+  static const defaultLabels = [
     Color(0xff8b93a3), // slate — the quiet default
     Color(0xff4aa3e0), // azure — footage
     Color(0xffe0a33c), // amber — solids
@@ -1015,14 +1013,14 @@ class LumitTheme {
 
   /// How many chips the palette holds, so the picker draws exactly the set
   /// rather than a number that has to be kept in step by hand.
-  static int get labelCount => _labelSet.length;
+  static int get labelCount => defaultLabels.length;
 
-  Color labelColour(int i) => _labelSet[i % _labelSet.length];
+  Color labelColour(int i) => labels[i % labels.length];
 
   /// The colour for a person in a shared project. [colour] counts from 1 in
   /// joining order, and the neutral first chip is skipped so nobody is grey.
   Color personColour(int colour) =>
-      _labelSet[1 + (colour - 1) % (_labelSet.length - 1)];
+      labels[1 + (colour - 1) % (labels.length - 1)];
 
   /// This theme with a user-picked accent: hover brightens by 0x12 per
   /// channel on a dark surface, darkens by the same on a light one.
@@ -1074,6 +1072,8 @@ class LumitTheme {
         cacheDisk: cacheDisk,
         curve: curve,
         layer: layer,
+        port: port,
+        labels: labels,
         waveform: waveform,
         timelineOutOfRange: timelineOutOfRange,
         selectionFill: selectionFill,
@@ -2375,9 +2375,9 @@ class LumitTheme {
     'monospace',
   ];
 
-  /// Tabular figures where the shape sets numbers in its sans.
-  List<FontFeature>? get _figures =>
-      tokens.tabularNumbers ? const [FontFeature.tabularFigures()] : null;
+  /// Tabular figures in the sans under every shape, so a number set in it
+  /// keeps its width as it changes, and not only under Desk.
+  List<FontFeature> get _figures => const [FontFeature.tabularFigures()];
 
   /// The same for the two mono styles. Paper Mono draws a plain zero unless
   /// it is asked for the slashed one, and a frame readout of "F0" must not
@@ -2496,10 +2496,28 @@ class LumitTheme {
       color: textSecondary,
       decoration: TextDecoration.none);
 
-  /// The float shadow (menus, dialogs): rerun's offset 0/15, blur 50.
-  List<BoxShadow> get floatShadow => const [
+  /// The float shadow (menus, dialogs): a wide soft one for the lift and a
+  /// tight one for the edge. Lighter on a light scheme, where black as strong
+  /// as a dark one's reads as a smudge.
+  List<BoxShadow> get floatShadow => [
         BoxShadow(
-            offset: Offset(0, 15), blurRadius: 50, color: Color(0x80000000)),
+            offset: const Offset(0, 8),
+            blurRadius: 24,
+            color: mode == ThemeMode2.dark
+                ? const Color(0x66000000)
+                : const Color(0x24000000)),
+        ...tipShadow,
+      ];
+
+  /// The tight one alone, for a tooltip: one line over its control, not a
+  /// menu standing off the window.
+  List<BoxShadow> get tipShadow => [
+        BoxShadow(
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+            color: mode == ThemeMode2.dark
+                ? const Color(0x40000000)
+                : const Color(0x14000000)),
       ];
 
   /// The dimmed backdrop behind a true modal (Settings, the palette).

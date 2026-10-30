@@ -16,12 +16,16 @@
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/solid.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
@@ -68,6 +72,63 @@ Future<bool> showLayerSettingsFrb({
     ),
   );
   return applied ?? false;
+}
+
+/// The colour the last new solid was made in, so the next one starts there,
+/// as After Effects does.
+BridgeColourRgba _lastColour = const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
+
+/// Layer ▸ New ▸ Solid: ask for its name, size and colour first, as After
+/// Effects does, then make it above [row] as one undo step. Does nothing when
+/// cancelled.
+Future<void> newSolidFrb({
+  required BuildContext context,
+  required CompositionReference comp,
+  int? row,
+  VoidCallback? onDone,
+}) async {
+  final project = Provider.of<LumitState>(context, listen: false).project;
+  final size = comp.getSettings();
+  final picked = await showLumitModal<(String, BridgeSolidDef?)>(
+    context: context,
+    id: 'layer-settings',
+    builder: (close) => _LayerSettingsBody(
+      name: '',
+      definition: BridgeSolidDef(
+          name: '',
+          colour: _lastColour,
+          width: size.width,
+          height: size.height),
+      onConfirm: (name, def) => close((name, def)),
+      onCancel: () => close(null),
+    ),
+  );
+  final def = picked?.$2;
+  if (picked == null || def == null) return;
+  _lastColour = def.colour;
+  asOneUndoStep(project, () {
+    final layer = comp.addSolidLayer(row: row);
+    final made = layer.getName();
+    final white = def.colour.r == 1 && def.colour.g == 1 && def.colour.b == 1;
+    // ponytail: the engine names every new solid "White solid N", so a
+    // coloured one loses the word. A name per colour wants the engine to take
+    // the colour.
+    final name = picked.$1.isNotEmpty
+        ? picked.$1
+        : white
+            ? made
+            : made.replaceFirst('White solid', l10n.menuSolid);
+    if (name != made) layer.rename(name: name);
+    if (layer.getSourceItem() case ItemReference_Solid(:final field0)) {
+      field0.setDefinition(
+          definition: BridgeSolidDef(
+              name: name,
+              colour: def.colour,
+              width: def.width,
+              height: def.height));
+    }
+  });
+  onDone?.call();
 }
 
 class _LayerSettingsBody extends StatefulWidget {

@@ -19,9 +19,7 @@ const rendered = await Promise.all(
     <div class="wrap">
       <SectionHead page kicker="Releases" title="Changelog.">
         <Fragment slot="lede">
-          Every release of Lumit.
-          For the newest release update Lumit or download from <a class="link" href="/download">download page</a>.
-          There is an <a class="link" href="/releases/rss.xml">RSS feed</a> too.
+          <a class="link" href="/releases/rss.xml">RSS feed</a>
         </Fragment>
       </SectionHead>
 
@@ -99,6 +97,11 @@ const rendered = await Promise.all(
     transition:
       color 0.15s,
       border-color 0.15s;
+  }
+  @media (pointer: coarse) {
+    .jump a {
+      padding: 15px 12px;
+    }
   }
   .jump a:hover {
     border-color: var(--color-line-2);

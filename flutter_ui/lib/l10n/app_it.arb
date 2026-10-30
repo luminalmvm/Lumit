@@ -2415,10 +2415,6 @@
   "@exportColourSpaceSrgb": {
     "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
-  "exportColourStated": "Il file dichiara questo spazio nella propria intestazione.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportCrop": "Ritaglia",
   "@exportCrop": {
     "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
@@ -2652,15 +2648,6 @@
   "exportGuideLayers": "Livelli guida",
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
-  },
-  "exportImageSequenceNote": "Un file {extension} numerato per fotogramma, accanto al nome scelto.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
   },
   "exportKeepBoth": "Mantieni entrambi",
   "@exportKeepBoth": {
@@ -11201,10 +11188,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "Ancora nessun elemento: importa metraggio o crea una composizione",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Composizione",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -11375,10 +11358,6 @@
   "relinkEllipsis": "Ricollega…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
-  },
-  "reloadIcons": "Ricarica icone",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
   },
   "rememberInterpretation": "Ricorda interpretazione",
   "@rememberInterpretation": {
@@ -12893,10 +12872,6 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "Scegli la cartella che contiene extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
-  },
   "settingsExtensionsInstallPackage": "Installa un pacchetto",
   "@settingsExtensionsInstallPackage": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
@@ -13414,10 +13389,6 @@
   "settingsShareDownLimit": "Limite di download del metraggio",
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
-  },
-  "settingsShareLimitHint": "Si applica al metraggio nei progetti condivisi.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
   },
   "settingsShareLimitValue": "{kilobytes} KB/s",
   "@settingsShareLimitValue": {

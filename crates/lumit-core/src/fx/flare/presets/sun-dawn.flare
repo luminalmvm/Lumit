@@ -1,0 +1,42 @@
+{
+  "lumit_flare": 1,
+  "name": "Dawn",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.9, 0.8], [1.0, 0.55, 0.4]]},
+      "values": {"size": 130, "falloff": 0.35, "core": 0.8, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Haze",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.55, 0.5]]},
+      "values": {"size": 320, "brightness": 0.07, "falloff": 0.3, "core": 0.0, "stretch": 2.5}
+    },
+    {
+      "kind": "streak",
+      "name": "Streak",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.6, 0.5]]},
+      "values": {"size": 700, "thickness": 40.0, "brightness": 0.1, "taper": 0.7, "end_width": 0.2}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.65, 0.55]]},
+      "values": {"size": 420, "thickness": 80, "brightness": 0.3, "arc": 180, "grow": 0.4, "fringe": 0.3, "softness": 1.0, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.6, 0.5], [1.0, 0.8, 0.6], [0.8, 0.7, 1.0]]},
+      "values": {"count": 6, "size": 90, "brightness": 0.3, "sides": 0, "roundness": 0.2, "fill": 0.07, "edge": 0.3, "edge_width": 0.06, "softness": 0.4, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 2.0}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.7, 0.55]]},
+      "values": {"texture": 1, "size": 1400, "reach": 1200, "brightness": 0.07}
+    }
+  ]
+}

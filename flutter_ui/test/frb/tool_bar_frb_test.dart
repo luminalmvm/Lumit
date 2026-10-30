@@ -143,7 +143,7 @@ void main() {
                     matching: find.byType(Container),
                   )
                   .last)
-              .decoration as BoxDecoration?)
+              .foregroundDecoration as BoxDecoration?)
           ?.border as Border?;
       expect(tick?.bottom.color, LumitTheme.dark().accent);
 

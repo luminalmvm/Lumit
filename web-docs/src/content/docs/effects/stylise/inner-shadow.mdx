@@ -1,0 +1,40 @@
+---
+title: Inner shadow
+description: "A soft shadow cast inside the layer's own edges."
+---
+
+Inner shadow is a **Stylise** effect.
+
+## What it does
+
+Shifts the outside of the layer's shape towards **Angle**, blurs it and lays it over the
+layer where the layer draws. Past the layer's own edges counts as outside, so on a shape or
+text layer the shadow follows the shape.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Colour** | Colour | Each channel 0 to 1 | Black, 75% opaque | - |
+| **Angle** | Dial | Any angle | 45° | Degrees |
+| **Distance** | Slider | 0 to 200; any value by typing | 12 | Pixels at composition size |
+| **Size** | Slider | 0 to 200; any value by typing | 16 | Pixels at composition size |
+| **Choke** | Slider | 0 to 100 | 0 | - |
+
+## What each control does
+
+- **Colour**: the shadow's colour and opacity.
+- **Angle**: the direction the shadow falls. 0° is to the right and 90° down.
+- **Distance**: how far the shadow is shifted.
+- **Size**: how much it is blurred.
+- **Choke**: makes the shadow denser before it fades.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Erosion](/effects/utility/erosion/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

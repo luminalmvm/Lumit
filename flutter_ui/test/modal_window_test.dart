@@ -4,6 +4,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -82,8 +83,11 @@ void main() {
     expect(workspace.windowPlacements['test-window']?.offset,
         const Offset(50, 30));
 
-    // Close it — the backdrop is the click-outside dismissal — and reopen.
+    // Close it and reopen. A window with an id ignores a click beside it.
     await tester.tapAt(const Offset(5, 5));
+    await tester.pump();
+    expect(body, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     expect(body, findsNothing);
     await open(tester);
@@ -112,13 +116,25 @@ void main() {
         const Size(380, 260));
   });
 
+  testWidgets('an app window smaller than the minimum still opens it',
+      (tester) async {
+    tester.view.physicalSize = const Size(90, 70);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+        host(id: 'small-window', initialSize: const Size(300, 200)));
+    await open(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(FloatSurface)), const Size(90, 70));
+  });
+
   /// The panels hang their keyboard commands off the hardware keyboard, so
   /// they have to be told a window is up — and told it is gone again
   /// however it left, including having its tree taken down under it. A count
   /// that stuck above zero would leave the keyboard dead for the session.
   testWidgets('a window says it is open, and stops when it goes',
       (tester) async {
-    // A sized window, so the corner of the screen is the backdrop to click.
     await tester.pumpWidget(
         host(id: 'test-window', initialSize: const Size(200, 150)));
     expect(lumitModalOpen, isFalse);
@@ -126,7 +142,7 @@ void main() {
     await open(tester);
     expect(lumitModalOpen, isTrue);
 
-    await tester.tapAt(const Offset(5, 5));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(body, findsNothing, reason: 'the window went');
     expect(lumitModalOpen, isFalse, reason: 'dismissing closed it');

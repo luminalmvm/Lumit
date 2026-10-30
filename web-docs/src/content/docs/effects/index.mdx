@@ -153,6 +153,7 @@ Generate textures, colours, and gradients.
 | [Connect points](/effects/generate/connect-points/) | Joins points that are near each other with lines. |
 | [Points field](/effects/generate/points-field/) | Draws a picture of where a stream's points are, for other effects to read. |
 | [Label points](/effects/generate/label-points/) | Writes a short piece of text beside every point of a stream. |
+| [Type fill](/effects/generate/type-fill/) | Fills the frame with rows of words that stretch to fill the room a shape leaves them. |
 | [Vary points](/effects/generate/vary-points/) | Makes the points of a stream differ from one another. |
 | [Pick points](/effects/generate/pick-points/) | Keeps some of a stream's points and drops the rest. |
 | [Transform points](/effects/generate/transform-points/) | Moves, scales and turns a whole stream of points about an anchor. |
@@ -171,7 +172,7 @@ Add elements to existing footage.
 
 | Effect | What it does |
 | --- | --- |
-| [Sprite flare](/effects/stylise/sprite-flare/) | The cheap lens flare. |
+| [Sprite flare](/effects/stylise/sprite-flare/) | A lens flare built from glows, rays, rings and ghosts, designed in its own window. |
 | [Light wrap](/effects/stylise/light-wrap/) | Spill the background's light around a keyed subject's edge. |
 | [Flash](/effects/stylise/flash/) | A strobe on a beat. |
 | [Glow](/effects/stylise/glow/) | Bloom the picture's bright areas. |
@@ -229,6 +230,7 @@ Useful tools for specific tasks.
 | Effect | What it does |
 | --- | --- |
 | [Transform](/effects/utility/transform/) | The transform properties as an effect. |
+| [Crop](/effects/utility/crop/) | Takes the picture away past four edges. |
 | [Matte key](/effects/utility/matte-key/) | Pull a green or blue screen to transparency, with despill. |
 | [Set matte](/effects/utility/set-matte/) | Takes a channel of another layer as transparency. |
 | [Set channels](/effects/utility/set-channels/) | Every output channel told which channel of which layer it comes from. |
@@ -336,5 +338,22 @@ Effects that change a layer's sound. They draw nothing.
 | [Tremolo](/effects/audio/tremolo/) | The level moved up and down by an oscillator, or the sound panned side to side. |
 | [Vibrato](/effects/audio/vibrato/) | The pitch moved up and down by an oscillator. |
 | [Wah](/effects/audio/wah/) | A narrow band of the sound swept up and down, by an oscillator or by the sound's own level. |
+
+{/* END GENERATED */}
+
+### Siceliot
+
+Drivers in the manner of Cavalry's behaviours, which give each copy Clone to points stamps
+its own value. The heading is the name of the set they came from.
+
+{/* GENERATED:list:siceliot - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Stagger](/effects/siceliot/stagger/) | A value that steps from Minimum on the first copy to Maximum on the last. |
+| [Random](/effects/siceliot/random/) | A random value for each copy, kept or rolled again a set number of times a second. |
+| [Oscillator](/effects/siceliot/oscillator/) | A value that swings between two numbers in a wave, rippling across the copies. |
+| [Value noise](/effects/siceliot/value-noise/) | A value that wanders smoothly between two numbers, differently for each copy. |
+| [Ring wave](/effects/siceliot/ring-wave/) | Rings that grow out across the frame and give each point a value as they cross it. |
 
 {/* END GENERATED */}

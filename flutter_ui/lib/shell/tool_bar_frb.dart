@@ -46,6 +46,8 @@ import '../main.dart';
 import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
+import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
@@ -148,7 +150,8 @@ class LumitToolBarFrb extends StatelessWidget {
     // Lantern groups the row into three pills standing in the room; Studio
     // and Desk keep the flat strip, welded under the menu bar by a hairline.
     final pills = t.tokens.roomed;
-    return Container(
+    // Named, so a style can dress the toolbar's buttons apart from others.
+    return StylePart(name: 'toolbar', child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
         color: pills
@@ -225,7 +228,7 @@ class LumitToolBarFrb extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 }
 
@@ -883,6 +886,10 @@ class _ToolButton extends StatefulWidget {
 class _ToolButtonState extends State<_ToolButton> {
   bool _hover = false;
 
+  /// Whether this tool was armed at the last build, so a switch of tool can
+  /// be told from a hover.
+  bool? _wasActive;
+
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
@@ -943,6 +950,16 @@ class _ToolButtonState extends State<_ToolButton> {
         : desk
             ? toolRailWidth
             : 36.0;
+    // Arming a tool is a key press, many times an hour, so the mark moves
+    // at once, on the tool armed and the one let go. The hover light moves
+    // as a hover does, and the glyph goes with the fill behind it.
+    final switched = _wasActive != null && _wasActive != active;
+    _wasActive = active;
+    final step = active || switched
+        ? MotionSpec.still
+        : _hover
+            ? scope.motion.hoverIn
+            : scope.motion.hoverOut;
 
     return LumitTooltip(
       message: _tooltip(member),
@@ -964,8 +981,8 @@ class _ToolButtonState extends State<_ToolButton> {
               : null,
           child: AnimatedContainer(
             key: ValueKey<String>('tool-${widget.group.name}'),
-            duration: scope.motion.mark.duration,
-            curve: scope.motion.mark.curve,
+            duration: step.duration,
+            curve: step.curve,
             width: _toolButtonWidth,
             height: height,
             decoration: decoration,
@@ -973,8 +990,10 @@ class _ToolButtonState extends State<_ToolButton> {
               children: [
                 if (filled)
                   Center(
-                    child: Container(
+                    child: AnimatedContainer(
                       key: ValueKey<String>('tool-disc-${widget.group.name}'),
+                      duration: step.duration,
+                      curve: step.curve,
                       width: disc,
                       height: disc,
                       decoration: BoxDecoration(
@@ -988,8 +1007,14 @@ class _ToolButtonState extends State<_ToolButton> {
                     ),
                   ),
                 Center(
-                    child:
-                        lumitIcon(member.icon, size: iconSize, color: colour)),
+                  child: TweenAnimationBuilder<Color?>(
+                    tween: ColorTween(end: colour),
+                    duration: step.duration,
+                    curve: step.curve,
+                    builder: (context, ink, _) => lumitIcon(member.icon,
+                        size: iconSize, color: ink ?? colour),
+                  ),
+                ),
                 // The corner mark that says there is more under this button —
                 // the same promise After Effects' little triangle makes.
                 if (members.length > 1)
@@ -1071,7 +1096,8 @@ class _ToolFlyout extends StatelessWidget {
               selected: member == armed,
               // A member that is not built is listed and does nothing when
               // clicked — the same rule the buttons follow.
-              onPressed: member.ready ? () => onPick(member) : () {},
+              enabled: member.ready,
+              onPressed: () => onPick(member),
               child: Row(
                 children: [
                   lumitIcon(member.icon,
@@ -1215,7 +1241,12 @@ class _StripEntry extends StatelessWidget {
                 style: t.body.copyWith(
                   fontSize: 12,
                   height: 1.0,
-                  color: active ? accentInk(t) : t.textMuted,
+                  // A style that dresses the fronted button names its ink.
+                  color: active
+                      ? partStyle(context, t, 'button', states: const {'on'})
+                              .colour ??
+                          accentInk(t)
+                      : t.textMuted,
                 ),
               ),
             ),
@@ -1247,7 +1278,9 @@ class _StripEntry extends StatelessWidget {
           onPressed: onPressed,
           child: Container(
             padding: const EdgeInsets.only(bottom: 2),
-            decoration: active
+            // Painted over the padding, so the word doesn't move a pixel when
+            // its workspace is fronted.
+            foregroundDecoration: active
                 ? BoxDecoration(
                     border: Border(bottom: BorderSide(color: t.accent)))
                 : null,

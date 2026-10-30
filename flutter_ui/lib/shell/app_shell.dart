@@ -1,6 +1,9 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
+import 'dart:io';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +24,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/layer_settings_frb.dart' show newSolidFrb;
 import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
@@ -36,6 +40,7 @@ import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
+import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
@@ -44,9 +49,11 @@ import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
+import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/keymap.dart' show chordText;
-import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
+import 'package:lumit_flutter/state/settings.dart'
+    show LoopMode, ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
@@ -105,15 +112,19 @@ class LumitAppNew extends StatelessWidget {
             listenable: uiState,
             builder: (context, _) => ThemeScope(
               theme: uiState.theme,
-              // The system's own "no animations" setting outranks Lumit's.
-              animationLevel: MediaQuery.disableAnimationsOf(context)
-                  ? AnimationLevel.none
+              // The system's own "reduce motion" setting brings Lumit down to
+              // Minimal, which keeps the short fades that say what happened.
+              // Only Lumit's own None stills everything.
+              animationLevel: MediaQuery.disableAnimationsOf(context) &&
+                      uiState.workspace.animationLevel == AnimationLevel.all
+                  ? AnimationLevel.minimal
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               wireStyle: uiState.workspace.interface.wireStyle,
               child: Directionality(
                 textDirection: TextDirection.ltr,
-                child: ColoredBox(
+                child: _RoomPicture(
+                  child: ColoredBox(
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
                   // deepest surface.
@@ -136,11 +147,42 @@ class LumitAppNew extends StatelessWidget {
                     ),
                   ),
                 ),
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A style's room picture, under the whole window. The room colour is
+/// see-through then, so the picture shows wherever the room is painted.
+class _RoomPicture extends StatelessWidget {
+  final Widget child;
+  const _RoomPicture({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilt with the theme, which is rebuilt whenever the style changes.
+    ThemeScope.of(context);
+    final style = StyleSheet.current;
+    final path = style?.roomPicture;
+    if (style == null || path == null || StyleSheet.solid) return child;
+    Widget picture = Image.file(File(path), fit: BoxFit.cover);
+    if (style.roomBlur > 0) {
+      picture = ImageFiltered(
+        imageFilter: ImageFilter.blur(
+            sigmaX: style.roomBlur,
+            sigmaY: style.roomBlur,
+            tileMode: TileMode.clamp),
+        child: picture,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [RepaintBoundary(child: picture), child],
     );
   }
 }
@@ -315,6 +357,8 @@ class _LumitAppViewState extends State<LumitAppView> {
     _clipboardWatch = AppLifecycleListener(
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
+      // Icons and styles edited elsewhere show when the window comes back.
+      onResume: () => context.read<LumitUiState>().workspace.refreshFromDisk(),
     );
     // The first-run questions, after the first frame so there is an
     // Overlay to put them in. They ask nothing on any later launch.
@@ -740,6 +784,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
+      // Vegas's loop key: the work area loops, or plays once and stops.
+      case 'playback.loop.toggle':
+        ui.workspace.setLoopMode(
+            ui.workspace.performance.loop == LoopMode.once
+                ? LoopMode.workArea
+                : LoopMode.once);
       case 'playback.comp.end':
         final last = (comp?.durationFrames() ?? 1) - 1;
         ui.playheadFrame.value = last < 0 ? 0 : last;
@@ -797,12 +847,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // Layer ▸ New from the keyboard: the same engine call the menu row
       // makes, on the fronted composition.
-      // A light asks for its settings first, as the menu row does.
-      case 'layer.new.light.point':
+      // A light or a solid asks for its settings first, as the menu row does.
+      case 'layer.new.light.point' || 'layer.new.solid':
         if (comp == null) {
           handled = false;
         } else {
-          newLightFrb(
+          (action == 'layer.new.solid' ? newSolidFrb : newLightFrb)(
             context: context,
             comp: comp,
             row: newLayerRow(ui, comp),
@@ -817,8 +867,7 @@ class _LumitAppViewState extends State<LumitAppView> {
           insertEmptyLayer(ui, comp, action);
           state.notifyDocumentChanged();
         }
-      case 'layer.new.solid' ||
-            'layer.new.text' ||
+      case 'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
             'layer.new.null':
@@ -828,8 +877,6 @@ class _LumitAppViewState extends State<LumitAppView> {
           // Directly above the selected layer, exactly as the menu row does.
           final row = newLayerRow(ui, comp);
           switch (action) {
-            case 'layer.new.solid':
-              comp.addSolidLayer(row: row);
             case 'layer.new.text':
               comp.addTextLayer(row: row);
             case 'layer.new.camera':
@@ -1111,6 +1158,20 @@ class _LumitAppViewState extends State<LumitAppView> {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
           state.notifyDocumentChanged();
         }
+      // A region over the work area, as Vegas makes one over its time
+      // selection. Ahead of the numbered markers, which share the prefix.
+      case 'marker.add.region':
+        if (comp == null) {
+          handled = false;
+        } else {
+          final work = workAreaFrames(comp);
+          final list = markersWithFrb(comp, frame: work.start, label: '');
+          writeMarkers(comp, [
+            ...list.take(list.length - 1),
+            list.last.withSpan(work.end - work.start),
+          ]);
+          state.notifyDocumentChanged();
+        }
       case final id when id.startsWith('marker.add.'):
         if (comp == null) {
           handled = false;
@@ -1330,6 +1391,7 @@ bool _pressedOnce(String action) =>
       'mask.feather',
       'mask.invert',
       'comp.trim.workarea',
+      'marker.add.region',
       'export.queue.open',
       'help.open',
       'viewer.controls.toggle',

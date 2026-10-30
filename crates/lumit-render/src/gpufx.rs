@@ -442,6 +442,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &LensFlare,
     &DropShadow,
     &LinearWipe,
+    &crate::gpufx_crop::Crop,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,
@@ -465,6 +466,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &TrackPoints,
     &TextToPoints,
     &LabelPoints,
+    &TypeFill,
     &PointsModifier("vary_points"),
     &PointsModifier("pick_points"),
     &PointsModifier("transform_points"),
@@ -771,6 +773,10 @@ impl GpuEffect for SpriteFlare {
     fn match_name(&self) -> &'static str {
         "sprite_flare"
     }
+    /// The design kept in the effect rides the kept lens's carriage.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LensFile
+    }
     fn run(
         &self,
         fx: &FxEngine,
@@ -779,28 +785,71 @@ impl GpuEffect for SpriteFlare {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
-        let s = effects::sprite_flare::SpriteFlare::read(p).packed();
+        use effects::sprite_flare::{design_of, with_v1_rows, SpriteFlare};
+        use lumit_core::fx::flare::{instances, textures};
+        // The layer rows' pictures arrive in row order.
+        let picture = |id: &str| {
+            let at = <SpriteFlare as EffectMetadata>::SCHEMA
+                .layer_inputs()
+                .position(|row| row == id)?;
+            aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
+        };
+        use lumit_gpu::fx::sprite_flare as sf;
+        let mut frame = SpriteFlare::frame(p);
+        if let Some(stream) = points_input_at(aux, 0, frame.px_scale) {
+            frame.lights = SpriteFlare::points_lights(p, &stream).unwrap_or(frame.lights);
+        }
+        let spots = SpriteFlare::spots(p);
+        if frame.lights.is_empty() && spots.is_none() {
+            return tex.clone();
+        }
+        let (luma, radius) = SpriteFlare::hiding(p);
+        let design = with_v1_rows(design_of(aux.lens_file()), p);
+        let list: Vec<_> = instances::expand(&design, &frame, w, h)
+            .iter()
+            .map(instances::Instance::packed)
+            .collect();
+        let lights: Vec<[f32; 8]> = frame
+            .lights
+            .iter()
+            .map(|l| {
+                let [r, g, b] = l.colour;
+                [l.pos[0], l.pos[1], l.gain, l.scale, r, g, b, 0.0]
+            })
+            .collect();
         fx.sprite_flare(
             ctx,
             tex,
             w,
             h,
-            &lumit_gpu::fx::blur::SpriteFlareOp {
-                light: s.light,
-                intensity: s.intensity,
-                tint: s.tint,
-                glow_size: s.glow_size,
-                glow_intensity: s.glow_intensity,
-                ghosts: s.ghosts,
-                ghost_spacing: s.ghost_spacing,
-                ghost_size: s.ghost_size,
-                ghost_intensity: s.ghost_intensity,
-                streak_length: s.streak_length,
-                streak_intensity: s.streak_intensity,
-                streak_angle_deg: s.streak_angle_deg,
-                mix: s.mix,
+            &sf::SpriteFlareOp {
+                instances: &list,
+                lights: &lights,
+                centre: frame.centre,
+                edge_fade: frame.edge_fade * frame.px_scale,
+                spots: spots.map(|s| sf::SpotsOp {
+                    threshold: s.threshold,
+                    softness: s.softness,
+                    use_colour: s.use_colour,
+                    colour: s.colour,
+                    gain: s.gain,
+                }),
+                hide: picture("hide_behind").map(|picture| sf::HideOp {
+                    picture,
+                    luma,
+                    radius,
+                }),
+                depth: picture("depth_m").zip(SpriteFlare::light_distance(p)).map(
+                    |(picture, metres)| sf::DepthOp {
+                        picture,
+                        metres,
+                        radius,
+                    },
+                ),
+                layer: picture("texture_layer"),
+                textures: textures::all(),
             },
         )
     }
@@ -3513,6 +3562,7 @@ impl GpuEffect for Glow {
                 intensity,
                 tint,
                 mix,
+                rolloff: halo.rolloff,
             },
         )
     }
@@ -5927,39 +5977,66 @@ impl GpuEffect for LabelPoints {
         ) else {
             return tex.clone();
         };
-        let labels = inst.labels(stream, inst.template(&doc.text), px_scale);
-        let doc = label_document(doc, px_scale);
-        // Labels that read the same share one drawing. Only ever looked up,
-        // so the map's order decides nothing.
-        let mut drawn: std::collections::HashMap<&str, lumit_text::RasterText> =
+        use lumit_core::fx::effects::label_drawing::{composite, LabelDrawing, Placed};
+        let labels = inst.labels(stream, inst.template(&doc.text), px_scale, L::time_of(p));
+        // Each label has its own size and turn. A wording is laid
+        // out once per half octave of size, at or just above the sizes it is
+        // drawn at, and every label is resampled from that drawing, so sizes
+        // run smoothly, labels sit between pixels and turn, and nothing is
+        // ever blown up.
+        let octave = |scale: f32| -> Option<i32> {
+            (scale > 1e-3).then(|| ((scale.log2() * 2.0).ceil() as i32).clamp(-12, 8))
+        };
+        let octave_size = |k: i32| 2f32.powf(k as f32 / 2.0);
+        // The text engine's pixels are sRGB bytes with plain alpha. The frame
+        // is linear and premultiplied, so each drawing is made so once.
+        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
+        // Labels that read the same at the same octave share one drawing.
+        // Only ever looked up, so the map's order decides nothing.
+        let mut drawn: std::collections::HashMap<(&str, i32), LabelDrawing> =
             std::collections::HashMap::new();
-        for (text, _) in &labels {
-            drawn.entry(text.as_str()).or_insert_with(|| {
-                lumit_text::rasterise(&lumit_text::TextBlock::of(&doc, text), &[])
+        for label in &labels {
+            let Some(k) = octave(label.scale) else {
+                continue;
+            };
+            drawn.entry((label.text.as_str(), k)).or_insert_with(|| {
+                let sized = label_document(doc, px_scale * octave_size(k));
+                let r = lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, &label.text), &[]);
+                LabelDrawing {
+                    width: r.width as usize,
+                    height: r.height as usize,
+                    px: r
+                        .rgba
+                        .chunks_exact(4)
+                        .map(|t| {
+                            let a = f32::from(t[3]) / 255.0;
+                            [
+                                linear[usize::from(t[0])] * a,
+                                linear[usize::from(t[1])] * a,
+                                linear[usize::from(t[2])] * a,
+                                a,
+                            ]
+                        })
+                        .collect(),
+                }
             });
         }
-        // Each label's top left corner on the frame, and its picture. The
-        // anchor is level with the middle of the label's height.
-        let along = inst.anchor_along();
-        let whole = |v: f32| v.round().clamp(-1e9, 1e9) as i64;
-        let placed: Vec<(i64, i64, &lumit_text::RasterText)> = labels
+        let anchor = [inst.anchor_along(), inst.anchor_down()];
+        let placed: Vec<Placed<'_>> = labels
             .iter()
-            .filter_map(|(text, at)| {
-                let r = drawn.get(text.as_str())?;
-                Some((
-                    whole(at[0] - along * r.width as f32),
-                    whole(at[1] - 0.5 * r.height as f32),
-                    r,
-                ))
+            .filter_map(|label| {
+                let k = octave(label.scale)?;
+                let d = drawn.get(&(label.text.as_str(), k))?;
+                Placed::new(d, label, octave_size(k), anchor)
             })
             .collect();
         // The box round every label, kept to the frame.
         let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
-        for (x, y, r) in &placed {
-            x0 = x0.min(*x);
-            y0 = y0.min(*y);
-            x1 = x1.max(x + i64::from(r.width));
-            y1 = y1.max(y + i64::from(r.height));
+        for l in &placed {
+            x0 = x0.min(l.bounds[0]);
+            y0 = y0.min(l.bounds[1]);
+            x1 = x1.max(l.bounds[2]);
+            y1 = y1.max(l.bounds[3]);
         }
         let (x0, y0) = (x0.max(0), y0.max(0));
         let (x1, y1) = (x1.min(i64::from(w)), y1.min(i64::from(h)));
@@ -5967,67 +6044,241 @@ impl GpuEffect for LabelPoints {
             return tex.clone();
         }
         let (bw, bh) = (x1 - x0, y1 - y0);
-        // The text engine's pixels are sRGB bytes with plain alpha. The frame
-        // is linear and premultiplied.
-        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
-        let mut px = vec![0.0f32; (bw * bh * 4) as usize];
-        for (x, y, r) in &placed {
-            let rw = i64::from(r.width.max(1));
-            for (i, texel) in r.rgba.chunks_exact(4).enumerate() {
-                let &[red, green, blue, alpha] = texel else {
-                    continue;
+        let px = composite(&placed, [x0, y0], [bw, bh]);
+        stamp_box(fx, ctx, tex, w, h, &px, [x0, y0, x1, y1], mix)
+    }
+}
+
+/// `px` (scene-linear, premultiplied, `box` sized: left, top, right, bottom)
+/// stamped over the frame at `mix`, one texel on one pixel: the last step of
+/// Label points and Type fill.
+#[allow(clippy::too_many_arguments)]
+fn stamp_box(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    tex: &Tex,
+    w: u32,
+    h: u32,
+    px: &[f32],
+    [x0, y0, x1, y1]: [i64; 4],
+    mix: f32,
+) -> Tex {
+    let (bw, bh) = (x1 - x0, y1 - y0);
+    let sprite = lumit_gpu::fx::common::upload_linear_f32(ctx, px, bw as u32, bh as u32);
+    // One stamp, the size of the box and sitting exactly on it, so a pixel of
+    // the picture lands on a pixel of the frame.
+    let centre = [(x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5, 0.0];
+    let stamp = [lumit_gpu::fx::points_draw::DrawPoint {
+        position: centre,
+        size: bw as f32,
+        rotation: 0.0,
+        colour: [1.0; 4],
+        id: 0,
+        tail: centre,
+        stretch: [1.0; 2],
+    }];
+    fx.points_draw_runs(
+        ctx,
+        tex,
+        w,
+        h,
+        &[(
+            lumit_gpu::fx::points_draw::PointsDrawOp {
+                points: &stamp,
+                feather: 0.0,
+                mix,
+                // Everything was put where it is seen, so the stamp itself is
+                // flat.
+                projection: None,
+                field: lumit_gpu::fx::points_draw::FieldTest::None,
+                seed: 0,
+                mode: 1,
+                sprite: Some(&sprite),
+            },
+            lumit_gpu::fx::points_draw::SpriteFit {
+                unit: [1.0, bh as f32 / bw as f32],
+                ..Default::default()
+            },
+        )],
+    )
+}
+
+/// A word laid out by the text engine at `doc`'s look, `k` times its size and
+/// `wide` times its width, as scene-linear premultiplied texels.
+fn word_drawing(
+    doc: &lumit_core::model::TextDocument,
+    k: f32,
+    wide: f32,
+    text: &str,
+) -> lumit_core::fx::effects::label_drawing::LabelDrawing {
+    let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
+    let mut sized = label_document(doc, k);
+    sized.style.scale_x *= f64::from(wide);
+    let r = lumit_text::rasterise(&lumit_text::TextBlock::of(&sized, text), &[]);
+    lumit_core::fx::effects::label_drawing::LabelDrawing {
+        width: r.width as usize,
+        height: r.height as usize,
+        px: r
+            .rgba
+            .chunks_exact(4)
+            .map(|t| {
+                let a = f32::from(t[3]) / 255.0;
+                [
+                    linear[usize::from(t[0])] * a,
+                    linear[usize::from(t[1])] * a,
+                    linear[usize::from(t[2])] * a,
+                    a,
+                ]
+            })
+            .collect(),
+    }
+}
+
+/// Type fill: rows of words, each stretched to fill a free
+/// stretch of the Region layer.
+///
+/// The region is read back off the card once a frame; its value along the
+/// middle of every row is where `TypeFill::pieces` puts which word; each word
+/// is laid out once, at about the rows' height, trimmed to its letters, and
+/// stretched into its boxes by the same drawing Label points uses; and the
+/// region then cuts the words pixel by pixel.
+struct TypeFill;
+impl GpuEffect for TypeFill {
+    fn match_name(&self) -> &'static str {
+        "type_fill"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::label_drawing::{composite, Placed};
+        use lumit_core::fx::effects::type_fill::TypeFill as T;
+        let inst = T::read(p);
+        let px_scale = T::px_scale_of(p);
+        let mix = (inst.mix / 100.0).clamp(0.0, 1.0);
+        let words = inst.word_list();
+        let Some(doc) = aux.schedule().and_then(|c| c.label.as_deref()) else {
+            return tex.clone();
+        };
+        if words.is_empty() || mix <= 0.0 || w == 0 || h == 0 {
+            return tex.clone();
+        }
+        let bands = inst.row_bands(h as f32, px_scale);
+        // The region along the middle of each row, 0..1 a pixel; unset, all
+        // of it.
+        let region = aux
+            .layer_inputs()
+            .get(1)
+            .and_then(Option::as_ref)
+            .map(|l| &l.tex)
+            .filter(|t| t.width() == w && t.height() == h)
+            .and_then(|t| lumit_gpu::fx::common::readback_linear_f32(ctx, t, w, h).ok());
+        let luminance = inst.region_from == 1;
+        let free: Vec<Vec<[f32; 2]>> = bands
+            .iter()
+            .map(|band| {
+                let y = (((band[0] + band[1]) * 0.5) as u32).min(h - 1) as usize;
+                let samples: Vec<f32> = match &region {
+                    Some(px) => (0..w as usize)
+                        .map(|x| {
+                            let at = (y * w as usize + x) * 4;
+                            let t = px.get(at..at + 4).unwrap_or(&[0.0; 4]);
+                            if luminance {
+                                (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
+                            } else {
+                                t[3].clamp(0.0, 1.0)
+                            }
+                        })
+                        .collect(),
+                    None => vec![1.0; w as usize],
                 };
-                let (at_x, at_y) = (x + i as i64 % rw - x0, y + i as i64 / rw - y0);
-                if alpha == 0 || !(0..bw).contains(&at_x) || !(0..bh).contains(&at_y) {
-                    continue;
-                }
-                let d = ((at_y * bw + at_x) * 4) as usize;
-                let Some(under) = px.get_mut(d..d + 4) else {
-                    continue;
+                inst.free_spans(&samples)
+            })
+            .collect();
+        // Each word laid out once at about the rows' height, trimmed to its
+        // letters: its natural width a px of height, and the drawing that
+        // is stretched into its boxes.
+        let row = bands.first().map_or(0.0, |b| b[1] - b[0]).max(1.0);
+        let sizes: Vec<f32> = words
+            .iter()
+            .map(|word| {
+                let probe = word_drawing(doc, px_scale, 1.0, word).trimmed();
+                let k = if probe.height > 0 {
+                    px_scale * row / probe.height as f32
+                } else {
+                    px_scale
                 };
-                let a = f32::from(alpha) / 255.0;
-                let over = [red, green, blue].map(|c| linear[usize::from(c)] * a);
-                for (under, top) in under.iter_mut().zip(over.into_iter().chain([a])) {
-                    *under = top + *under * (1.0 - a);
+                k.clamp(0.01, 64.0)
+            })
+            .collect();
+        let drawings: Vec<_> = words
+            .iter()
+            .zip(&sizes)
+            .map(|(word, k)| word_drawing(doc, *k, 1.0, word).trimmed())
+            .collect();
+        let natural: Vec<f32> = drawings
+            .iter()
+            .map(|d| d.width as f32 / d.height.max(1) as f32)
+            .collect();
+        let pieces = inst.pieces(&bands, &free, &natural, w as f32, px_scale);
+        // Each word is set again as wide as its boxes want it, in quarter
+        // octaves, so a wide column gets wide letters instead of a smear.
+        let step = |piece: &lumit_core::fx::effects::type_fill::Piece| -> i32 {
+            let [x0, y0, x1, y1] = piece.rect;
+            let natural = natural.get(piece.word).copied().unwrap_or(1.0).max(1e-3);
+            let stretch = ((x1 - x0) / (y1 - y0).max(1e-3) / natural).max(1e-3);
+            (stretch.log2() * 4.0).round().clamp(-16.0, 24.0) as i32
+        };
+        let mut wide: std::collections::HashMap<(usize, i32), _> = std::collections::HashMap::new();
+        for piece in &pieces {
+            let (Some(word), Some(k)) = (words.get(piece.word), sizes.get(piece.word)) else {
+                continue;
+            };
+            wide.entry((piece.word, step(piece))).or_insert_with(|| {
+                word_drawing(doc, *k, 2f32.powf(step(piece) as f32 / 4.0), word).trimmed()
+            });
+        }
+        let placed: Vec<Placed<'_>> = pieces
+            .iter()
+            .filter_map(|piece| {
+                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None)
+                    .map(|p| p.clipped_x(piece.clip))
+            })
+            .collect();
+        if placed.is_empty() {
+            return tex.clone();
+        }
+        let mut px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
+        // The region cuts the words pixel by pixel: the rows read it only
+        // along their middle, and a curved edge crosses a tall row.
+        if let Some(region) = &region {
+            for (out, t) in px.chunks_exact_mut(4).zip(region.chunks_exact(4)) {
+                let v = if luminance {
+                    (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
+                } else {
+                    t[3].clamp(0.0, 1.0)
+                };
+                let keep = inst.coverage(v);
+                for c in out.iter_mut() {
+                    *c *= keep;
                 }
             }
         }
-        let sprite = lumit_gpu::fx::common::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
-        // One stamp, the size of the box and sitting exactly on it, so a
-        // pixel of the labels lands on a pixel of the frame.
-        let centre = [(x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5, 0.0];
-        let stamp = [lumit_gpu::fx::points_draw::DrawPoint {
-            position: centre,
-            size: bw as f32,
-            rotation: 0.0,
-            colour: [1.0; 4],
-            id: 0,
-            tail: centre,
-            stretch: [1.0; 2],
-        }];
-        fx.points_draw_runs(
+        stamp_box(
+            fx,
             ctx,
             tex,
             w,
             h,
-            &[(
-                lumit_gpu::fx::points_draw::PointsDrawOp {
-                    points: &stamp,
-                    feather: 0.0,
-                    mix,
-                    // The labels were put where the points are seen, so the
-                    // stamp itself is flat.
-                    projection: None,
-                    field: lumit_gpu::fx::points_draw::FieldTest::None,
-                    seed: 0,
-                    mode: 1,
-                    sprite: Some(&sprite),
-                },
-                lumit_gpu::fx::points_draw::SpriteFit {
-                    unit: [1.0, bh as f32 / bw as f32],
-                    ..Default::default()
-                },
-            )],
+            &px,
+            [0, 0, i64::from(w), i64::from(h)],
+            mix,
         )
     }
 }

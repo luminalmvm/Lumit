@@ -47,7 +47,9 @@ void main() {
     await tester.tap(find.byType(BareDropdown<String>));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<Text>(find.text('b')).style?.color, t.textDisabled,
+    final drawn = tester.widget<RichText>(
+        find.descendant(of: find.text('b'), matching: find.byType(RichText)));
+    expect(drawn.text.style?.color, t.textDisabled,
         reason: 'listed, and visibly not on offer');
     await tester.tap(find.text('b'));
     await tester.pumpAndSettle();

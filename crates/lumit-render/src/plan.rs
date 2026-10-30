@@ -32,26 +32,26 @@ use uuid::Uuid;
 /// moment they stop). Chosen to keep even 4K sources instant to draft.
 pub const DRAFT_MAX_WIDTH: u32 = 640;
 
-/// The widest and tallest a decoded frame may be. 8 192 is `wgpu`'s
-/// guaranteed `max_texture_dimension_2d`, and the context asks for no more:
-/// a 9 000-pixel photograph uploaded at its own size is a validation error
-/// on every pass that touches it, and the layer comes out blank. Shrunk to
-/// fit, it is a picture.
-pub const MAX_TEXTURE_SIDE: u32 = 8192;
-
-/// A decode width that also fits the texture limit. `target` is what the
+/// A decode width that also fits the largest picture. `target` is what the
 /// quality policy asked for (`None` for native); the answer is the same
 /// unless the source at that width would still be wider or taller than
-/// [`MAX_TEXTURE_SIDE`], in which case it is the widest that fits, aspect
-/// kept. Applied after the policy, and to the native path too, so no
-/// footage is ever asked for at a size the card cannot hold.
+/// [`lumit_core::largest_picture::side`], in which case it is the widest that
+/// fits, aspect kept. Applied after the policy, and to the native path too, so
+/// no footage is ever asked for at a size the card cannot hold: a 9 000-pixel
+/// photograph uploaded at its own size is a validation error on every pass
+/// that touches it, and the layer comes out blank. Shrunk to fit, it is a
+/// picture.
 #[must_use]
 pub fn fit_texture(target: Option<u32>, natural_w: u32, natural_h: u32) -> Option<u32> {
+    let most = lumit_core::largest_picture::side();
     let side = natural_w.max(natural_h);
-    if side <= MAX_TEXTURE_SIDE {
+    if side <= most {
         return target;
     }
-    let widest = (u64::from(natural_w) * u64::from(MAX_TEXTURE_SIDE) / u64::from(side)) as u32;
+    let widest = (u64::from(natural_w) * u64::from(most) / u64::from(side)) as u32;
+    if target.is_none_or(|t| t > widest) {
+        lumit_core::largest_picture::note_cut();
+    }
     Some(target.map_or(widest, |t| t.min(widest)).max(16))
 }
 
@@ -704,6 +704,7 @@ pub fn collect_comp_jobs(
                             outgoing,
                             incoming,
                             gain,
+                            ..
                         } => {
                             let under = footage_job(outgoing, lt, whole);
                             // An incoming clip with no picture of its own
@@ -2181,6 +2182,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -2216,6 +2218,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read_comp,
@@ -2284,6 +2287,7 @@ mod tests {
             Vec::new(),
             Some(CompGraph {
                 notes: Vec::new(),
+                ties: Vec::new(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
                 edges: vec![wire(box_id, "output", out3, "input")],
                 layout: Vec::new(),
@@ -2358,6 +2362,7 @@ mod tests {
                 Vec::new(),
                 Some(CompGraph {
                     notes: Vec::new(),
+                    ties: Vec::new(),
                     nodes,
                     edges,
                     layout: Vec::new(),

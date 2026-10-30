@@ -47,9 +47,15 @@ const { Content } = await render(release);
   }
   .back::before {
     content: "\2190";
-    transition: transform 0.2s;
   }
-  .back:hover::before {
-    transform: translateX(-3px);
+  @media (prefers-reduced-motion: no-preference) {
+    .back::before {
+      transition: transform 0.2s;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .back:hover::before {
+      transform: translateX(-3px);
+    }
   }
 </style>

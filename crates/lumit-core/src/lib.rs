@@ -19,6 +19,8 @@ pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers.
 pub mod group;
 pub mod interpretation;
+/// The largest picture the renderer makes, and saying when one was cut to it.
+pub mod largest_picture;
 pub mod lighting;
 pub mod linalg;
 pub mod lut;
@@ -49,3 +51,4 @@ pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
+pub mod wire_tie;

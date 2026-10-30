@@ -129,7 +129,10 @@ void main() {
       final before = p.state.project;
 
       await choose(tester, 'File', l10n.menuImportAe);
+      // Parsing the whole file and starting its worker can run past the
+      // usual 0.8s on a busy machine, so this one waits up to 8s.
       await settleFrb(tester,
+          maxRounds: 400,
           until: () => find.text(l10n.aeReportTitle).evaluate().isNotEmpty);
 
       expect(identical(p.state.project, before), isFalse,

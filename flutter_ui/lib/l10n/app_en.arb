@@ -1620,15 +1620,6 @@
       }
     }
   },
-  "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
-  },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
@@ -2151,10 +2142,6 @@
   "@settingsIconsFolder": {
     "description": "Settings window, Appearance: the row showing the folder a person's own icon files are read from, with a reload button."
   },
-  "reloadIcons": "Reload icons",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
-  },
   "iconsReplaced": "{count} replaced",
   "@iconsReplaced": {
     "description": "Beside the custom icons row: how many of the set's icons the folder currently replaces.",
@@ -2163,6 +2150,47 @@
         "type": "int"
       }
     }
+  },
+  "settingsStylesFolder": "Your styles",
+  "@settingsStylesFolder": {
+    "description": "Settings window, Appearance: the row showing the folder a person's own style files are read from, with a reload button."
+  },
+  "settingsReduceTransparency": "Reduce transparency",
+  "@settingsReduceTransparency": {
+    "description": "Settings window, Appearance: draws a style's see-through parts solid and blurs nothing behind them."
+  },
+  "styleProblem": "Line {line}: {problem}",
+  "@styleProblem": {
+    "description": "Under the Your styles row: one line of the style in use that Lumit skipped, then why.",
+    "placeholders": {
+      "line": {"type": "int"},
+      "problem": {"type": "String"}
+    }
+  },
+  "styleNoBase": "there's no style called {name}",
+  "@styleNoBase": {
+    "description": "Why a style file's @base line was skipped: it names a style that isn't Studio, Desk or Lantern.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleNoColon": "{text} has no colon",
+  "@styleNoColon": {
+    "description": "Why a line of a style file was skipped: a setting with no colon between its name and value.",
+    "placeholders": {"text": {"type": "String"}}
+  },
+  "styleRootDashes": "{name} needs to start with --",
+  "@styleRootDashes": {
+    "description": "Why a line of a style file was skipped: a variable in :root whose name doesn't start with two hyphens.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleBadSelector": "can't read {selector}",
+  "@styleBadSelector": {
+    "description": "Why a rule of a style file was skipped: its selector (the part before the brace) isn't one Lumit understands.",
+    "placeholders": {"selector": {"type": "String"}}
+  },
+  "styleNoProperty": "there's no setting called {name}",
+  "@styleNoProperty": {
+    "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
+    "placeholders": {"name": {"type": "String"}}
   },
   "styleChoice": "Style's choice",
   "@styleChoice": {
@@ -4040,6 +4068,10 @@
   "@fxIntensity": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxRolloff": "Rolloff",
+  "@fxRolloff": {
+    "description": "Effect controls — a control on Glow: how much of the top of the glow bends smoothly towards white instead of clipping, 0 to 1."
+  },
   "fxInterlaceOffset": "Interlace offset",
   "@fxInterlaceOffset": {
     "description": "Effect controls — a control on Scanlines."
@@ -4151,6 +4183,10 @@
   "fxLinearWipe": "Linear wipe",
   "@fxLinearWipe": {
     "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
+  },
+  "fxCrop": "Crop",
+  "@fxCrop": {
+    "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
   },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
@@ -4540,6 +4576,82 @@
   "@fxRotationFrequency": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxTwitchy": "Twitchy",
+  "@fxTwitchy": {
+    "description": "Effect controls — a Style option on Shake: the picture holds still between bursts of shaking."
+  },
+  "fxJumpy": "Jumpy",
+  "@fxJumpy": {
+    "description": "Effect controls — a Style option on Shake: the picture jumps from place to place instead of wobbling smoothly."
+  },
+  "fxStillness": "Stillness",
+  "@fxStillness": {
+    "description": "Effect controls — a control on Shake (Twitchy style): about how much of the time the picture is held still, 0 to 1."
+  },
+  "fxTwitchFrequency": "Twitch frequency",
+  "@fxTwitchFrequency": {
+    "description": "Effect controls — a control on Shake (Twitchy style): how often a burst of shaking can start or stop, per second."
+  },
+  "fxCentreBias": "Centre bias",
+  "@fxCentreBias": {
+    "description": "Effect controls — a control on Shake (Jumpy style): the chance that a jump lands back at the centre, 0 to 1."
+  },
+  "fxYEdges": "Y edges",
+  "@fxYEdges": {
+    "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
+  },
+  "fxSame": "Same",
+  "@fxSame": {
+    "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
+  },
+  "fxXWave": "X wave",
+  "@fxXWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth sideways goes."
+  },
+  "fxXWaveFrequency": "X wave frequency",
+  "@fxXWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the X wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxXWavePhase": "X wave phase",
+  "@fxXWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the X wave starts, in degrees."
+  },
+  "fxYWave": "Y wave",
+  "@fxYWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth up and down goes."
+  },
+  "fxYWaveFrequency": "Y wave frequency",
+  "@fxYWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Y wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxYWavePhase": "Y wave phase",
+  "@fxYWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Y wave starts, in degrees."
+  },
+  "fxZWave": "Z wave",
+  "@fxZWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in scale goes."
+  },
+  "fxZWaveFrequency": "Z wave frequency",
+  "@fxZWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Z wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxZWavePhase": "Z wave phase",
+  "@fxZWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Z wave starts, in degrees."
+  },
+  "fxRotationWave": "Rotation wave",
+  "@fxRotationWave": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how far the steady back and forth in rotation goes."
+  },
+  "fxRotationWaveFrequency": "Rotation wave frequency",
+  "@fxRotationWaveFrequency": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: how fast the Rotation wave swings, as a multiple of the shake's Frequency."
+  },
+  "fxRotationWavePhase": "Rotation wave phase",
+  "@fxRotationWavePhase": {
+    "description": "Effect controls — a control on Shake, in its Wave twirl: where in its swing the Rotation wave starts, in degrees."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."
@@ -4723,6 +4835,222 @@
   "fxShutterPhase": "Shutter phase",
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxSiceliot": "Siceliot",
+  "@fxSiceliot": {
+    "description": "Node graph category heading: the Siceliot drivers, which are found only in the Node graph. Siceliot is a proper name: keep it as it is in every language."
+  },
+  "fxStagger": "Stagger",
+  "@fxStagger": {
+    "description": "Node graph driver: a value that steps from Minimum to Maximum across the copies Clone to points stamps."
+  },
+  "fxOscillator": "Oscillator",
+  "@fxOscillator": {
+    "description": "Node graph driver: a value that swings in a wave over time."
+  },
+  "fxValueNoise": "Value noise",
+  "@fxValueNoise": {
+    "description": "Node graph driver: a value that wanders smoothly over time."
+  },
+  "fxBias": "Bias",
+  "@fxBias": {
+    "description": "Effect controls — a control on the Random driver: leans its values towards Minimum or Maximum."
+  },
+  "fxLoop": "Loop",
+  "@fxLoop": {
+    "description": "Effect controls — a checkbox on the Stagger driver: start again from the first copy past the last."
+  },
+  "fxChangeAbove": "Change above",
+  "@fxChangeAbove": {
+    "description": "Effect controls — a control on Label points: above this Change a label is in the wave and scrambles."
+  },
+  "fxScrambleRate": "Scramble rate",
+  "@fxScrambleRate": {
+    "description": "Effect controls — a control on Label points: new random text a second while a label is in the wave."
+  },
+  "fxFlashColour": "Flash colour",
+  "@fxFlashColour": {
+    "description": "Effect controls — a menu on Label points: the colour a label takes while it is in the wave."
+  },
+  "fxRandomHue": "Random hue",
+  "@fxRandomHue": {
+    "description": "Effect controls — an option of Flash colour on Label points: any hue, at random."
+  },
+  "fxTwoColours": "Two colours",
+  "@fxTwoColours": {
+    "description": "Effect controls — an option of Flash colour on Label points: Colour A or Colour B, at random."
+  },
+  "fxLabelScale": "Label scale",
+  "@fxLabelScale": {
+    "description": "Effect controls — a control on Label points: how big a label is drawn, per cent of the Text layer's size."
+  },
+  "fxRingWave": "Ring wave",
+  "@fxRingWave": {
+    "description": "Effect name: rings that grow out from points on the frame one after another, giving each point a value, a turn and a count of the rings that have crossed it."
+  },
+  "fxInterval": "Interval",
+  "@fxInterval": {
+    "description": "Effect controls — a control on Ring wave: seconds between one ring and the next."
+  },
+  "fxSpeedVariance": "Speed variance",
+  "@fxSpeedVariance": {
+    "description": "Effect controls — a control on Ring wave: how much faster or slower each ring may grow."
+  },
+  "fxThicknessMin": "Thickness min",
+  "@fxThicknessMin": {
+    "description": "Effect controls — a control on Ring wave: the thinnest a ring can be, in pixels."
+  },
+  "fxThicknessMax": "Thickness max",
+  "@fxThicknessMax": {
+    "description": "Effect controls — a control on Ring wave: the thickest a ring can be, in pixels."
+  },
+  "fxPasses": "Passes",
+  "@fxPasses": {
+    "description": "Node graph — an output port on Ring wave: how many rings have crossed a point so far."
+  },
+  "fxTextStep": "Text step",
+  "@fxTextStep": {
+    "description": "Effect controls — a control on Label points: each whole number gives the random text a new roll that stays."
+  },
+  "fxByStrength": "By strength",
+  "@fxByStrength": {
+    "description": "Effect controls — an option of Flash colour on Label points: colour each label smoothly by how strong the wave is on it."
+  },
+  "fxHueStart": "Hue start",
+  "@fxHueStart": {
+    "description": "Effect controls — a control on Label points: the hue a weak wave gives, with Flash colour on By strength."
+  },
+  "fxHueRange": "Hue range",
+  "@fxHueRange": {
+    "description": "Effect controls — a control on Label points: how far round the hues a full wave goes, in degrees."
+  },
+  "fxGrow": "Grow",
+  "@fxGrow": {
+    "description": "Effect controls — a control on Label points: how much bigger a full wave makes a label, per cent."
+  },
+  "fxLabelRotation": "Label rotation",
+  "@fxLabelRotation": {
+    "description": "Effect controls — a control on Label points: how far each label is turned about its anchor."
+  },
+  "fxAddUp": "Add up",
+  "@fxAddUp": {
+    "description": "Effect controls — a checkbox on Ring wave: let the strengths of overlapping rings add up past Maximum."
+  },
+  "fxAwayFromPoints": "Away from points",
+  "@fxAwayFromPoints": {
+    "description": "Effect controls — an option of Origin on Ring wave: rings start anywhere on the frame at least Clearance away from the points."
+  },
+  "fxClearance": "Clearance",
+  "@fxClearance": {
+    "description": "Effect controls — a control on Ring wave: how far from every point a ring starts, in pixels."
+  },
+  "fxGradient1": "Gradient 1",
+  "@fxGradient1": {
+    "description": "Effect controls — a colour on Label points: the first stop of the Gradient option of Flash colour."
+  },
+  "fxGradient2": "Gradient 2",
+  "@fxGradient2": {
+    "description": "Effect controls — a colour on Label points: the second stop of the Gradient."
+  },
+  "fxGradient3": "Gradient 3",
+  "@fxGradient3": {
+    "description": "Effect controls — a colour on Label points: the third stop of the Gradient."
+  },
+  "fxGradient4": "Gradient 4",
+  "@fxGradient4": {
+    "description": "Effect controls — a colour on Label points: the fourth stop of the Gradient."
+  },
+  "fxGradientStops": "Gradient stops",
+  "@fxGradientStops": {
+    "description": "Effect controls — a control on Label points: how many colours the Gradient runs through, 2 to 4."
+  },
+  "fxGrowMax": "Grow max",
+  "@fxGrowMax": {
+    "description": "Effect controls — a control on Ring wave: the most a ring makes what it crosses grow, per cent."
+  },
+  "fxGrowMin": "Grow min",
+  "@fxGrowMin": {
+    "description": "Effect controls — a control on Ring wave: the least a ring makes what it crosses grow, per cent."
+  },
+  "fxMiddle": "Middle",
+  "@fxMiddle": {
+    "description": "Effect controls — an option of Vertical anchor on Label points: the middle of the label's height."
+  },
+  "fxVerticalAnchor": "Vertical anchor",
+  "@fxVerticalAnchor": {
+    "description": "Effect controls — a control on Label points: which part of the label's height sits at its point and what it turns about."
+  },
+  "fxTypeFill": "Type fill",
+  "@fxTypeFill": {
+    "description": "Effect name: rows of words, each stretched to fill the room a Region layer leaves along its row."
+  },
+  "fxWords": "Words",
+  "@fxWords": {
+    "description": "Effect controls — a control on Type fill: the words, between bars, set left to right in every row."
+  },
+  "fxRegionLayer": "Region layer",
+  "@fxRegionLayer": {
+    "description": "Effect controls — a control on Type fill: the layer that says where the words may go."
+  },
+  "fxRegionPlacement": "Region placement",
+  "@fxRegionPlacement": {
+    "description": "Effect controls — a control on Type fill: where the Region layer's picture sits on this one."
+  },
+  "fxRegionFrom": "Region from",
+  "@fxRegionFrom": {
+    "description": "Effect controls — a control on Type fill: whether the region is where the Region layer is opaque or where it is bright."
+  },
+  "fxInvertRegion": "Invert region",
+  "@fxInvertRegion": {
+    "description": "Effect controls — a checkbox on Type fill: fill where the region is not."
+  },
+  "fxCutWords": "Cut words",
+  "@fxCutWords": {
+    "description": "Effect controls — a checkbox on Type fill: keep each word at its column's width and let the region's edge cut it, instead of stretching it."
+  },
+  "fxRowGap": "Row gap",
+  "@fxRowGap": {
+    "description": "Effect controls — a control on Type fill: the room between one row and the next, in pixels."
+  },
+  "fxWordGap": "Word gap",
+  "@fxWordGap": {
+    "description": "Effect controls — a control on Type fill: the room between the words of a row, in pixels."
+  },
+  "fxMinWidth": "Min width",
+  "@fxMinWidth": {
+    "description": "Effect controls — a control on Type fill: a stretch narrower than this is left empty, in pixels."
+  },
+  "fxOrder": "Order",
+  "@fxOrder": {
+    "description": "Effect controls — a control on Type fill: which word each column of a row has."
+  },
+  "fxInTurn": "In turn",
+  "@fxInTurn": {
+    "description": "Effect controls — an option of Order on Type fill: the same order of words in every row."
+  },
+  "fxShiftPerRow": "Shift per row",
+  "@fxShiftPerRow": {
+    "description": "Effect controls — an option of Order on Type fill: the list of words moved on one word a row."
+  },
+  "fxVaryBy": "Vary by",
+  "@fxVaryBy": {
+    "description": "Effect controls — a menu on the Value noise driver: what makes the copies wander differently (Nothing, Copy, Position)."
+  },
+  "fxCopy": "Copy",
+  "@fxCopy": {
+    "description": "Effect controls — an option on the Oscillator and Value noise drivers: vary by the number of the copy."
+  },
+  "fxPhaseFrom": "Phase from",
+  "@fxPhaseFrom": {
+    "description": "Effect controls — a menu on the Oscillator driver: whether each copy's place on the wave comes from its number or its position."
+  },
+  "fxWaveAngle": "Wave angle",
+  "@fxWaveAngle": {
+    "description": "Effect controls — a dial on the Oscillator driver: the direction the wave travels across the points."
+  },
+  "fxPhasePerCopy": "Phase per copy",
+  "@fxPhasePerCopy": {
+    "description": "Effect controls — a control on the Oscillator driver: how much further along the wave each copy is."
   },
   "fxSize": "Size",
   "@fxSize": {
@@ -5772,6 +6100,50 @@
   "@keyTurnSnappingOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
+  "keyTurnLoopingOnOrOff": "Turn looping on or off",
+  "@keyTurnLoopingOnOrOff": {
+    "description": "Keyboard shortcut action: switch playback between looping the work area and playing it once. Vegas puts this on Q."
+  },
+  "keyGroupThePickedClips": "Group the picked clips",
+  "@keyGroupThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: put the picked clips in one group, so they are picked and moved together. Vegas puts this on G."
+  },
+  "keyTakeThePickedClipsOutOfTheirGroup": "Take the picked clips out of their group",
+  "@keyTakeThePickedClipsOutOfTheirGroup": {
+    "description": "Keyboard shortcut action in the Cut timeline: the picked clips leave the group they are in. Vegas puts this on U."
+  },
+  "keyShowOrHideSpeedLines": "Show or hide speed lines",
+  "@keyShowOrHideSpeedLines": {
+    "description": "Keyboard shortcut action: show or hide the speed line drawn across each picture clip in the Cut timeline. Speed, never velocity."
+  },
+  "keyShowOrHideTheVolumeEnvelope": "Show or hide the volume envelope",
+  "@keyShowOrHideTheVolumeEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its volume over time. Vegas puts this on V."
+  },
+  "keyShowOrHideThePanEnvelope": "Show or hide the pan envelope",
+  "@keyShowOrHideThePanEnvelope": {
+    "description": "Keyboard shortcut action in the Cut timeline: show or hide the line across a track that sets its left-right balance over time. Vegas puts this on P."
+  },
+  "keySwitchThePickedClipsToTheirNextTake": "Switch the picked clips to their next take",
+  "@keySwitchThePickedClipsToTheirNextTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the next of its takes, the other recordings it holds of the same moment. Vegas puts this on T."
+  },
+  "keySwitchThePickedClipsToTheirPreviousTake": "Switch the picked clips to their previous take",
+  "@keySwitchThePickedClipsToTheirPreviousTake": {
+    "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
+  },
+  "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
+  "@keyPasteAClipSAttributesOntoThePickedClips": {
+    "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
+  },
+  "keyMinimiseEveryTrackOrRestoreThem": "Minimise every track, or restore them",
+  "@keyMinimiseEveryTrackOrRestoreThem": {
+    "description": "Keyboard shortcut action in the Cut timeline: every track goes to its smallest height, or back to the height it had."
+  },
+  "keyAddARegionOverTheWorkArea": "Add a region over the work area",
+  "@keyAddARegionOverTheWorkArea": {
+    "description": "Keyboard shortcut action: add a marker with a length, running from the start to the end of the work area. Vegas puts this on R."
+  },
   "keyTurnLinkedSelectionOnOrOff": "Turn linked selection on or off",
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
@@ -6214,6 +6586,10 @@
   "@keymapDragBreakHandles": {
     "description": "Dragging row: the modifier that, held as a handle drag begins in the Graph editor, lets one handle of a keyframe move without the other, or joins two that were apart."
   },
+  "keymapDragCut": "Clip drags in Cut",
+  "@keymapDragCut": {
+    "description": "Dragging row in Settings → Shortcuts: which editor's mouse habits the Cut timeline follows. Lumit: Alt drags a copy and Shift stretches an edge. Vegas: Ctrl drags a copy or stretches an edge, Alt slips and Ctrl+Alt slides."
+  },
   "keymapExported": "Keymap exported.",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -6290,6 +6666,10 @@
   "keymapWheelShift": "Shift",
   "@keymapWheelShift": {
     "description": "Scroll wheel modifier choice: the Shift key."
+  },
+  "keymapWheelBare": "No key",
+  "@keymapWheelBare": {
+    "description": "Scroll wheel modifier choice: the wheel on its own, with no key held. Vegas zooms the timeline this way."
   },
   "keymapWheelZoomTime": "Zoom the Timeline",
   "@keymapWheelZoomTime": {
@@ -7114,6 +7494,10 @@
   "@menuTogglePathKey": {
     "description": "Layer ▸ Mask and shape path submenu item: keys the picked path's shape at the playhead, or takes away the key already there."
   },
+  "menuPathClosed": "Closed",
+  "@menuPathClosed": {
+    "description": "Layer ▸ Mask and shape path submenu item, ticked while the picked path is closed: closes an open path or opens a closed one."
+  },
   "menuToggleHoldKeyframe": "Toggle hold keyframe",
   "@menuToggleHoldKeyframe": {
     "description": "Menu item."
@@ -7621,6 +8005,11 @@
     "description": "Project panel column heading: where a footage item's file is. Shown in capitals by the style, so write it sentence case.",
     "type": "text"
   },
+  "projectColumnDate": "Date",
+  "@projectColumnDate": {
+    "description": "Project panel column heading: when a footage item's file was last changed. Clicking it sorts by that. Shown in capitals by the style, so write it sentence case.",
+    "type": "text"
+  },
   "projectFooterComposition": "Composition",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -7642,10 +8031,6 @@
         "type": "int"
       }
     }
-  },
-  "projectEmpty": "No items yet — import footage or create a composition",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
   },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
@@ -8018,6 +8403,28 @@
   "settingsHardwareDecode": "Hardware video decoding",
   "@settingsHardwareDecode": {
     "description": "Settings window: the name of the tick that lets the graphics card decode video. On by default. Turning it off is slower, and is what to try when importing video freezes the computer."
+  },
+  "settingsPluginsOnCard": "Render plugins on the graphics card",
+  "@settingsPluginsOnCard": {
+    "description": "Settings window: the name of the tick that lets OFX plugins render on the graphics card where they support it. On by default. Turning it off keeps them on the processor, which is what to try when a plugin misbehaves with the graphics driver."
+  },
+  "settingsLargestPicture": "Largest picture",
+  "@settingsLargestPicture": {
+    "description": "Settings window, Preview and cache: the name of the dropdown that sets the widest and tallest picture Lumit makes while rendering, in pixels. Bigger lets a node graph keep a picture that reaches far past the frame, at the cost of memory."
+  },
+  "settingsLargestPictureSize": "{side} px ({memory})",
+  "@settingsLargestPictureSize": {
+    "description": "Settings window, Preview and cache: one choice in the Largest picture dropdown, a side in pixels and the memory one picture that size holds.",
+    "placeholders": {
+      "side": {
+        "type": "String",
+        "example": "16384"
+      },
+      "memory": {
+        "type": "String",
+        "example": "2.0 GB"
+      }
+    }
   },
   "settingsFullResolutionWhileDragging": "Full resolution while dragging",
   "@settingsFullResolutionWhileDragging": {
@@ -10689,6 +11096,30 @@
   "@cutQuantise": {
     "description": "A toggle on the Cut timeline's strip: while on, sound clips move in whole frames. Off, a sound clip can sit between two frames. One word."
   },
+  "cutSpeedLines": "Speed",
+  "@cutSpeedLines": {
+    "description": "A toggle on the Cut timeline's strip: while on, each picture clip shows its playback speed as a line across it that can be dragged, like Vegas's velocity envelope. One word. Speed, never velocity."
+  },
+  "cutGroup": "Group",
+  "@cutGroup": {
+    "description": "Cut timeline, clip right-click menu: put the picked clips in one group, so picking or moving one takes the rest. One word."
+  },
+  "cutUngroup": "Ungroup",
+  "@cutUngroup": {
+    "description": "Cut timeline, clip right-click menu: take the picked clips out of their group. One word."
+  },
+  "cutSpeedMenu": "Speed",
+  "@cutSpeedMenu": {
+    "description": "Cut timeline, clip right-click menu: the submenu holding the clip's speed commands. One word."
+  },
+  "cutCopySpeed": "Copy speed",
+  "@cutCopySpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: remember this clip's speed line, its points and curves, to paste onto other clips."
+  },
+  "cutPasteSpeed": "Paste speed",
+  "@cutPasteSpeed": {
+    "description": "Cut timeline, clip menu, Speed submenu: give every picked picture clip the speed line copied last, stretched to each clip's length."
+  },
   "cutSwitchOn": "{name} on",
   "@cutSwitchOn": {
     "description": "Status line, after a Cut timeline switch is turned on from the keyboard. {name} is the switch's own label, such as Auto ripple.",
@@ -10714,6 +11145,14 @@
   "clipBlendFromLayer": "From layer",
   "@clipBlendFromLayer": {
     "description": "The first choice in a clip's Blend mode list, in the Effect controls panel with one clip of a Sequence layer picked and on the clip's menu in the Cut timeline. The clip uses its layer's blend mode and has none of its own."
+  },
+  "clipColour": "Clip colour",
+  "@clipColour": {
+    "description": "Submenu on a clip's right-click menu in the Cut timeline and the Audio timeline. It gives the picked clips a colour of their own, in place of their track's."
+  },
+  "clipColourFromTrack": "Track colour",
+  "@clipColourFromTrack": {
+    "description": "The first row of the Clip colour submenu. The clip takes its track's colour again and has none of its own."
   },
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {
@@ -10742,6 +11181,94 @@
   "cutNoTracks": "Drop footage here.",
   "@cutNoTracks": {
     "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
+  },
+  "cutMixVolume": "Vol",
+  "@cutMixVolume": {
+    "description": "Cut timeline, a sound track's header: short label inside the slider that sets how loud the track is. Keep it to three or four letters."
+  },
+  "cutMixLevel": "Level",
+  "@cutMixLevel": {
+    "description": "Cut timeline, a picture track's header: short label inside the slider that sets how see-through the track is (its opacity). Keep it short."
+  },
+  "cutPanCropTitle": "Pan/Crop",
+  "@cutPanCropTitle": {
+    "description": "Cut timeline: title of the window that sets which part of a clip's picture fills the frame, as Vegas's Pan/Crop window."
+  },
+  "cutPanCropX": "X",
+  "@cutPanCropX": {
+    "description": "Cut timeline, Pan/Crop window: label beside the across position of the box's centre, in pixels."
+  },
+  "cutPanCropY": "Y",
+  "@cutPanCropY": {
+    "description": "Cut timeline, Pan/Crop window: label beside the up-and-down position of the box's centre, in pixels."
+  },
+  "cutPanCropWidth": "Width",
+  "@cutPanCropWidth": {
+    "description": "Cut timeline, Pan/Crop window: label beside the width of the box, the part of the picture that fills the frame, in pixels."
+  },
+  "cutPanCropHeight": "Height",
+  "@cutPanCropHeight": {
+    "description": "Cut timeline, Pan/Crop window: label beside the height of the box, in pixels."
+  },
+  "cutPanCropRotation": "Rotation",
+  "@cutPanCropRotation": {
+    "description": "Cut timeline, Pan/Crop window: label beside how far the box is turned, in degrees."
+  },
+  "cutPanCropLockAspect": "Lock aspect",
+  "@cutPanCropLockAspect": {
+    "description": "Cut timeline, Pan/Crop window: checkbox that keeps the box's width and height in proportion while it is resized."
+  },
+  "cutPanCropFill": "Fill frame",
+  "@cutPanCropFill": {
+    "description": "Cut timeline, Pan/Crop window: button that puts the box back over the whole picture, unturned, so the clip fills the frame as it was."
+  },
+  "cutMenuSplit": "Split",
+  "@cutMenuSplit": {
+    "description": "Cut timeline, right-click menu on a clip: cut the picked clips in two at the playhead, as Vegas's Split."
+  },
+  "cutVolumeEnvelope": "Volume envelope",
+  "@cutVolumeEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its loudness over time, as Vegas's volume envelope. Ticked while shown."
+  },
+  "cutPanEnvelope": "Pan envelope",
+  "@cutPanEnvelope": {
+    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
+  },
+  "envelopePointReset": "Reset",
+  "@envelopePointReset": {
+    "description": "Volume or pan envelope, right-click a point: put it back to 0 dB, or to centre for pan."
+  },
+  "envelopeFlipAll": "Flip all points",
+  "@envelopeFlipAll": {
+    "description": "Volume or pan envelope, right-click the line: mirror every point, louder becomes quieter by the same amount, or left swaps with right. Vegas calls this Flip All Points."
+  },
+  "envelopeResetAll": "Reset all",
+  "@envelopeResetAll": {
+    "description": "Volume or pan envelope, right-click the line: remove every point and put the level back to 0 dB, or to centre for pan. Vegas calls this Reset All."
+  },
+  "cutSpeedLineHere": "Speed line",
+  "@cutSpeedLineHere": {
+    "description": "Cut timeline, a picture clip's Speed submenu: show or hide the line across this one clip that draws and edits its speed, as Vegas's velocity envelope on one event. Ticked while shown."
+  },
+  "cutTakeMenu": "Take",
+  "@cutTakeMenu": {
+    "description": "Cut timeline, right-click menu on a clip that holds several takes: submenu listing them, the one showing ticked, as Vegas's Take submenu. A take is another piece of media the same clip can show in its place."
+  },
+  "cutDeleteTake": "Delete take",
+  "@cutDeleteTake": {
+    "description": "Cut timeline, a clip's Take submenu: remove the take showing from the clip, which then shows the next one."
+  },
+  "cutPasteAttributes": "Paste attributes",
+  "@cutPasteAttributes": {
+    "description": "Cut timeline, right-click menu on a clip: give the picked clips the copied clip's effects, gain, opacity, blend mode, fades and speed, as Vegas's Paste Event Attributes."
+  },
+  "cutMinimiseTracks": "Minimise all tracks",
+  "@cutMinimiseTracks": {
+    "description": "Cut timeline, right-click menu on a track's header: make every track as short as it goes, or, when they all already are, put them back to the usual height. As Vegas's Minimize All Tracks."
+  },
+  "cutSelectToEnd": "Select to end",
+  "@cutSelectToEnd": {
+    "description": "Cut timeline, right-click menu on a clip: select this clip and every clip after it, on the tracks in play, as Vegas's Select events to end."
   },
   "cutDragDelta": "{delta} f",
   "@cutDragDelta": {
@@ -12622,6 +13149,20 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
+  "viewerSpeed": "Playback speed",
+  "@viewerSpeed": {
+    "description": "Tooltip of the Viewer's playback speed picker: how fast playback runs, at the composition's own rate or slower. A preview setting, the export is unchanged."
+  },
+  "viewerSpeedTimes": "{times}×",
+  "@viewerSpeedTimes": {
+    "description": "One choice of the Viewer's playback speed, as a multiple of the composition's rate: 1×, 0.5× or 0.25×.",
+    "placeholders": {
+      "times": {
+        "type": "double",
+        "format": "decimalPattern"
+      }
+    }
+  },
   "viewerReadoutDegraded": "{source} → {preview}",
   "@viewerReadoutDegraded": {
     "description": "The size part of the Viewer bar's reading while the preview was made at fewer pixels than the composition has, set in mono and drawn in the warning colour: the composition's own pixel size, an arrow, and the pixel size the preview was actually made at. Both parts are numbers, so only the arrow is translatable.",
@@ -13701,10 +14242,6 @@
   "@exportColourSpaceDisplayP3": {
     "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
   },
-  "exportColourStated": "The file states this space in its own header.",
-  "@exportColourStated": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
   "exportAudio44k": "44.100 kHz",
   "@exportAudio44k": {
     "description": "Export dialog, Audio section, sample-rate list: 44100 hertz, the CD rate. A number and its unit; keep the same decimal style as the other two rates."
@@ -13935,6 +14472,50 @@
   "menuSetSpeed": "Set speed…",
   "@menuSetSpeed": {
     "description": "Context-menu item on a point of a speed envelope: opens a small box to type the point's exact playback speed in per cent."
+  },
+  "speedCurveLinear": "Linear",
+  "@speedCurveLinear": {
+    "description": "Speed envelope, right-click a line between two points: the speed changes evenly from one point to the next. Vegas calls this Linear."
+  },
+  "speedCurveFast": "Fast",
+  "@speedCurveFast": {
+    "description": "Speed envelope curve: the speed changes quickly just after the first point, then settles into the next. Vegas calls this Fast."
+  },
+  "speedCurveSlow": "Slow",
+  "@speedCurveSlow": {
+    "description": "Speed envelope curve: the speed changes slowly at first, then quickly into the next point. Vegas calls this Slow."
+  },
+  "speedCurveSmooth": "Smooth",
+  "@speedCurveSmooth": {
+    "description": "Speed envelope curve: the speed eases out of the first point and into the next. Vegas calls this Smooth."
+  },
+  "speedCurveSharp": "Sharp",
+  "@speedCurveSharp": {
+    "description": "Speed envelope curve: the speed changes fastest near both points and slowest between them. Vegas calls this Sharp."
+  },
+  "speedCurveHold": "Hold",
+  "@speedCurveHold": {
+    "description": "Speed envelope curve: the speed stays as it is until the next point, then jumps. Vegas calls this Hold."
+  },
+  "speedFlip": "Flip",
+  "@speedFlip": {
+    "description": "Speed line, right-click menu: mirror every point's speed about 100 per cent, so a slow-down becomes the same speed-up. Vegas calls this Flip."
+  },
+  "speedThin": "Thin",
+  "@speedThin": {
+    "description": "Speed line, right-click menu: remove the points that change nothing, those already on the straight line between their neighbours. Vegas calls this Thin."
+  },
+  "speedPointAdd": "Add point",
+  "@speedPointAdd": {
+    "description": "Speed envelope, right-click the line: put a new point where the click was."
+  },
+  "speedPointReset": "Reset to 100%",
+  "@speedPointReset": {
+    "description": "Speed envelope, right-click a point: put the point back to normal speed, 100 per cent."
+  },
+  "speedPointDelete": "Delete point",
+  "@speedPointDelete": {
+    "description": "Speed envelope, right-click a point: remove it. The two points at a clip's ends can't be removed."
   },
   "speedGuideEveryFrame": "Every frame {speed}",
   "@speedGuideEveryFrame": {
@@ -15490,9 +16071,9 @@
   "@statusHintShape": {
     "description": "Right-hand end of the status bar while one of the five shape tools is armed: one quiet line saying what a drag makes in the Viewer and what the Alt and Shift keys do to it. The parts are separated by a middle dot."
   },
-  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Esc abandons the path",
+  "statusHintPen": "Drag pulls out a point's handles · Alt pulls out one only · Backspace removes the last point · Enter or Esc leaves the path open",
   "@statusHintPen": {
-    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
+    "description": "Right-hand end of the status bar while the Pen tool is armed: one quiet line saying what a drag and the Alt, Backspace, Enter and Esc keys do while a path is being drawn in the Viewer. The parts are separated by a middle dot."
   },
   "statusHintConvertVertex": "Click makes a point sharp or smooth · Drag from a point pulls out its handles · Drag a handle moves it alone",
   "@statusHintConvertVertex": {
@@ -16625,6 +17206,10 @@
   "@viewerGpuMismatch": {
     "description": "Shown in the middle of the Viewer, in place of the picture, on a Linux laptop with two graphics cards when the picture and the window have ended up on different cards and cannot be shared. 'NVIDIA Performance mode' and 'PRIME render offload' are the names the NVIDIA driver and Linux desktops use for the two fixes, so keep them recognisable."
   },
+  "viewerPictureCut": "Cut to the largest picture",
+  "@viewerPictureCut": {
+    "description": "Viewer, bottom right in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Clicking it opens that setting."
+  },
   "fxFoldCompositing": "Compositing",
   "@fxFoldCompositing": {
     "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
@@ -17738,10 +18323,6 @@
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
   },
-  "settingsShareLimitHint": "Applies to footage in shared projects.",
-  "@settingsShareLimitHint": {
-    "description": "Description under the Footage upload limit row in Settings."
-  },
   "settingsShareNoLimit": "No limit",
   "@settingsShareNoLimit": {
     "description": "Option in the footage upload and download limit lists in Settings."
@@ -17798,10 +18379,6 @@
   "settingsExtensionsInstall": "Install from a folder",
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
-  },
-  "settingsExtensionsInstallHint": "Pick the folder containing extension.json.",
-  "@settingsExtensionsInstallHint": {
-    "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
   },
   "settingsExtensionsFolder": "Extensions folder",
   "@settingsExtensionsFolder": {
@@ -17901,6 +18478,10 @@
   "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
+  },
+  "extensionNative": "Runs its own code on this computer",
+  "@extensionNative": {
+    "description": "Quiet note above extensionWebNote in the extension install question, for an extension that carries an OFX plugin: a program of its own, held to none of Lumit's limits. The It cannot list is left out then, as it would not hold."
   },
   "extensionInstall": "Install",
   "@extensionInstall": {
@@ -21652,5 +22233,713 @@
   "easingBuiltIn": "Built in",
   "@easingBuiltIn": {
     "description": "Easing panel library: the tab showing the easing shapes that come with Lumit, beside the Yours tab. Very short."
+  },
+  "flareWindowTitle": "Flare",
+  "@flareWindowTitle": {
+    "description": "The Flare window, opened from Edit flare… on Sprite flare: its title."
+  },
+  "flareElements": "Elements",
+  "@flareElements": {
+    "description": "Flare window: heading over the list of elements (glows, rays, ghosts) the flare is made of."
+  },
+  "flareAdd": "Add",
+  "@flareAdd": {
+    "description": "Flare window: the button beside the Elements heading that opens the menu of element kinds to add. Shown with a plus."
+  },
+  "flareMovingLight": "Moving light",
+  "@flareMovingLight": {
+    "description": "Flare window, over the preview: the option that moves the light slowly round the frame so the flare's travel can be seen."
+  },
+  "flareStillLight": "Still",
+  "@flareStillLight": {
+    "description": "Flare window, over the preview: the option beside Moving light that holds the light where it was dragged."
+  },
+  "flareFit": "Fit",
+  "@flareFit": {
+    "description": "Flare window, over the preview: show the whole frame scaled to fit. Beside 100%."
+  },
+  "flareActualSize": "100%",
+  "@flareActualSize": {
+    "description": "Flare window, over the preview: show the flare at one comp pixel per screen pixel. Beside Fit."
+  },
+  "flareBuiltIn": "Built in",
+  "@flareBuiltIn": {
+    "description": "Flare window presets strip: the tab showing the flares that come with Lumit, beside the Yours tab. Very short."
+  },
+  "flareYours": "Yours",
+  "@flareYours": {
+    "description": "Flare window presets strip: the tab showing the flares the user has saved. Very short."
+  },
+  "flareAllGroups": "All",
+  "@flareAllGroups": {
+    "description": "Flare window presets strip: the chip that shows every group of built-in flares at once."
+  },
+  "flareDuplicate": "Duplicate",
+  "@flareDuplicate": {
+    "description": "Flare window: make a copy of the selected element, in its right-click menu and as a button over its controls."
+  },
+  "flareDelete": "Delete",
+  "@flareDelete": {
+    "description": "Flare window: remove the selected element or one of the user's saved flares, in a right-click menu and as a button."
+  },
+  "flareRename": "Rename…",
+  "@flareRename": {
+    "description": "Flare window presets strip: right-click on one of the user's saved flares, give it another name."
+  },
+  "flareNameTitle": "Flare name",
+  "@flareNameTitle": {
+    "description": "Flare window: the title of the small prompt asking what to call a flare being saved or renamed."
+  },
+  "flareImport": "Import…",
+  "@flareImport": {
+    "description": "Flare window, footer button: open a .flare file and take its elements."
+  },
+  "flareShare": "Share…",
+  "@flareShare": {
+    "description": "Flare window, footer button: opens a menu with Export to a file and Copy as text."
+  },
+  "flareExportFile": "Export to a file…",
+  "@flareExportFile": {
+    "description": "Flare window, Share menu: write the design to a .flare file."
+  },
+  "flareCopyJson": "Copy as text",
+  "@flareCopyJson": {
+    "description": "Flare window, Share menu: put the design's text on the clipboard."
+  },
+  "flareCopied": "Copied",
+  "@flareCopied": {
+    "description": "Flare window, footer line after Copy as text: the design's text is on the clipboard."
+  },
+  "flareSave": "Save to your flares",
+  "@flareSave": {
+    "description": "Flare window, footer button: save this design to the user's own flares, offered in every project."
+  },
+  "flareUse": "Use flare",
+  "@flareUse": {
+    "description": "Flare window, footer button: put this design on the effect and close the window."
+  },
+  "flareNotAFlare": "Not a flare file",
+  "@flareNotAFlare": {
+    "description": "Flare window, footer line: the file picked by Import is not a flare design."
+  },
+  "flareNotSaved": "Could not save",
+  "@flareNotSaved": {
+    "description": "Flare window, footer line: saving or exporting the design failed."
+  },
+  "flareFileType": "Flare",
+  "@flareFileType": {
+    "description": "File picker: the label of the .flare file type filter."
+  },
+  "flareBlack": "Black",
+  "@flareBlack": {
+    "description": "Flare window, preview background choice: the flare on black."
+  },
+  "flareFrame": "Frame",
+  "@flareFrame": {
+    "description": "Flare window, preview background choice: the flare over the composition's picture at the playhead."
+  },
+  "fxEditFlare": "Edit flare…",
+  "@fxEditFlare": {
+    "description": "Effect controls: Sprite flare's button row that opens the Flare window."
+  },
+  "fxFringe": "Fringe",
+  "@fxFringe": {
+    "description": "Flare window: a control on several elements, how much rainbow colour is pulled across the shape."
+  },
+  "fxThickness": "Thickness",
+  "@fxThickness": {
+    "description": "Flare window: a control on Rays, Star, Streak, Ring and Halo, the line's width in pixels."
+  },
+  "fxHalo": "Halo",
+  "@fxHalo": {
+    "description": "Flare window: the Halo kind of element, a rainbow arc round the light that grows away from the centre."
+  },
+  "fxRing": "Ring",
+  "@fxRing": {
+    "description": "Flare window: the Ring kind of element, a circle round the light."
+  },
+  "fxGhost": "Ghost",
+  "@fxGhost": {
+    "description": "Flare window: the Ghost kind of element, one iris shape on the axis through the centre."
+  },
+  "fxOrbs": "Orbs",
+  "@fxOrbs": {
+    "description": "Flare window: the Orbs kind of element, soft discs scattered across the whole frame."
+  },
+  "fxPicture": "Picture",
+  "@fxPicture": {
+    "description": "Flare window: the Picture kind of element, a texture placed anywhere."
+  },
+  "fxSolid": "Solid",
+  "@fxSolid": {
+    "description": "Flare window, colour mode: one colour."
+  },
+  "fxMixed": "Mixed",
+  "@fxMixed": {
+    "description": "Flare window, colour mode: each copy of the element picks one of a list of colours."
+  },
+  "fxRainbow": "Rainbow",
+  "@fxRainbow": {
+    "description": "Flare window, colour mode: a spectrum across the element."
+  },
+  "fxResponse": "Response",
+  "@fxResponse": {
+    "description": "Flare window: the group of controls saying how an element brightens as the light nears the centre or the edges."
+  },
+  "fxIgnore": "Ignore",
+  "@fxIgnore": {
+    "description": "Flare window: the group of switches that let an element ignore the effect's Size, Brightness, Rotation or Edge fade."
+  },
+  "fxNothing": "Nothing",
+  "@fxNothing": {
+    "description": "An option meaning no source. Flare window, Brighter near: the element does not respond to where the light is. Value noise driver, Vary by: every copy moves together."
+  },
+  "fxTheCentre": "The centre",
+  "@fxTheCentre": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's centre."
+  },
+  "fxTheEdges": "The edges",
+  "@fxTheEdges": {
+    "description": "Flare window, Brighter near: the element brightens as the light nears the frame's edges."
+  },
+  "fxBrighterNear": "Brighter near",
+  "@fxBrighterNear": {
+    "description": "Flare window, Response group: which place the element brightens towards."
+  },
+  "fxSmudge": "Smudge",
+  "@fxSmudge": {
+    "description": "Flare window, Texture option: a smudged lens texture."
+  },
+  "fxCaustic": "Caustic",
+  "@fxCaustic": {
+    "description": "Flare window, Texture option: a rippling light texture."
+  },
+  "fxSpecks": "Specks",
+  "@fxSpecks": {
+    "description": "Flare window, Texture option: fine specks of dust."
+  },
+  "fxReach": "Reach",
+  "@fxReach": {
+    "description": "Flare window: a control on Orbs and Dirt, how far from the light in pixels they are still lit."
+  },
+  "fxCore": "Core",
+  "@fxCore": {
+    "description": "Flare window, Glow: the brightness of the tight hot centre."
+  },
+  "fxCoreSize": "Core size",
+  "@fxCoreSize": {
+    "description": "Flare window, Glow: the hot centre's size as a fraction of the glow."
+  },
+  "fxShimmer": "Shimmer",
+  "@fxShimmer": {
+    "description": "Flare window, Rays: how much the rays' lengths flicker as Evolution turns."
+  },
+  "fxEdgeFade": "Edge fade",
+  "@fxEdgeFade": {
+    "description": "Flare window, Ignore group: the switch that lets an element ignore the fade at the frame's edge."
+  },
+  "fxEdgeWidth": "Edge width",
+  "@fxEdgeWidth": {
+    "description": "Flare window, Ghost: the width of the bright rim."
+  },
+  "fxLengthVariation": "Length variation",
+  "@fxLengthVariation": {
+    "description": "Flare window, Rays: how much each ray's length differs from the others."
+  },
+  "fxSizeVariation": "Size variation",
+  "@fxSizeVariation": {
+    "description": "Flare window, Ghosts and Orbs: how much each copy's size differs from the others."
+  },
+  "fxBrightnessVariation": "Brightness variation",
+  "@fxBrightnessVariation": {
+    "description": "Flare window, Ghosts: how much each ghost's brightness differs from the others."
+  },
+  "fxArcFeather": "Arc feather",
+  "@fxArcFeather": {
+    "description": "Flare window, Ring: how softly the arc's two ends fade out."
+  },
+  "fxSecondSet": "Second set",
+  "@fxSecondSet": {
+    "description": "Flare window, Star: the brightness of a second set of points rotated half a step."
+  },
+  "fxSecondSetLength": "Second set length",
+  "@fxSecondSetLength": {
+    "description": "Flare window, Star: the second set's length as a fraction of the first."
+  },
+  "fxFacesTheLight": "Faces the light",
+  "@fxFacesTheLight": {
+    "description": "Flare window, Ghost and Picture: the switch that turns the shape with the axis from the light."
+  },
+  "fxPointsToTheCentre": "Points to the centre",
+  "@fxPointsToTheCentre": {
+    "description": "Flare window, Streak: the switch that turns the streak along the axis to the centre."
+  },
+  "fxGrowsAwayFromTheCentre": "Grows away from the centre",
+  "@fxGrowsAwayFromTheCentre": {
+    "description": "Flare window, Halo: how much the halo's radius grows as the light moves away from the centre."
+  },
+  "fxOnTheLight": "On the light",
+  "@fxOnTheLight": {
+    "description": "Flare window, Add menu heading: the kinds drawn on the light itself."
+  },
+  "fxAlongTheAxis": "Along the axis",
+  "@fxAlongTheAxis": {
+    "description": "Flare window, Add menu heading: the kinds placed on the line from the light through the centre."
+  },
+  "fxAcrossTheFrame": "Across the frame",
+  "@fxAcrossTheFrame": {
+    "description": "Flare window, Add menu heading: the kinds scattered over the whole frame."
+  },
+  "fxLightFrom": "Light from",
+  "@fxLightFrom": {
+    "description": "Effect controls: Sprite flare's choice of where the light comes from."
+  },
+  "fx3dPoint": "3D point",
+  "@fx3dPoint": {
+    "description": "Effect controls, Sprite flare's Light from option: the light is a point in the comp's 3D space."
+  },
+  "fxBrightSpots": "Bright spots",
+  "@fxBrightSpots": {
+    "description": "Effect controls, Sprite flare's Light from option: the lights are found in the bright parts of the layer's picture."
+  },
+  "fxLightZ": "Light z",
+  "@fxLightZ": {
+    "description": "Effect controls: Sprite flare's depth of its 3D point."
+  },
+  "fxUseLightColour": "Use light colour",
+  "@fxUseLightColour": {
+    "description": "Effect controls, Sprite flare: each light's own colour tints its flare."
+  },
+  "fxUseLightIntensity": "Use light intensity",
+  "@fxUseLightIntensity": {
+    "description": "Effect controls, Sprite flare: each Light layer's intensity scales its flare."
+  },
+  "fxSizeWithDistance": "Size with distance",
+  "@fxSizeWithDistance": {
+    "description": "Effect controls, Sprite flare: a light further from the camera draws a smaller flare."
+  },
+  "fxHiding": "Hiding",
+  "@fxHiding": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that hide the light behind a layer."
+  },
+  "fxFlicker": "Flicker",
+  "@fxFlicker": {
+    "description": "Effect controls, Sprite flare: the twirl of rows that make the flare's brightness dip at random."
+  },
+  "fxHideBehind": "Hide behind",
+  "@fxHideBehind": {
+    "description": "Effect controls, Sprite flare: the layer that hides the light where it covers it."
+  },
+  "fxLuma": "Luma",
+  "@fxLuma": {
+    "description": "Effect controls, Sprite flare's Channel option: the layer's brightness hides the light."
+  },
+  "fxLightSize": "Light size",
+  "@fxLightSize": {
+    "description": "Effect controls, Sprite flare: how wide the light is, for how much of it a layer hides."
+  },
+  "fxEndWidth": "End width",
+  "@fxEndWidth": {
+    "description": "Flare window, Streak: how wide the line still is at its ends, as a fraction of its middle."
+  },
+  "fxNotches": "Notches",
+  "@fxNotches": {
+    "description": "Flare window, Ghost and Ghosts: how deep the small dents at each corner of the iris shape are, where a real lens's blades overlap."
+  },
+  "fxTextureLayer": "Texture layer",
+  "@fxTextureLayer": {
+    "description": "Effect controls, Sprite flare: the layer whose picture the flare's elements can take as their texture."
+  },
+  "fxTextures": "Textures",
+  "@fxTextures": {
+    "description": "Effect controls, Sprite flare: the twirl holding the Texture layer row."
+  },
+  "fxHexBokeh": "Hex bokeh",
+  "@fxHexBokeh": {
+    "description": "Flare window, Texture option: out-of-focus highlights shaped like hexagons."
+  },
+  "fxWaterDrops": "Water drops",
+  "@fxWaterDrops": {
+    "description": "Flare window, Texture option: rain drops on the lens."
+  },
+  "fxGrain": "Grain",
+  "@fxGrain": {
+    "description": "Flare window, Texture option: fine sparkling grain."
+  },
+  "fxMaskPoints": "Mask points",
+  "@fxMaskPoints": {
+    "description": "Effect controls, Sprite flare's Light from option: a light on each corner of one of the layer's masks."
+  },
+  "fxGlass": "Glass",
+  "@fxGlass": {
+    "description": "Effect name: the Glass effect, one of the effects that come with Lumit."
+  },
+  "fxShapeLayer": "Shape layer",
+  "@fxShapeLayer": {
+    "description": "Effect controls: the layer row on Glass."
+  },
+  "fxRoundedRectangle": "Rounded rectangle",
+  "@fxRoundedRectangle": {
+    "description": "Effect controls: an option of Shape on Glass."
+  },
+  "fxShapeChannel": "Shape channel",
+  "@fxShapeChannel": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxInvertedAlpha": "Inverted alpha",
+  "@fxInvertedAlpha": {
+    "description": "Effect controls: an option of Shape channel on Glass."
+  },
+  "fxInvertedLuminance": "Inverted luminance",
+  "@fxInvertedLuminance": {
+    "description": "Effect controls: an option of Shape channel on Glass."
+  },
+  "fxCentreXPercent": "Centre X (%)",
+  "@fxCentreXPercent": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxCentreYPercent": "Centre Y (%)",
+  "@fxCentreYPercent": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxShapeRotation": "Shape rotation",
+  "@fxShapeRotation": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxFrost": "Frost",
+  "@fxFrost": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxSplay": "Splay",
+  "@fxSplay": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxMagnify": "Magnify",
+  "@fxMagnify": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxMagnifyFalloff": "Magnify falloff",
+  "@fxMagnifyFalloff": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxEffectScale": "Effect scale",
+  "@fxEffectScale": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxEdgeHighlight": "Edge highlight",
+  "@fxEdgeHighlight": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxRimWidth": "Rim width",
+  "@fxRimWidth": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxLightAngle": "Light angle",
+  "@fxLightAngle": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxLightIntensity": "Light intensity",
+  "@fxLightIntensity": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxTintAmount": "Tint amount",
+  "@fxTintAmount": {
+    "description": "Effect controls: a control on Glass."
+  },
+  "fxBox": "Box",
+  "@fxBox": {
+    "description": "Effect controls: an option of Shape on Falloff."
+  },
+  "fxSweep": "Sweep",
+  "@fxSweep": {
+    "description": "Effect controls: an option of Shape on Falloff."
+  },
+  "fxRepetitions": "Repetitions",
+  "@fxRepetitions": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxEaseIn": "Ease in",
+  "@fxEaseIn": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxEaseOut": "Ease out",
+  "@fxEaseOut": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxBell": "Bell",
+  "@fxBell": {
+    "description": "Effect controls: an option of Curve on Falloff."
+  },
+  "fxInvertFalloff": "Invert falloff",
+  "@fxInvertFalloff": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxBinary": "Binary",
+  "@fxBinary": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxCellSize": "Cell size",
+  "@fxCellSize": {
+    "description": "Effect controls: a control on Falloff."
+  },
+  "fxGreyscale": "Greyscale",
+  "@fxGreyscale": {
+    "description": "Effect controls: an option of Output on Falloff."
+  },
+  "fxFadeLayer": "Fade layer",
+  "@fxFadeLayer": {
+    "description": "Effect controls: an option of Output on Falloff."
+  },
+  "fxConicalGradient": "Conical gradient",
+  "@fxConicalGradient": {
+    "description": "Effect name: the Conical gradient effect, one of the effects that come with Lumit."
+  },
+  "fxStartCentre": "Start centre",
+  "@fxStartCentre": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxStartRadius": "Start radius",
+  "@fxStartRadius": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxEndCentre": "End centre",
+  "@fxEndCentre": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxEndRadius": "End radius",
+  "@fxEndRadius": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPad": "Pad",
+  "@fxPad": {
+    "description": "Effect controls: an option of Spread on Conical gradient."
+  },
+  "fxInsideLayer": "Inside layer",
+  "@fxInsideLayer": {
+    "description": "Effect controls: an option of Paint on Conical gradient."
+  },
+  "fxWholeFrame": "Whole frame",
+  "@fxWholeFrame": {
+    "description": "Effect controls: an option of Paint on Conical gradient."
+  },
+  "fxPosition1": "Position 1",
+  "@fxPosition1": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition2": "Position 2",
+  "@fxPosition2": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition3": "Position 3",
+  "@fxPosition3": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxColour4": "Colour 4",
+  "@fxColour4": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition4": "Position 4",
+  "@fxPosition4": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxColour5": "Colour 5",
+  "@fxColour5": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPosition5": "Position 5",
+  "@fxPosition5": {
+    "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxSweepGradient": "Sweep gradient",
+  "@fxSweepGradient": {
+    "description": "Effect name: the Sweep gradient effect, one of the effects that come with Lumit."
+  },
+  "fxMultiPointGradient": "Multi-point gradient",
+  "@fxMultiPointGradient": {
+    "description": "Effect name: the Multi-point gradient effect, one of the effects that come with Lumit."
+  },
+  "fxPoint1": "Point 1",
+  "@fxPoint1": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence1": "Influence 1",
+  "@fxInfluence1": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint2": "Point 2",
+  "@fxPoint2": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence2": "Influence 2",
+  "@fxInfluence2": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint3": "Point 3",
+  "@fxPoint3": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence3": "Influence 3",
+  "@fxInfluence3": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint4": "Point 4",
+  "@fxPoint4": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence4": "Influence 4",
+  "@fxInfluence4": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint5": "Point 5",
+  "@fxPoint5": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence5": "Influence 5",
+  "@fxInfluence5": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxPoint6": "Point 6",
+  "@fxPoint6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxColour6": "Colour 6",
+  "@fxColour6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxInfluence6": "Influence 6",
+  "@fxInfluence6": {
+    "description": "Effect controls: a control on Multi-point gradient."
+  },
+  "fxGradientMap": "Gradient map",
+  "@fxGradientMap": {
+    "description": "Effect name: the Gradient map effect, one of the effects that come with Lumit."
+  },
+  "fxVoronoi": "Voronoi",
+  "@fxVoronoi": {
+    "description": "Effect name: the Voronoi effect, one of the effects that come with Lumit."
+  },
+  "fxCells": "Cells",
+  "@fxCells": {
+    "description": "Effect controls: an option of Mode on Voronoi."
+  },
+  "fxCheckerboard": "Checkerboard",
+  "@fxCheckerboard": {
+    "description": "Effect name: the Checkerboard effect, one of the effects that come with Lumit."
+  },
+  "fxHalftone": "Halftone",
+  "@fxHalftone": {
+    "description": "Effect name: the Halftone effect, one of the effects that come with Lumit."
+  },
+  "fxSquares": "Squares",
+  "@fxSquares": {
+    "description": "Effect controls: an option of Shape on Halftone."
+  },
+  "fxKeepColours": "Keep colours",
+  "@fxKeepColours": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxInk": "Ink",
+  "@fxInk": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxPaper": "Paper",
+  "@fxPaper": {
+    "description": "Effect controls: a control on Halftone."
+  },
+  "fxDithering": "Dithering",
+  "@fxDithering": {
+    "description": "Effect name: the Dithering effect, one of the effects that come with Lumit."
+  },
+  "fxOrdered": "Ordered",
+  "@fxOrdered": {
+    "description": "Effect controls: an option of Method on Dithering."
+  },
+  "fxPixelSize": "Pixel size",
+  "@fxPixelSize": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxColours": "Colours",
+  "@fxColours": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxDark": "Dark",
+  "@fxDark": {
+    "description": "Effect controls: a control on Dithering."
+  },
+  "fxErosion": "Erosion",
+  "@fxErosion": {
+    "description": "Effect name: the Erosion effect, one of the effects that come with Lumit."
+  },
+  "fxLightSweep": "Light sweep",
+  "@fxLightSweep": {
+    "description": "Effect name: the Light sweep effect, one of the effects that come with Lumit."
+  },
+  "fxLighting": "Lighting",
+  "@fxLighting": {
+    "description": "Effect name: the Lighting effect, one of the effects that come with Lumit."
+  },
+  "fxDirectional": "Directional",
+  "@fxDirectional": {
+    "description": "Effect controls: an option of Light on Lighting."
+  },
+  "fxLightPosition": "Light position",
+  "@fxLightPosition": {
+    "description": "Effect controls: a control on Lighting."
+  },
+  "fxLightRadius": "Light radius",
+  "@fxLightRadius": {
+    "description": "Effect controls: a control on Lighting."
+  },
+  "fxSide": "Side",
+  "@fxSide": {
+    "description": "Effect controls: a control on Stripes."
+  },
+  "fxBothSides": "Both sides",
+  "@fxBothSides": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxFront": "Front",
+  "@fxFront": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxBack": "Back",
+  "@fxBack": {
+    "description": "Effect controls: an option of Side on Stripes."
+  },
+  "fxScrape": "Scrape",
+  "@fxScrape": {
+    "description": "Effect name: the Scrape effect, one of the effects that come with Lumit."
+  },
+  "fxRoughness": "Roughness",
+  "@fxRoughness": {
+    "description": "Effect controls: a control on Scrape."
+  },
+  "fxBilateralBlur": "Bilateral blur",
+  "@fxBilateralBlur": {
+    "description": "Effect name: the Bilateral blur effect, one of the effects that come with Lumit."
+  },
+  "fxTolerance": "Tolerance",
+  "@fxTolerance": {
+    "description": "Effect controls: a control on Bilateral blur."
+  },
+  "fxFourPointWarp": "Four point warp",
+  "@fxFourPointWarp": {
+    "description": "Effect name: the Four point warp effect, one of the effects that come with Lumit."
+  },
+  "fxCurveTop": "Curve top",
+  "@fxCurveTop": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveRight": "Curve right",
+  "@fxCurveRight": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveBottom": "Curve bottom",
+  "@fxCurveBottom": {
+    "description": "Effect controls: a control on Four point warp."
+  },
+  "fxCurveLeft": "Curve left",
+  "@fxCurveLeft": {
+    "description": "Effect controls: a control on Four point warp."
   }
 }

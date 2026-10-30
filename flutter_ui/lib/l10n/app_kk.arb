@@ -1035,15 +1035,6 @@
   "@exportGroupTime": {
     "description": "Export dialog: the group naming how much is written and at what rate."
   },
-  "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
-  "@exportImageSequenceNote": {
-    "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
-    "placeholders": {
-      "extension": {
-        "type": "String"
-      }
-    }
-  },
   "exportKeepBoth": "Екеуін де сақтау",
   "@exportKeepBoth": {
     "description": "Button: keep the file that is there and export to a numbered name beside it, such as Scene_2.mp4."
@@ -5508,10 +5499,6 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
-  "projectEmpty": "No items yet — import footage or create a composition",
-  "@projectEmpty": {
-    "description": "Empty-state line in the Project panel."
-  },
   "projectFooterComposition": "Композиция",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
@@ -5614,10 +5601,6 @@
   "relinkEllipsis": "Relink…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
-  },
-  "reloadIcons": "Белгішелерді қайта жүктеу",
-  "@reloadIcons": {
-    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
   },
   "removeEffect": "Эффектіні алып тастау",
   "@removeEffect": {

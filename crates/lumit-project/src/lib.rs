@@ -597,10 +597,7 @@ pub fn migrate(value: serde_json::Value, schema_version: &str) -> serde_json::Va
 /// What every document from outside is put through once it is typed, whatever
 /// schema it was written at. Doing it again changes nothing.
 pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
-    // Forward-migrate effect stacks: a built-in whose schema grew
-    // since this file was saved gains the new parameters at their defaults,
-    // so the panel has values to draw and edits have ids to write.
-    for item in &mut doc.items {
+    for item in &doc.items {
         if let lumit_core::model::ProjectItem::Composition(comp) = item {
             // A composition's size decides every raster allocation made for it,
             // and it arrives as two plain integers out of the file's JSON. A
@@ -619,30 +616,11 @@ pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
                     limit: MAX_COMP_SIDE,
                 });
             }
-            let (w, h) = (f64::from(comp.width), f64::from(comp.height));
-            for layer in &mut comp.layers {
-                lumit_core::fx::builtins::backfill_builtin_params(&mut layer.effects);
-                // And convert the share-of-the-frame values that became
-                // px@comp. Separate because it needs the composition's own
-                // size, which is why it is done here rather than in the
-                // backfill: a per cent is only a pixel count once the frame is
-                // known.
-                lumit_core::fx::builtins::migrate_percent_to_px(&mut layer.effects, w, h);
-                // The layer's styles take the same forward migration —
-                // they are effect instances, and a style whose schema grew
-                // needs its new rows just as much. And then §1's invariants are
-                // restored: a file hand-edited (or written by a tool that did
-                // not know the order) comes back one-per-style and sorted, so
-                // the render never has to wonder what order it is looking at.
-                lumit_core::fx::builtins::backfill_builtin_params(&mut layer.styles);
-                lumit_core::fx::builtins::migrate_percent_to_px(&mut layer.styles, w, h);
-                lumit_core::fx::styles::normalise_styles(&mut layer.styles);
-            }
-            if let Some(graph) = &mut comp.graph {
-                graph.migrate_dof_pro_depth();
-            }
         }
     }
+    // A built-in whose schema grew or changed since this file was saved is
+    // brought up to it, wherever in the document it sits.
+    lumit_core::fx::builtins::migrate_document(doc);
     Ok(())
 }
 
@@ -1050,6 +1028,13 @@ pub fn presets_dir() -> Option<PathBuf> {
 pub fn lenses_dir() -> Option<PathBuf> {
     let dirs = project_dirs()?;
     Some(dirs.data_dir().join("lenses"))
+}
+
+/// The user's own flare designs, as `.flare` files saved from the Flare
+/// window. Beside the lenses, and lazily made the same way.
+pub fn flares_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_dir().join("flares"))
 }
 
 /// Where the user's own **export** presets live (docs/07 §11) — one small
@@ -2954,6 +2939,7 @@ mod tests {
         let wiggle_id = wiggle.id;
         layer.graph = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![
@@ -3111,6 +3097,7 @@ mod tests {
         let (read_id, input_id, out_id) = (read.id(), input.id(), out.id());
         let wanted = CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![read, input, GraphNode::Fx(blur), GraphNode::Fx(wiggle), out],
             edges: vec![
                 GraphEdge {

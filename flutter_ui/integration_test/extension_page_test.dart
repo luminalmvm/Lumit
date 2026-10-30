@@ -106,6 +106,7 @@ void main() {
           hosts: const [],
           broken: false,
           effects: const [],
+          native: false,
         ),
       ),
     ));

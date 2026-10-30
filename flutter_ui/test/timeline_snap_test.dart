@@ -80,6 +80,9 @@ void main() {
               sourceIn: const BridgeRational(num: 0, den: 1),
               sourceOut: const BridgeRational(num: 1, den: 1),
               sourceIsComp: false,
+              source: id,
+              opacity: 1,
+              takes: const [],
             ),
           ],
           transform: BridgeTransform(
@@ -150,8 +153,9 @@ void main() {
             .where((t) => t.kind == SnapKind.editPoint)
             .map((t) => t.frame)
             .toList(),
-        [90.0],
-        reason: "a row's in point is not its start offset",
+        [90.0, 150.0],
+        reason: "a row's in point is not its start offset, and a clip's end "
+            'is a place to land as much as its start',
       );
     });
   });

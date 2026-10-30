@@ -47,6 +47,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
+import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -73,8 +74,10 @@ import 'effect_param_row_frb.dart'
         relistedRows,
         withChained;
 import 'graph_groups.dart';
+import 'graph_ties.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
+import 'flare_window.dart' show pressFlareButton;
 import 'lens_window.dart' show pressLensButton;
 import '../state/share.dart';
 import 'placeholder.dart';
@@ -884,16 +887,7 @@ bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
         'output'
       ),
   };
-  final (toKey, toPort) = switch (e.to) {
-    BridgeInputRef_Param(:final node, :final port) => (
-        graphNodeKey(node),
-        port
-      ),
-    BridgeInputRef_Matte(:final effect) => (
-        graphNodeKey(BridgeNodeRef.effect(effect)),
-        'matte'
-      ),
-  };
+  final (toKey, toPort) = _inputEnd(e);
   final fromBox = layout.byKey[fromKey];
   final toBox = layout.byKey[toKey];
   if (fromBox == null || toBox == null) return null;
@@ -902,6 +896,82 @@ bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
   if (from == null || to == null) return null;
   final i = fromBox.outputs.indexWhere((p) => p.id == fromPort);
   return (from, to, fromBox.outputs[i < 0 ? 0 : i].portType);
+}
+
+/// The box and socket a stored wire ends in.
+(String, String) _inputEnd(BridgeGraphEdge e) => switch (e.to) {
+      BridgeInputRef_Param(:final node, :final port) => (
+          graphNodeKey(node),
+          port
+        ),
+      BridgeInputRef_Matte(:final effect) => (
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+          'matte'
+        ),
+    };
+
+/// Every wire the layer canvas draws, as the ties name them, each with the
+/// stored wire it is (null for one of the picture's chain) and the type it
+/// carries. [held] is the chain wire in hand, which is not drawn.
+List<(TieWire, BridgeGraphEdge?, BridgePortType)> _layerWires(
+    GraphLayout layout, List<BridgeGraphEdge> edges,
+    {int? held, bool outUnwired = false}) {
+  // The image chain's wires are not stored anywhere: they *are* the effect
+  // list, read left to right. Drawing them from the box order is what makes
+  // the stack view impossible to contradict.
+  //
+  // **A bypassed effect is not in the chain**, so the wire steps
+  // over it: from the last box still in to the next one, leaving the
+  // bypassed box floating with hollow sockets. That is the same picture the
+  // engine renders - the effect is skipped - and it is why switching a box
+  // off in Effect controls visibly unplugs it here.
+  //
+  // The Source and the Layer out always count as in: the picture starts and
+  // ends at them whatever the stack does, so an all-bypassed stack still
+  // draws exactly one wire, Source to Layer out. Unplugging the Layer out
+  // itself (`outUnwired`) takes that last segment away too - nothing feeds
+  // the layer, and the layer draws nothing.
+  //
+  // The indices are the FULL chain's throughout: `_InFlight.chain` and every
+  // gesture in `_down` count boxes the same way, and renumbering them here
+  // would put the dashed wire on the wrong socket.
+  final chain = _chainOf(layout);
+  final inChain = [
+    for (var i = 0; i < chain.length; i++)
+      if (i == 0 || i == chain.length - 1 || chain[i].card.enabled) i,
+  ];
+  final wires = <(TieWire, BridgeGraphEdge?, BridgePortType)>[];
+  for (var k = 0; k + 1 < inChain.length; k++) {
+    final i = inChain[k];
+    final j = inChain[k + 1];
+    // The wire in the hand is the dashed flight, not a drawn
+    // segment: it has visibly left its input. The flight names the box it
+    // feeds, which after a skip is anywhere in (i, j].
+    if (held != null && held > i && held <= j) continue;
+    // Nothing is plugged into the Layer out at all.
+    if (outUnwired && j == chain.length - 1) continue;
+    final port = j == chain.length - 1 ? 'image' : 'input';
+    final from = chain[i].socket(i == 0 ? 'image' : 'output', false);
+    final to = chain[j].socket(port, true);
+    if (from != null && to != null) {
+      wires.add((
+        (key: tieWireKey(chain[j].key, port), from: from, to: to),
+        null,
+        BridgePortType.image,
+      ));
+    }
+  }
+  for (final edge in edges) {
+    final ends = _edgeEnds(layout, edge);
+    if (ends == null) continue;
+    final (box, socket) = _inputEnd(edge);
+    wires.add((
+      (key: tieWireKey(box, socket), from: ends.$1, to: ends.$2),
+      edge,
+      ends.$3,
+    ));
+  }
+  return wires;
 }
 
 /// How near a wire a dropped box has to land to fall into it, canvas units.
@@ -1017,7 +1087,7 @@ class GraphPanelFrb extends StatefulWidget {
 }
 
 class _GraphPanelFrbState extends State<GraphPanelFrb>
-    with GraphGroups<GraphPanelFrb> {
+    with GraphGroups<GraphPanelFrb>, GraphTies<GraphPanelFrb> {
   LumitUiState? _ui;
   LayerReference? _layer;
 
@@ -1351,6 +1421,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final layer = _ui?.selectedLayer.value;
     BridgeLayerGraph? graph;
     var notes = const <BridgeGraphNote>[];
+    var ties = const <BridgeWireTie>[];
     var name = '';
     final infos = <String, BridgeEffectInstanceInfo>{};
     final params = <String, CompBoxRows>{};
@@ -1358,6 +1429,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       try {
         graph = layer.getGraph();
         notes = layer.getGraphNotes();
+        ties = layer.getGraphTies();
         name = layer.getInfo().name;
         // The rows an open box draws, by the Effect controls panel's rules.
         void read(BridgeNodeRef node, BridgeEffectInstance instance) {
@@ -1395,6 +1467,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _params = params;
       _driverDrag = null;
       _notes = graph == null ? const [] : notes;
+      _ties = graph == null ? const [] : ties;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
           graphNodeKey(n.node): n,
@@ -1581,6 +1654,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         effect: effect,
         param: param,
         onApplied: applied)) {
+      return;
+    }
+    if (pressFlareButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied,
+        comp: comp,
+        frame: frame)) {
       return;
     }
     if (info.name == 'node_graph' && param == 'open') {
@@ -2297,13 +2380,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// commits.
   void _addEffect(String name) {
     final layer = _layer;
-    if (layer == null) return;
-    try {
-      layer.addEffect(name: name);
-    } catch (_) {
-      return;
-    }
-    _ui?.model.refresh();
+    if (layer == null || !(_ui?.addEffect(layer, name) ?? false)) return;
     _reload();
   }
 
@@ -2422,6 +2499,34 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     _ui?.model.refresh();
     _reload();
   }
+
+  /// The held ties, read with the graph.
+  List<BridgeWireTie> _ties = const [];
+
+  @override
+  List<BridgeWireTie> get ties => _ties;
+
+  @override
+  void commitTies(List<BridgeWireTie> next) {
+    try {
+      _layer?.setGraphTies(ties: next);
+    } catch (_) {
+      // Refused, or the layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  @override
+  double get tieZoom => _zoom;
+
+  List<TieWire> _wiresOf(GraphLayout layout) => [
+        for (final (w, _, _) in _layerWires(
+            layout, _graph?.wiring.edges ?? const [],
+            held: _flight?.chain,
+            outUnwired: _graph?.wiring.outUnwired ?? false))
+          w,
+      ];
 
   @override
   Offset get noteSpot => graphClearSpot(
@@ -2759,10 +2864,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       setState(() => _panFrom = _pan - event.localPosition);
       return;
     }
-    // The right button opens the console on release.
-    if (event.buttons == kSecondaryMouseButton &&
-        _ui!.workspace.interface.rightClickOpensNodeSearch) {
-      _menuPress = true;
+    // The right button opens the console on release, and a right-button drag
+    // ties the wires it crosses.
+    if (tieDown(event, at, _wiresOf(layout))) {
+      _menuPress = event.buttons == kSecondaryMouseButton &&
+          _ui!.workspace.interface.rightClickOpensNodeSearch;
       return;
     }
     final keys = HardwareKeyboard.instance;
@@ -2857,6 +2963,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       });
       return;
     }
+    if (tieMove(at, _wiresOf(layout))) return;
     if (_marqueeFrom != null) {
       setState(() => _marqueeTo = event.localPosition);
       return;
@@ -2955,6 +3062,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       return;
     }
 
+    if (tieUp(at, moved, _wiresOf(layout))) {
+      _menuPress = false;
+      return;
+    }
     if (_menuPress) {
       _menuPress = false;
       if (!moved && _graph != null) _openSearch(at);
@@ -3198,6 +3309,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
               onPointerDown: (e) => _down(e, layout),
               onPointerMove: (e) => _move(e, layout),
               onPointerUp: (e) => _up(e, layout),
+              onPointerHover: (e) =>
+                  tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
               onPointerSignal: _wheel,
               behavior: HitTestBehavior.opaque,
               child: Container(
@@ -3238,6 +3351,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                           dragged: t.textPrimary,
                           outUnwired: _graph!.wiring.outUnwired,
                           wires: ThemeScope.of(context).wireStyle,
+                          ties: tieView(),
                         ),
                       ),
                     ),
@@ -3540,7 +3654,7 @@ class GraphNodeCard extends StatelessWidget {
                     border: Border.all(color: t.warning),
                   ),
                   child: Text('!',
-                      style: t.mono.copyWith(fontSize: 8, color: t.warning)),
+                      style: t.mono.copyWith(fontSize: 9, color: t.warning)),
                 ),
               ),
             ],
@@ -3946,6 +4060,7 @@ class _GraphPainter extends CustomPainter {
   /// and the last wire is not drawn either.
   final bool outUnwired;
   final WireStyle wires;
+  final TieView ties;
 
   const _GraphPainter({
     required this.layout,
@@ -3958,64 +4073,35 @@ class _GraphPainter extends CustomPainter {
     required this.theme,
     required this.outUnwired,
     required this.wires,
+    required this.ties,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The image chain's wires are not stored anywhere: they *are* the effect
-    // list, read left to right. Drawing them from the box order is what makes
-    // the stack view impossible to contradict.
-    //
-    // **A bypassed effect is not in the chain**, so the wire steps
-    // over it: from the last box still in to the next one, leaving the
-    // bypassed box floating with hollow sockets. That is the same picture the
-    // engine renders - the effect is skipped - and it is why switching a box
-    // off in Effect controls visibly unplugs it here.
-    //
-    // The Source and the Layer out always count as in: the picture starts and
-    // ends at them whatever the stack does, so an all-bypassed stack still
-    // draws exactly one wire, Source to Layer out. Unplugging the Layer out
-    // itself (`outUnwired`) takes that last segment away too - nothing feeds
-    // the layer, and the layer draws nothing.
-    //
-    // The indices are the FULL chain's throughout: `_InFlight.chain` and every
-    // gesture in `_down` count boxes the same way, and a painter that renumbered
-    // them would put the dashed wire on the wrong socket.
-    final chain = _chainOf(layout);
-    final inChain = [
-      for (var i = 0; i < chain.length; i++)
-        if (i == 0 || i == chain.length - 1 || chain[i].card.enabled) i,
-    ];
-    for (var k = 0; k + 1 < inChain.length; k++) {
-      final i = inChain[k];
-      final j = inChain[k + 1];
-      // The wire in the hand is the dashed flight, not a drawn
-      // segment: it has visibly left its input. The flight names the box it
-      // feeds, which after a skip is anywhere in (i, j].
-      if (flight?.chain case final held? when held > i && held <= j) continue;
-      // Nothing is plugged into the Layer out at all.
-      if (outUnwired && j == chain.length - 1) continue;
-      final from = chain[i].socket(i == 0 ? 'image' : 'output', false);
-      final to =
-          chain[j].socket(j == chain.length - 1 ? 'image' : 'input', true);
-      if (from != null && to != null) {
-        _wire(canvas, from, to, theme.port.image, dashes: false);
-      }
-    }
-
-    for (final edge in edges) {
-      final ends = _edgeEnds(layout, edge);
-      if (ends == null) continue;
-      // The wire a box is being dropped into wears the canvas's own picked
-      // colour while it is under one (N7) — the same mark a picked box
-      // wears, because both say "this is what the release will act on".
-      final into = edge == dropWire;
-      _wire(canvas, ends.$1, ends.$2,
-          into ? theme.animated : portColour(theme, ends.$3),
-          dashes: false, weight: into ? 2 : 1);
-    }
+    paintTiedWires(
+        canvas,
+        [
+          for (final (wire, edge, type) in _layerWires(layout, edges,
+              held: flight?.chain, outUnwired: outUnwired))
+            // The wire a box is being dropped into wears the canvas's own
+            // picked colour while it is under one (N7) — the same mark a
+            // picked box wears, because both say "this is what the release
+            // will act on".
+            (
+              wire,
+              edge != null && edge == dropWire
+                  ? theme.animated
+                  : portColour(theme, type),
+              edge != null && edge == dropWire ? 2.0 : 1.0,
+            ),
+        ],
+        ties,
+        pan: pan,
+        zoom: zoom,
+        style: wires,
+        theme: theme);
 
     if (flight case final f?) {
       // A wire drawn out of an input runs the other way, pointer to socket,

@@ -29,19 +29,17 @@ void main() {
         'waveformRest', 'waveformLow', 'waveformMid', 'waveformHigh',
         'layerFootage', 'layerSequence', 'layerPrecomp',
         'layerSolid', 'layerText', 'layerCamera',
-        // Deliberately NOT a token: the Viewer surround is strictly neutral
-        // by spec (15-DESIGN §2.1/§11) — a grade cannot be judged against a
-        // tinted surround, so it is the one colour taste does not reach.
-        //
-        // Nor are the five `port.*` wire colours, for the same kind of
-        // reason: on the Graph panel colour *is* the legend — the strip along
-        // the canvas says "amber is a number" — so a palette taste could
-        // retint would be a legend that lies. See [PortColours].
+        // Only in a theme file, never in the editor: the Viewer surround,
+        // which stays neutral unless a file says otherwise, the socket
+        // colours, whose legend follows them, and the label chips.
+        'viewerSurround',
+        'socketImage', 'socketNumber', 'socketColour', 'socketShape',
+        'socketAudio',
+        for (var i = 1; i <= LumitTheme.labelCount; i++) 'label$i',
       };
       final listed = themeTokens.map((t) => t.key).toSet();
       expect(listed, onTheStruct);
-      expect(t.viewerSurround, isNotNull,
-          reason: 'still there, just not offered');
+      expect(t.viewerSurround, isNotNull);
     });
 
     test('every token reads and writes its own field', () {

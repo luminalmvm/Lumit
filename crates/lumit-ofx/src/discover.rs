@@ -132,6 +132,58 @@ static DISCOVERED: Mutex<BTreeMap<String, DiscoveredPlugin>> = Mutex::new(BTreeM
 /// next launch.
 static DISABLED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 
+/// Every bundle's broker this session started, by its binary.
+static BROKERS: Mutex<Vec<(PathBuf, Arc<SharedBroker>)>> = Mutex::new(Vec::new());
+
+/// End the brokers of every bundle at or below `folder`, after the frame each
+/// is drawing, so its files can be replaced or deleted: Windows keeps a
+/// loaded plugin's file locked. Their effects answer identity, as a disabled
+/// plugin's do, until Lumit starts again.
+pub fn stop_brokers(folder: &std::path::Path) {
+    let Ok(brokers) = BROKERS.lock().map(|brokers| brokers.clone()) else {
+        return;
+    };
+    for (binary, shared) in brokers {
+        if binary.starts_with(folder) {
+            let mut broker = shared.broker.lock();
+            broker.disabled = true;
+            broker.kill();
+        }
+    }
+}
+
+/// Start again every broker that would render another way now "Render plugins
+/// on the graphics card" has changed, after the frame each is drawing.
+/// Blocking, and not for the interface's thread.
+pub fn follow_gpu_setting() {
+    let Ok(brokers) = BROKERS.lock().map(|brokers| brokers.clone()) else {
+        return;
+    };
+    let env = crate::gpu::broker_env();
+    for (_, shared) in &brokers {
+        let mut broker = shared.broker.lock();
+        if !broker.disabled && broker.config.env != env {
+            broker.config.env.clone_from(&env);
+            let _ = broker.restart();
+        }
+    }
+    renote_paths();
+}
+
+/// Put each plugin's path back as the broker that renders it last said, which
+/// is what the frame key reads. A rescan's broker describes plugins an earlier
+/// one renders, and the earliest registered them, so it has the last word.
+fn renote_paths() {
+    let Ok(brokers) = BROKERS.lock().map(|brokers| brokers.clone()) else {
+        return;
+    };
+    for (_, shared) in brokers.iter().rev() {
+        let mut broker = shared.broker.lock();
+        let paths = broker.paths.clone();
+        broker.note_paths(paths);
+    }
+}
+
 /// Every plugin this session has registered, in registration order.
 #[must_use]
 pub fn discovered() -> Vec<DiscoveredPlugin> {
@@ -283,6 +335,7 @@ pub fn scan_reporting(
             Hosting::InProcess => scan_in_process(binary, options, register, &mut outcome),
         }
     }
+    renote_paths();
     outcome
 }
 
@@ -323,6 +376,13 @@ fn scan_through_broker(
             Arc::new(BrokerHost::new(Arc::clone(&shared), plugin, context))
         };
         offer(binary, descriptor, &host, options, register, outcome);
+    }
+    // A definition holds it now, so it lives for the session. Otherwise it
+    // ends here, as a rescan's broker for a bundle it knows does.
+    if Arc::strong_count(&shared) > 1 {
+        if let Ok(mut brokers) = BROKERS.lock() {
+            brokers.push((binary.to_path_buf(), shared));
+        }
     }
 }
 

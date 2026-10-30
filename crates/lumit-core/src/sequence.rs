@@ -25,6 +25,9 @@ use crate::time::Rational;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod clip_opacity;
+pub mod takes;
+
 /// What a clip plays: one footage item or one nested composition
 /// (docs/03-DATA-MODEL.md §5.3 ClipSource).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,6 +222,26 @@ pub struct Clip {
     /// the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blend: Option<crate::model::BlendMode>,
+    /// The clip's own label colour, worn in place of its layer's. Unset is
+    /// "the layer's", and is left out of the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<u8>,
+    /// The group the clip is in, as Vegas groups events: clips sharing one
+    /// are picked, moved and trimmed together. Apart from `link`, which pairs
+    /// a picture clip with its sound one to one. Left out of the file while
+    /// unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<Uuid>,
+    /// How opaque the clip's picture is, nought to one, taken with its fades.
+    #[serde(
+        default = "clip_opacity::one",
+        skip_serializing_if = "clip_opacity::is_one"
+    )]
+    pub opacity: f64,
+    /// The other takes the clip holds ([`takes`]). What it shows is the one
+    /// in `source` and `source_in`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub takes: Vec<takes::Take>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -252,6 +275,10 @@ impl Clip {
             audio_streams: crate::model::AudioStreams::default(),
             audible: true,
             blend: None,
+            label: None,
+            group: None,
+            opacity: 1.0,
+            takes: Vec::new(),
             extra: serde_json::Map::new(),
         }
     }
@@ -543,12 +570,12 @@ impl Clip {
     /// position holds at the clip's [source_in, source_out] boundary rather
     /// than running on into media past the trim (docs/04 §7.2). The raw map
     /// stays available through [`Self::source_time`] for overrun detection.
-    /// `.max().min()` avoids `f64::clamp`'s panics on a degenerate window or
-    /// a NaN map (engine crates never panic).
+    /// A clip played backwards ends before it starts, so the window is its
+    /// two ends whichever way round, as the sound holds it. `.max().min()`
+    /// avoids `f64::clamp`'s panic on a NaN map (engine crates never panic).
     pub fn held_source_time(&self, lt: f64) -> f64 {
-        self.source_time(lt)
-            .max(self.source_in.to_f64())
-            .min(self.source_out.to_f64())
+        let (a, b) = (self.source_in.to_f64(), self.source_out.to_f64());
+        self.source_time(lt).max(a.min(b)).min(a.max(b))
     }
 
     /// Which moment of `nested` a clip that plays it shows at layer time
@@ -579,7 +606,8 @@ impl Clip {
                 Rational::from_f64_on_grid(map.value_at(tau.to_f64()), Rational::FLICK_DEN).ok()?
             }
         };
-        Some(shown.max(self.source_in).min(self.source_out))
+        let (a, b) = (self.source_in, self.source_out);
+        Some(shown.max(a.min(b)).min(a.max(b)))
     }
 
     /// How far the clip's end, or its start with `at_start`, can be carried
@@ -625,6 +653,8 @@ impl Clip {
         Clip {
             id: Uuid::now_v7(),
             effects: respawn(&self.effects),
+            // A copy is out of the original's group.
+            group: None,
             ..self.clone()
         }
     }
@@ -727,6 +757,10 @@ impl Clip {
             audio_streams: self.audio_streams.clone(),
             audible: self.audible,
             blend: self.blend,
+            label: self.label,
+            group: self.group,
+            opacity: self.opacity,
+            takes: self.takes.clone(),
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -755,6 +789,10 @@ impl Clip {
             audio_streams: self.audio_streams.clone(),
             audible: self.audible,
             blend: self.blend,
+            label: self.label,
+            group: self.group,
+            opacity: self.opacity,
+            takes: self.takes.clone(),
             extra: self.extra.clone(),
         };
         Some((left, right))
@@ -1449,11 +1487,13 @@ pub enum Shown<'a> {
     /// no other clip overlaps it is how opaque the clip is.
     One { clip: &'a Clip, gain: f64 },
     /// Two clips overlapping, which is a dissolve: `outgoing` at `1 - gain`
-    /// and `incoming` at `gain`, added together.
+    /// and `incoming` at `gain`, added together, and the mix drawn at
+    /// `opacity`, which is 1 unless a clip's own opacity is less.
     Two {
         outgoing: &'a Clip,
         incoming: &'a Clip,
         gain: f64,
+        opacity: f64,
     },
 }
 
@@ -1485,7 +1525,7 @@ pub fn shown_at(clips: &[Clip], lt: f64) -> Shown<'_> {
     let Some(second) = live.next() else {
         return Shown::One {
             clip: first,
-            gain: lone_gain(clips, first, lt),
+            gain: lone_gain(clips, first, lt) * clip_opacity::opaque(first),
         };
     };
     // Two that start together keep the order they are stored in.
@@ -1501,10 +1541,13 @@ pub fn shown_at(clips: &[Clip], lt: f64) -> Shown<'_> {
     } else {
         1.0
     };
+    let (gain, opacity) =
+        clip_opacity::weighed(outgoing, incoming, opacity(incoming.fade_in.shape, u));
     Shown::Two {
         outgoing,
         incoming,
-        gain: opacity(incoming.fade_in.shape, u),
+        gain,
+        opacity,
     }
 }
 
@@ -1546,6 +1589,7 @@ pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
             outgoing,
             incoming,
             gain,
+            ..
         } => (
             vec![(outgoing, 1.0 - gain), (incoming, gain)],
             if gain >= 0.5 { incoming } else { outgoing },
@@ -1705,6 +1749,7 @@ mod tests {
                 outgoing,
                 incoming,
                 gain,
+                ..
             } => (Some(outgoing.id), Some(incoming.id), gain),
         };
         assert_eq!(shown(-1.0), (None, None, 0.0));
@@ -2040,6 +2085,10 @@ mod tests {
         );
         assert_eq!(trimmed.source_at(rat(7, 2)), Some(rat(23, 2)));
         assert_eq!(trimmed.source_at(rat(5, 1)), Some(rat(12, 1)), "held");
+        // Run backwards it ends before it starts, and still plays.
+        let back = trimmed.with_ramp(rat(-1, 1), rat(-1, 1));
+        assert_eq!(back.source_at(rat(3, 1)), Some(rat(9, 1)), "backwards");
+        assert!((back.held_source_time(3.0) - 9.0).abs() < 1e-9);
         // Speed running 1x to 3x over four seconds has used three by two.
         let ramp = clip(src, 0, 4).with_ramp(rat(1, 1), rat(3, 1));
         let shown = ramp.source_at(rat(2, 1)).unwrap().to_f64();
@@ -2398,7 +2447,8 @@ mod tests {
     fn the_new_fields_are_absent_until_set_and_round_trip_when_they_are() {
         let bare = clip(Uuid::now_v7(), 1, 4);
         let before = serde_json::to_string(&bare).unwrap();
-        for key in ["fade_in", "fade_out", "effects", "fx", "gain_db", "link"] {
+        let keys = ["fade_in", "fade_out", "effects", "fx", "gain_db", "link"];
+        for key in keys.into_iter().chain(["opacity", "takes"]) {
             assert!(!before.contains(key), "an untouched clip writes no {key}");
         }
         let reopened: Clip = serde_json::from_str(&before).unwrap();
@@ -2422,6 +2472,10 @@ mod tests {
         set.fx = false;
         set.gain_db = -6.0;
         set.link = Some(Uuid::now_v7());
+        set.opacity = 0.5;
+        set = set
+            .with_take(ClipSource::Comp(Uuid::now_v7()), rat(0, 1))
+            .unwrap();
         let text = serde_json::to_string(&set).unwrap();
         assert_eq!(serde_json::from_str::<Clip>(&text).unwrap(), set);
     }

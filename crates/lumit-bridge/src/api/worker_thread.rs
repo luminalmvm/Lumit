@@ -2015,6 +2015,10 @@ pub struct PlayRequest {
     /// How many times the comp's rate the leg runs at: the J and L shuttle.
     /// Above 1 the leg keeps time by skipping frames, whatever `mode` says.
     pub speed: u32,
+    /// How many times slower than the comp's rate the leg plays: the
+    /// Viewer's playback speed. Every frame is shown, and the sound is
+    /// slowed with its pitch kept.
+    pub slow: u32,
     /// The frame the leg ends on: the end of the work area going forwards,
     /// its start going back. `None` runs to the end of the composition.
     /// Without it the frames past the end of a loop were composited every
@@ -2068,6 +2072,9 @@ struct Playback {
     /// How many frames each step of the leg covers: 1, or a shuttle's 2, 4 or
     /// 8. Above 1 the leg has no sound and runs on the wall clock.
     speed: u64,
+    /// How many times slower than the comp's rate the leg plays. `fps` is
+    /// already divided by it; the sound still counts the comp's seconds.
+    slow: u32,
     /// True once the leg has given out its final frame, because `next` cannot
     /// step below zero to say so.
     ended: bool,
@@ -2075,7 +2082,8 @@ struct Playback {
     pre_rolled: bool,
     mode: BridgePlaybackMode,
     scale: f32,
-    /// The composition's rate, for turning a clock reading into a frame.
+    /// The rate the leg shows frames at, for turning a clock reading into a
+    /// frame: the composition's, divided by `slow`.
     fps: f64,
     /// Where playback started, and when — the wall clock's baseline for as long
     /// as no mix is loaded to be master instead.
@@ -2193,9 +2201,15 @@ impl Playback {
                 .audio_settles
                 .is_none_or(|at| std::time::Instant::now() >= at);
         match clock_seconds() {
-            Some(seconds) if ours => seconds,
+            Some(seconds) if ours => seconds * f64::from(self.slow),
             _ => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
         }
+    }
+
+    /// Where the sound is to be for `seconds` into this leg: the comp's own
+    /// seconds, which a slowed leg takes longer to play.
+    fn sound_at(&self, seconds: f64) -> f64 {
+        seconds / f64::from(self.slow)
     }
 
     /// Whether the leg has no sound to follow, so the wall clock times it: a
@@ -2415,14 +2429,15 @@ fn start_audio(
     comp: Uuid,
     start: f64,
     document: Option<std::sync::Arc<lumit_core::model::Document>>,
+    slow: u32,
 ) {
     let Some(document) = document else {
         return;
     };
     #[cfg(feature = "media")]
-    crate::audio::play(comp, start, document);
+    crate::audio::play(comp, start, document, slow);
     #[cfg(not(feature = "media"))]
-    let _ = (comp, start, document);
+    let _ = (comp, start, document, slow);
 }
 
 /// Bring the sound up to date with an edit that landed while `playback` runs:
@@ -2454,7 +2469,8 @@ fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::
                 .ring
                 .front()
                 .map_or(playback.next, |(frame, _)| *frame);
-            crate::audio::play(comp, frame as f64 / playback.fps + heard_late(), document);
+            let start = playback.sound_at(frame as f64 / playback.fps + heard_late());
+            crate::audio::play(comp, start, document, playback.slow);
             playback.settle_audio();
         }
     }
@@ -2522,7 +2538,7 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     let settling = playback
         .audio_settles
         .is_some_and(|at| std::time::Instant::now() < at);
-    let lead = sound_lead(frame, fps).filter(|_| !settling);
+    let lead = sound_lead(frame, fps, playback.slow).filter(|_| !settling);
     let slack = sync_slack(period).as_secs_f64();
     match audio_chase(
         playback.audio_held_for_picture,
@@ -2536,23 +2552,24 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
         }
         AudioChase::Start => {
             playback.audio_held_for_picture = false;
-            crate::api::audio::audio_seek(frame as f64 / fps + heard_late());
+            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
             resume_audio();
             playback.settle_audio();
         }
         AudioChase::Catch => {
-            crate::api::audio::audio_seek(frame as f64 / fps + heard_late());
+            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
             playback.settle_audio();
         }
         AudioChase::Leave => {}
     }
 }
 
-/// How far the sound is in front of the picture showing `frame`, in seconds,
-/// and behind it when negative. `None` when no sound is running.
+/// How far the sound is in front of the picture showing `frame`, in seconds
+/// of a leg played `slow` times slower than the comp, and behind it when
+/// negative. `None` when no sound is running.
 #[frb(ignore)]
-fn sound_lead(frame: u64, fps: f64) -> Option<f64> {
-    clock_seconds().map(|sound| sound - frame as f64 / fps)
+fn sound_lead(frame: u64, fps: f64, slow: u32) -> Option<f64> {
+    clock_seconds().map(|sound| sound * f64::from(slow) - frame as f64 / fps)
 }
 
 /// What to do with the sound this frame.
@@ -2794,6 +2811,9 @@ pub struct RenderCompRequestWithPreview {
     /// pointer is let go, which is the one edit where watching it matters
     /// most.
     pub clip_retime: Option<(Uuid, crate::api::effect::BridgeScalar)>,
+    /// One clip's edges as comp frames, while one of them is being dragged,
+    /// so the Viewer shows the frame at the edge.
+    pub clip_span: Option<(Uuid, i64, i64)>,
     /// The layer's own Retime map, while a key of it is being dragged
     /// in the graph editor. Exactly `clip_retime`'s reason, for the property
     /// rather than a clip: the map decides which source frame is decoded, so
@@ -3483,13 +3503,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         if !playback.pre_rolled && playback.pre_roll_done(playback.ring.len()) {
             playback.pre_rolled = true;
             let document = playback.pending_audio.take();
-            let start = playback.from as f64 / playback.fps;
+            let start = playback.sound_at(playback.from as f64 / playback.fps);
             // The clock's baseline is now, not when the request arrived: the
             // pre-roll's own milliseconds are not playback time, and counting
             // them would have adaptive skip straight over the frames just
             // banked. A silent leg needs the baseline too.
             playback.started = std::time::Instant::now();
-            start_audio(playback.comp.id, start, document);
+            start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
     }
@@ -3984,6 +4004,7 @@ fn present_ring_frame(
                     view,
                     reach: prepared.reach().map(|r| r.rect.map(f64::from)),
                     reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+                    cut: prepared.cut(),
                 },
             ));
         }
@@ -4012,6 +4033,7 @@ fn present_ring_frame(
                 view,
                 reach: prepared.reach().map(|r| r.rect.map(f64::from)),
                 reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+                cut: prepared.cut(),
             }));
         }
         Err(err) => note!("Shared DMA-BUF present failed, dropping frame: {err}"),
@@ -4094,6 +4116,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     state.renderer.sync_colour(&document);
     // The engine clamps the shuttle: a speed of zero would never leave `from`.
     let speed = req.speed.clamp(1, 8) as usize;
+    let slow = req.slow.clamp(1, 8);
     // The same leg twice running is a loop, and a third is on its way.
     let leg = (comp_id, from, last);
     let loops_to = (state.last_leg == Some(leg) && !req.reverse && speed == 1).then_some(from);
@@ -4154,6 +4177,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         first,
         reverse: req.reverse,
         speed: speed as u64,
+        slow,
         ended: false,
         pre_rolled: false,
         // A shuttle follows its clock and skips what it cannot make in time,
@@ -4164,7 +4188,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
             req.mode
         },
         scale: req.scale,
-        fps: if fps > 0.0 { fps } else { 60.0 },
+        fps: if fps > 0.0 { fps } else { 60.0 } / f64::from(slow),
         from,
         started: std::time::Instant::now(),
         last_presented: None,
@@ -5133,6 +5157,21 @@ fn render_comp_with_preview(
             }
         }
     }
+    if let Some((clip, start, end)) = req.clip_span {
+        // The row's own zero comes off, then the same trim the commit makes.
+        let offset = comp.layers[index].start_offset.0;
+        let rate = comp.frame_rate;
+        let at = |f: i64| rate.time_of_frame(f).ok()?.0.checked_sub(offset).ok();
+        if let (Some(start), Some(end), lumit_core::model::LayerKind::Sequence { clips }) =
+            (at(start), at(end), &mut comp.layers[index].kind)
+        {
+            if let Some(c) = clips.iter_mut().find(|c| c.id == clip) {
+                if let Some(next) = crate::api::layer::trimmed(c, start, end) {
+                    *c = next;
+                }
+            }
+        }
+    }
     if let Some(masks) = req.masks {
         // The preview's masks are the layer's own, so they read on its clock.
         let offset = comp.layers[index].start_offset.0;
@@ -5850,7 +5889,7 @@ fn send_dmabuf(
     {
         Ok(shared) => shared,
         Err(err) => {
-            note!("Shared DMA-BUF present failed, dropping frame: {err}");
+            crate::faults::record_dmabuf_failure(&err);
             return false;
         }
     };
@@ -5876,6 +5915,7 @@ fn send_dmabuf(
         view: state.view_id(),
         reach: prepared.reach().map(|r| r.rect.map(f64::from)),
         reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+        cut: prepared.cut(),
     }));
     true
 }
@@ -5968,6 +6008,7 @@ fn send_shared(
             view: state.view_id(),
             reach: prepared.reach().map(|r| r.rect.map(f64::from)),
             reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
+            cut: prepared.cut(),
         },
     ));
     true
@@ -6935,6 +6976,7 @@ mod tests {
             first: 0,
             reverse: false,
             speed: 1,
+            slow: 1,
             ended: false,
             pre_rolled: false,
             mode,

@@ -3,11 +3,13 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/motion.dart';
 import '../../theme/theme.dart';
+import '../../theme/style_sheet.dart';
 import 'base.dart';
 import 'motion.dart';
 
@@ -34,8 +36,9 @@ const Map<ShortcutActivator, Intent> _activateShortcuts = {
 /// - **Dropdown** ([dropdown]): a `surface2` well-adjacent face with a plain
 ///   `hairline` border and no raised fill.
 ///
-/// Hover and press are fill steps over whichever face is set — `surface3` then
-/// `hairline_strong` (§2.3).
+/// Hover and press lay a tint of the text colour over whichever face is set,
+/// press twice as strong, since a step up the surface ramp is the ground's own
+/// colour in some light schemes.
 class HouseButton extends StatefulWidget {
   final Widget child;
   final VoidCallback? onPressed;
@@ -108,22 +111,42 @@ class _HouseButtonState extends State<HouseButton> {
     Color? edge;
     // The label, when the fill under it decides what colour it has to be.
     Color? label;
-    // The label's own style, for the one face that sets it: mono capitals.
+    // The label's own style, for the one face that sets it: mono capitals,
+    // at the size of every other button's label.
     TextStyle? labelStyle;
+    final capitals = t.kicker.copyWith(
+        fontSize: t.body.fontSize,
+        letterSpacing:
+            t.kicker.letterSpacing! * t.body.fontSize! / t.kicker.fontSize!);
     // Desk's 2px accent index on the leading edge of the control in force.
     var index = false;
+    // Desk: a button is a flat plate with a shade line under it, and a
+    // dropdown an underlined word; nothing is boxed.
+    final plate = t.shape == ThemeShape.desk &&
+        enabled &&
+        !widget.primary &&
+        !widget.active &&
+        !widget.frameless;
+    // The fill an accent face takes in the hand: a step past its hover.
+    Color pressedAccent() => Color.alphaBlend(hoverTint(t, 2), t.accentHover);
     if (!enabled) {
-      fill = widget.frameless ? null : t.surface2;
+      // No fill and a plain hairline, so a dead button reads lighter than a
+      // live one rather than heavier.
+      edge = widget.frameless ? null : t.hairline;
       // A dead primary drops the accent but keeps the shape of its word: the
       // Export button must not change case as the path field is filled in.
-      if (widget.primary) labelStyle = t.kicker.copyWith(color: t.textDisabled);
+      if (widget.primary) labelStyle = capitals.copyWith(color: t.textDisabled);
     } else if (widget.primary) {
       // The single filled action (§3.1, §12A.4). Ahead of every other state:
       // what `Enter` presses must be findable at a glance whatever the pointer
       // is doing, so hover lifts the fill rather than replacing it.
-      fill = _hover || _down ? t.accentHover : t.accent;
+      fill = _down
+          ? pressedAccent()
+          : _hover
+              ? t.accentHover
+              : t.accent;
       label = accentInk(t);
-      labelStyle = t.kicker.copyWith(color: label);
+      labelStyle = capitals.copyWith(color: label);
     } else if (widget.active) {
       // Ahead of hover and press: which one is in force must not blink off
       // under the pointer. Hover lifts it to `accentHover` instead.
@@ -136,39 +159,40 @@ class _HouseButtonState extends State<HouseButton> {
           fill = t.accent.withValues(alpha: lifted ? 0.24 : 0.16);
           index = true;
         case ThemeShape.lantern:
-          fill = lifted ? t.accentHover : t.accent;
+          fill = _down
+              ? pressedAccent()
+              : lifted
+                  ? t.accentHover
+                  : t.accent;
           label = accentInk(t);
       }
-    } else if (_down) {
-      fill = t.hairlineStrong;
+    } else if (_down || _hover) {
+      // Over the face's own ground where it has one, the dropdown's well and
+      // Desk's plate, so hover lightens what is there.
+      final ground = (widget.dropdown && !plate) || (plate && !widget.dropdown)
+          ? t.surface2
+          : null;
+      final tint = hoverTint(t, _down ? 2 : 1);
+      fill = ground == null ? tint : Color.alphaBlend(tint, ground);
       edge = t.hairlineStrong;
-    } else if (_hover) {
-      fill = t.surface3;
+    } else if (plate) {
+      fill = widget.dropdown ? null : t.surface2;
       edge = t.hairlineStrong;
     } else if (widget.dropdown) {
       fill = t.surface2;
-      edge = _focused ? t.accent : t.hairline;
+      edge = t.hairline;
     } else {
       // Idle: an outline over the panel's own surface, not a raised fill —
       // a widget at rest adds no fourth grey to the panel (§2.1, §2.3).
-      fill = null;
-      edge = _focused
-          ? t.accent
-          : widget.frameless
-              ? null
-              : t.hairlineStrong;
+      edge = widget.frameless ? null : t.hairlineStrong;
     }
-    // Desk: a button is a flat plate with a shade line under it, and a
-    // dropdown an underlined word; nothing is boxed.
-    final plate = t.shape == ThemeShape.desk &&
-        enabled &&
-        !widget.primary &&
-        !widget.active &&
-        !widget.frameless;
-    if (plate && !_hover && !_down) {
-      fill = widget.dropdown ? null : t.surface2;
-      edge = _focused ? t.accent : t.hairlineStrong;
-    }
+    // The focus ring, over whatever face is drawn. In the label's colour on
+    // an accent fill, where an accent ring would vanish.
+    final ring = _focused && enabled
+        ? (widget.primary || (widget.active && t.shape == ThemeShape.lantern)
+            ? accentInk(t)
+            : t.accent)
+        : null;
     final pad = widget.padding ??
         (widget.small
             ? const EdgeInsets.symmetric(horizontal: 5, vertical: 2)
@@ -190,6 +214,24 @@ class _HouseButtonState extends State<HouseButton> {
         math.max(0, t.tokens.actionRadius - inset).toDouble());
     // The fill comes up quickly and leaves a little slower (docs/15 §8).
     final step = _hover || _down ? scope.motion.hoverIn : scope.motion.hoverOut;
+    // A press gives a little under the finger, at Full only: Desk's
+    // controls stop dead, and Minimal keeps no manner.
+    final gives = scope.animationLevel == AnimationLevel.all &&
+        t.shape != ThemeShape.desk;
+    final dressed = partStyle(context, t, 'button', classes: {
+      if (widget.primary) 'primary',
+      if (widget.dropdown) 'dropdown',
+    }, states: {
+      if (_hover) 'hover',
+      if (_down) 'pressed',
+      if (widget.active) 'on',
+      if (!enabled) 'disabled',
+      if (_focused) 'focus',
+    });
+    if (dressed.colour != null) {
+      label = dressed.colour;
+      labelStyle = labelStyle?.copyWith(color: label);
+    }
     // Keyboard-reachable (docs/15 §9): Tab lands here in reading order,
     // Enter/Space press it, and the accent edge is the focus ring (§6.5).
     return FocusableActionDetector(
@@ -209,18 +251,34 @@ class _HouseButtonState extends State<HouseButton> {
         _hover = over;
         if (!over) _down = false;
       }),
-      child: GestureDetector(
+      // The press shows from the moment the pointer goes down. A tap's own
+      // down waits out the drag recogniser in a dialogue or a list, so a
+      // quick click there showed no press at all.
+      child: Listener(
+        onPointerDown: enabled
+            ? (e) {
+                if (e.buttons & kPrimaryButton != 0) {
+                  setState(() => _down = true);
+                }
+              }
+            : null,
+        onPointerUp: enabled ? (_) => setState(() => _down = false) : null,
+        onPointerCancel:
+            enabled ? (_) => setState(() => _down = false) : null,
+        child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _down = false) : null,
-        onTapCancel: enabled ? () => setState(() => _down = false) : null,
         onTap: widget.onPressed,
-        child: AnimatedContainer(
+        child: AnimatedScale(
+        scale: gives && _down ? 0.97 : 1,
+        duration: scope.motion.hoverIn.duration,
+        curve: scope.motion.hoverIn.curve,
+        child: Padding(
+          padding: margin,
+          child: frosted(dressed, radius, insetShadows(dressed, radius, AnimatedContainer(
           duration: step.duration,
           curve: step.curve,
-          margin: margin,
           padding: innerPad,
-          decoration: BoxDecoration(
+          decoration: dress(BoxDecoration(
             color: fill,
             // A one-sided border cannot carry a radius, and Desk's is nought.
             borderRadius: plate ? null : radius,
@@ -234,13 +292,17 @@ class _HouseButtonState extends State<HouseButton> {
                         color: edge ?? const Color(0x00000000), width: 1))
                 : Border.all(
                     color: edge ?? const Color(0x00000000), width: 1),
-          ),
-          // The index is painted over the box, so it insets nothing and the
-          // control in force is the same size as its neighbours.
-          foregroundDecoration: index
+          ), dressed),
+          // The index and the focus ring are painted over the box, so they
+          // inset nothing and the control is the same size as its neighbours.
+          foregroundDecoration: ring != null
               ? BoxDecoration(
-                  border: Border(left: BorderSide(color: t.accent, width: 2)))
-              : null,
+                  borderRadius: radius, border: Border.all(color: ring))
+              : index
+                  ? BoxDecoration(
+                      border:
+                          Border(left: BorderSide(color: t.accent, width: 2)))
+                  : null,
           child: DefaultTextStyle(
             // A dropdown's closed face reads in the secondary text colour —
             // the mockups' own (§12A.6); bright primary at 11px reads bold.
@@ -252,6 +314,9 @@ class _HouseButtonState extends State<HouseButton> {
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
             child: _centred(_capitalised(t, widget.child, widget.primary)),
           ),
+        ))),
+        ),
+        ),
         ),
       ),
     );
@@ -326,8 +391,11 @@ Color accentInk(LumitTheme t) {
 class HouseCheckbox extends StatefulWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
+
+  /// The words beside the box, which a click on ticks it too.
+  final String? label;
   const HouseCheckbox(
-      {super.key, required this.value, required this.onChanged});
+      {super.key, required this.value, required this.onChanged, this.label});
 
   @override
   State<HouseCheckbox> createState() => _HouseCheckboxState();
@@ -402,8 +470,30 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
         ),
       ),
     );
+    // The box, with its words after it inside the same hit area. One line of
+    // text with the box in it, so it fits a row of any width and ends in an
+    // ellipsis in a narrow one.
+    Widget labelled(double lit) {
+      final label = widget.label;
+      if (label == null) return mark(lit);
+      return Text.rich(
+        TextSpan(children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+                padding: const EdgeInsets.only(right: 6), child: mark(lit)),
+          ),
+          TextSpan(text: label),
+        ]),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: t.body
+            .copyWith(color: onChanged == null ? t.textDisabled : t.textMuted),
+      );
+    }
+
     // Disabled: no gesture, no focus, no shortcut — just the reading.
-    if (onChanged == null) return mark(0);
+    if (onChanged == null) return labelled(0);
     return FocusableActionDetector(
       focusNode: _focusNode,
       shortcuts: _activateShortcuts,
@@ -417,7 +507,7 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!widget.value),
-        child: HoverMark(builder: (context, lit) => mark(lit)),
+        child: HoverMark(builder: (context, lit) => labelled(lit)),
       ),
     );
   }
@@ -508,23 +598,23 @@ class _HouseToggleState extends State<HouseToggle> {
                   : Color.lerp(t.hairlineStrong, t.textMuted, 0.6 * lit),
               borderRadius: BorderRadius.circular(_height / 2),
             ),
-            child: Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: scope.motion.toggle.duration,
-                  curve: scope.motion.toggle.curve,
-                  left: widget.value ? _width - _knob - _inset : _inset,
-                  top: _inset,
-                  child: Container(
-                    width: _knob,
-                    height: _knob,
-                    decoration: BoxDecoration(
-                      color: t.surface0,
-                      borderRadius: BorderRadius.circular(_knob / 2),
-                    ),
-                  ),
+            // The knob slides as paint alone, so nothing is laid out again
+            // while it crosses.
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: _inset),
+            child: AnimatedSlide(
+              duration: scope.motion.toggle.duration,
+              curve: scope.motion.toggle.curve,
+              offset: Offset(
+                  widget.value ? (_width - _knob - 2 * _inset) / _knob : 0, 0),
+              child: Container(
+                width: _knob,
+                height: _knob,
+                decoration: BoxDecoration(
+                  color: t.surface0,
+                  borderRadius: BorderRadius.circular(_knob / 2),
                 ),
-              ],
+              ),
             ),
           ),
           ),
@@ -538,6 +628,9 @@ class _HouseToggleState extends State<HouseToggle> {
 /// sentence. [HouseCheckbox] is the independent one; this is the one that says
 /// "this, and therefore not that". Disabled it still shows which way the
 /// choice fell, dimmed, rather than going blank.
+///
+/// Drawn as the checkbox is: chosen is a dot in the primary text colour, not
+/// the accent, and focus is the `animated` edge.
 class HouseRadio extends StatefulWidget {
   final bool selected;
   final bool enabled;
@@ -579,10 +672,10 @@ class _HouseRadioState extends State<HouseRadio> {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     Color ring(double lit) => !widget.enabled
-        ? t.textMuted.withValues(alpha: 0.4)
-        : (_focused || widget.selected
-            ? t.accent
-            : Color.lerp(t.hairlineStrong, t.textMuted, lit)!);
+        ? t.textDisabled
+        : _focused
+            ? t.animated
+            : Color.lerp(t.textMuted, t.textPrimary, lit)!;
 
     return FocusableActionDetector(
       focusNode: _focusNode,
@@ -618,7 +711,7 @@ class _HouseRadioState extends State<HouseRadio> {
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: widget.enabled ? t.accent : t.textMuted,
+                      color: widget.enabled ? t.textPrimary : t.textDisabled,
                       shape: BoxShape.circle,
                     ),
                   ),

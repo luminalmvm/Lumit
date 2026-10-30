@@ -35,15 +35,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use interprocess::local_socket::traits::Stream as _;
-use interprocess::local_socket::{Listener, SendHalf};
 use thiserror::Error;
 
 use crate::describe::{Context, PluginDescriptor};
+use crate::gpu::GpuApi;
 use crate::image::{Frame16, RectI};
 use crate::instance::{ParamSnapshot, Settled};
 use crate::ipc::pipe::{self, PipeError};
@@ -51,6 +50,9 @@ use crate::ipc::proto::{
     BrokerMessage, FrameRef, FrameWanted, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };
 use crate::ipc::shm::{slot_bytes_for, Ring, ShmError};
+use crate::ipc::spawn::{
+    allow_foreground, fresh_identifier, no_console, read_loop, ring_path, Incoming, Link,
+};
 use crate::quirks::Quirks;
 use crate::render::{RenderRequest, SOURCE_CLIP};
 
@@ -94,6 +96,10 @@ pub const MAX_LIVE_INSTANCES: usize = 1_024;
 /// not a queue, it is a memory leak with a plugin attached (docs/14 §3).
 pub const MAX_NOTES: usize = 64;
 
+/// How often a wait for an answer looks up to see whether the frame is still
+/// wanted. The plugin sees a raised cancel word at its next `abort`.
+const CANCEL_POLL: Duration = Duration::from_millis(5);
+
 /// The environment variable that overrides where the broker executable is,
 /// for a test or for a developer running from a build tree.
 pub const BROKER_EXE_ENV: &str = "LUMIT_OFX_BROKER";
@@ -120,26 +126,6 @@ pub fn broker_exe() -> PathBuf {
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
         .unwrap_or_else(|| PathBuf::from(name))
-}
-
-/// Start the broker with no console window of its own.
-///
-/// A broker is a console program and Lumit is a windowed one, so on Windows
-/// every spawn opens a console window in front of the editor — one per plugin
-/// file, all at once, during the start-up scan. `CREATE_NO_WINDOW` gives the
-/// child no console at all instead. Nothing is lost by it: the protocol was
-/// never on the child's standard streams (see `ipc::pipe`), and its output is
-/// already sent to nowhere.
-fn no_console(command: &mut Command) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        /// `CREATE_NO_WINDOW`, from winbase.h.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    #[cfg(not(windows))]
-    let _ = command;
 }
 
 /// What can go wrong before there is a broker to blame.
@@ -215,8 +201,9 @@ pub struct BrokerConfig {
     pub frame: (usize, usize),
     /// Where the broker executable is, if not beside Lumit's own.
     pub exe: Option<PathBuf>,
-    /// Extra environment for the child. Lumit sets none of its own; the tests
-    /// use it to tell a plugin to misbehave on purpose.
+    /// Extra environment for the child: the graphics card setting and which
+    /// card Lumit draws with ([`crate::gpu`]), and in the tests a plugin told
+    /// to misbehave on purpose.
     pub env: Vec<(String, String)>,
 }
 
@@ -229,7 +216,7 @@ impl BrokerConfig {
             quirks: Quirks::default(),
             frame,
             exe: None,
-            env: Vec::new(),
+            env: crate::gpu::broker_env(),
         }
     }
 }
@@ -258,28 +245,14 @@ pub struct BrokerRender {
     pub frames_needed: BTreeMap<String, (f64, f64)>,
     /// The clip the plugin said this frame simply is, if it said so.
     pub identity_of: Option<String>,
-}
-
-/// The live connection to one broker process.
-struct Link {
-    child: Child,
-    sender: SendHalf,
-    incoming: Receiver<Incoming>,
-}
-
-/// What the reading thread hands back.
-enum Incoming {
-    /// The broker connected; here is the half to write to.
-    Connected(SendHalf),
-    /// A message.
-    Message(Box<BrokerMessage>),
-    /// The pipe closed — which, for a child process, means it died.
-    Gone,
+    /// The graphics card path the plugin renders its next frame through,
+    /// `None` being the CPU.
+    pub path: Option<GpuApi>,
 }
 
 /// One plugin bundle, hosted in a process of its own.
 pub struct Broker {
-    config: BrokerConfig,
+    pub(crate) config: BrokerConfig,
     ring: Ring,
     /// The frame size the current ring was built for. `config.frame` is only
     /// the size it *started* at; `fit` grows it, and a restart has to rebuild
@@ -288,6 +261,8 @@ pub struct Broker {
     ring_frame: (usize, usize),
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
+    /// The graphics card path of each of `descriptors`, as the broker last said.
+    pub(crate) paths: Vec<Option<GpuApi>>,
     refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
     /// The instances that have rendered a frame in this process. The first
@@ -296,35 +271,10 @@ pub struct Broker {
     next_instance: InstanceId,
     next_slot: Slot,
     strikes: u32,
-    disabled: bool,
+    pub(crate) disabled: bool,
     shipments: usize,
     restarts: usize,
     notes: Vec<(String, String)>,
-}
-
-/// A name no other pipe or ring on this machine will have, and none of them can
-/// work out in advance.
-///
-/// This used to be the host's process id and a counter. That is unique, which
-/// is all a name needs to be to keep two brokers apart — and it is also
-/// something any other program on the machine can compute, which is not all a
-/// name needs to be when the endpoint it names is one somebody could connect to
-/// instead of the broker. The programs best placed to do the computing are the
-/// *other* brokers, each of which is running a third party's compiled code.
-///
-/// A failure here is a broker that does not start, deliberately: there is no
-/// fallback to a counter, because a guessable name is the thing being fixed.
-fn fresh_identifier() -> Result<String, BrokerError> {
-    Ok(lumit_peer::Token::generate()
-        .map_err(BrokerError::Peer)?
-        .as_name())
-}
-
-/// Where the ring with this name lives.
-fn ring_path(identifier: &str) -> PathBuf {
-    let mut path = std::env::temp_dir();
-    path.push(format!("lumit-ofx-{identifier}.ring"));
-    path
 }
 
 impl Broker {
@@ -345,6 +295,7 @@ impl Broker {
             ring_frame,
             link: None,
             descriptors: Vec::new(),
+            paths: Vec::new(),
             refused: Vec::new(),
             instances: BTreeMap::new(),
             warm: BTreeSet::new(),
@@ -487,9 +438,14 @@ impl Broker {
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
         let deadline = describe_deadline(&self.config.quirks);
         match self.action(&HostMessage::Describe, deadline, None) {
-            Ok(BrokerMessage::Described { plugins, refused }) => {
+            Ok(BrokerMessage::Described {
+                plugins,
+                refused,
+                paths,
+            }) => {
                 self.descriptors = plugins;
                 self.refused = refused;
+                self.note_paths(paths);
                 Ok(&self.descriptors)
             }
             Ok(_) => Err(BrokerError::Unexpected(
@@ -510,6 +466,32 @@ impl Broker {
                 Fault::Gone => BrokerError::NoHandshake,
                 Fault::Refused(_) => BrokerError::Unexpected("a refusal"),
             }
+        }
+    }
+
+    /// Keep each plugin's path, here and where the frame key reads it.
+    pub(crate) fn note_paths(&mut self, paths: Vec<Option<GpuApi>>) {
+        self.paths = paths;
+        for (index, descriptor) in self.descriptors.iter().enumerate() {
+            let path = self.paths.get(index).copied().flatten();
+            crate::gpu::note_path(&descriptor.identifier, descriptor.version, path);
+        }
+    }
+
+    /// One plugin's path changed: the card failed on it and the CPU took over.
+    fn note_path(&mut self, instance: InstanceId, path: Option<GpuApi>) {
+        let Some(plugin) = self.instances.get(&instance).map(|record| record.plugin) else {
+            return;
+        };
+        let index = plugin as usize;
+        if self.paths.get(index).copied().flatten() == path {
+            return;
+        }
+        if let Some(slot) = self.paths.get_mut(index) {
+            *slot = path;
+        }
+        if let Some(descriptor) = self.descriptors.get(index) {
+            crate::gpu::note_path(&descriptor.identifier, descriptor.version, path);
         }
     }
 
@@ -757,6 +739,8 @@ impl Broker {
             }
         }
         let output = self.take_slot();
+        // Lowered for this frame; raised by `exchange` if it stops being wanted.
+        self.ring.clear_cancel();
 
         let message = HostMessage::Render {
             instance,
@@ -776,8 +760,10 @@ impl Broker {
                 slot,
                 frames_needed,
                 identity_of,
+                path,
             }) => {
                 self.warm.insert(instance);
+                self.note_path(instance, path);
                 let (_, frame) = self.ring.read_frame(slot)?;
                 Ok(BrokerRender {
                     frame,
@@ -785,7 +771,12 @@ impl Broker {
                     error: None,
                     frames_needed,
                     identity_of,
+                    path,
                 })
+            }
+            // Nobody's frame: its own input, never kept.
+            Ok(BrokerMessage::Cancelled) => {
+                Ok(errored(identity, lumit_core::fx::registry::STOPPED))
             }
             Ok(_) => Ok(errored(identity, "the broker answered out of turn")),
             Err(Fault::Timeout) => Ok(errored(identity, "the plugin missed its deadline")),
@@ -877,6 +868,8 @@ impl Broker {
         }
         let outcome = self.exchange(message, deadline, source);
         match outcome {
+            // A frame stopped on purpose says nothing about the plugin.
+            Ok(BrokerMessage::Cancelled) => Ok(BrokerMessage::Cancelled),
             Ok(BrokerMessage::Failed { action, message }) => {
                 // A plugin that answers "no" is not a plugin that has gone
                 // wrong: the frame is lost, the process is fine, and the next
@@ -907,9 +900,20 @@ impl Broker {
     ) -> Result<BrokerMessage, Fault> {
         let expiry = Instant::now() + deadline;
         self.send(message).map_err(|_| Fault::Gone)?;
+        let mut raised = false;
         loop {
             let left = expiry.saturating_duration_since(Instant::now());
-            match self.wait_for(left) {
+            match self.wait_for(left.min(CANCEL_POLL)) {
+                // Still waiting. If the thread asking has had its frame
+                // cancelled, say so through the ring and keep waiting: the
+                // plugin stops at its next `abort`, and its answer still has
+                // to be read before the next question can be asked.
+                Err(Fault::Timeout) if !left.is_zero() => {
+                    if !raised && lumit_core::fx::points::stepped::stopping() {
+                        self.ring.raise_cancel();
+                        raised = true;
+                    }
+                }
                 Ok(BrokerMessage::NeedFrames { frames }) => {
                     self.ship(&frames, source)?;
                 }
@@ -1072,7 +1076,7 @@ impl Broker {
 
     /// Start a broker again and put it back where the last one was: describe
     /// the bundle, make every instance, with the values the host holds.
-    fn restart(&mut self) -> Result<(), BrokerError> {
+    pub(crate) fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
         // A new process loads everything again, so every instance warms up again.
@@ -1089,14 +1093,23 @@ impl Broker {
         let (width, height) = self.ring_frame;
         self.ring = Ring::create(&ring_path(&fresh_identifier()?), width, height)?;
         self.next_slot = 0;
+        // A broker that died with plugins on the card comes back on the CPU: a
+        // crash in a driver cannot be redone on the CPU in place, and trying
+        // the card again would only spend the next strike.
+        if self.paths.iter().any(Option::is_some) {
+            self.config
+                .env
+                .push((crate::gpu::GPU_ENV.to_owned(), "0".to_owned()));
+        }
         self.start(&fresh_identifier()?)?;
 
         let describe = describe_deadline(&self.config.quirks);
         let warm_up = self.warm_up_deadline();
-        if let Ok(BrokerMessage::Described { plugins, .. }) =
+        if let Ok(BrokerMessage::Described { plugins, paths, .. }) =
             self.exchange(&HostMessage::Describe, describe, None)
         {
             self.descriptors = plugins;
+            self.note_paths(paths);
         }
         let records: Vec<(InstanceId, InstanceRecord)> = self
             .instances
@@ -1119,7 +1132,7 @@ impl Broker {
     }
 
     /// End the broker process, however it feels about that.
-    fn kill(&mut self) {
+    pub(crate) fn kill(&mut self) {
         if let Some(mut link) = self.link.take() {
             let _ = pipe::send(&mut link.sender, &HostMessage::Shutdown);
             let _ = link.child.kill();
@@ -1134,26 +1147,6 @@ impl Drop for Broker {
     }
 }
 
-/// Let the plugin's window come to the front. Windows only lets the process
-/// that has the foreground pass that right on, and the plugin lives in the
-/// broker, so without this its editor opens behind Lumit.
-#[cfg(windows)]
-fn allow_foreground(broker: Option<u32>) {
-    #[link(name = "user32")]
-    extern "system" {
-        fn AllowSetForegroundWindow(process: u32) -> i32;
-    }
-    if let Some(process) = broker {
-        // SAFETY: a plain Win32 call that takes a process id and nothing else.
-        unsafe {
-            AllowSetForegroundWindow(process);
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn allow_foreground(_broker: Option<u32>) {}
-
 /// The frame a failed render answers with: its own input, and a sentence.
 fn errored(frame: Frame16, why: &str) -> BrokerRender {
     BrokerRender {
@@ -1162,49 +1155,6 @@ fn errored(frame: Frame16, why: &str) -> BrokerRender {
         error: Some(why.to_owned()),
         frames_needed: BTreeMap::new(),
         identity_of: None,
-    }
-}
-
-/// The reading thread: accept the one connection, hand the writing half back,
-/// then read until the pipe closes.
-///
-/// It holds no lock and takes none, which is what lets the host wait on a
-/// deadline rather than on the plugin (docs/14 §1).
-fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
-    let Ok(stream) = pipe::accept(&listener) else {
-        let _ = tx.send(Incoming::Gone);
-        return;
-    };
-    let (mut receiver, sender) = stream.split();
-    if tx.send(Incoming::Connected(sender)).is_err() {
-        return;
-    }
-    loop {
-        match pipe::recv::<_, BrokerMessage>(&mut receiver) {
-            Ok(message) => {
-                if tx.send(Incoming::Message(Box::new(message))).is_err() {
-                    return;
-                }
-            }
-            Err(_) => {
-                let _ = tx.send(Incoming::Gone);
-                return;
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod describe_deadline_tests {
-    use super::{describe_deadline, DESCRIBE_TIMEOUT};
-    use crate::quirks::Quirks;
-
-    /// The shipped two-second control deadline is not what describe waits
-    /// under: the first describe opens the module, which is a program starting.
-    #[test]
-    fn describe_takes_its_own_ceiling_by_default() {
-        let quirks = Quirks::default();
-        assert!(quirks.control_timeout < DESCRIBE_TIMEOUT);
-        assert_eq!(describe_deadline(&quirks), DESCRIBE_TIMEOUT);
+        path: None,
     }
 }

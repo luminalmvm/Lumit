@@ -288,8 +288,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // 540 is the middle of a 1080p comp and the top-left quarter of a
             // 4K one, and a fresh radial blur must spin about the middle of
             // whatever frame it landed on.
-            ("radial_blur", "centre_x") => w * 0.5,
-            ("radial_blur", "centre_y") => h * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_x") => w * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_y") => h * 0.5,
             // Card wipe's Transition width is a distance across the frame,
             // and its declared half-a-frame default is only *half a frame* on
             // the comp it landed on. The default Flip order runs left to
@@ -328,6 +328,34 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             _ => continue,
         };
         p.value = EffectValue::Float(Property::fixed(v));
+    }
+    // An LFX effect's points are written for a 1920 x 1080 frame, so a fresh
+    // one has them moved onto the raster it lands on. A saved instance keeps
+    // what it stored, and reads the shader's own default for what it did not.
+    if inst.effect.namespace == EffectNamespace::Lfx {
+        let rows = crate::fx::catalogue::BUILTIN_DEFS
+            .get(match_name)
+            .map_or(&[][..], |def| def.derived(&inst));
+        for pair in rows.windows(2) {
+            let (x, y) = (&pair[0], &pair[1]);
+            let (ParamKind::Float { default: dx, .. }, ParamKind::Float { default: dy, .. }) =
+                (&x.kind, &y.kind)
+            else {
+                continue;
+            };
+            let point = x.id.strip_suffix("_x").is_some_and(|stem| {
+                y.id.strip_suffix("_y") == Some(stem) && x.unit == Unit::Px && y.unit == Unit::Px
+            });
+            if point {
+                for (id, v) in [(x.id, dx * w / 1920.0), (y.id, dy * h / 1080.0)] {
+                    inst.params.push(EffectParam {
+                        id: id.to_owned(),
+                        value: EffectValue::Float(Property::fixed(v)),
+                        extra: serde_json::Map::new(),
+                    });
+                }
+            }
+        }
     }
     Some(inst)
 }
@@ -575,6 +603,121 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
                 }
             }
             e.effect.version = 12;
+        }
+    }
+}
+
+/// Bring effects from outside, a file, a preset or the clipboard, up to this
+/// build's schemas: [`backfill_builtin_params`], [`migrate_percent_to_px`]
+/// against the `comp` size, and an old Sprite flare carried over about the
+/// middle of the `own` picture it runs on. `wired` says whether an instance's
+/// row has a wire into it.
+pub fn migrate_in(
+    effects: &mut [EffectInstance],
+    comp: (f64, f64),
+    own: (f64, f64),
+    wired: &dyn Fn(uuid::Uuid, &str) -> bool,
+) {
+    backfill_builtin_params(effects);
+    migrate_percent_to_px(effects, comp.0, comp.1);
+    for e in effects.iter_mut() {
+        if e.effect.namespace == EffectNamespace::Builtin
+            && e.effect.match_name == "sprite_flare"
+            && e.effect.version < 2
+        {
+            let id = e.id;
+            crate::fx::effects::sprite_flare::migrate_v1(e, own.0, own.1, &|row| wired(id, row));
+        }
+    }
+}
+
+/// Whether a row of an effect on the stack beside `graph` has a wire into it.
+pub fn wired_in(graph: &crate::graph::LayerGraph) -> impl Fn(uuid::Uuid, &str) -> bool + '_ {
+    move |effect, row| {
+        let to = crate::graph::InputRef::Param {
+            node: crate::graph::NodeRef::Effect(effect),
+            port: row.to_owned(),
+        };
+        graph.wire_into(&to).is_some()
+    }
+}
+
+/// The size of the picture `layer`'s effects run on, where the document
+/// holds it: a solid's, a precomp's comp, a shape's art. The comp's
+/// otherwise, footage's included, which the document does not know.
+pub fn picture_size(
+    doc: &crate::model::Document,
+    comp: &crate::model::Composition,
+    layer: &crate::model::Layer,
+) -> (f64, f64) {
+    use crate::model::LayerKind;
+    let size = |w: u32, h: u32| (f64::from(w), f64::from(h));
+    match &layer.kind {
+        LayerKind::Solid { def } => doc.solid(*def).map(|s| size(s.width, s.height)),
+        LayerKind::Precomp { comp } => doc.comp(*comp).map(|c| size(c.width, c.height)),
+        LayerKind::Shape { contents } => crate::shape::contents_bounds(contents, 0.0)
+            .map(|(x0, y0, x1, y1)| ((x1 - x0).max(1.0), (y1 - y0).max(1.0))),
+        _ => None,
+    }
+    .unwrap_or(size(comp.width, comp.height))
+}
+
+/// [`migrate_in`] for every effect `doc` holds: a layer's effects, styles,
+/// graph boxes and graph inputs, a Sequence layer's clips, a group's header
+/// and the comp's node graph.
+pub fn migrate_document(doc: &mut crate::model::Document) {
+    use crate::model::{LayerKind, ProjectItem};
+    let read = &*doc;
+    let own: std::collections::HashMap<uuid::Uuid, (f64, f64)> = (read.items.iter())
+        .filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        })
+        .flat_map(|c| (c.layers.iter()).map(move |l| (l.id, picture_size(read, c, l))))
+        .collect();
+    let none = |_: uuid::Uuid, _: &str| false;
+    for item in &mut doc.items {
+        let ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        let size = (f64::from(comp.width), f64::from(comp.height));
+        for layer in &mut comp.layers {
+            let at = own.get(&layer.id).copied().unwrap_or(size);
+            {
+                let wired = wired_in(&layer.graph);
+                migrate_in(&mut layer.effects, size, at, &wired);
+                migrate_in(&mut layer.styles, size, at, &wired);
+            }
+            // A file hand-edited, or written by a tool that did not know the
+            // order, comes back one per style and sorted.
+            crate::fx::styles::normalise_styles(&mut layer.styles);
+            migrate_in(layer.graph_inputs.as_mut_slice(), size, size, &none);
+            migrate_in(&mut layer.graph.nodes, size, size, &none);
+            layer.graph.prune_rows(&layer.effects);
+            if let LayerKind::Sequence { clips } = &mut layer.kind {
+                for clip in clips {
+                    migrate_in(&mut clip.effects, size, size, &none);
+                }
+            }
+        }
+        for group in &mut comp.groups {
+            migrate_in(&mut group.effects, size, size, &none);
+        }
+        if let Some(graph) = &mut comp.graph {
+            migrate_graph(graph, size);
+        }
+    }
+}
+
+/// [`migrate_in`] for the boxes of a comp's node graph, `size` its comp's.
+pub fn migrate_graph(graph: &mut crate::comp_graph::CompGraph, size: (f64, f64)) {
+    graph.migrate_dof_pro_depth();
+    let edges = graph.edges.clone();
+    let wired =
+        |effect: uuid::Uuid, row: &str| edges.iter().any(|e| e.to == effect && e.to_port == row);
+    for node in &mut graph.nodes {
+        if let crate::comp_graph::GraphNode::Fx(inst) = node {
+            migrate_in(std::slice::from_mut(inst), size, size, &wired);
         }
     }
 }

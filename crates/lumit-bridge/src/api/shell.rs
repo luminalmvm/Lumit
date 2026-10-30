@@ -111,6 +111,78 @@ pub fn set_hardware_decode(on: bool) {
     let _ = on;
 }
 
+/// The widest and tallest picture the renderer makes, in pixels. Held to what
+/// the graphics card takes.
+#[frb(sync)]
+pub fn largest_picture() -> u32 {
+    lumit_core::largest_picture::side()
+}
+
+/// The sides [`largest_picture`] may be set to on this machine, smallest
+/// first: as far as the card takes, while one picture at 16-bit (8 bytes a
+/// pixel) is no more than a quarter of the graphics memory, or of the
+/// machine's where the card does not say.
+// ponytail: a quarter of memory for one picture is a rule of thumb. A graph
+// holds a few at once, so measure a heavy one if a size still runs out.
+#[frb(sync)]
+pub fn largest_picture_choices() -> Vec<u32> {
+    let card = lumit_core::largest_picture::card();
+    LARGEST_PICTURES
+        .into_iter()
+        .filter(|&side| side == LARGEST_PICTURES[0] || (side <= card && memory_takes(side)))
+        .collect()
+}
+
+/// Set [`largest_picture`], to the largest choice no bigger than `side` that
+/// the memory takes. The card is held to when the picture is made, since a
+/// setting handed back at boot comes before the card is open. Held the way
+/// the drag setting above is.
+#[frb(sync)]
+pub fn set_largest_picture(side: u32) {
+    let fits = LARGEST_PICTURES
+        .into_iter()
+        .rfind(|&s| s <= side && memory_takes(s))
+        .unwrap_or(LARGEST_PICTURES[0]);
+    lumit_core::largest_picture::set(fits);
+}
+
+const LARGEST_PICTURES: [u32; 3] = [lumit_core::largest_picture::DEFAULT_SIDE, 16_384, 32_768];
+
+fn memory_takes(side: u32) -> bool {
+    let memory = match crate::api::system::video_memory_bytes() {
+        0 => crate::api::system::system_memory_bytes(),
+        bytes => bytes,
+    };
+    u64::from(side).pow(2) * 8 <= memory / 4
+}
+
+/// Whether OFX plugins render on the graphics card where they can. Kept with
+/// the plugin preferences.
+#[frb(sync)]
+pub fn plugins_on_graphics_card() -> bool {
+    !lumit_project::plugins::PluginPrefs::load_default().plugins_on_cpu
+}
+
+/// Turn plugin rendering on the graphics card on or off. Each plugin broker it
+/// changes starts again in the background, after the frame it is drawing.
+///
+/// # Errors
+///
+/// [`BridgeError::WriteFailed`] when the preference could not be written.
+#[frb(sync)]
+pub fn set_plugins_on_graphics_card(on: bool) -> Result<(), BridgeError> {
+    lumit_ofx::gpu::set_enabled(on);
+    let _ = std::thread::Builder::new()
+        .name("plugins on the card".to_owned())
+        .spawn(lumit_ofx::discover::follow_gpu_setting);
+    let mut prefs = lumit_project::plugins::PluginPrefs::load_default();
+    if prefs.plugins_on_cpu != on {
+        return Ok(());
+    }
+    prefs.plugins_on_cpu = !on;
+    prefs.save_default().map_err(|_| BridgeError::WriteFailed)
+}
+
 /// What Discord shows under the person's name while Lumit is open.
 ///
 /// `show` off takes Lumit out of their status. On, it says Lumit is open, and

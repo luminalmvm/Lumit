@@ -2,6 +2,7 @@
 // and the field itself.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import '../../l10n/strings.dart';
 import '../../src/rust/api/project.dart' show ProjectReference;
 import '../../state/app_state.dart' show LumitState;
 import '../../theme/theme.dart';
+import '../../theme/style_sheet.dart';
 import '../time_readout.dart' show monoSlotWidth;
 import 'base.dart';
 import 'menus.dart';
@@ -69,7 +71,7 @@ class ScrubLadder extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     // The hint pill's own ground and face (§4.2): every readout a gesture
-    // summons in this application is 8px mono on `surface_4`.
+    // summons in this application is 9px mono on `surface_4`.
     return IgnorePointer(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
@@ -100,7 +102,7 @@ class ScrubLadder extends StatelessWidget {
                 child: Text(
                   labels[i],
                   style: t.mono.copyWith(
-                    fontSize: 8,
+                    fontSize: t.caption.fontSize,
                     color:
                         factor == scrubLadder[i] ? t.textPrimary : t.textMuted,
                   ),
@@ -460,14 +462,22 @@ class _DragValueFieldState extends State<DragValueField>
       t.mono.copyWith(fontSize: widget.bare ? barValueTextSize : wellTextSize);
 
   /// How wide the resting face draws — the reading's own width plus the well's
-  /// padding and its edge.
+  /// padding and its edge, and never narrower than [_minWidth].
   ///
   /// The reading is monospaced, so a character count is a width; [monoSlotWidth]
   /// is the same measurement the readouts use, and caches by face and length.
-  double _restingWidth(LumitTheme t) =>
+  double _restingWidth(LumitTheme t) => math.max(
       monoSlotWidth(_valueStyle(t), _format(widget.value).length) +
-      (widget.bare ? 0 : 12) +
-      2;
+          (widget.bare ? 0 : 12) +
+          2,
+      _minWidth(t));
+
+  /// The narrowest a well draws: six characters. A reading that gains a digit
+  /// as it is dragged, 9.9 to 10.0, then does not push its neighbour along,
+  /// and a longer number typed over a short one stays in view. A bare number
+  /// keeps its own width, as a bar has no room to spare.
+  double _minWidth(LumitTheme t) =>
+      widget.bare ? 0 : monoSlotWidth(_valueStyle(t), 6) + 12 + 2;
 
   String _format(num v) {
     var s = _plain(v);
@@ -603,7 +613,7 @@ class _DragValueFieldState extends State<DragValueField>
         width: _restingWidth(t),
         height: widget.bare ? null : wellHeight,
         child: DecoratedBox(
-          decoration: BoxDecoration(
+          decoration: dress(BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
             // `animated`, not `accent`: the focused value field is the one
@@ -611,11 +621,15 @@ class _DragValueFieldState extends State<DragValueField>
             // at the resting face's own width so the edge does not move either.
             border:
                 Border.all(color: _refused ? t.error : t.animated, width: 1),
-          ),
+          ), widget.bare
+              ? PartStyle.none
+              : partStyle(context, t, 'well', states: const {'focus'})),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
-          // text selected nothing.
-          child: TextSelectionGestureDetectorBuilder(delegate: this)
+          // text selected nothing. The I-beam says it can be typed in.
+          child: MouseRegion(
+            cursor: SystemMouseCursors.text,
+            child: TextSelectionGestureDetectorBuilder(delegate: this)
               .buildGestureDetector(
             child: Padding(
               // The resting face's 6 of padding **plus its 1px edge**: a
@@ -656,6 +670,7 @@ class _DragValueFieldState extends State<DragValueField>
                 ),
               ),
             ),
+          ),
           ),
         ),
       );
@@ -760,10 +775,19 @@ class _DragValueFieldState extends State<DragValueField>
                   .duration,
           curve: motion.hoverOut.curve,
           height: widget.bare ? null : wellHeight,
+          constraints: BoxConstraints(minWidth: _minWidth(t)),
           padding: widget.bare
               ? EdgeInsets.zero
               : const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
+          // A style's inner shadows, so a well can sit sunk into its panel.
+          foregroundDecoration: widget.bare
+              ? null
+              : insetDecoration(
+                  partStyle(context, t, 'well'),
+                  BorderRadius.circular(
+                      partStyle(context, t, 'well').radius ??
+                          t.tokens.wellRadius)),
+          decoration: dress(BoxDecoration(
             // The inset stays the inset in every state: a well does not lift
             // under the pointer, because then it would stop being a recess
             // (§2.1). Hover and scrub speak through the edge instead.
@@ -792,7 +816,13 @@ class _DragValueFieldState extends State<DragValueField>
                                     : t.hairline,
                     lit: _refused || _dragging || _focused || _hover,
                   ),
-          ),
+          ), widget.bare
+              ? PartStyle.none
+              : partStyle(context, t, 'well', states: {
+                  if (_hover) 'hover',
+                  if (_focused) 'focus',
+                  if (_dragging) 'pressed',
+                })),
           child: Align(
             alignment: Alignment.centerRight,
             widthFactor: 1,

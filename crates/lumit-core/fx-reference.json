@@ -48,6 +48,10 @@
     {
       "slug": "drivers",
       "label": "Drivers"
+    },
+    {
+      "slug": "siceliot",
+      "label": "Siceliot"
     }
   ],
   "effects": [
@@ -674,10 +678,16 @@
       "slug": "sprite-flare",
       "match_name": "sprite_flare",
       "label": "Sprite flare",
-      "version": 1,
+      "version": 2,
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
+        {
+          "id": "edit_flare",
+          "label": "Edit flare…",
+          "kind": "action",
+          "unit": "raw"
+        },
         {
           "id": "light_x",
           "label": "Light x",
@@ -697,8 +707,60 @@
           "slider_max": 2160.0
         },
         {
+          "id": "light_from",
+          "label": "Light from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Point",
+            "3D point",
+            "Lights",
+            "Bright spots",
+            "Mask points",
+            "Points"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_z",
+          "label": "Light z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "light_mask",
+          "label": "Mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "threshold_softness",
+          "label": "Softness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.25,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "intensity",
-          "label": "Intensity",
+          "label": "Brightness",
           "kind": "float",
           "unit": "raw",
           "default": 1.0,
@@ -707,8 +769,26 @@
           "hard_min": 0.0
         },
         {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "tint",
-          "label": "Tint",
+          "label": "Colour",
           "kind": "colour",
           "unit": "raw",
           "default": [
@@ -721,94 +801,145 @@
           "slider_max": 4.0
         },
         {
-          "id": "glow_size",
-          "label": "Glow size",
+          "id": "evolution",
+          "label": "Evolution",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "centre_x",
+          "label": "Centre X",
           "kind": "float",
           "unit": "px",
-          "default": 120.0,
+          "default": 960.0,
           "slider_min": 0.0,
-          "slider_max": 800.0,
-          "hard_min": 0.0
+          "slider_max": 3840.0
         },
         {
-          "id": "glow_intensity",
-          "label": "Glow intensity",
+          "id": "centre_y",
+          "label": "Centre Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "flicker",
+          "label": "Amount",
           "kind": "float",
           "unit": "raw",
-          "default": 1.0,
+          "default": 0.0,
           "slider_min": 0.0,
-          "slider_max": 4.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "flicker_speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghosts",
-          "label": "Ghosts",
+          "id": "flicker_seed",
+          "label": "Seed",
           "kind": "int",
           "unit": "raw",
-          "default": 6,
+          "default": 1,
           "slider_min": 0.0,
-          "slider_max": 16.0,
-          "hard_min": 0.0,
-          "hard_max": 16.0
-        },
-        {
-          "id": "ghost_spacing",
-          "label": "Ghost spacing",
-          "kind": "float",
-          "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 1.5,
+          "slider_max": 999.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghost_size",
-          "label": "Ghost size",
+          "id": "use_light_colour",
+          "label": "Use light colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "use_light_intensity",
+          "label": "Use light intensity",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "size_with_distance",
+          "label": "Size with distance",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "hide_behind",
+          "label": "Hide behind",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "hide_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Alpha",
+            "Luma"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "light_size",
+          "label": "Light size",
           "kind": "float",
           "unit": "px",
-          "default": 60.0,
+          "default": 20.0,
           "slider_min": 0.0,
           "slider_max": 400.0,
           "hard_min": 0.0
         },
         {
-          "id": "ghost_intensity",
-          "label": "Ghost intensity",
-          "kind": "float",
+          "id": "depth_m",
+          "label": "Depth",
+          "kind": "layer",
           "unit": "raw",
-          "default": 0.35,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
+          "self_default": false
         },
         {
-          "id": "streak_length",
-          "label": "Streak length",
+          "id": "light_distance_m",
+          "label": "Light distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1000.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "edge_fade",
+          "label": "Edge fade",
           "kind": "float",
           "unit": "px",
-          "default": 300.0,
+          "default": 200.0,
           "slider_min": 0.0,
-          "slider_max": 2000.0,
+          "slider_max": 1000.0,
           "hard_min": 0.0
         },
         {
-          "id": "streak_intensity",
-          "label": "Streak intensity",
-          "kind": "float",
+          "id": "texture_layer",
+          "label": "Texture layer",
+          "kind": "layer",
           "unit": "raw",
-          "default": 0.5,
-          "slider_min": 0.0,
-          "slider_max": 2.0,
-          "hard_min": 0.0
-        },
-        {
-          "id": "streak_angle",
-          "label": "Streak angle",
-          "kind": "float",
-          "unit": "degrees",
-          "default": 0.0,
-          "slider_min": -180.0,
-          "slider_max": 180.0
+          "self_default": false
         },
         {
           "id": "mix",
@@ -889,31 +1020,176 @@
       ],
       "groups": [
         {
-          "label": "Glow",
+          "label": "",
           "params": [
-            "glow_size",
-            "glow_intensity"
+            "light_z"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1
+            ]
+          }
         },
         {
-          "label": "Ghosts",
+          "label": "",
           "params": [
-            "ghosts",
-            "ghost_spacing",
-            "ghost_size",
-            "ghost_intensity"
+            "light_mask"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              4
+            ]
+          }
         },
         {
-          "label": "Streak",
+          "label": "",
           "params": [
-            "streak_length",
-            "streak_intensity",
-            "streak_angle"
+            "threshold",
+            "threshold_softness"
           ],
-          "collapsed": false
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
+          "label": "Centre",
+          "params": [
+            "centre_x",
+            "centre_y"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_speed",
+            "flicker_seed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Lights",
+          "params": [
+            "use_light_colour",
+            "use_light_intensity",
+            "size_with_distance"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "light_from",
+            "values": [
+              1,
+              2,
+              3,
+              5
+            ]
+          }
+        },
+        {
+          "label": "Hiding",
+          "params": [
+            "hide_behind",
+            "hide_channel",
+            "light_size",
+            "depth_m",
+            "light_distance_m",
+            "edge_fade"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Textures",
+          "params": [
+            "texture_layer"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "light_x",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 5
+        },
+        {
+          "param": "light_y",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 4
+        },
+        {
+          "param": "use_light_colour",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 1
+        },
+        {
+          "param": "use_light_intensity",
+          "on": "light_from",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "size_with_distance",
+          "on": "light_from",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "hide_channel",
+          "on": "hide_behind",
+          "cond": "layer_set"
+        },
+        {
+          "param": "light_distance_m",
+          "on": "depth_m",
+          "cond": "layer_set"
         }
       ],
       "matte_role": "strength"
@@ -4535,6 +4811,148 @@
       "matte_role": "strength"
     },
     {
+      "slug": "crop",
+      "match_name": "crop",
+      "label": "Crop",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "left",
+          "label": "Left",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "top",
+          "label": "Top",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "right",
+          "label": "Right",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "glow",
       "match_name": "glow",
       "label": "Glow",
@@ -4690,6 +5108,17 @@
           "slider_max": 4.0
         },
         {
+          "id": "rolloff",
+          "label": "Rolloff",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
           "id": "repeat_edge_pixels",
           "label": "Repeat edge pixels",
           "kind": "bool",
@@ -4824,6 +5253,71 @@
           "hard_min": 0.0
         },
         {
+          "id": "phase",
+          "label": "Phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
+        },
+        {
+          "id": "style",
+          "label": "Style",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Twitchy",
+            "Jumpy"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "stillness",
+          "label": "Stillness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.7,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "twitch_freq",
+          "label": "Twitch frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "drift",
+          "label": "Drift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.3,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "centre_bias",
+          "label": "Centre bias",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
           "id": "rotation",
           "label": "Rotation amount",
           "kind": "float",
@@ -4906,6 +5400,124 @@
           "hard_min": 0.0
         },
         {
+          "id": "x_wave",
+          "label": "X wave",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "x_wave_freq",
+          "label": "X wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "x_wave_phase",
+          "label": "X wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "y_wave",
+          "label": "Y wave",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "y_wave_freq",
+          "label": "Y wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "y_wave_phase",
+          "label": "Y wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "z_wave",
+          "label": "Z wave",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "z_wave_freq",
+          "label": "Z wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "z_wave_phase",
+          "label": "Z wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "rot_wave",
+          "label": "Rotation wave",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 45.0,
+          "hard_min": 0.0,
+          "hard_max": 360.0
+        },
+        {
+          "id": "rot_wave_freq",
+          "label": "Rotation wave frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "rot_wave_phase",
+          "label": "Rotation wave phase",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
           "id": "motion_blur",
           "label": "Motion blur",
           "kind": "bool",
@@ -4921,7 +5533,7 @@
           "slider_min": 0.0,
           "slider_max": 1.0,
           "hard_min": 0.0,
-          "hard_max": 1.0
+          "hard_max": 4.0
         },
         {
           "id": "mb_samples",
@@ -4935,12 +5547,37 @@
           "hard_max": 64.0
         },
         {
+          "id": "scale",
+          "label": "Scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 100.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
           "id": "edge",
           "label": "Edges",
           "kind": "choice",
           "unit": "raw",
           "default": 2,
           "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "y_edge",
+          "label": "Y edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Same",
             "Transparent",
             "Repeat",
             "Mirror"
@@ -5032,6 +5669,34 @@
       ],
       "groups": [
         {
+          "label": "",
+          "params": [
+            "stillness",
+            "twitch_freq"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "style",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "drift",
+            "centre_bias"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "style",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
           "label": "Per-axis wobble",
           "params": [
             "x_amp",
@@ -5040,6 +5705,24 @@
             "y_freq",
             "z_amp",
             "z_freq"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Wave",
+          "params": [
+            "x_wave",
+            "x_wave_freq",
+            "x_wave_phase",
+            "y_wave",
+            "y_wave_freq",
+            "y_wave_phase",
+            "z_wave",
+            "z_wave_freq",
+            "z_wave_phase",
+            "rot_wave",
+            "rot_wave_freq",
+            "rot_wave_phase"
           ],
           "collapsed": true
         },
@@ -10697,7 +11380,7 @@
           "label": "Flock radius",
           "kind": "float",
           "unit": "px",
-          "default": 50.0,
+          "default": 150.0,
           "slider_min": 0.0,
           "slider_max": 500.0,
           "hard_min": 0.0
@@ -14340,6 +15023,12 @@
           "hard_max": 4.0
         },
         {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
           "id": "offset_x",
           "label": "Offset x",
           "kind": "float",
@@ -14371,6 +15060,19 @@
           "dividers_after": []
         },
         {
+          "id": "vertical_anchor",
+          "label": "Vertical anchor",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Middle",
+            "Top",
+            "Bottom"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "max_labels",
           "label": "Max labels",
           "kind": "int",
@@ -14380,6 +15082,220 @@
           "slider_max": 2000.0,
           "hard_min": 1.0,
           "hard_max": 2000.0
+        },
+        {
+          "id": "change",
+          "label": "Change",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "change_above",
+          "label": "Change above",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "scramble_rate",
+          "label": "Scramble rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 60.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "text_step",
+          "label": "Text step",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "flash_colour",
+          "label": "Flash colour",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Off",
+            "Random hue",
+            "Two colours",
+            "By strength",
+            "Gradient"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "colour_a",
+          "label": "Colour A",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.2,
+            0.1,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "colour_b",
+          "label": "Colour B",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.1,
+            0.6,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "hue_start",
+          "label": "Hue start",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "hue_range",
+          "label": "Hue range",
+          "kind": "float",
+          "unit": "raw",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0
+        },
+        {
+          "id": "saturation",
+          "label": "Saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 80.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "darken",
+          "label": "Darken",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "gradient_stops",
+          "label": "Gradient stops",
+          "kind": "int",
+          "unit": "raw",
+          "default": 4,
+          "slider_min": 2.0,
+          "slider_max": 4.0,
+          "hard_min": 2.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "gradient_1",
+          "label": "Gradient 1",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_2",
+          "label": "Gradient 2",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.63,
+            0.67,
+            0.34,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_3",
+          "label": "Gradient 3",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.08,
+            0.41,
+            0.13,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "gradient_4",
+          "label": "Gradient 4",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.006,
+            0.11,
+            0.22,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "label_scale",
+          "label": "Label scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "grow",
+          "label": "Grow",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "label_rotation",
+          "label": "Label rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
         },
         {
           "id": "mix",
@@ -14471,8 +15387,293 @@
           "on": "apply_to",
           "cond": "choice_is_not",
           "value": 0
+        },
+        {
+          "param": "colour_a",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "colour_b",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "hue_start",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "hue_range",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "saturation",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "darken",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "gradient_stops",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_1",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_2",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_3",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
+        },
+        {
+          "param": "gradient_4",
+          "on": "flash_colour",
+          "cond": "choice_is",
+          "value": 4
         }
       ],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "type-fill",
+      "match_name": "type_fill",
+      "label": "Type fill",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "text_layer",
+          "label": "Text layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "words",
+          "label": "Words",
+          "kind": "text",
+          "unit": "raw",
+          "default": "Flood|the|Grid"
+        },
+        {
+          "id": "region_layer",
+          "label": "Region layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "region_layer_placement",
+          "label": "Region placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "region_from",
+          "label": "Region from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Alpha",
+            "Luminance"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "invert",
+          "label": "Invert region",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "cut_words",
+          "label": "Cut words",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "rows",
+          "label": "Rows",
+          "kind": "int",
+          "unit": "raw",
+          "default": 24,
+          "slider_min": 1.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "row_gap",
+          "label": "Row gap",
+          "kind": "float",
+          "unit": "px",
+          "default": 6.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "word_gap",
+          "label": "Word gap",
+          "kind": "float",
+          "unit": "px",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "min_width",
+          "label": "Min width",
+          "kind": "float",
+          "unit": "px",
+          "default": 24.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "order",
+          "label": "Order",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "In turn",
+            "Shift per row",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
       "matte_role": "strength"
     },
     {
@@ -27317,6 +28518,493 @@
           "on": "events",
           "cond": "choice_is",
           "value": 2
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "stagger",
+      "match_name": "stagger",
+      "label": "Stagger",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "curve",
+          "label": "Curve",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "looped",
+          "label": "Loop",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "reverse",
+          "label": "Reverse",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "random",
+      "match_name": "random",
+      "label": "Random",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "bias",
+          "label": "Bias",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "oscillator",
+      "match_name": "oscillator",
+      "label": "Oscillator",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sine",
+            "Triangle",
+            "Square",
+            "Sawtooth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "phase",
+          "label": "Phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "phase_per_copy",
+          "label": "Phase per copy",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "phase_from",
+          "label": "Phase from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Copy",
+            "Position"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "wave_angle",
+          "label": "Wave angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "wavelength",
+          "label": "Wavelength",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 10.0,
+          "slider_max": 4000.0,
+          "hard_min": 1.0
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "phase_per_copy",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "wave_angle",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "wavelength",
+          "on": "phase_from",
+          "cond": "choice_is",
+          "value": 1
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "value-noise",
+      "match_name": "value_noise",
+      "label": "Value noise",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "detail",
+          "label": "Detail",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 4.0,
+          "hard_min": 1.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "vary_by",
+          "label": "Vary by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Nothing",
+            "Copy",
+            "Position"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "noise_scale",
+          "label": "Noise scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 300.0,
+          "slider_min": 10.0,
+          "slider_max": 4000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "noise_scale",
+          "on": "vary_by",
+          "cond": "choice_is",
+          "value": 2
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "ring-wave",
+      "match_name": "ring_wave",
+      "label": "Ring wave",
+      "version": 1,
+      "category": "Siceliot",
+      "category_slug": "siceliot",
+      "params": [
+        {
+          "id": "minimum",
+          "label": "Minimum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "maximum",
+          "label": "Maximum",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "interval",
+          "label": "Interval",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.05,
+          "slider_max": 5.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "px",
+          "default": 300.0,
+          "slider_min": 10.0,
+          "slider_max": 2000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "speed_variance",
+          "label": "Speed variance",
+          "kind": "float",
+          "unit": "px",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "thickness_min",
+          "label": "Thickness min",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "thickness_max",
+          "label": "Thickness max",
+          "kind": "float",
+          "unit": "px",
+          "default": 120.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "origin",
+          "label": "Origin",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Anywhere",
+            "Edges",
+            "Centre",
+            "Away from points"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "clearance",
+          "label": "Clearance",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "add_up",
+          "label": "Add up",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "grow_min",
+          "label": "Grow min",
+          "kind": "float",
+          "unit": "percent",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "grow_max",
+          "label": "Grow max",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "spin",
+          "label": "Spin",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "clearance",
+          "on": "origin",
+          "cond": "choice_is",
+          "value": 3
         }
       ],
       "matte_role": "none"

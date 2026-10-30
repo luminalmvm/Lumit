@@ -46,6 +46,9 @@ pub struct PluginPrefs {
     /// not open it again. The plugin host's own shape, kept opaque here so this
     /// crate need not depend on the host.
     pub audio_cache: serde_json::Value,
+    /// "Render plugins on the graphics card" turned off, which keeps every OFX
+    /// plugin on the CPU. The way out for a bad graphics driver.
+    pub plugins_on_cpu: bool,
 }
 
 impl PluginPrefs {

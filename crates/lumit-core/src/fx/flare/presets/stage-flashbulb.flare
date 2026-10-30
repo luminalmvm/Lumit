@@ -1,0 +1,28 @@
+{
+  "lumit_flare": 1,
+  "name": "Flashbulb",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "values": {"size": 55, "falloff": 0.5, "core": 2.0, "core_size": 0.25, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"size": 200, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"points": 4, "size": 500, "thickness": 6.0, "brightness": 0.5}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "values": {"count": 100, "size": 350, "thickness": 2.0, "brightness": 0.3, "length_var": 0.8, "softness": 0.5, "taper": 1.0, "shimmer": 0.2}
+    }
+  ]
+}

@@ -304,6 +304,22 @@ pub fn parent_world_placement(
     world
 }
 
+/// Whether `layer` carries a live effect drawn over the composite below
+/// ([`EffectDef::backdrop`](lumit_core::fx::registry::EffectDef::backdrop)),
+/// which makes it an adjustment for this frame without being one in the
+/// project: its picture is still decoded, and is that effect's shape.
+fn backdrop_fx(layer: &lumit_core::model::Layer) -> bool {
+    layer.switches.fx && layer.effects.iter().any(|e| e.enabled && is_backdrop(e))
+}
+
+/// Whether `e` is an effect drawn over the composite below.
+fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
+    e.effect.namespace == lumit_core::model::EffectNamespace::Lfx
+        && lumit_core::fx::catalogue::BUILTIN_DEFS
+            .get(&e.effect.match_name)
+            .is_some_and(|d| d.backdrop())
+}
+
 /// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
 /// own pixels to comp pixels, as the compositor places it.
 fn world_placement(
@@ -993,14 +1009,25 @@ fn points_room(
         // To the further of the frame's two edges, and never past a frame's
         // width, however far off the layer has been moved.
         let px = corner.max(frame - corner - art).clamp(0.0, frame);
-        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(tex) / 2;
-        ((px * scale).ceil() as u32).min(most)
+        lumit_core::largest_picture::room((px * scale).ceil() as u32, tex)
     };
     let room = [
         side(corner.0, natural.0, frame.0, tex.0),
         side(corner.1, natural.1, frame.1, tex.1),
     ];
     (room != [0, 0]).then_some((room, scale))
+}
+
+/// The rows of a points consumer that wired drivers give each point
+/// its own value for, and the stream columns they are written into.
+fn driven_rows(
+    consumer: &lumit_core::model::EffectInstance,
+) -> Option<&'static [(&'static str, &'static str)]> {
+    match consumer.effect.match_name.as_str() {
+        "clone_to_points" => Some(lumit_core::fx::drivers::per_copy::COPY_ROWS),
+        "label_points" => Some(lumit_core::fx::effects::label_points::LABEL_DRIVEN_ROWS),
+        _ => None,
+    }
 }
 
 /// **The stream a points consumer's wire brings it** (points-stream.md §3.3),
@@ -1176,9 +1203,24 @@ fn points_input_in(
         }
         // No stream yet, but the wire may still name its producer: one whose
         // points depend on a picture is asked again on the card.
-        let Some(stream) = now else {
+        let Some(mut stream) = now else {
             break;
         };
+        // Drivers wired into Clone to points' Scale, Rotation or
+        // Opacity give each stamp its own value, and into Label points'
+        // Change or Label scale each label its own.
+        if let Some(rows) = driven_rows(consumer) {
+            lumit_core::fx::drivers::per_copy::drive_rows(
+                graph,
+                consumer.id,
+                &mut stream,
+                rows,
+                t,
+                context,
+                Some(audio),
+                projection,
+            );
+        }
         found.streams.push(stream);
 
         // The history, if this consumer asks for one. `Samples` counts the
@@ -1273,7 +1315,7 @@ fn text_carriage(
     Option<Box<lumit_core::model::TextDocument>>,
 ) {
     let name = e.effect.match_name.as_str();
-    if name != "text_to_points" && name != "label_points" {
+    if name != "text_to_points" && name != "label_points" && name != "type_fill" {
         return Default::default();
     }
     // An unset row means the layer the effect is on.
@@ -1297,7 +1339,7 @@ fn text_carriage(
         current_depth: 0,
         inputs: None,
     }));
-    if name == "label_points" {
+    if name == "label_points" || name == "type_fill" {
         // A label is set straight and still, so the path and the animators
         // are left behind.
         let label = lumit_core::model::TextDocument {
@@ -1884,6 +1926,8 @@ impl Walk<'static> {
 /// Something asked of a walk on its own, in place of its draws. Both are
 /// Clone to points': a picture at another moment or as one copy of several,
 /// and the whole list for a stream that was only made during the render.
+// One of these a walk, so the picture is kept inline.
+#[allow(clippy::large_enum_variant)]
 enum Probe<'a> {
     /// One layer row of an effect, as a picture.
     Picture {
@@ -2464,6 +2508,7 @@ fn comp_walk(
             format: lumit_media::decode::PixelFormat::Srgb8,
             fx: Default::default(),
             colour_tables: Vec::new(),
+            flare_lens_files: Vec::new(),
             // A comp reference runs no stack of its own here: its layers were
             // walked whole, each with its own carriages already filled.
             roto_mattes: Vec::new(),
@@ -2570,7 +2615,7 @@ fn comp_walk(
             // texture before resampling. Uses that layer's decode scale (its
             // px@comp radii stay honest), the same resolve export uses. Empty
             // otherwise.
-            let (fx, colour_tables) = if mode.folds_effects() && src.switches.fx {
+            let (fx, colour_tables, flare_lens_files) = if mode.folds_effects() && src.switches.fx {
                 let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
                 let scale = tex_w as f32 / natural.0.max(1.0);
@@ -2603,6 +2648,7 @@ fn comp_walk(
                     )
                     .1,
                     colour_tables(&src.effects, slt),
+                    flare_lens_files(&src.effects, slt),
                 )
             } else {
                 Default::default()
@@ -2627,6 +2673,7 @@ fn comp_walk(
                 format,
                 fx,
                 colour_tables,
+                flare_lens_files,
                 roto_mattes,
                 planes,
                 nested: None,
@@ -2799,7 +2846,7 @@ fn comp_walk(
                     .layers
                     .iter()
                     .find(|l| l.effects.iter().any(|x| x.id == e.id))
-                    .filter(|l| !l.is_adjustment());
+                    .filter(|l| !l.is_adjustment() && !backdrop_fx(l));
                 let context = Arc::new(ExpressionContext {
                     document: expr_doc.clone(),
                     comp: Some(comp.id),
@@ -2848,6 +2895,85 @@ fn comp_walk(
                 graph_fx_with(Some(src), &src.effects, slt, frame_slt, &layer_slot_plain);
         }
         input.place = map_place(e, param);
+        Some(input)
+    };
+    // **A backdrop effect's shape**: the layer it sits on, with its other
+    // effects and styles run on its own picture, placed in the comp as the
+    // layer is, since the effect runs over the comp-sized composite below.
+    // `None` on an adjustment layer, which has no picture to give.
+    let own_shape = |owner: uuid::Uuid| -> Option<DofInputDraw> {
+        let src = comp
+            .layers
+            .iter()
+            .find(|l| l.id == owner)
+            .filter(|l| !l.is_adjustment())?;
+        let context = Arc::new(ExpressionContext {
+            document: expr_doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(src.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        });
+        let place = Some(Box::new(crate::draw::MapPlace {
+            placed: Some(world_placement(comp, src, t_comp, context.clone())),
+            ground: [0.0; 4],
+        }));
+        let mut input = match nested_input_for(src) {
+            Some(nested) => nested,
+            None => {
+                let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
+                DofInputDraw {
+                    rgba: rgba.to_vec(),
+                    tex_w,
+                    tex_h,
+                    format,
+                    fx: Default::default(),
+                    colour_tables: Default::default(),
+                    flare_lens_files: Vec::new(),
+                    roto_mattes: Vec::new(),
+                    planes: Vec::new(),
+                    nested: None,
+                    colour_space: crate::colour::footage_colour_space(doc, &src.kind),
+                    natural: [natural.0, natural.1],
+                    graph_fx: Vec::new(),
+                    place: None,
+                }
+            }
+        };
+        input.place = place;
+        if src.switches.fx {
+            let shape = lumit_core::model::Layer {
+                effects: src
+                    .effects
+                    .iter()
+                    .filter(|e| !is_backdrop(e))
+                    .cloned()
+                    .collect(),
+                ..src.clone()
+            };
+            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+            let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+            let scale = input.tex_w as f32 / input.natural[0].max(1.0);
+            let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, src);
+            let drivers = drivers_for(&shape, slt, context.clone());
+            input.fx = resolve_layer_fx(
+                &shape,
+                &drivers,
+                slt,
+                slt,
+                comp_diag * scale,
+                scale,
+                &markers,
+                context,
+            )
+            .1;
+            let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+            input.colour_tables = colour_tables(&shape.effects, slt);
+            input.flare_lens_files = flare_lens_files(&shape.effects, slt);
+            input.roto_mattes = roto_mattes_for(&shape.effects, src_frame);
+            input.planes = planes_for(&shape.effects, src_frame);
+        }
         Some(input)
     };
     let graph_fx_for =
@@ -3048,6 +3174,13 @@ fn comp_walk(
                     def.is_image_op().then_some((e, def, param))
                 })
                 .map(|(e, def, param)| {
+                    // A backdrop effect on a layer with a picture takes that
+                    // picture wherever its row picks no other layer.
+                    if def.backdrop() && e.layer_ref(param).is_none_or(|id| id == owner) {
+                        if let Some(d) = own_shape(owner) {
+                            return LayerInputDraw::Layer(d);
+                        }
+                    }
                     let schema = def.schema();
                     let slot = |param: &str| {
                         // A row read for its layer's shapes has no picture.
@@ -3271,8 +3404,7 @@ fn comp_walk(
             .filter(|(_, e)| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|(i, e)| {
                 let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                let wants =
-                    lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
+                let wants = lumit_core::fx::points::wants_carriage_of(def) && def.is_image_op();
                 wants.then_some((i, e, def))
             })
             .collect();
@@ -3342,6 +3474,8 @@ fn comp_walk(
                 // (points-stream.md §3.3). In px@comp — the units a stream is
                 // data in — and rescaled into the raster by whichever
                 // consumer draws it.
+                let drive_projection =
+                    projection.unwrap_or(lumit_core::fx::points::Projection::FLAT);
                 let mut wired = match owner {
                     Some(layer) => points_input_for(
                         layer,
@@ -3388,6 +3522,31 @@ fn comp_walk(
                     text_carriage(comp, layer, e, t_comp, expr_doc)
                 });
                 let late = late(&wired);
+                // A stream made on the card gets its drivers when
+                // it arrives, as one made here got them in points_input_for.
+                let late_drive = owner
+                    .filter(|_| late.first().is_some_and(|(entry, _)| *entry == 0))
+                    .and_then(|layer| {
+                        let rows = driven_rows(e)?;
+                        let (graph, consumer, context) =
+                            (layer.graph.clone(), e.id, context.clone());
+                        let (flat, doc, comp_id) = (drive_projection, doc.clone(), comp.id);
+                        Some(lumit_core::fx::points::LateDrive(Arc::new(
+                            move |stream: &mut lumit_core::fx::points::PointsStream| {
+                                // The comp's sound, so an Audio level wired in
+                                // hears the same mix here as anywhere else.
+                                let audio = doc.comp(comp_id).map(|comp| {
+                                    crate::audio_tap::DocumentAudio::new(&doc, comp, t_comp)
+                                });
+                                let audio = audio
+                                    .as_ref()
+                                    .map(|a| a as &dyn lumit_core::fx::registry::AudioTap);
+                                lumit_core::fx::drivers::per_copy::drive_rows(
+                                    &graph, consumer, stream, rows, t, &context, audio, flat,
+                                );
+                            },
+                        )))
+                    });
                 let input_from = wired.from.first().copied().flatten();
                 let ports_from: Vec<u32> = wired
                     .from
@@ -3408,6 +3567,7 @@ fn comp_walk(
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3424,12 +3584,12 @@ fn comp_walk(
                 if let Some(layer) =
                     owner.filter(|_| lumit_core::fx::points::stepped::trails(comp, e))
                 {
-                    use lumit_core::fx::points::stepped::{definition, target};
                     return lumit_core::fx::points::PointsSchedule {
                         schedule: lumit_core::fx::points::Schedule::default(),
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3437,14 +3597,14 @@ fn comp_walk(
                         label,
                         grow,
                         stepped: None,
-                        trails: Some(lumit_core::fx::points::Trails {
-                            key: definition(expr_doc, comp, layer, e, target(comp, e)),
-                            doc: expr_doc.clone(),
-                            comp: comp.id,
-                            layer: layer.id,
-                            clone: clone_number,
+                        trails: Some(crate::trails::carriage(
+                            expr_doc,
+                            comp,
+                            layer,
+                            e,
+                            clone_number,
                             inset,
-                        }),
+                        )),
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -3471,6 +3631,7 @@ fn comp_walk(
                         t,
                         projection,
                         late,
+                        late_drive: late_drive.clone(),
                         ports_from,
                         input,
                         input_from,
@@ -3487,6 +3648,7 @@ fn comp_walk(
                     t,
                     projection,
                     late,
+                    late_drive,
                     ports_from,
                     input,
                     input_from,
@@ -3805,7 +3967,7 @@ fn comp_walk(
             // (its px@comp radii stay honest under reduced-res preview), the same
             // §1.4 markers and the same resolve export uses. Empty for
             // None / Masks or when the source's fx switch is off.
-            let (fx, colour_tables) = if nested.is_some() {
+            let (fx, colour_tables, flare_lens_files) = if nested.is_some() {
                 // The nested render already ran every layer's own stack.
                 Default::default()
             } else if mr.source.folds_effects() && src.switches.fx {
@@ -3827,6 +3989,7 @@ fn comp_walk(
                     )
                     .1,
                     colour_tables(&src.effects, mlt),
+                    flare_lens_files(&src.effects, mlt),
                 )
             } else {
                 Default::default()
@@ -3864,6 +4027,7 @@ fn comp_walk(
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
                 colour_tables,
+                flare_lens_files,
                 // The graphs the matte source's own Node graph effects apply,
                 // as a layer read through an effect's row carries them. Their
                 // further pictures are fetched plainly, which is the same bound.
@@ -3880,14 +4044,24 @@ fn comp_walk(
             })
         });
 
+        // How much of the layer's opacity a composition clip inside a fade is
+        // showing, or a dissolve between clips with an opacity of their own.
+        // One everywhere else.
+        let mut clip_share = 1.0f32;
         // What a Sequence layer shows where a composition is one of the clips
         // showing. `None` at every other moment, where the decoded pixels
         // are the layer's source as they always were.
+        // A layer with a backdrop effect is drawn as an adjustment is: over
+        // the composite below, its own picture handed to that effect instead.
+        let adjusts = layer.is_adjustment() || backdrop_fx(layer);
         let comp_clips = match &layer.kind {
-            LayerKind::Sequence { clips } if !layer.is_adjustment() => {
+            LayerKind::Sequence { clips } if !adjusts => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
                 let shown = lumit_core::sequence::shown_at(clips, lt);
+                if let Shown::Two { opacity, .. } = shown {
+                    clip_share = opacity as f32;
+                }
                 match shown {
                     Shown::One { clip, .. } if plays(clip) => Some(shown),
                     Shown::Two {
@@ -3899,9 +4073,6 @@ fn comp_walk(
             _ => None,
         };
 
-        // How much of the layer's opacity a composition clip inside a fade is
-        // showing. One everywhere else.
-        let mut clip_share = 1.0f32;
         let (source, natural) = match &layer.kind {
             // **A Sequence clip that plays a composition** draws that comp
             // as a Precomp layer draws its own: walked at the moment the clip
@@ -3988,6 +4159,7 @@ fn comp_walk(
                         outgoing,
                         incoming,
                         gain,
+                        ..
                     }) => (
                         picture(outgoing).map(|p| (p, 1.0 - gain)),
                         picture(incoming).map(|p| (p, gain)),
@@ -4000,7 +4172,7 @@ fn comp_walk(
                     // and a fade is taken where the layer is composited.
                     (Some(((source, size), share)), None)
                     | (None, Some(((source, size), share))) => {
-                        clip_share = share as f32;
+                        clip_share *= share as f32;
                         (source, size)
                     }
                     // A dissolve: both, each at its share and fitted about
@@ -4046,7 +4218,7 @@ fn comp_walk(
             }
             // Guarded so a Precomp acting as an adjustment falls
             // through to the adjustment arm below rather than drawing its comp.
-            LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
+            LayerKind::Precomp { comp: nested_id } if !adjusts => {
                 if visited.contains(nested_id) {
                     continue; // cycle guard
                 }
@@ -4278,7 +4450,26 @@ fn comp_walk(
             // the adjustment switch on: either way the layer's own source is
             // set aside, so there is one behaviour here and no second copy of
             // it to drift.
-            _ if layer.is_adjustment() => {
+            _ if adjusts => {
+                // A layer drawn as one only for its backdrop effect runs that
+                // alone over the composite below. Its other effects and styles
+                // shaped the picture the effect is handed (`own_shape`).
+                let backdrop_only;
+                let layer = if layer.is_adjustment() {
+                    layer
+                } else {
+                    backdrop_only = lumit_core::model::Layer {
+                        effects: layer
+                            .effects
+                            .iter()
+                            .filter(|e| is_backdrop(e))
+                            .cloned()
+                            .collect(),
+                        styles: Vec::new(),
+                        ..layer.clone()
+                    };
+                    &backdrop_only
+                };
                 // A staging point, not a picture (docs/06 §1.5): realise
                 // composites everything below, runs this stack on it, and
                 // blends back by coverage — masks × opacity, placed by the
@@ -4362,8 +4553,25 @@ fn comp_walk(
                     continue;
                 }
 
-                let placed = drawn(layer, lt, &context);
-                draws.push(CompLayerDraw {
+                // A layer drawn as one only for its backdrop effect covers the
+                // whole comp, unmoved: its masks and transform already shaped
+                // the picture that effect takes, and it is the effect, not
+                // the coverage, that leaves the rest of the comp as it was.
+                let native = layer.is_adjustment();
+                let placed = if native {
+                    drawn(layer, lt, &context)
+                } else {
+                    lumit_gpu::composite::MbSample {
+                        position: (0.0, 0.0),
+                        anchor: (0.0, 0.0),
+                        scale: (100.0, 100.0),
+                        rotation_deg: 0.0,
+                        z: 0.0,
+                        rotation_x_deg: 0.0,
+                        rotation_y_deg: 0.0,
+                    }
+                };
+                draws.push(crate::trails::with_sprites(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
                     natural_size: (comp.width as f32, comp.height as f32),
@@ -4375,14 +4583,14 @@ fn comp_walk(
                     z: placed.z,
                     rotation_x_deg: placed.rotation_x_deg,
                     rotation_y_deg: placed.rotation_y_deg,
-                    three_d: layer.switches.three_d,
+                    three_d: native && layer.switches.three_d,
                     ends_run: false,
                     // The adjustment's own Matte gates where its stack lands,
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
                     blend: lumit_gpu::composite::Blend::Normal,
-                    mask_cov: (!layer.masks.is_empty()).then(|| {
+                    mask_cov: (native && !layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
                         // natural), same as the property panel treats them.
                         (
@@ -4398,7 +4606,11 @@ fn comp_walk(
                             comp.height,
                         )
                     }),
-                    pre: parent_world_placement(comp, layer, t_comp, context.clone()),
+                    pre: if native {
+                        parent_world_placement(comp, layer, t_comp, context.clone())
+                    } else {
+                        None
+                    },
                     fx,
                     fx_ids,
                     // Adjustment layers process the composite below, not
@@ -4476,7 +4688,7 @@ fn comp_walk(
                             keys,
                         )
                     },
-                });
+                }));
                 continue;
             }
             _ => {
@@ -4614,7 +4826,7 @@ fn comp_walk(
         };
 
         let placed = drawn(layer, lt, &context);
-        draws.push(CompLayerDraw {
+        draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
             natural_size: natural,
@@ -4705,7 +4917,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-        });
+        }));
     }
     // A live span reaching the top of the stack closes with the walk itself.
     if let Some((_, group, mark)) = open_unit {
@@ -4727,17 +4939,15 @@ fn comp_walk(
 
 /// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
 fn at_own_size(d: &mut CompLayerDraw) {
-    let max = crate::plan::MAX_TEXTURE_SIDE;
-    let (w, h) = (
-        (d.natural_size.0 as u32).min(max),
-        (d.natural_size.1 as u32).min(max),
-    );
+    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
     if let DrawSource::Pixels {
         rgba, tex_w, tex_h, ..
     } = &mut d.source
     {
         let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
-        if (*tex_w, *tex_h) == (8, 8) && (w, h) != (8, 8) && flat {
+        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
+            let fit = lumit_core::largest_picture::fit;
+            let (w, h) = (fit(natural.0), fit(natural.1));
             let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
             (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
         }
@@ -4876,21 +5086,29 @@ fn colour_tables(
 }
 
 /// The lens each enabled built-in lens effect reads other than its Lens row,
-/// 1:1 and in order with the stack's lens ops, as the LUT files are.
+/// 1:1 and in order with the stack's lens ops, as the LUT files are. A
+/// Sprite flare's kept design rides the same list as text.
 fn flare_lens_files(
     effects: &[lumit_core::model::EffectInstance],
     lt: f64,
 ) -> Vec<Option<lumit_core::fx::lens::LensSource>> {
     use lumit_core::fx::lens;
     use lumit_core::model::EffectNamespace;
+    let flare = |e: &lumit_core::model::EffectInstance| e.effect.match_name == "sprite_flare";
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && lens::takes_a_lens(&e.effect.match_name)
+                && (lens::takes_a_lens(&e.effect.match_name) || flare(e))
         })
-        .map(|e| lens::source_at(e, lt))
+        .map(|e| {
+            if flare(e) {
+                lumit_core::fx::flare::design::embedded_text(e).map(lens::LensSource::Text)
+            } else {
+                lens::source_at(e, lt)
+            }
+        })
         .collect()
 }
 
@@ -5813,7 +6031,7 @@ impl GraphLower<'_> {
         let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&inst.effect.match_name) else {
             return Vec::new();
         };
-        if !(lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op()) {
+        if !(lumit_core::fx::points::wants_carriage_of(def) && def.is_image_op()) {
             return Vec::new();
         }
         let (t, dt) = (self.t, 1.0 / graph_comp.frame_rate.fps().max(1.0));
@@ -6712,7 +6930,7 @@ fn rebuilt_as_itself(
             return false;
         }
         // An adjustment draws the composite beneath it, whatever its kind.
-        if layer.is_adjustment() {
+        if layer.is_adjustment() || backdrop_fx(layer) {
             return true;
         }
         match &layer.kind {
@@ -9056,6 +9274,7 @@ mod render_below_at_tests {
         let mut graph = comp_with(10, Vec::new());
         graph.graph = Some(CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

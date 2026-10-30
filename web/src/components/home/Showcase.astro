@@ -67,10 +67,10 @@ const [latest] = await releasesNewestFirst();
 
   {/* The one wide slot under the heading: the application on a real edit, with
       the hero's light coming up behind it, and the edit playing. */}
-  <div class="relative" data-reveal style="--i:1">
+  <div class="relative" data-reveal style="--i:1;--blur:4px">
     <div class="spill" aria-hidden="true"></div>
     <figure class="shot relative m-0 overflow-hidden rounded-card border border-line-2 bg-ink-2">
-      <figcaption class="shot-bar"><span>Lumit, mid-edit</span><span>Click to bring forward</span></figcaption>
+      <figcaption class="shot-bar"><span>Lumit, mid-edit</span></figcaption>
       <button type="button" class="zoom relative" data-zoom={heroFull.url} data-w={heroFull.w} data-h={heroFull.h} aria-label="Enlarge this screenshot">
         <Image
           class="block w-full"
@@ -138,14 +138,20 @@ const [latest] = await releasesNewestFirst();
   }
   .release::after {
     content: "\2192";
-    transition: transform 0.2s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .release::after {
+      transition: transform 0.2s;
+    }
   }
   .release:hover {
     border-color: var(--color-line-2);
     color: var(--color-fg);
   }
-  .release:hover::after {
-    transform: translateX(3px);
+  @media (hover: hover) and (pointer: fine) {
+    .release:hover::after {
+      transform: translateX(3px);
+    }
   }
   .release-v {
     padding: 4px 7px;

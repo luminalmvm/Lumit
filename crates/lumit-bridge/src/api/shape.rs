@@ -408,7 +408,8 @@ pub(crate) fn write_entries(
         }
         let written = match &entry.kind {
             BridgeShapeEntryKind::Item(item) => {
-                if item.vertices.len() < 2 {
+                // A path keeps going while any point is left on it.
+                if item.vertices.is_empty() {
                     return Err(BridgeError::EmptyPath);
                 }
                 ShapeEntry::Item(match items.iter().find(|p| p.id == item.id) {
@@ -445,6 +446,36 @@ pub(crate) fn write_entries(
 }
 
 impl LayerReference {
+    /// Close a mask's path or a shape item's, or open it, at every key it
+    /// has. `id` names either.
+    #[frb(sync)]
+    pub fn set_path_closed(&self, id: Uuid, closed: bool) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let mut masks = layer.masks.clone();
+        if let Some(mask) = masks.iter_mut().find(|m| m.id == id) {
+            mask.path.closed = closed;
+            for key in &mut mask.path_keys {
+                key.path.closed = closed;
+            }
+            return self.commit(lumit_core::ops::Op::SetLayerMasks {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                masks,
+            });
+        }
+        let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
+            return Err(BridgeError::NoSuchMask);
+        };
+        let mut items = before.clone();
+        let item = lumit_core::shape::modifier::item_mut(&mut items, id)
+            .ok_or(BridgeError::InvalidItem)?;
+        item.path.closed = closed;
+        for key in &mut item.path_keys {
+            key.path.closed = closed;
+        }
+        self.commit_shape_items(&layer, before, items)
+    }
+
     /// Turn a parametric shape into a drawn path, the shape it shows at
     /// `time` (composition time), so its points can be moved one by one.
     #[frb(sync)]

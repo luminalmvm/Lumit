@@ -1,0 +1,61 @@
+---
+title: Stagger
+description: "A value that steps from Minimum on the first copy to Maximum on the last."
+---
+
+Stagger is a **Siceliot** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Gives each copy [Clone to points](/effects/generate/clone-to-points/) stamps its own value,
+from **Minimum** on the first copy to **Maximum** on the last.
+
+Wired into Clone to points' own **Scale**, **Rotation** or **Opacity**, or into
+[Label points](/effects/generate/label-points/)' **Change**, **Label scale**, **Text step**
+or **Label rotation**, it gives each stamp or label its own value, for up to 4096 points.
+In what a clone layer shows, it renders that layer once per copy, as
+[Clone index](/effects/drivers/clone-index/) does. Anywhere else it reads as the first copy
+of one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Minimum** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Maximum** | Slider | -100 to 100; any value by typing | 100 | - |
+| **Curve** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Offset** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Loop** | Checkbox | On or off | Off | - |
+| **Reverse** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Minimum**: the value the first copy gets.
+- **Maximum**: the value the last copy gets.
+- **Curve**: how the values are spread between the first copy and the last.
+- **Offset**: moves the run along the copies, as a share of them.
+- **Loop**: past the last copy, start again from the first instead of holding.
+- **Reverse**: the last copy first.
+
+## With Clone to points
+
+Stagger from 0 to 90, on the layer that holds Clone to points and wired into its
+**Rotation**, turns the first copy 0° and the last 90°. Keyframe **Offset** from 0 to 100
+with **Loop** on and the turn runs through the copies.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Clone index](/effects/drivers/clone-index/)
+- [Siceliot](/effects/#siceliot)
+- [Effects](/use/effects/)

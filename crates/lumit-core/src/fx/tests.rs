@@ -761,6 +761,7 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
     };
     let graph = CompGraph {
         notes: Vec::new(),
+        ties: Vec::new(),
         edges: vec![
             wire(&provided, OUTPUT_PORT.id, &echo, INPUT_PORT.id),
             wire(&echo, OUTPUT_PORT.id, &out, INPUT_PORT.id),
@@ -2395,6 +2396,7 @@ fn cpu_glow_halo_is_round_and_has_no_edge() {
                 fringe_tints: cpu::HALO_FRINGE_TINTS,
                 fringe_wavelength: false,
                 fringe_samples: 16,
+                rolloff: 0.0,
             },
             0.0,
             0.0,
@@ -6044,7 +6046,7 @@ fn a_missing_parameter_reads_its_default() {
 /// x from 300 by 100, each `(80, 40)` half-size at y 200 — what a Lights-mode
 /// flare resolves its derived sources from. Returns the document and the
 /// comp's id, ready for an [`ExpressionContext`].
-fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
+pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     use crate::model::*;
     use crate::time::{CompTime, Duration, FrameRate};
 
@@ -6259,8 +6261,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 3,
-        "Scanlines, the Lens flare and Transform points are the three today"
+        declaring, 4,
+        "Scanlines, the two flares and Transform points are the four today"
     );
 }
 
@@ -6507,9 +6509,11 @@ fn every_parameter_declares_a_unit() {
             ("sharpen", "radius"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
-            ("sprite_flare", "glow_size"),
-            ("sprite_flare", "ghost_size"),
-            ("sprite_flare", "streak_length"),
+            ("sprite_flare", "light_z"),
+            ("sprite_flare", "centre_x"),
+            ("sprite_flare", "centre_y"),
+            ("sprite_flare", "light_size"),
+            ("sprite_flare", "edge_fade"),
             ("light_wrap", "width"),
             ("rgb_split", "amount"),
             ("chromatic_aberration", "amount"),
@@ -6529,6 +6533,7 @@ fn every_parameter_declares_a_unit() {
             ("transform", "anchor_y"),
             ("transform", "position_x"),
             ("transform", "position_y"),
+            ("crop", "feather"),
             ("glow", "radius"),
             ("shake", "amplitude"),
             ("block_glitch", "block_size"),
@@ -6726,6 +6731,9 @@ fn every_parameter_declares_a_unit() {
             // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
+            ("type_fill", "row_gap"),
+            ("type_fill", "word_gap"),
+            ("type_fill", "min_width"),
             // Vary points and Pick points: the pattern's own distances, and
             // how far Vary points moves a point. All travel with the stream.
             ("vary_points", "noise_scale"),
@@ -6821,6 +6829,13 @@ fn every_parameter_declares_a_unit() {
             ("points_sample", "position_y"),
             ("measure", "padding_x"),
             ("measure", "padding_y"),
+            ("oscillator", "wavelength"),
+            ("value_noise", "noise_scale"),
+            ("ring_wave", "speed"),
+            ("ring_wave", "speed_variance"),
+            ("ring_wave", "thickness_min"),
+            ("ring_wave", "thickness_max"),
+            ("ring_wave", "clearance"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's
@@ -7139,83 +7154,6 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
         },
     );
     both(
-        &effects::sprite_flare::SpriteFlareDef,
-        &[
-            (
-                effects::sprite_flare::SpriteFlare::LIGHT_X,
-                Value::Float(1.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::LIGHT_Y,
-                Value::Float(2.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::INTENSITY,
-                Value::Float(1.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::TINT,
-                Value::Colour([1.0, 0.5, 0.25, 1.0]),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GLOW_SIZE,
-                Value::Float(3.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GLOW_INTENSITY,
-                Value::Float(1.0),
-            ),
-            (effects::sprite_flare::SpriteFlare::GHOSTS, Value::Int(3)),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_SPACING,
-                Value::Float(0.4),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_SIZE,
-                Value::Float(2.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::GHOST_INTENSITY,
-                Value::Float(0.5),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_LENGTH,
-                Value::Float(4.0),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_INTENSITY,
-                Value::Float(0.6),
-            ),
-            (
-                effects::sprite_flare::SpriteFlare::STREAK_ANGLE,
-                Value::Float(15.0),
-            ),
-            (effects::sprite_flare::SpriteFlare::MIX, Value::Float(50.0)),
-        ],
-        &|p| {
-            cpu::sprite_flare(
-                p,
-                4,
-                4,
-                &cpu::SpriteFlareParams {
-                    light: [1.0, 2.0],
-                    intensity: 1.0,
-                    tint: [1.0, 0.5, 0.25],
-                    glow_size: 3.0,
-                    glow_intensity: 1.0,
-                    ghosts: 3,
-                    ghost_spacing: 0.4,
-                    ghost_size: 2.0,
-                    ghost_intensity: 0.5,
-                    streak_length: 4.0,
-                    streak_intensity: 0.6,
-                    streak_angle_deg: 15.0,
-                    mix: 0.5,
-                },
-            )
-        },
-    );
-    both(
         // Block glitch's tick is derived rather than declared, so it
         // goes into the bag here the way `resolve_derived` puts it there.
         &effects::block_glitch::BlockGlitchDef,
@@ -7406,11 +7344,9 @@ fn every_effect_carries_a_matte_row() {
         // them rather than drawing one.
         if matches!(
             s.category,
-            FxCategory::Controls
-                | FxCategory::Drivers
-                | FxCategory::Audio
-                | FxCategory::Compositing
-        ) || matches!(s.match_name, "camera_track" | "planar_track")
+            FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
+        ) || s.category.is_driver()
+            || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
                 s.matte,
@@ -10187,8 +10123,8 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
     // The ceiling holds a slider drag to a raster every backend can allocate.
     assert_eq!(
         cpu::tile_raster(3840, 2160, &of(5.0, 5.0, 100.0)),
-        (cpu::TILE_MAX_RASTER, cpu::TILE_MAX_RASTER),
-        "the growth stops at the guaranteed maximum texture side"
+        (8192, 8192),
+        "the growth stops at the largest picture"
     );
 
     // The margin holds picture, and the frame's own window is untouched: the
@@ -11029,4 +10965,36 @@ fn a_collider_turned_in_3d_is_a_surface() {
         held.position.iter().all(|p| p[1] <= 800.01),
         "a particle went through the floor"
     );
+}
+
+/// The per-copy columns `drive_rows` writes replace Scale,
+/// Rotation and Opacity stamp by stamp, and a stream without them keeps the
+/// rows' one value. Guards each copy taking the value its driver gave it.
+#[test]
+fn clone_to_points_reads_per_copy_scale_rotation_and_opacity() {
+    use crate::fx::drivers::per_copy::{COPY_OPACITY, COPY_ROTATION, COPY_SCALE};
+    let e = clone_to_points(&[
+        ("rotation", EffectValue::Float(Property::fixed(10.0))),
+        ("tint", EffectValue::Float(Property::fixed(0.0))),
+    ]);
+    let plain = clone_stamps(&e, &two_points());
+    let ten = 10f32.to_radians();
+    assert!(plain.rotation.iter().all(|r| (r - ten).abs() < 1e-5));
+
+    let mut driven = two_points();
+    driven.named_mut(COPY_ROTATION, 1).expect("room")[1][0] = 90.0;
+    driven.named_mut(COPY_SCALE, 1).expect("room")[1][0] = 50.0;
+    driven.named_mut(COPY_OPACITY, 1).expect("room")[1][0] = 25.0;
+    for (column, first) in [
+        (COPY_ROTATION, 0.0),
+        (COPY_SCALE, 100.0),
+        (COPY_OPACITY, 100.0),
+    ] {
+        driven.named_mut(column, 1).expect("room")[0][0] = first;
+    }
+    let s = clone_stamps(&e, &driven);
+    assert!(s.rotation[0].abs() < 1e-5, "copy 0 turned by its own 0");
+    assert!((s.rotation[1] - 90f32.to_radians()).abs() < 1e-5);
+    assert!((s.size[0] - 10.0).abs() < 1e-4 && (s.size[1] - 5.0).abs() < 1e-4);
+    assert!((s.colour[0][3] - 1.0).abs() < 1e-5 && (s.colour[1][3] - 0.25).abs() < 1e-5);
 }

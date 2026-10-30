@@ -56,6 +56,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
@@ -63,6 +65,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
+import 'viewer_effect_points.dart' show pickForPoint;
 import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
 import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
@@ -70,6 +73,7 @@ import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
+import 'flare_window.dart';
 import 'lens_window.dart';
 import 'lfx_interface_panel.dart';
 import 'shader_editor.dart';
@@ -265,9 +269,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       const {};
 
   /// Every Points input on the layer's effects, by `effectId/portId`, with
-  /// the port's label. Taken from the same read as [_driven], which already
-  /// names what each one is wired to.
-  Map<String, String> _points = const {};
+  /// the port's label and the output it is wired from. Taken from the same
+  /// read as [_driven].
+  Map<String, ({String label, BridgeOutputRef? from})> _points = const {};
   LumitUiState? _boundUi;
 
   @override
@@ -469,11 +473,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // a row cannot say *driven* in one panel and offer a spinner in the other.
     final next =
         graph == null ? const <String, DrivenParam>{} : drivenParamsIn(graph);
+    final into = {
+      for (final e in graph?.wiring.edges ?? const <BridgeGraphEdge>[])
+        e.to: e.from,
+    };
     final points = {
       for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
         if (n.node case BridgeNodeRef_Effect(:final field0))
           for (final p in n.inputs)
-            if (p.portType == BridgePortType.points) '$field0/${p.id}': p.label,
+            if (p.portType == BridgePortType.points)
+              '$field0/${p.id}': (
+                label: p.label,
+                from: into[BridgeInputRef.param(node: n.node, port: p.id)],
+              ),
     };
     if (!mapEquals(next, _driven) || !mapEquals(points, _points)) {
       setState(() {
@@ -659,10 +671,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     () => layer.getClipEffects(clip: clip, onCompClock: true);
               }
               // Going between a layer's stack and a clip's is content
-              // arriving in a place that was already there.
+              // arriving in a place that was already there, and the stack
+              // being left goes at once.
               final reveal = ThemeScope.of(context).motion.reveal;
               return AnimatedSwitcher(
                 duration: reveal.duration,
+                reverseDuration: Duration.zero,
                 switchInCurve: reveal.curve,
                 layoutBuilder: (current, previous) => Stack(
                   fit: StackFit.expand,
@@ -785,13 +799,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                   await details.data.landOn(layer, clip: clipId);
                   if (mounted) changed();
                 },
-                builder: (context, candidate, _) => Container(
-                  decoration: candidate.isEmpty
-                      ? null
-                      : BoxDecoration(
-                          border: Border.all(color: t.accent),
-                          color: t.accent.withValues(alpha: 0.06),
-                        ),
+                builder: (context, candidate, _) => _DropGround(
+                  lit: candidate.isNotEmpty,
                   child: ListView(
                     key: const ValueKey('fx-clip-ground'),
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -949,13 +958,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                   } catch (_) {}
                   ui.model.refresh();
                 },
-                builder: (context, candidate, _) => Container(
-                  decoration: candidate.isEmpty
-                      ? null
-                      : BoxDecoration(
-                          border: Border.all(color: t.accent),
-                          color: t.accent.withValues(alpha: 0.06),
-                        ),
+                builder: (context, candidate, _) => _DropGround(
+                  lit: candidate.isNotEmpty,
                   child: GestureDetector(
                     key: const ValueKey('fx-group-ground'),
                     behavior: HitTestBehavior.translucent,
@@ -1118,12 +1122,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _Header(
           layerName: info.name,
           // An add lands on the layer these rows are for, and no other.
-          onAdd: (name) {
-            try {
-              layer.addEffect(name: name);
-            } catch (_) {}
-            ui.model.refresh();
-          },
+          onAdd: (name) => ui.addEffect(layer, name),
         ),
         Expanded(
           // The keyframe strip beside the rows, spanning the layer's own in
@@ -1141,15 +1140,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               await details.data.landOn(layer);
               ui.model.refresh();
             },
-            builder: (context, candidate, _) => Container(
+            builder: (context, candidate, _) => _DropGround(
               // While something is over it, say so: a drop with no feedback is
               // indistinguishable from a drop that did nothing.
-              decoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(color: t.accent),
-                      color: t.accent.withValues(alpha: 0.06),
-                    ),
+              lit: candidate.isNotEmpty,
               // **A click on nothing clears the pick.** Every other surface
               // in the editor works this way — the Timeline's lane ground,
               // the Project panel's floor, the graph canvas — and an effect
@@ -1247,24 +1241,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
-                    // A null layer has no picture, so nothing here changes one
-                    // — but the parameters are real, animatable values, which is
-                    // exactly what a null is for once expressions can read them.
-                    // Said plainly, once, rather than refusing the drop.
-                    if (info.kind == BridgeLayerKind.nullLayer &&
-                        info.effects.isNotEmpty)
-                      Padding(
-                        key: const ValueKey('fx-null-inert'),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 8),
-                        child: Text(
-                          'A null layer draws nothing, so an effect here changes '
-                          'no picture. Its parameters stay live — a null is '
-                          'where a control lives when it is meant to drive other '
-                          'layers.',
-                          style: t.small.copyWith(color: t.textMuted),
-                        ),
-                      ),
                     if (info.effects.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1406,11 +1382,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           onPressed: worn.length < offeredStyles().length
               ? () => _addStyleMenu(context, ui, layer, worn)
               : null,
-          child: Text('+',
-              style: t.small.copyWith(
-                  color: worn.length < offeredStyles().length
-                      ? t.textMuted
-                      : t.textDisabled)),
+          child: glyph.LumitIcon(LumitIcons.addEffect,
+              size: 12,
+              colour: worn.length < offeredStyles().length
+                  ? t.textMuted
+                  : t.textDisabled),
         ),
       ),
     );
@@ -1614,15 +1590,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         onWrite: (id, param, value) {
           _effects.write(layer, id, param, value);
           ui.model.refresh();
+          if (!style) pickForPoint(ui, layer, fx, param);
         },
         onWritePair: (id, values) {
           _effects.writeAll(layer, id, values);
           ui.model.refresh();
+          if (!style) pickForPoint(ui, layer, fx, values.keys.first);
         },
-        onLive: (id, param, value) => setState(() {
-          _effects.live(comp, layer, id, param, value,
-              frame: ui.playheadFrame.value, scale: ui.viewerScale);
-        }),
+        onLive: (id, param, value) {
+          if (!style) pickForPoint(ui, layer, fx, param);
+          setState(() {
+            _effects.live(comp, layer, id, param, value,
+                frame: ui.playheadFrame.value, scale: ui.viewerScale);
+          });
+        },
         layer: layer,
         // The list a layer-valued row picks from. A card that draws one is
         // rebuilt whenever [_layersRead] moves, so the list it holds says the
@@ -1658,6 +1639,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             effect: effect,
             param: param,
             onApplied: ui.model.refresh,
+          )) {
+            return;
+          }
+          // Edit flare… opens the Flare window on a Sprite flare.
+          if (pressFlareButton(
+            context: context,
+            home: _shaderHome(layer),
+            effect: effect,
+            param: param,
+            onApplied: ui.model.refresh,
+            comp: ui.selectedComp,
+            frame: BigInt.from(ui.playheadFrame.value),
           )) {
             return;
           }
@@ -1808,6 +1801,32 @@ class _AtPlayhead extends StatelessWidget {
             Provider.of<LumitUiState>(context, listen: false).playheadFrame,
         builder: (context, frame, _) => builder(context, frame),
       );
+}
+
+/// The ground an effect is dropped on, lit while one is over it. It lights up
+/// as the dock's own drop preview does, and the edge is drawn over [child] so
+/// nothing in it shifts.
+class _DropGround extends StatelessWidget {
+  final bool lit;
+  final Widget child;
+
+  const _DropGround({required this.lit, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final accent = scope.theme.accent;
+    final step = scope.motion.dropZone;
+    return AnimatedContainer(
+      duration: step.duration,
+      curve: step.curve,
+      decoration:
+          BoxDecoration(color: accent.withValues(alpha: lit ? 0.06 : 0)),
+      foregroundDecoration: BoxDecoration(
+          border: Border.all(color: accent.withValues(alpha: lit ? 1 : 0))),
+      child: child,
+    );
+  }
 }
 
 /// A clip's own blend mode under the header: **From layer** while it has
@@ -2033,9 +2052,9 @@ class _EffectSection extends StatelessWidget {
   final Map<String, ({String driver, BridgePortType type, bool noStream})>
       driven;
 
-  /// The layer's Points inputs, by `effectId/portId`, with each port's label.
-  /// Read once by the panel beside [driven].
-  final Map<String, String> points;
+  /// The layer's Points inputs, by `effectId/portId`, with each port's label
+  /// and what it is wired from. Read once by the panel beside [driven].
+  final Map<String, ({String label, BridgeOutputRef? from})> points;
 
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
@@ -2501,8 +2520,8 @@ class _EffectSection extends StatelessWidget {
         // parameter row of its own.
         for (final input in points.entries)
           if (input.key.startsWith('$id/'))
-            _pointsRow(
-                context, input.key.substring('$id/'.length), input.value),
+            _pointsRow(context, input.key.substring('$id/'.length),
+                input.value.label, input.value.from),
         ..._paramRows(named, base, id, values),
       ],
     );
@@ -2513,7 +2532,8 @@ class _EffectSection extends StatelessWidget {
   ///
   /// The list is read when the menu opens, as the layer picker's is. Which
   /// effects sit above is a position, and a card can outlive one.
-  Widget _pointsRow(BuildContext context, String port, String label) {
+  Widget _pointsRow(BuildContext context, String port, String label,
+      BridgeOutputRef? from) {
     final t = ThemeScope.of(context).theme;
     final node = BridgeNodeRef.effect(info.id);
     final to = BridgeInputRef.param(node: node, port: port);
@@ -2525,6 +2545,8 @@ class _EffectSection extends StatelessWidget {
         width: effectCellWidth + 40,
         child: BareLazyDropdown<BridgeOutputRef?>(
           key: ValueKey<String>('fx-points-${info.id}-$port'),
+          // Ticked by the wire itself: two effects can share a name.
+          value: from,
           // A wire from a driver in the graph is named here too, though the
           // list only offers the stack.
           label: driven['${info.id}/$port']?.driver ?? l10n.none,

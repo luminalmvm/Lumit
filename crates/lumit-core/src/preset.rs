@@ -16,6 +16,13 @@ pub struct EffectPreset {
     pub format: u32,
     pub name: String,
     pub effects: Vec<EffectInstance>,
+    /// The wires between the copied effects and the drivers that
+    /// feed them, as a node group, so effects copied off one layer and pasted
+    /// on another arrive wired ([`wiring_of`]). Absent when nothing is wired,
+    /// and from every preset file, which reads and writes as it did; a Lumit
+    /// without it reads the effects and leaves this be.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wiring: Option<GroupPreset>,
 }
 
 /// The current on-disk format version.
@@ -26,12 +33,64 @@ pub const PRESET_EXTENSION: &str = "lumfx";
 
 /// Serialise a stack to the preset JSON text.
 pub fn to_json(name: &str, effects: &[EffectInstance]) -> Result<String, String> {
+    to_json_wired(name, effects, None)
+}
+
+/// [`to_json`] with the wiring the effects were copied with.
+pub fn to_json_wired(
+    name: &str,
+    effects: &[EffectInstance],
+    wiring: Option<GroupPreset>,
+) -> Result<String, String> {
     serde_json::to_string_pretty(&EffectPreset {
         format: PRESET_FORMAT,
         name: name.to_owned(),
         effects: effects.to_vec(),
+        wiring,
     })
     .map_err(|e| e.to_string())
+}
+
+/// What copying `effects` off a layer takes along of its `graph`:
+/// the wires between them, and every driver that feeds one of them, directly
+/// or through other drivers, with that driver's own wires. `None` when no
+/// wire is among them, so a plain copy stays a plain preset.
+///
+/// A wire from something not taken (another effect, the source's matte) is
+/// left behind, as a node group leaves a wire that leaves the set.
+#[must_use]
+pub fn wiring_of(
+    graph: &crate::graph::LayerGraph,
+    stack: &[EffectInstance],
+    effects: &[uuid::Uuid],
+) -> Option<GroupPreset> {
+    use crate::graph::{InputRef, NodeRef, OutputRef};
+    let mut members: Vec<NodeRef> = effects.iter().map(|id| NodeRef::Effect(*id)).collect();
+    // The drivers upstream, until a pass finds no new one.
+    loop {
+        let found: Vec<NodeRef> = graph
+            .edges
+            .iter()
+            .filter_map(|e| match (&e.from, &e.to) {
+                (OutputRef::Driver { node, .. }, InputRef::Param { node: to, .. })
+                    if members.contains(to) && !members.contains(&NodeRef::Driver(*node)) =>
+                {
+                    Some(NodeRef::Driver(*node))
+                }
+                _ => None,
+            })
+            .collect();
+        if found.is_empty() {
+            break;
+        }
+        for node in found {
+            if !members.contains(&node) {
+                members.push(node);
+            }
+        }
+    }
+    let wiring = group_from_graph(graph, stack, "", 0, &members);
+    (!wiring.edges.is_empty()).then_some(wiring)
 }
 
 /// Parse preset JSON text back to a preset. A newer `format` still loads:
@@ -822,6 +881,7 @@ mod tests {
             format: 99,
             name: "future".into(),
             effects: effects.clone(),
+            wiring: None,
         })
         .unwrap();
         v.as_object_mut()
@@ -849,6 +909,7 @@ mod tests {
         let (a, b, c, d) = (wiggle.id, smooth.id, outside.id, blur.id);
         let graph = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             nodes: vec![wiggle, smooth, outside],
             edges: vec![
@@ -902,6 +963,43 @@ mod tests {
         };
         let members = vec![NodeRef::Driver(a), NodeRef::Driver(b), NodeRef::Effect(d)];
         (graph, vec![blur], members)
+    }
+
+    /// Copying the blur takes the smooth that feeds it and the
+    /// wiggle that feeds the smooth, with the two wires between them, and
+    /// leaves the third driver and the wire to it behind; the wiring rides
+    /// in the copied text and comes back with every id fresh. Copying
+    /// nothing wired stays a plain preset. Guards effects that lose their
+    /// drivers when copied to another layer.
+    #[test]
+    fn copied_effects_take_the_drivers_that_feed_them() {
+        use crate::graph::{InputRef, NodeRef, OutputRef};
+        let (graph, stack, _) = wired_graph();
+        let blur = stack[0].id;
+        let wiring = wiring_of(&graph, &stack, &[blur]).unwrap();
+        let taken: Vec<_> = wiring.nodes.iter().map(|n| n.id).collect();
+        assert_eq!(taken, vec![graph.nodes[0].id, graph.nodes[1].id]);
+        assert_eq!(wiring.edges.len(), 2);
+        assert_eq!(wiring.effects.len(), 1);
+
+        let text = to_json_wired("look", &stack, Some(wiring)).unwrap();
+        let back = from_json(&text).unwrap();
+        let added = group_instantiated(back.wiring.as_ref().unwrap(), [0.0, 0.0]);
+        assert_ne!(added.effects[0].id, blur);
+        let into_blur = added.edges.iter().find(|e| {
+            matches!(&e.to, InputRef::Param { node: NodeRef::Effect(id), .. } if *id == added.effects[0].id)
+        });
+        assert!(
+            matches!(into_blur.map(|e| &e.from), Some(OutputRef::Driver { node, .. }) if *node == added.nodes[1].id),
+            "the fresh smooth feeds the fresh blur"
+        );
+
+        let plain = vec![crate::fx::builtins::instantiate("glow").unwrap()];
+        assert!(wiring_of(&graph, &plain, &[plain[0].id]).is_none());
+        assert!(from_json(&to_json("x", &plain).unwrap())
+            .unwrap()
+            .wiring
+            .is_none());
     }
 
     #[test]
@@ -990,6 +1088,7 @@ mod tests {
         let members = vec![read.id(), blur.id(), out.id()];
         let graph = CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             edges: vec![wire(&read, &blur), wire(&blur, &out)],
             layout: vec![
                 (read.id(), [100.0, 60.0]),

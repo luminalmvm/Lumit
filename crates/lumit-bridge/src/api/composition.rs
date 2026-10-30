@@ -597,6 +597,7 @@ impl CompositionReference {
                     crate::api::effect::read_instance_info(
                         &crate::api::effect::with_live_inputs(instance, &doc),
                         lumit_core::time::Rational::ZERO,
+                        false,
                     )
                 })
                 .collect(),
@@ -1817,7 +1818,7 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
+    pub(crate) fn commit(&self, op: lumit_core::ops::Op) -> Result<(), BridgeError> {
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
@@ -2115,7 +2116,10 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    fn runs_as_video(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
+    pub(crate) fn runs_as_video(
+        state: &LumitBridgeState,
+        footage: &lumit_core::model::FootageItem,
+    ) -> bool {
         #[cfg(feature = "media")]
         {
             let Some(src) = FootageReference::resolve_source(state, footage) else {
@@ -2361,6 +2365,10 @@ impl CompositionReference {
     /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
     /// keeps time by skipping frames, in either direction, and is silent.
     ///
+    /// `slow` is how many times slower than the comp's rate the leg plays,
+    /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
+    /// the sound is slowed with its pitch kept.
+    ///
     /// `until` is the frame the leg ends on, the end of the work area going
     /// forwards and its start going back. Nothing past it is composited.
     /// `None` runs to the end of the composition.
@@ -2374,6 +2382,7 @@ impl CompositionReference {
         view: u32,
         reverse: bool,
         speed: u32,
+        slow: u32,
         until: Option<u64>,
     ) -> Result<(), BridgeError> {
         // ponytail: sound plays forwards at the comp's rate only. Pitch-shifted
@@ -2414,6 +2423,7 @@ impl CompositionReference {
                 scale,
                 reverse,
                 speed,
+                slow,
                 until,
                 audio,
                 view,
@@ -2561,6 +2571,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2596,6 +2607,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2632,6 +2644,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -2667,6 +2680,40 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: Some((clip, retime)),
+            clip_span: None,
+            retime: None,
+        }))
+    }
+
+    /// Ask for `frame` with one clip trimmed to `start_frame..end_frame`, as
+    /// `LayerReference::trim_clip` would leave it: the live edge drag, which
+    /// never touches the document. A moved head moves the source in-point
+    /// with it, so the Viewer shows the frame at the edge.
+    #[frb(sync)]
+    pub fn render_frame_with_clip_span(
+        &self,
+        frame: u64,
+        scale: f32,
+        layer: LayerReference,
+        clip: Uuid,
+        start_frame: i64,
+        end_frame: i64,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {
+            comp: self.clone(),
+            frame,
+            scale,
+            layer: Some(layer),
+            graph_instances: None,
+            effects: None,
+            drivers: None,
+            transform: None,
+            text: None,
+            paint: None,
+            contents: None,
+            masks: None,
+            clip_retime: None,
+            clip_span: Some((clip, start_frame, end_frame)),
             retime: None,
         }))
     }
@@ -2705,6 +2752,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: Some(retime),
         }))
     }
@@ -2975,6 +3023,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3008,6 +3057,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3044,6 +3094,7 @@ impl CompositionReference {
             contents: None,
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3078,6 +3129,7 @@ impl CompositionReference {
             contents: Some(contents),
             masks: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
         }))
     }
@@ -3105,6 +3157,7 @@ impl CompositionReference {
             paint: None,
             contents: None,
             clip_retime: None,
+            clip_span: None,
             retime: None,
             masks: Some(masks),
         }))
@@ -3352,7 +3405,9 @@ impl CompositionReference {
             .collect();
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
-        graph.notes = self.graph_of(&doc)?.notes.clone();
+        let held = self.graph_of(&doc)?;
+        graph.notes = held.notes.clone();
+        graph.ties = held.ties.clone();
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
@@ -3490,6 +3545,11 @@ impl CompositionReference {
             graph.groups.push(added.group);
             graph.groups.extend(added.inner);
         }
+        // Boxes saved by an older Lumit are brought up to this one.
+        if let Some(comp) = doc.comp(self.id) {
+            let size = (f64::from(comp.width), f64::from(comp.height));
+            lumit_core::fx::builtins::migrate_graph(&mut graph, size);
+        }
 
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
@@ -3529,7 +3589,7 @@ impl CompositionReference {
             .ok_or(BridgeError::OpError(lumit_core::ops::OpError::UnknownGroup))?;
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
-            .is_some_and(|def| def.schema().category == lumit_core::fx::schema::FxCategory::Drivers)
+            .is_some_and(|def| def.schema().category.is_driver())
         {
             return Err(BridgeError::UnknownEffectName);
         }
@@ -4070,7 +4130,11 @@ fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
                     .effects
                     .iter()
                     .map(|e| {
-                        crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO)
+                        crate::api::effect::read_instance_info(
+                            e,
+                            lumit_core::time::Rational::ZERO,
+                            false,
+                        )
                     })
                     .collect(),
             }

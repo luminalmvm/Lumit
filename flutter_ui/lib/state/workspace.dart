@@ -17,8 +17,10 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
+import '../theme/style_sheet.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
+import '../theme/theme_tokens.dart' show applyTokens;
 import 'dock.dart';
 import 'expression_language.dart';
 import 'settings.dart';
@@ -567,6 +569,89 @@ class Workspace extends ChangeNotifier {
   DockSplit dock = defaultLayout();
   LumitColorScheme colorScheme = LumitColorScheme.dark;
   ThemeShape themeShape = ThemeShape.studio;
+
+  /// The person's own style in use, by name, or null for the built-in
+  /// [themeShape]. With one in use, [themeShape] is the style it starts from.
+  String? customStyle;
+
+  /// The styles in the styles folder, read at launch and whenever the folder
+  /// changes, so a saved edit shows straight away.
+  List<StyleSheet> styles = const [];
+  StreamSubscription<FileSystemEvent>? _stylesWatch;
+  Timer? _stylesSoon;
+  bool _stylesRead = false;
+
+  /// The folder a person's own styles are read from.
+  static String stylesFolder() =>
+      '${storeFile().parent.path}${Platform.pathSeparator}styles';
+
+  /// The style in use, or null.
+  StyleSheet? get activeStyle {
+    for (final s in styles) {
+      if (s.name == customStyle) return s;
+    }
+    return null;
+  }
+
+  /// Read the styles folder again and redraw.
+  void reloadStyles() {
+    _readStyles();
+    recompose();
+  }
+
+  /// Read the icons and styles folders again, and redraw only if something
+  /// in them changed. Called when the window comes back, so a file edited
+  /// elsewhere shows without a button.
+  void refreshFromDisk() {
+    final icons = IconStyle.reload();
+    String stamp() => [for (final s in styles) s.name + s.source].join();
+    final before = stamp();
+    _readStyles();
+    if (icons || stamp() != before) recompose();
+  }
+
+  /// Read the styles folder, making it if it isn't there so it is easy to
+  /// find, and start watching it.
+  void _readStyles() {
+    _stylesRead = true;
+    final folder = stylesFolder();
+    try {
+      Directory(folder).createSync(recursive: true);
+    } on FileSystemException {
+      // A read-only settings folder still opens Lumit, with no styles.
+    }
+    styles = StyleSheet.readFolder(folder);
+    if (_stylesWatch == null && Directory(folder).existsSync()) {
+      // One read for a burst of events, as a save is often several. A watch
+      // that fails or ends, as when the folder goes, is dropped, and the next
+      // resume arms a new one.
+      void drop() {
+        _stylesWatch?.cancel();
+        _stylesWatch = null;
+      }
+
+      _stylesWatch = Directory(folder).watch(recursive: true).listen(
+        (_) {
+          _stylesSoon?.cancel();
+          _stylesSoon = Timer(const Duration(milliseconds: 100), reloadStyles);
+        },
+        onError: (Object _) => drop(),
+        onDone: drop,
+      );
+    }
+    final style = activeStyle;
+    if (style != null) themeShape = style.base;
+    // Under the person's own icons: the style's.
+    IconStyle.under = [if (style?.iconFolder case final icons?) icons];
+    IconStyle.reload();
+  }
+
+  /// Use the person's own style called [name].
+  void setCustomStyle(String name) {
+    customStyle = name;
+    reloadStyles();
+    save();
+  }
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
@@ -1231,8 +1316,24 @@ class Workspace extends ChangeNotifier {
           '${storeFile().parent.path}${Platform.pathSeparator}icons';
       IconStyle.reload();
     }
+    if (!_stylesRead) _readStyles();
+    final style = activeStyle;
+    StyleSheet.current = style;
+    StyleSheet.solid = interface.reduceTransparency;
+    final shape = style?.tokens();
+    // A style's own colours, if it sets any, go over the scheme.
+    LumitTheme dressed(LumitTheme t) {
+      if (style == null) return t;
+      final own = applyTokens(t, style.colours(t));
+      // A room picture shows through wherever the room is painted.
+      final picture = style.roomPicture;
+      return picture == null || StyleSheet.solid || !File(picture).existsSync()
+          ? own
+          : own.copyWith(room: const Color(0x00000000));
+    }
     if (_preview != null) {
-      _theme = _withRoom(_preview!.copyWith(density: density));
+      _theme =
+          _withRoom(_preview!.copyWith(tokens: shape, density: density));
       notifyListeners();
       return;
     }
@@ -1246,13 +1347,14 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = _withRoom(custom.build(themeShape).copyWith(density: density));
+      _theme = _withRoom(dressed(
+          custom.build(themeShape).copyWith(tokens: shape, density: density)));
     } else {
-      _theme = _withRoom(LumitTheme.forScheme(
+      _theme = _withRoom(dressed(LumitTheme.forScheme(
         looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: _lookingAccent ?? accentOverride,
-      ).copyWith(density: density));
+      ).copyWith(tokens: shape, density: density)));
     }
     notifyListeners();
   }
@@ -1511,6 +1613,7 @@ class Workspace extends ChangeNotifier {
 
   void setShape(ThemeShape s) {
     themeShape = s;
+    customStyle = null;
     recompose();
     save();
   }
@@ -1952,6 +2055,7 @@ class Workspace extends ChangeNotifier {
         'dock': dock.toJson(),
         'color_scheme': colorScheme.name,
         'theme_shape': themeShape.name,
+        'custom_style': customStyle,
         'accent_override': accentOverride == null
             ? null
             : [
@@ -2052,6 +2156,11 @@ class Workspace extends ChangeNotifier {
     themeShape =
         ThemeShape.values.asNameMap()[oldShapeNames[shapeName] ?? shapeName] ??
             ThemeShape.studio;
+    final style = j['custom_style'];
+    customStyle = style is String ? style : null;
+    // The folder was read before the style was known, so its icons are read
+    // again by the recompose below.
+    _stylesRead = false;
     final acc = j['accent_override'];
     accentOverride = acc is List && acc.length == 3
         ? Color.fromARGB(0xff, acc[0] as int, acc[1] as int, acc[2] as int)

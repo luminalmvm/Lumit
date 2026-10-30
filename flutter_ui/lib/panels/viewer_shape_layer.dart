@@ -6,8 +6,9 @@
 // rectangle, an ellipse, a polygon or a star, between the two corners you
 // dragged, with Shift keeping it square. The **Pen** is different: it builds a
 // path a point at a time, and clicking its first point again closes and applies
-// it. (That gesture was briefly on the polygon tool; it is After Effects' pen,
-// and it belongs on the Pen.)
+// it. Enter, Esc, a click outside the Viewer or another tool applies it open.
+// (That gesture was briefly on the polygon tool; it is After Effects' pen, and
+// it belongs on the Pen.)
 //
 // **What it does with nothing selected.** Makes a *shape layer* — the art
 // itself rather than a hole in someone else's picture. It is the same
@@ -135,13 +136,51 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// How to stand down from the ladder.
   VoidCallback? _escapeRelease;
 
-  /// Escape abandons a path in progress — the ladder's gesture rung
-  /// (widgets/escape_ladder.dart), ahead of every menu and dialogue, because a
-  /// half-drawn path is the innermost thing on screen while it is being drawn.
+  /// Escape ends a path in progress and keeps it open, as After Effects does —
+  /// the ladder's gesture rung (widgets/escape_ladder.dart), ahead of every
+  /// menu and dialogue, because a half-drawn path is the innermost thing on
+  /// screen while it is being drawn.
   bool _escape() {
     if (!widget.active || !_isPen || _draft.isEmpty) return false;
-    setState(() => _draft = const PathDraft());
+    _finishOpen();
     return true;
+  }
+
+  /// A path left behind by a tool change is kept open, not lost. After the
+  /// frame, because the commit tells the Viewer, which is mid-build.
+  @override
+  void didUpdateWidget(ViewerShapeLayer old) {
+    super.didUpdateWidget(old);
+    final penGone = old.active &&
+        old.tool == ToolMode.pen &&
+        (!widget.active || widget.tool != ToolMode.pen);
+    if (!penGone || _draft.vertices.length < 2) {
+      if (penGone) _draft = const PathDraft();
+      return;
+    }
+    final path = _draft.vertices;
+    final box = _target;
+    _draft = const PathDraft();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _place(path, box, closed: false);
+    });
+  }
+
+  /// The path in progress, applied as it stands: open.
+  void _finishOpen() {
+    final path = _draft.vertices;
+    setState(() => _draft = const PathDraft());
+    if (path.length < 2) return;
+    _place(path, _target, closed: false);
+  }
+
+  /// A finished Pen path, onto [box] or into a new shape layer.
+  void _place(List<BridgeVertex> path, LayerBox? box, {required bool closed}) {
+    if (box == null) {
+      _commitShapeLayer(ToolMode.pen, path, closed: closed);
+    } else {
+      _commit(ToolMode.pen, box, path, closed: closed);
+    }
   }
 
   @override
@@ -153,8 +192,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   }
 
   /// Backspace takes back the path's last point — what every path tool does,
-  /// and part of why a half-drawn path is never a trap. (Escape, which abandons
-  /// the path outright, is [_escape] on the ladder.)
+  /// and part of why a half-drawn path is never a trap. Enter ends the path
+  /// open, as Escape does ([_escape], on the ladder).
   ///
   /// **`Ctrl+Z` takes back a point too, while a path is being built**.
   /// This is the one place the application's undo means something narrower than
@@ -171,6 +210,11 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             HardwareKeyboard.instance.isMetaPressed);
     if (undo || event.logicalKey == LogicalKeyboardKey.backspace) {
       setState(() => _draft = _draft.withoutLast());
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      _finishOpen();
       return true;
     }
     return false;
@@ -233,64 +277,70 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     final art = _drawsArt;
     final space = _space;
     return Positioned.fill(
-      // The hardware crosshair leads: the OS precise pointer moves at
-      // input rate whatever the application's frame rate is doing, so it is
-      // the thing to aim with. The badge beside it, drawn by the app, only
-      // says which shape.
-      child: DrawnPointerRegion(
-        cursor: SystemMouseCursors.precise,
-        onPointer: (at) => setState(() {
-          _pointer = at;
-          // The Pen also draws the edge it would place next, from the last
-          // point placed to here.
-          _penPointer = _isPen ? at : null;
-        }),
-        child: Listener(
-          onPointerDown: (event) => _downAt = event.localPosition,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapUp: _isPen ? _onPenTap : null,
-            onPanStart: _onPanStart,
-            onPanUpdate: _onPanUpdate,
-            onPanEnd: (_) => _onPanEnd(),
-            onPanCancel: _onPanCancel,
-            child: Stack(children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: ShapePreviewPainter(
-                    tool: widget.tool,
-                    space: space,
-                    // What the art would be committed with. A mask has no
-                    // colour of its own — it cuts — so a drag on a selected
-                    // layer previews in the accent instead of promising a fill
-                    // that will never appear.
-                    fill: art
-                        ? colourOf(widget.uiState.tools.fill)
-                        : widget.accent,
-                    stroke:
-                        art ? colourOf(widget.uiState.tools.stroke) : null,
-                    strokeWidth: art
-                        ? widget.uiState.tools.strokeWidth * space.screenScale
-                        : 0,
-                    from: _from,
-                    to: _to,
-                    square: HardwareKeyboard.instance.isShiftPressed,
-                    draft: _draft,
-                    penPointer: _penPointer,
-                    handleFrom: _handleFrom,
-                    handleTo: _handleTo,
-                    closing: _wouldClose,
-                    accent: widget.accent,
+      // A click anywhere outside the Viewer ends a Pen path, open.
+      child: TapRegion(
+        onTapOutside: (_) {
+          if (_isPen && !_draft.isEmpty) _finishOpen();
+        },
+        // The hardware crosshair leads: the OS precise pointer moves at
+        // input rate whatever the application's frame rate is doing, so it is
+        // the thing to aim with. The badge beside it, drawn by the app, only
+        // says which shape.
+        child: DrawnPointerRegion(
+          cursor: SystemMouseCursors.precise,
+          onPointer: (at) => setState(() {
+            _pointer = at;
+            // The Pen also draws the edge it would place next, from the last
+            // point placed to here.
+            _penPointer = _isPen ? at : null;
+          }),
+          child: Listener(
+            onPointerDown: (event) => _downAt = event.localPosition,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: _isPen ? _onPenTap : null,
+              onPanStart: _onPanStart,
+              onPanUpdate: _onPanUpdate,
+              onPanEnd: (_) => _onPanEnd(),
+              onPanCancel: _onPanCancel,
+              child: Stack(children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: ShapePreviewPainter(
+                      tool: widget.tool,
+                      space: space,
+                      // What the art would be committed with. A mask has no
+                      // colour of its own — it cuts — so a drag on a selected
+                      // layer previews in the accent instead of promising a fill
+                      // that will never appear.
+                      fill: art
+                          ? colourOf(widget.uiState.tools.fill)
+                          : widget.accent,
+                      stroke:
+                          art ? colourOf(widget.uiState.tools.stroke) : null,
+                      strokeWidth: art
+                          ? widget.uiState.tools.strokeWidth * space.screenScale
+                          : 0,
+                      from: _from,
+                      to: _to,
+                      square: HardwareKeyboard.instance.isShiftPressed,
+                      draft: _draft,
+                      penPointer: _penPointer,
+                      handleFrom: _handleFrom,
+                      handleTo: _handleTo,
+                      closing: _wouldClose,
+                      accent: widget.accent,
+                    ),
                   ),
                 ),
-              ),
-              ToolPointer(
-                at: _pointer,
-                tool: widget.tool,
-                mark: t.textPrimary,
-                outline: t.surface0,
-              ),
-            ]),
+                ToolPointer(
+                  at: _pointer,
+                  tool: widget.tool,
+                  mark: t.textPrimary,
+                  outline: t.surface0,
+                ),
+              ]),
+            ),
           ),
         ),
       ),
@@ -367,9 +417,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     );
     final box = _target;
     if (box == null) {
-      _commitShapeLayer(path, primitive);
+      _commitShapeLayer(widget.tool, path, primitive: primitive);
     } else {
-      _commit(box, path, primitive);
+      _commit(widget.tool, box, path, primitive: primitive);
     }
   }
 
@@ -396,12 +446,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         withinClosingDistance(at, start, screenScale: space.screenScale)) {
       final path = _draft.vertices;
       setState(() => _draft = const PathDraft());
-      final box = _target;
-      if (box == null) {
-        _commitShapeLayer(path);
-      } else {
-        _commit(box, path);
-      }
+      _place(path, _target, closed: true);
       return;
     }
     setState(() => _draft = _draft.withCorner(at));
@@ -429,13 +474,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 
   /// A new shape layer holding this art, at the top of the composition — what a
   /// shape tool or the Pen does with nothing selected.
-  void _commitShapeLayer(List<BridgeVertex> path,
-      [BridgeShapePrimitive? primitive]) {
+  void _commitShapeLayer(ToolMode tool, List<BridgeVertex> path,
+      {BridgeShapePrimitive? primitive, bool closed = true}) {
     if (path.length < 2) return;
     try {
       final layer = widget.comp.addShapeLayer(
-        name: shapeMaskName(widget.tool),
-        contents: [_item(path, primitive)],
+        name: shapeMaskName(tool),
+        contents: [_item(tool, path, primitive, closed)],
       );
       widget.uiState.setSelection([layer]);
       widget.onChanged();
@@ -447,16 +492,16 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// A piece of art holding [path], or the shape [primitive] makes, painted
   /// with the toolbar's fill and its stroke when that has a width: the two
   /// swatches that had nothing to paint until there were shape layers.
-  BridgeShapeItem _item(List<BridgeVertex> path,
-      BridgeShapePrimitive? primitive) {
+  BridgeShapeItem _item(ToolMode tool, List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive, bool closed) {
     final tools = widget.uiState.tools;
     return BridgeShapeItem(
       id: UuidValue.fromString(const Uuid().v4()),
-      name: shapeMaskName(widget.tool),
+      name: shapeMaskName(tool),
       vertices: path,
-      // Always closed: a shape tool draws a closed figure, and the Pen
-      // commits only when its path has come back to its first point.
-      closed: true,
+      // A shape tool draws a closed figure; the Pen's path is closed when
+      // it came back to its first point.
+      closed: closed,
       fill: stillColour(tools.fillRgba),
       stroke: tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
       strokeWidth: BridgeScalar.static_(tools.strokeWidth),
@@ -480,18 +525,19 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     );
   }
 
-  void _commit(LayerBox box, List<BridgeVertex> path,
-      [BridgeShapePrimitive? primitive]) {
+  void _commit(ToolMode tool, LayerBox box, List<BridgeVertex> path,
+      {BridgeShapePrimitive? primitive, bool closed = true}) {
     if (path.length < 2) return;
     if (_drawsArt) {
-      _addArt(box, path, primitive);
+      _addArt(tool, box, path, primitive, closed);
       return;
     }
     try {
       box.layer.addMask(
         mask: shapeMask(
           vertices: path,
-          name: maskName(widget.tool, box.masks.length),
+          name: maskName(tool, box.masks.length),
+          closed: closed,
         ),
       );
       widget.onChanged();
@@ -504,14 +550,14 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// A new piece of art on top of the shape layer [box]. The path was drawn
   /// in the layer's pixels, and the art's own coordinates sit a bounding box
   /// away from those.
-  void _addArt(LayerBox box, List<BridgeVertex> path,
-      BridgeShapePrimitive? primitive) {
+  void _addArt(ToolMode tool, LayerBox box, List<BridgeVertex> path,
+      BridgeShapePrimitive? primitive, bool closed) {
     final o = box.artOrigin;
     BridgeScalar moved(BridgeScalar s, double by) =>
         BridgeScalar.static_((s as BridgeScalar_Static).field0 + by);
     try {
       box.layer.addShapeItem(
-        item: _item([
+        item: _item(tool, [
           for (final v in path)
             BridgeVertex(
                 x: v.x + o.dx,
@@ -536,7 +582,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
               outerRoundness: p.outerRoundness,
               innerRoundness: p.innerRoundness,
             ),
-        }),
+        }, closed),
       );
       widget.onChanged();
     } catch (_) {
@@ -658,17 +704,15 @@ class ShapePreviewPainter extends CustomPainter {
     if (draft.isEmpty && handleFrom == null) return;
 
     if (draft.vertices.isNotEmpty) {
-      // A path still being built is previewed filled too, so what the Pen is
-      // making looks like what it will make. Closed for the fill even though
-      // the path is open — an unclosed run of points has no inside otherwise,
-      // and the shape it commits to will be closed.
-      if (draft.vertices.length > 2) {
-        _paintPreview(canvas, _screenPath(draft.vertices, closed: true));
+      // A path still being built is previewed as it would land if ended now:
+      // open, its fill closed by a straight line, as the engine fills it.
+      final open = _screenPath(draft.vertices, closed: false);
+      if (draft.vertices.length > 1) {
+        _paintPreview(
+            canvas, _screenPath(draft.vertices, closed: false)..close(),
+            edge: open);
       }
-      canvas.drawPath(
-        _screenPath(draft.vertices, closed: false),
-        outline,
-      );
+      canvas.drawPath(open, outline);
       // Every placed vertex, and the first one larger: it is the one a click
       // has to land on to close the shape.
       for (var i = 0; i < draft.vertices.length; i++) {
@@ -753,19 +797,19 @@ class ShapePreviewPainter extends CustomPainter {
   /// document until the drag ends. Half opacity reads as "this is what you are
   /// about to get" while still showing the colour, which is the thing the fill
   /// swatch could not answer before.
-  void _paintPreview(Canvas canvas, Path path) {
+  void _paintPreview(Canvas canvas, Path path, {Path? edge}) {
     canvas.drawPath(
       path,
       Paint()
         ..color = fill.withValues(alpha: fill.a * previewOpacity)
         ..style = PaintingStyle.fill,
     );
-    final edge = stroke;
-    if (edge == null || strokeWidth <= 0) return;
+    final colour = stroke;
+    if (colour == null || strokeWidth <= 0) return;
     canvas.drawPath(
-      path,
+      edge ?? path,
       Paint()
-        ..color = edge.withValues(alpha: edge.a * previewOpacity)
+        ..color = colour.withValues(alpha: colour.a * previewOpacity)
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
         ..strokeJoin = StrokeJoin.round,

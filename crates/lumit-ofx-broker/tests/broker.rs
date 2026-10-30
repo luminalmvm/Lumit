@@ -474,3 +474,109 @@ fn a_broker_with_no_credential_does_not_start() {
         "a broker with no credential must refuse rather than serve"
     );
 }
+
+/// The test plugin's gain drawn on the graphics card comes back as the CPU
+/// draws it, through CUDA and through OpenCL. The plugin is told the card is
+/// `needed`, so it refuses the CPU and a frame that came back was the card's.
+/// Each API this machine cannot open is skipped, which on CI is both.
+#[test]
+fn a_frame_drawn_on_the_graphics_card_matches_the_cpu() {
+    let name = "a_frame_drawn_on_the_graphics_card_matches_the_cpu";
+    let pixels: Vec<f32> = (0..FRAME.0 * FRAME.1 * 4)
+        .map(|index| index as f32 / 256.0)
+        .collect();
+    let source = Frame16::from_f32(FRAME.0, FRAME.1, &pixels).expect("a frame");
+    let mut params = ParamSnapshot::new();
+    params.set("gain", PropValue::double(1.5));
+    let render = |env: &[(&str, &str)]| {
+        let root = tempfile::tempdir().expect("a temp dir");
+        let (mut broker, _) = a_broker(root.path(), env)?;
+        let plugin = broker
+            .descriptors()
+            .iter()
+            .position(|descriptor| descriptor.identifier == "com.lumitlab.testplug")
+            .expect("the test plugin");
+        let instance = broker
+            .create_instance(plugin as u32, Context::Filter, params.clone())
+            .expect("an instance");
+        let request = RenderRequest::filter(0.0, source.clone());
+        Some(
+            broker
+                .render(instance, &request, &|_, _| None)
+                .expect("a frame back"),
+        )
+    };
+
+    let Some(cpu) = render(&[(lumit_ofx::gpu::GPU_ENV, "0")]) else {
+        skipped(name);
+        return;
+    };
+    assert!(!cpu.errored, "the CPU frame: {:?}", cpu.error);
+    for api in ["cuda", "opencl"] {
+        let gpu = render(&[
+            (lumit_ofx_testplug::gpu::GPU_ENV, "needed"),
+            (lumit_ofx::gpu::GPU_ENV, api),
+        ])
+        .expect("a broker");
+        if gpu.path.is_none() {
+            eprintln!("{name}: skipped {api}, which this machine cannot open");
+            continue;
+        }
+        assert!(!gpu.errored, "the {api} frame: {:?}", gpu.error);
+        for y in 0..FRAME.1 {
+            for x in 0..FRAME.0 {
+                let (on_card, on_cpu) = (gpu.frame.pixel(x, y), cpu.frame.pixel(x, y));
+                for channel in 0..4 {
+                    assert!(
+                        (on_card[channel] - on_cpu[channel]).abs() < 1e-3,
+                        "{api} at {x},{y}: {on_card:?} against {on_cpu:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Set by the cancelling thread in the test below.
+static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A frame cancelled while a slow plugin renders it stops at the plugin's next
+/// `abort`, rather than at the deadline, and is no strike against it.
+#[test]
+fn a_cancelled_frame_stops_a_plugin_that_polls_abort() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[("LUMIT_TESTPLUG_HANG", "1")]) else {
+        skipped("a_cancelled_frame_stops_a_plugin_that_polls_abort");
+        return;
+    };
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+
+    let cancel = std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(200));
+        STOP.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let before = lumit_core::fx::points::stepped::stop_when(Some(|| {
+        STOP.load(std::sync::atomic::Ordering::SeqCst)
+    }));
+    let started = std::time::Instant::now();
+    let rendered = broker
+        .render(
+            instance,
+            &RenderRequest::filter(0.0, a_flat_frame(0.5)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    let took = started.elapsed();
+    lumit_core::fx::points::stepped::stop_when(before);
+    cancel.join().expect("the cancel");
+
+    assert_eq!(
+        rendered.error.as_deref(),
+        Some(lumit_core::fx::registry::STOPPED),
+        "a cancelled frame is not a failure, and is not kept"
+    );
+    assert!(took < Duration::from_millis(1500), "it stopped in {took:?}");
+    assert_eq!(broker.strikes(), 0);
+}

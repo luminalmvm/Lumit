@@ -1,0 +1,40 @@
+---
+title: Scrape
+description: "Drags the pixels of a line out across the picture, like paint pulled by a rough edge."
+---
+
+Scrape is a **Stylise** effect.
+
+## What it does
+
+Drags the pixels of a line through **Centre** out along **Angle**, fading as they go. Only
+the side Angle points to is scraped.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 0° | Degrees |
+| **Length** | Slider | 0 to 4000; any value by typing | 600 | Pixels at composition size |
+| **Roughness** | Slider | 0 to 100 | 30 | - |
+| **Fade** | Slider | 0 to 100 | 50 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+
+## What each control does
+
+- **Centre**: a point on the line that is dragged.
+- **Angle**: the direction it is dragged in.
+- **Length**: how far the pixels are dragged.
+- **Roughness**: gives each row of pixels its own length.
+- **Fade**: how much the drag blends back into the picture towards its end.
+- **Seed**: which lengths Roughness gives.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Stripes](/effects/stylise/stripes/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

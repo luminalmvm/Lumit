@@ -97,7 +97,9 @@ class _Hold {
 ///
 /// One short sync call per tick — the engine reads lock-free atomics the
 /// callback publishes (docs/09 §3.1) — and the notifier only fires when the
-/// numbers moved, so a paused transport costs no repaints at all.
+/// numbers moved, so a paused transport costs no repaints at all. Started with
+/// a `wake`, the poll also parks itself once the bars have been silent a
+/// second with no hold left to fall, and that wakes it again.
 class AudioMeterFeed {
   final ValueNotifier<AudioMeterFrame> frame =
       ValueNotifier(AudioMeterFrame.silence);
@@ -119,9 +121,31 @@ class AudioMeterFeed {
   /// tick is one sync crossing that copies a handful of numbers.
   static const Duration _period = Duration(milliseconds: 33);
 
-  void start() => _timer ??= Timer.periodic(_period, (_) => tick());
+  /// What starts a parked poll again: the transport starting, or the
+  /// playhead moving under a scrub that may be heard.
+  Listenable? _wake;
+
+  /// When something was last heard, or the poll last woken.
+  DateTime _heard = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// How long the bars stay silent before the poll parks. Long enough for a
+  /// scrub's burst to reach the tap after the playhead moved.
+  static const Duration _quiet = Duration(seconds: 1);
+
+  void start({Listenable? wake}) {
+    _wake = wake?..addListener(this.wake);
+    this.wake();
+  }
+
+  /// Poll again, because something may be about to sound.
+  void wake() {
+    _heard = DateTime.now();
+    _timer ??= Timer.periodic(_period, (_) => tick());
+  }
 
   void stop() {
+    _wake?.removeListener(wake);
+    _wake = null;
     _timer?.cancel();
     _timer = null;
   }
@@ -149,6 +173,12 @@ class AudioMeterFeed {
       frame.value = next;
     }
     if (clipped.value != anyClipped) clipped.value = anyClipped;
+    if (strips.values.any((s) => s != StripLevels.silence)) {
+      _heard = now;
+    } else if (_wake != null && now.difference(_heard) > _quiet) {
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   /// A rising peak takes the hold at once; a fallen one keeps it for

@@ -61,6 +61,7 @@ import '../state/settings.dart';
 import '../state/share.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 // The ruler helpers moved with the ruler (shared with the graph editor); the
@@ -1973,12 +1974,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// magnification without reading the axis it is itself rebuilding.
   int _laneFrames = 1;
 
-  /// How much motion the shell is set to show, read in build where the theme
-  /// scope is in reach — the same arrangement the Viewer's zoom uses.
-  AnimationLevel _animationLevel = AnimationLevel.all;
+  /// How a zoom flies under the shell's shape and motion setting, read in
+  /// build where the theme scope is in reach — the same arrangement the
+  /// Viewer's zoom uses.
+  MotionSpec _zoomFlight = MotionSpec.still;
 
   /// The room the lanes leave either side of the frames
-  /// ([TimelineAxis.padFor]), read in build beside [_animationLevel] so the
+  /// ([TimelineAxis.padFor]), read in build beside [_zoomFlight] so the
   /// scroll arithmetic outside it measures against the axis that is drawn.
   double _axisPad = TimelineAxis.pad;
 
@@ -2183,6 +2185,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void _edgeFollow() {
     final ui = _ui;
     if (ui == null || !ui.playing.value || !mounted) return;
+    // Nothing to follow behind another tab; the next frame once shown does.
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return;
     final position = positionOf(_hLane);
     if (position == null || position.maxScrollExtent <= 0) return;
     final viewport = position.viewportDimension;
@@ -2415,7 +2419,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
-        _deleteSelectedEffects();
+        _deleteSelectedEffects() ||
+        _deleteSequenceClip();
+  }
+
+  /// The clip picked in an open sequence view goes, and leaves a gap: what
+  /// follows keeps the beat it was cut to. Its layer stays.
+  bool _deleteSequenceClip() {
+    final pick = sequenceClipPick.value;
+    if (pick == null) return false;
+    try {
+      pick.layer.deleteClip(clip: pick.clip);
+    } catch (_) {
+      // Gone between the click and the key.
+    }
+    sequenceClipPick.value = null;
+    _ui?.cutClip.value = null;
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    _ui?.model.refresh();
+    return true;
   }
 
   /// Delete every picked effect row, returning whether there was one.
@@ -2768,7 +2790,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   ///
   /// The popup is an overlay entry, so it outlives the panel that opened it —
   /// a re-dock while it is up would otherwise land an Apply on a dead State.
-  void _applyEasing(EasingCurve curve) {
+  void _applyEasing(EasingCurve curve, EaseSides sides) {
     if (!mounted) return;
     if (_graph && _graphLens != GraphLens.value) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -2783,6 +2805,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         channels: channels,
         selectedKeys: selection,
         curve: curve,
+        sides: sides,
       );
     });
     ui.model.refresh();
@@ -2977,11 +3000,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The zoom keys (docs/07 §4.6): `=` in, `-` out, `\` between the whole
     // composition and wherever the zoom was before. They hold the **playhead**
     // still, because a key press has no pointer to zoom about — the same
-    // answer the bottom bar's slider gives.
+    // answer the bottom bar's slider gives. They land at once: keys repeat,
+    // and a flight on every repeat makes a held key feel late.
     if (action == 'timeline.zoom.in' || action == 'timeline.zoom.out') {
       _zoomBeforeFit = null;
-      _setZoom(zoomNudged(_zoomMotion.target,
-          inward: action == 'timeline.zoom.in', maxZoom: _maxZoom));
+      _setZoom(
+          zoomNudged(_zoomMotion.target,
+              inward: action == 'timeline.zoom.in', maxZoom: _maxZoom),
+          fly: false);
       return true;
     }
     if (action == 'timeline.zoom.fit') {
@@ -2990,10 +3016,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final was = _zoomBeforeFit;
       if (_zoomMotion.target > 1) {
         _zoomBeforeFit = _zoomMotion.target;
-        _setZoom(1);
+        _setZoom(1, fly: false);
       } else {
         _zoomBeforeFit = null;
-        _setZoom((was ?? 1).clamp(1.0, _maxZoom));
+        _setZoom((was ?? 1).clamp(1.0, _maxZoom), fly: false);
       }
       return true;
     }
@@ -3480,7 +3506,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         wheelDelta(event) < 0 ? 1.2 : 1 / 1.2,
-        duration: animationDuration(_animationLevel),
+        motion: _zoomFlight,
       );
       return;
     }
@@ -3537,8 +3563,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is exact: the flight (and the drag) re-applies the same fixed point
     // every tick, which is the invariant the whole mechanism is built on.
     if (!_zoomAnchorHeld) _anchorOnPlayhead();
-    _zoomMotion.goTo(z,
-        duration: fly ? animationDuration(_animationLevel) : Duration.zero);
+    _zoomMotion.goTo(z, motion: fly ? _zoomFlight : MotionSpec.still);
   }
 
   /// The navigator asked for a window: `start` frames from the left, `span`
@@ -4061,8 +4086,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    // How much motion the shell shows, for the zoom's flight.
-    _animationLevel = scope.animationLevel;
+    _zoomFlight = scope.motion.zoom;
     _axisPad = TimelineAxis.padFor(t);
     // The columns actually drawn. The render-time column is only there while
     // something is being measured: switched off it takes no width, no
@@ -4237,22 +4261,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ui, layers, blockHeights, details.offset, t.density);
               switch (details.data) {
                 case FootageDragData(:final footage):
-                  // Each file lands on the row it was dropped on, so one file
-                  // is one op and one press of Ctrl-Z puts it back. Bottom-up,
-                  // so a multi-item drop stacks in the order the panel listed
-                  // them: every one goes in at the same row and pushes the one
-                  // before it down.
-                  // ponytail: a ten-file drop is still ten steps, one per
-                  // file, because each add is its own committed op. That is
-                  // the ceiling left here, and the fix is an op that carries a
-                  // whole drop.
-                  for (final f in footage.reversed) {
-                    comp.addFootageLayer(
-                        footage: f,
-                        asSequence: _videoAsSequence(context),
-                        row: at,
-                        arrival: ui.streamsArrival);
-                  }
+                  // The files land on the row they were dropped on, in the
+                  // order the panel lists them, as one undo step. Several lie
+                  // end to end, and Shift stacks them all at the start.
+                  comp.addFootageLayers(
+                      footage: footage,
+                      asSequence: _videoAsSequence(context),
+                      row: at,
+                      arrival: ui.streamsArrival,
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.

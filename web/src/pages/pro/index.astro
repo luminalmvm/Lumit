@@ -339,31 +339,47 @@ const questions = [
     color: var(--color-fg-4);
     font-size: 15px;
   }
-  /* The plan most people should take, edged in the sweep. */
+  /* The plan most people should take, edged in the sweep. The sweep is a
+     square much bigger than the card, turning slowly behind it, and the
+     card's own ground covers all of it but a 1px edge. Turning it is a
+     transform, so nothing is painted again as it goes. */
   .plan-pick {
-    --pick: color-mix(in srgb, var(--key-jade) 5%, var(--color-ink-2));
     position: relative;
-    border-color: transparent;
-    background:
-      linear-gradient(var(--pick), var(--pick)) padding-box,
-      linear-gradient(var(--turn), var(--key-jade), var(--key-sky)) border-box;
-    animation: turn 9s linear infinite;
+    isolation: isolate;
+    overflow: hidden;
+    border: 0;
+    padding: calc(1.75rem + 1px);
+    background: none;
   }
-  /* The sweep goes slowly round the edge. An angle has to be registered to
-     be animated, and without that the edge just stands at 135. */
-  @property --turn {
-    syntax: "<angle>";
-    inherits: false;
-    initial-value: 135deg;
+  .plan-pick::before,
+  .plan-pick::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+  }
+  .plan-pick::before {
+    z-index: -2;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    background: linear-gradient(135deg, var(--key-jade) 30%, var(--key-sky) 70%);
+  }
+  .plan-pick::after {
+    z-index: -1;
+    inset: 1px;
+    border-radius: calc(var(--radius-card) - 1px);
+    background: color-mix(in srgb, var(--key-jade) 5%, var(--color-ink-2));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .plan-pick::before {
+      animation: turn 9s linear infinite;
+    }
   }
   @keyframes turn {
     to {
-      --turn: 495deg;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .plan-pick {
-      animation: none;
+      rotate: 360deg;
     }
   }
   /* Where a feature's picture stands. One picture fills it to the edges. */
@@ -471,6 +487,18 @@ const questions = [
     width: 96px;
     text-align: center;
   }
+  /* On a phone the ticks take less room, so the feature has more. */
+  @media (max-width: 639px) {
+    .compare th,
+    .compare td {
+      padding-inline: 16px;
+    }
+    .compare th:not(:first-child),
+    .compare td:not(:first-child) {
+      width: 52px;
+      padding-inline: 4px;
+    }
+  }
   .faq {
     border-top: 1px solid var(--color-line);
   }
@@ -502,7 +530,11 @@ const questions = [
     content: "+";
     color: var(--color-fg-4);
     font-family: var(--font-mono);
-    transition: transform 0.2s;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .faq summary::after {
+      transition: transform 0.2s;
+    }
   }
   .faq details[open] summary::after {
     transform: rotate(45deg);

@@ -1,0 +1,48 @@
+{
+  "lumit_flare": 1,
+  "name": "Ion",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[0.85, 1.0, 1.0]]},
+      "values": {"size": 40, "falloff": 0.25, "core": 2.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.2, 0.8, 1.0]]},
+      "values": {"size": 220, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "picture",
+      "name": "Caustic",
+      "colour": {"mode": "solid", "colours": [[0.3, 0.9, 1.0]]},
+      "values": {"texture": 3, "size": 130, "brightness": 0.25, "place": 0.0}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[0.4, 0.95, 1.0]]},
+      "values": {"size": 150, "thickness": 6, "brightness": 0.3, "softness": 0.7}
+    },
+    {
+      "kind": "ring",
+      "name": "Ring",
+      "colour": {"mode": "solid", "colours": [[0.4, 0.95, 1.0]]},
+      "values": {"size": 230, "thickness": 3, "brightness": 0.25, "softness": 0.4, "arc": 200, "arc_feather": 0.3, "rotation": -40}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[0.5, 0.95, 1.0]]},
+      "values": {"count": 30, "size": 380, "thickness": 3.0, "brightness": 0.35, "length_var": 0.5, "softness": 0.4, "taper": 1.0, "shimmer": 0.5, "fringe": 0.5, "spin": -15}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[0.4, 0.9, 1.0]]},
+      "values": {"count": 5, "size": 45, "brightness": 0.35, "sides": 0, "roundness": 0.2, "fill": 0.05, "edge": 0.6, "edge_width": 0.06, "softness": 0.05, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.6, "to": 2.0, "texture": 3}
+    }
+  ]
+}

@@ -744,14 +744,13 @@ List<BridgeVertex> verticesConverted(
   ];
 }
 
-/// [vertices] without point [index], or null when the path would be left with
-/// too few points to be a path.
+/// [vertices] without point [index], or null when it is the path's last.
 List<BridgeVertex>? verticesWithoutPoint(
   List<BridgeVertex> vertices,
   int index,
   bool closed,
 ) {
-  if (vertices.length <= (closed ? 3 : 2)) return null;
+  if (vertices.length <= 1) return null;
   return [
     for (var i = 0; i < vertices.length; i++)
       if (i != index) vertices[i],
@@ -3319,7 +3318,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   /// Delete with path points selected, in the Viewer: the points go, and a
-  /// path left with too few to be a path goes with them, as in After Effects.
+  /// path goes only with its last point, as in After Effects.
   bool _deleteClaim() {
     final ui = widget.uiState;
     if (!mounted ||
@@ -3342,7 +3341,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             kept(mask.vertices, (i) => maskPointKey(box.id, mask.id, i));
         if (left.length == mask.vertices.length) continue;
         try {
-          if (left.length < (mask.closed ? 3 : 2)) {
+          if (left.isEmpty) {
             box.layer.deleteMask(id: mask.id);
           } else {
             box.layer.setMask(
@@ -3361,9 +3360,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
               kept(item.vertices, (i) => shapePointKey(box.id, item.id, i));
           if (left.length != item.vertices.length) {
             touched = true;
-            // Too few points left is no shape: the item goes, and whatever
-            // acted on it acts on the rest.
-            if (left.length >= (item.closed ? 3 : 2)) {
+            // No points left is no shape: the item goes, and whatever acted
+            // on it acts on the rest.
+            if (left.isNotEmpty) {
               contents.add(BridgeShapeEntry(
                   depth: entry.depth,
                   kind: BridgeShapeEntryKind.item(
@@ -3982,7 +3981,7 @@ class _GizmoPainter extends CustomPainter {
     bool art = false,
     List<double>? feather,
   }) {
-    if (vertices.length < 2) return;
+    if (vertices.isEmpty) return;
     final projected = box.map.projected;
     final moved = _shift(box);
     // A selected point follows the pointer while it is being dragged, so the
@@ -4135,7 +4134,7 @@ class _GizmoPainter extends CustomPainter {
     double Function(Offset layerPoint) depth,
   ) {
     final path = Path();
-    final spans = closed && vertices.length > 2
+    final spans = closed && vertices.length > 1
         ? vertices.length
         : vertices.length - 1;
     Offset? last;
@@ -4191,7 +4190,7 @@ class _GizmoPainter extends CustomPainter {
             p3 * (t * t * t));
       }
     }
-    if (whole && closed && vertices.length > 2) path.close();
+    if (whole && closed && vertices.length > 1) path.close();
     return path;
   }
 

@@ -29,6 +29,8 @@ pub mod drivers;
 pub mod effects;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
+/// The Sprite flare's design: its elements and how they are drawn.
+pub mod flare;
 /// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
 pub mod labels;
 /// Lenses as both lens effects read them, and a lens kept in the effect.

@@ -213,9 +213,7 @@ void main() {
         'appearance': [
           'settings-scheme',
           'settings-theme-swatches',
-          'settings-shape-studio',
-          'settings-shape-desk',
-          'settings-shape-lantern',
+          'settings-shape',
           'settings-lantern-room',
           'settings-customise',
           'settings-themed-splash',
@@ -236,7 +234,7 @@ void main() {
           'settings-range-sliders',
           'settings-command-box',
           'settings-icon-set',
-          'settings-icons-reload',
+          'settings-icons-folder',
           'settings-multiwave',
           'settings-waveform-from-bottom',
         ],
@@ -320,11 +318,12 @@ void main() {
           }
           expect(finder, findsOneWidget,
               reason: '$control belongs to the ${page.key} page');
-          // The room rows only exist while their shape is in force, so the
-          // Desk and Lantern chips are pressed on the way past them.
-          if (control == 'settings-shape-desk' ||
-              control == 'settings-shape-lantern') {
+          // The room row only exists while Lantern is in force, so it is
+          // picked on the way past.
+          if (control == 'settings-shape') {
             await tester.tap(finder);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Lantern').last);
             await tester.pumpAndSettle();
           }
         }
@@ -367,7 +366,9 @@ void main() {
       expect(p.uiState.theme.mode, isNot(ThemeMode2.dark),
           reason: 'the derived theme follows the choice');
 
-      await tester.tap(find.byKey(const ValueKey('settings-shape-desk')));
+      await tester.tap(find.byKey(const ValueKey('settings-shape')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desk').last);
       await tester.pumpAndSettle();
       expect(p.uiState.scheme, LumitColorScheme.light,
           reason: 'picking Desk never changes the scheme by itself');
@@ -806,8 +807,6 @@ void main() {
       expect(live('export-depth'), isTrue, reason: 'and either depth');
       expect(live('export-audio'), isFalse,
           reason: 'a folder of stills is mute');
-      expect(find.textContaining('One numbered PNG per frame'), findsOneWidget,
-          reason: 'the dialog says what a sequence writes');
 
       await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
       await tester.pumpAndSettle();

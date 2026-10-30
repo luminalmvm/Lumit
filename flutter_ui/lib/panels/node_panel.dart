@@ -55,6 +55,7 @@ import 'graph_panel.dart'
 import 'placeholder.dart';
 import 'plane_display_frb.dart';
 import 'roto_display_frb.dart';
+import 'flare_window.dart';
 import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
@@ -488,6 +489,18 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           effect: effect,
           param: param,
           onApplied: ui.model.refresh,
+        )) {
+      return;
+    }
+    if (home != null &&
+        pressFlareButton(
+          context: context,
+          home: home,
+          effect: effect,
+          param: param,
+          onApplied: ui.model.refresh,
+          comp: comp,
+          frame: frame,
         )) {
       return;
     }

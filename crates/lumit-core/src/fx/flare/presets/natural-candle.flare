@@ -1,0 +1,36 @@
+{
+  "lumit_flare": 1,
+  "name": "Candle",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.98, 0.92], [1.0, 0.72, 0.38]]},
+      "values": {"size": 60, "falloff": 0.3, "core": 2.0, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Flame",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.75, 0.4]]},
+      "values": {"size": 140, "brightness": 0.35, "falloff": 0.3, "core": 0.0, "stretch": 0.55}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.6, 0.3]]},
+      "values": {"size": 300, "brightness": 0.1, "falloff": 0.35, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.8, 0.5]]},
+      "values": {"count": 40, "size": 300, "thickness": 6.0, "brightness": 0.25, "length_var": 0.6, "softness": 1.0, "taper": 1.0, "shimmer": 0.6}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.7, 0.4]]},
+      "values": {"count": 3, "size": 50, "brightness": 0.25, "sides": 0, "roundness": 0.2, "fill": 0.08, "edge": 0.3, "edge_width": 0.06, "softness": 0.5, "fringe": 0.0, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.9, "to": 1.7}
+    }
+  ]
+}

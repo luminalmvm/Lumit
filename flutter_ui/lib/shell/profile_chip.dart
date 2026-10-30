@@ -540,8 +540,8 @@ class _SyncRingState extends State<SyncRing>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final moving =
-        ThemeScope.of(context).animationLevel != AnimationLevel.none;
+    // An endless turn is Full's alone, as the other busy loops are.
+    final moving = ThemeScope.of(context).motion.carries;
     if (moving && _turn == null) {
       _turn = AnimationController(
           vsync: this, duration: const Duration(milliseconds: 900))

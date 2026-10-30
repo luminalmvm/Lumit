@@ -200,6 +200,9 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// same way and for the same reason.
   BridgeStreamsArrival? arrival,
 
+  /// Lay the items end to end rather than all at the start.
+  bool endToEnd = false,
+
   /// Make a **node graph** rather than a layer stack
   /// (docs/impl/node-graph-comp.md §4.4). The same dialogue, the same fields:
   /// a node graph is sized and timed like any comp, and only the door it goes
@@ -266,10 +269,11 @@ Future<CompositionReference?> showNewCompositionFrb({
             comp.setLightingLikeAfterEffects(on_: true);
           }
           // A node graph has no layers, so nothing is dropped on this door.
-          for (final item in footage) {
-            comp.addFootageLayer(
-                footage: item, asSequence: asSequence, arrival: arrival);
-          }
+          comp.addFootageLayers(
+              footage: footage,
+              asSequence: asSequence,
+              arrival: arrival,
+              endToEnd: endToEnd);
         });
         close(comp);
       },

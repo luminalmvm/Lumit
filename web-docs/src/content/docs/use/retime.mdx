@@ -34,20 +34,40 @@ Each clip in a [Sequence layer](/use/sequence-layers/) has its own speed. Double
 Sequence layer's row in the Timeline to open it. Under the clips is the **speed envelope**: a
 line per clip, in per cent.
 
-- Drag a line up or down to change the speed. On a clip that has never been retimed the
-  whole line moves as one.
+- Drag a line up or down to change the speed. The points at both ends of the stretch move
+  together. On a clip that has never been retimed the whole line moves as one.
 - Double-click a line, or `Ctrl`+click it, to add a point. It takes the speed already there.
 - Drag a point sideways to move it in time, in whole frames. A clip's first and last points
   stay on its ends.
-- `Alt`+click a point to remove it. A clip keeps at least two.
+- Hold `Shift` or `Alt` while dragging to move a point in time only.
+- Hold `Ctrl` while dragging to change the speed a tenth as fast, with the point held at its
+  time. `Ctrl` also suspends the snap to **Every frame**.
+- `Alt`+click a point to remove it. A clip's first and last points stay.
+- Double-click a point to put it back to 100%.
 - Drag across empty space in the strip to select points, with `Shift` to add to them.
   Selected points move together, across clips too.
-- Double-click a point, or right-click it and choose **Set speed…**, to type its speed.
-- Hold `Ctrl` while dragging to change the speed a tenth as fast. `Ctrl` also suspends the
-  snap to **Every frame**.
 - Drag the divider above the strip to make it taller.
 
-Between two points the speed changes in a straight line. Below 0% the clip plays backwards.
+| On a point's right-click menu | What it does |
+| --- | --- |
+| **Set speed…** | Types the point's speed. |
+| **Reset to 100%** | Puts the point back to 100%. |
+| **Delete point** | Removes the point. Not on a clip's first or last. |
+
+| On the line's right-click menu | What it does |
+| --- | --- |
+| **Add point** | Adds a point where the click was. |
+| **Linear** | The speed changes evenly to the next point. |
+| **Fast** | The speed changes most just after the point. |
+| **Slow** | The speed changes most just before the next point. |
+| **Smooth** | The speed eases out of the point and into the next. |
+| **Sharp** | The speed changes fastest near both points. |
+| **Hold** | The speed stays as it is until the next point, then jumps. |
+| **Flip** | Mirrors every point's speed about 100%. |
+| **Thin** | Removes the points already on the straight line between their neighbours. |
+| **Reset speed** | Sets the whole clip back to 100%. |
+
+Below 0% the clip plays backwards.
 
 A clip keeps its start and its length. A change of speed changes which source frames fill it.
 Lengthening a retimed clip carries on at the speed its last point has.
@@ -60,7 +80,8 @@ Lengthening a retimed clip carries on at the speed its last point has.
 | **Copy the whole row's shape** | Copies where every cut falls and how each piece is ramped. |
 | **Paste shape onto this layer** | Cuts and ramps this Sequence layer to match. |
 
-The razor cuts through a ramp. The [Cut timeline](/use/cutting/) does not show the envelope.
+The razor cuts through a ramp. In the [Cut timeline](/use/cutting/) the same line is drawn
+across each picture clip.
 
 ## Retime on a layer
 
@@ -105,8 +126,9 @@ on a key's menu.
 In the speed envelope:
 
 - Double-click the line, or `Ctrl`+click it, to add a point.
-- Double-click a point, or right-click it and choose **Set speed…**, to type its **Frame** and
-  **Speed**. Speed runs from −10000% to 10000%.
+- Double-click a point to put it back to 100%.
+- Right-click a point for **Set speed…**, which types its **Frame** and **Speed**, **Reset to
+  100%**, the curve to the next point, and **Delete key**. Speed runs from −10000% to 10000%.
 - `Alt`+click a point to remove it.
 - Hold `Ctrl` while dragging to change the speed a tenth as fast.
 - The first point stays where it is. Moving a later point moves the frames after it.

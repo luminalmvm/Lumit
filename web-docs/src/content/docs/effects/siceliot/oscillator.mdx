@@ -1,0 +1,82 @@
+---
+title: Oscillator
+description: "A value that swings between two numbers in a wave, rippling across the copies."
+---
+
+Oscillator is a **Siceliot** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Swings a value between **Minimum** and **Maximum** in a wave. Each copy
+[Clone to points](/effects/generate/clone-to-points/) stamps sits at its own place on the
+wave, set by its number or by where it stands.
+
+Wired into Clone to points' own **Scale**, **Rotation** or **Opacity**, or into
+[Label points](/effects/generate/label-points/)' **Change**, **Label scale**, **Text step**
+or **Label rotation**, it gives each stamp or label its own value, for up to 4096 points.
+In what a clone layer shows, it renders that layer once per copy, as
+[Clone index](/effects/drivers/clone-index/) does. Anywhere else it reads as the first copy
+of one.
+
+Where a copy stands is known only when the driver is wired into those rows. Anywhere else
+it reads as the top left corner of the composition.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Sine · Triangle · Square · Sawtooth | Sine | - |
+| **Minimum** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Maximum** | Slider | -100 to 100; any value by typing | 100 | - |
+| **Frequency** | Slider | 0 to 20; higher | 1 | - |
+| **Phase** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Phase per copy** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Phase from** | Dropdown | Copy · Position | Copy | - |
+| **Wave angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Wavelength** | Slider | 10 to 4000; down to 1 and higher | 400 | Pixels at composition size |
+
+In the Effect Controls panel:
+
+- **Phase per copy** is editable while **Phase from** is set to Copy.
+- **Wave angle** is editable while **Phase from** is set to Position.
+- **Wavelength** is editable while **Phase from** is set to Position.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shape**: the wave's shape. A sine starts halfway between Minimum and Maximum, on its
+  way up.
+- **Minimum**: the bottom of the wave.
+- **Maximum**: the top of the wave.
+- **Frequency**: waves a second.
+- **Phase**: where in the wave it starts.
+- **Phase per copy**: how much further along the wave each copy is than the one before.
+- **Phase from**: what sets each copy's place on the wave. **Copy** goes by its number;
+  **Position** goes by where it stands, so the wave crosses the points whatever order they
+  come in.
+- **Wave angle**: the direction the wave travels across the points. 0° runs left to
+  right, 90° top to bottom.
+- **Wavelength**: the distance from one crest to the next.
+
+## With Clone to points
+
+On the layer that holds Clone to points, an Oscillator from 100 to 900 with **Phase from**
+on Position, wired into Clone to points' **Scale**, sends a wave of size across a grid of
+copies. With Phase from on Copy and **Phase per copy** at 15°, the copies pulse one after
+another instead.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Value noise](/effects/siceliot/value-noise/)
+- [Siceliot](/effects/#siceliot)
+- [Effects](/use/effects/)

@@ -54,16 +54,29 @@ impl Bounds {
         ]
     }
 
+    /// How far past an `n`-pixel edge a box may keep: `frames` frames (0 for
+    /// no limit of its own), and never past the largest picture. Whether it is
+    /// the largest picture that stops it.
+    fn room(n: u32, frames: u32) -> (f32, bool) {
+        let frames = if frames == 0 { u32::MAX } else { frames };
+        let (asked, most) = (
+            n.saturating_mul(frames),
+            lumit_core::largest_picture::side().saturating_sub(n) / 2,
+        );
+        (asked.min(most) as f32, most < asked)
+    }
+
     /// The whole pixels that cover `rect` and the `w × h` frame, keeping at
     /// most `frames` frames past each edge (0 for no limit of its own) and
-    /// never more than the widest texture.
+    /// never more than the largest picture.
     fn covering(rect: [f32; 4], w: u32, h: u32, frames: u32) -> Self {
-        let frames = if frames == 0 { u32::MAX } else { frames };
-        let room = |n: u32| {
-            n.saturating_mul(frames)
-                .min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2) as f32
-        };
-        let (rx, ry) = (room(w), room(h));
+        let ((rx, cap_x), (ry, cap_y)) = (Self::room(w, frames), Self::room(h, frames));
+        // Cut by the largest picture rather than by the overscan asked for.
+        if (cap_x && (rect[0] < -rx || rect[2] > w as f32 + rx))
+            || (cap_y && (rect[1] < -ry || rect[3] > h as f32 + ry))
+        {
+            lumit_core::largest_picture::note_cut();
+        }
         // Nothing sensible to cover reads as the frame's own edge.
         let low = |v: f32, room: f32| {
             if v.is_nan() {
@@ -91,17 +104,16 @@ impl Bounds {
 
     /// The most a box may keep round a `w × h` frame.
     fn limit(w: u32, h: u32, frames: u32) -> Self {
-        Self::covering(
-            [
-                f32::NEG_INFINITY,
-                f32::NEG_INFINITY,
-                f32::INFINITY,
-                f32::INFINITY,
-            ],
-            w,
-            h,
-            frames,
-        )
+        let (rx, ry) = (
+            Self::room(w, frames).0 as u32,
+            Self::room(h, frames).0 as u32,
+        );
+        Self {
+            x: -(rx as i32),
+            y: -(ry as i32),
+            w: w + rx * 2,
+            h: h + ry * 2,
+        }
     }
 
     /// Whether this reaches the limit on any side the limit is past the
@@ -737,7 +749,7 @@ impl Realiser<'_> {
                         &[],
                         &tables,
                         &[],
-                        &[],
+                        &self.load_flare_lens(&d.flare_lens_files),
                         &[],
                         // No mask paths through a referenced layer's own stack
                         // — the same v1 boundary its mattes take.
@@ -1957,7 +1969,7 @@ impl Realiser<'_> {
                 &[],
                 &tables,
                 &[],
-                &[],
+                &self.load_flare_lens(&m.flare_lens_files),
                 &[],
                 // As above: a referenced layer's own stack walks no
                 // mask path, and carries no birth schedule, in v1.
@@ -3235,8 +3247,7 @@ fn dof_blur(
             .filter(|c| c.z > 0.0)
             .map(|&c| texels(c, s))
             .fold(0.0, f32::max);
-        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n as u32) / 2;
-        (widest.min(reach * step).ceil() as u32).min(most)
+        lumit_core::largest_picture::room(widest.min(reach * step).ceil() as u32, n as u32)
     };
     let room = (room(x, tw), room(y, th));
     let corner = corner - x * room.0 as f32 - y * room.1 as f32;

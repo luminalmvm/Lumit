@@ -1,0 +1,42 @@
+{
+  "lumit_flare": 1,
+  "name": "Vintage",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.92, 0.8]]},
+      "values": {"size": 80, "falloff": 0.4, "core": 0.8, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.8, 0.6]]},
+      "values": {"size": 280, "brightness": 0.04, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[1.0, 0.85, 0.55], [0.7, 0.95, 0.75], [1.0, 0.65, 0.6]]},
+      "values": {"count": 10, "size": 70, "brightness": 0.5, "sides": 5, "roundness": 0.1, "fill": 0.12, "edge": 0.5477226, "edge_width": 0.08, "softness": 0.08, "fringe": 0.35, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.3, "to": 2.3, "face": 1}
+    },
+    {
+      "kind": "ghost",
+      "name": "Big ghost",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.8, 0.55]]},
+      "values": {"place": 1.9, "size": 300, "brightness": 0.4, "sides": 5, "roundness": 0.3, "fill": 0.04, "edge": 0.3741657, "edge_width": 0.06, "softness": 0.1, "fringe": 0.5, "response": 2, "response_amount": 0.6, "response_range": 0.7}
+    },
+    {
+      "kind": "halo",
+      "name": "Halo",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.8, 0.5]]},
+      "values": {"size": 400, "thickness": 60, "brightness": 0.3, "arc": 180, "grow": 0.4, "fringe": 0.3, "softness": 1.0, "response": 2, "response_amount": 0.6, "response_range": 0.6}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.85, 0.6]]},
+      "values": {"texture": 1, "size": 700, "reach": 800, "brightness": 0.1}
+    }
+  ]
+}

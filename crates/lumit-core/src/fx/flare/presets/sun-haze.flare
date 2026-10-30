@@ -1,0 +1,30 @@
+{
+  "lumit_flare": 1,
+  "name": "Haze",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "gradient", "colours": [[1.0, 0.97, 0.9], [1.0, 0.8, 0.55]]},
+      "values": {"size": 140, "falloff": 0.4, "core": 0.8, "core_size": 0.2, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.8, 0.55]]},
+      "values": {"size": 600, "brightness": 0.06, "falloff": 0.5, "core": 0.0}
+    },
+    {
+      "kind": "rays",
+      "name": "Rays",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.85, 0.6]]},
+      "values": {"count": 30, "size": 900, "thickness": 14.0, "brightness": 0.1, "length_var": 0.5, "softness": 1.0, "taper": 1.0, "shimmer": 0.5}
+    },
+    {
+      "kind": "dirt",
+      "name": "Dust",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.85, 0.6]]},
+      "values": {"texture": 1, "size": 1000, "reach": 1400, "brightness": 0.07}
+    }
+  ]
+}

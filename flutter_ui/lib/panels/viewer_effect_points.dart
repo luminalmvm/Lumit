@@ -33,6 +33,20 @@ import 'viewer_anchor.dart' show constrainToAxis;
 import 'viewer_gizmo.dart' show gizmoAnchorSlop;
 import 'viewer_tool_cursor.dart' show paintAnchorMark;
 
+/// A point's row changed in Effect controls or the Timeline picks its effect,
+/// as After Effects does, so the point is on the picture to drag. A pick that
+/// already holds it is left alone.
+void pickForPoint(LumitUiState ui, LayerReference layer,
+    BridgeEffectInstanceInfo fx, String param) {
+  if (ui.selectedEffectsLayer?.internallayerId == layer.internallayerId &&
+      ui.selectedEffects.value.contains(fx.id)) {
+    return;
+  }
+  if (cachedListPairs(fx.name).any((p) => p.x == param || p.y == param)) {
+    ui.setEffectSelection(layer, [fx.id]);
+  }
+}
+
 /// One point on the picture, and what a drag on it writes.
 class _Mark {
   final LayerReference layer;

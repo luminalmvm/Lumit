@@ -149,6 +149,11 @@ destination each time or uses a folder you name.
   rather than a reduced one.
 - **Hardware video decoding**: on by default. If importing video freezes the computer,
   turn it off and open the project again.
+- **Render plugins on the graphics card**: on by default. OFX plugins that support CUDA,
+  OpenCL or Metal render on the graphics card.
+- **Largest picture**: the widest and tallest picture Lumit makes, 8192 px by default. The
+  list offers what this machine's graphics card and memory can take. A frame cut to it shows
+  **Cut to the largest picture** in the Viewer.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
   graphics card, and frames parked on disk. Each shows what is **In use**, with **Clear**.
   The disk cache's location is set here too (**Where**), for **Everything** or **This
@@ -164,8 +169,9 @@ Every command and its shortcut. Rebind by clicking one; conflicts are flagged. K
 and import.
 
 - **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**. The Vegas
-  one puts split on `S`, snapping on `F8`, zoom on `↑` and `↓`, and the Cut timeline's
-  switches on `Ctrl`+`L`, `Ctrl`+`Shift`+`X` and `Alt`+`F8`.
+  one puts split on `S`, snapping on `F8`, zoom on `↑` and `↓` and on the wheel with no key
+  held, looping on `Q`, grouping on `G` and `U`, the Cut timeline's switches on `Ctrl`+`L`,
+  `Ctrl`+`Shift`+`X` and `Alt`+`F8`, and sets **Clip drags in Cut** to **Vegas**.
 - **After Effects shortcuts ▸ Import…** reads a shortcut file saved by After Effects, the
   `.txt` in its `aeks` folder. Commands Lumit has no match for are skipped.
 - **Keyboard** shows which keys have a shortcut. A filled key works anywhere and an outlined
@@ -173,7 +179,10 @@ and import.
   change, and point at a key to read what it does.
 
 **Dragging** sets the modifier that breaks or joins handles in the
-[graph editor](/use/graph-editor/): `Alt` or `Ctrl`.
+[graph editor](/use/graph-editor/): `Alt` or `Ctrl`. **Clip drags in Cut** picks
+**Lumit default** or **Vegas** drags for the [Cut timeline](/use/cutting/#vegas-drags).
+
+A wheel action set to **No key** answers the wheel with no key held.
 
 :::note[Not built yet]
 There is no page listing installed [plugins](/use/plugins/) — switching one off is a command

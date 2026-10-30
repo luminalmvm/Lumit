@@ -49,7 +49,7 @@
 //! for what gives way, and [`CloneToPoints::picture_of`] chooses a stamp's
 //! picture. The planner, the builder and the draw all go through them.
 
-use crate::fx::drivers::clone_index;
+use crate::fx::drivers::{clone_index, per_copy};
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, Column, PointsStream, SpriteFit};
 use crate::fx::{
@@ -556,17 +556,20 @@ impl CloneToPoints {
         // that many times and keeps all its stamps or none.
         let most = self.max_clones.clamp(0, points::CAP_HARD as i32) as usize;
         out.keep_newest(most / count);
-        let scale = (self.scale / 100.0).max(0.0);
-        let turn = self.rotation.to_radians();
         let tint = (self.tint / 100.0).clamp(0.0, 1.0);
-        let opacity = (self.opacity / 100.0).clamp(0.0, 1.0);
-        for s in &mut out.size {
-            *s *= scale;
+        // Scale, Rotation and Opacity, per stamp where a driver that reads
+        // the copy is wired into the row, and the row's one value elsewhere.
+        let scales = per_copy::column_or(&out, per_copy::COPY_SCALE, self.scale);
+        let turns = per_copy::column_or(&out, per_copy::COPY_ROTATION, self.rotation);
+        let opacities = per_copy::column_or(&out, per_copy::COPY_OPACITY, self.opacity);
+        for (s, scale) in out.size.iter_mut().zip(&scales) {
+            *s *= (scale / 100.0).max(0.0);
         }
-        for r in &mut out.rotation {
-            *r += turn;
+        for (r, turn) in out.rotation.iter_mut().zip(&turns) {
+            *r += turn.to_radians();
         }
-        for c in &mut out.colour {
+        for (c, opacity) in out.colour.iter_mut().zip(&opacities) {
+            let opacity = (opacity / 100.0).clamp(0.0, 1.0);
             // Towards opaque white, which is the identity of a premultiplied
             // tint: at Tint 0 a stamp is the layer's own picture, at 100 it is
             // the picture times the point's colour and alpha.

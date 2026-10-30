@@ -507,11 +507,18 @@ pub(crate) fn drm_device(adapter: &wgpu::Adapter) -> DrmDevice {
 /// the adapter is not Vulkan or cannot enable the extensions; the caller then
 /// opens a plain device and the DMA-BUF path stays unavailable.
 ///
+/// `descriptor` is what a plain device would have been asked for, and this one
+/// asks for the same. It used to ask for no features, which held every Linux
+/// card to 16-bit colour and 4x anti-aliasing.
+///
 /// # Safety
 /// Uses the raw Vulkan device/instance underneath wgpu; the returned wgpu device
 /// owns them exactly as a `request_device` device would.
-pub(crate) fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue), String> {
-    let features = wgpu::Features::empty();
+pub(crate) fn open_device(
+    adapter: &wgpu::Adapter,
+    descriptor: &wgpu::DeviceDescriptor<'_>,
+) -> Result<(wgpu::Device, wgpu::Queue), String> {
+    let features = descriptor.required_features;
     let memory_hints = wgpu::MemoryHints::default();
     // The extra device extensions, on top of what wgpu-hal enables for `features`.
     let extra: [&'static std::ffi::CStr; 3] = [
@@ -565,15 +572,33 @@ pub(crate) fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu
         })
     }?;
 
-    let (device, queue) = unsafe {
-        adapter.create_device_from_hal::<wgpu::hal::api::Vulkan>(
-            open,
-            &wgpu::DeviceDescriptor::default(),
-            None,
-        )
-    }
-    .map_err(|e| format!("dmabuf device: create_device_from_hal failed: {e}"))?;
+    let (device, queue) =
+        unsafe { adapter.create_device_from_hal::<wgpu::hal::api::Vulkan>(open, descriptor, None) }
+            .map_err(|e| format!("dmabuf device: create_device_from_hal failed: {e}"))?;
     Ok((device, queue))
+}
+
+/// Why the first context opened without DMA-BUF export, when it did. With no
+/// export the Viewer has nothing to show, so the bridge writes this into the
+/// diagnostics file beside the adapter line.
+static REFUSED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The device a card without DMA-BUF export opens instead, with the reason kept.
+pub(crate) fn plain_device(
+    adapter: &wgpu::Adapter,
+    descriptor: &wgpu::DeviceDescriptor<'_>,
+    why: String,
+) -> Result<(wgpu::Device, wgpu::Queue), crate::GpuError> {
+    note!("lumit-gpu: {why}");
+    let _ = REFUSED.set(why);
+    pollster::block_on(adapter.request_device(descriptor, None))
+        .map_err(|e| crate::GpuError::Device(e.to_string()))
+}
+
+/// See [`REFUSED`]. `None` when export works or no context exists yet.
+#[must_use]
+pub fn dmabuf_refused() -> Option<&'static str> {
+    REFUSED.get().map(String::as_str)
 }
 
 /// Pick a memory type index satisfying `type_bits`, preferring device-local.

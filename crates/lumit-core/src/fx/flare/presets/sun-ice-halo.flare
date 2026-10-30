@@ -1,0 +1,35 @@
+{
+  "lumit_flare": 1,
+  "name": "Ice halo",
+  "elements": [
+    {
+      "kind": "glow",
+      "name": "Core",
+      "colour": {"mode": "solid", "colours": [[1.0, 0.98, 0.95]]},
+      "values": {"size": 80, "falloff": 0.35, "core": 1.0, "core_size": 0.15, "brightness": 1.0}
+    },
+    {
+      "kind": "glow",
+      "name": "Bloom",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"size": 400, "brightness": 0.05, "falloff": 0.4, "core": 0.0}
+    },
+    {
+      "kind": "picture",
+      "name": "Bow",
+      "values": {"texture": 8, "size": 380, "brightness": 0.06, "place": 0.0}
+    },
+    {
+      "kind": "star",
+      "name": "Star",
+      "colour": {"mode": "solid", "colours": [[0.95, 0.97, 1.0]]},
+      "values": {"points": 6, "size": 500, "thickness": 2.5, "brightness": 0.3, "fringe": 0.2}
+    },
+    {
+      "kind": "ghosts",
+      "name": "Ghosts",
+      "colour": {"mode": "mixed", "colours": [[0.6, 0.8, 1.0], [0.8, 0.9, 1.0], [0.7, 0.75, 1.0]]},
+      "values": {"count": 5, "size": 50, "brightness": 0.35, "sides": 8, "roundness": 0.2, "fill": 0.1, "edge": 0.5, "edge_width": 0.06, "softness": 0.1, "fringe": 0.2, "size_var": 0.6, "bright_var": 0.5, "response": 2, "response_amount": 0.5, "response_range": 0.7, "from": 0.5, "to": 1.8}
+    }
+  ]
+}

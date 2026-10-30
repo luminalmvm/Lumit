@@ -38,6 +38,11 @@ pub const DEFAULT_PASS: &str = "shade";
 /// How many lost graphics devices switch an effect off until Lumit restarts.
 pub const STRIKES_OFF: u32 = 2;
 
+/// Set on a backdrop effect whose second input is the picture of the layer it
+/// sits on, which its Mix then fades from, as that layer would be drawn.
+pub const OWN_PICTURE: super::params::ParamId =
+    super::params::ParamId::new("derived.lfx_own_picture");
+
 /// One effect an extension carries, as the engine needs it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LfxEffect {
@@ -55,6 +60,10 @@ pub struct LfxEffect {
     /// Empty means one pass called `shade`.
     pub passes: Vec<LfxPass>,
     pub input: Option<LfxInput>,
+    /// Drawn over the composite below, as an adjustment layer is, even when
+    /// the effect sits on a layer with a picture; that picture is then the
+    /// second input wherever its row picks no other layer.
+    pub backdrop: bool,
     /// The `.wgsl` file's text.
     pub shader: String,
 }
@@ -365,6 +374,7 @@ struct ShapeKey {
     category: FxCategory,
     version: u32,
     input: Option<LfxInput>,
+    backdrop: bool,
 }
 
 struct Shape {
@@ -380,6 +390,7 @@ fn def_for(name: &str, effect: &LfxEffect, category: FxCategory) -> &'static Lfx
         category,
         version: effect.version,
         input: effect.input.clone(),
+        backdrop: effect.backdrop,
     };
     let mut defs = match DEFS.lock() {
         Ok(defs) => defs,
@@ -473,6 +484,9 @@ impl EffectDef for LfxDef {
         push(cs::HASH_HI, Value::Int((hash >> 32) as u32 as i32));
         push(cs::HASH_LO, Value::Int(hash as u32 as i32));
         push(cs::COMP_SCALE, Value::Float(cx.px_scale));
+        if self.backdrop() && cx.inst.layer_ref("input2").is_none() {
+            push(OWN_PICTURE, Value::Int(1));
+        }
     }
 
     fn depth_inputs(&self) -> &'static [&'static str] {
@@ -484,6 +498,50 @@ impl EffectDef for LfxDef {
             &["input2"]
         } else {
             &[]
+        }
+    }
+
+    fn backdrop(&self) -> bool {
+        match self.shape.read() {
+            Ok(shape) => shape.key.backdrop,
+            Err(poisoned) => poisoned.into_inner().key.backdrop,
+        }
+    }
+
+    /// The rows whose `@enabled_if` does not hold, greyed. The second input
+    /// gives a picture when its row names a layer, or when this is a backdrop
+    /// effect on a layer with a picture, which is then the input.
+    fn row_state_on(&self, inst: &EffectInstance, picture: bool) -> super::registry::RowState {
+        let Some(program) =
+            installed(self.match_name).and_then(|e| e.built.program.as_ref().ok().copied())
+        else {
+            return super::registry::RowState::default();
+        };
+        let input = inst.layer_ref("input2").is_some() || (picture && self.backdrop());
+        let holds = |term: &shader::RowTerm| match *term {
+            shader::RowTerm::Input(want) => input == want,
+            shader::RowTerm::Choice { field, index, is } => {
+                let on = match inst.param(field) {
+                    Some(crate::model::EffectValue::Choice(v)) => *v,
+                    Some(crate::model::EffectValue::Bool(b)) => u32::from(*b),
+                    _ => program
+                        .fields
+                        .iter()
+                        .find(|f| f.name == field)
+                        .map_or(0, |f| f.default[0] as u32),
+                };
+                (on == index) == is
+            }
+        };
+        let disabled = program
+            .fields
+            .iter()
+            .filter(|f| !f.enabled_if.iter().all(|any| any.iter().any(holds)))
+            .flat_map(|f| f.params.iter().map(|row| row.id))
+            .collect();
+        super::registry::RowState {
+            disabled,
+            ..Default::default()
         }
     }
 }
@@ -511,6 +569,7 @@ mod tests {
             api: API,
             passes: vec![pass("bleed", 0.5), pass("shade", 1.0)],
             input: None,
+            backdrop: false,
             shader: shader.into(),
         }
     }
@@ -555,5 +614,72 @@ mod tests {
         assert_eq!(rows(def), ["strength"]);
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);
+
+        // A rescan that turns `backdrop` on changes the def it already has.
+        assert!(!def.backdrop());
+        let mut glass = effect(&TWO_PASS.replace("amount", "strength"));
+        glass.backdrop = true;
+        let def = install(glass).expect("with backdrop");
+        assert!(def.backdrop());
+    }
+
+    /// `@enabled_if` greys a row while none of a rule's terms holds, and the
+    /// second input counts as there on a backdrop effect's own picture.
+    #[test]
+    fn enabled_if_greys_rows_by_shape_and_input() {
+        const SHADER: &str = "struct Params {\n\
+            /// @choice(\"Layer\", \"Box\") Shape\n    shape: u32,\n\
+            /// @enabled_if(shape != 0, !input) Width\n    width: f32,\n\
+            /// @enabled_if(shape = 0) @enabled_if(input) Channel\n    channel: f32,\n\
+            /// @enabled_if(colour) Typo\n    typo: f32,\n}\n\
+            fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv) * p.width; }\n";
+        let mut e = effect(SHADER);
+        e.id = "enabled-if".into();
+        e.passes = Vec::new();
+        e.backdrop = true;
+        let def = install(e).expect("it installs");
+        let mut inst = crate::fx::builtins::instantiate("custom_shader").expect("a built-in");
+        let greyed =
+            |inst: &EffectInstance, picture: bool| def.row_state_on(inst, picture).disabled;
+        // On an adjustment layer with nothing picked: the box's rows.
+        assert_eq!(greyed(&inst, false), ["channel"]);
+        // On a layer with a picture, that picture is the shape.
+        assert_eq!(greyed(&inst, true), ["width"]);
+        // A box wants its size and no channel, wherever it sits.
+        inst.params.push(crate::model::EffectParam {
+            id: "shape".into(),
+            value: crate::model::EffectValue::Choice(1),
+            extra: Default::default(),
+        });
+        assert_eq!(greyed(&inst, true), ["channel"]);
+    }
+
+    /// A fresh instance's points land on its own raster, not on 1080p's, so
+    /// a corner pinned to the frame's corner starts with no change. Guards
+    /// wrong pixels on apply.
+    #[test]
+    fn a_fresh_instance_puts_its_points_on_the_raster() {
+        const SHADER: &str = r"
+struct Params {
+    /// @point @default(1920, 1080) Corner
+    corner: vec2<f32>,
+};
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv);
+}
+";
+        let mut e = effect(SHADER);
+        e.id = "corner".into();
+        e.passes = Vec::new();
+        let def = install(e).expect("it installs");
+        crate::fx::catalogue::BUILTIN_DEFS.register(def);
+        let name = def.schema().match_name;
+        let inst = crate::fx::builtins::instantiate_for_raster(name, 3840.0, 1000.0).expect("one");
+        let at = |id: &str| match inst.param(id) {
+            Some(crate::model::EffectValue::Float(p)) => p.value_at(0.0),
+            other => panic!("{id}: {other:?}"),
+        };
+        assert_eq!((at("corner_x"), at("corner_y")), (3840.0, 1000.0));
     }
 }

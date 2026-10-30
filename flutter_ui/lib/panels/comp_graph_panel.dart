@@ -37,6 +37,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -66,7 +67,9 @@ import 'effect_param_row_frb.dart'
         withChained;
 import 'graph_groups.dart';
 import 'graph_panel.dart';
+import 'graph_ties.dart';
 import 'placeholder.dart';
+import 'flare_window.dart';
 import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
@@ -256,7 +259,7 @@ class CompGraphPanel extends StatefulWidget {
 }
 
 class _CompGraphPanelState extends State<CompGraphPanel>
-    with GraphGroups<CompGraphPanel> {
+    with GraphGroups<CompGraphPanel>, GraphTies<CompGraphPanel> {
   LumitUiState? _ui;
 
   /// The held graph. Read when the comp or the document changes, never in a
@@ -436,9 +439,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     final infos = <String, BridgeEffectInstanceInfo>{};
     final params = <String, CompBoxRows>{};
     var notes = const <BridgeGraphNote>[];
+    var ties = const <BridgeWireTie>[];
     if (graph != null) {
       try {
         notes = widget.comp.getNodeGraphNotes();
+        ties = widget.comp.getNodeGraphTies();
         for (final instance in widget.comp.getNodeGraphInstances()) {
           final key = compNodeKey(instance.id());
           final info = instance.getInfo();
@@ -462,6 +467,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     setState(() {
       _graph = graph;
       _notes = notes;
+      _ties = ties;
       _infos = infos;
       _params = params;
       _byKey = {
@@ -753,6 +759,27 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           home: InstanceHome.graph(widget.comp),
           effect: effect,
           param: param,
+          onApplied: () {
+            ui.model.refresh();
+            _reload();
+          },
+        )) {
+          return;
+        }
+        if (pressFlareButton(
+          context: context,
+          home: InstanceHome.graph(
+            widget.comp,
+            draw: (staged) => widget.comp.renderFrameWithGraphPreview(
+              frame: BigInt.from(ui.playheadFrame.value),
+              scale: ui.viewerScale,
+              instances: staged,
+            ),
+          ),
+          effect: effect,
+          param: param,
+          comp: widget.comp,
+          frame: BigInt.from(ui.playheadFrame.value),
           onApplied: () {
             ui.model.refresh();
             _reload();
@@ -1558,6 +1585,46 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     _reload();
   }
 
+  /// The held ties, read with the graph.
+  List<BridgeWireTie> _ties = const [];
+
+  @override
+  List<BridgeWireTie> get ties => _ties;
+
+  @override
+  void commitTies(List<BridgeWireTie> next) {
+    try {
+      widget.comp.setNodeGraphTies(ties: next);
+    } catch (_) {
+      // Refused, or the comp moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  @override
+  double get tieZoom => _zoom;
+
+  /// Every wire as the ties name it, and where it runs.
+  List<(TieWire, BridgeCompEdge, BridgePortType)> _tieWires(
+          GraphLayout layout) =>
+      [
+        for (final edge in _graph?.wiring.edges ?? const <BridgeCompEdge>[])
+          if (_edgeEnds(layout, edge) case final ends?)
+            (
+              (
+                key: tieWireKey(_toKey(edge), edge.toPort),
+                from: ends.$1,
+                to: ends.$2
+              ),
+              edge,
+              ends.$3,
+            ),
+      ];
+
+  List<TieWire> _wiresOf(GraphLayout layout) =>
+      [for (final (w, _, _) in _tieWires(layout)) w];
+
   @override
   Offset get noteSpot => graphClearSpot(
         _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
@@ -1768,10 +1835,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       setState(() => _panFrom = _pan - event.localPosition);
       return;
     }
-    // A right-click on empty ground opens the console on release.
-    if (event.buttons == kSecondaryMouseButton &&
-        _ui!.workspace.interface.rightClickOpensNodeSearch) {
-      _menuPress = true;
+    // A right-click on empty ground opens the console on release, and a
+    // right-button drag ties the wires it crosses.
+    if (tieDown(event, at, _wiresOf(layout))) {
+      _menuPress = event.buttons == kSecondaryMouseButton &&
+          _ui!.workspace.interface.rightClickOpensNodeSearch;
       return;
     }
     final keys = HardwareKeyboard.instance;
@@ -1846,6 +1914,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       });
       return;
     }
+    if (tieMove(at, _wiresOf(layout))) return;
     if (_marqueeFrom != null) {
       setState(() => _marqueeTo = event.localPosition);
       return;
@@ -1924,6 +1993,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       return;
     }
 
+    if (tieUp(at, moved, _wiresOf(layout))) {
+      _menuPress = false;
+      return;
+    }
     if (_menuPress) {
       _menuPress = false;
       if (!moved) _openSearch(at);
@@ -2158,6 +2231,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           onPointerDown: (e) => _down(e, layout),
           onPointerMove: (e) => _move(e, layout),
           onPointerUp: (e) => _up(e, layout),
+          onPointerHover: (e) =>
+              tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
           child: ClipRect(
@@ -2188,17 +2263,17 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                     child: CustomPaint(
                       painter: _CompWirePainter(
                         wires: [
-                          for (final edge in _graph!.wiring.edges)
-                            if (_edgeEnds(layout, edge) case final ends?)
-                              (
-                                ends.$1,
-                                ends.$2,
-                                edge == _dropWire
-                                    ? t.animated
-                                    : portColour(t, ends.$3),
-                                edge == _dropWire ? 2.0 : 1.0
-                              ),
+                          for (final (wire, edge, type) in _tieWires(layout))
+                            (
+                              wire,
+                              edge == _dropWire
+                                  ? t.animated
+                                  : portColour(t, type),
+                              edge == _dropWire ? 2.0 : 1.0
+                            ),
                         ],
+                        ties: tieView(),
+                        theme: t,
                         flight: _flight == null
                             ? null
                             : _flight!.from.isInput
@@ -2275,7 +2350,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 /// Every wire on this canvas: the stored ones, coloured by the type they
 /// carry, and the dashed one in hand.
 class _CompWirePainter extends CustomPainter {
-  final List<(Offset, Offset, Color, double)> wires;
+  final List<(TieWire, Color, double)> wires;
+  final TieView ties;
+  final LumitTheme theme;
   final (Offset, Offset)? flight;
   final Color dragged;
   final Offset pan;
@@ -2284,6 +2361,8 @@ class _CompWirePainter extends CustomPainter {
 
   const _CompWirePainter({
     required this.wires,
+    required this.ties,
+    required this.theme,
     required this.flight,
     required this.dragged,
     required this.pan,
@@ -2295,9 +2374,8 @@ class _CompWirePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final (from, to, colour, weight) in wires) {
-      _wire(canvas, from, to, colour, dashes: false, weight: weight);
-    }
+    paintTiedWires(canvas, wires, ties,
+        pan: pan, zoom: zoom, style: wireStyle, theme: theme);
     if (flight case final f?) {
       _wire(canvas, f.$1, f.$2, dragged, dashes: true);
     }

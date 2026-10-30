@@ -231,6 +231,9 @@ void main() {
         sourceIn: const BridgeRational(num: 0, den: 1),
         sourceOut: const BridgeRational(num: 1, den: 1),
         sourceIsComp: false,
+        source: UuidValue.fromString(id),
+        opacity: 1,
+        takes: const [],
       );
 
   group('Which clip a press takes hold of', () {
@@ -291,6 +294,9 @@ void main() {
       sourceIn: const BridgeRational(num: 0, den: 1),
       sourceOut: const BridgeRational(num: 1, den: 1),
       sourceIsComp: false,
+      source: clipId,
+      opacity: 1,
+      takes: const [],
     );
 
     test('opens on to the clip name, then a heading per effect', () {

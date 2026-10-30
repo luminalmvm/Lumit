@@ -25,6 +25,12 @@ Wobbles the layer as though the camera were handheld.
 | --- | --- | --- | --- | --- |
 | **Amplitude** | Slider | 0 to 400; up to 2000 | 30 | Pixels at composition size |
 | **Frequency** | Slider | 0.1 to 30; down to 0 and higher | 8 | - |
+| **Phase** | Slider | -5 to 5; any value by typing | 0 | Seconds |
+| **Style** | Dropdown | Normal · Twitchy · Jumpy | Normal | - |
+| **Stillness** | Slider | 0 to 1 | 0.7 | - |
+| **Twitch frequency** | Slider | 0 to 10; higher | 2 | - |
+| **Drift** | Slider | 0 to 1 | 0.3 | - |
+| **Centre bias** | Slider | 0 to 1 | 0 | - |
 | **Rotation amount** | Slider | 0 to 45; up to 360 | 1 | Degrees |
 | **Rotation frequency** | Slider | 0 to 4; higher | 1 | - |
 | **X amount** | Slider | 0 to 2; higher | 1 | - |
@@ -33,10 +39,24 @@ Wobbles the layer as though the camera were handheld.
 | **Y frequency** | Slider | 0 to 4; higher | 1 | - |
 | **Z amount** | Slider | 0 to 20; up to 100 | 0 | Per cent |
 | **Z frequency** | Slider | 0 to 4; higher | 1 | - |
+| **X wave** | Slider | 0 to 2; higher | 0 | - |
+| **X wave frequency** | Slider | 0 to 4; higher | 0.5 | - |
+| **X wave phase** | Slider | 0 to 360; any value by typing | 0 | Degrees |
+| **Y wave** | Slider | 0 to 2; higher | 0 | - |
+| **Y wave frequency** | Slider | 0 to 4; higher | 0.5 | - |
+| **Y wave phase** | Slider | 0 to 360; any value by typing | 0 | Degrees |
+| **Z wave** | Slider | 0 to 20; up to 100 | 0 | Per cent |
+| **Z wave frequency** | Slider | 0 to 4; higher | 0.5 | - |
+| **Z wave phase** | Slider | 0 to 360; any value by typing | 0 | Degrees |
+| **Rotation wave** | Slider | 0 to 45; up to 360 | 0 | Degrees |
+| **Rotation wave frequency** | Slider | 0 to 4; higher | 0.5 | - |
+| **Rotation wave phase** | Slider | 0 to 360; any value by typing | 0 | Degrees |
 | **Motion blur** | Checkbox | On or off | Off | - |
-| **Shutter** | Slider | 0 to 1 | 0.5 | - |
+| **Shutter** | Slider | 0 to 1; up to 4 | 0.5 | - |
 | **Samples** | Slider | 2 to 64 | 9 | - |
+| **Scale** | Slider | 100 to 200; down to 1 and up to 1000 | 100 | Per cent |
 | **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
+| **Y edges** | Dropdown | Same · Transparent · Repeat · Mirror | Same | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -47,6 +67,7 @@ Wobbles the layer as though the camera were handheld.
 In the Effect Controls panel:
 
 - **Per-axis wobble** groups **X amount**, **X frequency**, **Y amount**, **Y frequency**, **Z amount**, **Z frequency**, and starts closed.
+- **Wave** groups **X wave**, **X wave frequency**, **X wave phase**, **Y wave**, **Y wave frequency**, **Y wave phase**, **Z wave**, **Z wave frequency**, **Z wave phase**, **Rotation wave**, **Rotation wave frequency**, **Rotation wave phase**, and starts closed.
 - **Motion blur** groups **Motion blur**, **Shutter**, **Samples**, and starts closed.
 - **Matte** scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp. **Invert** reads that matte inverted.
 
@@ -56,9 +77,19 @@ In the Effect Controls panel:
 
 - **Amplitude**: the overall scale for the intensity of the shake.
 - **Frequency**: how fast wobbles happen, in cycles per second.
+- **Phase**: shifts the whole shake in time, in seconds.
+- **Style**: how the shake moves. Normal wobbles smoothly. Twitchy holds still between bursts
+  of shaking. Jumpy jumps to a new place **Frequency** times a second.
+- **Stillness** (Twitchy): about how much of the time the picture is held still.
+- **Twitch frequency** (Twitchy): how often a burst can start or stop, per second.
+- **Drift** (Jumpy): how far the picture moves towards its next place before it jumps. At 0
+  it holds still between jumps.
+- **Centre bias** (Jumpy): the chance a jump goes back to the centre. At 1 every jump does.
 - **Rotation amount**: how much the frame rotates as it moves.
+- **Scale**: a steady zoom on top of the shake. 100% is natural size.
 - **Edges**: what fills the border. Mirror reflects the
   picture back. Repeat holds the edge pixel. Transparent leaves it clear.
+- **Y edges**: the top and bottom border on its own. Same follows **Edges**.
 - **Seed**: generates which random shake occurs.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
@@ -69,11 +100,19 @@ The **Per-axis wobble** group biases the movement rather than adding to it:
 - **X frequency** / **Y frequency**: multipliers on the frequency per axis.
 - **Z amount** and **Z frequency**: depth shake.
 
+The **Wave** group adds a steady swing on top of the random shake, per axis:
+
+- **X wave**, **Y wave**, **Z wave**, **Rotation wave**: how far it swings. X and Y are
+  multipliers on the amplitude.
+- **X wave frequency** and the others: multipliers on the frequency, like **X frequency**.
+- **X wave phase** and the others: where in the swing it starts, in degrees. X and Y at 90
+  degrees apart move in a circle.
+
 The **Motion blur** group adds the shake's own smear:
 
 - **Motion blur**: samples the wobble several times across the shutter and
   averages the results.
-- **Shutter**: how far across the shutter window those samples spread.
+- **Shutter**: how far across the shutter window those samples spread. Up to 4 by typing.
 - **Samples**: how many of them there are. A big amplitude at few samples
   shows each one as a ghost; more samples make a smooth smear at more cost.
 

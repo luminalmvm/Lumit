@@ -29,6 +29,7 @@ pub mod particulate;
 pub mod points_draw;
 pub mod points_field;
 pub mod split;
+pub mod sprite_flare;
 pub mod stylise;
 pub mod temporal;
 pub mod utility;
@@ -55,9 +56,8 @@ pub struct FxEngine {
     /// convolution, the radius-free sibling of the Unsharp mask's two-entry
     /// kernel above.
     sharpen_simple: wgpu::ComputePipeline,
-    /// Sprite flare (docs/08 §3.29): one procedural pass, placed from
-    /// a light position rather than from the picture's bright pixels.
-    sprite_flare: wgpu::ComputePipeline,
+    /// Sprite flare, built the first time one is drawn.
+    sprite_flare: sprite_flare::LazySpriteFlare,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
@@ -259,6 +259,8 @@ pub struct FxEngine {
     set_channels: wgpu::ComputePipeline,
     /// Linear wipe (docs/08 §3.46): a straight edge swept across the frame.
     linear_wipe: wgpu::ComputePipeline,
+    /// Crop: the picture taken away past four edges.
+    crop: wgpu::ComputePipeline,
     /// Radial wipe (docs/08 §3.47): a wedge swept round a centre.
     radial_wipe: wgpu::ComputePipeline,
     /// Venetian blinds (docs/08 §3.70): §3.46's straight edge, folded into one

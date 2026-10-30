@@ -80,7 +80,7 @@ A particle system.
 | **Separation** | Slider | 0 to 100 | 0 | Per cent |
 | **Alignment** | Slider | 0 to 100 | 0 | Per cent |
 | **Cohesion** | Slider | 0 to 100 | 0 | Per cent |
-| **Flock radius** | Slider | 0 to 500; higher | 50 | Pixels at composition size |
+| **Flock radius** | Slider | 0 to 500; higher | 150 | Pixels at composition size |
 | **Sparks** | Slider | 0 to 50 | 0 | - |
 | **Spark speed** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
 | **Spark life** | Slider | 0.1 to 5; down to 0 and higher | 0.5 | Seconds |
@@ -253,7 +253,8 @@ The **Flock** group, particles steering by their neighbours:
 - **Cohesion**: how strongly it steers towards the middle of its neighbours.
 - **Flock radius**: how far away another particle can be and still count as a neighbour.
 
-A particle stuck to a layer neither steers nor is steered by.
+Steering turns a particle and leaves its speed as it was. A particle stuck to a layer
+neither steers nor is steered by.
 
 The **Sparks** group, small particles thrown out where one dies:
 

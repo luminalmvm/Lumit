@@ -7,6 +7,7 @@
 // once — kept together because they are all "the chrome around the tracks"
 // rather than because they share anything.
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:clock/clock.dart';
@@ -35,7 +36,9 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/layer_picker.dart';
+import '../widgets/name_direction.dart';
 import 'timeline_metrics_frb.dart'
     show TimelineMode, laneKeyHalf, positionOf;
 import 'timeline_snap.dart';
@@ -195,11 +198,23 @@ class CompTabsFrb extends StatelessWidget {
                     BoxDecoration(color: t.accent, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
-              Segment(
-                key: const ValueKey('tl-comp-tabs'),
-                children: _tabs(context, t, comps, selected),
+              // Scrolls sideways once the tabs outgrow the line, so the mode
+              // pill and Export always keep their place.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: EdgeFade(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Segment(
+                        key: const ValueKey('tl-comp-tabs'),
+                        children: _tabs(context, t, comps, selected),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 6),
               if (mode != null && onMode != null) ...[
                 Segment(key: const ValueKey('tl-mode-tabs'), children: [
                   for (final (keyName, label, tip, which) in [
@@ -460,36 +475,67 @@ Future<int?> showLabelPicker(
     context: context,
     position: position,
     builder: (close) => FloatSurface(
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < LumitTheme.labelCount; i++)
-              GestureDetector(
-                key: ValueKey<String>('$keyPrefix-chip-$i'),
-                onTap: () => close(i),
-                child: HoverMark(
-                  swells: true,
-                  builder: (context, lit) => Container(
-                    width: 14,
-                    height: 14,
-                    margin: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: t.labelColour(i),
-                      borderRadius:
-                          BorderRadius.circular(t.tokens.controlRadius),
-                    ),
-                    foregroundDecoration: chipRing(t, lit),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+      child: labelChips(t, keyPrefix: keyPrefix, onPick: close),
     ),
   );
 }
+
+/// The label picker's row of chips, [onPick] told which was tapped. The
+/// colour submenus on the Cut and Audio timelines wear the same row.
+Widget labelChips(
+  LumitTheme t, {
+  required String keyPrefix,
+  required void Function(int) onPick,
+}) =>
+    Padding(
+      padding: const EdgeInsets.all(6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < LumitTheme.labelCount; i++)
+            GestureDetector(
+              key: ValueKey<String>('$keyPrefix-chip-$i'),
+              onTap: () => onPick(i),
+              child: HoverMark(
+                swells: true,
+                builder: (context, lit) => Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: t.labelColour(i),
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                  foregroundDecoration: chipRing(t, lit),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+/// The Clip colour submenu on the Cut and Audio timelines: back to the
+/// track's colour, which [onPick] is told as null, then the label chips.
+Widget clipColourMenu(
+  LumitTheme t, {
+  required String keyPrefix,
+  required void Function(int?) onPick,
+}) =>
+    FloatSurface(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MenuRow(
+            key: ValueKey<String>('$keyPrefix-track'),
+            onPressed: () => onPick(null),
+            child: Text(l10n.clipColourFromTrack),
+          ),
+          labelChips(t, keyPrefix: keyPrefix, onPick: onPick),
+        ],
+      ),
+    );
 
 /// The right-click menu on a marker flag: edit what it says, take it away, or
 /// — for a layer's own markers — clear the lot. Shared by the ruler's comp
@@ -727,6 +773,8 @@ class _CompTabState extends State<_CompTab> {
     final dropping = widget.dropping;
     final tab = Container(
           height: round ? null : compTabHeight,
+          // A long name is cut short rather than making a tab that wide.
+          constraints: const BoxConstraints(maxWidth: 200),
           padding: const EdgeInsets.only(left: 10, right: 10),
           // **The pointer says the tab is a control**. A tab that is
           // not the open one answered a hover with nothing at all, so there
@@ -772,15 +820,25 @@ class _CompTabState extends State<_CompTab> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Center(
-                // Body, not `small`: a composition's name is the *user's* text
-                // (§7.1), and the mockup sets both states at 11. Only the colour
-                // tells the fronted tab from the rest.
-                child: Text(
-                  name,
-                  style: active
-                      ? t.bodyPrimary
-                      : t.body.copyWith(color: t.textMuted),
+              Flexible(
+                child: Center(
+                  widthFactor: 1,
+                  // Body, not `small`: a composition's name is the *user's*
+                  // text (§7.1), and the mockup sets both states at 11. Only
+                  // the colour tells the fronted tab from the rest.
+                  child: LumitTooltip(
+                    message: name,
+                    child: Text(
+                      name,
+                      style: active
+                          ? t.bodyPrimary
+                          : t.body.copyWith(color: t.textMuted),
+                      textDirection: nameDirection(name),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1495,21 +1553,43 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
     if (old.comp != widget.comp) _readFrames = null;
   }
 
+  /// The re-read waiting while playing, so a frame arriving sixty times a
+  /// second reads the cache four times a second.
+  Timer? _wait;
+
   @override
   void dispose() {
     widget.revision.removeListener(_invalidate);
+    _wait?.cancel();
     super.dispose();
   }
 
   /// A frame arrived (or the comp changed): read again on the next build.
+  ///
+  /// Hidden behind another tab, nothing is read until the bar is shown again.
   void _invalidate() {
     if (!mounted) return;
-    setState(() => _readFrames = null);
+    if (!TickerMode.getValuesNotifier(context).value.enabled) {
+      _readFrames = null;
+      return;
+    }
+    if (!Provider.of<LumitUiState>(context, listen: false).playing.value) {
+      _wait?.cancel();
+      _wait = null;
+      setState(() => _readFrames = null);
+      return;
+    }
+    _wait ??= Timer(const Duration(milliseconds: 250), () {
+      _wait = null;
+      if (mounted) setState(() => _readFrames = null);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Listened to, so a tab brought back to the front catches up.
+    TickerMode.valuesOf(context);
     final frames = widget.axis.frames;
     final scale = Provider.of<LumitUiState>(context, listen: false).viewerScale;
     if (_readFrames != frames || _readScale != scale) {
@@ -2354,7 +2434,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       axis: axis,
                       fps: widget.fps,
                       label: t.mono.copyWith(
-                        fontSize: 7,
+                        fontSize: 9,
                         color: t.textMuted.withValues(alpha: 0.75),
                       ),
                     ),
@@ -2836,6 +2916,10 @@ final ValueNotifier<MarkerPreview?> markerDragPreview = ValueNotifier(null);
 const double markerLineAlpha = 0.6;
 const double beatLineAlpha = 0.3;
 
+/// How faintly [MarkerLinesGround] washes a region, over clips rather than
+/// under bars, so lighter than [markerRegionFillAlpha].
+const double markerRegionBandAlpha = 0.08;
+
 /// How far apart beats have to stand, in pixels, before their lines are drawn
 /// at all, and how far apart before they are drawn at full strength.
 const double beatLineMinGap = 8;
@@ -2863,6 +2947,7 @@ class MarkerLinesGround extends StatelessWidget {
     required this.comp,
     required this.axis,
     this.hScroll,
+    this.regions = false,
   });
 
   final CompositionReference comp;
@@ -2870,6 +2955,10 @@ class MarkerLinesGround extends StatelessWidget {
 
   /// The scroll the lanes ride sideways, when they ride one.
   final ScrollController? hScroll;
+
+  /// Whether each region is washed in faintly too, with a line at its end,
+  /// for a view with no [MarkerRegionsGround] of its own.
+  final bool regions;
 
   @override
   Widget build(BuildContext context) {
@@ -2907,6 +2996,17 @@ class MarkerLinesGround extends StatelessWidget {
             colour: t.animated.withValues(alpha: beatAlpha),
           ),
     ];
+    final spans = [
+      if (regions)
+        for (final m in markers)
+          if ((m.durationFrames ?? 0) > 0 && !m.isBeat)
+            (
+              id: m.id,
+              frame: frameAtTime(comp, m.time),
+              span: m.durationFrames!,
+              colour: markerColour(t, m),
+            ),
+    ];
     return Positioned.fill(
       top: t.density.ruler,
       child: RepaintBoundary(
@@ -2915,9 +3015,32 @@ class MarkerLinesGround extends StatelessWidget {
             animation: Listenable.merge([markerDragPreview, hScroll]),
             builder: (context, _) {
               final staged = markerDragPreview.value;
+              // Each region's two ends, following a drag as its flag does.
+              final ends = [
+                for (final r in spans)
+                  staged != null && staged.id == r.id
+                      ? (
+                          axis.xOf(staged.frame),
+                          axis.xOf(staged.frame + staged.span),
+                          r.colour
+                        )
+                      : (
+                          axis.xOf(r.frame),
+                          axis.xOf(r.frame + r.span),
+                          r.colour
+                        ),
+              ];
               return CustomPaint(
                 key: const ValueKey<String>('tl-marker-lines'),
                 painter: _MarkerLinesPainter(
+                  bands: [
+                    for (final (from, to, colour) in ends)
+                      (
+                        from,
+                        to,
+                        colour.withValues(alpha: markerRegionBandAlpha)
+                      ),
+                  ],
                   lines: [
                     for (final line in lines)
                       (
@@ -2930,6 +3053,8 @@ class MarkerLinesGround extends StatelessWidget {
                             ? line.colour.withValues(alpha: 1)
                             : line.colour,
                       ),
+                    for (final (_, to, colour) in ends)
+                      (to, colour.withValues(alpha: markerLineAlpha)),
                   ],
                   // Only the fraction: rounding is the same under a whole
                   // pixel of scroll, so one changes nothing and repaints
@@ -2953,14 +3078,28 @@ class _MarkerLinesPainter extends CustomPainter {
   /// Each line's place in the view's own pixels, and its colour.
   final List<(double, Color)> lines;
 
+  /// Each region's two edges and its wash, drawn under the lines.
+  final List<(double, double, Color)> bands;
+
   /// Where this painter's left edge sits against the panel's pixel grid: the
   /// fraction of a pixel the lanes are scrolled by, negated.
   final double origin;
 
-  const _MarkerLinesPainter({required this.lines, required this.origin});
+  const _MarkerLinesPainter({
+    required this.lines,
+    required this.origin,
+    this.bands = const [],
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    for (final (from, to, colour) in bands) {
+      final left = from.clamp(0.0, size.width);
+      final right = to.clamp(0.0, size.width);
+      if (right <= left) continue;
+      canvas.drawRect(Rect.fromLTRB(left, 0, right, size.height),
+          Paint()..color = colour);
+    }
     for (final (x, colour) in lines) {
       if (x < 0 || x > size.width) continue;
       // A filled pixel column and not a stroke, put on the panel's grid: a
@@ -2975,7 +3114,9 @@ class _MarkerLinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MarkerLinesPainter old) =>
-      old.origin != origin || !listEquals(old.lines, lines);
+      old.origin != origin ||
+      !listEquals(old.lines, lines) ||
+      !listEquals(old.bands, bands);
 
   /// Never takes the pointer, it is the ground and not a control.
   @override
@@ -4098,12 +4239,11 @@ const double workAreaHandleRadius = 1;
 /// still the edge's to catch.
 const double workAreaHandleTopInset = 18;
 
-/// What a marker's label is set in: mono at 8, the mockup's own size —
-/// a marker's label is a cue read at a glance beside a clock, and it sets in
-/// the same face the clock does, one step quieter so the pill stays a pill
-/// inside the ruler's 12px lower row.
+/// What a marker's label is set in: the clock's own face and size, mono at 9.
+/// A marker's label is a cue read at a glance beside the clock, and at 9 with
+/// no leading the pill still fits the ruler's 12px lower row.
 TextStyle markerLabelStyle(LumitTheme t) =>
-    t.mono.copyWith(fontSize: 8, color: t.textPrimary, height: 1);
+    t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
 
 /// The corner of a marker's label pill: a capsule under Lantern, 2 elsewhere.
 double markerPillRadius(LumitTheme t) =>
@@ -4143,6 +4283,17 @@ const double workAreaLaneFillAlpha = 0.04;
 /// value here is applied to the token, never written as a second hex, so a
 /// recoloured layer recolours its bar and its clips in any theme.
 const double clipFillAlpha = 0.38;
+
+/// The waveform of a clip on the Cut or Audio timeline, in the clip's own
+/// colour: the label lifted toward the text colour, so it reads bright on the
+/// tint the clip is filled with, and dark on a light scheme. The bands keep
+/// the theme's order, a dim body under a bright treble.
+WaveformColours clipWaveColours(Color label, Color text) => WaveformColours(
+      rest: Color.lerp(label, text, 0.5)!,
+      low: Color.lerp(label, text, 0.15)!,
+      mid: Color.lerp(label, text, 0.45)!,
+      high: Color.lerp(label, text, 0.8)!,
+    );
 
 /// A bar's corner radius on a flush pane: **none**, as the mockup draws it.
 /// It was 2, which rounded nothing visibly and softened every bar end by a

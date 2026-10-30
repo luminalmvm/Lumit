@@ -365,6 +365,17 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
+/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
+/// a buffer big enough to read one back.
+pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    let card = adapter.limits();
+    wgpu::Limits {
+        max_texture_dimension_2d: card.max_texture_dimension_2d,
+        max_buffer_size: card.max_buffer_size,
+        ..Default::default()
+    }
+}
+
 /// Which adapter was picked, as one line, published the first time a context
 /// opens one.
 ///
@@ -1187,9 +1198,9 @@ impl GpuContext {
         );
         // The Linux DMA-BUF path needs the external-memory device extensions
         // enabled at device-creation time, which wgpu's default Vulkan device does
-        // not do. Open the device ourselves with them appended; if the adapter
-        // cannot enable them, fall back to a plain device so the read-back path
-        // still works (the DMA-BUF path then reports unavailable).
+        // not do. Open the device ourselves with them appended. A card that can't
+        // enable them opens a plain device, which renders but leaves the Viewer
+        // with nothing to show, so the reason is kept for the diagnostics file.
         //
         // The device also asks for the adapter's own format features where the
         // card has them, which is what makes 8× anti-aliasing legal rather than
@@ -1202,17 +1213,20 @@ impl GpuContext {
         // not offer it gets the half-float upload instead (see
         // [`ColourEngine::upload_float_frame`]) — softer, never an error, the
         // same shape as the multisample fallback beside it.
+        //
+        // The widest texture is the card's own, so the largest picture setting
+        // can reach it. Every other limit stays what every card guarantees.
         let descriptor = wgpu::DeviceDescriptor {
             required_features: adapter.features()
                 & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                     | wgpu::Features::FLOAT32_FILTERABLE),
+            required_limits: widest_texture(&adapter),
             ..Default::default()
         };
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
-        let (device, queue) = match shared_linux::open_device(&adapter) {
+        let (device, queue) = match shared_linux::open_device(&adapter, &descriptor) {
             Ok(dq) => dq,
-            Err(_) => pollster::block_on(adapter.request_device(&descriptor, None))
-                .map_err(|e| GpuError::Device(e.to_string()))?,
+            Err(why) => shared_linux::plain_device(&adapter, &descriptor, why)?,
         };
         #[cfg(not(all(target_os = "linux", feature = "shared-texture-linux")))]
         let (device, queue) = pollster::block_on(adapter.request_device(&descriptor, None))

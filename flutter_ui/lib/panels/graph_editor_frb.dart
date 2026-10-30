@@ -1113,10 +1113,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       } else if (at == keys.length) {
         planted = speeds.last;
       } else {
-        final t0 = rationalSeconds(keys[at - 1].time);
-        final t1 = rationalSeconds(keys[at].time);
-        final f = t1 > t0 ? (seconds - t0) / (t1 - t0) : 0.0;
-        planted = speeds[at - 1] + (speeds[at] - speeds[at - 1]) * f;
+        // On the span's own curve, which is a straight line only for Linear.
+        planted = evaluateKeysSpeed(keys, seconds) * 100;
       }
       final grown = [...keys]..insert(at, keyframeAmong(keys, time, 0));
       final withSpeed = [...speeds]..insert(at, planted);
@@ -2432,6 +2430,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// on, or null for the value lens's one key.
   Future<void> _showKeyMenu(GraphChannel channel, int index, Offset position,
       {bool? side}) async {
+    if (isEnvelope(channel)) {
+      await _showSpeedPointMenu(channel, index, position);
+      return;
+    }
     final picked = await showLumitPopup<String>(
       context: context,
       position: position,
@@ -2516,6 +2518,71 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
+  /// A speed point's menu: type its speed, put it back to 100%, choose the
+  /// curve the speed takes to the next point, or delete it. The easing rows
+  /// a key has would bend the envelope out of the shape its points describe.
+  Future<void> _showSpeedPointMenu(
+      GraphChannel channel, int index, Offset position) async {
+    final keys = channel.keys;
+    final current =
+        index + 1 < keys.length ? speedCurveOf(keys[index].interpOut) : null;
+    final names = {
+      SpeedCurve.linear: l10n.speedCurveLinear,
+      SpeedCurve.fast: l10n.speedCurveFast,
+      SpeedCurve.slow: l10n.speedCurveSlow,
+      SpeedCurve.smooth: l10n.speedCurveSmooth,
+      SpeedCurve.sharp: l10n.speedCurveSharp,
+      SpeedCurve.hold: l10n.speedCurveHold,
+    };
+    final picked = await showLumitPopup<Object>(
+      context: context,
+      position: position,
+      builder: (close) => FloatSurface(
+        width: 170,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+                key: const ValueKey<String>('graph-key-menu-speed'),
+                onPressed: () => close('speed'),
+                child: Text(l10n.menuSetSpeed)),
+            MenuRow(
+                onPressed: () => close('reset'),
+                child: Text(l10n.speedPointReset)),
+            if (current != null)
+              for (final MapEntry(key: curve, value: name) in names.entries)
+                MenuRow.option(
+                  key: ValueKey<String>('graph-speed-curve-${curve.name}'),
+                  onPressed: () => close(curve),
+                  child: Row(children: [
+                    menuTick(curve == current),
+                    Expanded(child: Text(name)),
+                  ]),
+                ),
+            MenuRow(
+                onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'speed':
+        await _openKeyFields(channel, index, position);
+      case 'reset':
+        _applySpeedPoint(channel.id, index,
+            percent: 100, frame: keyFrame(keys[index], widget.fps));
+      case 'delete':
+        _deleteSelection(fallback: '${channel.id}#$index');
+      case final SpeedCurve curve:
+        commitChannelEdits({
+          channel: BridgeScalar.keyframed(setEnvelopeCurve(keys, index, curve)),
+        });
+        widget.onChanged();
+    }
+  }
+
   /// Delete the selected keys (or [fallback] when none) — the last key of a
   /// curve leaves a static value holding what it held.
   void _deleteSelection({String? fallback}) {
@@ -2598,9 +2665,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                             .model,
                         grid: t.hairline,
                         // The axis numbers are numbers, so they are set in the
-                        // mono face at the mockup's own 8 — Hanken at 10 read
-                        // as body text ruling the graph.
-                        label: t.mono.copyWith(fontSize: 8, color: t.textMuted),
+                        // mono face at 9, the smallest type the editor uses.
+                        // Hanken at 10 read as body text ruling the graph.
+                        label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                         viewportLeft: _viewportLeft,
                         viewportWidth: _viewportWidth(constraints.maxWidth),
                         gutterFill: t.surface0.withValues(alpha: 0.85),
@@ -2788,7 +2855,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   box.count,
                   KeyBlock(first: box.first, last: box.last, count: box.count)
                       .spanFrames),
-              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+              style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
             ),
           ),
         ),
@@ -3072,6 +3139,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 _keyTapId = id;
                 if (again) {
                   _keyTapId = null;
+                  // A speed point goes back to 100%, as Vegas has it; its
+                  // exact speed is typed from the right-click menu.
+                  if (isEnvelope(channel)) {
+                    _applySpeedPoint(channel.id, i,
+                        percent: 100,
+                        frame: keyFrame(channel.keys[i], widget.fps));
+                    return;
+                  }
                   _openKeyFields(channel, i, d.globalPosition);
                   return;
                 }
@@ -3283,6 +3358,33 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 const double graphGutterWidth = 34;
 
 /// The grid, the value-axis labels, and every channel's curve.
+/// An expression's curve across a span, held until the document or the span
+/// moves, so a scroll repainting the graph asks the engine nothing.
+List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
+    BridgeRational end, int samples, BigInt? revision) {
+  if (_curvesRevision != revision || _curves.length >= 64) {
+    _curves.clear();
+    _curvesRevision = revision;
+  }
+  final layer = channel.entry.layer;
+  return _curves[(
+    channel.scalar,
+    layer.internallayerId,
+    channel.expressionRow,
+    start,
+    end,
+  )] ??= sampleScalarRangeWithContext(
+      scalar: channel.scalar,
+      layer: layer,
+      start: start,
+      end: end,
+      samples: samples,
+      row: channel.expressionRow);
+}
+
+final Map<Object, List<double>> _curves = {};
+BigInt? _curvesRevision;
+
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;
 
@@ -3414,13 +3516,8 @@ class _GraphPainter extends CustomPainter {
             timeOfSubframe(endSeconds * f, comp.fpsExact.$1, comp.fpsExact.$2);
 
         const samples = 500;
-        final result = sampleScalarRangeWithContext(
-            scalar: channel.scalar,
-            layer: channel.entry.layer,
-            start: start,
-            end: end,
-            samples: samples,
-            row: channel.expressionRow);
+        final result =
+            _expressionCurve(channel, start, end, samples, comp.heldRevision);
 
         for (var i = 0; i < result.length; i++) {
           final x = size.width * (i.toDouble() / samples.toDouble());

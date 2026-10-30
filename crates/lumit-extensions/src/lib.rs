@@ -6,7 +6,9 @@
 //! panel of its own. The page can do nothing to Lumit by itself. It asks
 //! through the interface, which answers only what the extension's manifest
 //! asked for and the person agreed to when they installed it. An effect is a
-//! WGSL shader (an LFX effect), which the engine checks before it ever runs.
+//! WGSL shader (an LFX effect), which the engine checks before it ever runs,
+//! or an OFX plugin's bundle, which runs in a process of its own like any
+//! other OFX plugin.
 //!
 //! This crate is the folder's side of that: reading and judging a manifest,
 //! the folders extensions are found in, `.lfx` packages, and installing,
@@ -19,6 +21,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
+pub mod builtin;
 pub mod package;
 
 /// The file that makes a folder an extension.
@@ -125,15 +128,27 @@ pub struct ManifestEffect {
     pub category: String,
     /// Bumped by the author when the pixels change.
     pub version: u32,
-    /// The shader contract it was written to.
+    /// The shader contract it was written to. 1 for an OFX plugin.
     pub api: u32,
-    /// The `.wgsl` file, as a path inside the folder.
-    pub shader: String,
+    /// The `.wgsl` file, as a path inside the folder. Exactly one of this
+    /// and `ofx`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shader: Option<String>,
+    /// An OFX plugin's bundle folder inside the extension, such as
+    /// `Sort.ofx.bundle`. The plugin scan finds it like any other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ofx: Option<String>,
+    /// The OFX plugin's identifier, so the effect is `ofx:<plugin>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
     /// None means one pass called `shade`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub passes: Vec<ManifestPass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<ManifestInput>,
+    /// Drawn over the composite below, with the layer it sits on as its shape.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backdrop: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<ManifestInterface>,
 }
@@ -176,7 +191,7 @@ pub struct ManifestInterface {
 }
 
 /// What the engine keeps of `effect`, with its shader's text.
-fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
+pub(crate) fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEffect {
     LfxEffect {
         extension: extension.to_owned(),
         id: effect.id.clone(),
@@ -199,6 +214,7 @@ fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEf
                 InputKind::Depth => LfxInputKind::Depth,
             },
         }),
+        backdrop: effect.backdrop,
         shader,
     }
 }
@@ -266,6 +282,17 @@ fn version(text: &str) -> Option<[u32; 3]> {
 /// Read a manifest and judge it. What is refused here is refused before a
 /// single file is copied.
 pub fn parse(text: &str) -> Result<Manifest, ExtensionError> {
+    // `requires` is read before anything else, so a manifest that names a
+    // newer Lumit is turned away as that, whatever fields it has that this
+    // one does not know.
+    #[derive(Deserialize)]
+    struct Requires {
+        #[serde(default)]
+        requires: String,
+    }
+    if let Ok(Requires { requires }) = serde_json::from_str(text) {
+        at_least(&requires)?;
+    }
     let manifest: Manifest = serde_json::from_str(text).map_err(|e| {
         // Its own sentence names the field, which is what the author needs.
         ExtensionError::Invalid(format!("extension.json could not be read: {e}"))
@@ -318,14 +345,20 @@ pub fn parse(text: &str) -> Result<Manifest, ExtensionError> {
             "an extension's hosts are at most 16 bare site names, such as example.org",
         ));
     }
-    if !manifest.requires.is_empty() {
-        let needs = version(&manifest.requires)
-            .ok_or_else(|| invalid("requires is a Lumit version, such as 0.7.0"))?;
-        if version(env!("CARGO_PKG_VERSION")).is_some_and(|have| have < needs) {
-            return Err(ExtensionError::Newer(manifest.requires));
-        }
-    }
     Ok(manifest)
+}
+
+/// Whether this Lumit is at least `requires`, which may be empty for any.
+fn at_least(requires: &str) -> Result<(), ExtensionError> {
+    if requires.is_empty() {
+        return Ok(());
+    }
+    let needs =
+        version(requires).ok_or_else(|| invalid("requires is a Lumit version, such as 0.7.0"))?;
+    if version(env!("CARGO_PKG_VERSION")).is_some_and(|have| have < needs) {
+        return Err(ExtensionError::Newer(requires.to_owned()));
+    }
+    Ok(())
 }
 
 /// One effect's entry, judged. The engine's own check has the last word on
@@ -341,10 +374,31 @@ fn judge_effect(manifest: &Manifest, effect: &ManifestEffect) -> Result<(), Exte
     if !named(&effect.name) {
         return Err(invalid("an effect needs a name of at most 64 letters"));
     }
-    if inside(&effect.shader).is_none() {
-        return Err(ExtensionError::Invalid(format!(
-            "the {id} effect's shader is a file inside the extension's own folder"
-        )));
+    match (&effect.shader, &effect.ofx) {
+        (Some(shader), None) if inside(shader).is_none() => {
+            return Err(ExtensionError::Invalid(format!(
+                "the {id} effect's shader is a file inside the extension's own folder"
+            )));
+        }
+        (Some(_), None) => {}
+        (None, Some(bundle)) => {
+            if !bundle.ends_with(".ofx.bundle") || inside(bundle).is_none() {
+                return Err(ExtensionError::Invalid(format!(
+                    "the {id} effect's ofx is a .ofx.bundle folder inside the extension's own folder"
+                )));
+            }
+            let plugin = effect.plugin.as_deref().unwrap_or_default();
+            if plugin.is_empty() || plugin.len() > 256 || plugin.contains(char::is_whitespace) {
+                return Err(ExtensionError::Invalid(format!(
+                    "the {id} effect needs its OFX plugin's identifier as plugin"
+                )));
+            }
+        }
+        _ => {
+            return Err(ExtensionError::Invalid(format!(
+                "the {id} effect has a shader or an ofx bundle, and not both"
+            )));
+        }
     }
     if effect
         .input
@@ -513,18 +567,21 @@ fn check_files(
     }
     for effect in &manifest.effects {
         let id = &effect.id;
-        match inside(&effect.shader).and_then(|path| size(&path)) {
-            None => {
+        // An OFX bundle is a folder, and one without a binary for this
+        // computer only means its plugin is not found here.
+        let shader = effect.shader.as_deref();
+        match shader.map(|shader| inside(shader).and_then(|path| size(&path))) {
+            Some(None) => {
                 return Err(ExtensionError::Invalid(format!(
                     "the {id} effect's shader is not in the folder"
                 )))
             }
-            Some(bytes) if bytes > MAX_SHADER => {
+            Some(Some(bytes)) if bytes > MAX_SHADER => {
                 return Err(ExtensionError::Invalid(format!(
                     "the {id} effect's shader is longer than 1 MB"
                 )))
             }
-            Some(_) => {}
+            _ => {}
         }
         if effect
             .interface
@@ -605,7 +662,7 @@ pub fn scan() -> Vec<Installed> {
 pub fn effects(installed: &Installed) -> Vec<LfxEffect> {
     let manifest = &installed.manifest;
     let read = |effect: &ManifestEffect| {
-        let path = installed.path.join(inside(&effect.shader)?);
+        let path = installed.path.join(inside(effect.shader.as_deref()?)?);
         if file_size(&path)? > MAX_SHADER {
             return None;
         }
@@ -613,6 +670,19 @@ pub fn effects(installed: &Installed) -> Vec<LfxEffect> {
         Some(lfx_effect(&manifest.id, effect, text))
     };
     manifest.effects.iter().filter_map(read).collect()
+}
+
+/// The OFX bundle folders an installed extension carries, for the plugin
+/// scan. Two effects may share one bundle.
+#[must_use]
+pub fn bundles(installed: &Installed) -> Vec<PathBuf> {
+    let bundles: std::collections::BTreeSet<PathBuf> = installed
+        .manifest
+        .effects
+        .iter()
+        .filter_map(|effect| Some(installed.path.join(inside(effect.ofx.as_deref()?)?)))
+        .collect();
+    bundles.into_iter().collect()
 }
 
 /// What a copy has left to spend.
@@ -821,6 +891,31 @@ mod tests {
             let text = manifest(|m| m["effects"][0][field] = value.clone());
             assert!(parse(&text).is_err(), "effect {field}: {value}");
         }
+
+        // An OFX plugin's bundle loads native code, so it too stays inside.
+        let ofx = |bundle: &str, plugin: &str| {
+            manifest(|m| {
+                let effect = m["effects"][0].as_object_mut().unwrap();
+                effect.remove("shader");
+                effect.insert("ofx".into(), bundle.into());
+                effect.insert("plugin".into(), plugin.into());
+            })
+        };
+        assert!(parse(&ofx("Tape.ofx.bundle", "com.example.tape")).is_ok());
+        let refused = [
+            ("../Tape.ofx.bundle", "com.example.tape"),
+            ("C:\\Tape.ofx.bundle", "com.example.tape"),
+            ("tape.dll", "com.example.tape"),
+            ("Tape.ofx.bundle", ""),
+        ];
+        for (bundle, plugin) in refused {
+            assert!(
+                parse(&ofx(bundle, plugin)).is_err(),
+                "ofx {bundle}: {plugin}"
+            );
+        }
+        let both = manifest(|m| m["effects"][0]["ofx"] = "Tape.ofx.bundle".into());
+        assert!(parse(&both).is_err());
     }
 
     /// Installing copies the folder whole, an install over another replaces

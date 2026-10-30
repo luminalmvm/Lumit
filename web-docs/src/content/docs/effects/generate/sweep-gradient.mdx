@@ -1,0 +1,52 @@
+---
+title: Sweep gradient
+description: "A ramp that turns round a centre, like a radar or a colour wheel."
+---
+
+Sweep gradient is a **Generate** effect.
+
+## What it does
+
+Paints a ramp that turns clockwise round **Centre**, starting at **Rotation** and running
+over **Arc**.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Rotation** | Dial | Any angle | 0° | Degrees |
+| **Arc** | Slider | 1 to 360; any value by typing | 360 | Degrees |
+| **Repetitions** | Slider, whole numbers | 1 to 64 | 1 | - |
+| **Spread** | Dropdown | Pad · Repeat · Mirror | Pad | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Centre**: the point the ramp turns round.
+- **Rotation**: where the ramp starts. 0° points right.
+- **Arc**: how far round the ramp runs.
+- **Repetitions**: how many times the ramp fits into the Arc.
+- **Spread**: past the ends of the ramp, **Pad** holds the end colours, **Repeat** starts
+  the ramp again and **Mirror** runs it back.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
+  and where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Conical gradient](/effects/generate/conical-gradient/)
+- [Gradient](/effects/generate/gradient/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

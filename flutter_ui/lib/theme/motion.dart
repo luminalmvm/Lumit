@@ -13,9 +13,9 @@
 // **What the three levels keep.** Full plays everything. Minimal keeps the
 // motion that says something, where a row went or that a menu opened, as a
 // 50ms fade or slide, and drops the motion that is only manner: nothing rises,
-// grows, overshoots or trails. The one thing it keeps whole is what is on a
-// menu or a dialogue following it in. None plays nothing, and a widget given a
-// still spec does not mount a controller at all.
+// grows, overshoots or trails. What is on a menu is there with the menu.
+// None plays nothing, and a widget given a still spec does not mount a
+// controller at all.
 //
 // **What no level drops.** The light a pressable thing takes under the
 // pointer. It is what says the thing can be pressed, so it is a state and not
@@ -73,12 +73,10 @@ const Curve _land = Cubic(0.3, 1.4, 0.6, 1.0);
 /// Lantern's landing, nearer a tenth.
 const Curve _landSoft = Cubic(0.3, 1.6, 0.6, 1.0);
 
-/// A swell's spring: out past its size by about a sixth and back, once. More
+/// Lantern's swell: out past its size by about a third and back, once. More
 /// than a landing, because a swell travels a pixel or three and a twentieth
-/// of that is nothing anyone sees.
-const Curve _spring = Cubic(0.3, 1.7, 0.5, 1.0);
-
-/// Lantern's spring, nearer a third.
+/// of that is nothing anyone sees. Studio's swell has no spring at all: it is
+/// on things hovered tens of times a day, and Studio is quick and quiet.
 const Curve _springSoft = Cubic(0.3, 2.2, 0.5, 1.0);
 
 /// Every named movement, for one shape at one level.
@@ -107,6 +105,10 @@ class Motion {
   /// went, and at 50ms there is nothing left of it to see.
   final MotionSpec scroll;
 
+  /// A zoom flying to its new magnification, in the Viewer and the Timelines.
+  /// Full only, as [scroll] is, since it is how the view travels.
+  final MotionSpec zoom;
+
   /// A state mark changing: the tab that is fronted, the tool that is armed,
   /// a focus ring.
   final MotionSpec mark;
@@ -127,10 +129,10 @@ class Motion {
   final double popupScale;
 
   /// What is on a menu or a dialogue, following its surface in: the surface
-  /// is there first and its rows come up a beat behind, clearing from a blur
-  /// as they settle. The rise is as a popup's, the blur is the sigma it starts
-  /// at. Runs a little past 150ms, because it starts late and the surface it
-  /// is on has landed and takes the pointer long before it is done.
+  /// is there first and its rows come up a beat behind. Menus open dozens of
+  /// times an hour and are read by their rows, so the beat is short and only
+  /// Lantern's soft cards clear from a blur, and only slightly. The rise is as
+  /// a popup's, the blur is the sigma it starts at.
   final MotionSpec content;
   final double contentRise;
   final double contentBlur;
@@ -174,6 +176,10 @@ class Motion {
   /// loses it. Full only: at Minimal and None the next step is simply there.
   final MotionSpec tour;
 
+  /// Wires drawn into a tie on a graph canvas, or let out of one. Longer than
+  /// a settle, since a wire may travel a long way to its place.
+  final MotionSpec tie;
+
   const Motion._({
     required this.shape,
     required this.level,
@@ -183,6 +189,7 @@ class Motion {
     required this.swell,
     required this.swellScale,
     required this.scroll,
+    required this.zoom,
     required this.mark,
     required this.pop,
     required this.popScale,
@@ -208,6 +215,7 @@ class Motion {
     required this.revealRise,
     required this.swap,
     required this.tour,
+    required this.tie,
   });
 
   /// Whether nothing moves at all.
@@ -244,6 +252,7 @@ class Motion {
         swell: MotionSpec.still,
         swellScale: 1,
         scroll: MotionSpec.still,
+        zoom: MotionSpec.still,
         mark: MotionSpec.still,
         pop: MotionSpec.still,
         popScale: 1,
@@ -269,15 +278,14 @@ class Motion {
         revealRise: 0,
         swap: MotionSpec.still,
         tour: MotionSpec.still,
+        tie: MotionSpec.still,
       );
 
   /// Minimal is the same under every shape: what is left is too short to
   /// carry a manner. A 50ms fade or slide where the motion says something,
-  /// and nothing where it only decorates. Only the content of a menu or a
-  /// dialogue moves as its shape does at Full.
+  /// and nothing where it only decorates.
   static Motion _minimal(ThemeShape shape) {
     const snap = MotionSpec(_ms50, Curves.easeOut);
-    final full = of(shape, AnimationLevel.all);
     return Motion._(
       shape: shape,
       level: AnimationLevel.minimal,
@@ -287,6 +295,7 @@ class Motion {
       swell: MotionSpec.still,
       swellScale: 1,
       scroll: MotionSpec.still,
+      zoom: MotionSpec.still,
       mark: snap,
       pop: MotionSpec.still,
       popScale: 1,
@@ -294,9 +303,9 @@ class Motion {
       popup: snap,
       popupRise: 0,
       popupScale: 1,
-      content: full.content,
-      contentRise: full.contentRise,
-      contentBlur: full.contentBlur,
+      content: MotionSpec.still,
+      contentRise: 0,
+      contentBlur: 0,
       flyout: MotionSpec.still,
       tooltip: MotionSpec.still,
       tooltipRise: 0,
@@ -314,6 +323,7 @@ class Motion {
       revealRise: 0,
       swap: snap,
       tour: MotionSpec.still,
+      tie: snap,
     );
   }
 
@@ -323,9 +333,10 @@ class Motion {
     hoverIn: MotionSpec(_ms60, _out),
     hoverOut: MotionSpec(_ms140, _out),
     rowTrail: MotionSpec(_ms90, Curves.easeOut),
-    swell: MotionSpec(_ms180, _spring),
+    swell: MotionSpec(_ms120, _out),
     swellScale: 1.06,
     scroll: MotionSpec(_ms140, _out),
+    zoom: MotionSpec(_ms120, _out),
     mark: MotionSpec(_ms120, _out),
     pop: MotionSpec(_ms110, _out),
     popScale: 0.5,
@@ -333,9 +344,9 @@ class Motion {
     popup: MotionSpec(_ms110, _out),
     popupRise: -4,
     popupScale: 1,
-    content: MotionSpec(_ms180, _out),
+    content: MotionSpec(_ms120, _out),
     contentRise: 3,
-    contentBlur: 3,
+    contentBlur: 0,
     flyout: MotionSpec(_ms80, Curves.easeOut),
     tooltip: MotionSpec(_ms90, Curves.easeOut),
     tooltipRise: -2,
@@ -351,6 +362,7 @@ class Motion {
     revealRise: 4,
     swap: MotionSpec(_ms150, Curves.easeOut),
     tour: MotionSpec(_ms280, Curves.easeInOutCubic),
+    tie: MotionSpec(_ms220, _land),
   );
 
   static const Motion _desk = Motion._(
@@ -363,6 +375,7 @@ class Motion {
     swell: MotionSpec(_ms80, _detent),
     swellScale: 1.04,
     scroll: MotionSpec(_ms90, _detent),
+    zoom: MotionSpec(_ms80, _detent),
     mark: MotionSpec(_ms80, _detent),
     // A tick on an instrument is on or it is off.
     pop: MotionSpec.still,
@@ -391,6 +404,7 @@ class Motion {
     revealRise: 0,
     swap: MotionSpec(_ms100, Curves.easeOut),
     tour: MotionSpec(_ms200, _detent),
+    tie: MotionSpec(_ms120, _detent),
   );
 
   static const Motion _lantern = Motion._(
@@ -402,6 +416,7 @@ class Motion {
     swell: MotionSpec(_ms220, _springSoft),
     swellScale: 1.08,
     scroll: MotionSpec(_ms180, _out),
+    zoom: MotionSpec(_ms150, _out),
     mark: MotionSpec(_ms150, _out),
     pop: MotionSpec(_ms140, _landSoft),
     popScale: 0.4,
@@ -411,7 +426,7 @@ class Motion {
     popupScale: 0.96,
     content: MotionSpec(_ms220, _out),
     contentRise: 4,
-    contentBlur: 5,
+    contentBlur: 2,
     flyout: MotionSpec(_ms100, Curves.easeOut),
     tooltip: MotionSpec(_ms110, Curves.easeOut),
     tooltipRise: -3,
@@ -427,5 +442,6 @@ class Motion {
     revealRise: 6,
     swap: MotionSpec(_ms150, Curves.easeOut),
     tour: MotionSpec(_ms320, Curves.easeInOutCubic),
+    tie: MotionSpec(_ms280, _landSoft),
   );
 }

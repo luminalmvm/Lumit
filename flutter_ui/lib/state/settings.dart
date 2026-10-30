@@ -80,6 +80,10 @@ class PerformanceSettings {
   /// misbehaves with it.
   bool hardwareDecode;
 
+  /// The widest and tallest picture the engine makes, in pixels. Null means
+  /// the engine's default, as for [cacheBudgetBytes].
+  int? largestPicture;
+
   /// Where parked frames live, as the engine's own enum name
   /// (`appData` / `besideProject` / `custom`). Null means the engine's default.
   /// The frontend never interprets it beyond showing the choice — it hands the
@@ -106,6 +110,7 @@ class PerformanceSettings {
     this.diskCacheFolder,
     this.fullResDragPreviews = false,
     this.hardwareDecode = true,
+    this.largestPicture,
   });
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +123,7 @@ class PerformanceSettings {
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
         'full_res_drag_previews': fullResDragPreviews,
         'hardware_decode': hardwareDecode,
+        if (largestPicture != null) 'largest_picture': largestPicture,
       };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
@@ -147,6 +153,7 @@ class PerformanceSettings {
         fullResDragPreviews: j['full_res_drag_previews'] == true,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
+        largestPicture: _positiveInt(j['largest_picture']),
       );
 }
 
@@ -338,6 +345,18 @@ class InterfaceSettings {
   /// another keeps the overlap, which is a dissolve or a crossfade.
   bool cutAutoCrossfade;
 
+  /// The Cut timeline's Speed switch: each picture clip carries its speed as
+  /// a line across it, edited where it lies, as Vegas draws velocity.
+  bool cutSpeedLines;
+
+  /// Mouse drags in the Cut timeline the way Vegas has them: Ctrl drags a
+  /// copy or stretches an edge, Alt slips, Ctrl+Alt slides, and Shift holds
+  /// snapping off. Turned on with the Vegas key preset.
+  bool cutVegasDrags;
+
+  /// How wide the Cut timeline's track heads are, dragged at their edge.
+  double cutHeadWidth;
+
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
@@ -383,6 +402,10 @@ class InterfaceSettings {
   /// so a kick and a hi-hat are told apart at a glance — which is what an edit
   /// is aimed at. Off gives the plain wave back, unchanged.
   bool multiwaveWaveforms;
+
+  /// Whether a style's see-through fills are drawn solid and nothing behind
+  /// a part is blurred. Off by default.
+  bool reduceTransparency;
 
   /// Whether a waveform stands on the floor of its row rather than being
   /// centred about silence.
@@ -551,6 +574,9 @@ class InterfaceSettings {
     this.videoAsSequenceLayer = false,
     this.cutAutoRipple = false,
     this.cutAutoCrossfade = false,
+    this.cutSpeedLines = false,
+    this.cutVegasDrags = false,
+    this.cutHeadWidth = 180,
     this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
@@ -558,6 +584,7 @@ class InterfaceSettings {
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
+    this.reduceTransparency = false,
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.easingInPopup = false,
@@ -593,6 +620,9 @@ class InterfaceSettings {
         'video_as_sequence_layer': videoAsSequenceLayer,
         'cut_auto_ripple': cutAutoRipple,
         'cut_auto_crossfade': cutAutoCrossfade,
+        'cut_speed_lines': cutSpeedLines,
+        'cut_vegas_drags': cutVegasDrags,
+        'cut_head_width': cutHeadWidth,
         'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
@@ -600,6 +630,7 @@ class InterfaceSettings {
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
+        'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
@@ -656,6 +687,9 @@ class InterfaceSettings {
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
         cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
+        cutSpeedLines: j['cut_speed_lines'] as bool? ?? false,
+        cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
+        cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is
@@ -681,6 +715,7 @@ class InterfaceSettings {
         // and a settings file written before this field existed should get
         // the better picture rather than be pinned to the old one.
         multiwaveWaveforms: j['multiwave_waveforms'] as bool? ?? true,
+        reduceTransparency: j['reduce_transparency'] as bool? ?? false,
         // Absent means off: centred is what a settings file written before
         // this field existed was already drawing.
         waveformsFromBottom: j['waveforms_from_bottom'] as bool? ?? false,

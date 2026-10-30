@@ -52,6 +52,9 @@ pub struct MatteDraw {
     /// ops in `fx` (as for a layer's own `colour_tables`). Empty unless the
     /// source mode is `EffectsAndMasks` and the matte source has a LUT.
     pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
+    /// Its lens texts and Sprite flare designs, 1:1 with the lens ops in `fx`
+    /// as a layer's own [`CompLayerDraw::flare_lens_files`] are.
+    pub flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
     /// The matte source's own baked pictures, 1:1 with the matching ops in
     /// `fx` exactly as a layer's own are, and filled for the same reason
     /// [`DofInputDraw::roto_mattes`] is: without them the source layer's stack
@@ -142,6 +145,9 @@ pub struct DofInputDraw {
     /// `fx`. Empty unless the depth source is `EffectsAndMasks` and the depth
     /// layer has a LUT.
     pub colour_tables: Vec<Option<crate::colour::TableRequest>>,
+    /// Its lens texts and Sprite flare designs, 1:1 with the lens ops in `fx`
+    /// as a layer's own [`CompLayerDraw::flare_lens_files`] are.
+    pub flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
     /// The referenced layer's own baked pictures, 1:1 with the matching ops in
     /// `fx` exactly as a layer's own are. Non-empty only when the consumer
     /// reads it through Effects and masks and the layer wears such an effect.

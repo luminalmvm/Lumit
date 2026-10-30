@@ -1,0 +1,52 @@
+---
+title: Lighting
+description: "Long shadows cast from a light, and the layer's own pixels brightened by it."
+---
+
+Lighting is a **Stylise** effect.
+
+## What it does
+
+Every clear pixel looks towards the light for something opaque in the way, and is in shadow
+when it finds it. The layer's own pixels are brightened by the light, more the closer they
+are to it.
+
+Shadows fall only inside the layer's picture. Things thinner than a 48th of **Length** can
+be missed.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Light** | Dropdown | Point · Directional | Point | - |
+| **Light position** | Point | Any position | 400, 200 | Pixels at composition size |
+| **Angle** | Dial | Any angle | 45° | Degrees |
+| **Length** | Slider | 0 to 2000; any value by typing | 400 | Pixels at composition size |
+| **Fade** | Slider | 0 to 100 | 50 | - |
+| **Shadow colour** | Colour | Each channel 0 to 1 | Black, 60% opaque | - |
+| **Light colour** | Colour | Each channel 0 to 1 | Warm white | - |
+| **Light intensity** | Slider | 0 to 400; any value by typing | 50 | - |
+| **Light radius** | Slider | 0 to 4000; any value by typing | 1200 | Pixels at composition size |
+
+## What each control does
+
+- **Light**: **Point** casts shadows away from Light position, and **Directional** casts
+  them all along Angle.
+- **Light position**: where a Point light sits.
+- **Angle**: the direction a Directional light shines.
+- **Length**: how far a shadow reaches.
+- **Fade**: how much a shadow thins on the way.
+- **Shadow colour**: the shadow's colour and opacity.
+- **Light colour**: the colour the layer's pixels are brightened by.
+- **Light intensity**: how much they are brightened.
+- **Light radius**: how far a Point light reaches before it brightens nothing.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Light sweep](/effects/stylise/light-sweep/)
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

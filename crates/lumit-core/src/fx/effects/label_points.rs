@@ -4,9 +4,11 @@
 //! wording is a template, typed into the Text row, or the Text layer's own
 //! text while that row is empty. In it `{index}` is the point's place in the
 //! stream, `{number}` the number it carries, `{x}` and `{y}` where it is, and
-//! `{id}`, `{size}` and `{age}` read the same way. Any other text is written
-//! as it is, at every point. Hide the Text layer if it is only there to be
-//! read.
+//! `{id}`, `{size}` and `{age}` read the same way. Random text:
+//! `{pick:a|b|c}` is one of the words, `{chars:N}` N letters and digits and
+//! `{hex:N}` N hexadecimal digits, each point keeping its own (Seed re-rolls
+//! them). Any other text is written as it is, at every point. Hide the Text
+//! layer if it is only there to be read.
 //!
 //! Labels follow where the points are seen and do not turn with them. This
 //! file only says which label goes where. The letters are drawn by the text
@@ -19,7 +21,7 @@ use crate::fx::points::{Column, PointsStream};
 use crate::fx::{
     params::ParamId, params::Params, params::ShortText, params::Value, registry::EffectDef,
     registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
-    schema::EnabledWhen, schema::Port, schema::PortType,
+    schema::EnabledCond, schema::EnabledWhen, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
 
@@ -32,7 +34,108 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
 /// laid out and drawn by the text engine, so this is what bounds the cost.
 pub const LABELS_HARD: i64 = 2_000;
 
-pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN];
+pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[
+    APPLY_GROUP_WHEN,
+    APPLY_THRESHOLD_WHEN,
+    EnabledWhen {
+        param: "colour_a",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "colour_b",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "hue_start",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "hue_range",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "saturation",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "darken",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "gradient_stops",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_1",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_2",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_3",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+    EnabledWhen {
+        param: "gradient_4",
+        on: "flash_colour",
+        cond: EnabledCond::ChoiceIs(4),
+    },
+];
+
+/// What a label's colour does while it is in the wave.
+pub const FLASH_COLOUR: &[&str] = &[
+    "Off",
+    "Random hue",
+    "Two colours",
+    "By strength",
+    "Gradient",
+];
+
+/// The rows a driver can give each label its own value for, and the named
+/// columns the render writes those values into
+/// ([`crate::fx::drivers::per_copy::drive_rows`]).
+pub const LABEL_DRIVEN_ROWS: &[(&str, &str)] = &[
+    ("change", "label:change"),
+    ("label_scale", "label:label_scale"),
+    ("text_step", "label:text_step"),
+    ("label_rotation", "label:label_rotation"),
+];
+
+/// One label: its wording, where its anchor goes, how big it is drawn (1 is
+/// the Text layer's size), how far it is turned (degrees, clockwise on the
+/// frame, about its anchor) and its colour, `None` for the Text layer's own.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Label {
+    pub text: String,
+    pub at: [f32; 2],
+    pub scale: f32,
+    pub rotation: f32,
+    pub tint: Option<Tint>,
+}
+
+/// How a label's colour is changed: drawn all in one colour,
+/// keeping only its letters' shape, or its own colours multiplied by one.
+/// Both scene-linear.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Tint {
+    Replace([f32; 4]),
+    Multiply([f32; 4]),
+}
+
+/// The dice a flashing colour rolls.
+const TINT_ATTR: u32 = 95;
 
 /// Label points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -45,7 +148,10 @@ pub const LABEL_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHO
     // A point may be anywhere, and its label reaches away from it.
     roi = FullFrame,
     premultiplied = true,
-    seeded = false,
+    // Seeded: a label in the wave scrambles and flashes with the
+    // layer's clock under constant rows, so its frames cannot be shared
+    // across time.
+    seeded = true,
     enabled_when = LABEL_ENABLED_WHEN,
 )]
 pub struct LabelPoints {
@@ -89,6 +195,11 @@ pub struct LabelPoints {
     )]
     pub decimals: i32,
 
+    /// Which words `{pick:…}` chooses and which characters `{chars:N}` and
+    /// `{hex:N}` write. Each point keeps its own, frame after frame.
+    #[seed]
+    pub seed: u32,
+
     /// How far across from its point a label sits, px@comp.
     #[slider(label = "Offset x", min = -200.0, max = 200.0, default = 8.0, unit = Px)]
     pub offset_x: f32,
@@ -102,6 +213,16 @@ pub struct LabelPoints {
     #[choice(label = "Anchor", options = ["Left", "Centre", "Right"], default = 0)]
     pub anchor: u32,
 
+    /// Which part of the label's height sits at the offset, and what it
+    /// turns and grows about. Top is how Processing's
+    /// `textAlign(CENTER, TOP)` hangs a letter from its point.
+    #[choice(
+        label = "Vertical anchor",
+        options = ["Middle", "Top", "Bottom"],
+        default = 0
+    )]
+    pub vertical_anchor: u32,
+
     /// The most labels drawn. Past it the newest points keep theirs.
     #[counter(
         label = "Max labels",
@@ -113,6 +234,162 @@ pub struct LabelPoints {
         unit = Raw
     )]
     pub max_labels: i32,
+
+    /// How much a wave is at a point, per cent. Wire a driver into
+    /// it, an Oscillator by Position say, and each point reads its own value.
+    #[slider(label = "Change", min = 0.0, max = 100.0, default = 0.0, unit = Percent)]
+    pub change: f32,
+
+    /// Above this, a point is in the wave: its random text scrambles and its
+    /// colour flashes. Below it, the label rests on its own text and colour.
+    #[slider(
+        label = "Change above",
+        min = 0.0,
+        max = 100.0,
+        default = 50.0,
+        unit = Percent
+    )]
+    pub change_above: f32,
+
+    /// New random text a second while a point is in the wave. At 0 it takes
+    /// one other text for as long as the wave is there.
+    #[slider(
+        label = "Scramble rate",
+        min = 0.0,
+        max = 60.0,
+        default = 12.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub scramble_rate: f32,
+
+    /// Each whole number here gives the random text a new roll that stays.
+    /// Wire Ring wave's Passes into it and a label keeps the text the last
+    /// ring left it with.
+    #[slider(
+        label = "Text step",
+        min = 0.0,
+        max = 1000.0,
+        default = 0.0,
+        unit = Raw
+    )]
+    pub text_step: f32,
+
+    /// The colour a label takes while it is in the wave, changing at Scramble
+    /// rate: none, any hue, or Colour A and Colour B in turn at random. By
+    /// strength colours it smoothly by Change instead, as far as Change goes.
+    #[choice(
+        label = "Flash colour",
+        options = FLASH_COLOUR,
+        default = 0
+    )]
+    pub flash_colour: u32,
+
+    /// One of the two colours Two colours flashes between.
+    #[colour(label = "Colour A", default = [1.0, 0.2, 0.1, 1.0], max = 4.0)]
+    pub colour_a: [f32; 4],
+
+    /// The other.
+    #[colour(label = "Colour B", default = [0.1, 0.6, 1.0, 1.0], max = 4.0)]
+    pub colour_b: [f32; 4],
+
+    /// By strength: the hue a little Change gives.
+    #[dial(label = "Hue start", default = 0.0)]
+    pub hue_start: f32,
+
+    /// By strength: how far round the hues full Change goes, degrees.
+    #[slider(
+        label = "Hue range",
+        min = 0.0,
+        max = 360.0,
+        default = 200.0,
+        unit = Raw
+    )]
+    pub hue_range: f32,
+
+    /// By strength: how much colour full Change gives, per cent.
+    #[slider(
+        label = "Saturation",
+        min = 0.0,
+        max = 100.0,
+        default = 80.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub saturation: f32,
+
+    /// By strength: how much darker full Change makes a label, per cent.
+    #[slider(
+        label = "Darken",
+        min = 0.0,
+        max = 100.0,
+        default = 50.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub darken: f32,
+
+    /// Gradient: how many of the colours below the gradient runs through,
+    /// evenly spaced from Change 0 to Change 100.
+    #[counter(
+        label = "Gradient stops",
+        min = 2,
+        max = 4,
+        default = 4,
+        hard_min = 2,
+        hard_max = 4,
+        unit = Raw
+    )]
+    pub gradient_stops: i32,
+
+    /// Gradient: the colour at Change 0. Labels are multiplied by it, so
+    /// with white text it is the colour seen.
+    #[colour(label = "Gradient 1", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub gradient_1: [f32; 4],
+
+    /// Gradient: the next colour along.
+    #[colour(label = "Gradient 2", default = [0.63, 0.67, 0.34, 1.0], max = 4.0)]
+    pub gradient_2: [f32; 4],
+
+    /// Gradient: the next, with three or four stops.
+    #[colour(label = "Gradient 3", default = [0.08, 0.41, 0.13, 1.0], max = 4.0)]
+    pub gradient_3: [f32; 4],
+
+    /// Gradient: the colour at Change 100, with four stops.
+    #[colour(label = "Gradient 4", default = [0.006, 0.11, 0.22, 1.0], max = 4.0)]
+    pub gradient_4: [f32; 4],
+
+    /// How big a label is drawn, per cent of the Text layer's size. Wire a
+    /// driver into it and each label takes its own size.
+    #[slider(
+        label = "Label scale",
+        min = 0.0,
+        max = 400.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub label_scale: f32,
+
+    /// How much bigger full Change makes a label, per cent, on top of Label
+    /// scale.
+    #[slider(
+        label = "Grow",
+        min = 0.0,
+        max = 200.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub grow: f32,
+
+    /// How far each label is turned about its anchor, clockwise. Wire a
+    /// driver into it, Ring wave's Rotation say, and each label turns its
+    /// own way.
+    #[dial(label = "Label rotation", default = 0.0)]
+    pub label_rotation: f32,
 
     /// The Mix every effect ends with, per cent.
     #[slider(
@@ -131,6 +408,85 @@ pub struct LabelPoints {
 fn number(v: f32, decimals: usize) -> String {
     let unit = 10f32.powi(decimals as i32);
     format!("{:.decimals$}", (v * unit).round() / unit + 0.0)
+}
+
+/// The characters `{chars:N}` writes.
+const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+/// The characters `{hex:N}` writes.
+const HEX: &[u8] = b"0123456789abcdef";
+/// The longest `{chars:N}` or `{hex:N}`.
+const RANDOM_MAX: usize = 64;
+/// The dice the random text rolls, kept off the numbers the points effects use.
+const TEXT_ATTR: u32 = 90;
+
+/// **Random text**: `text` with each `{pick:a|b|c}` replaced by
+/// one of its words, each `{chars:N}` by N letters and digits and each
+/// `{hex:N}` by N hexadecimal digits, all chosen by the point's `id` and
+/// `seed`, so a point keeps its text frame after frame and whatever order the
+/// points come in. Tokens are numbered from the left, so two of them on one
+/// label roll differently. Anything else is left as it is.
+fn random_text(text: &str, seed: u32, id: u64) -> String {
+    if !text.contains("{pick:") && !text.contains("{chars:") && !text.contains("{hex:") {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    let mut token = 0u32;
+    // One roll in 0..1 for character `k` of token `token`.
+    let roll = |token: u32, k: u32| {
+        let attr = TEXT_ATTR
+            .wrapping_add(token.wrapping_mul(1_000))
+            .wrapping_add(k);
+        crate::fx::points::draw(seed, id, attr)
+    };
+    let pick = |n: usize, u: f32| {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let k = (u * n as f32) as usize;
+        k.min(n.saturating_sub(1))
+    };
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open..];
+        let Some(close) = after.find('}') else {
+            out.push_str(after);
+            return out;
+        };
+        let inner = &after[1..close];
+        let made = if let Some(words) = inner.strip_prefix("pick:") {
+            let words: Vec<&str> = words.split('|').collect();
+            Some(words[pick(words.len(), roll(token, 0))].to_owned())
+        } else if let Some((set, n)) = inner
+            .strip_prefix("chars:")
+            .map(|n| (CHARS, n))
+            .or_else(|| inner.strip_prefix("hex:").map(|n| (HEX, n)))
+        {
+            n.trim().parse::<usize>().ok().map(|n| {
+                (0..n.clamp(1, RANDOM_MAX))
+                    .map(|k| {
+                        #[allow(clippy::cast_possible_truncation)]
+                        let u = roll(token, k as u32 + 1);
+                        char::from(set[pick(set.len(), u)])
+                    })
+                    .collect()
+            })
+        } else {
+            None
+        };
+        match made {
+            Some(made) => {
+                out.push_str(&made);
+                token += 1;
+            }
+            None => out.push_str(&after[..=close]),
+        }
+        rest = &after[close + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// `template` cut at each `{attr:NAME}` and `{@NAME}` in it: the text
@@ -166,6 +522,16 @@ impl LabelPoints {
     /// The raster factor, since a stream read off a wire is in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
+    /// The layer's time, seconds, which the scrambling text and the flashing
+    /// colour step by.
+    pub const DERIVED_TIME: ParamId = ParamId::new("derived.time");
+
+    /// This instance's layer time, read back out of a resolved bag.
+    #[must_use]
+    pub fn time_of(p: Params<'_>) -> f64 {
+        f64::from(p.float(Self::DERIVED_TIME, 0.0))
+    }
+
     /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
@@ -180,6 +546,37 @@ impl LabelPoints {
             2 => 1.0,
             _ => 0.0,
         }
+    }
+
+    /// How far down a label its anchor is: 0 its top, 1 its bottom.
+    #[must_use]
+    pub fn anchor_down(self) -> f32 {
+        match self.vertical_anchor {
+            1 => 0.0,
+            2 => 1.0,
+            _ => 0.5,
+        }
+    }
+
+    /// The Gradient's colour at `s` (0..1) of the way along its stops,
+    /// mixed in scene-linear light.
+    #[must_use]
+    pub fn gradient_at(self, s: f32) -> [f32; 4] {
+        let stops = [
+            self.gradient_1,
+            self.gradient_2,
+            self.gradient_3,
+            self.gradient_4,
+        ];
+        #[allow(clippy::cast_sign_loss)]
+        let n = self.gradient_stops.clamp(2, 4) as usize;
+        #[allow(clippy::cast_precision_loss)]
+        let along = s.clamp(0.0, 1.0) * (n - 1) as f32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let k = (along.floor() as usize).min(n - 2);
+        #[allow(clippy::cast_precision_loss)]
+        let t = along - k as f32;
+        std::array::from_fn(|c| stops[k][c] + (stops[k + 1][c] - stops[k][c]) * t)
     }
 
     /// The template: the Text row, or `layer_text` while that row is empty.
@@ -201,7 +598,8 @@ impl LabelPoints {
         stream: &PointsStream,
         template: &str,
         px_scale: f32,
-    ) -> Vec<(String, [f32; 2])> {
+        lt: f64,
+    ) -> Vec<Label> {
         // A point behind the camera is not seen, so it has no label.
         let group = stream.group(self.apply_group.as_str());
         let (cuts, tail) = named(template, stream);
@@ -214,22 +612,45 @@ impl LabelPoints {
         let most = self.max_labels.clamp(0, LABELS_HARD as i32) as usize;
         let decimals = self.decimals.clamp(0, 4) as usize;
         let get = |v: &[f32], i: usize| v.get(i).copied().unwrap_or(0.0);
+        // The driven rows, per point where a driver wrote them, else the row.
+        let column_of = |row: &str| {
+            let name = LABEL_DRIVEN_ROWS.iter().find(|(r, _)| *r == row)?.1;
+            match stream.column(name) {
+                Column::Named(_) => Some(stream.column(name)),
+                _ => None,
+            }
+        };
+        let change_column = column_of("change");
+        let scale_column = column_of("label_scale");
+        let step_column = column_of("text_step");
+        let rotation_column = column_of("label_rotation");
         chosen
             .iter()
             .skip(chosen.len().saturating_sub(most))
             .map(|&i| {
                 let seen = stream.projected(i);
+                let id = stream.id.get(i).copied().unwrap_or(0);
+                let read = |column: Option<Column>, row: f32| {
+                    column.and_then(|c| stream.read(c, i)).unwrap_or(row)
+                };
+                let change = read(change_column, self.change);
+                let scale = read(scale_column, self.label_scale);
+                let step = read(step_column, self.text_step);
+                let rotation = read(rotation_column, self.label_rotation);
+                let (seed, tint) = self.in_wave(change, step, id, lt);
                 let plain = |text: &str| {
                     if !text.contains('{') {
                         return text.to_owned();
                     }
-                    text.replace("{index}", &i.to_string())
-                        .replace("{id}", &stream.id.get(i).copied().unwrap_or(0).to_string())
+                    let filled = text
+                        .replace("{index}", &i.to_string())
+                        .replace("{id}", &id.to_string())
                         .replace("{number}", &number(stream.index_of(i), decimals))
                         .replace("{x}", &number(seen[0], decimals))
                         .replace("{y}", &number(seen[1], decimals))
                         .replace("{size}", &number(get(&stream.size, i), decimals))
-                        .replace("{age}", &number(get(&stream.age, i), decimals))
+                        .replace("{age}", &number(get(&stream.age, i), decimals));
+                    random_text(&filled, seed, id)
                 };
                 let mut text = String::new();
                 for (before, column) in &cuts {
@@ -244,10 +665,82 @@ impl LabelPoints {
                     seen[0] * px_scale + self.offset_x,
                     seen[1] * px_scale + self.offset_y,
                 ];
-                (text, at)
+                let strength = (change / 100.0).clamp(0.0, 1.0);
+                Label {
+                    text,
+                    at,
+                    scale: (scale / 100.0 * (1.0 + strength * self.grow / 100.0)).max(0.0),
+                    rotation: if rotation.is_finite() { rotation } else { 0.0 },
+                    tint,
+                }
             })
             .collect()
     }
+
+    /// Whether a point with `change` (per cent) is in the wave at layer time
+    /// `lt`, answered as the seed its random text rolls with and its colour.
+    /// At rest a point keeps its own text (the instance's Seed, moved on by
+    /// each whole Text step) and the Text layer's colour (`None`), unless By
+    /// strength colours it by Change.
+    #[must_use]
+    pub fn in_wave(self, change: f32, text_step: f32, id: u64, lt: f64) -> (u32, Option<Tint>) {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let rest = if text_step.is_finite() && text_step.floor() != 0.0 {
+            let n = text_step.floor() as i64 as u32;
+            self.seed ^ n.wrapping_mul(0x85eb_ca6b).rotate_left(7)
+        } else {
+            self.seed
+        };
+        // Change past 100 (rings that add up) keeps turning the hue round,
+        // as the sketch's does, while colour and darkness stop at their rows.
+        let by_strength = (change > 0.0).then_some(change / 100.0).and_then(|s| {
+            let full = s.min(1.0);
+            match self.flash_colour {
+                3 => Some(Tint::Multiply(hsv(
+                    self.hue_start + s * self.hue_range,
+                    full * self.saturation / 100.0,
+                    1.0 - full * self.darken / 100.0,
+                ))),
+                4 => Some(Tint::Multiply(self.gradient_at(full))),
+                _ => None,
+            }
+        });
+        if change <= self.change_above {
+            return (rest, by_strength);
+        }
+        // One step per Scramble rate tick, counted from 1 so a wave always
+        // shows something other than the resting text.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let step = if self.scramble_rate > 0.0 {
+            (lt * f64::from(self.scramble_rate)).floor().max(0.0) as u32 + 1
+        } else {
+            1
+        };
+        let seed = rest ^ step.wrapping_mul(0x9e37_79b9);
+        let roll = crate::fx::points::draw(seed, id, TINT_ATTR);
+        let tint = match self.flash_colour {
+            1 => Some(Tint::Replace(hsv(roll * 360.0, 1.0, 1.0))),
+            2 => Some(Tint::Replace(if roll < 0.5 {
+                self.colour_a
+            } else {
+                self.colour_b
+            })),
+            _ => by_strength,
+        };
+        (seed, tint)
+    }
+}
+
+/// The colour of hue `h` (degrees), saturation `s` and value `v` (0..1), as
+/// sRGB and then made scene-linear.
+fn hsv(h: f32, s: f32, v: f32) -> [f32; 4] {
+    let h = h.rem_euclid(360.0) / 60.0;
+    let k = |n: f32| {
+        let k = (n + h) % 6.0;
+        let c = v - v * s * k.min(4.0 - k).clamp(0.0, 1.0);
+        c.max(0.0).powf(2.2)
+    };
+    [k(5.0), k(3.0), k(1.0), 1.0]
 }
 
 /// Label points' behaviour. No CPU reference through the trait, as with the
@@ -269,5 +762,189 @@ impl EffectDef for LabelPointsDef {
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(LabelPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+        #[allow(clippy::cast_possible_truncation)]
+        push(LabelPoints::DERIVED_TIME, Value::Float(cx.lt as f32));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::{random_text, LabelPoints, Tint, LABEL_DRIVEN_ROWS};
+    use crate::fx::params::Params;
+    use crate::fx::points::PointsStream;
+    use crate::fx::registry::EffectMetadata;
+
+    /// The wave on Label points: a point below Change above keeps its
+    /// resting text and the Text layer's colour; a point above it scrambles
+    /// with time at Scramble rate and flashes one of the two colours; Label
+    /// scale and Change are read per point from the columns the render
+    /// writes. Guards the decode effect drawing the wrong labels.
+    #[test]
+    fn labels_scramble_and_flash_only_in_the_wave() {
+        let mut l = LabelPoints::read(Params::EMPTY);
+        l.text = crate::fx::params::ShortText::new("{chars:6}");
+        l.flash_colour = 2;
+        l.scramble_rate = 10.0;
+        l.colour_a = [1.0, 0.0, 0.0, 1.0];
+        l.colour_b = [0.0, 0.0, 1.0, 1.0];
+        let mut s = PointsStream {
+            position: vec![[0.0; 3]; 3],
+            speed: vec![[0.0; 3]; 3],
+            age: vec![0.0; 3],
+            life: vec![1.0; 3],
+            size: vec![8.0; 3],
+            rotation: vec![0.0; 3],
+            colour: vec![[1.0; 4]; 3],
+            id: vec![0, 1, 2],
+            ..PointsStream::default()
+        };
+        for (k, v) in s
+            .named_mut(LABEL_DRIVEN_ROWS[0].1, 1)
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            v[0] = [0.0, 80.0, 80.0][k];
+        }
+        for (k, v) in s
+            .named_mut(LABEL_DRIVEN_ROWS[1].1, 1)
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            v[0] = [100.0, 150.0, 50.0][k];
+        }
+        let at = |lt: f64| l.labels(&s, l.template(""), 1.0, lt);
+        let (a, b) = (at(0.0), at(0.05));
+        let rest = random_text("{chars:6}", l.seed, 0);
+        assert_eq!(a[0].text, rest, "below the threshold the label rests");
+        assert_eq!(a[0].tint, None);
+        assert_eq!(a[0].text, b[0].text, "and does not scramble");
+        assert!(
+            a[1].tint == Some(Tint::Replace(l.colour_a))
+                || a[1].tint == Some(Tint::Replace(l.colour_b))
+        );
+        assert_ne!(
+            a[1].text,
+            random_text("{chars:6}", l.seed, 1),
+            "in the wave it is not its rest text"
+        );
+        assert_eq!(a[1].text, b[1].text, "inside one tick it holds");
+        assert_ne!(a[1].text, at(0.15)[1].text, "a tick later it has scrambled");
+        assert!(
+            (a[0].scale - 1.0).abs() < 1e-6
+                && (a[1].scale - 1.5).abs() < 1e-6
+                && (a[2].scale - 0.5).abs() < 1e-6
+        );
+    }
+
+    /// The ring look on Label points: Text step moves the resting
+    /// text on and keeps it, By strength tints smoothly by Change (none at
+    /// nought, more colour and darker as it grows), Grow sizes by Change, and
+    /// Label rotation is read per point. Guards the text a ring leaves behind
+    /// and the colours and sizes it gives.
+    #[test]
+    fn labels_keep_the_text_a_ring_leaves_and_colour_by_strength() {
+        let mut l = LabelPoints::read(Params::EMPTY);
+        l.text = crate::fx::params::ShortText::new("{chars:4}");
+        l.flash_colour = 3;
+        l.change_above = 80.0;
+        l.grow = 50.0;
+        assert_eq!(l.in_wave(0.0, 0.0, 5, 0.0), (l.seed, None));
+        let (moved, _) = l.in_wave(0.0, 3.0, 5, 0.0);
+        assert_ne!(moved, l.seed, "a whole step rolls a new text");
+        assert_eq!(moved, l.in_wave(0.0, 3.7, 5, 9.0).0, "and keeps it");
+        let tint = |change: f32| match l.in_wave(change, 0.0, 5, 0.0).1 {
+            Some(Tint::Multiply(c)) => c,
+            other => panic!("{other:?}"),
+        };
+        let (weak, strong) = (tint(10.0), tint(70.0));
+        let spread = |c: [f32; 4]| c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2]);
+        assert!(spread(strong) > spread(weak), "{weak:?} {strong:?}");
+        assert!(strong.iter().take(3).all(|v| *v <= 1.0));
+        let mut s = PointsStream {
+            position: vec![[0.0; 3]; 2],
+            speed: vec![[0.0; 3]; 2],
+            age: vec![0.0; 2],
+            life: vec![1.0; 2],
+            size: vec![8.0; 2],
+            rotation: vec![0.0; 2],
+            colour: vec![[1.0; 4]; 2],
+            id: vec![0, 1],
+            ..PointsStream::default()
+        };
+        let mut write = |row: &str, values: [f32; 2]| {
+            let name = LABEL_DRIVEN_ROWS.iter().find(|(r, _)| *r == row).unwrap().1;
+            for (k, v) in s.named_mut(name, 1).unwrap().iter_mut().enumerate() {
+                v[0] = values[k];
+            }
+        };
+        write("change", [0.0, 100.0]);
+        write("label_rotation", [-30.0, 45.0]);
+        let labels = l.labels(&s, l.template(""), 1.0, 0.0);
+        assert!((labels[0].scale - 1.0).abs() < 1e-6);
+        assert!(
+            (labels[1].scale - 1.5).abs() < 1e-6,
+            "Grow 50 at full Change"
+        );
+        assert_eq!((labels[0].rotation, labels[1].rotation), (-30.0, 45.0));
+        assert_eq!(labels[0].tint, None);
+
+        // Gradient: the stops in turn, evenly along Change, mixed between.
+        let mut g = l;
+        g.flash_colour = 4;
+        g.gradient_stops = 3;
+        g.gradient_1 = [1.0, 0.0, 0.0, 1.0];
+        g.gradient_2 = [0.0, 1.0, 0.0, 1.0];
+        g.gradient_3 = [0.0, 0.0, 1.0, 1.0];
+        assert_eq!(g.gradient_at(0.0), g.gradient_1);
+        assert_eq!(g.gradient_at(0.5), g.gradient_2);
+        assert_eq!(g.gradient_at(1.0), g.gradient_3);
+        assert_eq!(g.gradient_at(0.25), [0.5, 0.5, 0.0, 1.0]);
+        assert_eq!(
+            g.in_wave(50.0, 0.0, 5, 0.0).1,
+            Some(Tint::Multiply(g.gradient_2))
+        );
+        assert_eq!(g.in_wave(0.0, 0.0, 5, 0.0).1, None, "at rest, untouched");
+        // By strength past 100 turns the hue on round, as rings that add up.
+        let past = |change: f32| match l.in_wave(change, 0.0, 5, 0.0).1 {
+            Some(Tint::Multiply(c)) => c,
+            other => panic!("{other:?}"),
+        };
+        assert_ne!(past(100.0), past(150.0));
+        // The vertical anchor: Top hangs a label from its point.
+        let mut top = l;
+        top.vertical_anchor = 1;
+        assert_eq!((l.anchor_down(), top.anchor_down()), (0.5, 0.0));
+    }
+
+    /// Random text: each token is replaced, a point keeps its
+    /// text, points differ, the Seed re-rolls, unknown braces stay. Guards
+    /// labels that change from frame to frame or read the same everywhere.
+    #[test]
+    fn random_text_fills_tokens_per_point() {
+        let t = "{pick:alpha|beta|gamma}-{chars:6}-{hex:4}";
+        let a = random_text(t, 1, 7);
+        let (word, rest) = a.split_once('-').unwrap();
+        let (chars, hex) = rest.split_once('-').unwrap();
+        assert!(["alpha", "beta", "gamma"].contains(&word), "{a}");
+        assert_eq!(chars.len(), 6);
+        assert!(chars.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert_eq!(hex.len(), 4);
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(a, random_text(t, 1, 7), "the same point keeps its text");
+        let others: Vec<String> = (0..20).map(|id| random_text(t, 1, id)).collect();
+        assert!(others.windows(2).any(|w| w[0] != w[1]), "points differ");
+        assert_ne!(
+            random_text("{chars:12}", 1, 7),
+            random_text("{chars:12}", 2, 7)
+        );
+        assert_eq!(random_text("{index} {nope}", 1, 7), "{index} {nope}");
+        assert_ne!(
+            random_text("{chars:8}{chars:8}", 1, 7)[..8],
+            random_text("{chars:8}{chars:8}", 1, 7)[8..],
+            "two tokens roll differently"
+        );
     }
 }

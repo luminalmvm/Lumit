@@ -59,7 +59,7 @@ impl CompositionReference {
     pub fn audio_play(&self, start: f64) -> Result<(), BridgeError> {
         let document = self.document_snapshot()?;
         #[cfg(feature = "media")]
-        crate::audio::play(self.id, start, document);
+        crate::audio::play(self.id, start, document, 1);
         #[cfg(not(feature = "media"))]
         let _ = (start, document);
         Ok(())
@@ -123,6 +123,7 @@ impl CompositionReference {
                     bands: 1,
                     buckets,
                     values,
+                    channels: 1,
                 });
             }
         }

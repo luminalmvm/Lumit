@@ -25,9 +25,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::fx::{
-    params::Unit, schema::FxCategory, schema::ParamKind, schema::Port, schema::PortType,
-};
+use crate::fx::{params::Unit, schema::ParamKind, schema::Port, schema::PortType};
 use crate::graph::{GraphError, INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, ProjectItem};
 
@@ -92,6 +90,9 @@ pub struct CompGraph {
     /// The notes left on the canvas, as a layer's graph keeps them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<crate::graph::Note>,
+    /// The ties on its wires, as a layer's graph keeps them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// One box on a node graph's canvas.
@@ -268,11 +269,13 @@ pub struct Projection {
 /// Whether this catalogue entry makes a value rather than a picture.
 ///
 /// The declared category, which is how the bridge already tells one apart: a
-/// driver declares [`FxCategory::Drivers`] and a data signature together.
+/// driver declares a driver category
+/// ([`crate::fx::schema::FxCategory::is_driver`]) and a data
+/// signature together.
 #[must_use]
 fn is_driver(inst: &EffectInstance) -> bool {
     crate::fx::builtins::def(&inst.effect.match_name)
-        .is_some_and(|def| def.schema().category == FxCategory::Drivers)
+        .is_some_and(|def| def.schema().category.is_driver())
 }
 
 /// Whether this catalogue entry is offered in a node graph's console (§5.1).
@@ -405,7 +408,7 @@ fn fx_ports(
     };
     let schema = def.schema();
     let signature = def.signature();
-    let driver = schema.category == FxCategory::Drivers;
+    let driver = schema.category.is_driver();
 
     let mut ins = Vec::new();
     if !driver {
@@ -566,6 +569,7 @@ impl CompGraph {
         let id = Uuid::now_v7();
         CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![GraphNode::Output { id }],
             edges: Vec::new(),
             layout: vec![(id, [0.0, 0.0])],
@@ -1442,6 +1446,7 @@ impl CompGraph {
             exposed: Vec::new(),
             groups: Vec::new(),
             notes: Vec::new(),
+            ties: Vec::new(),
         };
         (graph, fed)
     }
@@ -1604,6 +1609,7 @@ mod tests {
     fn built(nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> CompGraph {
         CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes,
             edges,
             layout: Vec::new(),

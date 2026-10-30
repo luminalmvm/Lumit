@@ -31,6 +31,8 @@ import '../state/comp_time.dart'
     show sampledExpression, sampledOrientation, sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart'
     show shapeContentsBounds, shapeContentsRect, textLayerBounds;
+import '../shell/settings_window_frb.dart'
+    show SettingsPage, showSettingsWindowFrb;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
 import '../state/view_projection.dart' show flatView;
@@ -815,10 +817,15 @@ class ViewerStage extends StatelessWidget {
               ),
             ),
             _missingSlate(),
+            _cutSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
             // called once per tool layer — six times per build, sixty times a
             // second during playback. One walk now serves all of them.
+            //
+            // The playhead moves them too, and they follow it while playing
+            // even with the layer controls hidden: the tools read them, and a
+            // stroke on a moving layer has to land where the layer is now.
             Positioned.fill(
               child: ListenableBuilder(
                 // Four things move the boxes without the panel being rebuilt:
@@ -826,6 +833,7 @@ class ViewerStage extends StatelessWidget {
                 // clip's real size, an edit changing a transform, and a turn
                 // in flight from the Rotation tool.
                 listenable: Listenable.merge([
+                  uiState.playheadFrame,
                   uiState.selectedLayers,
                   // Picking a mask's **Path** row outlines its layer without
                   // the layer ever being clicked, so it is half of
@@ -1002,27 +1010,31 @@ class ViewerStage extends StatelessWidget {
               ),
             ),
             // The camera tools: a drag orbits, tracks or dollies the comp's
-            // active camera.
-            ViewerCameraLayer(
-              active: uiState.tools.tool.group == ToolGroup.camera,
-              viewport: uiState.isViewport(viewId),
-              tool: uiState.tools.tool,
-              comp: comp,
-              viewId: viewId,
-              state: Provider.of<LumitState>(context, listen: false),
-              uiState: uiState,
-              fitted: fitted,
-              compSize: Size(
-                compSize.width.toDouble(),
-                compSize.height.toDouble(),
+            // active camera. Under the playhead, so a pivot on a moving
+            // selection moves with it.
+            ValueListenableBuilder<int>(
+              valueListenable: uiState.playheadFrame,
+              builder: (context, _, __) => ViewerCameraLayer(
+                active: uiState.tools.tool.group == ToolGroup.camera,
+                viewport: uiState.isViewport(viewId),
+                tool: uiState.tools.tool,
+                comp: comp,
+                viewId: viewId,
+                state: Provider.of<LumitState>(context, listen: false),
+                uiState: uiState,
+                fitted: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                // Locked layers too: they are still there to be looked at
+                // and orbited round.
+                boxes: () => _boxes(locked: true),
+                mark: t.textPrimary,
+                outline: t.surface0,
+                accent: t.accent,
+                onChanged: onChanged,
               ),
-              // Locked layers too: they are still there to be looked at
-              // and orbited round.
-              boxes: () => _boxes(locked: true),
-              mark: t.textPrimary,
-              outline: t.surface0,
-              accent: t.accent,
-              onChanged: onChanged,
             ),
             // The solved point cloud on the tracked layer: drawn
             // whenever Show points is on and a solve exists, and taking the
@@ -1215,6 +1227,29 @@ class ViewerStage extends StatelessWidget {
       child: _MissingBadge(footage: footage),
     );
   }
+
+  /// A notice when the last frame was cut to the largest picture, which
+  /// opens the setting that raises it.
+  Widget _cutSlate() => Positioned(
+        right: 8,
+        bottom: 8,
+        child: ValueListenableBuilder<bool>(
+          valueListenable: uiState.cutOf(viewId),
+          builder: (context, cut, _) {
+            if (!cut) return const SizedBox.shrink();
+            final t = ThemeScope.of(context).theme;
+            return HouseButton(
+              key: const ValueKey('viewer-cut'),
+              small: true,
+              onPressed: () => unawaited(showSettingsWindowFrb(context,
+                  initialPage: SettingsPage.previewAndCache,
+                  row: l10n.settingsLargestPicture)),
+              child: Text(l10n.viewerPictureCut,
+                  style: t.small.copyWith(color: t.warning)),
+            );
+          },
+        ),
+      );
 }
 
 /// Whether [entry] is seen through the comp's camera: a 3D layer, or a light,

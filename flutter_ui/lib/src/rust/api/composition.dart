@@ -26,6 +26,7 @@ import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'wire_tie.dart';
 import 'wireframes.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
@@ -625,6 +626,31 @@ class CompositionReference {
               row: row,
               arrival: arrival);
 
+  /// Place `footage` in this composition as new layers, the first given on
+  /// top, as one undo step.
+  ///
+  /// `end_to_end` lays them one after another, each starting where the one
+  /// before it ends, as Premiere and Vegas lay a multi-item drop. The
+  /// composition grows to the last one's end if it runs past it, as a cut
+  /// does. Without it they all start together, as After Effects stacks them.
+  ///
+  /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
+  /// `as_sequence` and `arrival` as there.
+  void addFootageLayers(
+          {required List<FootageReference> footage,
+          required bool asSequence,
+          int? row,
+          BridgeStreamsArrival? arrival,
+          required bool endToEnd}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddFootageLayers(
+              that: this,
+              footage: footage,
+              asSequence: asSequence,
+              row: row,
+              arrival: arrival,
+              endToEnd: endToEnd);
+
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every
   /// Add-effect surface drives.
@@ -893,6 +919,16 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceCropToRegion(
           that: this, region: region);
 
+  /// **Takes.** A clip's takes are numbered with the one it shows as
+  /// nought and the rest in the order T steps through them, as
+  /// `BridgeClip::takes` lists them. A linked clip playing the same media
+  /// takes the same change. Add `footage` to `clip` as a take, from its
+  /// marked In or its start, and show it.
+  BridgeCutResult cutAddTake(
+          {required UuidValue clip, required FootageReference footage}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutAddTake(
+          that: this, clip: clip, footage: footage);
+
   /// **Attach audio**: each silent picture clip named takes back the sound
   /// of the clips linked to it that are still the same stretch, and those
   /// clips go. `Nothing` when no clip named has such a clip beside it.
@@ -945,6 +981,13 @@ class CompositionReference {
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutDelete(
           that: this, clips: clips, ripple: ripple, linked: linked);
+
+  /// Take away take number `take` of `clip`. Taking away the one shown
+  /// shows the next.
+  BridgeCutResult cutDeleteTake({required UuidValue clip, required int take}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutDeleteTake(
+              that: this, clip: clip, take: take);
 
   /// **Detach audio**: each heard picture clip named goes silent, and its
   /// sound goes down as a clip of its own on a sound row, linked to it.
@@ -1020,6 +1063,13 @@ class CompositionReference {
           linked: linked,
           how: how);
 
+  /// Show each clip's next take, or with `back` the one before, round
+  /// from the last to the first. `Nothing` when none holds another.
+  BridgeCutResult cutNextTake(
+          {required List<UuidValue> clips, required bool back}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutNextTake(
+          that: this, clips: clips, back: back);
+
   /// Paste the copied clips with the earliest of them at `at_frame`,
   /// overwriting what they land on. They arrive as clips of their own,
   /// linked to each other as the copied ones were.
@@ -1040,6 +1090,15 @@ class CompositionReference {
           {required PlatformInt64 atFrame, LayerReference? target}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPaste(
           that: this, atFrame: atFrame, target: target);
+
+  /// **Paste attributes**: give each of `clips` the effects, fx switch,
+  /// gain, opacity, blend mode and fades of the first clip copied, and its
+  /// speed line laid along each one's length. `Nothing` when nothing is
+  /// copied in this project.
+  BridgeCutResult cutPasteAttributes({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPasteAttributes(
+              that: this, clips: clips);
 
   /// Put a span of a footage item down at `at_frame`: the Cut workspace's
   /// insert and overwrite, and the drop from its Source viewer.
@@ -1088,6 +1147,18 @@ class CompositionReference {
           linked: linked,
           withPicture: withPicture,
           arrival: arrival);
+
+  /// Put the whole of `comp` down at `at_frame` as one clip, the drop of a
+  /// composition from the Project panel. `target` is the picture Sequence
+  /// layer to place on, or `None` for a new one at the top of the stack.
+  /// The clip overwrites what it lands on.
+  BridgeCutResult cutPlaceComp(
+          {LayerReference? target,
+          required CompositionReference comp,
+          required PlatformInt64 atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceComp(
+              that: this, target: target, comp: comp, atFrame: atFrame);
 
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
@@ -1139,6 +1210,12 @@ class CompositionReference {
           endEdge: endEdge,
           toFrame: toFrame,
           linked: linked);
+
+  /// Show take number `take` of `clip`. `Nothing` for take nought or one
+  /// it does not hold.
+  BridgeCutResult cutSetTake({required UuidValue clip, required int take}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSetTake(
+          that: this, clip: clip, take: take);
 
   /// Slide a clip between its neighbours by `by_frames`: it keeps its
   /// length and its frames, and the clips either side trim and extend to
@@ -1228,24 +1305,26 @@ class CompositionReference {
   /// With `ripple` everything after the clip follows its change of length,
   /// and a trimmed head leaves the clip starting where it did. Without it
   /// nothing else moves, and on a picture layer an edge is refused where it
-  /// would cover a neighbour it only met. An edge that already overlaps its
-  /// neighbour is a dissolve, and is dragged longer or shorter: it stays
-  /// within the neighbour's span, and is refused as `Limit` past the end
-  /// of its own media. With `linked` the clips linked to it take the same
-  /// change at the same edges.
+  /// would cover a neighbour it only met, unless `overlap` (Auto
+  /// crossfade) makes that a dissolve. An edge that overlaps its neighbour
+  /// is a dissolve, and is dragged longer or shorter: it stays within the
+  /// neighbour's span, and is refused as `Limit` past the end of its own
+  /// media. With `linked` the clips linked to it take the same change.
   BridgeCutResult cutTrim(
           {required UuidValue clip,
           required PlatformInt64 startFrame,
           required PlatformInt64 endFrame,
           required bool ripple,
-          required bool linked}) =>
+          required bool linked,
+          required bool overlap}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutTrim(
           that: this,
           clip: clip,
           startFrame: startFrame,
           endFrame: endFrame,
           ripple: ripple,
-          linked: linked);
+          linked: linked,
+          overlap: overlap);
 
   /// Detect beats and replace this comp's beat markers.
   ///
@@ -1442,6 +1521,12 @@ class CompositionReference {
   /// The notes on this node graph's canvas.
   List<BridgeGraphNote> getNodeGraphNotes() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceGetNodeGraphNotes(
+        that: this,
+      );
+
+  /// The ties on this node graph.
+  List<BridgeWireTie> getNodeGraphTies() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraphTies(
         that: this,
       );
 
@@ -1700,6 +1785,10 @@ class CompositionReference {
   /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
   /// keeps time by skipping frames, in either direction, and is silent.
   ///
+  /// `slow` is how many times slower than the comp's rate the leg plays,
+  /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
+  /// the sound is slowed with its pitch kept.
+  ///
   /// `until` is the frame the leg ends on, the end of the work area going
   /// forwards and its start going back. Nothing past it is composited.
   /// `None` runs to the end of the composition.
@@ -1710,6 +1799,7 @@ class CompositionReference {
           required int view,
           required bool reverse,
           required int speed,
+          required int slow,
           BigInt? until}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
           that: this,
@@ -1719,6 +1809,7 @@ class CompositionReference {
           view: view,
           reverse: reverse,
           speed: speed,
+          slow: slow,
           until: until);
 
   /// The preview tier adaptive playback has settled on: 1 Full, 2 Half,
@@ -1908,6 +1999,27 @@ class CompositionReference {
               layer: layer,
               clip: clip,
               retime: retime);
+
+  /// Ask for `frame` with one clip trimmed to `start_frame..end_frame`, as
+  /// `LayerReference::trim_clip` would leave it: the live edge drag, which
+  /// never touches the document. A moved head moves the source in-point
+  /// with it, so the Viewer shows the frame at the edge.
+  void renderFrameWithClipSpan(
+          {required BigInt frame,
+          required double scale,
+          required LayerReference layer,
+          required UuidValue clip,
+          required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderFrameWithClipSpan(
+              that: this,
+              frame: frame,
+              scale: scale,
+              layer: layer,
+              clip: clip,
+              startFrame: startFrame,
+              endFrame: endFrame);
 
   /// Ask for `frame` with `layer`'s **driver graph nodes** replaced by
   /// `drivers` — the live drag on a driver's number, which never touches the
@@ -2294,6 +2406,12 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSetNodeGraphNotes(
               that: this, notes: notes);
 
+  /// Replace the ties on this node graph, as one undo step.
+  void setNodeGraphTies({required List<BridgeWireTie> ties}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraphTies(
+              that: this, ties: ties);
+
   /// Apply the Composition settings dialog, as one undo step.
   ///
   /// Dimensions are clamped to 16..=16384 and the duration to at least one frame,
@@ -2488,6 +2606,23 @@ class CompositionReference {
   void startExport({required BridgeExportSpec spec, required String path}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceStartExport(
           that: this, spec: spec, path: path);
+
+  /// A still of this composition at `frame`, its longest edge `max_edge`
+  /// pixels, with effect `effect` switched off wherever it sits: the Flare
+  /// window's Frame background, which the flare preview is then added over.
+  /// Rides the welcome row's thumbnail road, so it is small and asked for
+  /// once. `None` on a machine with no graphics adapter. Not `sync`: it
+  /// renders.
+  ///
+  /// # Errors
+  /// [`BridgeError::InvalidComp`] when this is not a composition.
+  Future<BridgeRenderedFrame?> stillWithoutEffect(
+          {required BigInt frame,
+          required int maxEdge,
+          required UuidValue effect}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceStillWithoutEffect(
+              that: this, frame: frame, maxEdge: maxEdge, effect: effect);
 
   /// Stop playing, and silence the sound. Harmless when nothing is playing.
   void stopPlayback() => BridgeLib.instance.api

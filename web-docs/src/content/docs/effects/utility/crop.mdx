@@ -1,0 +1,55 @@
+---
+title: "Crop"
+description: "Takes the picture away past four edges."
+---
+
+Crop is a [Utility](/effects/#utility) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Takes the picture away past four edges, each set from its own side of the frame. The crop
+half of Vegas's Pan/Crop. A clip's **Pan/Crop** button in the [Cut timeline](/use/cutting/)
+puts a Crop and a [Transform](/effects/utility/transform/) on the clip.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Left** | Slider | 0 to 100 | 0 | Per cent |
+| **Top** | Slider | 0 to 100 | 0 | Per cent |
+| **Right** | Slider | 0 to 100 | 0 | Per cent |
+| **Bottom** | Slider | 0 to 100 | 0 | Per cent |
+| **Feather** | Slider | 0 to 500; higher | 0 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Left**, **Top**, **Right** and **Bottom**: how much of the frame goes from that side, in
+  per cent.
+- **Feather**: how soft the edges are.
+- **Mix**: how much of the result replaces the original.
+
+## Related
+
+- [Transform](/effects/utility/transform/)
+- [Cutting](/use/cutting/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

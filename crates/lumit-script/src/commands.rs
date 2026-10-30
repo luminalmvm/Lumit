@@ -347,6 +347,17 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "effect.get",
+        summary: "One effect on a layer, with every control it has",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"description":"The effect's id or name, or its place in the stack, 0 the top","oneOf":[{"type":"string"},{"type":"integer","minimum":0}]}},"required":["comp","layer","effect"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "effect.add",
         summary: "Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'",
         schema: concat!(
@@ -430,6 +441,7 @@ pub(crate) fn run(
         "layer.keys" => layer_keys(host, parse(args)?),
         "markers.set" => markers_set(host, parse(args)?),
         "effect.list" => effects::list(host, parse(args)?),
+        "effect.get" => effects::get(host, parse(args)?),
         "effect.add" => effects::add(host, parse(args)?),
         "effect.set" => effects::set(host, parse(args)?),
         "footage.import" => footage_import(host, reach, parse(args)?),

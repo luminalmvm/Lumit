@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'extensions.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `flatten`, `outcome`, `read`, `register_effects`
+// These functions are ignored because they are not marked as `pub`: `flatten`, `offer_bundles`, `outcome`, `read`, `register_effects`, `release`, `scan_options`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Every extension installed, by id.
@@ -139,8 +139,11 @@ class BridgeExtension {
   /// be installed again or removed.
   final bool broken;
 
-  /// The LFX effects it carries.
+  /// The effects it carries.
   final List<BridgeExtensionEffect> effects;
+
+  /// It carries an OFX plugin, which is code that runs on this computer.
+  final bool native;
 
   const BridgeExtension({
     required this.id,
@@ -156,6 +159,7 @@ class BridgeExtension {
     required this.hosts,
     required this.broken,
     required this.effects,
+    required this.native,
   });
 
   @override
@@ -172,7 +176,8 @@ class BridgeExtension {
       permissions.hashCode ^
       hosts.hashCode ^
       broken.hashCode ^
-      effects.hashCode;
+      effects.hashCode ^
+      native.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -191,7 +196,8 @@ class BridgeExtension {
           permissions == other.permissions &&
           hosts == other.hosts &&
           broken == other.broken &&
-          effects == other.effects;
+          effects == other.effects &&
+          native == other.native;
 }
 
 /// One of Lumit's commands, as an extension's page lists it.
@@ -245,7 +251,8 @@ class BridgeExtensionEffect {
   final String id;
   final String name;
 
-  /// `lfx:<extension>/<effect>`, what adding it takes.
+  /// `lfx:<extension>/<effect>`, or `ofx:<plugin>` for an OFX plugin, what
+  /// adding it takes.
   final String matchName;
 
   /// Whether it has an interface page of its own.

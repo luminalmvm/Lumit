@@ -78,7 +78,9 @@ pub mod schedule;
 /// * 18: main's 17 meets 12 to 16.
 /// * 19: a shape whose outline crosses itself is filled where it crosses.
 /// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
-pub const ALGO_VERSION: u32 = 20;
+/// * 21: an open shape path is filled, as if a straight line closed it, and
+///   an open mask no longer hides its layer.
+pub const ALGO_VERSION: u32 = 21;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -361,6 +363,13 @@ fn feed_comp(
     if !doc.graph_room.is_default() {
         h.update(b"room");
         h.update(&doc.graph_room.frames().to_le_bytes());
+    }
+    // The largest picture, which is the machine's and not the project's, but
+    // changes the pixels of anything it cuts all the same.
+    let side = lumit_core::largest_picture::side();
+    if side != lumit_core::largest_picture::DEFAULT_SIDE {
+        h.update(b"side");
+        h.update(&side.to_le_bytes());
     }
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
@@ -666,7 +675,7 @@ fn feed_comp_graph(
     let driven = graph.edges.iter().any(|e| {
         matches!(graph.node(e.from), Some(lumit_core::comp_graph::GraphNode::Fx(inst))
             if lumit_core::fx::builtins::def(&inst.effect.match_name)
-                .is_some_and(|d| d.schema().category == lumit_core::fx::schema::FxCategory::Drivers))
+                .is_some_and(|d| d.schema().category.is_driver()))
     });
     if driven {
         h.update(b"graph-drivers/");
@@ -930,6 +939,22 @@ fn feed_effect_stack(
             h.update(b"lens/");
             h.update(&(text.len() as u64).to_le_bytes());
             h.update(text.as_bytes());
+        }
+        // A Sprite flare's design lives there as well.
+        if let Some(text) = lumit_core::fx::flare::design::embedded_text(e) {
+            h.update(b"flare/");
+            h.update(&(text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
+        }
+        // Across a blurred shutter it draws the light where it is either
+        // side of the frame, which this frame's rows alone don't say.
+        let shutter =
+            comp.motion_blur.enabled && marker_layer.is_some_and(|l| l.switches.motion_blur);
+        if e.effect.match_name == "sprite_flare"
+            && (shutter || lumit_core::fx::effects::sprite_flare::moves_with_time(e))
+        {
+            h.update(b"flare-time");
+            feed_f64(h, lt);
         }
         // Track points draws nothing until its analysis lands, and a landing
         // changes no row. Whether one is in hand for these rows joins the key,
@@ -1935,6 +1960,7 @@ fn feed_layer(
                         outgoing,
                         incoming,
                         gain,
+                        ..
                     } => {
                         feed_clip(h, outgoing);
                         h.update(b"dissolve/");
@@ -2499,9 +2525,14 @@ fn feed_source(
                     outgoing,
                     incoming,
                     gain,
+                    opacity,
                 } => {
                     h.update(b"seq-dissolve/");
                     feed_f64(h, gain);
+                    // The clips' own opacity, drawn as the layer's.
+                    if opacity < 1.0 {
+                        feed_f64(h, opacity);
+                    }
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }
@@ -3036,6 +3067,7 @@ mod tests {
 
         let wired = LayerGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -4772,12 +4804,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 20, which renamed every frame.
+        // Pinned under ALGO_VERSION 21, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                190_794_504_286_447_224_961_720_191_318_525_597_499,
-                129_597_391_233_871_061_469_308_816_969_221_614_058
+                3_442_992_140_865_201_264_137_942_798_082_220_911,
+                19_851_494_428_891_465_839_658_608_807_448_204_430
             )
         );
 
@@ -4847,6 +4879,7 @@ mod tests {
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
             notes: Vec::new(),
+            ties: Vec::new(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

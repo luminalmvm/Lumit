@@ -230,10 +230,12 @@ List<SnapTarget> snapTargetsOf({
     }
     // A Sequence layer's cuts. A clip's start frame is already the comp frame
     // its box is drawn at, so it is taken as it stands: the row's start offset
-    // is in it, and an in point is not the same thing. The last clip's end is
-    // the layer's out point, already in the list.
+    // is in it, and an in point is not the same thing. Its end too, which is
+    // the next clip's start only where nothing lies between them.
     for (final clip in info.clips) {
-      out.add(SnapTarget(clip.startFrame.toDouble(), SnapKind.editPoint));
+      out
+        ..add(SnapTarget(clip.startFrame.toDouble(), SnapKind.editPoint))
+        ..add(SnapTarget(clip.endFrame.toDouble(), SnapKind.editPoint));
     }
   }
   // One target per frame, however many lanes are keyed on it. A baked import
