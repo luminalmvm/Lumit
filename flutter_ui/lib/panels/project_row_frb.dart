@@ -608,6 +608,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   size: widget.cells.size,
                   fps: widget.cells.fps,
                   duration: widget.cells.duration,
+                  date: widget.cells.date,
                   path: widget.cells.path,
                   style: projectMetaStyle(t),
                   pathStyle: projectMetaStyle(t).copyWith(color: t.textDisabled),
