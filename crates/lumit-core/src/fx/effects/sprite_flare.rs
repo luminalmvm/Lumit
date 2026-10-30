@@ -6,15 +6,18 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::anim::Animation;
 use crate::fx::flare::design::{self, Design, Element, Kind};
 use crate::fx::flare::presets::default_design;
 use crate::fx::flare::raster::{self, Frame, Light};
 use crate::fx::noise::value3;
 use crate::fx::{
-    params::{ParamId, Params, Value},
+    params::{ParamId, Params, Unit, Value},
     points::PointsStream,
     registry::{EffectDef, EffectMetadata, ResolveCx, Signature},
-    schema::{EffectSchema, EnabledCond, EnabledWhen, ParamGroup, Port, PortType},
+    schema::{
+        EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamKind, ParamSchema, Port, PortType,
+    },
 };
 use crate::model::{Composition, EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
@@ -649,26 +652,67 @@ pub fn design_of(kept: Option<&(u64, String)>) -> Arc<Design> {
     design
 }
 
-/// The rows version 1 had and version 2 keeps in its design instead.
-const V1_ROWS: [&str; 9] = [
-    "glow_size",
-    "glow_intensity",
-    "ghosts",
-    "ghost_spacing",
-    "ghost_size",
-    "ghost_intensity",
-    "streak_length",
-    "streak_intensity",
-    "streak_angle",
+/// A version 1 row, as version 1 declared it.
+const fn v1_row(
+    id: &'static str,
+    label: &'static str,
+    max: f64,
+    default: f64,
+    unit: Unit,
+) -> ParamSchema {
+    ParamSchema {
+        id,
+        label,
+        kind: ParamKind::Float {
+            default,
+            slider: (0.0, max),
+            hard: (Some(0.0), None),
+        },
+        unit,
+    }
+}
+
+/// The rows version 1 had. An old flare whose rows move keeps them, and they
+/// go on drawing its glow, ghosts and streak in front of its design.
+const V1_PARAMS: [ParamSchema; 9] = [
+    v1_row("glow_size", "Glow size", 800.0, 120.0, Unit::Px),
+    v1_row("glow_intensity", "Glow intensity", 4.0, 1.0, Unit::Raw),
+    ParamSchema {
+        id: "ghosts",
+        label: "Ghosts",
+        kind: ParamKind::Int {
+            default: 6,
+            slider: (0, 16),
+            hard: (Some(0), Some(16)),
+        },
+        unit: Unit::Raw,
+    },
+    v1_row("ghost_spacing", "Ghost spacing", 1.5, 0.35, Unit::Raw),
+    v1_row("ghost_size", "Ghost size", 400.0, 60.0, Unit::Px),
+    v1_row("ghost_intensity", "Ghost intensity", 2.0, 0.35, Unit::Raw),
+    v1_row("streak_length", "Streak length", 2000.0, 300.0, Unit::Px),
+    v1_row("streak_intensity", "Streak intensity", 2.0, 0.5, Unit::Raw),
+    ParamSchema {
+        id: "streak_angle",
+        label: "Streak angle",
+        kind: ParamKind::Float {
+            default: 0.0,
+            slider: (-180.0, 180.0),
+            hard: (None, None),
+        },
+        unit: Unit::Degrees,
+    },
 ];
 
-/// Carry a version 1 instance over: its glow, ghosts and streak become a
-/// design, its centre the middle of the `w` by `h` comp it was always drawn
-/// about, and it never fades at the edge, as it never did. The glow and the
-/// streak come out exactly; the ghosts were a disc profile no iris draws, so
-/// they are a near match. A keyframed row is read at its first frame.
-pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64) {
-    let old = |id: &str, default: f32| e.float_at(id, 0.0).map_or(default, |v| v as f32);
+/// Whether `e` kept the version 1 rows.
+fn keeps_v1_rows(e: &EffectInstance) -> bool {
+    V1_PARAMS.iter().any(|row| e.param(row.id).is_some())
+}
+
+/// The glow, ghosts and streak version 1 drew, from its nine rows. The glow
+/// and the streak are exact; the ghosts were a disc profile no iris draws, so
+/// they are a near match.
+fn v1_elements(old: impl Fn(&str, f32) -> f32) -> Vec<Element> {
     let (glow_size, glow) = (old("glow_size", 120.0), old("glow_intensity", 1.0));
     let ghosts = old("ghosts", 6.0).round().clamp(0.0, 16.0) as u32;
     let spacing = old("ghost_spacing", 0.35).max(0.0);
@@ -727,6 +771,47 @@ pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64) {
             ],
         ));
     }
+    elements
+}
+
+/// The design `kept` with an old flare's glow, ghosts and streak in front,
+/// drawn from the version 1 rows it kept because they move.
+pub fn with_v1_rows(kept: Arc<Design>, p: Params<'_>) -> Arc<Design> {
+    if p.get(ParamId::new(V1_PARAMS[0].id)).is_none() {
+        return kept;
+    }
+    // The bag's lengths are at the raster's size, the design's at the comp's.
+    let px_scale = p.float(SpriteFlare::DERIVED_PX_SCALE, 1.0).max(1e-6);
+    let mut elements = v1_elements(|id, default| {
+        let v = p.float(ParamId::new(id), default);
+        match V1_PARAMS.iter().find(|row| row.id == id) {
+            Some(row) if row.unit == Unit::Px => v / px_scale,
+            _ => v,
+        }
+    });
+    elements.extend(kept.elements.iter().cloned());
+    Arc::new(Design {
+        elements,
+        ..(*kept).clone()
+    })
+}
+
+/// Carry a version 1 instance over: centred on the middle of the `w` by `h`
+/// picture it was always drawn about, and never fading at the edge, as it
+/// never did. A still flare's glow, ghosts and streak become its design. One
+/// whose rows move, by keys, an expression or a wire (`wired`), keeps the
+/// rows so they go on moving, and its design starts empty.
+pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64, wired: &dyn Fn(&str) -> bool) {
+    let moves = V1_PARAMS.iter().any(|row| {
+        wired(row.id)
+            || matches!(e.param(row.id), Some(EffectValue::Float(p))
+                if !matches!(p.animation, Animation::Static(_)))
+    });
+    let elements = if moves {
+        Vec::new()
+    } else {
+        v1_elements(|id, default| e.float_at(id, 0.0).map_or(default, |v| v as f32))
+    };
     design::set_embedded(
         e,
         Some(&Design {
@@ -735,7 +820,10 @@ pub fn migrate_v1(e: &mut EffectInstance, w: f64, h: f64) {
             elements,
         }),
     );
-    e.params.retain(|p| !V1_ROWS.contains(&p.id.as_str()));
+    if !moves {
+        e.params
+            .retain(|p| !V1_PARAMS.iter().any(|row| row.id == p.id));
+    }
     for (id, v) in [
         ("centre_x", w * 0.5),
         ("centre_y", h * 0.5),
@@ -760,6 +848,15 @@ pub struct SpriteFlareDef;
 impl EffectDef for SpriteFlareDef {
     fn schema(&self) -> &'static EffectSchema {
         &<SpriteFlare as EffectMetadata>::SCHEMA
+    }
+
+    /// The version 1 rows an old flare kept because they move.
+    fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
+        if keeps_v1_rows(inst) {
+            &V1_PARAMS
+        } else {
+            &[]
+        }
     }
 
     fn depth_inputs(&self) -> &'static [&'static str] {

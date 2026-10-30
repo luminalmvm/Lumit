@@ -787,7 +787,7 @@ impl GpuEffect for SpriteFlare {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        use effects::sprite_flare::{design_of, SpriteFlare};
+        use effects::sprite_flare::{design_of, with_v1_rows, SpriteFlare};
         use lumit_core::fx::flare::{instances, textures};
         // The layer rows' pictures arrive in row order.
         let picture = |id: &str| {
@@ -806,7 +806,7 @@ impl GpuEffect for SpriteFlare {
             return tex.clone();
         }
         let (luma, radius) = SpriteFlare::hiding(p);
-        let design = design_of(aux.lens_file());
+        let design = with_v1_rows(design_of(aux.lens_file()), p);
         let list: Vec<_> = instances::expand(&design, &frame, w, h)
             .iter()
             .map(instances::Instance::packed)

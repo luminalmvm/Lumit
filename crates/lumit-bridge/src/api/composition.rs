@@ -3545,6 +3545,11 @@ impl CompositionReference {
             graph.groups.push(added.group);
             graph.groups.extend(added.inner);
         }
+        // Boxes saved by an older Lumit are brought up to this one.
+        if let Some(comp) = doc.comp(self.id) {
+            let size = (f64::from(comp.width), f64::from(comp.height));
+            lumit_core::fx::builtins::migrate_graph(&mut graph, size);
+        }
 
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,

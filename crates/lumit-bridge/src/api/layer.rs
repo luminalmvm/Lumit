@@ -3270,6 +3270,25 @@ impl LayerReference {
             .ok_or(BridgeError::InvalidLayer)
     }
 
+    /// Bring effects from a preset or the clipboard up to this build, as a
+    /// project's are when it opens, for this layer. `wired` says whether an
+    /// instance's row has a wire into it.
+    fn migrate_in(
+        &self,
+        effects: &mut [EffectInstance],
+        wired: &dyn Fn(Uuid, &str) -> bool,
+    ) -> Result<(), BridgeError> {
+        use lumit_core::fx::builtins::{migrate_in, picture_size};
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        let layer = (comp.layers.iter())
+            .find(|l| l.id == self.layer_id)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let size = (f64::from(comp.width), f64::from(comp.height));
+        migrate_in(effects, size, picture_size(&doc, comp, layer), wired);
+        Ok(())
+    }
+
     /// This layer as it leaves the project, on the clipboard or in a preset.
     /// A file an effect reads has the path it had, and not its copy's in this
     /// machine's cache.
@@ -3477,6 +3496,10 @@ impl LayerReference {
             graph.nodes.extend(added.nodes);
             graph.edges.extend(added.edges);
             graph.layout.extend(added.layout);
+            self.migrate_in(
+                &mut added.effects,
+                &lumit_core::fx::builtins::wired_in(&graph),
+            )?;
             let mut effects = layer.effects;
             effects.extend(added.effects);
             let op = lumit_core::ops::Op::Batch {
@@ -3502,6 +3525,7 @@ impl LayerReference {
         let mut fresh = lumit_core::preset::instantiated(&preset);
         let first = lumit_core::preset::first_key_time(&fresh);
         land(&mut fresh, first)?;
+        self.migrate_in(&mut fresh, &|_, _| false)?;
         self.with_effects(move |effects| {
             effects.extend(fresh);
             Ok(())
@@ -3557,7 +3581,7 @@ impl LayerReference {
         }
 
         let preset: Preset = serde_json::from_str(&text).map_err(|_| BridgeError::InvalidPreset)?;
-        let fresh: Vec<EffectInstance> = preset
+        let mut fresh: Vec<EffectInstance> = preset
             .effects
             .into_iter()
             .map(|mut effect| {
@@ -3565,6 +3589,7 @@ impl LayerReference {
                 effect
             })
             .collect();
+        self.migrate_in(&mut fresh, &|_, _| false)?;
 
         let home = clip.map_or(InstanceHome::Effects, InstanceHome::Clip);
         self.with_instances(home, move |effects| {
@@ -8383,7 +8408,7 @@ impl LayerReference {
     pub fn insert_node_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
         let preset =
             lumit_core::preset::group_from_json(&text).map_err(|_| BridgeError::InvalidEffect)?;
-        let added = lumit_core::preset::group_instantiated(&preset, [x, y]);
+        let mut added = lumit_core::preset::group_instantiated(&preset, [x, y]);
 
         let layer = self.item()?;
         let mut graph = layer.graph;
@@ -8392,6 +8417,10 @@ impl LayerReference {
         graph.layout.extend(added.layout);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
+        self.migrate_in(
+            &mut added.effects,
+            &lumit_core::fx::builtins::wired_in(&graph),
+        )?;
         let graph = lumit_core::ops::Op::SetLayerGraph {
             comp: self.comp_id,
             layer: self.layer_id,

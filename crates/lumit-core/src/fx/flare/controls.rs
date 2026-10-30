@@ -71,7 +71,9 @@ const fn c(
 const BIG: f32 = 1.0e5;
 const UNIT: (f32, f32, f32, f32) = (0.0, 1.0, 0.0, 1.0);
 const ANGLE: (f32, f32, f32, f32) = (-180.0, 180.0, -BIG, BIG);
-const PLACE: (f32, f32, f32, f32) = (-3.0, 3.0, -10.0, 10.0);
+// Typing reaches 25, where the last of an old flare's 16 ghosts at its
+// widest spacing sat.
+const PLACE: (f32, f32, f32, f32) = (-3.0, 3.0, -25.0, 25.0);
 
 /// The textures Ghost, Dirt and Picture can use, by index. 0 is none, and
 /// the last is the effect's Texture layer.
