@@ -578,6 +578,29 @@ pub(crate) fn open_device(
     Ok((device, queue))
 }
 
+/// Why the first context opened without DMA-BUF export, when it did. With no
+/// export the Viewer has nothing to show, so the bridge writes this into the
+/// diagnostics file beside the adapter line.
+static REFUSED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The device a card without DMA-BUF export opens instead, with the reason kept.
+pub(crate) fn plain_device(
+    adapter: &wgpu::Adapter,
+    descriptor: &wgpu::DeviceDescriptor<'_>,
+    why: String,
+) -> Result<(wgpu::Device, wgpu::Queue), crate::GpuError> {
+    note!("lumit-gpu: {why}");
+    let _ = REFUSED.set(why);
+    pollster::block_on(adapter.request_device(descriptor, None))
+        .map_err(|e| crate::GpuError::Device(e.to_string()))
+}
+
+/// See [`REFUSED`]. `None` when export works or no context exists yet.
+#[must_use]
+pub fn dmabuf_refused() -> Option<&'static str> {
+    REFUSED.get().map(String::as_str)
+}
+
 /// Pick a memory type index satisfying `type_bits`, preferring device-local.
 fn pick_memory_type(props: &vk::PhysicalDeviceMemoryProperties, type_bits: u32) -> Option<u32> {
     let types = &props.memory_types[..props.memory_type_count as usize];

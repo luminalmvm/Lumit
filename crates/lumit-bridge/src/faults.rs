@@ -107,11 +107,25 @@ pub(crate) fn record_adapter() {
         if let Some(adapter) = lumit_gpu::adapter_summary() {
             record(&format!("graphics adapter: {adapter}"));
         }
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        if let Some(why) = lumit_gpu::shared_linux::dmabuf_refused() {
+            record(&format!("no Viewer texture on this card: {why}"));
+        }
     });
 }
 
 /// Said once, whoever asks and however many renderers a session builds.
 static ADAPTER: Once = Once::new();
+
+/// A frame the Linux Viewer could not be handed. Every frame after it fails the
+/// same way and the Viewer stays blank, so the first goes in the file as well
+/// as on the console, which a double-clicked Lumit doesn't have.
+#[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+pub(crate) fn record_dmabuf_failure(err: &str) {
+    note!("Shared DMA-BUF present failed, dropping frame: {err}");
+    static SAID: Once = Once::new();
+    SAID.call_once(|| record(&format!("the Viewer texture could not be made: {err}")));
+}
 
 /// Install the process-wide panic hook, once for the life of the process.
 ///
