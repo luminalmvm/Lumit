@@ -5889,7 +5889,7 @@ fn send_dmabuf(
     {
         Ok(shared) => shared,
         Err(err) => {
-            note!("Shared DMA-BUF present failed, dropping frame: {err}");
+            crate::faults::record_dmabuf_failure(&err);
             return false;
         }
     };
