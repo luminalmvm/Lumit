@@ -2,7 +2,7 @@
 //! Project panel selection on the Timeline makes.
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::Layer;
+use lumit_core::model::{Layer, ProjectItem};
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, Duration, Rational};
 
@@ -12,6 +12,10 @@ use crate::api::{
     streams::BridgeStreamsArrival,
     BridgeError,
 };
+
+/// How long a still lasts in a run of dropped files, in seconds: what Cut's
+/// drop gives one.
+const STILL_SECONDS: i64 = 5;
 
 impl CompositionReference {
     /// Place `footage` in this composition as new layers, the first given on
@@ -38,6 +42,12 @@ impl CompositionReference {
         let comp = self.composition()?;
         let mut index = insert_row(row, comp.layers.len());
         let mut start = Rational::ZERO;
+        let five = Rational::new(STILL_SECONDS, 1).map_err(|_| BridgeError::InvalidTime)?;
+        let still = comp
+            .frame_rate
+            .time_of_frame(comp.frame_rate.nearest_frame_at(CompTime(five)))
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0;
         let mut ops = Vec::new();
         {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -45,12 +55,33 @@ impl CompositionReference {
             for item in &footage {
                 let (layer, beside) =
                     Self::footage_layers(&p, &doc, &comp, item.id(), as_sequence, false, arrival)?;
-                let length = layer
-                    .out_point
-                    .0
-                    .checked_sub(layer.in_point.0)
-                    .map_err(|_| BridgeError::InvalidTime)?;
+                // A still, or a file that will not probe, has no length of its
+                // own and would last the whole comp, pushing the next one past
+                // its end. In a run it takes what a still dropped in Cut takes.
+                let held = end_to_end
+                    && footage.len() > 1
+                    && match doc.item(item.id()) {
+                        Some(ProjectItem::Footage(f)) => {
+                            Self::has_picture(&p, f) && !Self::runs_as_video(&p, f)
+                        }
+                        _ => false,
+                    };
+                let length = if held {
+                    still
+                } else {
+                    layer
+                        .out_point
+                        .0
+                        .checked_sub(layer.in_point.0)
+                        .map_err(|_| BridgeError::InvalidTime)?
+                };
                 for mut layer in std::iter::once(layer).chain(beside) {
+                    if held {
+                        layer.out_point = layer
+                            .in_point
+                            .add_dur(Duration(length))
+                            .map_err(|_| BridgeError::InvalidTime)?;
+                    }
                     if end_to_end {
                         shift(&mut layer, Duration(start))?;
                     }

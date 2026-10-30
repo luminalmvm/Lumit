@@ -2116,7 +2116,10 @@ impl CompositionReference {
     }
 
     #[frb(ignore)]
-    fn runs_as_video(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
+    pub(crate) fn runs_as_video(
+        state: &LumitBridgeState,
+        footage: &lumit_core::model::FootageItem,
+    ) -> bool {
         #[cfg(feature = "media")]
         {
             let Some(src) = FootageReference::resolve_source(state, footage) else {
