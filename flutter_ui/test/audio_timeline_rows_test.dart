@@ -231,6 +231,7 @@ void main() {
         sourceIn: const BridgeRational(num: 0, den: 1),
         sourceOut: const BridgeRational(num: 1, den: 1),
         sourceIsComp: false,
+        source: UuidValue.fromString(id),
         opacity: 1,
         takes: const [],
       );
@@ -293,6 +294,7 @@ void main() {
       sourceIn: const BridgeRational(num: 0, den: 1),
       sourceOut: const BridgeRational(num: 1, den: 1),
       sourceIsComp: false,
+      source: clipId,
       opacity: 1,
       takes: const [],
     );

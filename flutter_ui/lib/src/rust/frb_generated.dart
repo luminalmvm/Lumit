@@ -24183,8 +24183,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeClip dco_decode_bridge_clip(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 28)
-      throw Exception('unexpected arr length: expect 28 but see ${arr.length}');
+    if (arr.length != 29)
+      throw Exception('unexpected arr length: expect 29 but see ${arr.length}');
     return BridgeClip(
       id: dco_decode_Uuid(arr[0]),
       placeStart: dco_decode_bridge_rational(arr[1]),
@@ -24209,11 +24209,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       sourceIn: dco_decode_bridge_rational(arr[20]),
       sourceOut: dco_decode_bridge_rational(arr[21]),
       sourceIsComp: dco_decode_bool(arr[22]),
-      blend: dco_decode_opt_box_autoadd_u_32(arr[23]),
-      label: dco_decode_opt_box_autoadd_u_8(arr[24]),
-      group: dco_decode_opt_Uuid(arr[25]),
-      startExact: dco_decode_f_64(arr[26]),
-      endExact: dco_decode_f_64(arr[27]),
+      source: dco_decode_Uuid(arr[23]),
+      blend: dco_decode_opt_box_autoadd_u_32(arr[24]),
+      label: dco_decode_opt_box_autoadd_u_8(arr[25]),
+      group: dco_decode_opt_Uuid(arr[26]),
+      startExact: dco_decode_f_64(arr[27]),
+      endExact: dco_decode_f_64(arr[28]),
     );
   }
 
@@ -31465,6 +31466,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_sourceIn = sse_decode_bridge_rational(deserializer);
     var var_sourceOut = sse_decode_bridge_rational(deserializer);
     var var_sourceIsComp = sse_decode_bool(deserializer);
+    var var_source = sse_decode_Uuid(deserializer);
     var var_blend = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_label = sse_decode_opt_box_autoadd_u_8(deserializer);
     var var_group = sse_decode_opt_Uuid(deserializer);
@@ -31494,6 +31496,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sourceIn: var_sourceIn,
         sourceOut: var_sourceOut,
         sourceIsComp: var_sourceIsComp,
+        source: var_source,
         blend: var_blend,
         label: var_label,
         group: var_group,
@@ -40087,6 +40090,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_rational(self.sourceIn, serializer);
     sse_encode_bridge_rational(self.sourceOut, serializer);
     sse_encode_bool(self.sourceIsComp, serializer);
+    sse_encode_Uuid(self.source, serializer);
     sse_encode_opt_box_autoadd_u_32(self.blend, serializer);
     sse_encode_opt_box_autoadd_u_8(self.label, serializer);
     sse_encode_opt_Uuid(self.group, serializer);

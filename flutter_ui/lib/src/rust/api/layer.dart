@@ -506,6 +506,10 @@ class BridgeClip {
   /// Whether the clip plays a composition and not a footage item.
   final bool sourceIsComp;
 
+  /// The footage item or composition the clip plays: its take's, when T
+  /// has stepped to another.
+  final UuidValue source;
+
   /// The clip's own blend mode as an index into [`list_blend_modes`], or
   /// `None` while it takes its layer's.
   final int? blend;
@@ -546,6 +550,7 @@ class BridgeClip {
     required this.sourceIn,
     required this.sourceOut,
     required this.sourceIsComp,
+    required this.source,
     this.blend,
     this.label,
     this.group,
@@ -578,6 +583,7 @@ class BridgeClip {
       sourceIn.hashCode ^
       sourceOut.hashCode ^
       sourceIsComp.hashCode ^
+      source.hashCode ^
       blend.hashCode ^
       label.hashCode ^
       group.hashCode ^
@@ -612,6 +618,7 @@ class BridgeClip {
           sourceIn == other.sourceIn &&
           sourceOut == other.sourceOut &&
           sourceIsComp == other.sourceIsComp &&
+          source == other.source &&
           blend == other.blend &&
           label == other.label &&
           group == other.group &&

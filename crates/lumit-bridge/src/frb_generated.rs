@@ -25712,6 +25712,7 @@ impl SseDecode for crate::api::layer::BridgeClip {
         let mut var_sourceIn = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
         let mut var_sourceOut = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
         let mut var_sourceIsComp = <bool>::sse_decode(deserializer);
+        let mut var_source = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_blend = <Option<u32>>::sse_decode(deserializer);
         let mut var_label = <Option<u8>>::sse_decode(deserializer);
         let mut var_group = <Option<uuid::Uuid>>::sse_decode(deserializer);
@@ -25741,6 +25742,7 @@ impl SseDecode for crate::api::layer::BridgeClip {
             source_in: var_sourceIn,
             source_out: var_sourceOut,
             source_is_comp: var_sourceIsComp,
+            source: var_source,
             blend: var_blend,
             label: var_label,
             group: var_group,
@@ -36454,6 +36456,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeClip {
             self.source_in.into_into_dart().into_dart(),
             self.source_out.into_into_dart().into_dart(),
             self.source_is_comp.into_into_dart().into_dart(),
+            self.source.into_into_dart().into_dart(),
             self.blend.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
             self.group.into_into_dart().into_dart(),
@@ -44775,6 +44778,7 @@ impl SseEncode for crate::api::layer::BridgeClip {
         <crate::api::effect::BridgeRational>::sse_encode(self.source_in, serializer);
         <crate::api::effect::BridgeRational>::sse_encode(self.source_out, serializer);
         <bool>::sse_encode(self.source_is_comp, serializer);
+        <uuid::Uuid>::sse_encode(self.source, serializer);
         <Option<u32>>::sse_encode(self.blend, serializer);
         <Option<u8>>::sse_encode(self.label, serializer);
         <Option<uuid::Uuid>>::sse_encode(self.group, serializer);

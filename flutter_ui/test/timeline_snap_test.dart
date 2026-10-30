@@ -80,6 +80,7 @@ void main() {
               sourceIn: const BridgeRational(num: 0, den: 1),
               sourceOut: const BridgeRational(num: 1, den: 1),
               sourceIsComp: false,
+              source: id,
               opacity: 1,
               takes: const [],
             ),

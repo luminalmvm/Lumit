@@ -1521,6 +1521,9 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// The footage item or composition the clip plays: its take's, when T
+    /// has stepped to another.
+    pub source: Uuid,
     /// The clip's own blend mode as an index into [`list_blend_modes`], or
     /// `None` while it takes its layer's.
     pub blend: Option<u32>,
@@ -1655,6 +1658,10 @@ fn bridge_clip(
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
+        source: match clip.source {
+            lumit_core::sequence::ClipSource::Footage(id)
+            | lumit_core::sequence::ClipSource::Comp(id) => id,
+        },
         blend: clip.blend.map(|blend| {
             lumit_core::model::BlendMode::ALL
                 .iter()

@@ -1690,7 +1690,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         );
         if (request == null) continue;
         final key = '${request.key}|${clip.startFrame}|${clip.endFrame}'
-            '|${clip.retimed}|$_multiwave';
+            '|${clip.retimed}|$_multiwave|${clip.source}';
         if (_peakKeys[id] == key) continue;
         _peakKeys[id] = key;
         track.entry.layer
