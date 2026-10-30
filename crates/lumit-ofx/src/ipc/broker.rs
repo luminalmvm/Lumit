@@ -774,11 +774,9 @@ impl Broker {
                     path,
                 })
             }
-            // Nobody's frame: its own input, and nothing for a badge to say.
+            // Nobody's frame: its own input, never kept.
             Ok(BrokerMessage::Cancelled) => {
-                let mut cancelled = errored(identity, "");
-                cancelled.error = None;
-                Ok(cancelled)
+                Ok(errored(identity, lumit_core::fx::registry::STOPPED))
             }
             Ok(_) => Ok(errored(identity, "the broker answered out of turn")),
             Err(Fault::Timeout) => Ok(errored(identity, "the plugin missed its deadline")),

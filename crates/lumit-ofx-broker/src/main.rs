@@ -383,6 +383,11 @@ impl Session {
         mut request: RenderRequest,
         output: u32,
     ) -> Result<(), String> {
+        // Stopped before it started. A frame that finishes is sent even if the
+        // stop came while it rendered.
+        if self.ring.as_ref().is_some_and(Ring::cancel_raised) {
+            return self.reply(&BrokerMessage::Cancelled);
+        }
         // The instance, the plugin and the two pipe halves are all borrowed out
         // of `self` at once and they are different fields, which is what lets
         // the prefetch closure below write to the pipe in the middle of a
@@ -428,7 +433,7 @@ impl Session {
             .gpu
             .filter(|_| failures < GPU_FAILURES_ALLOWED)
             .map(|gpu| gpu.api);
-        if cancelled() || matches!(rendered, Err(RenderError::Cancelled)) {
+        if matches!(rendered, Err(RenderError::Cancelled)) || (rendered.is_err() && cancelled()) {
             return self.reply(&BrokerMessage::Cancelled);
         }
         let (frame, frames_needed, identity_of) = match rendered {

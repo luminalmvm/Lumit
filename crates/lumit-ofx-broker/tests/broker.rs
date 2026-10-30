@@ -572,7 +572,11 @@ fn a_cancelled_frame_stops_a_plugin_that_polls_abort() {
     lumit_core::fx::points::stepped::stop_when(before);
     cancel.join().expect("the cancel");
 
-    assert_eq!(rendered.error, None, "a cancelled frame is not a failure");
+    assert_eq!(
+        rendered.error.as_deref(),
+        Some(lumit_core::fx::registry::STOPPED),
+        "a cancelled frame is not a failure, and is not kept"
+    );
     assert!(took < Duration::from_millis(1500), "it stopped in {took:?}");
     assert_eq!(broker.strikes(), 0);
 }

@@ -106,7 +106,11 @@ pub fn apply_and_note(
     neighbours: &[(i32, &[f32])],
 ) {
     def.apply_cpu_temporal(instance, lt, rgba, w, h, p, neighbours);
-    note(instance, def.last_error());
+    match def.last_error() {
+        // Stopped part way, so the frame is the input and is not kept.
+        Some(why) if why == lumit_core::fx::registry::STOPPED => crate::cancel::cut_short(),
+        error => note(instance, error),
+    }
 }
 
 /// Record, or clear, one op's failure.
