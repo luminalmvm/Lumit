@@ -212,7 +212,8 @@ class CutTrackPainter extends CustomPainter {
       // Where two clips overlap the overlap is the transition, a dissolve
       // on a picture track and a crossfade on a sound track: the join,
       // drawn as an X across the stretch both play, each side in the curve
-      // it takes, as Vegas draws a crossfade.
+      // it takes. A dissolve shows the outgoing picture at what the incoming
+      // one leaves, so both its sides follow the incoming clip's shape.
       final paint = Paint()
         ..color = colours.cross
         ..strokeWidth = 1
@@ -233,8 +234,10 @@ class CutTrackPainter extends CustomPainter {
         for (var k = 1; k <= steps; k++) {
           final u = k / steps;
           final x = a + (b - a) * u;
-          falling.lineTo(x, foot - clipFadeGain(out, 1 - u) * (foot - top));
-          rising.lineTo(x, foot - clipFadeGain(into, u) * (foot - top));
+          final gain = clipFadeGain(into, u);
+          final left = track.sound ? clipFadeGain(out, 1 - u) : 1 - gain;
+          falling.lineTo(x, foot - left * (foot - top));
+          rising.lineTo(x, foot - gain * (foot - top));
         }
         canvas.drawPath(falling, paint);
         canvas.drawPath(rising, paint);
