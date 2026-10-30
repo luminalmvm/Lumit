@@ -309,14 +309,15 @@ pub fn parent_world_placement(
 /// which makes it an adjustment for this frame without being one in the
 /// project: its picture is still decoded, and is that effect's shape.
 fn backdrop_fx(layer: &lumit_core::model::Layer) -> bool {
-    layer.switches.fx
-        && layer.effects.iter().any(|e| {
-            e.enabled
-                && e.effect.namespace == lumit_core::model::EffectNamespace::Lfx
-                && lumit_core::fx::catalogue::BUILTIN_DEFS
-                    .get(&e.effect.match_name)
-                    .is_some_and(|d| d.backdrop())
-        })
+    layer.switches.fx && layer.effects.iter().any(|e| e.enabled && is_backdrop(e))
+}
+
+/// Whether `e` is an effect drawn over the composite below.
+fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
+    e.effect.namespace == lumit_core::model::EffectNamespace::Lfx
+        && lumit_core::fx::catalogue::BUILTIN_DEFS
+            .get(&e.effect.match_name)
+            .is_some_and(|d| d.backdrop())
 }
 
 /// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
@@ -2840,7 +2841,7 @@ fn comp_walk(
                     .layers
                     .iter()
                     .find(|l| l.effects.iter().any(|x| x.id == e.id))
-                    .filter(|l| !l.is_adjustment());
+                    .filter(|l| !l.is_adjustment() && !backdrop_fx(l));
                 let context = Arc::new(ExpressionContext {
                     document: expr_doc.clone(),
                     comp: Some(comp.id),
@@ -2891,10 +2892,10 @@ fn comp_walk(
         input.place = map_place(e, param);
         Some(input)
     };
-    // **A backdrop effect's shape**: the layer it sits on, alone and before
-    // any of its effects, placed in the comp as the layer is, since the effect
-    // runs over the comp-sized composite below. `None` on an adjustment layer,
-    // which has no picture to give.
+    // **A backdrop effect's shape**: the layer it sits on, with its other
+    // effects and styles run on its own picture, placed in the comp as the
+    // layer is, since the effect runs over the comp-sized composite below.
+    // `None` on an adjustment layer, which has no picture to give.
     let own_shape = |owner: uuid::Uuid| -> Option<DofInputDraw> {
         let src = comp
             .layers
@@ -2910,29 +2911,63 @@ fn comp_walk(
             inputs: None,
         });
         let place = Some(Box::new(crate::draw::MapPlace {
-            placed: Some(world_placement(comp, src, t_comp, context)),
+            placed: Some(world_placement(comp, src, t_comp, context.clone())),
             ground: [0.0; 4],
         }));
-        if let Some(mut nested) = nested_input_for(src) {
-            nested.place = place;
-            return Some(nested);
+        let mut input = match nested_input_for(src) {
+            Some(nested) => nested,
+            None => {
+                let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
+                DofInputDraw {
+                    rgba: rgba.to_vec(),
+                    tex_w,
+                    tex_h,
+                    format,
+                    fx: Default::default(),
+                    colour_tables: Default::default(),
+                    roto_mattes: Vec::new(),
+                    planes: Vec::new(),
+                    nested: None,
+                    colour_space: crate::colour::footage_colour_space(doc, &src.kind),
+                    natural: [natural.0, natural.1],
+                    graph_fx: Vec::new(),
+                    place: None,
+                }
+            }
+        };
+        input.place = place;
+        if src.switches.fx {
+            let shape = lumit_core::model::Layer {
+                effects: src
+                    .effects
+                    .iter()
+                    .filter(|e| !is_backdrop(e))
+                    .cloned()
+                    .collect(),
+                ..src.clone()
+            };
+            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+            let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+            let scale = input.tex_w as f32 / input.natural[0].max(1.0);
+            let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, src);
+            let drivers = drivers_for(&shape, slt, context.clone());
+            input.fx = resolve_layer_fx(
+                &shape,
+                &drivers,
+                slt,
+                slt,
+                comp_diag * scale,
+                scale,
+                &markers,
+                context,
+            )
+            .1;
+            let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+            input.colour_tables = colour_tables(&shape.effects, slt);
+            input.roto_mattes = roto_mattes_for(&shape.effects, src_frame);
+            input.planes = planes_for(&shape.effects, src_frame);
         }
-        let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
-        Some(DofInputDraw {
-            rgba: rgba.to_vec(),
-            tex_w,
-            tex_h,
-            format,
-            fx: Default::default(),
-            colour_tables: Default::default(),
-            roto_mattes: Vec::new(),
-            planes: Vec::new(),
-            nested: None,
-            colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-            natural: [natural.0, natural.1],
-            graph_fx: Vec::new(),
-            place,
-        })
+        Some(input)
     };
     let graph_fx_for =
         |owner: Option<&lumit_core::model::Layer>,
@@ -4407,6 +4442,25 @@ fn comp_walk(
             // set aside, so there is one behaviour here and no second copy of
             // it to drift.
             _ if adjusts => {
+                // A layer drawn as one only for its backdrop effect runs that
+                // alone over the composite below. Its other effects and styles
+                // shaped the picture the effect is handed (`own_shape`).
+                let backdrop_only;
+                let layer = if layer.is_adjustment() {
+                    layer
+                } else {
+                    backdrop_only = lumit_core::model::Layer {
+                        effects: layer
+                            .effects
+                            .iter()
+                            .filter(|e| is_backdrop(e))
+                            .cloned()
+                            .collect(),
+                        styles: Vec::new(),
+                        ..layer.clone()
+                    };
+                    &backdrop_only
+                };
                 // A staging point, not a picture (docs/06 §1.5): realise
                 // composites everything below, runs this stack on it, and
                 // blends back by coverage — masks × opacity, placed by the

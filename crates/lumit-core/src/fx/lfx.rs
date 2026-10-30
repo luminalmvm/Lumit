@@ -38,6 +38,11 @@ pub const DEFAULT_PASS: &str = "shade";
 /// How many lost graphics devices switch an effect off until Lumit restarts.
 pub const STRIKES_OFF: u32 = 2;
 
+/// Set on a backdrop effect whose second input is the picture of the layer it
+/// sits on, which its Mix then fades from, as that layer would be drawn.
+pub const OWN_PICTURE: super::params::ParamId =
+    super::params::ParamId::new("derived.lfx_own_picture");
+
 /// One effect an extension carries, as the engine needs it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LfxEffect {
@@ -479,6 +484,9 @@ impl EffectDef for LfxDef {
         push(cs::HASH_HI, Value::Int((hash >> 32) as u32 as i32));
         push(cs::HASH_LO, Value::Int(hash as u32 as i32));
         push(cs::COMP_SCALE, Value::Float(cx.px_scale));
+        if self.backdrop() && cx.inst.layer_ref("input2").is_none() {
+            push(OWN_PICTURE, Value::Int(1));
+        }
     }
 
     fn depth_inputs(&self) -> &'static [&'static str] {
@@ -645,4 +653,5 @@ mod tests {
         });
         assert_eq!(greyed(&inst, true), ["channel"]);
     }
+
 }

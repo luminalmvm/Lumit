@@ -153,6 +153,9 @@ impl GpuEffect for LfxPass {
         let [fx0, fy0, fw, fh] =
             lumit_core::fx::schema::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
         let mix = (p.float(lumit_core::fx::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+        // A backdrop effect on its own layer's picture fades from that picture
+        // over the composite below, so at Mix 0 the layer is drawn as it was.
+        let own = input2.filter(|_| mix < 1.0 && p.int(lfx::OWN_PICTURE, 0) == 1);
         let params = program.pack(p);
         let passes = built.passes();
         ctx.note_in_flight(key);
@@ -169,7 +172,7 @@ impl GpuEffect for LfxPass {
                 p.float(cs::COMP_SCALE, 1.0),
                 lt,
                 seed,
-                if last { mix } else { 1.0 },
+                if last && own.is_none() { mix } else { 1.0 },
                 false,
                 input2.is_some(),
             );
@@ -188,7 +191,48 @@ impl GpuEffect for LfxPass {
             );
             done.push(out);
         }
-        done.pop().unwrap_or_else(|| tex.clone())
+        let out = done.pop().unwrap_or_else(|| tex.clone());
+        let Some(picture) = own else {
+            return out;
+        };
+        // The effect's output, faded towards the picture laid over the
+        // composite below.
+        const UNDER: &str = r"
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    let s = lumit_sample2(uv);
+    return s + lumit_orig(uv) * (1.0 - s.a);
+}
+";
+        let Ok(under) = lumit_core::fx::shader::program_for(UNDER) else {
+            return out;
+        };
+        let Ok((pipeline, _)) = fx.shader_pipeline(ctx, 0, under.source_hash, &under.assembled)
+        else {
+            return out;
+        };
+        let header = CustomShader::header(
+            [fx0 as u32, fy0 as u32],
+            [fw as u32, fh as u32],
+            [w, h],
+            1.0,
+            lt,
+            seed,
+            1.0 - mix,
+            false,
+            true,
+        );
+        fx.custom_shader(
+            ctx,
+            &pipeline,
+            &out,
+            tex,
+            None,
+            Some(picture),
+            w,
+            h,
+            &header,
+            &under.pack(p),
+        )
     }
 }
 
@@ -487,5 +531,71 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .render_rgba(&Arc::new(plain), plain_comp, 0, 1.0)
             .expect("the control renders");
         assert_eq!(with, without, "a missing effect leaves the picture alone");
+    }
+    /// A backdrop effect at Mix 0 leaves its layer as it was drawn, and the
+    /// layer's other effects run on its own picture rather than on the comp
+    /// below. Guards wrong pixels.
+    #[test]
+    fn a_backdrop_effect_at_mix_0_leaves_its_layer_alone() {
+        const MAGENTA: &str = r"
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+}
+";
+        let mut glass = effect("backdrop_zero", MAGENTA, &[]);
+        glass.input = Some(lfx::LfxInput {
+            label: "Shape".into(),
+            kind: lfx::LfxInputKind::Image,
+        });
+        glass.backdrop = true;
+        let def = register(glass).expect("it installs");
+        let mut glass =
+            lumit_core::fx::builtins::instantiate(def.schema().match_name).expect("instantiates");
+        for p in &mut glass.params {
+            if p.id == "mix" {
+                p.value = EffectValue::Float(Property::fixed(0.0));
+            }
+        }
+        let invert = lumit_core::fx::builtins::instantiate("invert").expect("a built-in");
+        // A small plate over a full-frame one, so the comp below shows.
+        let scene = |effects: Vec<EffectInstance>| {
+            let (mut doc, id) = project(effects);
+            let ground = Uuid::now_v7();
+            for item in &mut doc.items {
+                match item {
+                    ProjectItem::Solid(solid) => (solid.width, solid.height) = (12, 12),
+                    ProjectItem::Composition(comp) => {
+                        comp.layers.push(layer(LayerKind::Solid { def: ground }));
+                    }
+                    _ => {}
+                }
+            }
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: ground,
+                name: "ground".into(),
+                colour: LinearColour([0.8, 0.5, 0.1, 1.0]),
+                width: 32,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            (Arc::new(doc), id)
+        };
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let (doc, comp) = scene(vec![invert.clone(), glass]);
+        let (with, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("it renders");
+        let (doc, comp) = scene(vec![invert]);
+        let (without, ..) = r
+            .render_rgba(&doc, comp, 0, 1.0)
+            .expect("the control renders");
+        let off = with
+            .iter()
+            .zip(&without)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(u8::MAX);
+        assert!(off <= 1, "off by {off}");
     }
 }
