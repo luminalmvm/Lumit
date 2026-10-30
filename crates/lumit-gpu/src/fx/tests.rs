@@ -8670,16 +8670,10 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
-    let base = {
-        let mut l = LinearWipe::read(Params::EMPTY);
-        l.centre_x = w as f32 * 0.5;
-        l.centre_y = h as f32 * 0.5;
-        l
-    };
+    let base = LinearWipe::read(Params::EMPTY);
     let op_of = |l: LinearWipe| {
         let p = l.packed();
         LinearWipeOp {
-            centre: p.centre,
             normal: p.normal,
             completion: p.completion,
             band: p.band,
@@ -8694,9 +8688,6 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
     turned.feather = 5.0;
     let mut down = base;
     down.angle = 0.0;
-    let mut off_centre = base;
-    off_centre.centre_x = 4.0;
-    off_centre.feather = 3.0;
     let mut nothing = base;
     nothing.completion = 0.0;
     let mut everything = base;
@@ -8711,7 +8702,6 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
         ("feathered", feathered),
         ("turned", turned),
         ("downward", down),
-        ("off-centre", off_centre),
         ("completion-zero", nothing),
         ("completion-full", everything),
         ("mixed", faded),
@@ -15228,14 +15218,11 @@ fn the_matte_scales_the_linear_wipe_completion() {
     let img = corpus(w, h);
     let l = {
         let mut l = LinearWipe::read(Params::EMPTY);
-        l.centre_x = w as f32 * 0.5;
-        l.centre_y = h as f32 * 0.5;
         l.feather = 6.0;
         l
     };
     let p = l.packed();
     let op = LinearWipeOp {
-        centre: p.centre,
         normal: p.normal,
         completion: p.completion,
         band: p.band,
