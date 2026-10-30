@@ -3457,10 +3457,29 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               closeParent: () => close(null),
               streams: streams,
               onChoose: (places) {
-                try {
-                  track.entry.layer
-                      .setClipAudioStreams(clip: clip.id, streams: places);
-                } catch (_) {}
+                // Every picked clip that is heard, as the list is offered.
+                setPickedAudioStreams(
+                  Provider.of<LumitState>(context, listen: false).project,
+                  [
+                    for (final pick in _selected.contains(id) ? _selected : {id})
+                      if (_trackOfClip[pick] case final at?)
+                        if (_tracks[at].clip(pick) case final c?)
+                          if (_tracks[at].entry.info.switches.audible &&
+                              c.audible)
+                            (
+                              streams: () => _tracks[at]
+                                  .entry
+                                  .layer
+                                  .clipAudioStreams(clip: c.id),
+                              set: (List<int> places) => _tracks[at]
+                                  .entry
+                                  .layer
+                                  .setClipAudioStreams(
+                                      clip: c.id, streams: places),
+                            ),
+                  ],
+                  places,
+                );
                 if (!mounted) return;
                 Provider.of<LumitState>(context, listen: false)
                     .notifyDocumentChanged();

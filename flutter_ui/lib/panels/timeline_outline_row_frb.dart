@@ -1321,9 +1321,19 @@ class _OutlineRowState extends State<OutlineRow> {
               closeParent: () => close(null),
               streams: streams,
               onChoose: (places) {
-                try {
-                  widget.entry.layer.setAudioStreams(streams: places);
-                } catch (_) {}
+                setPickedAudioStreams(
+                  context.read<LumitState>().project,
+                  [
+                    for (final target in _menuTargets())
+                      if (!target.info.switches.locked)
+                        (
+                          streams: () => target.layer.audioStreams(),
+                          set: (List<int> places) =>
+                              target.layer.setAudioStreams(streams: places),
+                        ),
+                  ],
+                  places,
+                );
                 widget.onChanged();
               },
             ),
