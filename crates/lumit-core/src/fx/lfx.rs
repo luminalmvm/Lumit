@@ -654,4 +654,32 @@ mod tests {
         assert_eq!(greyed(&inst, true), ["channel"]);
     }
 
+    /// A fresh instance's points land on its own raster, not on 1080p's, so
+    /// a corner pinned to the frame's corner starts with no change. Guards
+    /// wrong pixels on apply.
+    #[test]
+    fn a_fresh_instance_puts_its_points_on_the_raster() {
+        const SHADER: &str = r"
+struct Params {
+    /// @point @default(1920, 1080) Corner
+    corner: vec2<f32>,
+};
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv);
+}
+";
+        let mut e = effect(SHADER);
+        e.id = "corner".into();
+        e.passes = Vec::new();
+        let def = install(e).expect("it installs");
+        crate::fx::catalogue::BUILTIN_DEFS.register(def);
+        let name = def.schema().match_name;
+        let inst = crate::fx::builtins::instantiate_for_raster(name, 3840.0, 1000.0).expect("one");
+        let at = |id: &str| match inst.param(id) {
+            Some(crate::model::EffectValue::Float(p)) => p.value_at(0.0),
+            other => panic!("{id}: {other:?}"),
+        };
+        assert_eq!((at("corner_x"), at("corner_y")), (3840.0, 1000.0));
+    }
 }

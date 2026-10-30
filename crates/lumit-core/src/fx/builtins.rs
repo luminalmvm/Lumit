@@ -329,6 +329,34 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
         };
         p.value = EffectValue::Float(Property::fixed(v));
     }
+    // An LFX effect's points are written for a 1920 x 1080 frame, so a fresh
+    // one has them moved onto the raster it lands on. A saved instance keeps
+    // what it stored, and reads the shader's own default for what it did not.
+    if inst.effect.namespace == EffectNamespace::Lfx {
+        let rows = crate::fx::catalogue::BUILTIN_DEFS
+            .get(match_name)
+            .map_or(&[][..], |def| def.derived(&inst));
+        for pair in rows.windows(2) {
+            let (x, y) = (&pair[0], &pair[1]);
+            let (ParamKind::Float { default: dx, .. }, ParamKind::Float { default: dy, .. }) =
+                (&x.kind, &y.kind)
+            else {
+                continue;
+            };
+            let point = x.id.strip_suffix("_x").is_some_and(|stem| {
+                y.id.strip_suffix("_y") == Some(stem) && x.unit == Unit::Px && y.unit == Unit::Px
+            });
+            if point {
+                for (id, v) in [(x.id, dx * w / 1920.0), (y.id, dy * h / 1080.0)] {
+                    inst.params.push(EffectParam {
+                        id: id.to_owned(),
+                        value: EffectValue::Float(Property::fixed(v)),
+                        extra: serde_json::Map::new(),
+                    });
+                }
+            }
+        }
+    }
     Some(inst)
 }
 
