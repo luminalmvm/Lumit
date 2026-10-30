@@ -303,10 +303,26 @@ class _FloatSurfaceState extends State<FloatSurface> {
     HardwareKeyboard.instance
       ..removeHandler(_onKey)
       ..addHandler(_onKey);
+    FocusManager.instance
+      ..removeEarlyKeyEventHandler(_keepFromFocus)
+      ..addEarlyKeyEventHandler(_keepFromFocus);
   }
 
-  static bool _onKey(KeyEvent event) =>
-      event is! KeyUpEvent && _up.isNotEmpty && _up.last._key(event.logicalKey);
+  /// The last key a menu took. The focused widget hears every key the
+  /// hardware keyboard does, so this one is kept from it, or Down in a
+  /// search box would move its cursor as well as the highlight.
+  static KeyEvent? _taken;
+
+  static bool _onKey(KeyEvent event) {
+    final took = event is! KeyUpEvent &&
+        _up.isNotEmpty &&
+        _up.last._key(event.logicalKey);
+    _taken = took ? event : null;
+    return took;
+  }
+
+  static KeyEventResult _keepFromFocus(KeyEvent event) =>
+      identical(event, _taken) ? KeyEventResult.handled : KeyEventResult.ignored;
 
   /// Whether a text box has the keys. Up and Down still move the highlight,
   /// as in the search picker, and the rest are the box's.
@@ -548,7 +564,10 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _lit.dispose();
     if (_listed) {
       _up.remove(this);
-      if (_up.isEmpty) HardwareKeyboard.instance.removeHandler(_onKey);
+      if (_up.isEmpty) {
+        HardwareKeyboard.instance.removeHandler(_onKey);
+        FocusManager.instance.removeEarlyKeyEventHandler(_keepFromFocus);
+      }
     }
     super.dispose();
   }
