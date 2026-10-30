@@ -15,6 +15,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart'
     show PointerDownEvent, kPrimaryMouseButton, kSecondaryMouseButton;
 import 'package:flutter/scheduler.dart' show Ticker;
@@ -327,12 +328,12 @@ void paintTiedWires(
   // let go shrinks away as they leave.
   for (final (i, b) in now.bars.indexed) {
     if (b == null) continue;
-    final fresh = view.was != null && !view.was!.contains(view.ties[i]);
+    final fresh = view.was != null && !_hasTie(view.was!, view.ties[i]);
     bar(b, fresh ? view.t : 1, view.lit == i);
   }
   if (before != null) {
     for (final (i, b) in before.bars.indexed) {
-      if (b != null && !view.ties.contains(view.was![i])) {
+      if (b != null && !_hasTie(view.ties, view.was![i])) {
         bar(b, 1 - view.t, false);
       }
     }
@@ -348,6 +349,11 @@ void paintTiedWires(
           ..strokeCap = StrokeCap.round);
   }
 }
+
+/// Whether [ties] has [tie], by value: ties read again after each change
+/// are new lists, and the generated == compares the wires by identity.
+bool _hasTie(List<BridgeWireTie> ties, BridgeWireTie tie) => ties.any((t) =>
+    t.x == tie.x && t.y == tie.y && listEquals(t.wires, tie.wires));
 
 bool _samePoints(List<(Offset, Offset)>? a, List<(Offset, Offset)>? b) {
   if ((a?.length ?? 0) != (b?.length ?? 0)) return false;
