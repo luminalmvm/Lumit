@@ -539,6 +539,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// epoch.
   final Map<String, BridgeMediaInfo?> _mediaInfo = {};
 
+  /// When each footage file was last changed, in seconds since 1970, for the
+  /// Date column. Asked with the media facts and kept through a change, so
+  /// the column does not blink.
+  final Map<String, int> _modified = {};
+
   /// A composition's own size and rate, for the same two columns. Comp settings
   /// are a synchronous read, so the cache is what keeps them off every rebuild
   /// rather than off the build thread.
@@ -788,6 +793,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       ProjectColumn.size => _cellNumber(cells().size),
       ProjectColumn.fps => _cellNumber(cells().fps),
       ProjectColumn.duration => projectClockSeconds(cells().duration),
+      ProjectColumn.date => _modified[id] ?? -1,
       ProjectColumn.path => (cells().path ?? '').toLowerCase(),
     };
   }
@@ -1366,13 +1372,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               size: projectNoValue,
               fps: projectNoValue,
               duration: projectNoValue,
+              date: projectNoValue,
               path: path);
         }
+        final date = projectDateText(_modified[id]);
         // Blank until the probe the preview card already asks for has
         // answered: the length comes out of that same cache, so no row ever
         // probes on its own account.
         final info = _mediaInfo[id];
-        if (info == null) return ProjectCells(path: path);
+        if (info == null) return ProjectCells(date: date, path: path);
         final seconds = info.duration.den == 0
             ? 0.0
             : info.duration.num / info.duration.den;
@@ -1382,7 +1390,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           // to fit the FPS column — where a picture would state its rate.
           // Its length counts milliseconds, as the card's does: sound has
           // no frames worth counting.
-          if (info.audioCodec == null) return ProjectCells(path: path);
+          if (info.audioCodec == null) {
+            return ProjectCells(date: date, path: path);
+          }
           return ProjectCells(
             size: projectSampleRateText(info.sampleRate),
             fps: switch (info.channels) {
@@ -1391,6 +1401,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               final n => l10n.audioChannels(n),
             },
             duration: timecodeOfSecondsMs(seconds),
+            date: date,
             path: path,
           );
         }
@@ -1406,6 +1417,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ? null
               : timecodeOfRate(
                   (seconds * fps).round(), info.fpsNum, info.fpsDen),
+          date: date,
           path: path,
         );
       case ItemReference_Composition(:final field0):
@@ -1453,6 +1465,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _mediaInfo[id] = info;
       _bookRebuild();
     });
+    footage.modified().then((seconds) {
+      if (!mounted || seconds == null || _modified[id] == seconds) return;
+      _modified[id] = seconds;
+      _bookRebuild();
+    }, onError: (_) {});
   }
 
   /// Ask for one rebuild at the end of this frame, however many probes have

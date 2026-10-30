@@ -4,9 +4,17 @@
   "@aboutBlurb": {
     "description": "About window: Lumit's licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
   },
+  "acceptsShadows": "Aceita sombras",
+  "@acceptsShadows": {
+    "description": "Material options row: whether shadows fall on the layer."
+  },
   "accountRenameTitle": "Alterar seu nome",
   "@accountRenameTitle": {
     "description": "Title of the small window that asks for the name other people see on previews and replies."
+  },
+  "accountUsernameHint": "nome",
+  "@accountUsernameHint": {
+    "description": "Placeholder of the username field. Lower case because usernames are."
   },
   "addAtPlayhead": "Adicionar no indicador de reprodução",
   "@addAtPlayhead": {
@@ -409,7 +417,7 @@
   "@aeOutcomePlaceholder": {
     "description": "Import report window — an outcome grade: an inert stand-in keeping the data and the slot."
   },
-  "aeOutcomeSkipped": "Ignorado",
+  "aeOutcomeSkipped": "Pulado",
   "@aeOutcomeSkipped": {
     "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
   },
@@ -588,7 +596,7 @@
     "description": "A two-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
     "type": "text"
   },
-  "audioStereoShort": "es",
+  "audioStereoShort": "st",
   "@audioStereoShort": {
     "description": "The Project panel list's channel-layout cell for a stereo sound file — the FPS column is narrow, so this is the two-letter form of 'stereo'."
   },
@@ -1375,11 +1383,11 @@
       }
     }
   },
-  "blendColourBurn": "Superexposição de cores",
+  "blendColourBurn": "Superexposição de cor",
   "@blendColourBurn": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
-  "blendColourDodge": "Subexposição de cores",
+  "blendColourDodge": "Subexposição de cor",
   "@blendColourDodge": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
@@ -1411,15 +1419,15 @@
   "@blendLuminosity": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
-  "blendPinLight": "Luz do pino",
+  "blendPinLight": "Luz de pino",
   "@blendPinLight": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
-  "blendVividLight": "Luz brilhante",
+  "blendVividLight": "Luz vívida",
   "@blendVividLight": {
     "description": "A blend mode — the Timeline's Blend dropdown, and anywhere layers composite."
   },
-  "bootLoadingAudioPlugins": "Carregando plug-ins de áudio",
+  "bootLoadingAudioPlugins": "Carregando plugins de áudio",
   "@bootLoadingAudioPlugins": {
     "description": "Step on the start-up splash, left of the progress bar, while the CLAP and VST3 audio plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
   },
@@ -1427,11 +1435,11 @@
   "@bootLoadingExtensions": {
     "description": "Step on the start-up splash, left of the progress bar, while the effects that installed extensions add are read in."
   },
-  "bootLoadingPlugins": "Carregando plug-ins",
+  "bootLoadingPlugins": "Carregando plugins",
   "@bootLoadingPlugins": {
     "description": "Step on the start-up splash, left of the progress bar, while the OFX effect plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
   },
-  "bootStartingUp": "Iniciando",
+  "bootStartingUp": "Inicializando",
   "@bootStartingUp": {
     "description": "Step on the start-up splash once everything is loaded, in the moment before the main window appears."
   },
@@ -1463,11 +1471,11 @@
   "@cache": {
     "description": "Bottom strip: heading over the three cache meters."
   },
-  "cacheDeleteTitle": "Excluir os quadros guardados no disco?",
+  "cacheDeleteTitle": "Excluir os quadros armazenados no disco?",
   "@cacheDeleteTitle": {
     "description": "Asked before emptying the disk cache, which deletes real files."
   },
-  "cacheKeepThem": "Manter",
+  "cacheKeepThem": "Mantê-los",
   "@cacheKeepThem": {
     "description": "Button that declines to delete the parked frames."
   },
@@ -1564,6 +1572,10 @@
   "@cancelImport": {
     "description": "Button on the card shown over the interface while files or an After Effects project are being imported. Stops the import and leaves the project as it was."
   },
+  "castsShadows": "Projeta sombras",
+  "@castsShadows": {
+    "description": "Row and settings field on a light and in a 3D layer's Material options: whether it casts shadows."
+  },
   "changeEllipsis": "Alterar…",
   "@changeEllipsis": {
     "description": "Button that opens a dialogue to pick something other than what is shown beside it."
@@ -1572,11 +1584,20 @@
   "@channelAlpha": {
     "description": "A viewing channel: transparency on its own. A technical term — keep it recognisable."
   },
-  "chooseConfirm": "Escolher",
+  "chooseA": "Escolha um {kind}",
+  "@chooseA": {
+    "description": "Tooltip on a button that opens a file dialogue. {kind} is the sort of file wanted, e.g. 'LUT'.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseConfirm": "Selecionar",
   "@chooseConfirm": {
     "description": "The confirm button in the system's folder-picking dialogue."
   },
-  "chooseEllipsis": "Escolher…",
+  "chooseEllipsis": "Selecionar…",
   "@chooseEllipsis": {
     "description": "Button that opens a file dialogue when nothing has been chosen yet."
   },
@@ -1656,7 +1677,7 @@
   "@clipPasteShape": {
     "description": "Context-menu item: apply a copied speed curve here."
   },
-  "clipResetSpeed": "Redefinir velocidade",
+  "clipResetSpeed": "Restaurar velocidade",
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
   },
@@ -1863,7 +1884,7 @@
   "@custom": {
     "description": "Shown in a preset picker when the values match no preset."
   },
-  "customiseEllipsis": "Customizar",
+  "customiseEllipsis": "Personalizar…",
   "@customiseEllipsis": {
     "description": "Button that opens the theme editor."
   },
@@ -3492,7 +3513,7 @@
   "@flowDetailLow": {
     "description": "A choice of the Flow group's Vector detail option."
   },
-  "flowDetailMedium": "Metade",
+  "flowDetailMedium": "Médio",
   "@flowDetailMedium": {
     "description": "A choice of the Flow group's Vector detail option."
   },
@@ -3733,6 +3754,48 @@
   "@frameRate": {
     "description": "Field label: frames per second."
   },
+  "friendsAccept": "Aceitar",
+  "@friendsAccept": {
+    "description": "Button beside somebody who asked to be friends."
+  },
+  "friendsAdd": "Adicionar amigo",
+  "@friendsAdd": {
+    "description": "Row label in the Friends group of Settings, beside the field a friend's username is typed in."
+  },
+  "friendsAddButton": "Adicionar",
+  "@friendsAddButton": {
+    "description": "Button beside the username field in the Friends group of Settings. It asks that person to be friends."
+  },
+  "friendsCount": "Amigos · {count}",
+  "@friendsCount": {
+    "description": "Friends group of Settings: the bar the account's friends are folded under, with how many there are. A press opens or shuts it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "friendsDecline": "Ignorar",
+  "@friendsDecline": {
+    "description": "Button beside somebody who asked to be friends: turn them down. They are not told."
+  },
+  "friendsRemove": "Desfazer amizade",
+  "@friendsRemove": {
+    "description": "Button beside a friend: stop being friends."
+  },
+  "friendsRemoveAsk": "Remover {name} dos seus amigos?",
+  "@friendsRemoveAsk": {
+    "description": "Question before a friend is removed. {name} is the name they show.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "friendsTakeBack": "Cancelar",
+  "@friendsTakeBack": {
+    "description": "Button beside somebody this account asked to be friends: take the ask back."
+  },
   "fx125Hz": "125 Hz",
   "@fx125Hz": {
     "description": "Effect controls: the Graphic EQ fader for the band centred on 125 Hz."
@@ -3812,6 +3875,10 @@
   "fxAlignToPath": "Alinhar ao caminho",
   "@fxAlignToPath": {
     "description": "Effect controls — a checkbox on Points along path: turn each point to face the way the path runs."
+  },
+  "fxAlignment": "Alinhamento",
+  "@fxAlignment": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers to go the way its neighbours go, as a percentage."
   },
   "fxAll": "Tudo",
   "@fxAll": {
@@ -3941,7 +4008,7 @@
   "@fxAspectRatio": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxAsymmetric": "Assimétrico",
+  "fxAsymmetric": "Assimétrica",
   "@fxAsymmetric": {
     "description": "Effect controls — a Type option on Ripple."
   },
@@ -4236,6 +4303,10 @@
   "fxBrushSize": "Tamanho do pincel",
   "@fxBrushSize": {
     "description": "Effect controls — a control on Stroke: how wide the brush is."
+  },
+  "fxBulge": "Saliência",
+  "@fxBulge": {
+    "description": "Effect controls — a control on Spherize."
   },
   "fxBurst": "Rajada",
   "@fxBurst": {
@@ -5098,6 +5169,10 @@
   "@fxFadeOut": {
     "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading out."
   },
+  "fxFalloff": "Queda",
+  "@fxFalloff": {
+    "description": "Effect controls — a control on Glow."
+  },
   "fxFarBlur": "Desfoque distante",
   "@fxFarBlur": {
     "description": "Effect controls — a control on Depth of field."
@@ -5177,6 +5252,10 @@
   "fxFlipOrder": "Ordem de giro",
   "@fxFlipOrder": {
     "description": "Effect controls — a control on Card wipe: which corner the wave of flips starts from."
+  },
+  "fxFlowPoints": "Pontos de fluxo",
+  "@fxFlowPoints": {
+    "description": "Effect controls — the name of the Flow points effect, which carries the points of a stream along a field over time."
   },
   "fxFlowResolution": "Resolução do fluxo",
   "@fxFlowResolution": {
@@ -5762,7 +5841,7 @@
   "@fxLightColour": {
     "description": "Mood lighting parameter — the colour of the light inside a pool."
   },
-  "fxLightDirection": "Direção da luz",
+  "fxLightDirection": "Direção de luz",
   "@fxLightDirection": {
     "description": "Effect controls — a control on Texturize: which way the light falls across the texture's relief."
   },
@@ -6146,9 +6225,17 @@
   "@fxNumberByInput": {
     "description": "Effect controls — a switch on Merge points: the number each point carries becomes which input it came in on, so effects below can tell the streams apart."
   },
+  "fxNumberFrom": "Número de",
+  "@fxNumberFrom": {
+    "description": "Effect controls — a control on Vary points: the number a point is given where the pattern is at its lowest."
+  },
   "fxNumberRange": "Intervalo de números",
   "@fxNumberRange": {
     "description": "Effect controls — a control on Points field: the point number that draws as white when Output is Number."
+  },
+  "fxNumberTo": "Número pra",
+  "@fxNumberTo": {
+    "description": "Effect controls — a control on Vary points: the number a point is given where the pattern is at its highest."
   },
   "fxOcioColourSpaceTransform": "Transformação de espaço de cor OCIO",
   "@fxOcioColourSpaceTransform": {
@@ -6434,6 +6521,10 @@
   "@fxPillowEmboss": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
   },
+  "fxPinLayer": "Fixar camada",
+  "@fxPinLayer": {
+    "description": "Effect controls — a control on Planar track: which layer the Create corner pin and Create transform keys buttons write to."
+  },
   "fxPinTo": "Fixar em",
   "@fxPinTo": {
     "description": "Effect controls — a control on Transform points: which corner, edge or centre of the composition the points are pinned to."
@@ -6597,6 +6688,14 @@
   "fxPreserveLuminosity": "Preservar luminosidade",
   "@fxPreserveLuminosity": {
     "description": "Effect controls — a control on Photo filter: keep the exposure and change only the colour."
+  },
+  "fxProducerX": "Produtor x",
+  "@fxProducerX": {
+    "description": "Effect controls — a control on Radio waves: where the waves are emitted, horizontally."
+  },
+  "fxProducerY": "Produtor y",
+  "@fxProducerY": {
+    "description": "Effect controls — a control on Radio waves: where the waves are emitted, vertically."
   },
   "fxPropagate": "Propagar",
   "@fxPropagate": {
@@ -6785,6 +6884,10 @@
   "fxReverb": "Reverberação",
   "@fxReverb": {
     "description": "Effect controls: the name of an audio effect, which puts the sound in a room."
+  },
+  "fxReverse": "Inverso",
+  "@fxReverse": {
+    "description": "Effect controls — a control on Lens distort."
   },
   "fxRgbSplit": "Separação RGB",
   "@fxRgbSplit": {
@@ -6997,6 +7100,10 @@
   "fxSensor": "Sensor",
   "@fxSensor": {
     "description": "Effect controls — a control on Depth of field pro: the size of camera sensor the footage was shot on."
+  },
+  "fxSeparation": "Separação",
+  "@fxSeparation": {
+    "description": "Effect controls — a control on Particulate: how strongly a particle steers away from neighbours that are close, as a percentage."
   },
   "fxSepia": "Sépia",
   "@fxSepia": {
@@ -7322,6 +7429,10 @@
   "@fxStick": {
     "description": "Effect controls — an On contact setting on Particulate: the particle stays where it hit the shape."
   },
+  "fxStops": "Paradas",
+  "@fxStops": {
+    "description": "Effect controls — a control on Exposure."
+  },
   "fxStore": "Armazenar",
   "@fxStore": {
     "description": "Effect controls — a dropdown on Vary points, under Set number: what is saved for each point under the Name, a number, an offset or a colour. A verb."
@@ -7345,6 +7456,10 @@
   "fxStretchY": "Esticar y",
   "@fxStretchY": {
     "description": "Effect controls — a control on Vary points: how far each point is stretched down."
+  },
+  "fxStrike": "Colisão",
+  "@fxStrike": {
+    "description": "Effect controls — a Type option on Lightning: both ends pinned, so the bolt lands on its target."
   },
   "fxStripes": "Listras",
   "@fxStripes": {
@@ -7610,6 +7725,10 @@
   "@fxTurnPoints": {
     "description": "Effect controls — a switch on Transform points: each point's own rotation turns with the stream."
   },
+  "fxTwirl": "Redemoinho",
+  "@fxTwirl": {
+    "description": "Effect name in the Add effect menu — the picture wrung round a point."
+  },
   "fxTwist": "Torcer",
   "@fxTwist": {
     "description": "Effect controls — a Style option on Warp."
@@ -7617,6 +7736,10 @@
   "fxTwoPoints": "Dois pontos",
   "@fxTwoPoints": {
     "description": "Option of a Planar track's Follow control: two small regions are followed separately, giving a position, a rotation and a scale."
+  },
+  "fxTwoWayStrike": "Colisão bidirecional",
+  "@fxTwoWayStrike": {
+    "description": "Effect controls — a Type option on Lightning: two bolts meeting in the middle."
   },
   "fxType": "Tipo",
   "@fxType": {
@@ -7694,7 +7817,7 @@
   "@fxUseSourceColour": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxUtility": "Utilitário",
+  "fxUtility": "Utilidade",
   "@fxUtility": {
     "description": "Add-effect menu category heading."
   },
@@ -7790,6 +7913,10 @@
   "@fxWarmingFilterLba": {
     "description": "Effect controls — a Filter option on Photo filter. LBA is a photographic filter designation and is not translated."
   },
+  "fxWarp": "Distorção",
+  "@fxWarp": {
+    "description": "Effect name in the Add effect menu — the thirteen bend presets."
+  },
   "fxWave": "Onda",
   "@fxWave": {
     "description": "Effect controls — a Style option on Warp."
@@ -7801,6 +7928,10 @@
   "fxWaveType": "Tipo de onda",
   "@fxWaveType": {
     "description": "Effect controls — a control on Wave warp."
+  },
+  "fxWaveWarp": "Distorção de onda",
+  "@fxWaveWarp": {
+    "description": "Effect name in the Add effect menu — a travelling wave across the frame."
   },
   "fxWaveWidth": "Largura da onda",
   "@fxWaveWidth": {
@@ -7866,6 +7997,10 @@
   "@fxWorkingSpace": {
     "description": "Effect controls - the unset entry of an OCIO colour space dropdown: the space Lumit composites in."
   },
+  "fxX": "X",
+  "@fxX": {
+    "description": "Node graph socket - on Repeat start: across, in pixels, where this run's point or path is."
+  },
   "fxXAmount": "Quantidade X",
   "@fxXAmount": {
     "description": "Effect controls — a control on Shake."
@@ -7873,6 +8008,10 @@
   "fxXFrequency": "Frequência X",
   "@fxXFrequency": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxY": "Y",
+  "@fxY": {
+    "description": "Node graph socket - on Repeat start: down, in pixels, where this run's point or path is."
   },
   "fxYAmount": "Quantidade Y",
   "@fxYAmount": {
@@ -9197,6 +9336,10 @@
   "@keyOpenTheFlowchart": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenTheFxConsole": "Abra o Console FX",
+  "@keyOpenTheFxConsole": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyOpenTheSelectedFolder": "Abrir a pasta selecionada",
   "@keyOpenTheSelectedFolder": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -9750,6 +9893,91 @@
       }
     }
   },
+  "lightAmbient": "Ambiente",
+  "@lightAmbient": {
+    "description": "Light type: light from everywhere at once, with no place or direction."
+  },
+  "lightArea": "Área",
+  "@lightArea": {
+    "description": "Light type: light from a rectangle of a set size, like a softbox."
+  },
+  "lightColour": "Cor",
+  "@lightColour": {
+    "description": "Light row: the colour of the light."
+  },
+  "lightConeAngle": "Ângulo do cone",
+  "@lightConeAngle": {
+    "description": "Spot light row: the full angle of the cone of light, in degrees."
+  },
+  "lightConeFeather": "Difusão de cone",
+  "@lightConeFeather": {
+    "description": "Spot light row: how much of the cone's edge fades rather than cuts off, as a percentage."
+  },
+  "lightFalloff": "Queda",
+  "@lightFalloff": {
+    "description": "Light row and settings field: how the light weakens with distance."
+  },
+  "lightFalloffDistance": "Distância de queda",
+  "@lightFalloffDistance": {
+    "description": "Light row: how far past the radius a smooth falloff takes to fade to nothing, in pixels."
+  },
+  "lightFalloffInverseSquare": "Quadrado inverso fixado",
+  "@lightFalloffInverseSquare": {
+    "description": "Light falloff: full strength out to the radius, then weakening with the square of the distance, as real light does. After Effects' name for it."
+  },
+  "lightFalloffSmooth": "Suave",
+  "@lightFalloffSmooth": {
+    "description": "Light falloff: full strength out to the radius, then fading smoothly to nothing over the falloff distance."
+  },
+  "lightIntensity": "Intensidade",
+  "@lightIntensity": {
+    "description": "Light row: how bright the light is, as a percentage."
+  },
+  "lightLayerName": "Luz {kind}",
+  "@lightLayerName": {
+    "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "lightOptions": "Opções de luz",
+  "@lightOptions": {
+    "description": "Heading in a light's Transform group, over the rows about the light itself rather than about where it stands."
+  },
+  "lightParallel": "Paralelo",
+  "@lightParallel": {
+    "description": "Light type: light from very far away, every ray running the same way, like the sun."
+  },
+  "lightPoint": "Ponto",
+  "@lightPoint": {
+    "description": "Light type: light from one point, shining every way."
+  },
+  "lightRadius": "Raio",
+  "@lightRadius": {
+    "description": "Light row: how far the light keeps its full strength before it starts to fall off, in pixels."
+  },
+  "lightSettings": "Configurações de Luz",
+  "@lightSettings": {
+    "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
+  },
+  "lightShadowDarkness": "Escuridão da sombra",
+  "@lightShadowDarkness": {
+    "description": "Light row: how dark the shadows the light casts are, as a percentage."
+  },
+  "lightShadowDiffusion": "Difusão de sombra",
+  "@lightShadowDiffusion": {
+    "description": "Light row: how soft the shadows the light casts are, in pixels."
+  },
+  "lightSpot": "Spot",
+  "@lightSpot": {
+    "description": "Light type: a cone of light."
+  },
+  "lightType": "Tipo de luz",
+  "@lightType": {
+    "description": "Row and settings field: which kind of light a Light layer is."
+  },
   "liveDisconnect": "Desconectar",
   "@liveDisconnect": {
     "description": "Button on the bottom strip beside liveDrivenBy. Cuts the connected program off."
@@ -9901,6 +10129,34 @@
       }
     }
   },
+  "materialAmbient": "Ambiente",
+  "@materialAmbient": {
+    "description": "Material options row: how much of the ambient lights the layer takes, as a percentage."
+  },
+  "materialDiffuse": "Difuso",
+  "@materialDiffuse": {
+    "description": "Material options row: how much of the other lights the layer takes, as a percentage."
+  },
+  "materialLightTransmission": "Transmissão de luz",
+  "@materialLightTransmission": {
+    "description": "Material options row: how much of the light passing through the layer takes its colour onto what is behind it, as a percentage."
+  },
+  "materialMetal": "Metal",
+  "@materialMetal": {
+    "description": "Material options row: how much the highlight takes the layer's own colour rather than the light's, as a percentage."
+  },
+  "materialOptions": "Opções de material",
+  "@materialOptions": {
+    "description": "Heading beside Transform on a 3D layer, over the rows about how it takes the composition's lights. After Effects' name for the group."
+  },
+  "materialShininess": "Brilho especular",
+  "@materialShininess": {
+    "description": "Material options row: how small and hard the highlight is, as a percentage."
+  },
+  "materialSpecular": "Intensidade Especular",
+  "@materialSpecular": {
+    "description": "Material options row: how bright the highlight a light makes on the layer is, as a percentage."
+  },
   "menu3dLayer": "Camada 3D",
   "@menu3dLayer": {
     "description": "Menu item."
@@ -9969,6 +10225,10 @@
   "@menuAuto": {
     "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
   },
+  "menuAutoOutline": "Traçado automático",
+  "@menuAutoOutline": {
+    "description": "Menu item."
+  },
   "menuBlendingMode": "Modo de mesclagem",
   "@menuBlendingMode": {
     "description": "Menu item."
@@ -10022,6 +10282,10 @@
   "menuCompareSplit": "Tela dividida",
   "@menuCompareSplit": {
     "description": "A row of the View menu. The two pictures side by side, each in its half."
+  },
+  "menuCompareWipe": "Abertura",
+  "@menuCompareWipe": {
+    "description": "A row of the View menu. One picture cut at a draggable line, both halves in register."
   },
   "menuComposition": "Composição",
   "@menuComposition": {
@@ -10131,6 +10395,10 @@
   "@menuFlipVertically": {
     "description": "Layer ▸ Transform submenu item: mirrors the selected layers top to bottom."
   },
+  "menuFlow": "Fluxo",
+  "@menuFlow": {
+    "description": "Menu item."
+  },
   "menuFlowchart": "Fluxograma",
   "@menuFlowchart": {
     "description": "The Composition menu row that opens the flowchart: a small picture of which compositions the open one is nested in and which are nested inside it."
@@ -10207,6 +10475,10 @@
   "@menuLayerStyles": {
     "description": "Menu item."
   },
+  "menuLight": "Luz…",
+  "@menuLight": {
+    "description": "Layer > New menu item: opens the light settings window, then makes the light."
+  },
   "menuLockView": "Bloquear esta exibição",
   "@menuLockView": {
     "description": "A row of the View menu. A locked view does not change what it is showing when something else is opened."
@@ -10247,19 +10519,19 @@
   "@menuMaskOpacity": {
     "description": "Layer ▸ Mask submenu item: opens a small dialogue asking how strongly the picked mask gates, 0 to 100."
   },
-  "menuMatteAlpha": "Fosco alfa",
+  "menuMatteAlpha": "Fosco de alfa",
   "@menuMatteAlpha": {
     "description": "Layer ▸ Matte submenu item: gate the selected layers with the transparency of the layer above each of them."
   },
-  "menuMatteAlphaInverted": "Fosco alfa invertido",
+  "menuMatteAlphaInverted": "Fosco invertido de alfa",
   "@menuMatteAlphaInverted": {
     "description": "Layer ▸ Matte submenu item: the same as Alpha matte, with the gate turned inside out."
   },
-  "menuMatteLuma": "Fosco luma",
+  "menuMatteLuma": "Fosco de luma",
   "@menuMatteLuma": {
     "description": "Layer ▸ Matte submenu item: gate the selected layers with the brightness of the layer above each of them."
   },
-  "menuMatteLumaInverted": "Fosco luma invertido",
+  "menuMatteLumaInverted": "Fosco invertido de luma",
   "@menuMatteLumaInverted": {
     "description": "Layer ▸ Matte submenu item: the same as Luma matte, with the gate turned inside out."
   },
@@ -10267,9 +10539,22 @@
   "@menuMergeAudioStreams": {
     "description": "Menu item, in Layer > Audio and on the right-click menu of a layer or clip: the way back from Split audio streams. One row plays the streams mixed and the rows split off beside it are removed."
   },
+  "menuNeedsPro": "{label} (Pro)",
+  "@menuNeedsPro": {
+    "description": "A row of the menu bar macOS draws, for something that needs Lumit Pro, to an account without it. {label} is the row's own name, such as Share preview…. Pro is short for Lumit Pro and is not translated.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "menuNew": "Novo",
   "@menuNew": {
     "description": "Menu item."
+  },
+  "menuNew3dViewport": "Nova viewport 3D",
+  "@menuNew3dViewport": {
+    "description": "A row of the Window menu: open a 3D viewport beside the Viewer, a Viewer panel looking at the same composition through a camera of its own that the mouse moves."
   },
   "menuNewViewer": "Novo Visualizador",
   "@menuNewViewer": {
@@ -10473,6 +10758,10 @@
   "menuShowTour": "Tour do Lumit",
   "@menuShowTour": {
     "description": "Help menu item: opens the guided tour of the interface again."
+  },
+  "menuShowWireframe": "Mostrar wireframe",
+  "@menuShowWireframe": {
+    "description": "Menu item."
   },
   "menuSnapToGrid": "Encaixar na grade",
   "@menuSnapToGrid": {
@@ -11064,6 +11353,10 @@
   "@paletteCommand": {
     "description": "Command palette: the badge at the end of a row that runs a menu command, such as 'Layer › New › Solid'. Short: it sits in a narrow column."
   },
+  "paletteComps": "Comp",
+  "@paletteComps": {
+    "description": "Command palette: heading over the compositions you can jump to. Short — it sits in a narrow column."
+  },
   "paletteLayer": "Camada",
   "@paletteLayer": {
     "description": "Command palette: the badge at the end of a row that names a layer of the open composition. Choosing the row selects that layer. Short: it sits in a narrow column."
@@ -11083,6 +11376,10 @@
   "panCentre": "C",
   "@panCentre": {
     "description": "The pan value when the sound sits in the middle - a single-letter abbreviation of centre, shown in the pan well and tooltip. Sides read L 50 / R 50."
+  },
+  "panel3dViewport": "Viewport 3D",
+  "@panel3dViewport": {
+    "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
   },
   "panelAudio": "Áudio",
   "@panelAudio": {
@@ -11451,6 +11748,10 @@
   "@precomposeOpenNew": {
     "description": "Pre-compose option: front the new composition once it is made."
   },
+  "presetNewGroup": "Novo grupo",
+  "@presetNewGroup": {
+    "description": "Effects & presets panel: right-click menu row on the Saved presets heading or on a group of presets that makes a new group inside it, and the title of the window asking for its name. A group is a folder of saved presets."
+  },
   "presetSavedNotice": "Predefinição salva",
   "@presetSavedNotice": {
     "description": "Status line, after one effect has been saved as a preset from its heading's menu in the Effect controls panel."
@@ -11475,7 +11776,7 @@
   "@previewRendering": {
     "description": "What the Viewer is doing, when no more precise stage is known. This is the internal picture-making sense, not writing a file — Lumit says 'export' for that."
   },
-  "previewShowing": "Exibindo",
+  "previewShowing": "Mostrando",
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
@@ -12611,11 +12912,24 @@
   "@reviewSendTitle": {
     "description": "Title strip of the Previews window while a composition is being sent."
   },
+  "reviewSendToFriend": "Enviar a um(a) amigo(a)",
+  "@reviewSendToFriend": {
+    "description": "Previews window: a button beside a link's address and a row in its menu. It lists the account's friends; picking one puts the preview in their Shared with you list."
+  },
   "reviewSendVersion": "Nova versão de {title}",
   "@reviewSendVersion": {
     "description": "Share a preview: the choice to add to the link this composition already has.",
     "placeholders": {
       "title": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewSentToFriend": "Enviado pra {name}",
+  "@reviewSentToFriend": {
+    "description": "Notice once a preview has been sent to a friend. {name} is the name they show.",
+    "placeholders": {
+      "name": {
         "type": "String"
       }
     }
@@ -13134,6 +13448,10 @@
   "@settingsAccountProfiles": {
     "description": "Group heading on the Account page of Settings: the profiles on this machine."
   },
+  "settingsAccountUsername": "Nome de usuário",
+  "@settingsAccountUsername": {
+    "description": "Row label on the Account page of Settings: the unique name friends find this account by."
+  },
   "settingsAddonsBroken": "Faltam arquivos",
   "@settingsAddonsBroken": {
     "description": "Settings window, Addons: shown beside an installed pack whose files are gone or the wrong size, so it will not run."
@@ -13500,6 +13818,10 @@
   "settingsFramesWaitingToBeWritten": "Quadros aguardando gravação",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsFriends": "Amigos",
+  "@settingsFriends": {
+    "description": "Group heading on the Account page of Settings, and a row in the profile card that opens it. Friends are other Lumit accounts, found by username, that previews can be sent to."
   },
   "settingsFullResolutionWhileDragging": "Resolução total ao arrastar",
   "@settingsFullResolutionWhileDragging": {
@@ -14204,6 +14526,10 @@
   "@shaderNodeDot": {
     "description": "Name of the 'Dot product' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
   },
+  "shaderNodeFract": "Fração",
+  "@shaderNodeFract": {
+    "description": "Name of the 'Fraction' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the part after the decimal point. Also a row of the box search that adds one."
+  },
   "shaderNodeLength": "Comprimento",
   "@shaderNodeLength": {
     "description": "Name of the 'Length' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — a vector's length. Also a row of the box search that adds one."
@@ -14351,6 +14677,14 @@
   "shaderPortVector": "vetor",
   "@shaderPortVector": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph — a vector value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shadowsOn": "Ativado",
+  "@shadowsOn": {
+    "description": "Casts shadows or Accepts shadows: yes."
+  },
+  "shadowsOnly": "Somente",
+  "@shadowsOnly": {
+    "description": "Casts shadows or Accepts shadows: only the shadow, without the layer itself. After Effects' word for it."
   },
   "shapeCombine": "Combinar",
   "@shapeCombine": {
@@ -15841,6 +16175,10 @@
   "@signInBack": {
     "description": "Link on the code and new password pages of the sign-in window, back to the first page."
   },
+  "signInBirthDate": "Data de nascimento",
+  "@signInBirthDate": {
+    "description": "Label over the day, month and year someone was born, on the page that creates an account."
+  },
   "signInBrowser": "Continue no seu navegador.",
   "@signInBrowser": {
     "description": "Line shown in the sign-in window while it waits for a Google or Discord sign-in to finish in the browser."
@@ -15874,6 +16212,10 @@
   "@signInCreateHeading": {
     "description": "Large heading in the sign-in window when making a new account."
   },
+  "signInDay": "Dia",
+  "@signInDay": {
+    "description": "Hint in the field for the day of the month someone was born, on the page that creates an account."
+  },
   "signInDiscord": "Continuar com o Discord",
   "@signInDiscord": {
     "description": "Button that signs in with a Discord account, in the browser."
@@ -15881,6 +16223,10 @@
   "signInEmail": "E-mail",
   "@signInEmail": {
     "description": "Label and placeholder of the email field in the sign-in window."
+  },
+  "signInErrorBirthDate": "Informe a sua data de nascimento.",
+  "@signInErrorBirthDate": {
+    "description": "Error when creating an account with the date of birth missing or not a real day, or after a Google, Discord or Apple sign-in that would make a new account without one."
   },
   "signInErrorBrowser": "Não foi possível abrir seu navegador.",
   "@signInErrorBrowser": {
@@ -15931,6 +16277,10 @@
   "@signInErrorTimedOut": {
     "description": "Error when a Google or Discord sign-in was started and never finished."
   },
+  "signInErrorTooYoung": "Você não tem idade suficiente para criar uma conta no Lumit.",
+  "@signInErrorTooYoung": {
+    "description": "Error when the year of birth given is under the least age for an account."
+  },
   "signInForgot": "Esqueceu a senha?",
   "@signInForgot": {
     "description": "Link under the password field in the sign-in window."
@@ -15946,6 +16296,10 @@
   "signInHeading": "Entrar no Lumit",
   "@signInHeading": {
     "description": "Large heading in the sign-in window."
+  },
+  "signInMonth": "Mês",
+  "@signInMonth": {
+    "description": "What the month list for a date of birth shows before a month is picked, on the page that creates an account."
   },
   "signInName": "Nome",
   "@signInName": {
@@ -16007,6 +16361,10 @@
   "signInWorking": "Um momento…",
   "@signInWorking": {
     "description": "Shown on the filled button of the sign-in window while it is busy, which takes a couple of seconds."
+  },
+  "signInYearShort": "Ano",
+  "@signInYearShort": {
+    "description": "Hint in the field for the year someone was born, on the page that creates an account. Four digits."
   },
   "size": "Tamanho",
   "@size": {
@@ -16096,7 +16454,7 @@
   "@sourceTextPath": {
     "description": "Field label in the Source rows of a text layer: which mask on the layer the words run along."
   },
-  "sourceTextPathNone": "Nenhum",
+  "sourceTextPathNone": "Nenhuma",
   "@sourceTextPathNone": {
     "description": "Option in the text layer's Path picker: the words lay in a straight line rather than along a mask."
   },
@@ -16699,6 +17057,10 @@
   "tipAnimatedOnly": "Só animadas",
   "@tipAnimatedOnly": {
     "description": "Tooltip on the Timeline’s Animated filter while it is off: turning it on lists only keyframed properties. One or two words."
+  },
+  "tipAnimatedShowing": "Mostrando animado",
+  "@tipAnimatedShowing": {
+    "description": "Tooltip on the Timeline’s Animated filter while it is on. One or two words."
   },
   "tipAspectLocked": "Proporção bloqueada",
   "@tipAspectLocked": {
@@ -17395,6 +17757,10 @@
   "tipViewerView": "Exibição 3D",
   "@tipViewerView": {
     "description": "Tooltip on the Viewer bar's view dropdown, which shows a mark and no words, so this is the only name it has. It chooses whether the picture is what the composition's own camera sees or one of the fixed and custom viewpoints used to arrange a 3D scene."
+  },
+  "tipViewportProjection": "Projeção",
+  "@tipViewportProjection": {
+    "description": "Tooltip on the switch under a 3D viewport's corner axes, which reads Persp or Ortho."
   },
   "tipZoomIn": "Aumentar zoom",
   "@tipZoomIn": {
@@ -18635,6 +19001,10 @@
   "@viewerOverlayGrid": {
     "description": "Entry in the Viewer bar's grid-and-guides menu, with a tick beside it when it is on. It draws a grid of thin lines over the picture, dividing the frame into eighths."
   },
+  "viewerOverlayGround": "Chão 3D",
+  "@viewerOverlayGround": {
+    "description": "Entry in the Viewer bar's view menu for a 3D composition, with a tick beside it when it is on. It draws a floor grid through the middle of the composition, the composition's frame and the x, y and z axes from the origin, in 3D over the picture. On by default in the fixed and custom 3D views and off through the composition's camera. Like After Effects' 3D Ground Plane."
+  },
   "viewerOverlayLayerControls": "Controles de camada",
   "@viewerOverlayLayerControls": {
     "description": "Entry in the Viewer bar's view menu, with a tick beside it when they are on: the boxes, handles and hover highlight drawn over the selected layer."
@@ -18745,6 +19115,18 @@
   "viewerViewTop": "Superior",
   "@viewerViewTop": {
     "description": "Entry in the Viewer bar's 3D view menu: the scene seen from above. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewportAxisX": "X",
+  "@viewportAxisX": {
+    "description": "The letter on the x axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisY": "Y",
+  "@viewportAxisY": {
+    "description": "The letter on the y axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisZ": "Z",
+  "@viewportAxisZ": {
+    "description": "The letter on the z axis in a 3D viewport's corner axes."
   },
   "volume": "Volume",
   "@volume": {
@@ -18874,7 +19256,7 @@
       }
     }
   },
-  "workspaceEdit": "Edição",
+  "workspaceEdit": "Editar",
   "@workspaceEdit": {
     "description": "The name of a panel arrangement, tuned for cutting."
   },

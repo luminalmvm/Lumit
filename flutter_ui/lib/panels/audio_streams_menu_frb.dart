@@ -8,10 +8,12 @@
 // does; this is the list and the ticks.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 
 /// What one stream's row says: its number, counted from one, and what the
 /// file calls it where it calls it anything. A stream with no name of its own
@@ -45,6 +47,29 @@ Widget audioStreamsSubmenu({
       ),
       child: Text(l10n.menuAudioStreams),
     );
+
+/// Give every picked layer or clip the streams ticked, as one undo step. One
+/// whose file has fewer streams keeps the ticked ones it has, and one that has
+/// none of them is left as it is.
+void setPickedAudioStreams(
+  ProjectReference? project,
+  List<
+          ({
+            BridgeAudioStreams Function() streams,
+            void Function(List<int>) set
+          })>
+      picked,
+  List<int> places,
+) =>
+    asOneUndoStep(project, () {
+      for (final one in picked) {
+        try {
+          final count = one.streams().streams.length;
+          final there = [for (final p in places) if (p < count) p];
+          if (there.isNotEmpty) one.set(there);
+        } catch (_) {}
+      }
+    });
 
 /// The ticked list. It keeps its own copy of the ticks so a press shows at
 /// once; the document follows through [onChoose].

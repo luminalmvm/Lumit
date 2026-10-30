@@ -4261,22 +4261,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ui, layers, blockHeights, details.offset, t.density);
               switch (details.data) {
                 case FootageDragData(:final footage):
-                  // Each file lands on the row it was dropped on, so one file
-                  // is one op and one press of Ctrl-Z puts it back. Bottom-up,
-                  // so a multi-item drop stacks in the order the panel listed
-                  // them: every one goes in at the same row and pushes the one
-                  // before it down.
-                  // ponytail: a ten-file drop is still ten steps, one per
-                  // file, because each add is its own committed op. That is
-                  // the ceiling left here, and the fix is an op that carries a
-                  // whole drop.
-                  for (final f in footage.reversed) {
-                    comp.addFootageLayer(
-                        footage: f,
-                        asSequence: _videoAsSequence(context),
-                        row: at,
-                        arrival: ui.streamsArrival);
-                  }
+                  // The files land on the row they were dropped on, in the
+                  // order the panel lists them, as one undo step. Several lie
+                  // end to end, and Shift stacks them all at the start.
+                  comp.addFootageLayers(
+                      footage: footage,
+                      asSequence: _videoAsSequence(context),
+                      row: at,
+                      arrival: ui.streamsArrival,
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.

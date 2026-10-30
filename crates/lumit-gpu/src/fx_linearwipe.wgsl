@@ -11,7 +11,7 @@
 // Mix 0 and Completion 0 are both the bit-exact identity.
 
 struct Params {
-    centre_normal: vec4<f32>,  // xy = centre (raster px), zw = (sin θ, −cos θ)
+    normal: vec2<f32>,         // (sin θ, −cos θ)
     completion: f32,           // 0..1
     band: f32,                 // the feather's width in raster px, floored above zero
     mix_amt: f32,              // 0..1, blended against the unprocessed input
@@ -52,11 +52,13 @@ fn linear_wipe(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(src, xy, 0);
     let px = f32(xy.x) + 0.5;
     let py = f32(xy.y) + 0.5;
-    let d = (px - p.centre_normal.x) * p.centre_normal.z
-          + (py - p.centre_normal.y) * p.centre_normal.w;
+    // Measured from the raster's own middle, so the sweep covers a layer of
+    // any size.
+    let d = (px - f32(size.x) * 0.5) * p.normal.x
+          + (py - f32(size.y) * 0.5) * p.normal.y;
     // Half the frame's reach along the sweep direction.
-    let extent = 0.5 * (abs(f32(size.x) * p.centre_normal.z)
-                      + abs(f32(size.y) * p.centre_normal.w));
+    let extent = 0.5 * (abs(f32(size.x) * p.normal.x)
+                      + abs(f32(size.y) * p.normal.y));
     // The matte pulls Completion toward 0 per pixel, before the edge is
     // placed: a gradient wipe, which a strength dissolve cannot make.
     var completion = p.completion;
