@@ -108,7 +108,13 @@ abstract final class IconStyle {
         continue;
       }
       final name = entry.uri.pathSegments.last;
-      final text = entry.readAsStringSync();
+      final String text;
+      try {
+        text = entry.readAsStringSync();
+      } on FileSystemException {
+        // Locked, or not UTF-8: that icon keeps its usual drawing.
+        continue;
+      }
       if (text.contains('<svg')) {
         found[_key(name.substring(0, name.length - 4))] = text;
       }

@@ -578,6 +578,7 @@ class Workspace extends ChangeNotifier {
   /// changes, so a saved edit shows straight away.
   List<StyleSheet> styles = const [];
   StreamSubscription<FileSystemEvent>? _stylesWatch;
+  Timer? _stylesSoon;
   bool _stylesRead = false;
 
   /// The folder a person's own styles are read from.
@@ -621,9 +622,22 @@ class Workspace extends ChangeNotifier {
     }
     styles = StyleSheet.readFolder(folder);
     if (_stylesWatch == null && Directory(folder).existsSync()) {
-      _stylesWatch = Directory(folder)
-          .watch(recursive: true)
-          .listen((_) => reloadStyles());
+      // One read for a burst of events, as a save is often several. A watch
+      // that fails or ends, as when the folder goes, is dropped, and the next
+      // resume arms a new one.
+      void drop() {
+        _stylesWatch?.cancel();
+        _stylesWatch = null;
+      }
+
+      _stylesWatch = Directory(folder).watch(recursive: true).listen(
+        (_) {
+          _stylesSoon?.cancel();
+          _stylesSoon = Timer(const Duration(milliseconds: 100), reloadStyles);
+        },
+        onError: (Object _) => drop(),
+        onDone: drop,
+      );
     }
     final style = activeStyle;
     if (style != null) themeShape = style.base;
@@ -2144,6 +2158,9 @@ class Workspace extends ChangeNotifier {
             ThemeShape.studio;
     final style = j['custom_style'];
     customStyle = style is String ? style : null;
+    // The folder was read before the style was known, so its icons are read
+    // again by the recompose below.
+    _stylesRead = false;
     final acc = j['accent_override'];
     accentOverride = acc is List && acc.length == 3
         ? Color.fromARGB(0xff, acc[0] as int, acc[1] as int, acc[2] as int)
