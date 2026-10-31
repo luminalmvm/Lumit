@@ -300,6 +300,8 @@ class EffectParamRowFrb extends StatelessWidget {
   /// channel static, or a kind that carries no curve at all — a choice, a
   /// switch, a file. Those have no stopwatch and nothing to sample.
   bool get _still {
+    // A driven row follows the wire, which can move at every frame.
+    if (driven != null) return false;
     final scalars = _animatableScalarsOf(value);
     return scalars == null || scalars.every((s) => s is BridgeScalar_Static);
   }
@@ -372,8 +374,12 @@ class EffectParamRowFrb extends StatelessWidget {
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
     // last, after everything the row writes.
-    final control = _greyed(_withReset(t, id, _withRiders(t, id,
+    final greyed = _greyed(_withReset(t, id, _withRiders(t, id,
         withUnitRider(t, param.unit, _control(context, t, id, value, frame)))));
+    // A driven row shows the number the wire carries at this frame, dimmed:
+    // it can be read, not edited.
+    final control =
+        driven == null ? greyed : Opacity(opacity: 0.5, child: greyed);
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -604,6 +610,19 @@ class EffectParamRowFrb extends StatelessWidget {
       );
     }
     if (value == null) return Text('—', style: t.small);
+
+    // Driven: the field shows what the wire carries at this frame (the
+    // engine samples it in the row's place), not what the row holds.
+    if (driven case (noStream: false, driver: _, type: _)
+        when currentLayer != null && value is BridgeEffectValue_Float) {
+      value = BridgeEffectValue.float(BridgeScalar.static_(
+          sampleScalarWithContext(
+              scalar: value.field0,
+              time: timeOfFrame(comp, frame),
+              layer: currentLayer!,
+              row: BridgeExpressionRow.effect(
+                  effect: effectId, param: param.id))));
+    }
 
     // A driven parameter is a line of code, not a number to drag, so it gets
     // the editor row instead of the value field. Asked once, ahead of the

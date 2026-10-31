@@ -57,6 +57,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
+import '../state/comp_time.dart' show timeOfFrame;
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
 import '../state/preview_throttle.dart';
@@ -1488,6 +1489,39 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   }
 
   // --- A box's own controls -----------------------------------------------
+
+  /// What a wired parameter on an effect's box reads at the playhead, dimmed
+  /// beside its port name: the wire decides it, so it is shown, not edited.
+  /// Null for a driver's own inputs and anything but a number.
+  Widget? _drivenValue(String key, String param) {
+    final layer = _layer;
+    final ui = _ui;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    if (layer == null ||
+        ui == null ||
+        comp == null ||
+        info == null ||
+        key.startsWith('driver:')) {
+      return null;
+    }
+    final held = info.values.where((v) => v.id == param).firstOrNull?.value;
+    if (held is! BridgeEffectValue_Float) return null;
+    final t = ThemeScope.of(context).theme;
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, frame, _) => Text(
+        sampleScalarWithContext(
+          scalar: held.field0,
+          time: timeOfFrame(comp, frame),
+          layer: layer,
+          row: BridgeExpressionRow.effect(effect: info.id, param: param),
+        ).toStringAsFixed(2),
+        key: ValueKey<String>('graph-driven-$key-$param'),
+        style: t.small.copyWith(color: t.textMuted),
+      ),
+    );
+  }
 
   /// One parameter row on an open box: the Node panel's row, committed and
   /// previewed the way that panel's edit is.
@@ -3420,6 +3454,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                                   foot: _shaderThumb(box.key),
                                   paramRow: (param) =>
                                       _paramRow(box.key, param),
+                                  drivenValue: (param) =>
+                                      _drivenValue(box.key, param),
                                   snap: _flight?.snap?.node == box.key
                                       ? _flight!.snap
                                       : null,
@@ -3528,6 +3564,10 @@ class GraphNodeCard extends StatelessWidget {
   /// own row, on the box. Null on a canvas whose rows are sockets alone.
   final Widget Function(String param)? paramRow;
 
+  /// The value a wired parameter row reads, drawn dimmed at the row's right
+  /// beside the port name. Null where the row shows no value.
+  final Widget? Function(String param)? drivenValue;
+
   /// What the box draws under its rows, in the room its layout left: a Custom
   /// shader's picture of its inner graph. A press on it is its own.
   final Widget? foot;
@@ -3548,6 +3588,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenamed,
     required this.onRenameCancelled,
     this.paramRow,
+    this.drivenValue,
     this.foot,
     this.snap,
   });
@@ -3782,6 +3823,9 @@ class GraphNodeCard extends StatelessWidget {
     final control = row.param != null && !(input?.wired ?? false)
         ? paramRow?.call(row.param!)
         : null;
+    final driven = row.param != null && (input?.wired ?? false)
+        ? drivenValue?.call(row.param!)
+        : null;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -3803,6 +3847,13 @@ class GraphNodeCard extends StatelessWidget {
                         t.small.copyWith(color: portColour(t, input.portType)),
                     overflow: TextOverflow.ellipsis),
               ),
+            ),
+          ),
+        if (driven != null)
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.only(right: graphRowInset),
+              child: Align(alignment: Alignment.centerRight, child: driven),
             ),
           ),
         // Its name, unless a control has the row: the words would sit on top of
