@@ -8573,8 +8573,7 @@
           "default": 0,
           "options": [
             "Linear",
-            "Radial",
-            "Conical"
+            "Radial"
           ],
           "dividers_after": []
         },
@@ -8641,34 +8640,6 @@
           ],
           "slider_min": 0.0,
           "slider_max": 4.0
-        },
-        {
-          "id": "focus_x",
-          "label": "Start centre x",
-          "kind": "float",
-          "unit": "px",
-          "default": 960.0,
-          "slider_min": 0.0,
-          "slider_max": 3840.0
-        },
-        {
-          "id": "focus_y",
-          "label": "Start centre y",
-          "kind": "float",
-          "unit": "px",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 2160.0
-        },
-        {
-          "id": "focus_radius",
-          "label": "Start radius",
-          "kind": "float",
-          "unit": "px",
-          "default": 0.0,
-          "slider_min": 0.0,
-          "slider_max": 2000.0,
-          "hard_min": 0.0
         },
         {
           "id": "colours",
@@ -8854,21 +8825,6 @@
         }
       ],
       "groups": [
-        {
-          "label": "",
-          "params": [
-            "focus_x",
-            "focus_y",
-            "focus_radius"
-          ],
-          "collapsed": false,
-          "visible_when": {
-            "param": "shape",
-            "values": [
-              2
-            ]
-          }
-        },
         {
           "label": "",
           "params": [

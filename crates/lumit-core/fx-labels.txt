@@ -246,7 +246,6 @@ Compositing
 Compressor
 Conductivity state
 Confidence
-Conical
 Connect points
 Connections
 Constant
@@ -1126,10 +1125,7 @@ Star depth
 Starburst intensity
 Start
 Start angle
-Start centre x
-Start centre y
 Start colour
-Start radius
 Start thickness
 Start x
 Start y

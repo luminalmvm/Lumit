@@ -3488,18 +3488,6 @@
   "@fxColour4Position": {
     "description": "Effect controls — a control on Gradient: where Colour 4 sits along the ramp, per cent."
   },
-  "fxConical": "Conical",
-  "@fxConical": {
-    "description": "Effect controls — a Shape option on Gradient: the ramp runs from a start circle out to an end circle."
-  },
-  "fxStartCentreX": "Start centre x",
-  "@fxStartCentreX": {
-    "description": "Effect controls — a control on Gradient (Conical): the start circle's centre, across."
-  },
-  "fxStartCentreY": "Start centre y",
-  "@fxStartCentreY": {
-    "description": "Effect controls — a control on Gradient (Conical): the start circle's centre, down."
-  },
   "fxTwo": "Two",
   "@fxTwo": {
     "description": "Effect controls — a Colours option on Gradient: two colours."
