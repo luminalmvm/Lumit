@@ -9028,7 +9028,7 @@ mod tests {
         let wired = build(true);
         let cut = build(false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 0, 1.0)
+            r.render_rgba(doc, *comp_id, 15, 1.0)
                 .expect("the export path renders")
                 .0
         };
@@ -9093,6 +9093,90 @@ mod tests {
             frame_of(&in_order),
             "two renders of one frame differ"
         );
+    }
+
+    /// **A lattice drawn at half resolution is the same lattice, smaller.**
+    /// The Viewer draws a drag at a reduced resolution, so a size that missed
+    /// the raster factor showed dots of the wrong size until the drag ended.
+    #[test]
+    fn a_lattice_keeps_its_size_at_half_resolution() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (128u32, 64u32);
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
+        let comp = doc.comp_mut(comp_id).unwrap();
+        let mut grid = lumit_core::fx::builtins::instantiate("grid").unwrap();
+        for p in &mut grid.params {
+            let v = match p.id.as_str() {
+                "position_x" => 64.0,
+                "position_y" => 32.0,
+                "spacing_x" => 32.0,
+                "spacing_y" => 24.0,
+                "size" => 12.0,
+                "columns" => 3.0,
+                "rows" => 2.0,
+                "planes" => 1.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+        }
+        comp.layers[0].effects = vec![grid];
+        let doc = DocumentStore::new(doc).snapshot();
+        let lit = |scale: f32, r: &mut HeadlessRenderer| {
+            let (px, w, h) = r.render_rgba(&doc, comp_id, 0, scale).expect("renders");
+            let n = px.chunks(4).filter(|c| c[0] > 128).count();
+            (n, w, h)
+        };
+        let (full, fw, fh) = lit(1.0, &mut r);
+        let (half, hw, hh) = lit(0.5, &mut r);
+        eprintln!("DEBUG full {full} ({fw}x{fh}) half {half} ({hw}x{hh})");
+        assert!(full > 0, "the lattice drew nothing");
+        let ratio = half as f32 * 4.0 / full as f32;
+        assert!((0.7..1.3).contains(&ratio), "half resolution drew {ratio} of the area");
+
+        // Stamped: a small white layer cloned onto the lattice of a full-frame
+        // one, at a half and a quarter.
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
+        let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([1.0, 1.0, 1.0, 1.0]));
+        let comp = doc.comp_mut(comp_id).unwrap();
+        let (mut effects, graph) = cloned_lattice(cw, ch, top);
+        for p in &mut effects[0].params {
+            let v = match p.id.as_str() {
+                "spacing_x" => 32.0,
+                "spacing_y" => 24.0,
+                "size" => 12.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+        }
+        for p in &mut effects[1].params {
+            if p.id == "scale" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(150.0));
+            }
+        }
+        let l = &mut comp.layers[1];
+        l.effects = effects;
+        l.graph = graph;
+        // The source out of the frame, so only the stamps are lit.
+        let t = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+        t.transform.position_x = Property::fixed(-500.0);
+        let doc = DocumentStore::new(doc).snapshot();
+        let lit = |scale: f32, r: &mut HeadlessRenderer| {
+            let (px, _, _) = r.render_rgba(&doc, comp_id, 0, scale).expect("renders");
+            px.chunks(4).filter(|c| c[0] > 128).count() as f32 / (scale * scale)
+        };
+        let full = lit(1.0, &mut r);
+        assert!(full > 0.0, "the stamps drew nothing");
+        for scale in [0.5, 0.25] {
+            let ratio = lit(scale, &mut r) / full;
+            eprintln!("DEBUG stamps at {scale}: {ratio}");
+            assert!((0.7..1.3).contains(&ratio), "stamps at {scale} drew {ratio} of the area");
+        }
     }
 
     /// **Clone pictures made inside the walk reach the stamps.**
@@ -9199,7 +9283,7 @@ mod tests {
         let off = build(1, true);
         let cut = build(0, false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 0, 1.0)
+            r.render_rgba(doc, *comp_id, 15, 1.0)
                 .expect("the export path renders")
                 .0
         };
@@ -10096,3 +10180,4 @@ pub mod test_support {
         }
     }
 }
+

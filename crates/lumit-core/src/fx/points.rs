@@ -2679,14 +2679,31 @@ pub fn draw_stream_blended(
     sprite: Option<Sprite<'_>>,
     blend: u32,
 ) {
+    let fit = SpriteFit::default();
+    draw_stream_fit_blended(rgba, w, h, s, tails, style, sprite, &fit, blend);
+}
+
+/// [`draw_stream_blended`], with a say in how a sprite sits on its point.
+/// Clone to points' reference draw for Copy blend.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_fit_blended(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+    blend: u32,
+) {
     if blend == 0 {
-        draw_stream(rgba, w, h, s, tails, style, sprite);
+        draw_stream_fit(rgba, w, h, s, tails, style, sprite, fit);
         return;
     }
     // ponytail: a frame-sized layer from the heap. This is the CPU oracle,
     // which only the tests draw with; the card's pass takes its own.
     let mut layer = vec![0.0f32; rgba.len()];
-    let fit = SpriteFit::default();
     stamp(
         &mut layer,
         w,
@@ -2695,7 +2712,7 @@ pub fn draw_stream_blended(
         tails,
         style,
         sprite,
-        &fit,
+        fit,
         &|dst, src| {
             let b = [dst[0], dst[1], dst[2], dst[3]];
             dst.copy_from_slice(&blend_over(blend, b, src));

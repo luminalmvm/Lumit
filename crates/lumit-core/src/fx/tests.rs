@@ -6191,6 +6191,36 @@ fn a_derived_roll_moves_with_the_raster() {
     assert_eq!(stack_bytes(&same), before);
 }
 
+/// **The raster factor follows the raster.** An adjustment layer's stack is
+/// resolved at comp size and rescaled to the reduced-resolution preview; the
+/// points effects read `derived.px_scale` to bring a px@comp stream onto that
+/// raster, so it has to shrink with it, or a live drag stamps Clone to points'
+/// copies at comp-pixel places on a quarter-size picture.
+#[test]
+fn rescaling_moves_the_raster_factor_of_the_points_effects() {
+    use effects::clone_to_points::CloneToPoints;
+    use effects::grid::Grid;
+    let resolve = |name: &str, px_scale: f32| {
+        let e = super::builtins::instantiate(name).expect("a built-in");
+        super::resolved::resolve_stack(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0 * px_scale,
+            px_scale,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+    };
+    let mut clone = resolve("clone_to_points", 1.0);
+    clone.rescale_spatial(0.25);
+    let p = clone.get(0).expect("the clone op").params;
+    assert_eq!(CloneToPoints::px_scale_of(p), 0.25);
+    let mut grid = resolve("grid", 1.0);
+    grid.rescale_spatial(0.25);
+    let p = grid.get(0).expect("the grid op").params;
+    assert_eq!(Grid::px_scale_of(p), 0.25);
+}
+
 /// **Every derived spatial id is one the effect actually derives.** A list
 /// entry that names a declared row would double-scale it (the row's own unit
 /// already moves it); one that names nothing the hook pushes is a promise the

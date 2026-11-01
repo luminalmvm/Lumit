@@ -782,6 +782,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     };
     // A clip's row: the fourth place a stack can be read from, and the commit
     // routes to the clip's own list by the same shared lookup.
+    _editor.drivers = row.driver;
     _editor.clipStack = switch (row.clip) {
       final c? => () =>
           widget.layer.getClipEffects(clip: c, onCompClock: false),
@@ -838,7 +839,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
   /// stack, so it has no point on the picture to pick.
   void _pick(LumitUiState ui, String param) {
     final row = widget.row;
-    if (!row.style && row.group == null && row.clip == null) {
+    if (!row.style && !row.driver && row.group == null && row.clip == null) {
       pickForPoint(ui, widget.layer, row.info, param);
     }
   }

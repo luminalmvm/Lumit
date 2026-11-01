@@ -1252,6 +1252,7 @@ Map<String, String> get _built => {
       "Colour 2 position": l10n.fxColour2Position,
       "Colour 3 position": l10n.fxColour3Position,
       "Colour 4 position": l10n.fxColour4Position,
+      "Copy blend": l10n.fxCopyBlend,
       "Two": l10n.fxTwo,
       "Three": l10n.fxThree,
       "Four": l10n.fxFour,

@@ -3286,9 +3286,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
-          _open.add(effectsPath(id));
+          // The drivers on the layer's graph come in the same list, and
+          // open under their own heading.
+          final drivers = {
+            for (final d in layer.getGraphDrivers()) d.id().toString()
+          };
           for (final fx in groups.effects) {
-            _open.add(effectPath(id, fx));
+            if (drivers.contains(fx)) {
+              _open
+                ..add(driversPath(id))
+                ..add(driverPath(id, fx));
+            } else {
+              _open
+                ..add(effectsPath(id))
+                ..add(effectPath(id, fx));
+            }
           }
         }
         if (groups.audio) _open.add(audioPath(id));

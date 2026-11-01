@@ -169,15 +169,21 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
     layer.setTransforms(props: props, values: values);
   }
   for (final (layer, byEffect) in effects.values) {
-    final staged = layer.getEffects();
-    for (final instance in staged) {
-      final wanted = byEffect[instance.id().toString()];
-      if (wanted == null) continue;
-      wanted.forEach((paramId, scalar) {
-        instance.setValue(id: paramId, value: BridgeEffectValue.float(scalar));
-      });
+    // The layer's stack, and its Node graph drivers when a channel names one:
+    // each list is written whole, through the same call.
+    for (final staged in [layer.getEffects(), layer.getGraphDrivers()]) {
+      var touched = false;
+      for (final instance in staged) {
+        final wanted = byEffect[instance.id().toString()];
+        if (wanted == null) continue;
+        touched = true;
+        wanted.forEach((paramId, scalar) {
+          instance.setValue(
+              id: paramId, value: BridgeEffectValue.float(scalar));
+        });
+      }
+      if (touched) layer.setEffects(effects: staged);
     }
-    layer.setEffects(effects: staged);
   }
   for (final (layer, writes) in shapes.values) {
     var entries = layer.getShapeContents();
@@ -253,7 +259,11 @@ void previewChannelEdits({
   }
 
   if (lead.effect == null || lead.param == null) return;
-  final staged = layer.getEffects();
+  // A Node graph driver's curve previews through the graph's own patch.
+  final drivers = layer.getGraphDrivers();
+  final driver =
+      drivers.any((d) => d.id().toString() == lead.effect!.id.toString());
+  final staged = driver ? drivers : layer.getEffects();
   for (final instance in staged) {
     all.forEach((channel, next) {
       if (!sameLayer(channel) ||
@@ -265,6 +275,15 @@ void previewChannelEdits({
       instance.setValue(
           id: channel.param!.id, value: BridgeEffectValue.float(next));
     });
+  }
+  if (driver) {
+    comp.renderFrameWithDriverPreview(
+      frame: bigFrame,
+      scale: scale,
+      layer: layer,
+      drivers: staged,
+    );
+    return;
   }
   comp.renderFrameWithPreview(
     frame: bigFrame,

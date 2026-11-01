@@ -4385,7 +4385,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         // whichever view was latched, and a drag fronts the view it is in
         // before it stages anything (docs/impl/multi-viewer.md §2.1). So the
         // whole preview lane collapses together, as it always did.
-        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(u32::MAX),
+        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(PREVIEW_LANE),
     }
 }
 
@@ -4413,6 +4413,9 @@ enum DrainClass {
     /// against a frame).
     Sample,
 }
+
+/// The lane every drag preview shares, whichever view it is in.
+const PREVIEW_LANE: u32 = u32::MAX;
 
 /// Take everything queued and keep what its class says to keep.
 ///
@@ -4449,6 +4452,17 @@ fn drain_to_newest<T>(
             }
             DrainClass::PictureKeepAll => kept.push(item),
             DrainClass::PictureNewestWins(view) => {
+                // A frame of the view being worked in, asked after a drag
+                // preview, is the frame the drag ended on: the preview is
+                // older than it, and run after it (the active view goes
+                // first) it would leave the drag's last, reduced picture on
+                // screen until the playhead moved.
+                if view == priority && view != PREVIEW_LANE {
+                    if let Some(at) = newest_wins.iter().position(|(v, _)| *v == PREVIEW_LANE) {
+                        newest_wins.remove(at);
+                        superseded += 1;
+                    }
+                }
                 match newest_wins.iter_mut().find(|(v, _)| *v == view) {
                     Some(slot) => {
                         slot.1 = item;
@@ -7213,6 +7227,30 @@ mod tests {
             "each view keeps its newest, in the order the views first asked"
         );
         assert_eq!(superseded, 5);
+    }
+
+    /// **A drag's last preview never lands on the frame it ended on.** The
+    /// active view's picture runs first, so a preview queued before it ran
+    /// after it and left the drag's reduced picture on screen.
+    #[test]
+    fn the_active_views_frame_supersedes_an_older_drag_preview() {
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(2, super::PREVIEW_LANE)).unwrap();
+        tx.send(Req::Adaptive(3, 0)).unwrap();
+        drop(tx);
+        let (pictures, _, _, superseded) =
+            drain_to_newest(Req::Adaptive(1, super::PREVIEW_LANE), &rx, classify, 0);
+        assert_eq!(pictures, vec![Req::Adaptive(3, 0)]);
+        assert_eq!(superseded, 2);
+        // A preview asked after the frame is newer, and still runs.
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(5, super::PREVIEW_LANE)).unwrap();
+        drop(tx);
+        let (pictures, _, _, _) = drain_to_newest(Req::Adaptive(4, 0), &rx, classify, 0);
+        assert_eq!(
+            pictures,
+            vec![Req::Adaptive(4, 0), Req::Adaptive(5, super::PREVIEW_LANE)]
+        );
     }
 
     /// The bug this policy exists to fix: during playback the Viewer asks for a

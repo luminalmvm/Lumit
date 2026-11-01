@@ -5652,7 +5652,7 @@ impl GpuEffect for CloneToPoints {
             }
             from = to;
         }
-        fx.points_draw_runs(ctx, tex, w, h, &runs)
+        fx.points_draw_blended(ctx, tex, w, h, &runs, inst.copy_blend)
     }
 }
 
@@ -7170,6 +7170,7 @@ mod tests {
             corner_radius: 6.0,
             opacity: 80.0,
             tint: 100.0,
+            copy_blend: 0,
             depth_sort: true,
             max_clones: 20_000,
             mix: 100.0,
@@ -7261,6 +7262,57 @@ mod tests {
         let twice =
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
+
+        // Copy blend, over a picture and split into two runs, so the second
+        // run's stamps meet the first's: Add as the card blends it, and
+        // Multiply, Screen and Difference through the tiles.
+        let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &ground, w, h);
+        let half = points.len() / 2;
+        let split = [
+            (
+                lumit_gpu::fx::points_draw::PointsDrawOp {
+                    points: &points[..half],
+                    ..op
+                },
+                runs[0].1,
+            ),
+            (
+                lumit_gpu::fx::points_draw::PointsDrawOp {
+                    points: &points[half..],
+                    ..op
+                },
+                runs[0].1,
+            ),
+        ];
+        for blend in [6u32, 2, 8, 18] {
+            let mut cpu = ground.clone();
+            lumit_core::fx::points::draw_stream_fit_blended(
+                &mut cpu,
+                w,
+                h,
+                &stamps,
+                &[],
+                &style,
+                Some(lumit_core::fx::points::Sprite {
+                    rgba: &sprite_px,
+                    w: 8,
+                    h: 8,
+                }),
+                &fit,
+                blend,
+            );
+            assert_ne!(cpu, ground, "blend {blend} drew nothing");
+            let out = fx.points_draw_blended(&ctx, &tex, w, h, &split, blend);
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let worst = cpu
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            eprintln!("copy blend {blend}: worst |Δ| {worst:.3e}");            assert!(worst < 2e-2, "copy blend {blend}: worst |Δ| {worst}");
+        }
     }
 
     // ---------------------------------------------- Points field

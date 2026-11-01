@@ -736,12 +736,82 @@ class EffectParamRowFrb extends StatelessWidget {
           // editor before they ever reach here (the panel's `_paramRows`),
           // exactly as an `_x`/`_y` pair folds into one point row; a schema
           // declaring a single curve gets the same plot without the tabs.
-          return CurveEditor(
-            key: ValueKey<String>('fx-curve-$id-${param.id}'),
-            points: curvePointsOf(field0),
-            onLive: (p) => _setLive(curveValue(p)),
-            onCommit: (p) => _set(curveValue(p)),
-          );
+          // Ease out and Ease in beside the curve (Stagger's) bend x before
+          // the curve reads it, and the plot draws what comes out.
+          double? ease(String row) => switch (siblings[row]) {
+                BridgeEffectValue_Float(:final field0) =>
+                  scalarValueAt(field0, comp, frame),
+                _ => null,
+              };
+          final out = ease('ease_out');
+          final inn = ease('ease_in');
+          final warp = out == null || inn == null
+              ? null
+              : (double x) => staggerEase(x, out / 100, inn / 100);
+          Widget editor(double size) => CurveEditor(
+                key: ValueKey<String>('fx-curve-$id-${param.id}-$size'),
+                points: curvePointsOf(field0),
+                size: size,
+                warp: warp,
+                onLive: (p) => _setLive(curveValue(p)),
+                onCommit: (p) => _set(curveValue(p)),
+              );
+          // A row one lane tall (the Timeline, the Node panel, a graph box)
+          // has no room for the plot: it shows a small one, and a click
+          // opens the editor at its own size.
+          return LayoutBuilder(builder: (context, room) {
+            if (!room.hasBoundedHeight || room.maxHeight >= 110) {
+              return editor(150);
+            }
+            final side = room.maxHeight.clamp(12.0, 40.0);
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                key: ValueKey<String>('fx-curve-thumb-$id-${param.id}'),
+                onTap: () {
+                  // The popup keeps what it last committed, so the plot
+                  // stays where the drag left it.
+                  var points = curvePointsOf(field0);
+                  final box = context.findRenderObject();
+                  showLumitPopup<void>(
+                    context: context,
+                    position: box is RenderBox
+                        ? box.localToGlobal(Offset(0, box.size.height))
+                        : Offset.zero,
+                    builder: (close) => Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: t.surface1,
+                        border: Border.all(color: t.hairline),
+                        borderRadius:
+                            BorderRadius.circular(t.tokens.floatRadius),
+                        boxShadow: t.floatShadow,
+                      ),
+                      child: StatefulBuilder(
+                        builder: (context, again) => CurveEditor(
+                          points: points,
+                          size: 210,
+                          warp: warp,
+                          onLive: (p) => _setLive(curveValue(p)),
+                          onCommit: (p) {
+                            _set(curveValue(p));
+                            again(() => points = p);
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                child: SizedBox(
+                  width: side * 2,
+                  height: side,
+                  child: IgnorePointer(
+                    child: FittedBox(fit: BoxFit.fill, child: editor(150)),
+                  ),
+                ),
+              ),
+            );
+          });
         }
         return Text('—', style: t.small);
 
@@ -2721,6 +2791,12 @@ class EffectStackEditor {
   /// because a row belongs to one container. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? clipStack;
 
+  /// Whether this editor's rows are a layer's **drivers** (the Timeline's
+  /// Drivers group): the list is the layer's graph nodes, the commit routes
+  /// to the graph by the same shared lookup, and a drag previews through
+  /// `renderFrameWithDriverPreview`, since the picture's own stack is not it.
+  bool drivers = false;
+
   /// The parameters this gesture has staged, by effect and parameter id.
   ///
   /// **A map rather than one edit, because a gesture can move two parameters
@@ -2755,7 +2831,7 @@ class EffectStackEditor {
   /// unchanged. The second read costs nothing on the ordinary path: every
   /// staged id being in the stack is the common case and settles it.
   List<BridgeEffectInstance> stackWith(LayerReference layer) {
-    final effects = layer.getEffects();
+    final effects = drivers ? layer.getGraphDrivers() : layer.getEffects();
     final ids = {for (final instance in effects) instance.id()};
     var stack = effects;
     if (!_staged.keys.every((key) => ids.contains(key.$1))) {
@@ -2803,6 +2879,15 @@ class EffectStackEditor {
     // A clip's rows do preview: the staged list is found by its ids on the
     // clip that holds it, and a picture clip's stack is on the picture.
     if (groupStack != null) return;
+    if (drivers) {
+      _throttle.request(() => comp.renderFrameWithDriverPreview(
+            frame: BigInt.from(frame),
+            scale: scale,
+            layer: layer,
+            drivers: stackWith(layer),
+          ));
+      return;
+    }
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(

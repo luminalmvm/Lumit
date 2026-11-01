@@ -529,6 +529,18 @@ pub struct CloneToPoints {
     #[slider(min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub tint: f32,
 
+    /// How the stamps combine with each other where they overlap, by the
+    /// layer blend modes verbatim, as Particulate's Particle blend. They then
+    /// go over the picture together. An index into
+    /// [`BlendMode::ALL`](crate::model::BlendMode::ALL).
+    #[choice(
+        label = "Copy blend",
+        options = *crate::model::BlendMode::NAMES,
+        default = 0,
+        dividers_after = crate::fx::builtins::CHOICE_UNGROUPED
+    )]
+    pub copy_blend: u32,
+
     /// Lay the stamps down furthest from the camera first, so a near one
     /// covers a far one. Off lays them in the stream's own order. Only shows
     /// on a 3D layer with a camera.

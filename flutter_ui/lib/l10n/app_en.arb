@@ -3484,6 +3484,10 @@
   "@fxColour3Position": {
     "description": "Effect controls — a control on Gradient: where Colour 3 sits along the ramp, per cent."
   },
+  "fxCopyBlend": "Copy blend",
+  "@fxCopyBlend": {
+    "description": "Effect controls — a control on Clone to points: the blend mode the copies use with each other where they overlap, from the same list as a layer's blend mode."
+  },
   "fxColour4Position": "Colour 4 position",
   "@fxColour4Position": {
     "description": "Effect controls — a control on Gradient: where Colour 4 sits along the ramp, per cent."

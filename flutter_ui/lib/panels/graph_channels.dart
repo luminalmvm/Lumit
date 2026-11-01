@@ -341,15 +341,28 @@ List<GraphChannel> graphChannels({
     // An effect's parameters, and a **layer style's** on the same road:
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
+    // A Node graph driver too: an instance in the layer's graph, read off
+    // the graph since the entry does not carry it, and written back through
+    // the same staged list ([commitChannelEdits]).
     final styles = path.startsWith('${stylesPath(layerId)}/');
-    if (styles || path.startsWith('${effectsPath(layerId)}/')) {
-      final head = styles ? stylesPath(layerId) : effectsPath(layerId);
+    final driver = path.startsWith('${driversPath(layerId)}/');
+    if (styles || driver || path.startsWith('${effectsPath(layerId)}/')) {
+      final head = styles
+          ? stylesPath(layerId)
+          : driver
+              ? driversPath(layerId)
+              : effectsPath(layerId);
       final rest = path.substring(head.length + 1);
       final slash = rest.indexOf('/');
       if (slash <= 0) continue;
       final effectId = rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in styles ? entry.info.styles : entry.info.effects) {
+      final list = styles
+          ? entry.info.styles
+          : driver
+              ? [for (final d in entry.layer.getGraphDrivers()) d.getInfo()]
+              : entry.info.effects;
+      for (final fx in list) {
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.

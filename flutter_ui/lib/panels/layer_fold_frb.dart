@@ -132,12 +132,20 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (`LayerReference.getClipEffects`), and that its keys are in clip time, so
   /// the lane draws them a clip's start along.
   final UuidValue? clip;
+
+  /// Whether this row is one of the layer's **drivers** (the Node graph's
+  /// boxes) rather than an effect: the styles bit's pattern again. What
+  /// differs is the path prefix ([driversPath]) and that a write reads the
+  /// layer's graph nodes; the commit routes to the graph by the engine's
+  /// shared instance lookup.
+  final bool driver;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
       this.style = false,
       this.group,
-      this.clip})
+      this.clip,
+      this.driver = false})
       : super(depth);
 }
 
@@ -1948,6 +1956,7 @@ bool moveLaneKeys({
         :final param,
         :final style,
         :final group,
+        :final driver,
         clip: final clipId
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
@@ -1960,6 +1969,8 @@ bool moveLaneKeys({
       } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);
+      } else if (driver) {
+        stack = entry.layer.getGraphDrivers();
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
@@ -2131,6 +2142,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${effectPath(clipFoldPrefix(c), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, driver: true) =>
+        '${driverPath(layerId, info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -2315,6 +2328,14 @@ String stylesPath(String layerId) => '$layerId/styles';
 /// else.
 String stylePath(String layerId, String styleId) =>
     '${stylesPath(layerId)}/$styleId';
+
+/// The path of a layer's **Drivers** group: the Node graph's driver boxes,
+/// whose rows key and drag as an effect's do.
+String driversPath(String layerId) => '$layerId/drivers';
+
+/// The path of one driver within it.
+String driverPath(String layerId, String driverId) =>
+    '${driversPath(layerId)}/$driverId';
 
 /// The effect instance a fold path names, or null when the path is not one
 /// effect's heading (it is the Effects group itself, one parameter under an
@@ -2850,6 +2871,44 @@ List<LayerFoldRow> layerFoldRows({
                 depth: 3,
                 style: true,
                 driven: driven['${style.id}/${param.id}']));
+          }
+        }
+      }
+    }
+  }
+
+  // The drivers on the layer's Node graph, after Styles and only once there
+  // are some, so a Stagger's keyed Maximum has diamonds to see and drag.
+  // Read here rather than off the entry: the graph is not part of it.
+  final drivers = [
+    for (final d in entry.layer.getGraphDrivers()) d.getInfo(),
+  ];
+  if (drivers.isNotEmpty) {
+    final driversOpen = open.contains(driversPath(id));
+    rows.add(FoldGroupRow(
+      path: driversPath(id),
+      label: l10n.fxDrivers,
+      open: driversOpen,
+      depth: 1,
+    ));
+    if (driversOpen) {
+      for (final d in drivers) {
+        final path = driverPath(id, d.id.toString());
+        final driverOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: d.customName ?? effectLabelOf(d.name),
+          open: driverOpen,
+          depth: 2,
+          named: d.customName != null,
+        ));
+        if (driverOpen) {
+          final values = {for (final v in d.values) v.id: v.value};
+          for (final param in cachedListParameters(d.name)) {
+            rows.add(FoldEffectParamRow(d, param, values[param.id],
+                depth: 3,
+                driver: true,
+                driven: driven['${d.id}/${param.id}']));
           }
         }
       }

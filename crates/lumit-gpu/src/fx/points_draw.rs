@@ -17,7 +17,21 @@
 
 use crate::GpuContext;
 
-use super::{particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine};
+use super::{
+    particulate, particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine,
+};
+
+/// Where one points pass lays its points.
+#[derive(Clone, Copy)]
+enum Lay<'a> {
+    /// Over the target as it stands, premultiplied `over`.
+    Over,
+    /// Summed into the target, Particle blend's Add.
+    Add,
+    /// Through the tiles, by the op's blend mode, starting from `base` (or
+    /// clear): a new layer comes back.
+    Tiles(Option<&'a wgpu::Texture>, u32),
+}
 
 /// **Which picture-derived field a point is put to a vote against**, in the
 /// vertex stage.
@@ -168,7 +182,7 @@ impl FxEngine {
             return out;
         }
         let plain = SpriteFit::default();
-        self.points_pass(ctx, src, w, h, field, op, &out, None, &plain);
+        self.points_pass(ctx, src, w, h, field, op, &out, None, &plain, Lay::Over);
         out
     }
 
@@ -183,13 +197,92 @@ impl FxEngine {
         h: u32,
         runs: &[(PointsDrawOp<'_>, SpriteFit)],
     ) -> wgpu::Texture {
+        self.points_draw_blended(ctx, src, w, h, runs, 0)
+    }
+
+    /// [`points_draw_runs`](Self::points_draw_runs), with the stamps of every
+    /// run combining with each other by layer blend mode `blend` — an index
+    /// into `lumit_core::model::BlendMode::ALL` — before they go over the
+    /// picture together, as Particle blend does. Normal is
+    /// `points_draw_runs` exactly.
+    pub fn points_draw_blended(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        runs: &[(PointsDrawOp<'_>, SpriteFit)],
+        blend: u32,
+    ) -> wgpu::Texture {
         let out = points_copy(ctx, src, w, h);
-        for (op, fit) in runs {
-            if op.points.is_empty() || op.mix <= 0.0 {
-                continue;
+        let runs = runs
+            .iter()
+            .filter(|(op, _)| !op.points.is_empty() && op.mix > 0.0);
+        if blend == 0 {
+            for (op, fit) in runs {
+                self.points_pass(ctx, src, w, h, None, op, &out, None, fit, Lay::Over);
             }
-            self.points_pass(ctx, src, w, h, None, op, &out, None, fit);
+            return out;
         }
+        // Any other mode: the stamps meet each other on a clear layer of
+        // their own. Add is the card's own blending; every other mode goes
+        // through the tiles, each run starting from the layer the one before
+        // it left, so stamps of different pictures still meet.
+        let mut layer: Option<wgpu::Texture> = None;
+        if blend == particulate::BLEND_ADD {
+            let clear = work_texture(ctx, w, h, "fx-points-layer");
+            {
+                let mut enc = ctx.encoder("fx-points-layer-clear");
+                let view = clear.create_view(&Default::default());
+                drop(particulate::draw_pass(
+                    &mut enc,
+                    &view,
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                ));
+            }
+            for (op, fit) in runs {
+                self.points_pass(ctx, src, w, h, None, op, &clear, None, fit, Lay::Add);
+            }
+            layer = Some(clear);
+        } else {
+            for (op, fit) in runs {
+                let base = layer.as_ref();
+                let lay = Lay::Tiles(base, blend);
+                if let Some(next) = self.points_pass(ctx, src, w, h, None, op, &out, None, fit, lay)
+                {
+                    layer = Some(next);
+                }
+            }
+        }
+        let Some(layer) = layer else {
+            return out;
+        };
+        let pipes = &self.particulate_blend;
+        let empty = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-points-empty"),
+            layout: &self.particulate_empty_layout,
+            entries: &[],
+        });
+        let finish_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-points-finish-bind"),
+            layout: &pipes.finish_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(
+                    &layer.create_view(&Default::default()),
+                ),
+            }],
+        });
+        let view = out.create_view(&Default::default());
+        let mut enc = ctx.encoder("fx-points-finish");
+        let mut rp = particulate::draw_pass(&mut enc, &view, wgpu::LoadOp::Load);
+        rp.set_pipeline(&pipes.finish);
+        rp.set_bind_group(0, &empty, &[]);
+        rp.set_bind_group(1, &empty, &[]);
+        rp.set_bind_group(2, &finish_bind, &[]);
+        rp.draw(0..3, 0..1);
+        drop(rp);
+        drop(enc);
         out
     }
 
@@ -259,7 +352,7 @@ impl FxEngine {
         let ph = (count as u32).div_ceil(pw).max(1);
         let target = work_texture(ctx, pw, ph, "fx-points-stood");
         let plain = SpriteFit::default();
-        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)), &plain);
+        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)), &plain, Lay::Over);
 
         let bytes = target.format().block_copy_size(None).unwrap_or(8);
         let padded = (pw * bytes).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -336,7 +429,8 @@ impl FxEngine {
         out: &wgpu::Texture,
         probe: Option<(u32, u32)>,
         fit: &SpriteFit,
-    ) {
+        lay: Lay<'_>,
+    ) -> Option<wgpu::Texture> {
         use wgpu::util::DeviceExt;
         // No more points than the card takes in one buffer. Past that the
         // bind group is refused and the whole draw is lost without a word,
@@ -408,6 +502,12 @@ impl FxEngine {
         u.stamp_anchor = [fit.anchor[0] - 0.5, fit.anchor[1] - 0.5];
         u.stamp_uv = [fit.uv[0] - 1.0, fit.uv[1] - 1.0];
         u.stamp_corner = fit.corner;
+        if let Lay::Tiles(_, blend) = lay {
+            u.blend = blend;
+            u.pair_max = particulate::pair_max(count);
+            u.scan_len = particulate::scan_len(count, w, h);
+            u.tile_scale = particulate::tile_scale(w, h);
+        }
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -455,6 +555,22 @@ impl FxEngine {
             layout: &self.particulate_empty_layout,
             entries: &[],
         });
+        if let Lay::Tiles(base, _) = lay {
+            // The tiles read how many are drawn from word 1 of an indirect
+            // draw's arguments, which a host-built set has to make.
+            let args = ctx
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("fx-points-args"),
+                    contents: bytemuck::cast_slice(&[6u32, count, 0, 0]),
+                    usage: wgpu::BufferUsages::STORAGE,
+                });
+            let mut enc = ctx.encoder("fx-points-tiles");
+            let layer =
+                self.particulate_tiles(ctx, &mut enc, [&empty, &draw_bind], &args, w, h, count, base);
+            drop(enc);
+            return Some(layer);
+        }
         let target = out.create_view(&Default::default());
         let mut enc = ctx.encoder("fx-points-draw");
         {
@@ -475,12 +591,16 @@ impl FxEngine {
                 })],
                 ..Default::default()
             });
-            rp.set_pipeline(&self.particulate_draw);
+            rp.set_pipeline(match lay {
+                Lay::Add => &self.particulate_blend.draw_add,
+                _ => &self.particulate_draw,
+            });
             rp.set_bind_group(0, &empty, &[]);
             rp.set_bind_group(1, &draw_bind, &[]);
             rp.draw(0..6, 0..count);
         }
         drop(enc);
+        None
     }
 }
 

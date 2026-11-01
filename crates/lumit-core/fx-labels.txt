@@ -258,6 +258,7 @@ Cooling filter (82)
 Cooling filter (LBB)
 Copies
 Copy
+Copy blend
 Core colour
 Core radius
 Corner pin
@@ -346,6 +347,8 @@ Duration
 Dust
 Each path
 Each point
+Ease in
+Ease out
 Echo
 Echoes
 Edge

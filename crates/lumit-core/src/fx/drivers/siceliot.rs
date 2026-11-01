@@ -75,6 +75,32 @@ pub struct Stagger {
     #[curve(label = "Curve", default = [[0.0, 0.0], [1.0, 1.0]])]
     pub curve: CurvePoints,
 
+    /// How slowly the run leaves the first copy, per cent: the curve's
+    /// handle out of its start, laid flat. Keyframe it to animate the shape.
+    #[slider(
+        label = "Ease out",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub ease_out: f32,
+
+    /// How slowly the run reaches the last copy, per cent: the handle into
+    /// its end.
+    #[slider(
+        label = "Ease in",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub ease_in: f32,
+
     /// Moves the run along the copies, as a share of them. Keyframe it to
     /// send a wave through the copies.
     #[slider(label = "Offset", min = -100.0, max = 100.0, default = 0.0, unit = Percent)]
@@ -125,8 +151,36 @@ pub fn stagger(p: &Stagger, norm: f32) -> f32 {
     } else {
         t.clamp(0.0, 1.0)
     };
+    let t = ease(t, p.ease_out / 100.0, p.ease_in / 100.0);
     let shaped = cpu::curve_at(t, &cpu::curve_table(&p.curve));
     between(p.minimum, p.maximum, shaped)
+}
+
+/// `t` through the cubic Bézier from (0, 0) to (1, 1) whose handles lie flat:
+/// out of the start by `out` of the way across, into the end by `inn`. Both
+/// nought is a straight line, `t` itself.
+#[must_use]
+pub fn ease(t: f32, out: f32, inn: f32) -> f32 {
+    let (out, inn) = (out.clamp(0.0, 1.0), inn.clamp(0.0, 1.0));
+    if out == 0.0 && inn == 0.0 {
+        return t;
+    }
+    let (x1, x2) = (out, 1.0 - inn);
+    let bez = |a: f32, b: f32, s: f32| {
+        let r = 1.0 - s;
+        3.0 * r * r * s * a + 3.0 * r * s * s * b + s * s * s
+    };
+    // x rises with s, so halving finds the s whose x is t.
+    let (mut lo, mut hi) = (0.0f32, 1.0f32);
+    for _ in 0..32 {
+        let mid = 0.5 * (lo + hi);
+        if bez(x1, x2, mid) < t {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    bez(0.0, 1.0, 0.5 * (lo + hi))
 }
 
 // ----------------------------------------------------------------- Random
@@ -635,6 +689,8 @@ mod tests {
             minimum: 10.0,
             maximum: 50.0,
             curve: CurvePoints::sanitised(&curve),
+            ease_out: 0.0,
+            ease_in: 0.0,
             offset: 0.0,
             looped: false,
             reverse: false,
@@ -652,6 +708,12 @@ mod tests {
         assert!((stagger(&s, 0.0) - 10.0).abs() < 1e-3);
         assert!((stagger(&s, 0.5) - 30.0).abs() < 0.5);
         assert!((stagger(&s, 1.0) - 50.0).abs() < 1e-3);
+        let mut e = s;
+        (e.ease_out, e.ease_in) = (100.0, 100.0);
+        assert!((stagger(&e, 0.5) - 30.0).abs() < 0.5, "a symmetric ease keeps the middle");
+        assert!(stagger(&e, 0.2) < 15.0, "eased out of the first copy");
+        assert!(stagger(&e, 0.8) > 45.0, "eased into the last copy");
+        assert!((stagger(&e, 1.0) - 50.0).abs() < 1e-3);
         let mut r = s;
         r.reverse = true;
         assert!((stagger(&r, 0.0) - 50.0).abs() < 1e-3);

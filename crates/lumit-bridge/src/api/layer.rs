@@ -41,6 +41,10 @@ pub(crate) enum InstanceHome {
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
     /// instance rather than a list, held in `Layer::graph_inputs`.
     GraphInputs,
+    /// The drivers on this layer's graph (`Layer::graph.nodes`), so a
+    /// driver's keys move, and its rows write, from the Timeline as an
+    /// effect's do.
+    Drivers,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -7660,6 +7664,17 @@ impl LayerReference {
             // closure is the same closure the other three homes take. An edit
             // that empties the list clears the Inputs, which is what removing
             // them means.
+            // The whole graph rewritten with only its nodes changed, as
+            // `set_graph` commits it: one op, one undo step.
+            InstanceHome::Drivers => {
+                let mut graph = self.item()?.graph;
+                edit(&mut graph.nodes)?;
+                lumit_core::ops::Op::SetLayerGraph {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    graph: Box::new(graph),
+                }
+            }
             InstanceHome::GraphInputs => {
                 let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
                 edit(&mut list)?;
@@ -7705,6 +7720,9 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if layer.graph.nodes.iter().any(|d| d.id == id) {
+            return Ok(InstanceHome::Drivers);
         }
         if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
@@ -8512,10 +8530,13 @@ impl LayerReference {
 
         // An effect qualifies when a parameter of it is keyframed; for
         // Modified, its mere presence qualifies it — a layer with an effect on
-        // it has been modified, whatever the parameters say.
+        // it has been modified, whatever the parameters say. The drivers on
+        // the layer's graph count the same way, so a keyed Stagger reveals
+        // its layer; the panel tells their ids from the stack's.
         let effects: Vec<String> = layer
             .effects
             .iter()
+            .chain(&layer.graph.nodes)
             .filter(|fx| match kind {
                 BridgeRevealKind::Modified => true,
                 BridgeRevealKind::Animated => fx.params.iter().any(|p| match &p.value {

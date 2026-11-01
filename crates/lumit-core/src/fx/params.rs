@@ -750,7 +750,13 @@ impl ResolvedStack {
     /// multiply as a declared `Px` row. Scanlines' roll offset and the flare's
     /// light geometry are the two; without this the period moved and the roll
     /// stayed, and the pattern's phase shifted with the raster.
+    ///
+    /// The raster factor `derived.px_scale` moves too: it is raster pixels per
+    /// comp pixel, so a raster `factor` times as wide has it `factor` times as
+    /// large. Left alone, Clone to points on an adjustment layer stamped a
+    /// px@comp stream onto a reduced-resolution raster unconverted.
     pub fn rescale_spatial(&mut self, factor: f32) {
+        const PX_SCALE: ParamId = ParamId::new("derived.px_scale");
         if factor == 1.0 {
             return;
         }
@@ -772,7 +778,7 @@ impl ResolvedStack {
                     if let Value::Float(v) = slot.1 {
                         slot.1 = Value::Float(v * factor);
                     }
-                } else if derived_spatial.contains(&slot.0) {
+                } else if derived_spatial.contains(&slot.0) || slot.0 == PX_SCALE {
                     slot.1 = match slot.1 {
                         Value::Float(v) => Value::Float(v * factor),
                         // Geometry carried four to an entry — every component

@@ -159,7 +159,8 @@ typedef CompBoxRows = ({
 /// [values], [hidden] and [greyed] are the instance's. Out go the rows a
 /// plugin is hiding, the members of a group whose `visible_when` is unmet, the
 /// riders that belong beside their host, and a curve, whose editor is no 24px
-/// row. The rows a plugin has greyed are drawn disabled.
+/// row (a lone one shows small and opens its editor). The rows a plugin has
+/// greyed are drawn disabled.
 CompBoxRows compBoxRows(
   String effect,
   List<BridgeParamInfo> params,
@@ -184,12 +185,15 @@ CompBoxRows compBoxRows(
     for (final beside in riders.values)
       for (final p in beside) p.id,
   };
+  // A lone curve (Stagger's) is a small plot that opens its editor on a
+  // click; Curves' tabbed channels stay the Effect controls panel's.
+  final lone = shown.where((p) => p.kind is BridgeParamKind_Curve).length == 1;
   return (
     rows: [
       for (final p in shown)
         if (!gated.contains(p.id) &&
             !folded.contains(p.id) &&
-            p.kind is! BridgeParamKind_Curve)
+            (p.kind is! BridgeParamKind_Curve || lone))
           p,
     ],
     riders: riders,

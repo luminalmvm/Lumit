@@ -335,6 +335,23 @@ fn world_placement(
     }
 }
 
+/// The longest side a shape layer's art is rasterised to, px: a shape scaled
+/// past it is drawn at this size and stretched, rather than asking the card
+/// for a texture it cannot hold.
+const SHAPE_RASTER_MAX: f64 = 8192.0;
+
+/// How many comp pixels one of the layer's own pixels covers at most, read
+/// off its world placement: the longest of the two axes' lengths, whichever
+/// way round the matrix is laid out, so a turned or skewed layer is never
+/// drawn short.
+fn shape_raster_scale(m: [[f32; 4]; 4]) -> f32 {
+    let len = |a: f32, b: f32| a.hypot(b);
+    len(m[0][0], m[1][0])
+        .max(len(m[0][1], m[1][1]))
+        .max(len(m[0][0], m[0][1]))
+        .max(len(m[1][0], m[1][1]))
+}
+
 /// `layer`'s own placement at comp time `t_comp`, before any parent's.
 fn own_placement(
     layer: &lumit_core::model::Layer,
@@ -2248,8 +2265,22 @@ fn comp_walk(
                     // The same reduced-resolution rule the other rasterised
                     // kinds follow: draw at the working scale, and let the
                     // placement matrix carry the natural size.
-                    let w = natural_w.round().max(1.0) as u32;
-                    let h = natural_h.round().max(1.0) as u32;
+                    //
+                    // **Continuously rasterised**, as After Effects draws a
+                    // shape layer: the art is drawn as large as the layer and
+                    // its parents show it, so scaling it up never blurs it.
+                    // The effects read the raster factor off the texture, so
+                    // they keep their size.
+                    let shown = shape_raster_scale(world_placement(
+                        comp,
+                        layer,
+                        t_comp,
+                        context.clone(),
+                    ));
+                    let most = (SHAPE_RASTER_MAX / natural_w.max(natural_h)).max(1.0);
+                    let k = f64::from(shown).clamp(1.0, most);
+                    let w = (natural_w * k).round().max(1.0) as u32;
+                    let h = (natural_h * k).round().max(1.0) as u32;
                     Some((
                         Arc::new(lumit_core::shape::rasterise_contents(
                             &contents, w, h, x0, y0, x1, y1, lt,
