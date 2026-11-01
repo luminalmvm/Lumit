@@ -22,6 +22,7 @@ pub mod generate;
 pub mod grid_lines;
 pub mod ground;
 pub mod lens_blur;
+mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
