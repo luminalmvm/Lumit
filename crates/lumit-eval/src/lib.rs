@@ -80,7 +80,8 @@ pub mod schedule;
 /// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
 /// * 21: an open shape path is filled, as if a straight line closed it, and
 ///   an open mask no longer hides its layer.
-pub const ALGO_VERSION: u32 = 21;
+/// * 22: Depth of field pro smooths the grain out of a wide blur.
+pub const ALGO_VERSION: u32 = 22;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4804,12 +4805,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 21, which renamed every frame.
+        // Pinned under ALGO_VERSION 22, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                3_442_992_140_865_201_264_137_942_798_082_220_911,
-                19_851_494_428_891_465_839_658_608_807_448_204_430
+                198_402_390_268_517_877_897_142_310_212_845_261_142,
+                277_017_077_478_348_940_767_282_525_562_387_889_406
             )
         );
 
