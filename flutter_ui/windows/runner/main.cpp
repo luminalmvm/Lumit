@@ -9,13 +9,10 @@
 #include "utils.h"
 
 // A laptop with two graphics cards starts a process on the integrated one
-// unless the executable says otherwise. Flutter draws through ANGLE on that
-// card while the engine picks the discrete one, and a shared texture will not
-// open across two cards, so the Viewer stays black and only the audio plays.
-// The Nvidia and AMD drivers look for these two exported values, which is the
-// same switch as setting Lumit to High performance in Windows graphics
-// settings by hand. A user who wants the integrated card can still say so
-// there, because the setting wins over the export.
+// unless the executable says otherwise. The Nvidia and AMD drivers look for
+// these two exported values, which is the same switch as setting Lumit to
+// High performance in Windows graphics settings by hand. Flutter itself is
+// told the same below, since not every driver reads these.
 extern "C" {
 __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
@@ -104,6 +101,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // ImpellerSwitch::Default the day a Flutter upgrade's re-run of the 2.4 A/B
   // shows Impeller clearing the mandate in the owner's conditions.
   project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);
+
+  // The engine draws the Viewer on the high performance card, and Flutter
+  // has to show it on the same one. Left to itself Flutter takes Windows'
+  // default card, which on a two-card machine whose driver ignores the exports
+  // above is the integrated one, and the Viewer's picture then crosses cards
+  // and comes out black or scrambled.
+  project.set_gpu_preference(flutter::GpuPreference::HighPerformancePreference);
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
