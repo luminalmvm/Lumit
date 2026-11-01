@@ -180,7 +180,7 @@ jobs:
       # The installer is the whole Windows release. An update downloads it
       # again and runs it silently, which is also what renames or removes
       # files the last version left, so there is no plain archive beside it.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installer
           path: |
@@ -304,7 +304,7 @@ jobs:
             flatpak-build packaging/flatpak/io.github.luminalmvm.Lumit.yml
           flatpak build-bundle flatpak-repo \
             "lumit-$version-linux-x64.flatpak" io.github.luminalmvm.Lumit
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-bundle
           path: lumit-*-linux-x64.flatpak
@@ -410,7 +410,7 @@ jobs:
           ditto -c -k --keepParent "$app" \
             "packaging/macos/dist/lumit-$version-macos-$(uname -m).app.zip"
           (cd flutter_ui && dart run tool/blockmap.dart ../packaging/macos/dist/*.zip)
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-dmg
           path: |

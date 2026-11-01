@@ -362,7 +362,7 @@ jobs:
       # looking at it, and a passing run's are what the next baseline is made from.
       - name: Keep the numbers
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bench-results-linux
           path: bench-results.json
@@ -474,7 +474,7 @@ jobs:
           fi
       - name: Keep the numbers
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ui-budget-linux
           path: ui-budget.md
@@ -1012,7 +1012,7 @@ jobs:
           fi
       - name: Keep the table
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ofx-conformance
           path: target/ofx-conformance.md
