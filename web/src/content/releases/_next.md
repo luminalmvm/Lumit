@@ -3,3 +3,5 @@ project or a setting does adds its line here. Each nightly's GitHub release carr
 section below, and when the release note is written the lines move into it.
 
 ## Before you update
+
+- Depth of field pro no longer leaves a fine grain over a wide blur, by either method.

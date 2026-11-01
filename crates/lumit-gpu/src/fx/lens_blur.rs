@@ -174,6 +174,7 @@ pub(super) struct LensBlurFx {
     pub(super) tiles: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     pub(super) dilate: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     pub(super) gather: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) smooth: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     pub(super) sprite: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     pub(super) finish: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     pub(super) ray_min1: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
@@ -529,6 +530,14 @@ impl FxEngine {
             U::STORAGE_BINDING | U::TEXTURE_BINDING | U::RENDER_ATTACHMENT,
             "fx-lens-blur-acc",
         );
+        let smoothed = scratch(
+            ctx,
+            w,
+            h,
+            wgpu::TextureFormat::Rgba16Float,
+            U::STORAGE_BINDING | U::TEXTURE_BINDING | U::RENDER_ATTACHMENT,
+            "fx-lens-blur-smoothed",
+        );
         let out = work_texture(ctx, w, h, "fx-lens-blur-out");
 
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
@@ -541,6 +550,7 @@ impl FxEngine {
             view(&b.atlas),
             view(&out),
         );
+        let v_smoothed = view(&smoothed);
         // No matte: the source stands in a slot the kernel never reads.
         let v_depth = view(depth.unwrap_or(src));
         let bind = |bgl: &wgpu::BindGroupLayout, entries: &[(u32, wgpu::BindingResource<'_>)]| {
@@ -613,12 +623,21 @@ impl FxEngine {
                 ],
             )
         };
+        let smooth = bind(
+            &fx.smooth.0,
+            &[
+                (4, T(&v_info)),
+                (9, T(&v_acc)),
+                (8, T(&v_smoothed)),
+                (3, u.clone()),
+            ],
+        );
         let finish = bind(
             &fx.finish.0,
             &[
                 (0, T(&v_src)),
                 (4, T(&v_info)),
-                (9, T(&v_acc)),
+                (9, T(&v_smoothed)),
                 (10, T(&v_out)),
                 (3, u.clone()),
             ],
@@ -892,6 +911,14 @@ impl FxEngine {
                 drop(enc);
                 ctx.flush();
             }
+        }
+        if !op.display_depth {
+            let mut enc = ctx.encoder("fx-lens-blur-smooth");
+            run(&mut enc, &fx.smooth.1, &smooth, w, h);
+            drop(enc);
+        }
+        // Highlights go on after, so the smoothing leaves their edges sharp.
+        if ray.is_none() && !op.display_depth {
             // One instance per block at every level.
             let blocks: u32 = (0..SPRITE_LEVELS)
                 .map(|l| w.div_ceil(1 << l) * h.div_ceil(1 << l))
@@ -903,7 +930,7 @@ impl FxEngine {
                 let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("fx-lens-blur-sprites"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &v_acc,
+                        view: &v_smoothed,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,

@@ -76,6 +76,16 @@ impl LensBlurFx {
                 (12, Slot::Uniform),
             ],
         );
+        let smooth = compute(
+            "fx-lens-blur-smooth",
+            "lb_smooth",
+            &[
+                (4, Slot::Tex),
+                (9, Slot::Tex),
+                (8, Slot::Store(F::Rgba16Float)),
+                (3, Slot::Uniform),
+            ],
+        );
         let finish = compute(
             "fx-lens-blur-finish",
             "lb_finish",
@@ -232,6 +242,7 @@ impl LensBlurFx {
             tiles,
             dilate,
             gather,
+            smooth,
             sprite: (sprite_bgl, sprite),
             finish,
             ray_min1,

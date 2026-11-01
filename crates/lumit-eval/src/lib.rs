@@ -80,7 +80,8 @@ pub mod schedule;
 /// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
 /// * 21: an open shape path is filled, as if a straight line closed it, and
 ///   an open mask no longer hides its layer.
-pub const ALGO_VERSION: u32 = 21;
+/// * 22: Depth of field pro smooths the grain out of a wide blur.
+pub const ALGO_VERSION: u32 = 22;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
