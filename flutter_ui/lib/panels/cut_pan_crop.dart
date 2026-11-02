@@ -83,11 +83,8 @@ Future<void> showCutPanCrop(
 }
 
 /// How big the clip's picture is in its own pixels, which is the raster its
-/// effects run on. Found by the clip's source name, and the comp's size when
+/// effects run on. Found by the clip's source item, and the comp's size when
 /// nothing answers.
-///
-/// ponytail: a name lookup, so two items of one name give the first. The
-/// upgrade is the clip's source item on BridgeClip.
 Future<Size> _pictureSize(ProjectReference? project, CompositionReference comp,
     BridgeClip clip) async {
   final own = comp.getSize();
@@ -102,15 +99,20 @@ Future<Size> _pictureSize(ProjectReference? project, CompositionReference comp,
 
   try {
     for (final item in walk(project.getItems())) {
-      if (item.name() != clip.sourceName) continue;
       switch (item) {
-        case ItemReference_Footage(:final field0) when !clip.sourceIsComp:
+        case ItemReference_Footage(:final field0)
+            when field0.internalid == clip.source:
           final info = await field0.mediaInfo();
           if (info != null && info.width > 0 && info.height > 0) {
             return Size(info.width.toDouble(), info.height.toDouble());
           }
-        case ItemReference_Composition(:final field0) when clip.sourceIsComp:
+        case ItemReference_Composition(:final field0)
+            when field0.internalid == clip.source:
           final s = field0.getSize();
+          return Size(s.width.toDouble(), s.height.toDouble());
+        case ItemReference_Solid(:final field0)
+            when field0.internalid == clip.source:
+          final s = field0.getDefinition();
           return Size(s.width.toDouble(), s.height.toDouble());
         default:
       }

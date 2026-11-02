@@ -5227,7 +5227,7 @@
       "slug": "shake",
       "match_name": "shake",
       "label": "Shake",
-      "version": 1,
+      "version": 2,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -5518,6 +5518,87 @@
           "slider_max": 360.0
         },
         {
+          "id": "red_amount",
+          "label": "Red amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "red_phase",
+          "label": "Red phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "green_amount",
+          "label": "Green amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "green_phase",
+          "label": "Green phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "blue_amount",
+          "label": "Blue amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "blue_phase",
+          "label": "Blue phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "rgb_randomness",
+          "label": "Randomness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "rgb_freq",
+          "label": "Random rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "motion_blur",
           "label": "Motion blur",
           "kind": "bool",
@@ -5583,6 +5664,50 @@
             "Mirror"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "crop_left",
+          "label": "Crop left",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_right",
+          "label": "Crop right",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_top",
+          "label": "Crop top",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_bottom",
+          "label": "Crop bottom",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "seed",
@@ -5727,11 +5852,35 @@
           "collapsed": true
         },
         {
+          "label": "Channels",
+          "params": [
+            "red_amount",
+            "red_phase",
+            "green_amount",
+            "green_phase",
+            "blue_amount",
+            "blue_phase",
+            "rgb_randomness",
+            "rgb_freq"
+          ],
+          "collapsed": true
+        },
+        {
           "label": "Motion blur",
           "params": [
             "motion_blur",
             "mb_amount",
             "mb_samples"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Crop",
+          "params": [
+            "crop_left",
+            "crop_right",
+            "crop_top",
+            "crop_bottom"
           ],
           "collapsed": true
         }

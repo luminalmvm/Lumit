@@ -137,7 +137,8 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     if (comp == null) return;
     for (final clip in _clips) {
       final id = clip.id.toString();
-      if (clip.sourceIsComp || _everyFrame.containsKey(id)) continue;
+      if (clip.sourceIsComp || clip.sourceIsSolid) continue;
+      if (_everyFrame.containsKey(id)) continue;
       _everyFrame[id] = null;
       final FootageReference? footage;
       try {

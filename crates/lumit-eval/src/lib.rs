@@ -81,7 +81,10 @@ pub mod schedule;
 /// * 21: an open shape path is filled, as if a straight line closed it, and
 ///   an open mask no longer hides its layer.
 /// * 22: Depth of field pro smooths the grain out of a wide blur.
-pub const ALGO_VERSION: u32 = 22;
+/// * 23: a blurred layer is drawn with more copies the faster it moves, its
+///   parents and the camera move them too, a still one is drawn once, and the
+///   inner layers of a collapsed Precomp blur.
+pub const ALGO_VERSION: u32 = 23;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -419,6 +422,7 @@ fn feed_comp(
         feed_f64(h, comp.motion_blur.shutter_angle);
         feed_f64(h, comp.motion_blur.shutter_phase);
         h.update(&comp.motion_blur.samples.to_le_bytes());
+        h.update(&comp.motion_blur.limit.to_le_bytes());
     }
     // The comp's lights (docs/06). Hashed once here rather than per
     // layer, because a light shades every layer that accepts it — and hashed
@@ -909,7 +913,7 @@ fn feed_effect_stack(
                 if name == "origin" {
                     continue;
                 }
-                // The inner graph's `layout` is canvas positions (CS4, §4.2):
+                // The inner graph's `layout` and `ties` (CS4, §4.2) are
                 // presentation state, absent from the key for the reason
                 // `LayerGraph::layout` is — moving a box changes no pixel.
                 let text = if name == "graph" {
@@ -917,7 +921,7 @@ fn feed_effect_stack(
                         serde_json::Value::Object(graph) => serde_json::Value::Object(
                             graph
                                 .iter()
-                                .filter(|(k, _)| *k != "layout")
+                                .filter(|(k, _)| !matches!(k.as_str(), "layout" | "ties"))
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect(),
                         )
@@ -1589,6 +1593,43 @@ fn feed_points_rows_at(
     }
 }
 
+/// The placements `layer`'s parents give it at comp time `t`.
+fn feed_parents(
+    h: &mut blake3::Hasher,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    t: f64,
+    stamper: &dyn SourceStamper,
+) {
+    let context = lumit_core::model::comp_context(doc, comp, t);
+    let read = lumit_core::model::context_reader(&context, t);
+    let solves = stamper.solves().map(|store| (doc, store));
+    for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
+        for v in [
+            p.position.0,
+            p.position.1,
+            p.position.2,
+            p.anchor.0,
+            p.anchor.1,
+            p.scale.0,
+            p.scale.1,
+            p.rotation_deg.2,
+            p.rotation_deg.0,
+            p.rotation_deg.1,
+        ]
+        .into_iter()
+        .chain(
+            (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
+                .then_some([p.anchor.2, p.scale.2])
+                .into_iter()
+                .flatten(),
+        ) {
+            feed_f64(h, v);
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn feed_layer(
     h: &mut blake3::Hasher,
@@ -1651,32 +1692,7 @@ fn feed_layer(
     // contribution is unchanged.
     if layer.parent.is_some() {
         h.update(b"parents/");
-        let context = lumit_core::model::comp_context(doc, comp, t);
-        let read = lumit_core::model::context_reader(&context, t);
-        let solves = stamper.solves().map(|store| (doc, store));
-        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
-            for v in [
-                p.position.0,
-                p.position.1,
-                p.position.2,
-                p.anchor.0,
-                p.anchor.1,
-                p.scale.0,
-                p.scale.1,
-                p.rotation_deg.2,
-                p.rotation_deg.0,
-                p.rotation_deg.1,
-            ]
-            .into_iter()
-            .chain(
-                (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
-                    .then_some([p.anchor.2, p.scale.2])
-                    .into_iter()
-                    .flatten(),
-            ) {
-                feed_f64(h, v);
-            }
-        }
+        feed_parents(h, doc, comp, layer, t, stamper);
     }
     h.update(&[u8::from(layer.switches.three_d)]);
     h.update(&[blend_tag(layer.blend)]);
@@ -1751,6 +1767,27 @@ fn feed_layer(
                     feed_f64(h, v);
                 }
                 feed_depth(h, tr, slt, &|p| p.value_at(slt));
+                // Its parents and the camera move the copies too, and how far
+                // they all go picks how many there are.
+                let st = t + off * dt;
+                if layer.parent.is_some() {
+                    feed_parents(h, doc, comp, layer, st, stamper);
+                }
+                if layer.switches.three_d {
+                    if let Some(pose) = stamper.camera(doc, comp, st) {
+                        for v in [
+                            pose.zoom,
+                            pose.position.0,
+                            pose.position.1,
+                            pose.position.2,
+                            pose.rotation_deg.0,
+                            pose.rotation_deg.1,
+                            pose.rotation_deg.2,
+                        ] {
+                            feed_f64(h, v);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1935,6 +1972,10 @@ fn feed_layer(
                             stamper.stamp(item, clip.held_source_time(at), native)
                         }
                         ClipSource::Comp(_) => None,
+                        ClipSource::Solid(def) => {
+                            feed_solid(h, doc, def);
+                            return;
+                        }
                     };
                     match stamp {
                         Some((identity, frame)) => {
@@ -2474,6 +2515,7 @@ fn feed_source(
                             feed_f64(h, st);
                         }
                     }
+                    ClipSource::Solid(def) => feed_solid(h, doc, def),
                     ClipSource::Comp(comp) => {
                         if visited.contains(&comp) {
                             h.update(b"cycle");
@@ -2859,6 +2901,23 @@ fn feed_depth(
         });
         for v in values {
             feed_f64(h, v);
+        }
+    }
+}
+
+/// A solid clip's picture: its colour and size, the same at every time.
+fn feed_solid(h: &mut blake3::Hasher, doc: &lumit_core::model::Document, def: uuid::Uuid) {
+    h.update(b"seq-solid/");
+    match doc.solid(def) {
+        Some(sd) => {
+            for ch in sd.colour.0 {
+                h.update(&ch.to_le_bytes());
+            }
+            h.update(&sd.width.to_le_bytes());
+            h.update(&sd.height.to_le_bytes());
+        }
+        None => {
+            h.update(b"nosolid");
         }
     }
 }
@@ -4805,12 +4864,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 22, which renamed every frame.
+        // Pinned under ALGO_VERSION 23, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                198_402_390_268_517_877_897_142_310_212_845_261_142,
-                277_017_077_478_348_940_767_282_525_562_387_889_406
+                182_280_591_360_908_586_824_180_793_851_848_185_389,
+                216_552_543_631_262_711_762_116_911_137_856_281_097
             )
         );
 

@@ -3413,9 +3413,9 @@ impl GpuEffect for Shake {
         // transform-domain effect — perturb a virtual camera, resample once):
         // the shared affine turns the resolved wobble into the same op the CPU
         // reference builds, so both paths consume bit-identical numbers. With
-        // its own motion blur on (T18) it builds one affine per sub-frame
-        // and dispatches the averaging kernel instead, over the same sub-frames
-        // `cpu::transform_average` averages. Shake's own Edges control governs
+        // its own motion blur on (T18), Channels or Crop it builds one affine
+        // per placement and dispatches the averaging kernel instead, over the
+        // same placements `cpu::transform_average` averages. Shake's own Edges control governs
         // the border the wobble reveals, either way.
         let params = ShakeParams::read(p);
         match params.packed(ShakeParams::derived_of(p)) {
@@ -3453,17 +3453,20 @@ impl GpuEffect for Shake {
                     },
                 )
             }
-            Shaken::Blurred {
+            Shaken::Taps {
                 samples,
                 count,
+                split,
+                crop,
                 edge,
                 mix,
             } => {
                 let mut taps = [lumit_gpu::fx::stylise::ShakeMbTap {
                     m: [1.0, 0.0, 0.0, 1.0],
                     off: [0.0, 0.0],
+                    channels: 7,
                 }; lumit_gpu::fx::stylise::SHAKE_MB_SAMPLES];
-                for (t, s) in taps.iter_mut().zip(samples.iter()) {
+                for (i, (t, s)) in taps.iter_mut().zip(samples.iter()).enumerate() {
                     let (anchor, position, scale, rot) = lumit_core::fx::maths::shake_affine(
                         w,
                         h,
@@ -3479,7 +3482,11 @@ impl GpuEffect for Shake {
                         lumit_core::fx::maths::NO_SKEW,
                         1.0,
                     );
-                    *t = lumit_gpu::fx::stylise::ShakeMbTap { m, off };
+                    *t = lumit_gpu::fx::stylise::ShakeMbTap {
+                        m,
+                        off,
+                        channels: Shaken::tap_channels(i, count, split),
+                    };
                 }
                 fx.shake_mb(
                     ctx,
@@ -3491,6 +3498,7 @@ impl GpuEffect for Shake {
                         taps,
                         count: count as u32,
                         edge,
+                        crop: Shaken::crop_px(crop, w, h),
                         mix,
                     },
                 )

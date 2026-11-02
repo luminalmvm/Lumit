@@ -2608,7 +2608,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     assert!(
         matches!(
             shake_packed(&smeared, 0.4, 1000.0),
-            effects::shake::Shaken::Blurred { .. }
+            effects::shake::Shaken::Taps { .. }
         ),
         "motion blur on carries sub-frames"
     );
@@ -4522,6 +4522,46 @@ fn beams_percent_length_converts_against_its_own_run() {
         (read(&effects, "length") - 390.0).abs() < 1e-9,
         "idempotent"
     );
+}
+
+// Shake's Phase now holds the shake back, so an old shake's Phase is turned
+// round on load and its wobble is the one it always had.
+#[test]
+fn an_old_shakes_phase_is_turned_round_and_shakes_the_same() {
+    let noise_of = |inst: &crate::model::EffectInstance| {
+        let packed = shake_packed(inst, 0.4, 1000.0);
+        format!("{packed:?}")
+    };
+    let mut old = instantiate("shake").unwrap();
+    old.effect.version = 1;
+    let mut new = old.clone();
+    new.effect.version = 2;
+    for (inst, phase) in [(&mut old, 0.3), (&mut new, -0.3)] {
+        for p in &mut inst.params {
+            if p.id == "phase" {
+                p.value = EffectValue::Float(Property::fixed(phase));
+            }
+        }
+    }
+    let mut effects = vec![old.clone()];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert_eq!(effects[0].effect.version, 2);
+    assert_eq!(noise_of(&effects[0]), noise_of(&new));
+
+    // A Phase an expression drives stays on version 1 and reads as before.
+    let mut scripted = old;
+    for p in &mut scripted.params {
+        if p.id == "phase" {
+            p.value = EffectValue::Float(Property {
+                animation: crate::anim::Animation::Expression("0.3".into()),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+    let mut effects = vec![scripted.clone()];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert_eq!(effects[0].effect.version, 1);
+    assert_eq!(noise_of(&effects[0]), noise_of(&new));
 }
 
 // Card wipe's Transition width was a per cent of the frame measured along

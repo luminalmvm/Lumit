@@ -4600,6 +4600,54 @@
   "@fxYEdges": {
     "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
   },
+  "fxRedAmount": "Red amount",
+  "@fxRedAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the red channel shakes, × the whole shake."
+  },
+  "fxRedPhase": "Red phase",
+  "@fxRedPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the red channel's shake runs behind the rest."
+  },
+  "fxGreenAmount": "Green amount",
+  "@fxGreenAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the green channel shakes, × the whole shake."
+  },
+  "fxGreenPhase": "Green phase",
+  "@fxGreenPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the green channel's shake runs behind the rest."
+  },
+  "fxBlueAmount": "Blue amount",
+  "@fxBlueAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the blue channel shakes, × the whole shake."
+  },
+  "fxBluePhase": "Blue phase",
+  "@fxBluePhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the blue channel's shake runs behind the rest."
+  },
+  "fxRandomRate": "Random rate",
+  "@fxRandomRate": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how fast each colour channel's own wobble moves, × Frequency."
+  },
+  "fxChannels": "Channels",
+  "@fxChannels": {
+    "description": "Effect controls — the twirl on Shake that shakes the red, green and blue channels apart."
+  },
+  "fxCropLeft": "Crop left",
+  "@fxCropLeft": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the left before shaking."
+  },
+  "fxCropRight": "Crop right",
+  "@fxCropRight": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the right before shaking."
+  },
+  "fxCropTop": "Crop top",
+  "@fxCropTop": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the top before shaking."
+  },
+  "fxCropBottom": "Crop bottom",
+  "@fxCropBottom": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the bottom before shaking."
+  },
   "fxSame": "Same",
   "@fxSame": {
     "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
@@ -11234,6 +11282,14 @@
   "@cutPanEnvelope": {
     "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
   },
+  "envelopePointSet": "Set value…",
+  "@envelopePointSet": {
+    "description": "Cut timeline — envelope point menu: type the value for this point in a small field."
+  },
+  "envelopeThin": "Thin points",
+  "@envelopeThin": {
+    "description": "Cut timeline — envelope menu: take away the points the curve does not need."
+  },
   "envelopePointReset": "Reset",
   "@envelopePointReset": {
     "description": "Volume or pan envelope, right-click a point: put it back to 0 dB, or to centre for pan."
@@ -13524,7 +13580,11 @@
   },
   "compSamples": "Samples",
   "@compSamples": {
-    "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
+    "description": "New composition / Composition settings dialog: label beside the shutter angle: the fewest sub-frame samples a moving blurred layer is drawn at."
+  },
+  "compSamplesTo": "to",
+  "@compSamplesTo": {
+    "description": "New composition / Composition settings dialog: the word between the two sample counts, read as 'Samples 16 to 128': the fewest a moving blurred layer is drawn at, then the most a fast one is."
   },
   "compBackground": "Background",
   "@compBackground": {

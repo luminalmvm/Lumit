@@ -1271,6 +1271,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// A right-click on empty canvas, waiting for its release.
   bool _menuPress = false;
 
+  @override
+  List<TieWire> tieWiresNow() {
+    final graph = _graph;
+    if (graph == null) return const [];
+    return _wiresOf(_layoutOf(
+      graph,
+      _positions,
+      graph.wiring.exposed.map(graphNodeKey).toSet(),
+      _layerName,
+      _params,
+    ));
+  }
+
   /// The boxes as they stand, for a placement that has to miss them.
   List<GraphBox> _boxesNow() {
     final graph = _graph;
@@ -1340,7 +1353,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         _showsCompGraph) {
       return _priorDeleteClaim?.call() ?? false;
     }
-    return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
+    return tieDelete() ||
+        _deleteSelected() ||
+        (_priorDeleteClaim?.call() ?? false);
   }
 
   /// Whether the panel's face is the **node graph composition's** canvas,
@@ -2683,14 +2698,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final at = (_positions[drag.key] ?? box.rect.topLeft) +
         Offset(box.rect.width / 2, box.rect.height / 2);
 
+    // Measured along each wire as its ties route it.
+    final wires = _wiresOf(layout);
     for (final edge in graph.wiring.edges) {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      if (graphWireDistance(ends.$1, ends.$2, at,
-              wires: _ui!.workspace.interface.wireStyle) >
-          graphWireGrab) {
-        continue;
-      }
+      final wire = (key: tieWireKey(_inputEnd(edge).$1, _inputEnd(edge).$2), from: ends.$1, to: ends.$2);
+      if (tieWireDistance(wire, at, wires) > graphWireGrab) continue;
       final into = _freeSocket(box, ends.$3, isInput: true);
       final outOf = _freeSocket(box, ends.$3, isInput: false);
       // Both types match the wire's by construction and the box has nothing
@@ -2735,7 +2749,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
-    final socket = layout.socketAt(at);
+    // Ctrl and a press on a point is a press on the socket its wires leave.
+    final socket =
+        layout.socketAt(tieWireFrom(event, at, _wiresOf(layout)) ?? at);
     // A group's bar, unless a socket is poking out over it.
     if (groupDown(event, at, (drag) => _nodeDrag = drag,
         unless: socket != null)) {
@@ -2980,6 +2996,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
+      tieWireLanded();
       final landed = layout.snapAt(at, _fits(flight)) ?? layout.socketAt(at);
       if (flight.chain case final held?) {
         // Out of an effect's output into a Matte below: a wire, not a move.
@@ -3313,7 +3330,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                   tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
               onPointerSignal: _wheel,
               behavior: HitTestBehavior.opaque,
-              child: Container(
+              child: tieCursorRegion(Container(
                 key: const ValueKey('graph-canvas'),
                 // Clipped, so a box or a group's frame pushed past the top
                 // edge goes under the toolbar and not over it.
@@ -3442,7 +3459,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                     _legend(t),
                   ],
                 ),
-              ),
+              )),
             ),
           ),
           // An effect dragged in from Effects & presets. Translucent, so every
@@ -4106,7 +4123,9 @@ class _GraphPainter extends CustomPainter {
     if (flight case final f?) {
       // A wire drawn out of an input runs the other way, pointer to socket,
       // so it leaves the input heading left as a stored wire would.
-      final (a, b) = f.from.isInput ? (f.end, f.from.at) : (f.from.at, f.end);
+      final (a, b) = f.from.isInput
+          ? (f.end, f.from.at)
+          : (ties.via ?? f.from.at, f.end);
       _wire(canvas, a, b, dragged, dashes: true);
     }
   }

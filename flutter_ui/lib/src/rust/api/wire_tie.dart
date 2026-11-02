@@ -17,14 +17,18 @@ class BridgeWireTie {
   /// Each wire by the socket it ends in, `box/socket`.
   final List<String> wires;
 
+  /// A reroute point: every wire through the one spot.
+  final bool point;
+
   const BridgeWireTie({
     required this.x,
     required this.y,
     required this.wires,
+    required this.point,
   });
 
   @override
-  int get hashCode => x.hashCode ^ y.hashCode ^ wires.hashCode;
+  int get hashCode => x.hashCode ^ y.hashCode ^ wires.hashCode ^ point.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -33,5 +37,6 @@ class BridgeWireTie {
           runtimeType == other.runtimeType &&
           x == other.x &&
           y == other.y &&
-          wires == other.wires;
+          wires == other.wires &&
+          point == other.point;
 }

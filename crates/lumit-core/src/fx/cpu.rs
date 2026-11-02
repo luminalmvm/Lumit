@@ -722,27 +722,35 @@ pub fn transform_matted(
 /// by `mix`. The accumulation order and the divide-by-count match the WGSL
 /// kernel op-for-op, so both paths agree within the cheap-class fp16 bound
 /// (§1.6). An empty `ops` is a defensive no-op (the caller never passes one).
+///
+/// Each op also names the channels it feeds (1 red, 2 green, 4 blue; alpha
+/// always), and a channel is the mean of the ops that feed it: that is how
+/// Shake's Channels shake the colours apart. `crop` is the part of the image
+/// the edge policy treats as the whole, `[x0, y0, x1, y1]` in pixels.
 pub fn transform_average(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
 ) {
-    transform_average_matted(rgba, w, h, ops, edge, mix, &[]);
+    transform_average_matted(rgba, w, h, ops, edge, crop, mix, &[]);
 }
 
 /// [`transform_average`] driven by a matte: every sub-frame
 /// tap's displacement is scaled toward none by the destination pixel's matte
 /// strength, exactly as [`transform_matted`] scales the single tap. An empty
 /// matte is the unmatted path to the byte.
+#[allow(clippy::too_many_arguments)]
 pub fn transform_average_matted(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
     matte: &[f32],
 ) {
@@ -750,7 +758,13 @@ pub fn transform_average_matted(
         return;
     }
     let original = rgba.to_vec();
-    let n = ops.len() as f32;
+    let feeds = |bits: u32| [bits & 1, bits >> 1 & 1, bits >> 2 & 1, 1].map(|b| b as f32);
+    let mut n = [0.0f32; 4];
+    for (_, _, bits) in ops {
+        for (n, f) in n.iter_mut().zip(feeds(*bits)) {
+            *n += f;
+        }
+    }
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -758,16 +772,17 @@ pub fn transform_average_matted(
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
             let mut acc = [0.0f32; 4];
-            for (m, o) in ops {
+            for (m, o, bits) in ops {
                 let qx = matte_toward(m[0] * px + m[1] * py + o[0], px, k);
                 let qy = matte_toward(m[2] * px + m[3] * py + o[1], py, k);
-                let s = bilinear_edge(&original, w, h, qx, qy, edge);
+                let s = bilinear_edge_in(&original, w, qx, qy, edge, crop);
+                let f = feeds(*bits);
                 for c in 0..4 {
-                    acc[c] += s[c];
+                    acc[c] += s[c] * f[c];
                 }
             }
             for c in 0..4 {
-                let v = acc[c] / n;
+                let v = acc[c] / n[c];
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
             }
         }
@@ -5956,15 +5971,23 @@ pub fn radial_blur_taps(amount_px: f32) -> i32 {
 /// `edge` past 3 carries a separate policy for y in its upper bits (see
 /// [`edge_y`]).
 fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+    bilinear_edge_in(rgba, w, sx, sy, edge, [0, 0, w, h])
+}
+
+/// [`bilinear_edge`] with the edges at `crop`, `[x0, y0, x1, y1]` in pixels:
+/// what lies outside it is read as the policy reads outside the frame.
+fn bilinear_edge_in(rgba: &[f32], w: u32, sx: f32, sy: f32, edge: u32, crop: [u32; 4]) -> [f32; 4] {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = fx.floor();
     let y0 = fy.floor();
     let tx = fx - x0;
     let ty = fy - y0;
-    let (wi, hi) = (w as i64, h as i64);
+    let wi = w as i64;
+    let [x0c, y0c, x1c, y1c] = crop.map(i64::from);
     let (ex, ey) = (edge & 3, edge_y(edge));
-    let at = |x: i64, y: i64| match (edge_index(x, wi, ex), edge_index(y, hi, ey)) {
+    let inside = |i: i64, lo: i64, hi: i64, e: u32| edge_index(i - lo, hi - lo, e).map(|i| i + lo);
+    let at = |x: i64, y: i64| match (inside(x, x0c, x1c, ex), inside(y, y0c, y1c, ey)) {
         (Some(x), Some(y)) => {
             let s = ((y * wi + x) * 4) as usize;
             [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]]

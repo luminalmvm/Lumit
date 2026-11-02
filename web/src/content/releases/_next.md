@@ -5,3 +5,4 @@ section below, and when the release note is written the lines move into it.
 ## Before you update
 
 - Depth of field pro no longer leaves a fine grain over a wide blur, by either method.
+- Fast layers with motion blur are drawn with more copies, up to 128, so they smear instead of stepping. A child now blurs with its parent, a 3D layer blurs when the camera moves, and the layers inside a collapsed precomp blur. Exports of those can look smoother and take longer. Set the second number beside **Samples** in **Composition settings** to the first to keep a fixed count.

@@ -1950,6 +1950,7 @@ impl HeadlessRenderer {
                                 lumit_core::model::comp_footage_items(doc, c)
                             })
                         }
+                        lumit_core::sequence::ClipSource::Solid(_) => Vec::new(),
                     };
                     for item in items {
                         if let Some(ProjectItem::Footage(f)) = doc.item(item) {
@@ -3577,6 +3578,8 @@ impl AudioJobsBuilder {
                     Some((item, sound))
                 }
                 lumit_core::sequence::ClipSource::Comp(_) => None,
+                // A colour makes no sound.
+                lumit_core::sequence::ClipSource::Solid(_) => continue,
             };
             let (start_s, end_s) = spans[i];
             // What the layer's own in/out points leave of it.
@@ -3858,6 +3861,7 @@ impl AudioJobsBuilder {
                         lumit_core::sequence::ClipSource::Comp(comp) => {
                             self.kind_has_audio(doc, &LayerKind::Precomp { comp }, visited)
                         }
+                        lumit_core::sequence::ClipSource::Solid(_) => false,
                     };
                     if sounds {
                         has = true;
@@ -6655,6 +6659,7 @@ mod tests {
                     shutter_angle: 180.0,
                     shutter_phase: -90.0,
                     samples: 8,
+                    ..lumit_core::model::MotionBlur::default()
                 };
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.switches.motion_blur = true;

@@ -25,9 +25,9 @@
 // The same band draws Pan when asked ([BandKind.pan]): centre in the middle,
 // left at the top and right at the bottom, as Vegas draws it. A double-click
 // on a key puts it back to 0 dB or centre, and anywhere else on the line
-// plants one. Right-click a key to reset or delete it, or the line for a
-// point, the curve of the span under the pointer, Flip and Reset all, as
-// Vegas's envelope menu has them. An expression's value or a locked layer is
+// plants one. Right-click a key to type its value, reset or delete it, or the
+// line for a point, the curve of the span under the pointer, Thin, Flip and
+// Reset all, as Vegas's envelope menu has them. An expression's value or a locked layer is
 // not for dragging: the first draws nothing, the second only the line.
 
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
@@ -112,6 +112,10 @@ class VolumeBand extends StatefulWidget {
 }
 
 class VolumeBandState extends State<VolumeBand> {
+  /// The press a band took last, so the lane under it leaves that press
+  /// alone: its own double-click would open the clip too.
+  static int? claimed;
+
   /// The drag in flight: which key it holds (null while the property is
   /// static and the whole level moves), the value it has reached, and the
   /// value it began at. Travel in, travel out, so the line never teleports to
@@ -461,8 +465,79 @@ class VolumeBandState extends State<VolumeBand> {
     _write(BridgeScalar.keyframed(grown));
   }
 
-  /// Right-click a key to reset or delete it, or the line for a point, the
-  /// span's curve, Flip and Reset all.
+  /// [keys] without the keys the curve does not need: each one whose going
+  /// moves the line by no more than a hair anywhere, first to last. The ends
+  /// stay.
+  List<BridgeKeyframe> _thinned(List<BridgeKeyframe> keys) {
+    final hair = _pan ? 0.5 : 0.05;
+    var kept = [...keys];
+    for (var i = 1; i + 1 < kept.length;) {
+      final without = [...kept]..removeAt(i);
+      final t0 = rationalSeconds(kept[i - 1].time);
+      final t1 = rationalSeconds(kept[i + 1].time);
+      var near = true;
+      for (var s = 0; s <= 32 && near; s++) {
+        final t = t0 + (t1 - t0) * s / 32;
+        near = (evaluateKeys(kept, t) - evaluateKeys(without, t)).abs() <= hair;
+      }
+      if (near) {
+        kept = without;
+      } else {
+        i++;
+      }
+    }
+    return kept;
+  }
+
+  /// A value typed for key [index] in a field by the pointer at [global]. The
+  /// key follows the field while it is scrubbed, and the value is written
+  /// once, on Enter.
+  Future<void> _setValue(
+      List<BridgeKeyframe> keys, int index, Offset global) async {
+    final t = ThemeScope.of(context).theme;
+    _grabbedAt = keys[index].value;
+    final typed = await showLumitPopup<double>(
+      context: context,
+      position: global,
+      builder: (close) {
+        var value = keys[index].value;
+        return FloatSurface(
+          width: 120,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: DragValueField(
+              key: const ValueKey('band-value-field'),
+              autofocus: true,
+              value: value,
+              min: _pan ? -100 : volumeBandFloorDb,
+              max: _pan ? 100 : volumeBandTopDb,
+              decimals: 1,
+              signed: true,
+              suffix: _pan ? null : l10n.unitSymbolDb,
+              fill: t.surface0,
+              onChanged: (v) {
+                value = v.toDouble();
+                if (mounted) {
+                  setState(() {
+                    _timed = _span = false;
+                    _drag = (index: index, value: value);
+                  });
+                }
+              },
+              onSubmitted: () => close(value),
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    setState(() => _drag = null);
+    if (typed == null || !listEquals(_keys, keys)) return;
+    if (typed != keys[index].value) _write(_withKey(keys, index, typed));
+  }
+
+  /// Right-click a key to type its value, reset or delete it, or the line for
+  /// a point, the span's curve, Thin, Flip and Reset all.
   Future<void> _menu(Offset local, Offset global) async {
     final keys = _keys;
     final key = keys.isEmpty ? null : _keyNear(local);
@@ -482,6 +557,10 @@ class VolumeBandState extends State<VolumeBand> {
       width: 170,
       rows: (close) => [
         if (key != null) ...[
+          MenuRow(
+              key: const ValueKey('band-set-point'),
+              onPressed: () => close('set'),
+              child: Text(l10n.envelopePointSet)),
           MenuRow(
               key: const ValueKey('band-reset-point'),
               onPressed: () => close('reset'),
@@ -505,6 +584,11 @@ class VolumeBandState extends State<VolumeBand> {
                   Expanded(child: Text(name)),
                 ]),
               ),
+          if (keys.length > 2)
+            MenuRow(
+                key: const ValueKey('band-thin'),
+                onPressed: () => close('thin'),
+                child: Text(l10n.envelopeThin)),
           MenuRow(
               key: const ValueKey('band-flip'),
               onPressed: () => close('flip'),
@@ -520,6 +604,11 @@ class VolumeBandState extends State<VolumeBand> {
     // these keys.
     if (!mounted || picked == null || !listEquals(_keys, keys)) return;
     switch (picked) {
+      case 'set':
+        await _setValue(keys, key!, global);
+      case 'thin':
+        final thin = _thinned(keys);
+        if (thin.length < keys.length) _write(BridgeScalar.keyframed(thin));
       case 'reset':
         if (keys[key!].value != 0) _write(_withKey(keys, key, 0));
       case 'delete':
@@ -576,7 +665,9 @@ class VolumeBandState extends State<VolumeBand> {
         onPanUpdate: (d) => _moveDrag(d.delta),
         onPanEnd: (_) => _commitDrag(),
         onPanCancel: () => setState(() => _drag = null),
-        child: CustomPaint(
+        child: Listener(
+          onPointerDown: (e) => claimed = e.pointer,
+          child: CustomPaint(
           size: Size(widget.axis.width, widget.rowHeight),
           painter: VolumeBandPainter(
             points: points,
@@ -602,7 +693,7 @@ class VolumeBandState extends State<VolumeBand> {
             // A locked layer shows its line and takes no hold of it.
             grabbable: !widget.entry.info.switches.locked,
           ),
-        ),
+        )),
       ),
     );
   }

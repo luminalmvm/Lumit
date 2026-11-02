@@ -3021,7 +3021,8 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
         for layer in &comp.layers {
             let removed = if let LayerKind::Sequence { clips } = &layer.kind {
                 let lives = |s: &ClipSource| {
-                    let (ClipSource::Footage(id) | ClipSource::Comp(id)) = s;
+                    let (ClipSource::Footage(id) | ClipSource::Comp(id) | ClipSource::Solid(id)) =
+                        s;
                     !gone.contains(id)
                 };
                 // A clip goes with the item it shows; a take of a removed
