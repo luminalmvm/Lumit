@@ -10,7 +10,14 @@
 //! A composition is Y down with Z going away from the eye, so a model reaches
 //! it turned half a turn about X, then scaled by its Model settings.
 
-use std::path::PathBuf;
+use std::path::{Path as FilePath, PathBuf};
+use std::sync::atomic::AtomicBool;
+
+use lumit_ingress::{Budget, Limits};
+
+mod fbx_file;
+mod files;
+mod gltf_file;
 
 /// One model: its tree of nodes and everything they point at.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -291,4 +298,223 @@ pub enum SceneError {
     TooLarge { path: PathBuf },
     #[error("cancelled")]
     Cancelled,
+}
+
+/// The extensions [`read`] opens, lower case.
+pub const EXTENSIONS: [&str; 4] = ["gltf", "glb", "fbx", "obj"];
+
+/// Read the model at `path`, held to `limits` and stopped when `cancel` is
+/// set. Never panics, whatever the file holds.
+pub fn read(
+    path: &FilePath,
+    limits: Limits,
+    cancel: &AtomicBool,
+) -> Result<ModelScene, SceneError> {
+    let mut r = files::Reader::new(path, Budget::new(limits), cancel);
+    // Both parsers are other people's code, and the gltf crate's panic fixes
+    // aren't released yet, so a panic in either is a file that won't open.
+    let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut scene = match extension(path).as_str() {
+            "gltf" | "glb" => gltf_file::read(&mut r),
+            "fbx" | "obj" => fbx_file::read(&mut r),
+            // .blend, USD, Alembic, PLY, STL and DAE go here: turned into a
+            // GLB by the user's Blender, then read by gltf_file::read.
+            _ => Err(SceneError::Unsupported {
+                path: path.to_path_buf(),
+            }),
+        }?;
+        link(&mut scene).map_err(|reason| r.fail(reason))?;
+        tangents(&mut scene);
+        scene.bounds = bounds(&scene);
+        Ok(scene)
+    }));
+    let mut scene = read.unwrap_or_else(|_| Err(r.fail("the file is damaged")))?;
+    scene.missing = std::mem::take(&mut r.missing);
+    // A picture two materials share is named once.
+    scene.missing.sort();
+    scene.missing.dedup();
+    Ok(scene)
+}
+
+/// The other files a model pulls in (its .bin, pictures and .mtl) that are
+/// there to be found, for packing and collecting. Never the model itself.
+pub fn dependants(path: &FilePath) -> Vec<PathBuf> {
+    let cancel = AtomicBool::new(false);
+    let mut r = files::Reader::new(path, Budget::new(Limits::MODEL), &cancel);
+    let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match extension(path).as_str() {
+            "gltf" | "glb" => gltf_file::dependants(&mut r),
+            "fbx" | "obj" => fbx_file::dependants(&mut r),
+            _ => Vec::new(),
+        }
+    }));
+    let mut found = found.unwrap_or_default();
+    found.sort();
+    found.dedup();
+    found
+}
+
+fn extension(path: &FilePath) -> String {
+    path.extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// Parents from children, the roots, and a refusal for a tree that loops.
+fn link(scene: &mut ModelScene) -> Result<(), &'static str> {
+    let count = scene.nodes.len();
+    for n in 0..count {
+        for c in scene.nodes[n].children.clone() {
+            let child = scene.nodes.get_mut(c).ok_or("a node's child isn't there")?;
+            child.parent = Some(n);
+        }
+    }
+    for start in 0..count {
+        let mut at = scene.nodes[start].parent;
+        for _ in 0..=count {
+            match at {
+                Some(p) => at = scene.nodes.get(p).and_then(|n| n.parent),
+                None => break,
+            }
+        }
+        if at.is_some() {
+            return Err("its tree of parts loops");
+        }
+    }
+    scene.roots = (0..count)
+        .filter(|&n| scene.nodes[n].parent.is_none())
+        .collect();
+    Ok(())
+}
+
+/// Tangents for every primitive drawn with a normal map that came without
+/// them, worked out the way the normal map's own baker did.
+fn tangents(scene: &mut ModelScene) {
+    struct Geometry<'a> {
+        p: &'a Primitive,
+        uv: &'a [[f32; 2]],
+        out: Vec<[f32; 4]>,
+    }
+    impl Geometry<'_> {
+        fn at(&self, face: usize, vert: usize) -> usize {
+            self.p
+                .indices
+                .get(face * 3 + vert)
+                .map_or(0, |&i| i as usize)
+        }
+    }
+    impl bevy_mikktspace::Geometry for Geometry<'_> {
+        fn num_faces(&self) -> usize {
+            self.p.indices.len() / 3
+        }
+        fn num_vertices_of_face(&self, _: usize) -> usize {
+            3
+        }
+        fn position(&self, face: usize, vert: usize) -> [f32; 3] {
+            self.p
+                .positions
+                .get(self.at(face, vert))
+                .copied()
+                .unwrap_or_default()
+        }
+        fn normal(&self, face: usize, vert: usize) -> [f32; 3] {
+            self.p
+                .normals
+                .get(self.at(face, vert))
+                .copied()
+                .unwrap_or_default()
+        }
+        fn tex_coord(&self, face: usize, vert: usize) -> [f32; 2] {
+            self.uv
+                .get(self.at(face, vert))
+                .copied()
+                .unwrap_or_default()
+        }
+        fn set_tangent(
+            &mut self,
+            t: Option<bevy_mikktspace::TangentSpace>,
+            face: usize,
+            vert: usize,
+        ) {
+            // ponytail: a vertex shared by faces that disagree keeps the last
+            // face's tangent. Splitting those vertices is the exact answer.
+            let i = self.at(face, vert);
+            if let (Some(t), Some(slot)) = (t, self.out.get_mut(i)) {
+                *slot = t.tangent_encoded();
+            }
+        }
+    }
+    let materials = &scene.materials;
+    for p in scene
+        .meshes
+        .iter_mut()
+        .flat_map(|m| m.primitives.iter_mut())
+    {
+        let Some(normal_map) = p
+            .material
+            .and_then(|m| materials.get(m))
+            .and_then(|m| m.normal_texture)
+        else {
+            continue;
+        };
+        let uv = if normal_map.uv_set == 1 {
+            &p.uv1
+        } else {
+            &p.uv0
+        };
+        if !p.tangents.is_empty() || p.normals.is_empty() || uv.is_empty() {
+            continue;
+        }
+        let mut g = Geometry {
+            p,
+            uv,
+            out: vec![[1.0, 0.0, 0.0, 1.0]; p.positions.len()],
+        };
+        if bevy_mikktspace::generate_tangents(&mut g).is_ok() {
+            p.tangents = g.out;
+        }
+    }
+}
+
+/// The box round every mesh in its place at rest.
+fn bounds(scene: &ModelScene) -> Bounds {
+    use glam::{Mat4, Quat, Vec3};
+    let mut lo = Vec3::splat(f32::INFINITY);
+    let mut hi = Vec3::splat(f32::NEG_INFINITY);
+    let mut stack: Vec<(usize, Mat4, usize)> = scene
+        .roots
+        .iter()
+        .map(|&n| (n, Mat4::IDENTITY, 0))
+        .collect();
+    while let Some((n, parent, depth)) = stack.pop() {
+        // A loop in the tree would never end, so depth past the node count stops it.
+        let Some(node) = scene.nodes.get(n).filter(|_| depth <= scene.nodes.len()) else {
+            continue;
+        };
+        let world = parent
+            * Mat4::from_scale_rotation_translation(
+                Vec3::from(node.scale),
+                Quat::from_array(node.rotation),
+                Vec3::from(node.translation),
+            );
+        let points = node
+            .mesh
+            .and_then(|m| scene.meshes.get(m))
+            .into_iter()
+            .flat_map(|m| &m.primitives)
+            .flat_map(|p| &p.positions);
+        for &p in points {
+            let p = world.transform_point3(Vec3::from(p));
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+        stack.extend(node.children.iter().map(|&c| (c, world, depth + 1)));
+    }
+    if lo.x > hi.x {
+        return Bounds::default();
+    }
+    Bounds {
+        min: lo.to_array(),
+        max: hi.to_array(),
+    }
 }

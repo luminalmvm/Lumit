@@ -209,6 +209,16 @@ impl Limits {
         work: 1 << 32,
     };
 
+    /// A 3D model with its geometry and pictures. A heavy scene with every
+    /// picture at 4K decodes to a few gigabytes; 6 GiB admits it and stops a
+    /// file that claims a mesh larger than any graphics card holds.
+    pub const MODEL: Limits = Limits {
+        bytes: 6 << 30,
+        items: 1_000_000,
+        depth: 64,
+        work: 1 << 32,
+    };
+
     /// A sidecar or cache file written beside a project — roto mattes, media
     /// indexes, thumbnails.
     pub const SIDECAR: Limits = Limits {
