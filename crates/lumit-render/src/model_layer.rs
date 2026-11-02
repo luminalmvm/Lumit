@@ -10,10 +10,6 @@ use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
 
-// ponytail: a model takes no motion blur yet (motion_blur_samples gives it
-// none). It needs its placement at each shutter sample, a mesh pass at each,
-// their average, and the nearest depth of them all, so the smear isn't cut
-// to the still model's outline where it joins.
 impl Realiser<'_> {
     /// Model draw `m` seen through the comp's camera, or the default one when
     /// it has none, and lit by `l`'s lights as `l`'s Material options take
@@ -31,12 +27,18 @@ impl Realiser<'_> {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
         let eye = [pose.position.0, pose.position.1, pose.position.2].map(|v| v as f32);
+        let shutter: Vec<Mat4> = m
+            .shutter
+            .iter()
+            .map(|p| Mat4::from_cols_array_2d(p) * Mat4::from_cols_array_2d(&m.model_to_comp))
+            .collect();
         let view = ModelView {
             comp: (width, height),
             render_scale: self.render_scale,
             samples: self.samples,
             camera: crate::export::camera_mat(width, height, pose),
             model_to_comp: to_comp(m),
+            shutter: &shutter,
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial { eye, ..l.material },
         };

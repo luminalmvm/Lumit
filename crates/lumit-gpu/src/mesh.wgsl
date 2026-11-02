@@ -246,3 +246,9 @@ fn fs_down(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let size = vec2<f32>(textureDimensions(down_from));
     return textureSampleLevel(down_from, down_samp, pos.xy * 2.0 / size, 0.0);
 }
+
+// A shutter sample's picture, added to the others at the pass's share.
+@fragment
+fn fs_add(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return textureLoad(down_from, vec2<i32>(pos.xy), 0);
+}

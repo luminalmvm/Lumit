@@ -8,7 +8,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use lumit_core::model::{Document, ProjectItem, ShadowMode};
+use lumit_core::expression::ExpressionContext;
+use lumit_core::model::{Composition, Document, Layer, ProjectItem, ShadowMode};
 use lumit_core::model_layer::{ModelSettings, UpAxis};
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
@@ -25,6 +26,9 @@ pub struct ModelDraw {
     /// that takes Y up to the comp's Y down, the Up axis and the Units, or the
     /// fit. Applied before `placement`. Column-major.
     pub model_to_comp: [[f32; 4]; 4],
+    /// `placement` at each shutter sample when the layer blurs, empty when
+    /// it doesn't.
+    pub shutter: Vec<[[f32; 4]; 4]>,
     pub opacity: f32,
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
@@ -114,6 +118,62 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
         return None;
     }
     read_and_keep(key)
+}
+
+/// Model layer `layer` as the mesh pass draws it at comp time `t_comp`,
+/// `None` while its file is missing, won't open or is still being read.
+pub(crate) fn draw(
+    doc: &Document,
+    comp: &Composition,
+    layer: &Layer,
+    item: Uuid,
+    settings: &ModelSettings,
+    t_comp: f64,
+    context: &Arc<ExpressionContext>,
+) -> Option<ModelDraw> {
+    let scene = scene(doc, item)?;
+    let material = &layer.transform.material;
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let placed = |t: f64| {
+        // Each shutter sample reads `time` at its own moment.
+        let context = Arc::new(ExpressionContext {
+            comp_time: t,
+            ..(**context).clone()
+        });
+        crate::placement::world_placement(comp, layer, t, context)
+    };
+    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let offsets = match layer.switches.motion_blur {
+        true => comp.motion_blur.sample_offsets(),
+        false => Vec::new(),
+    };
+    let placement = crate::placement::world_placement(comp, layer, t_comp, Arc::clone(context));
+    let mut shutter: Vec<_> = offsets
+        .iter()
+        .map(|off| placed(t_comp + off * dt))
+        .collect();
+    // A model that stays put over the shutter is drawn once.
+    if shutter.iter().all(|s| *s == placement) {
+        shutter.clear();
+    }
+    Some(ModelDraw {
+        item,
+        placement,
+        model_to_comp: model_to_comp(
+            settings,
+            &scene.bounds,
+            (comp.width as f32, comp.height as f32),
+        ),
+        shutter,
+        scene,
+        opacity: layer
+            .transform
+            .opacity
+            .value_at_with_context(lt, Arc::clone(context)) as f32,
+        casts_shadows: material.casts_shadows,
+        accepts_shadows: material.accepts_shadows,
+        accepts_lights: layer.switches.accepts_lights,
+    })
 }
 
 /// The key model item `item`'s file is kept under, as it is on disk now.

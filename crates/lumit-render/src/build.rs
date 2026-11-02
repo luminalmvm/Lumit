@@ -4480,24 +4480,10 @@ fn comp_walk(
                 continue;
             }
             LayerKind::Model { item, settings } => {
-                let Some(scene) = crate::model::scene(doc, *item) else {
+                let Some(draw) =
+                    crate::model::draw(doc, comp, layer, *item, settings, t_comp, &context)
+                else {
                     continue;
-                };
-                let material = &layer.transform.material;
-                let model_to_comp = crate::model::model_to_comp(
-                    settings,
-                    &scene.bounds,
-                    (comp.width as f32, comp.height as f32),
-                );
-                let draw = crate::model::ModelDraw {
-                    item: *item,
-                    placement: world_placement(comp, layer, t_comp, context.clone()),
-                    model_to_comp,
-                    scene,
-                    opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32,
-                    casts_shadows: material.casts_shadows,
-                    accepts_shadows: material.accepts_shadows,
-                    accepts_lights: layer.switches.accepts_lights,
                 };
                 (DrawSource::Model(Box::new(draw)), (1.0, 1.0))
             }

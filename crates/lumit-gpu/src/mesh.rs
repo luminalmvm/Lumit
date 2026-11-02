@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use wgpu::util::DeviceExt;
 
+mod blur;
 mod upload;
 
 /// What the picture is made in: linear, premultiplied, the compositor's own
@@ -49,6 +50,8 @@ pub struct ModelView<'a> {
     /// Model space (metres, Y up) to comp pixels, the half turn about X
     /// already in it.
     pub model_to_comp: Mat4,
+    /// The same at each shutter sample when the model blurs, empty when not.
+    pub shutter: &'a [Mat4],
     /// The comp's lights as a 3D layer takes them, at most eight, and the
     /// eye and Accepts lights from the layer's Material options. Its numbers
     /// are left out, as a model's materials come from its file. No lights
@@ -139,8 +142,12 @@ pub(crate) struct MeshFx {
         [wgpu::RenderPipeline; 2],
         wgpu::Sampler,
     ),
-    /// Per sample count: opaque and blended, each culled and double-sided.
-    sets: Mutex<HashMap<u32, Arc<[wgpu::RenderPipeline; 4]>>>,
+    /// By sample count and kind: opaque and blended, each culled and
+    /// double-sided, then depth alone, culled and double-sided. Each is made
+    /// the first time a draw needs it, as making one takes a while.
+    sets: Mutex<HashMap<(u32, usize), Arc<wgpu::RenderPipeline>>>,
+    /// Adds a shutter sample's picture to the rest ([`blur`]).
+    add: wgpu::RenderPipeline,
     white: wgpu::Texture,
     models: Mutex<Vec<(Weak<ModelScene>, Arc<GpuModel>)>>,
     scratch: Mutex<Option<Scratch>>,
@@ -300,6 +307,7 @@ impl MeshFx {
             }),
         );
         let down = (down_layout, down.0, down.1);
+        let add = blur::add_pipeline(device, &shader, &pipeline_layout("mesh-add", &[&down.0]));
         let white = device.create_texture_with_data(
             &ctx.queue,
             &wgpu::TextureDescriptor {
@@ -327,6 +335,7 @@ impl MeshFx {
             depth_one,
             depth_many,
             down,
+            add,
             sets: Mutex::new(HashMap::new()),
             white,
             models: Mutex::new(Vec::new()),
@@ -385,15 +394,20 @@ impl MeshFx {
         }
     }
 
-    /// The four mesh pipelines at `samples`, built the first time they are
-    /// asked for.
-    fn pipelines(&self, device: &wgpu::Device, samples: u32) -> Arc<[wgpu::RenderPipeline; 4]> {
+    /// The mesh pipeline of kind `set` at `samples`, made the first time it
+    /// is asked for.
+    fn pipeline(
+        &self,
+        device: &wgpu::Device,
+        samples: u32,
+        set: usize,
+    ) -> Arc<wgpu::RenderPipeline> {
         let build = || {
             let attributes = wgpu::vertex_attr_array![
                 0 => Float32x3, 1 => Float32x3, 2 => Float32x4,
                 3 => Float32x2, 4 => Float32x2, 5 => Float32x4,
             ];
-            let make = |blend: bool, cull: Option<wgpu::Face>| {
+            let make = |blend: bool, cull: Option<wgpu::Face>, writes: wgpu::ColorWrites| {
                 device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("mesh"),
                     layout: Some(&self.layout),
@@ -413,7 +427,7 @@ impl MeshFx {
                         targets: &[Some(wgpu::ColorTargetState {
                             format: COLOUR,
                             blend: blend.then_some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
+                            write_mask: writes,
                         })],
                         compilation_options: Default::default(),
                     }),
@@ -436,16 +450,15 @@ impl MeshFx {
                     cache: None,
                 })
             };
-            let back = Some(wgpu::Face::Back);
-            Arc::new([
-                make(false, back),
-                make(false, None),
-                make(true, back),
-                make(true, None),
-            ])
+            let cull = set.is_multiple_of(2).then_some(wgpu::Face::Back);
+            let writes = match set {
+                4.. => wgpu::ColorWrites::empty(),
+                _ => wgpu::ColorWrites::ALL,
+            };
+            Arc::new(make(set == 2 || set == 3, cull, writes))
         };
         match self.sets.lock() {
-            Ok(mut sets) => Arc::clone(sets.entry(samples).or_insert_with(build)),
+            Ok(mut sets) => Arc::clone(sets.entry((samples, set)).or_insert_with(build)),
             Err(_) => build(),
         }
     }
@@ -608,32 +621,45 @@ impl MeshFx {
             size as u64,
             u64::from(ctx.device.limits().min_uniform_buffer_offset_alignment),
         );
-        let mut bytes = vec![0u8; (stride * order.len().max(1) as u64) as usize];
-        let mut draws = Vec::with_capacity(order.len());
-        for p in order {
-            let at = world(p);
-            let m3 = Mat3::from_mat4(at);
-            let det = m3.determinant();
-            if !det.is_normal() {
-                continue;
+        // The frame's placement, or each shutter sample's.
+        let placements = if view.shutter.is_empty() {
+            std::slice::from_ref(&view.model_to_comp)
+        } else {
+            view.shutter
+        };
+        let mut bytes =
+            vec![0u8; (stride * (order.len() * placements.len()).max(1) as u64) as usize];
+        let mut next = 0;
+        let mut draws = Vec::with_capacity(placements.len());
+        for placed in placements {
+            let mut these = Vec::with_capacity(order.len());
+            for &p in &order {
+                let at = *placed * p.node;
+                let m3 = Mat3::from_mat4(at);
+                let det = m3.determinant();
+                if !det.is_normal() {
+                    continue;
+                }
+                let n = m3.inverse().transpose();
+                let mirrored = det < 0.0;
+                let uniform = DrawUniform {
+                    model: at.to_cols_array_2d(),
+                    normal: [
+                        n.x_axis.extend(f32::from(u8::from(mirrored))).to_array(),
+                        n.y_axis.extend(0.0).to_array(),
+                        n.z_axis.extend(0.0).to_array(),
+                    ],
+                };
+                let offset = next * stride;
+                next += 1;
+                bytes[offset as usize..][..size].copy_from_slice(bytemuck::bytes_of(&uniform));
+                let (blend, double) = look(p);
+                // ponytail: a mirrored part is drawn from both sides rather than
+                // with its winding turned round.
+                let set = usize::from(blend) * 2 + usize::from(double || mirrored);
+                these.push((p, offset as u32, set));
             }
-            let n = m3.inverse().transpose();
-            let mirrored = det < 0.0;
-            let uniform = DrawUniform {
-                model: at.to_cols_array_2d(),
-                normal: [
-                    n.x_axis.extend(f32::from(u8::from(mirrored))).to_array(),
-                    n.y_axis.extend(0.0).to_array(),
-                    n.z_axis.extend(0.0).to_array(),
-                ],
-            };
-            let offset = draws.len() as u64 * stride;
-            bytes[offset as usize..][..size].copy_from_slice(bytemuck::bytes_of(&uniform));
-            let (blend, double) = look(p);
-            // ponytail: a mirrored part is drawn from both sides rather than
-            // with its winding turned round.
-            let set = usize::from(blend) * 2 + usize::from(double || mirrored);
-            draws.push((p, offset as u32, set));
+            draws.push(these);
         }
         let uniforms = ctx
             .device
@@ -660,42 +686,78 @@ impl MeshFx {
                 },
             ],
         });
-        let pipelines = self.pipelines(&ctx.device, samples);
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
-        let mut encoder = ctx.encoder("mesh");
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("mesh"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: msaa_view.as_ref().unwrap_or(&colour_view),
-                    resolve_target: msaa_view.as_ref().map(|_| &colour_view),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &z_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Store,
+        // With motion blur each sample is drawn on its own and added to the
+        // picture at its share.
+        let blurred = draws.len() > 1;
+        // Depth alone never blends, and is culled as the part is.
+        let depth_set = |set: usize| 4 + set % 2;
+        let mut pipelines: [Option<Arc<wgpu::RenderPipeline>>; 6] = Default::default();
+        for &(_, _, set) in draws.iter().flatten() {
+            let wanted = std::iter::once(set).chain(blurred.then(|| depth_set(set)));
+            for set in wanted {
+                pipelines[set].get_or_insert_with(|| self.pipeline(&ctx.device, samples, set));
+            }
+        }
+        let shutter = blur::Shutter::new(ctx, self, (tw, th), draws.len());
+        let target = shutter.as_ref().map_or(&colour_view, |s| &s.view);
+        let mesh_pass = |encoder: &mut wgpu::CommandEncoder, label| {
+            encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(label),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: msaa_view.as_ref().unwrap_or(target),
+                        resolve_target: msaa_view.as_ref().map(|_| target),
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &z_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
+                    ..Default::default()
+                })
+                .forget_lifetime()
+        };
+        let draw_parts = |pass: &mut wgpu::RenderPass<'_>,
+                          these: &[(&Part, u32, usize)],
+                          depth: bool| {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for (p, offset, set) in draws {
+            for &(p, offset, set) in these {
                 let Some((group, _, _)) = model.materials.get(p.material) else {
                     continue;
                 };
-                pass.set_pipeline(&pipelines[set]);
+                let Some(pipeline) = &pipelines[if depth { depth_set(set) } else { set }] else {
+                    continue;
+                };
+                pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
                 pass.draw_indexed(p.first..p.first + p.count, p.base_vertex, 0..1);
+            }
+        };
+        let mut encoder = ctx.encoder("mesh");
+        for (k, these) in draws.iter().enumerate() {
+            draw_parts(&mut mesh_pass(&mut encoder, "mesh"), these, false);
+            if let Some(shutter) = &shutter {
+                shutter.add(self, &mut encoder, &colour_view, k);
+            }
+        }
+        if blurred {
+            // The nearest depth of every sample, so where the model meets the
+            // scene its smear isn't cut to the outline it has at rest.
+            let mut pass = mesh_pass(&mut encoder, "mesh-shutter-depth");
+            for these in &draws {
+                draw_parts(&mut pass, these, true);
             }
         }
         {

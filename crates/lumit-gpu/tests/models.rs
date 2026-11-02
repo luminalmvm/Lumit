@@ -68,6 +68,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     samples: 1,
                     camera,
                     model_to_comp,
+                    shutter: &[],
                     lights,
                     material: LightingMaterial {
                         eye,

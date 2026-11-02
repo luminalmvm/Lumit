@@ -71,6 +71,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         model_to_comp: glam::Mat4::from_translation(glam::Vec3::new(w / 2.0, h / 2.0, 0.0))
             * glam::Mat4::from_scale(glam::Vec3::splat(h / 2.0))
             * glam::Mat4::from_rotation_x(std::f32::consts::PI),
+        shutter: &[],
         lights: &lights,
         // A new layer's Material options.
         material: LightingMaterial {
