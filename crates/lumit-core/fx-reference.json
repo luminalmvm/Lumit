@@ -5892,6 +5892,484 @@
       "matte_role": "own"
     },
     {
+      "slug": "jolt",
+      "match_name": "jolt",
+      "label": "Jolt",
+      "version": 1,
+      "category": "Distortion",
+      "category_slug": "distortion",
+      "params": [
+        {
+          "id": "amount",
+          "label": "Amount",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "trigger",
+          "label": "Trigger",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Random",
+            "Markers",
+            "Beats"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "separate",
+          "label": "Separate timing",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ease_in",
+          "label": "Ease in",
+          "kind": "float",
+          "unit": "frames",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 12.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "ease_out",
+          "label": "Ease out",
+          "kind": "float",
+          "unit": "frames",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "jolts_only",
+          "label": "Jolts only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "blur_on",
+          "label": "Blur",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "blur_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 500.0
+        },
+        {
+          "id": "blur_aspect",
+          "label": "Aspect",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour_on",
+          "label": "Colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "colour_amount",
+          "label": "Amount",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour",
+          "label": "Tint",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.9,
+            0.05,
+            0.35,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "random_hue",
+          "label": "Random hue",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "light_on",
+          "label": "Light",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "light_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "light_direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Brighter",
+            "Darker",
+            "Both"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "scale_on",
+          "label": "Scale",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "scale_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "origin_x",
+          "label": "Origin x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "origin_y",
+          "label": "Origin y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "random_origin",
+          "label": "Random origin",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "slide_on",
+          "label": "Slide",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "slide_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "slide_direction",
+          "label": "Direction",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "spread",
+          "label": "Spread",
+          "kind": "slider",
+          "unit": "degrees",
+          "default": 180.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "rgb_split",
+          "label": "RGB split",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "time_on",
+          "label": "Time",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "time_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "frames",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0,
+          "hard_max": 240.0
+        },
+        {
+          "id": "time_direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Both",
+            "Forward",
+            "Backward"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "rate",
+            "separate"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "trigger",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Blur",
+          "params": [
+            "blur_on",
+            "blur_amount",
+            "blur_aspect"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Colour",
+          "params": [
+            "colour_on",
+            "colour_amount",
+            "colour",
+            "random_hue"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Light",
+          "params": [
+            "light_on",
+            "light_amount",
+            "light_direction"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Scale",
+          "params": [
+            "scale_on",
+            "scale_amount",
+            "origin_x",
+            "origin_y",
+            "random_origin"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Slide",
+          "params": [
+            "slide_on",
+            "slide_amount",
+            "slide_direction",
+            "spread",
+            "rgb_split"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Time",
+          "params": [
+            "time_on",
+            "time_amount",
+            "time_direction"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "block-glitch",
       "match_name": "block_glitch",
       "label": "Block glitch",

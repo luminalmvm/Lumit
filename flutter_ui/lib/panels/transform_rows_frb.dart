@@ -308,6 +308,52 @@ List<TransformGroup> transformGroups({
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 0.5),
         ], section: option),
       ],
+      // How it shows in the air, and once it does, what the air is like. An
+      // ambient light comes from nowhere, so it has no beam to show.
+      if (s.kind != BridgeLightKind.ambient)
+        TransformGroup(l10n.lightVolumetric, const [
+          TransformAxis(BridgeTransformProp.hazeAmount,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+      if (s.kind != BridgeLightKind.ambient && s.inAir) ...[
+        TransformGroup(l10n.lightHazeDensity, const [
+          TransformAxis(BridgeTransformProp.hazeDensity,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(
+            l10n.lightHazeColour,
+            const [
+              TransformAxis(BridgeTransformProp.hazeColourR, min: 0),
+              TransformAxis(BridgeTransformProp.hazeColourG, min: 0),
+              TransformAxis(BridgeTransformProp.hazeColourB, min: 0),
+            ],
+            section: option,
+            colour: true),
+        TransformGroup(l10n.lightHeightFalloff, const [
+          TransformAxis(BridgeTransformProp.hazeFalloff,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightForwardScatter, const [
+          TransformAxis(BridgeTransformProp.hazeScatter,
+              suffix: '%', min: -100, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightNoise, const [
+          TransformAxis(BridgeTransformProp.hazeNoise,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+      if (s.kind != BridgeLightKind.ambient && s.inAir && s.noisy) ...[
+        TransformGroup(l10n.lightNoiseSize, [
+          TransformAxis(BridgeTransformProp.hazeNoiseSize,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
+        ], section: option),
+        TransformGroup(l10n.lightNoiseSpeed, [
+          TransformAxis(BridgeTransformProp.hazeNoiseSpeed,
+              suffix: l10n.unitPerSecond(l10n.unitSymbolPx),
+              decimals: 0,
+              speed: 0.5),
+        ], section: option),
+      ],
     ];
   }
 
@@ -1365,6 +1411,18 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.light?.shadowDarkness ?? _noChannel,
       BridgeTransformProp.shadowDiffusion =>
         tf.light?.shadowDiffusion ?? _noChannel,
+      BridgeTransformProp.hazeAmount => tf.light?.hazeAmount ?? _noChannel,
+      BridgeTransformProp.hazeDensity => tf.light?.hazeDensity ?? _noChannel,
+      BridgeTransformProp.hazeColourR => tf.light?.hazeColourR ?? _noChannel,
+      BridgeTransformProp.hazeColourG => tf.light?.hazeColourG ?? _noChannel,
+      BridgeTransformProp.hazeColourB => tf.light?.hazeColourB ?? _noChannel,
+      BridgeTransformProp.hazeFalloff => tf.light?.hazeFalloff ?? _noChannel,
+      BridgeTransformProp.hazeScatter => tf.light?.hazeScatter ?? _noChannel,
+      BridgeTransformProp.hazeNoise => tf.light?.hazeNoise ?? _noChannel,
+      BridgeTransformProp.hazeNoiseSize =>
+        tf.light?.hazeNoiseSize ?? _noChannel,
+      BridgeTransformProp.hazeNoiseSpeed =>
+        tf.light?.hazeNoiseSpeed ?? _noChannel,
       BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
       BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
       BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
@@ -1441,6 +1499,24 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.shadowDarkness, light.shadowDarkness),
             shadowDiffusion:
                 pick(BridgeTransformProp.shadowDiffusion, light.shadowDiffusion),
+            hazeAmount: pick(BridgeTransformProp.hazeAmount, light.hazeAmount),
+            hazeDensity:
+                pick(BridgeTransformProp.hazeDensity, light.hazeDensity),
+            hazeColourR:
+                pick(BridgeTransformProp.hazeColourR, light.hazeColourR),
+            hazeColourG:
+                pick(BridgeTransformProp.hazeColourG, light.hazeColourG),
+            hazeColourB:
+                pick(BridgeTransformProp.hazeColourB, light.hazeColourB),
+            hazeFalloff:
+                pick(BridgeTransformProp.hazeFalloff, light.hazeFalloff),
+            hazeScatter:
+                pick(BridgeTransformProp.hazeScatter, light.hazeScatter),
+            hazeNoise: pick(BridgeTransformProp.hazeNoise, light.hazeNoise),
+            hazeNoiseSize:
+                pick(BridgeTransformProp.hazeNoiseSize, light.hazeNoiseSize),
+            hazeNoiseSpeed:
+                pick(BridgeTransformProp.hazeNoiseSpeed, light.hazeNoiseSpeed),
           ),
     material: material == null
         ? null

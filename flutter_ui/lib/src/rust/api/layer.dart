@@ -25,7 +25,7 @@ import 'streams.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `migrate_in`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -1300,6 +1300,19 @@ class BridgeLightChannels {
   /// Comp pixels.
   final BridgeScalar shadowDiffusion;
 
+  /// How it shows in the air: percentages and a linear colour, then the
+  /// noise's size in comp pixels and its speed in comp pixels a second.
+  final BridgeScalar hazeAmount;
+  final BridgeScalar hazeDensity;
+  final BridgeScalar hazeColourR;
+  final BridgeScalar hazeColourG;
+  final BridgeScalar hazeColourB;
+  final BridgeScalar hazeFalloff;
+  final BridgeScalar hazeScatter;
+  final BridgeScalar hazeNoise;
+  final BridgeScalar hazeNoiseSize;
+  final BridgeScalar hazeNoiseSpeed;
+
   const BridgeLightChannels({
     required this.poiX,
     required this.poiY,
@@ -1316,6 +1329,16 @@ class BridgeLightChannels {
     required this.height,
     required this.shadowDarkness,
     required this.shadowDiffusion,
+    required this.hazeAmount,
+    required this.hazeDensity,
+    required this.hazeColourR,
+    required this.hazeColourG,
+    required this.hazeColourB,
+    required this.hazeFalloff,
+    required this.hazeScatter,
+    required this.hazeNoise,
+    required this.hazeNoiseSize,
+    required this.hazeNoiseSpeed,
   });
 
   @override
@@ -1334,7 +1357,17 @@ class BridgeLightChannels {
       width.hashCode ^
       height.hashCode ^
       shadowDarkness.hashCode ^
-      shadowDiffusion.hashCode;
+      shadowDiffusion.hashCode ^
+      hazeAmount.hashCode ^
+      hazeDensity.hashCode ^
+      hazeColourR.hashCode ^
+      hazeColourG.hashCode ^
+      hazeColourB.hashCode ^
+      hazeFalloff.hashCode ^
+      hazeScatter.hashCode ^
+      hazeNoise.hashCode ^
+      hazeNoiseSize.hashCode ^
+      hazeNoiseSpeed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1355,7 +1388,17 @@ class BridgeLightChannels {
           width == other.width &&
           height == other.height &&
           shadowDarkness == other.shadowDarkness &&
-          shadowDiffusion == other.shadowDiffusion;
+          shadowDiffusion == other.shadowDiffusion &&
+          hazeAmount == other.hazeAmount &&
+          hazeDensity == other.hazeDensity &&
+          hazeColourR == other.hazeColourR &&
+          hazeColourG == other.hazeColourG &&
+          hazeColourB == other.hazeColourB &&
+          hazeFalloff == other.hazeFalloff &&
+          hazeScatter == other.hazeScatter &&
+          hazeNoise == other.hazeNoise &&
+          hazeNoiseSize == other.hazeNoiseSize &&
+          hazeNoiseSpeed == other.hazeNoiseSpeed;
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -1386,11 +1429,18 @@ class BridgeLightSettings {
   final bool twoNode;
   final bool castsShadows;
 
+  /// Shows in the air, so its haze rows show, and has Noise, so the
+  /// noise's size and speed show. Read only.
+  final bool inAir;
+  final bool noisy;
+
   const BridgeLightSettings({
     required this.kind,
     required this.falloff,
     required this.twoNode,
     required this.castsShadows,
+    required this.inAir,
+    required this.noisy,
   });
 
   @override
@@ -1398,7 +1448,9 @@ class BridgeLightSettings {
       kind.hashCode ^
       falloff.hashCode ^
       twoNode.hashCode ^
-      castsShadows.hashCode;
+      castsShadows.hashCode ^
+      inAir.hashCode ^
+      noisy.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1408,7 +1460,9 @@ class BridgeLightSettings {
           kind == other.kind &&
           falloff == other.falloff &&
           twoNode == other.twoNode &&
-          castsShadows == other.castsShadows;
+          castsShadows == other.castsShadows &&
+          inAir == other.inAir &&
+          noisy == other.noisy;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
@@ -2618,6 +2672,16 @@ enum BridgeTransformProp {
   lightHeight,
   shadowDarkness,
   shadowDiffusion,
+  hazeAmount,
+  hazeDensity,
+  hazeColourR,
+  hazeColourG,
+  hazeColourB,
+  hazeFalloff,
+  hazeScatter,
+  hazeNoise,
+  hazeNoiseSize,
+  hazeNoiseSpeed,
   ambient,
   diffuse,
   specular,

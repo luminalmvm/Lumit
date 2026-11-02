@@ -280,6 +280,38 @@
   "@lightShadowDiffusion": {
     "description": "Light row: how soft the shadows the light casts are, in pixels."
   },
+  "lightVolumetric": "Volumetric",
+  "@lightVolumetric": {
+    "description": "Light row: how much the light shows in the air, as a beam or a glow, as a percentage. Nought shows none."
+  },
+  "lightHazeDensity": "Haze density",
+  "@lightHazeDensity": {
+    "description": "Light row: how thick the air the light shows in is, as a percentage."
+  },
+  "lightHazeColour": "Haze colour",
+  "@lightHazeColour": {
+    "description": "Light row: the colour the air tints the light it shows, as a colour swatch."
+  },
+  "lightHeightFalloff": "Height falloff",
+  "@lightHeightFalloff": {
+    "description": "Light row: how quickly the air the light shows in thins out above the ground, as a percentage. Nought keeps it even everywhere."
+  },
+  "lightForwardScatter": "Forward scatter",
+  "@lightForwardScatter": {
+    "description": "Light row: how much brighter the light shows in the air when looking towards it than away from it, as a percentage."
+  },
+  "lightNoise": "Noise",
+  "@lightNoise": {
+    "description": "Light row: how patchy the air the light shows in is, as a percentage."
+  },
+  "lightNoiseSize": "Noise size",
+  "@lightNoiseSize": {
+    "description": "Light row: how wide the patches in the air are, in pixels."
+  },
+  "lightNoiseSpeed": "Noise speed",
+  "@lightNoiseSpeed": {
+    "description": "Light row: how fast the patches in the air drift, in pixels a second."
+  },
   "materialLightTransmission": "Light transmission",
   "@materialLightTransmission": {
     "description": "Material options row: how much of the light passing through the layer takes its colour onto what is behind it, as a percentage."
@@ -5088,6 +5120,74 @@
   "fxShake": "Shake",
   "@fxShake": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxJolt": "Jolt",
+  "@fxJolt": {
+    "description": "Effect name in the Add effect menu: sudden random hits that kick the picture and let it settle."
+  },
+  "fxForward": "Forward",
+  "@fxForward": {
+    "description": "Effect controls, Jolt: a Time Direction option. Each time hit jumps ahead."
+  },
+  "fxBackward": "Backward",
+  "@fxBackward": {
+    "description": "Effect controls, Jolt: a Time Direction option. Each time hit jumps back."
+  },
+  "fxTimeStutter": "Time stutter",
+  "@fxTimeStutter": {
+    "description": "A built-in preset in Jolt's menu: the layer jumps a few frames ahead or back about three times a second."
+  },
+  "fxSeparateTiming": "Separate timing",
+  "@fxSeparateTiming": {
+    "description": "Effect controls, Jolt: a switch. On the Random trigger each kind of hit keeps its own time instead of all landing together."
+  },
+  "fxJoltsOnly": "Jolts only",
+  "@fxJoltsOnly": {
+    "description": "Effect controls: a switch on Jolt. When on, the layer shows only while a jolt is on it."
+  },
+  "fxMarkers": "Markers",
+  "@fxMarkers": {
+    "description": "Effect controls: a Trigger option on Jolt. A jolt fires on each of the layer's markers and the composition's markers that are not beats."
+  },
+  "fxBeats": "Beats",
+  "@fxBeats": {
+    "description": "Effect controls: a Trigger option on Jolt. A jolt fires on each of the composition's beat markers."
+  },
+  "fxBlur": "Blur",
+  "@fxBlur": {
+    "description": "Effect controls: a group heading and switch on Jolt. Each hit blurs the picture."
+  },
+  "fxAspect": "Aspect",
+  "@fxAspect": {
+    "description": "Effect controls: a control in Jolt's Blur group. 0 blurs evenly, higher only sideways, lower only up and down."
+  },
+  "fxBrighter": "Brighter",
+  "@fxBrighter": {
+    "description": "Effect controls: a Direction option in Jolt's Light group. Each hit brightens the picture."
+  },
+  "fxDarker": "Darker",
+  "@fxDarker": {
+    "description": "Effect controls: a Direction option in Jolt's Light group. Each hit darkens the picture."
+  },
+  "fxRandomOrigin": "Random origin",
+  "@fxRandomOrigin": {
+    "description": "Effect controls: a control in Jolt's Scale group. How far each hit's origin wanders from where it is set."
+  },
+  "fxCameraKick": "Camera kick",
+  "@fxCameraKick": {
+    "description": "A built-in preset in Jolt's menu: about once a second the picture is knocked downwards, as if the camera was struck, with a blur along the knock."
+  },
+  "fxGlitchHit": "Glitch hit",
+  "@fxGlitchHit": {
+    "description": "A built-in preset in Jolt's menu: quick sideways hits with the colour channels pulled apart and a random colour."
+  },
+  "fxLightFlicker": "Light flicker",
+  "@fxLightFlicker": {
+    "description": "A built-in preset in Jolt's menu: quick hits of light only, brighter and darker."
+  },
+  "fxBeatPulse": "Beat pulse",
+  "@fxBeatPulse": {
+    "description": "A built-in preset in Jolt's menu: a hit of scale, blur and light on each beat marker of the composition."
   },
   "fxShape": "Shape",
   "@fxShape": {

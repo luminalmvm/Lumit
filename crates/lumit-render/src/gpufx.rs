@@ -392,6 +392,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &ChannelBlur,
     &Transform,
     &Shake,
+    &crate::gpufx_jolt::JoltFx,
     &Glow,
     &BlockGlitch,
     &Scanlines,

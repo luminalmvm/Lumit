@@ -70,6 +70,7 @@ pub mod hue_saturation;
 pub mod hue_shift;
 pub mod invert;
 pub mod iris_wipe;
+pub mod jolt;
 pub mod label_drawing;
 pub mod label_points;
 pub mod lens_dirt;

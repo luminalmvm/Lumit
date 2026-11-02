@@ -2891,6 +2891,7 @@ fn beat_ctx(beats: &[f64], fps: f64) -> MarkerContext {
     MarkerContext {
         beats: beats.to_vec(),
         fps,
+        cues: Vec::new(),
     }
 }
 
@@ -6576,6 +6577,10 @@ fn every_parameter_declares_a_unit() {
             ("crop", "feather"),
             ("glow", "radius"),
             ("shake", "amplitude"),
+            ("jolt", "blur_amount"),
+            ("jolt", "origin_x"),
+            ("jolt", "origin_y"),
+            ("jolt", "slide_amount"),
             ("block_glitch", "block_size"),
             ("block_glitch", "block_amount"),
             ("block_glitch", "channel_offset"),

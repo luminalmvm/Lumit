@@ -24,6 +24,7 @@ pub mod film;
 pub mod generate;
 pub mod grid_lines;
 pub mod ground;
+pub mod jolt;
 pub mod lens_blur;
 mod lens_blur_pipes;
 pub mod lens_dirt;
@@ -38,6 +39,7 @@ pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
 pub mod utility;
+pub mod volumetric;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -96,6 +98,9 @@ pub struct FxEngine {
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
     lighting: lighting::LightingFx,
+    /// Volumetric light, waited for the first time a comp shows a light in
+    /// the air.
+    haze: volumetric::HazeSlot,
     /// A 3D viewport's ground, drawn over its frame. Not an effect either.
     ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
@@ -289,6 +294,8 @@ pub struct FxEngine {
     /// than the Transform kernel because it reads the input at several affines
     /// in one pass; it uses the shared two-input layout all the same.
     shake_mb: wgpu::ComputePipeline,
+    /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
+    jolt: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.

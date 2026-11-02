@@ -21,6 +21,8 @@ const NOISE_CORE: &str = include_str!("../src/fx_noise_core.wgsl");
 const OCIO_SAMPLE: &str = include_str!("../src/ocio_sample.wgsl");
 /// The layer blend modes' maths, exactly as its consumers prepend it.
 const BLEND_CORE: &str = include_str!("../src/fx_blend_core.wgsl");
+/// The lighting kernel, which volumetric light is compiled after.
+const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -62,6 +64,11 @@ fn every_wgsl_kernel_parses_and_validates() {
         // it alone and failed on an unknown identifier.
         let source = if source.contains("nc_") {
             format!("{NOISE_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if name == "fx_volumetric.wgsl" {
+            format!("{LIGHTING}{source}")
         } else {
             source
         };

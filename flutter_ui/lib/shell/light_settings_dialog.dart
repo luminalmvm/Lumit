@@ -154,6 +154,8 @@ Future<void> newLightFrb({
           falloff: BridgeLightFalloff.none,
           twoNode: true,
           castsShadows: false,
+          inAir: false,
+          noisy: false,
         ),
         intensity: 100,
         colour: [1, 1, 1],

@@ -60,6 +60,7 @@ sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
 | B27 | Long cut: decoded sound in memory, comp open | ≤ 64 MB | ≤ 64 MB |
 | B28 | Long cut: decoded sound in memory, a minute played | ≤ 512 MB | ≤ 512 MB |
 | B29 | Long cut: first peaks of a file never summarised | ≤ 500 ms | ≤ 1500 ms |
+| B32 | Volumetric light pass, 1080p, two lights showing, GPU | ≤ 4 ms | ≤ 12 ms |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
 frame so high-refresh screens are fed. An idle editor schedules no frames.
@@ -138,4 +139,4 @@ pressure it slows down, it never changes output.
   `flutter_ui/integration_test/ui_budget_test.dart`. B2 is asserted everywhere, B1 only on
   reference hardware. `rebuild_budget_test.dart` pins rebuild and paint counts per
   gesture.
-- B8, B9 and B10 are manual checks before a release.
+- B8, B9, B10 and B32 are manual checks before a release.

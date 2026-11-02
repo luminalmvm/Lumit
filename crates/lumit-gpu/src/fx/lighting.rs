@@ -163,7 +163,7 @@ pub struct CasterPlane {
 
 /// The frame's casters, made once and read by every layer's lighting.
 pub struct ShadowCasters {
-    texture: wgpu::Texture,
+    pub(super) texture: wgpu::Texture,
     planes: Vec<CasterPlane>,
     /// Where each picture sits in its square, as shares of the side.
     places: Vec<[f32; 4]>,
@@ -380,6 +380,72 @@ fn v4(v: [f32; 3], w: f32) -> [f32; 4] {
     [v[0], v[1], v[2], w]
 }
 
+/// One light as the kernel reads it, with `mask` saying which casters can
+/// shade it.
+fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
+    GpuLight {
+        c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
+        c1: v4(l.corners[1], 0.0),
+        c2: v4(l.corners[2], 0.0),
+        c3: v4(l.corners[3], 0.0),
+        colour: v4(l.colour, l.falloff_px),
+        axis: v4(l.axis, l.cone_cos),
+        flags: [
+            f32::from(l.kind as u8),
+            l.falloff as f32,
+            l.radius_px,
+            l.cone_inner,
+        ],
+        shadow: [
+            l.shadow_darkness,
+            l.shadow_diffusion * DIFFUSION_SPREAD,
+            mask as f32,
+            MAX_STRETCH,
+        ],
+    }
+}
+
+/// The frame's casters as the kernel reads them, how many and their side.
+fn gpu_casters(casters: Option<&ShadowCasters>) -> ([GpuCaster; MAX_SHADOW_CASTERS], usize, u32) {
+    let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];
+    let (count, size) = casters.map_or((0, 0), |c| (c.planes.len(), c.size));
+    let placed = casters.iter().flat_map(|c| c.planes.iter().zip(&c.places));
+    for (slot, (c, place)) in planes.iter_mut().zip(placed) {
+        *slot = GpuCaster {
+            origin: v4(c.origin, c.transmission),
+            u: v4(c.u, 0.0),
+            v: v4(c.v, 0.0),
+            place: *place,
+        };
+    }
+    (planes, count, size)
+}
+
+/// The kernel's uniform for lights seen in the air rather than on a layer:
+/// no plane, and every caster can cut every light.
+pub(super) fn air_params(lights: &[LightingLight], casters: Option<&ShadowCasters>) -> Vec<u8> {
+    let (planes, count, size) = gpu_casters(casters);
+    let mask = (1u32 << count) - 1;
+    let mut slots = [GpuLight::default(); MAX_LIT_LIGHTS];
+    for (slot, l) in slots.iter_mut().zip(lights) {
+        *slot = gpu_light(l, mask);
+    }
+    let live = lights.len().min(MAX_LIT_LIGHTS) as f32;
+    bytemuck::bytes_of(&LightingParams {
+        origin: [0.0; 4],
+        du: [0.0; 4],
+        dv: [0.0; 4],
+        normal: [0.0, 0.0, 0.0, live],
+        material: [0.0; 4],
+        eye: [0.0; 4],
+        base: [0.0; 4],
+        casters_head: [count as f32, size as f32, 0.0, 0.0],
+        lights: slots,
+        casters: planes,
+    })
+    .to_vec()
+}
+
 /// The pass's own layouts and pipelines: the lighting kernel, which reads the
 /// casters' array through a sampler, and the two that make a caster's square
 /// and its smaller levels.
@@ -389,9 +455,9 @@ pub(super) struct LightingFx {
     square_layout: wgpu::BindGroupLayout,
     square: wgpu::ComputePipeline,
     halve: wgpu::ComputePipeline,
-    sampler: wgpu::Sampler,
+    pub(super) sampler: wgpu::Sampler,
     /// Bound when the frame has no casters, and never read.
-    empty: wgpu::Texture,
+    pub(super) empty: wgpu::Texture,
 }
 
 /// The format a caster's square is kept in. Eight bits is plenty for how much
@@ -666,38 +732,9 @@ impl FxEngine {
                     .filter(|&(i, p)| op.own_caster != Some(i) && may_shade(&receiver, l, p))
                     .fold(0, |m, (i, _)| m | (1 << i))
             });
-            *slot = GpuLight {
-                c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
-                c1: v4(l.corners[1], 0.0),
-                c2: v4(l.corners[2], 0.0),
-                c3: v4(l.corners[3], 0.0),
-                colour: v4(l.colour, l.falloff_px),
-                axis: v4(l.axis, l.cone_cos),
-                flags: [
-                    f32::from(l.kind as u8),
-                    l.falloff as f32,
-                    l.radius_px,
-                    l.cone_inner,
-                ],
-                shadow: [
-                    l.shadow_darkness,
-                    l.shadow_diffusion * DIFFUSION_SPREAD,
-                    mask as f32,
-                    MAX_STRETCH,
-                ],
-            };
+            *slot = gpu_light(l, mask);
         }
-        let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];
-        let (count, size) = casters.map_or((0, 0), |c| (c.planes.len(), c.size));
-        let placed = casters.iter().flat_map(|c| c.planes.iter().zip(&c.places));
-        for (slot, (c, place)) in planes.iter_mut().zip(placed) {
-            *slot = GpuCaster {
-                origin: v4(c.origin, c.transmission),
-                u: v4(c.u, 0.0),
-                v: v4(c.v, 0.0),
-                place: *place,
-            };
-        }
+        let (planes, count, size) = gpu_casters(casters);
         let m = &op.material;
         let ubuf = ctx
             .device

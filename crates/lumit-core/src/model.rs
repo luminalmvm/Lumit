@@ -12,6 +12,8 @@ use crate::time::{CompTime, Duration, FrameRate, Rational};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod light_file;
+
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LinearColour(pub [f32; 4]);
@@ -1007,6 +1009,17 @@ pub enum TransformProp {
     LightHeight,
     ShadowDarkness,
     ShadowDiffusion,
+    /// How a light shows in the air, in [`crate::haze::LightHaze`].
+    HazeAmount,
+    HazeDensity,
+    HazeColourR,
+    HazeColourG,
+    HazeColourB,
+    HazeFalloff,
+    HazeScatter,
+    HazeNoise,
+    HazeNoiseSize,
+    HazeNoiseSpeed,
     /// A layer's Material options, in [`Material`].
     Ambient,
     Diffuse,
@@ -2613,11 +2626,11 @@ pub enum LightFalloff {
 /// the layer's ordinary transform, so a light animates and parents exactly as
 /// every other layer does.
 ///
-/// Read through [`LightDefFile`], because lights saved before they had rows
+/// Read through [`light_file::LightDefFile`], because lights saved before they had rows
 /// held a gain, a half-size and a half-angle where these hold a percentage, a
 /// full size and a full angle.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(from = "LightDefFile")]
+#[serde(from = "light_file::LightDefFile")]
 pub struct LightDef {
     pub kind: LightKind,
     /// Scene-linear RGB. Animatable per channel, like every colour in the
@@ -2659,108 +2672,8 @@ pub struct LightDef {
     /// After Effects does.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub legacy_shape: bool,
-}
-
-/// [`LightDef`] as a file holds it, old keys and new.
-#[derive(serde::Deserialize)]
-struct LightDefFile {
-    #[serde(default)]
-    kind: LightKind,
-    #[serde(default = "LightDef::white")]
-    colour: [Property; 3],
-    intensity_pct: Option<Property>,
-    size: Option<[Property; 2]>,
-    cone_angle: Option<Property>,
-    /// A tenth was the fixed edge every spot had before the row.
-    #[serde(default = "LightDef::ten")]
-    cone_feather: Property,
-    falloff: Option<LightFalloff>,
-    #[serde(default = "Property::zero")]
-    radius_px: Property,
-    #[serde(default = "Property::zero")]
-    falloff_px: Property,
-    #[serde(default)]
-    two_node: bool,
-    #[serde(default = "LightDef::zero3")]
-    point_of_interest: [Property; 3],
-    #[serde(default)]
-    casts_shadows: bool,
-    #[serde(default = "LightDef::hundred")]
-    shadow_darkness: Property,
-    #[serde(default = "Property::zero")]
-    shadow_diffusion: Property,
-    #[serde(default)]
-    legacy_shape: bool,
-    // What a light held before it had rows.
-    intensity: Option<Property>,
-    half_size: Option<[Property; 2]>,
-    cone_deg: Option<Property>,
-}
-
-impl From<LightDefFile> for LightDef {
-    fn from(f: LightDefFile) -> Self {
-        let falloff = f.falloff.unwrap_or_else(|| {
-            // A distance used to mean a smooth fade with no radius, and none
-            // meant no falloff at all.
-            if f.falloff_px.is_animated() || f.falloff_px.value_at(0.0) > 0.0 {
-                LightFalloff::Smooth
-            } else {
-                LightFalloff::None
-            }
-        });
-        // A file with none of the new keys was written before them.
-        let legacy_shape = f.legacy_shape || (f.cone_angle.is_none() && f.intensity_pct.is_none());
-        Self {
-            kind: f.kind,
-            colour: f.colour,
-            intensity: f
-                .intensity_pct
-                .or_else(|| f.intensity.map(|p| scaled(p, 100.0)))
-                .unwrap_or_else(LightDef::hundred),
-            size: f
-                .size
-                .or_else(|| f.half_size.map(|h| h.map(|p| scaled(p, 2.0))))
-                .unwrap_or_else(LightDef::zero_pair),
-            cone_angle: f
-                .cone_angle
-                .or_else(|| f.cone_deg.map(|p| scaled(p, 2.0)))
-                .unwrap_or_else(LightDef::ninety),
-            cone_feather: f.cone_feather,
-            falloff,
-            radius_px: f.radius_px,
-            falloff_px: f.falloff_px,
-            two_node: f.two_node,
-            point_of_interest: f.point_of_interest,
-            casts_shadows: f.casts_shadows,
-            shadow_darkness: f.shadow_darkness,
-            shadow_diffusion: f.shadow_diffusion,
-            legacy_shape,
-        }
-    }
-}
-
-/// Every value of `p` times `by`, keys and their speeds with them.
-fn scaled(mut p: Property, by: f64) -> Property {
-    use crate::anim::{Animation, SideInterp};
-    let side = |s: SideInterp| match s {
-        SideInterp::Bezier { speed, influence } => SideInterp::Bezier {
-            speed: speed * by,
-            influence,
-        },
-        other => other,
-    };
-    match &mut p.animation {
-        Animation::Static(v) => *v *= by,
-        Animation::Keyframed(keys) => {
-            for k in keys {
-                k.value *= by;
-                k.interp_in = side(k.interp_in);
-                k.interp_out = side(k.interp_out);
-            }
-        }
-        Animation::Expression(_) => {}
-    }
-    p
+    #[serde(default, skip_serializing_if = "crate::haze::LightHaze::is_default")]
+    pub haze: crate::haze::LightHaze,
 }
 
 impl LightDef {
@@ -2807,7 +2720,7 @@ impl LightDef {
             TransformProp::PoiZ => &self.point_of_interest[2],
             TransformProp::ShadowDarkness => &self.shadow_darkness,
             TransformProp::ShadowDiffusion => &self.shadow_diffusion,
-            _ => return None,
+            _ => return self.haze.channel(prop),
         })
     }
 
@@ -2828,7 +2741,7 @@ impl LightDef {
             TransformProp::PoiZ => &mut self.point_of_interest[2],
             TransformProp::ShadowDarkness => &mut self.shadow_darkness,
             TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
-            _ => return None,
+            _ => return self.haze.channel_mut(prop),
         })
     }
 
@@ -2873,6 +2786,7 @@ impl Default for LightDef {
             shadow_darkness: Self::hundred(),
             shadow_diffusion: Property::zero(),
             legacy_shape: false,
+            haze: crate::haze::LightHaze::default(),
         }
     }
 }
@@ -2929,6 +2843,8 @@ pub struct ResolvedLight {
     /// casts none, and how many comp pixels their edges spread over.
     pub shadow_darkness: f32,
     pub shadow_diffusion: f32,
+    /// How it shows in the air.
+    pub haze: crate::haze::HazeLook,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -3186,6 +3102,7 @@ impl Composition {
                         0.0
                     },
                     shadow_diffusion: light.shadow_diffusion.value_at(lt).max(0.0) as f32,
+                    haze: light.haze.at(lt),
                 })
             })
             .collect()

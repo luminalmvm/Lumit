@@ -288,8 +288,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // 540 is the middle of a 1080p comp and the top-left quarter of a
             // 4K one, and a fresh radial blur must spin about the middle of
             // whatever frame it landed on.
-            ("radial_blur" | "sprite_flare", "centre_x") => w * 0.5,
-            ("radial_blur" | "sprite_flare", "centre_y") => h * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_x") | ("jolt", "origin_x") => w * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_y") | ("jolt", "origin_y") => h * 0.5,
             // Card wipe's Transition width is a distance across the frame,
             // and its declared half-a-frame default is only *half a frame* on
             // the comp it landed on. The default Flip order runs left to

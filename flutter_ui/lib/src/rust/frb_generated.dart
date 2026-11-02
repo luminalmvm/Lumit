@@ -26447,8 +26447,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeLightChannels dco_decode_bridge_light_channels(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 25)
+      throw Exception('unexpected arr length: expect 25 but see ${arr.length}');
     return BridgeLightChannels(
       poiX: dco_decode_bridge_scalar(arr[0]),
       poiY: dco_decode_bridge_scalar(arr[1]),
@@ -26465,6 +26465,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       height: dco_decode_bridge_scalar(arr[12]),
       shadowDarkness: dco_decode_bridge_scalar(arr[13]),
       shadowDiffusion: dco_decode_bridge_scalar(arr[14]),
+      hazeAmount: dco_decode_bridge_scalar(arr[15]),
+      hazeDensity: dco_decode_bridge_scalar(arr[16]),
+      hazeColourR: dco_decode_bridge_scalar(arr[17]),
+      hazeColourG: dco_decode_bridge_scalar(arr[18]),
+      hazeColourB: dco_decode_bridge_scalar(arr[19]),
+      hazeFalloff: dco_decode_bridge_scalar(arr[20]),
+      hazeScatter: dco_decode_bridge_scalar(arr[21]),
+      hazeNoise: dco_decode_bridge_scalar(arr[22]),
+      hazeNoiseSize: dco_decode_bridge_scalar(arr[23]),
+      hazeNoiseSpeed: dco_decode_bridge_scalar(arr[24]),
     );
   }
 
@@ -26484,13 +26494,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeLightSettings dco_decode_bridge_light_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BridgeLightSettings(
       kind: dco_decode_bridge_light_kind(arr[0]),
       falloff: dco_decode_bridge_light_falloff(arr[1]),
       twoNode: dco_decode_bool(arr[2]),
       castsShadows: dco_decode_bool(arr[3]),
+      inAir: dco_decode_bool(arr[4]),
+      noisy: dco_decode_bool(arr[5]),
     );
   }
 
@@ -33945,6 +33957,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_height = sse_decode_bridge_scalar(deserializer);
     var var_shadowDarkness = sse_decode_bridge_scalar(deserializer);
     var var_shadowDiffusion = sse_decode_bridge_scalar(deserializer);
+    var var_hazeAmount = sse_decode_bridge_scalar(deserializer);
+    var var_hazeDensity = sse_decode_bridge_scalar(deserializer);
+    var var_hazeColourR = sse_decode_bridge_scalar(deserializer);
+    var var_hazeColourG = sse_decode_bridge_scalar(deserializer);
+    var var_hazeColourB = sse_decode_bridge_scalar(deserializer);
+    var var_hazeFalloff = sse_decode_bridge_scalar(deserializer);
+    var var_hazeScatter = sse_decode_bridge_scalar(deserializer);
+    var var_hazeNoise = sse_decode_bridge_scalar(deserializer);
+    var var_hazeNoiseSize = sse_decode_bridge_scalar(deserializer);
+    var var_hazeNoiseSpeed = sse_decode_bridge_scalar(deserializer);
     return BridgeLightChannels(
         poiX: var_poiX,
         poiY: var_poiY,
@@ -33960,7 +33982,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         width: var_width,
         height: var_height,
         shadowDarkness: var_shadowDarkness,
-        shadowDiffusion: var_shadowDiffusion);
+        shadowDiffusion: var_shadowDiffusion,
+        hazeAmount: var_hazeAmount,
+        hazeDensity: var_hazeDensity,
+        hazeColourR: var_hazeColourR,
+        hazeColourG: var_hazeColourG,
+        hazeColourB: var_hazeColourB,
+        hazeFalloff: var_hazeFalloff,
+        hazeScatter: var_hazeScatter,
+        hazeNoise: var_hazeNoise,
+        hazeNoiseSize: var_hazeNoiseSize,
+        hazeNoiseSpeed: var_hazeNoiseSpeed);
   }
 
   @protected
@@ -33986,11 +34018,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_falloff = sse_decode_bridge_light_falloff(deserializer);
     var var_twoNode = sse_decode_bool(deserializer);
     var var_castsShadows = sse_decode_bool(deserializer);
+    var var_inAir = sse_decode_bool(deserializer);
+    var var_noisy = sse_decode_bool(deserializer);
     return BridgeLightSettings(
         kind: var_kind,
         falloff: var_falloff,
         twoNode: var_twoNode,
-        castsShadows: var_castsShadows);
+        castsShadows: var_castsShadows,
+        inAir: var_inAir,
+        noisy: var_noisy);
   }
 
   @protected
@@ -42119,6 +42155,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.height, serializer);
     sse_encode_bridge_scalar(self.shadowDarkness, serializer);
     sse_encode_bridge_scalar(self.shadowDiffusion, serializer);
+    sse_encode_bridge_scalar(self.hazeAmount, serializer);
+    sse_encode_bridge_scalar(self.hazeDensity, serializer);
+    sse_encode_bridge_scalar(self.hazeColourR, serializer);
+    sse_encode_bridge_scalar(self.hazeColourG, serializer);
+    sse_encode_bridge_scalar(self.hazeColourB, serializer);
+    sse_encode_bridge_scalar(self.hazeFalloff, serializer);
+    sse_encode_bridge_scalar(self.hazeScatter, serializer);
+    sse_encode_bridge_scalar(self.hazeNoise, serializer);
+    sse_encode_bridge_scalar(self.hazeNoiseSize, serializer);
+    sse_encode_bridge_scalar(self.hazeNoiseSpeed, serializer);
   }
 
   @protected
@@ -42143,6 +42189,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_light_falloff(self.falloff, serializer);
     sse_encode_bool(self.twoNode, serializer);
     sse_encode_bool(self.castsShadows, serializer);
+    sse_encode_bool(self.inAir, serializer);
+    sse_encode_bool(self.noisy, serializer);
   }
 
   @protected
