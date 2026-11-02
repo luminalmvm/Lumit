@@ -5,6 +5,11 @@ edition = "2021"
 license = "GPL-3.0-only"
 publish = false
 
+[features]
+# The models built in code (src/fixtures.rs), for other crates' tests and the
+# bench. Nothing shipped turns it on.
+test-fixtures = []
+
 [dependencies]
 base64 = "0.22"
 bevy_mikktspace = "1"

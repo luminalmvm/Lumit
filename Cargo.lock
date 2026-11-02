@@ -2247,6 +2247,7 @@ dependencies = [
  "lumit-eval",
  "lumit-gpu",
  "lumit-ingress",
+ "lumit-scene",
  "metal",
  "naga",
  "objc",

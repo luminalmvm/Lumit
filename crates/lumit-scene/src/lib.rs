@@ -19,6 +19,10 @@ mod fbx_file;
 mod files;
 mod gltf_file;
 
+/// Models built in code, for other crates' tests and the bench.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod fixtures;
+
 /// One model: its tree of nodes and everything they point at.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelScene {
