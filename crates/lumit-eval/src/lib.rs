@@ -85,7 +85,8 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-/// * 24: Corner pin on a node graph box draws past the picture it is handed.
+/// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
+///   they are handed.
 pub const ALGO_VERSION: u32 = 24;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
