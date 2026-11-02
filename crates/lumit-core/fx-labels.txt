@@ -26,6 +26,7 @@ Align to motion
 Align to path
 Alignment
 All
+All at once
 All edges
 All frames
 All points
@@ -120,6 +121,7 @@ Block size
 Bloom
 Blue
 Blue amount
+Blue blade
 Blue blur
 Blue from
 Blue phase
@@ -252,8 +254,12 @@ Cooling filter (82)
 Cooling filter (LBB)
 Copies
 Copy
+Core
 Core colour
+Core distortion
 Core radius
+Core size
+Core softness
 Corner pin
 Corner point
 Corner radius
@@ -262,6 +268,7 @@ Corner y
 Corners
 Count
 Count nested inputs
+Crackle
 Create corner pin
 Create transform keys
 Crop
@@ -333,6 +340,7 @@ Dots
 Down
 Draft
 Drag
+Draw along
 Drift
 Drive
 Drivers
@@ -357,6 +365,7 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Electric
 Element 1
 Element 10
 Element 11
@@ -386,18 +395,23 @@ Emitter
 Emitter angle
 End
 End colour
+End size
 End thickness
 End x
 End y
+Energy
+Energy line
 Envelope
 Even
 Events
 Every N frames
 Every Nth beat
 Every layer
+Every mask
 Every nth
 Evolution
 Evolution options
+Evolution speed
 Exclusion
 Expansion
 Exposure
@@ -424,6 +438,7 @@ Filter
 Final
 Final result
 Find edges
+Fire
 Fish
 Fisheye
 Fit cell
@@ -433,6 +448,7 @@ Flare options
 Flash
 Flash colour
 Flicker
+Flicker speed
 Flip axis
 Flip direction
 Flip order
@@ -464,6 +480,8 @@ Frequency
 Friction
 From
 From group
+From x
+From y
 Full body
 Full frame
 Full off
@@ -474,14 +492,19 @@ Gate
 Gaussian
 Gaussian blur
 Generate
+Ghost
 Ghost intensity
 Ghost softness
 Glass curvature
 Glass dirt
 Glow
 Glow colour
+Glow distortion
+Glow falloff
+Glow intensity
 Glow opacity
 Glow radius
+Glow size
 Gradient
 Gradient 1
 Gradient 2
@@ -511,6 +534,7 @@ Grow min
 H line rel width
 Hairs
 Half
+Halo
 Hard
 Hard colour
 Hard light
@@ -547,6 +571,7 @@ Hue range
 Hue shift
 Hue start
 Hysteresis
+Ice
 Image
 Image layer
 In front
@@ -600,6 +625,7 @@ LUT
 Label points
 Label rotation
 Label scale
+Laser
 Latitude
 Layer
 Layer in to out
@@ -746,9 +772,11 @@ Nearby
 Nearest
 Nearest (m)
 Nearest distance
+Neon
 Node graph
 Noise
 Noise scale
+Noise size
 Noise speed
 Noise type
 None
@@ -781,6 +809,7 @@ On original
 On transparent
 On trigger
 Once at start
+One after another
 One point
 Opacity
 Opacity %
@@ -824,6 +853,7 @@ Particulate
 Passes
 Path
 Path overlap
+Paths
 Pattern
 Peak
 Per
@@ -856,6 +886,7 @@ Place y
 Placement
 Planar track
 Planes
+Plasma
 Point
 Point 1 x
 Point 1 y
@@ -887,6 +918,7 @@ Power
 Pre-delay
 Preserve luminance
 Preserve luminosity
+Preset
 Producer x
 Producer y
 Propagate
@@ -919,6 +951,7 @@ Rectangle outline
 Rectangular to polar
 Red
 Red amount
+Red blade
 Red blur
 Red from
 Red phase
@@ -1069,12 +1102,14 @@ Slide
 Slider
 Slider control
 Slope channel
+Smoke
 Smooth
 Smooth noise
 Smudges
 Soft colour
 Soft light
 Softness
+Solar
 Sort
 Sort by
 Source
@@ -1123,6 +1158,7 @@ Starburst intensity
 Start
 Start angle
 Start colour
+Start size
 Start thickness
 Start x
 Start y
@@ -1196,6 +1232,8 @@ Tint
 Tint colour
 To
 To group
+To x
+To y
 Tone
 Top
 Top and bottom
@@ -1207,6 +1245,7 @@ Top right
 Top right tangent x
 Top right tangent y
 Top to bottom
+Toxic
 Track points
 Trail
 Trails
@@ -1308,6 +1347,8 @@ Wiggle type
 Wiggles per second
 Wiggly
 Wind
+Wind direction
+Wind speed
 Wind x
 Wind y
 Wind z

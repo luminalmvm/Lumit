@@ -955,10 +955,15 @@ fn feed_effect_stack(
         // side of the frame, which this frame's rows alone don't say.
         let shutter =
             comp.motion_blur.enabled && marker_layer.is_some_and(|l| l.switches.motion_blur);
-        if e.effect.match_name == "sprite_flare"
-            && (shutter || lumit_core::fx::effects::sprite_flare::moves_with_time(e))
-        {
+        let moves = || {
+            lumit_core::fx::builtins::def(e.effect.match_name.as_str())
+                .is_some_and(|def| def.moves_with_time(e))
+        };
+        if e.effect.match_name == "sprite_flare" && (shutter || moves()) {
             h.update(b"flare-time");
+            feed_f64(h, lt);
+        } else if moves() {
+            h.update(b"fx-time");
             feed_f64(h, lt);
         }
         // Track points draws nothing until its analysis lands, and a landing

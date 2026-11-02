@@ -463,6 +463,13 @@ pub trait EffectDef: Sync + Send + 'static {
         None
     }
 
+    /// Whether this instance's picture changes from frame to frame with every
+    /// row held still, so the layer time has to join its frame key. `false`
+    /// for an effect that has no clock in it.
+    fn moves_with_time(&self, _inst: &EffectInstance) -> bool {
+        false
+    }
+
     /// Whether this effect has an image operation at all. `false` for the
     /// orchestration-only effects, which the render path skips and the
     /// registry-agreement test excuses from needing a GPU entry.

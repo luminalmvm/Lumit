@@ -850,6 +850,10 @@ impl EffectDef for SpriteFlareDef {
         &<SpriteFlare as EffectMetadata>::SCHEMA
     }
 
+    fn moves_with_time(&self, inst: &EffectInstance) -> bool {
+        moves_with_time(inst)
+    }
+
     /// The version 1 rows an old flare kept because they move.
     fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
         if keeps_v1_rows(inst) {

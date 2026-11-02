@@ -17,6 +17,7 @@ pub mod common;
 pub mod custom_shader;
 pub mod distort;
 pub mod dof;
+pub mod energy_line;
 mod engine;
 pub mod generate;
 pub mod grid_lines;
@@ -59,6 +60,8 @@ pub struct FxEngine {
     sharpen_simple: wgpu::ComputePipeline,
     /// Sprite flare, built the first time one is drawn.
     sprite_flare: sprite_flare::LazySpriteFlare,
+    /// Energy line, compiled in the background as the engine starts.
+    energy_line: energy_line::LazyEnergyLine,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,

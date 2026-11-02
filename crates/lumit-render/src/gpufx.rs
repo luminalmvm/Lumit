@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+mod energy_line;
 pub mod lfx;
 pub mod ofx;
 
@@ -454,6 +455,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &AddGrain,
     &Scribble,
     &Stroke,
+    &energy_line::EnergyLine,
     &Particulate,
     &Grid,
     &Scatter,
