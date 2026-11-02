@@ -90,9 +90,9 @@ async function stereo(track) {
   return out;
 }
 
-// Open `file` (a File) and hand it to the engine. Its path, or null when the
-// browser can decode none of it.
-async function open(file) {
+// Open `file` (a File) and hand it to the engine, as `path` when it is one
+// opened before. Its path, or null when the browser can decode none of it.
+async function open(file, path) {
   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   if (!(await input.canRead())) return null;
   let video = await input.getPrimaryVideoTrack();
@@ -101,7 +101,8 @@ async function open(file) {
   if (audio && !(await audio.canDecode())) audio = null;
   if (!video && !audio) return null;
 
-  const path = `/web/${crypto.randomUUID().slice(0, 8)}/${file.name}`;
+  const fresh = path === undefined;
+  path ??= `/web/${crypto.randomUUID().slice(0, 8)}/${file.name}`;
   const probe = {
     duration_seconds: await input.computeDuration(),
     container: (await input.getFormat()).name.toLowerCase(),
@@ -157,6 +158,7 @@ async function open(file) {
   })).supported;
   const accel = soft ? 'prefer-software' : 'no-preference';
   files.set(path, { video, keyTimes, accel, runs: new Map() });
+  if (fresh) await lumitFiles.hold(path, file).catch(() => {});
   return path;
 }
 
@@ -459,6 +461,6 @@ function exportCancel(id) {
 }
 
 globalThis.lumitMedia = {
-  open, want, exportCodecs, exportOpen, exportState, exportFrame, exportSound, exportFinish,
-  exportCancel,
+  open, holds: (path) => files.has(path), want, exportCodecs, exportOpen, exportState,
+  exportFrame, exportSound, exportFinish, exportCancel,
 };

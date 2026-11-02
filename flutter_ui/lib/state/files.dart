@@ -23,3 +23,17 @@ Future<int?> storageUsed() async => null;
 
 /// Nothing to do: quitting asks about unsaved work itself (ui_state.dart).
 void warnBeforeLeaving(bool Function() unsaved) {}
+
+/// Never asked: the system's own dialogue picks (file_dialogs.dart).
+Future<List<String>?> pickFilesHere(
+        String label, List<String> extensions) async =>
+    null;
+
+/// Nothing to open again: footage on a disk is read where it is.
+Future<int> reopenFootage(String project) async => 0;
+
+/// Nothing waits to be allowed on a desktop.
+Future<List<String>> allowFootage() async => const [];
+
+/// Nothing kept on a desktop's behalf to forget.
+Future<void> forgetUnused(List<String> projects) async {}

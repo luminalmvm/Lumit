@@ -1288,11 +1288,11 @@ fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
     // Where is the file, right now? The session's absolute path first,
     // else wherever the stored relative path points.
     let abs = Path::new(&media.absolute_path);
-    let located: Option<PathBuf> = if !media.absolute_path.is_empty() && abs.is_file() {
+    let located = if !media.absolute_path.is_empty() && lumit_ingress::files::is_file(abs) {
         Some(abs.to_path_buf())
     } else {
         let rel = project_dir.join(&media.relative_path);
-        rel.is_file().then_some(rel)
+        lumit_ingress::files::is_file(&rel).then_some(rel)
     };
     let Some(located) = located else {
         return; // missing: keep the reference untouched for relinking
@@ -1308,9 +1308,9 @@ fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
     if shared_footage_dir().is_some_and(|sent| located.starts_with(sent)) {
         return;
     }
-    // Footage on another drive has no relative path, so it keeps the whole
-    // path, otherwise it goes missing on the next open.
+    // On another drive, or in a browser's own folders, it keeps its whole path.
     media.relative_path = relative_between(project_dir, &located)
+        .filter(|_| !cfg!(target_arch = "wasm32"))
         .unwrap_or_else(|| located.to_string_lossy().into_owned());
     if media.fingerprint.is_none() {
         media.fingerprint = fingerprint_path(&located).ok();

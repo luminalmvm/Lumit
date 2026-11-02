@@ -18,11 +18,15 @@
 // values beside them say.
 
 import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../state/ui_state.dart';
 import '../theme/theme.dart';
+import '../widgets/controls.dart';
 import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.dart'
-    show storageUsed;
+    show forgetUnused, storageUsed;
+import 'settings_account.dart' show askBefore;
 
 /// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
 /// dialog row is 30 under both densities). A row carrying a live readout under
@@ -143,19 +147,44 @@ String byteSize(int bytes) {
   return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
 }
 
-/// How much the browser keeps for Lumit, once it has said.
-Widget storageUsedText(LumitTheme t) => FutureBuilder<int?>(
-      future: storageUsed(),
-      builder: (context, used) => Text(
-          switch (used.data) {
-            null => '',
-            // To a tenth, since settings and a few projects come to less
-            // than one.
-            final bytes when bytes < 1 << 30 =>
-              '${(bytes / (1 << 20)).toStringAsFixed(1)} ${l10n.unitMb}',
-            final bytes => byteSize(bytes),
-          },
-          style: t.body),
+/// How much the browser keeps for Lumit, once it has said, and a Clear that
+/// forgets the files no recent project uses.
+Widget storageKept(LumitTheme t) => StatefulBuilder(
+      builder: (context, setState) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FutureBuilder<int?>(
+            future: storageUsed(),
+            builder: (context, used) => Text(
+                switch (used.data) {
+                  null => '',
+                  // To a tenth, since settings and a few projects come to
+                  // less than one.
+                  final bytes when bytes < 1 << 30 =>
+                    '${(bytes / (1 << 20)).toStringAsFixed(1)} ${l10n.unitMb}',
+                  final bytes => byteSize(bytes),
+                },
+                style: t.body),
+          ),
+          const SizedBox(width: 8),
+          HouseButton(
+            key: const ValueKey('settings-browser-forget'),
+            small: true,
+            onPressed: () async {
+              final recent = Provider.of<LumitUiState>(context, listen: false)
+                  .workspace
+                  .recentProjects;
+              if (!await askBefore(context, l10n.settingsBrowserForget,
+                  l10n.settingsBrowserForgetYes)) {
+                return;
+              }
+              await forgetUnused(recent);
+              setState(() {});
+            },
+            child: Text(l10n.clear, style: t.small),
+          ),
+        ],
+      ),
     );
 
 /// A size in bytes as a whole number of megabytes, without the unit.

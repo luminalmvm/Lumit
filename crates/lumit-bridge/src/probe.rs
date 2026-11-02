@@ -179,7 +179,7 @@ fn run(rx: &Receiver<Job>) {
 fn stamp(path: &Path) -> Option<Stamp> {
     // A file the browser build's page holds never changes under its path.
     #[cfg(target_arch = "wasm32")]
-    if lumit_media::is_file(path) && !lumit_ingress::files::is_file(path) {
+    if lumit_media::is_file(path) && lumit_ingress::files::len(path).is_err() {
         return Some((0, None));
     }
     if !lumit_ingress::files::is_file(path) {

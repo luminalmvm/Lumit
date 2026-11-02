@@ -26,6 +26,19 @@ external JSPromise<JSAny?> _restore();
 @JS('lumitFiles.used')
 external JSPromise<JSNumber?> _used();
 
+@JS('lumitFiles.pick')
+external JSPromise<JSArray<web.File>?> _pick(
+    JSString description, JSArray<JSString> extensions);
+
+@JS('lumitFiles.reopen')
+external JSPromise<JSNumber> _reopen(JSString project);
+
+@JS('lumitFiles.allow')
+external JSPromise<JSArray<JSString>> _allow();
+
+@JS('lumitFiles.forget')
+external JSPromise<JSAny?> _forget(JSArray<JSString> projects);
+
 /// Put the browser's files in place of `dart:io`'s, before anything reads one.
 /// The engine's store is what they live in, so this comes after the bridge.
 Future<void> installFiles() async {
@@ -35,6 +48,25 @@ Future<void> installFiles() async {
 
 /// How much this browser keeps for Lumit on this computer, in bytes.
 Future<int?> storageUsed() async => (await _used().toDart)?.toDartDouble.round();
+
+/// Forget the files opened here that none of [projects] uses, and the caches.
+Future<void> forgetUnused(List<String> projects) =>
+    _forget([for (final p in projects) p.toJS].toJS).toDart;
+
+/// Open again the video and sound [project] uses where the browser still
+/// lets the page read it. How many files it will only give back once the
+/// person allows it ([allowFootage]).
+Future<int> reopenFootage(String project) async {
+  try {
+    return (await _reopen(project.toJS).toDart).toDartInt;
+  } catch (_) {
+    return 0;
+  }
+}
+
+/// Ask for those files, on a click. The paths that came back.
+Future<List<String>> allowFootage() async =>
+    [for (final path in (await _allow().toDart).toDart) path.toDart];
 
 /// Have the browser ask before the page goes, while [unsaved] says so.
 void warnBeforeLeaving(bool Function() unsaved) {
@@ -67,6 +99,26 @@ Future<String> keepPicked(XFile file) async {
   final path = '${_newFolder()}/${file.name}';
   _put(path, await file.readAsBytes());
   return path;
+}
+
+/// Pick [label] files with the browser's own picker, which lets a later page
+/// open them again, and put each where [keepPicked] would. Null where the
+/// browser has no such picker.
+Future<List<String>?> pickFilesHere(
+    String label, List<String> extensions) async {
+  final files =
+      await _pick(label.toJS, [for (final e in extensions) e.toJS].toJS).toDart;
+  if (files == null) return null;
+  final paths = <String>[];
+  for (final file in files.toDart) {
+    if (_media.contains(file.name.split('.').last.toLowerCase())) {
+      paths.add(await openWebMedia(file) ?? '');
+    } else {
+      paths.add('${_newFolder()}/${file.name}');
+      _put(paths.last, (await file.arrayBuffer().toDart).toDart.asUint8List());
+    }
+  }
+  return paths;
 }
 
 /// The files the person chose to save into, by where they are kept here.

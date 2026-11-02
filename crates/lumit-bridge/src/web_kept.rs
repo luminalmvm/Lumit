@@ -32,6 +32,49 @@ pub fn lumit_web_file(path: String) -> Option<Vec<u8>> {
     files::read(Path::new(&path)).ok()
 }
 
+/// The `/web/<id>/` folders the projects at `projects` use: each one's own,
+/// which holds its autosaves, and every one their footage, their autosaves'
+/// or an open project's is in. A file opened into any other folder is used by
+/// none of them.
+#[wasm_bindgen]
+pub fn lumit_web_used(projects: Vec<String>) -> Vec<String> {
+    let mut docs = Vec::new();
+    let mut used: Vec<String> = projects.iter().filter_map(|p| folder(p)).collect();
+    for project in projects.iter().map(Path::new) {
+        let autosaves = project.with_file_name("autosaves");
+        let saved = files::list(&autosaves).unwrap_or_default();
+        let saved = saved.into_iter().map(|(name, _)| autosaves.join(name));
+        for lum in std::iter::once(project.to_path_buf()).chain(saved) {
+            if let Ok((doc, _)) = lumit_project::open(&lum) {
+                docs.push(std::sync::Arc::new(doc));
+            }
+        }
+    }
+    if let Ok(open) = crate::api::state::PROJECTS.read() {
+        let open = open
+            .values()
+            .filter_map(|p| Some(p.read().ok()?.store.snapshot()));
+        docs.extend(open);
+    }
+    for doc in &docs {
+        for item in &doc.items {
+            if let lumit_core::model::ProjectItem::Footage(f) = item {
+                used.extend(folder(&f.media.absolute_path));
+                used.extend(folder(&f.media.relative_path));
+            }
+        }
+    }
+    used.sort_unstable();
+    used.dedup();
+    used
+}
+
+/// The `/web/<id>/` folder `path` is in, if it is in one.
+fn folder(path: &str) -> Option<String> {
+    let id = path.strip_prefix("/web/")?.split('/').next()?;
+    Some(format!("/web/{id}/"))
+}
+
 /// Put back a file kept from an earlier page.
 #[wasm_bindgen]
 pub fn lumit_web_restore(path: String, bytes: Vec<u8>) {

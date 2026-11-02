@@ -1002,7 +1002,7 @@ class LumitState extends ChangeNotifier {
   /// started to do nothing else.
   Future<void> openProject(String asked,
       {bool recover = true, bool launch = false}) async {
-    final path = kIsWeb ? await pickIfGone(asked) : asked;
+    final path = kIsWeb ? await pickIfGone(asked, this) : asked;
     if (path == null) return;
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.

@@ -8,9 +8,12 @@ import 'dart:io' hide Platform;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
 import '../theme/style_sheet.dart' show styleFileExtension;
+import 'app_state.dart' show LumitState;
 import 'workspace.dart' show workspaceFileExtension;
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -69,9 +72,41 @@ Future<String?> pickProjectToOpen() async {
 }
 
 /// [path] as it is, or picked again where the browser build no longer has
-/// it. Null when that was cancelled.
-Future<String?> pickIfGone(String path) async =>
-    File(path).existsSync() ? path : pickProjectToOpen();
+/// it. Null when that was cancelled. The video and sound it uses are opened
+/// again where the browser allows, and [app] offers to ask for the rest.
+Future<String?> pickIfGone(String path, LumitState app) async {
+  final picked = File(path).existsSync() ? path : await pickProjectToOpen();
+  final asking = picked == null ? 0 : await reopenFootage(picked);
+  if (asking > 0) {
+    app.postNotice(l10n.webFilesAskAgain(asking),
+        action: l10n.webAllowAccess, onTap: () => _allowFootage(app));
+  }
+  return picked;
+}
+
+/// Ask for the files [reopenFootage] couldn't open, and point the footage
+/// that came back at itself again, so the engine reads it.
+Future<void> _allowFootage(LumitState app) async {
+  final back = (await allowFootage()).toSet();
+  for (final footage in _footageIn(app.project?.getItems() ?? const [])) {
+    try {
+      final path = footage.filePath();
+      if (back.contains(path)) footage.relink(path: path);
+    } catch (_) {
+      // Gone with its project. Nothing to point.
+    }
+  }
+  app.notifyDocumentChanged();
+}
+
+Iterable<FootageReference> _footageIn(List<ItemReference> items) sync* {
+  for (final item in items) {
+    if (item case ItemReference_Footage(:final field0)) yield field0;
+    if (item case ItemReference_Folder(:final field0)) {
+      yield* _footageIn(field0.getChildren());
+    }
+  }
+}
 
 /// Choose where to save a project, defaulting the name to `untitled.lum` (as
 /// the egui Save dialogue does), or null when cancelled.
@@ -90,6 +125,9 @@ Future<String?> pickProjectSaveLocation(
 /// [projects] a Lumit project is offered too, which an import brings one
 /// composition in from.
 Future<List<String>> pickFootage({bool projects = false}) async {
+  final here = await pickFilesHere(
+      l10n.fileTypeFootage, [...footageExtensions, if (projects) 'lum']);
+  if (here != null) return here;
   final files = await openFiles(
     acceptedTypeGroups: [
       _footageGroup(),

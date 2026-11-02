@@ -2414,7 +2414,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
             ),
           ),
-          if (kIsWeb) _row(t, l10n.settingsBrowserStorage, storageUsedText(t)),
+          if (kIsWeb) _row(t, l10n.settingsBrowserStorage, storageKept(t)),
         ],
       ),
     ]);

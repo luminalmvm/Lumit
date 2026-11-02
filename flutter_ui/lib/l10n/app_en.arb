@@ -13326,6 +13326,14 @@
   "@settingsBrowserStorage": {
     "description": "Settings window, Autosave, browser version only: the name of the row that shows how much space this browser is using to keep Lumit's settings, projects and spare copies on this computer."
   },
+  "settingsBrowserForget": "Forget the files no recent project uses?",
+  "@settingsBrowserForget": {
+    "description": "Settings window, Autosave, browser version only: the question asked after pressing Clear on the Kept in this browser row. Yes forgets the files opened in the browser that no project in the Recent list uses, and the browser's caches. Settings, spare copies and recent projects stay."
+  },
+  "settingsBrowserForgetYes": "Forget",
+  "@settingsBrowserForgetYes": {
+    "description": "Settings window, browser version only: the button that confirms forgetting the files no recent project uses."
+  },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
@@ -16491,6 +16499,19 @@
   "webCannotDecode": "This browser can't open that file.",
   "@webCannotDecode": {
     "description": "Status line notice in the browser build when an imported video or sound file can't be decoded by the browser."
+  },
+  "webFilesAskAgain": "{count, plural, =1{1 file needs access again} other{{count} files need access again}}",
+  "@webFilesAskAgain": {
+    "description": "Status line notice in the browser build, after a project opens whose video or sound files the browser will only let Lumit read again once the person allows it. Beside it is the Allow access button.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "webAllowAccess": "Allow access",
+  "@webAllowAccess": {
+    "description": "Button beside the status line notice in the browser build that asks the browser for permission to read the project's video and sound files again."
   },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {

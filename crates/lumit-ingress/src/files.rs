@@ -134,6 +134,8 @@ struct Store {
     dirs: BTreeSet<String>,
     /// Every file written or deleted since [`take_changed`] was last asked.
     changed: BTreeSet<String>,
+    /// Video and sound the page holds itself ([`hold`]).
+    held: BTreeSet<String>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -141,6 +143,7 @@ static STORE: Mutex<Store> = Mutex::new(Store {
     files: BTreeMap::new(),
     dirs: BTreeSet::new(),
     changed: BTreeSet::new(),
+    held: BTreeSet::new(),
 });
 
 /// The store. The page has one thread, so nothing ever waits here.
@@ -390,7 +393,16 @@ pub fn create_dir_all(path: &Path) -> io::Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 pub fn is_file(path: &Path) -> bool {
-    store().files.contains_key(&key(path))
+    let (key, store) = (key(path), store());
+    store.files.contains_key(&key) || store.held.contains(&key)
+}
+
+/// Say a file is at `path` that the page holds itself, as it does video and
+/// sound, which its own decoders read. Its bytes are never in here, but a
+/// project finds it like any other file.
+#[cfg(target_arch = "wasm32")]
+pub fn hold(path: &Path) {
+    store().held.insert(key(path));
 }
 
 #[cfg(target_arch = "wasm32")]

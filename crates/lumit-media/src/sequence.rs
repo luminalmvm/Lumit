@@ -371,6 +371,13 @@ fn briefly_held<T: Clone>(
 
 /// A file's length and modification time.
 pub(crate) fn file_stamp(path: &Path) -> Option<(u64, SystemTime)> {
+    // A file the page holds has no length here, and never changes, but one
+    // handed in after its project opened must not keep the answer from
+    // before.
+    #[cfg(target_arch = "wasm32")]
+    if crate::web::holds(path) {
+        return Some((0, SystemTime::UNIX_EPOCH));
+    }
     type Held = Mutex<HashMap<PathBuf, (Instant, Option<(u64, SystemTime)>)>>;
     static HELD: LazyLock<Held> = LazyLock::new(Held::default);
     briefly_held(&HELD, path, || {

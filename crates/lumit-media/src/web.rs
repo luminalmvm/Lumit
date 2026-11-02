@@ -86,6 +86,7 @@ pub fn register(path: PathBuf, opened: Opened) {
         index,
         sound: None,
     };
+    lumit_ingress::files::hold(&path);
     HELD.with(|files| files.borrow_mut().insert(path, held));
 }
 
