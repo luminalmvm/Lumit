@@ -834,11 +834,11 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     );
   }
 
-  /// A style's, a group header's or a clip's row is not on the layer's own
-  /// stack, so it has no point on the picture to pick.
+  /// A style's, an Input's, a group header's or a clip's row is not on the
+  /// layer's own stack, so it has no point on the picture to pick.
   void _pick(LumitUiState ui, String param) {
     final row = widget.row;
-    if (!row.style && row.group == null && row.clip == null) {
+    if (!row.style && !row.inputs && row.group == null && row.clip == null) {
       pickForPoint(ui, widget.layer, row.info, param);
     }
   }

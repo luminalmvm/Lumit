@@ -520,6 +520,10 @@
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."
   },
+  "foldInputs": "Inputs",
+  "@foldInputs": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the Inputs of the node graph the layer places."
+  },
   "foldStyles": "Styles",
   "@foldStyles": {
     "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."

@@ -85,6 +85,7 @@ import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'graph_box_lanes.dart';
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
@@ -4058,30 +4059,42 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           LayoutBuilder(builder: (context, box) {
             // No zoom here, so the frames span the panel's width.
             final axis = TimelineAxis(frames: frames, width: box.maxWidth);
-            return SizedBox(
-              height: t.density.ruler,
-              child: Stack(
-                children: [
-                  TimelineRuler(
-                    comp: comp,
-                    axis: axis,
-                    fps: ui.model.fps,
-                    height: t.density.ruler,
-                    work: work,
-                    onSeek: (f) =>
-                        ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
-                    onWorkArea: (span) {
-                      comp.setWorkArea(span: span);
-                      setState(() {});
-                    },
-                    onWorkPreview: (span) => _workPreview.value = span,
-                    onMarkersChanged: () => setState(() {}),
-                    cache: TimelineCacheBar(
-                        comp: comp, axis: axis, revision: _cacheRevision!),
-                  ),
-                  PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
-                ],
-              ),
+            // The picked box's keyed rows hang under the ruler on its axis,
+            // and the playhead runs down through both.
+            return Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: t.density.ruler,
+                      child: TimelineRuler(
+                        comp: comp,
+                        axis: axis,
+                        fps: ui.model.fps,
+                        height: t.density.ruler,
+                        work: work,
+                        onSeek: (f) => ui
+                            .scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
+                        onWorkArea: (span) {
+                          comp.setWorkArea(span: span);
+                          setState(() {});
+                        },
+                        onWorkPreview: (span) => _workPreview.value = span,
+                        onMarkersChanged: () => setState(() {}),
+                        cache: TimelineCacheBar(
+                            comp: comp,
+                            axis: axis,
+                            revision: _cacheRevision!),
+                      ),
+                    ),
+                    GraphBoxLanes(
+                        comp: comp, frames: frames, width: box.maxWidth),
+                  ],
+                ),
+                PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
+              ],
             );
           }),
           Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
