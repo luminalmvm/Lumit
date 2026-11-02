@@ -25,17 +25,22 @@ reads the folder again when its window comes back to the front.
 ```
 
 - Lumit's icons are drawn on a 16 by 16 grid with a 1.5 stroke. Any `viewBox` works.
-- An icon is drawn in one colour, the colour of wherever it sits, and changes with hover
+- An icon drawn in one colour takes the colour of wherever it sits, and changes with hover
   and selection like the words beside it.
+- An icon drawn in several colours, or with a gradient or a picture, keeps its colours. Its
+  `currentColor` parts follow the words beside it, and `var(--accent)` or any other colour of
+  the colour scheme takes the scheme's. It is drawn grey on a control that can't be pressed.
 - **Icon set** in Settings draws the strokes thinner or heavier by changing
   `stroke-width="1.5"`. Other widths are left as they are.
 
 Lumit's own icons are in the repository at `flutter_ui/tool/icons/glyphs.json`, each as the
 inside of a 16 by 16 SVG.
 
-:::note
-An SVG's own colours are not kept.
-:::
+```xml
+<svg viewBox="0 0 16 16">
+  <path d="M3 2l10 6-4.5 1L6 13z" fill="var(--accent)" stroke="currentColor" stroke-width="1.2"/>
+</svg>
+```
 
 ## The names
 
