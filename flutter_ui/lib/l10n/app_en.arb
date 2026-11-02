@@ -12093,6 +12093,18 @@
   "@fxMoodLighting": {
     "description": "Effect name in the Add effect menu — pools of coloured light laid over the picture, and a firmer contrast under them."
   },
+  "fxAmorphous": "Amorphous",
+  "@fxAmorphous": {
+    "description": "Effect controls — a Style option on Mood lighting: soft round pools of light."
+  },
+  "fxDigital": "Digital",
+  "@fxDigital": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light broken into square blocks."
+  },
+  "fxStreaks": "Streaks",
+  "@fxStreaks": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light stretched sideways into long bands."
+  },
   "fxMoreOptions": "More options",
   "@fxMoreOptions": {
     "description": "Effect controls — a collapsible group heading on Shadow highlight."

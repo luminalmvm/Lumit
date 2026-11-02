@@ -8543,8 +8543,11 @@ pub fn texturize_matted(
 pub struct MoodLightingParams {
     /// The light field's shape (§3.37's core), seed included.
     pub field: FractalField,
-    /// `1 ÷ pool size`, in raster pixels.
-    pub inv_scale: f32,
+    /// `1 ÷ pool size` across and down, in raster pixels.
+    pub inv_scale: [f32; 2],
+    /// Raster pixels a side of the square the field is read once for; 1 reads
+    /// it at every pixel.
+    pub block: u32,
     /// The field's depth coordinate: Drift ÷ 360.
     pub z: f32,
     /// Intensity ÷ 100.
@@ -8590,6 +8593,10 @@ pub fn mood_lighting_matted(
     p: &MoodLightingParams,
     matte: &[f32],
 ) {
+    // Each pixel reads the field at the centre of its block. A block of one is
+    // the pixel's own centre.
+    let b = p.block.max(1);
+    let half = b as f32 * 0.5;
     for y in 0..h {
         for x in 0..w {
             let i = (y as usize * w as usize + x as usize) * 4;
@@ -8598,8 +8605,8 @@ pub fn mood_lighting_matted(
             let contrast = matte_toward(p.contrast, 1.0, k);
             let n = fractal(
                 &p.field,
-                (x as f32 + 0.5) * p.inv_scale,
-                (y as f32 + 0.5) * p.inv_scale,
+                ((x / b * b) as f32 + half) * p.inv_scale[0],
+                ((y / b * b) as f32 + half) * p.inv_scale[1],
                 p.z,
             );
             // The field, spread to fill 0..1: a Perlin sum rarely reaches its

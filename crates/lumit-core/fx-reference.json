@@ -26697,6 +26697,19 @@
       "category_slug": "stylise",
       "params": [
         {
+          "id": "style",
+          "label": "Style",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Amorphous",
+            "Digital",
+            "Streaks"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "intensity",
           "label": "Intensity",
           "kind": "float",

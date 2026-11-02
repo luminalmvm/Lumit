@@ -4280,6 +4280,7 @@ impl GpuEffect for MoodLighting {
                 turbulent: m.field.turbulent,
                 cycle: m.field.cycle,
                 inv_scale: m.inv_scale,
+                block: m.block,
                 z: m.z,
                 intensity: m.intensity,
                 light: m.light,
