@@ -186,6 +186,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// On disk, but the engine cannot decode it.
   final bool undecodable;
 
+  /// The pictures a 3D model names that are missing, shown in its badge's
+  /// tooltip.
+  final List<String> missingPictures;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -319,6 +323,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.depth,
     required this.missing,
     this.undecodable = false,
+    this.missingPictures = const [],
     required this.audio,
     required this.label,
     required this.inherited,
@@ -843,6 +848,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
       if (widget.undecodable)
         ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
+      if (widget.missingPictures.isNotEmpty)
+        ('pictures-$id', l10n.projectItemMissing, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
@@ -929,9 +936,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 )
-              else if (key.startsWith('undecodable-'))
+              else if (key.startsWith('undecodable-') ||
+                  key.startsWith('pictures-'))
                 LumitTooltip(
-                  message: l10n.tipProjectUndecodable,
+                  message: key.startsWith('pictures-')
+                      ? widget.missingPictures.join('\n')
+                      : l10n.tipProjectUndecodable,
                   child: ProjectBadge(
                       key: ValueKey<String>(key), label: label, colour: colour),
                 )

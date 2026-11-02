@@ -44,6 +44,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -834,6 +835,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// Footage the engine found on disk but cannot decode, by id.
   final Set<String> _undecodable = {};
 
+  /// The pictures each 3D model names that are missing or won't read.
+  final Map<String, List<String>> _pictures = {};
+
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
   /// of v0's `documentEpoch`.
@@ -1145,6 +1149,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         depth: row.depth,
         missing: missing,
         undecodable: _undecodable.contains(id),
+        missingPictures: _pictures[id] ?? const [],
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
@@ -1766,6 +1771,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             // throws. Nothing is missing in a document that is gone, and the
             // panel is about to be rebuilt from the new one.
           }).catchError((_) {});
+          if (_models[id] ??= _isModel(item)) {
+            // The old names stay until the new answer lands, so the badge
+            // doesn't blink on every edit.
+            item.field0.getModelMissing().then((names) {
+              if (!mounted) return;
+              final had = _pictures[id];
+              if (names.isEmpty ? had == null : listEquals(had, names)) return;
+              if (names.isEmpty) {
+                _pictures.remove(id);
+              } else {
+                _pictures[id] = names;
+              }
+              _bookRebuild();
+            }).catchError((_) {});
+          }
         }
       }
       if (item is ItemReference_Folder) {
