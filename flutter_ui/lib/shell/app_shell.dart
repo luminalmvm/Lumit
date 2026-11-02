@@ -20,6 +20,7 @@ import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
+import 'package:lumit_flutter/shell/look_fade.dart';
 import 'package:lumit_flutter/shell/style_import.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
@@ -125,7 +126,9 @@ class LumitAppNew extends StatelessWidget {
               wireStyle: uiState.workspace.interface.wireStyle,
               child: Directionality(
                 textDirection: TextDirection.ltr,
-                child: _RoomPicture(
+                child: LookFade(
+                  workspace: uiState.workspace,
+                  child: _RoomPicture(
                   child: ColoredBox(
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
@@ -150,6 +153,7 @@ class LumitAppNew extends StatelessWidget {
                       ]),
                     ),
                   ),
+                ),
                 ),
                 ),
               ),

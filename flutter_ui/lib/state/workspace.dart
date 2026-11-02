@@ -651,6 +651,7 @@ class Workspace extends ChangeNotifier {
         if (!identical(activeStyle, style)) return;
         final said = style.problems.join('\n');
         if (loaded) {
+          beforeLookChange?.call();
           recompose();
         } else if (said != _saidProblems) {
           recompose();
@@ -666,8 +667,14 @@ class Workspace extends ChangeNotifier {
   /// The style's problems as Settings last showed them.
   String _saidProblems = '';
 
+  /// Called just before the look changes as a whole: a style or shape
+  /// picked, a style's fonts arriving, the window turning see-through. The
+  /// shell fades from the look as it was (shell/look_fade.dart).
+  VoidCallback? beforeLookChange;
+
   /// Use the person's own style called [name].
   void setCustomStyle(String name) {
+    beforeLookChange?.call();
     customStyle = name;
     reloadStyles();
     save();
@@ -1400,7 +1407,10 @@ class Workspace extends ChangeNotifier {
   /// The window behind it all, dark or light as the theme is. Its answer
   /// comes back to [recompose] when it changes.
   void _askBackdrop(Backdrop kind) {
-    WindowBackdrop.onChange ??= recompose;
+    WindowBackdrop.onChange ??= () {
+      beforeLookChange?.call();
+      recompose();
+    };
     WindowBackdrop.want(kind, dark: _theme.mode == ThemeMode2.dark);
   }
 
@@ -1657,6 +1667,7 @@ class Workspace extends ChangeNotifier {
   }
 
   void setShape(ThemeShape s) {
+    beforeLookChange?.call();
     themeShape = s;
     customStyle = null;
     recompose();

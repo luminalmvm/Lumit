@@ -1454,6 +1454,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsReduceTransparency,
               value: settings.reduceTransparency, set: (on) {
             settings.reduceTransparency = on;
+            ui.workspace.beforeLookChange?.call();
             ui.workspace.recompose();
             ui.workspace.settingsChanged();
           }),
