@@ -2381,6 +2381,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-scene"
+version = "0.10.1"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lumit-script"
 version = "0.10.1"
 dependencies = [

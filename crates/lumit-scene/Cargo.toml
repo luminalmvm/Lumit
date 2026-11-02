@@ -1,0 +1,12 @@
+[package]
+name = "lumit-scene"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+thiserror = "2"
+
+[lints]
+workspace = true
