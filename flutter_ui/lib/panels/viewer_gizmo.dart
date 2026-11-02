@@ -25,6 +25,7 @@
 // sampled, a dot per frame, a box per key — and dragging a key's box moves
 // that key.
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show PointMode;
 
@@ -414,8 +415,8 @@ class LayerBox {
   /// already undoes all three. Seen through a camera the layer has to be in
   /// front of the eye there too. A marker is hit near its place.
   bool contains(Offset point) {
-    // ponytail: a model is picked anywhere inside its box's outline, even
-    // where nothing of it shows. Pick by its depth if that gets in the way.
+    // A model by its box's outline. A click asks after the model itself
+    // ([modelDepthAt]).
     if (cube != null) {
       return wholeInFront && (Path()..addPolygon(_hull, true)).contains(point);
     }
@@ -1317,8 +1318,11 @@ UuidValue? pickedShapeItem(List<String> selected, UuidValue layerId) {
 ///
 /// 3D layers next to each other in the stack are one run, as After Effects
 /// sorts them, and within a run the one nearest the eye under the pointer
-/// wins. A 2D layer ends a run.
-LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point) {
+/// wins. A 2D layer ends a run. [exact], for a click, takes a model only where
+/// the model itself is under the pointer, so the space round it inside its
+/// box picks what is behind.
+LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point,
+    {bool exact = false}) {
   LayerBox? nearest;
   var nearestDepth = double.infinity;
   for (final box in boxes) {
@@ -1331,8 +1335,10 @@ LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point) {
     // A light's mark is as far away as the light is.
     final depth = box.marker
         ? box.map.depthOf(box.map.ax, box.map.ay)
-        : box.map.depthAt(point) ?? double.infinity;
-    if (depth < nearestDepth) {
+        : exact && box.cube != null
+            ? modelDepthAt(box, point)
+            : box.map.depthAt(point) ?? double.infinity;
+    if (depth != null && depth < nearestDepth) {
       nearest = box;
       nearestDepth = depth;
     }
@@ -1358,7 +1364,73 @@ LayerBox? layerToDragAt(
   for (final box in boxes) {
     if (selectedIds.contains(box.id) && box.contains(point)) return box;
   }
-  return layerAtPoint(boxes, point);
+  return layerAtPoint(boxes, point, exact: true);
+}
+
+/// How far in front of the eye a Model layer's model is where the pointer at
+/// [point] first meets it, as the depth over the camera's zoom, null where it
+/// misses. The engine meets the ray with the model's triangles, so this is
+/// asked once a click, never on a hover.
+double? modelDepthAt(LayerBox box, Offset point) {
+  final map = box.map;
+  if (box.cube == null || !map.projected) return null;
+  // The layer's own pixels (x, y, z, 1) to the picture's (X, Y, W), row by
+  // row: the parents and the view after the layer's own placement.
+  final r = map.parentRows;
+  final o = map.inParent(0, 0, 0);
+  final ends = [
+    map.inParent(1, 0, 0),
+    map.inParent(0, 1, 0),
+    map.inParent(0, 0, 1),
+  ];
+  List<double> row(int k) {
+    double at(Vec3 p) =>
+        r[k * 4] * p.$1 + r[k * 4 + 1] * p.$2 + r[k * 4 + 2] * p.$3 + r[k * 4 + 3];
+    return [for (final e in ends) at(e) - at(o), at(o)];
+  }
+
+  final m = [row(0), row(1), row(2)];
+  final c = (point - map.origin) / map.viewScale;
+  // The ray is where two planes meet: X over W is the pointer's x, and Y over
+  // W its y.
+  final p = [for (var i = 0; i < 4; i++) m[0][i] - c.dx * m[2][i]];
+  final q = [for (var i = 0; i < 4; i++) m[1][i] - c.dy * m[2][i]];
+  Vec3 cross(Vec3 a, Vec3 b) => (
+        a.$2 * b.$3 - a.$3 * b.$2,
+        a.$3 * b.$1 - a.$1 * b.$3,
+        a.$1 * b.$2 - a.$2 * b.$1,
+      );
+  double dot(Vec3 a, Vec3 b) => a.$1 * b.$1 + a.$2 * b.$2 + a.$3 * b.$3;
+  final pn = (p[0], p[1], p[2]), qn = (q[0], q[1], q[2]);
+  final away = (m[2][0], m[2][1], m[2][2]);
+  var d = cross(pn, qn);
+  if (dot(d, away) < 0) d = (-d.$1, -d.$2, -d.$3);
+  // A point on it, the one where it crosses the plane through the layer's
+  // origin square to it.
+  final det = dot(pn, cross(qn, d));
+  if (det.abs() < 1e-12) return null;
+  final (u, v) = (cross(qn, d), cross(d, pn));
+  final from = (
+    (-p[3] * u.$1 - q[3] * v.$1) / det,
+    (-p[3] * u.$2 - q[3] * v.$2) / det,
+    (-p[3] * u.$3 - q[3] * v.$3) / det,
+  );
+  // From the eye, where the depth is nought, so the first face the ray
+  // meets is the one in front.
+  final rate = dot(away, d);
+  if (rate.abs() < 1e-12) return null;
+  final back = -(dot(away, from) + m[2][3]) / rate;
+  final eye = (from.$1 + d.$1 * back, from.$2 + d.$2 * back, from.$3 + d.$3 * back);
+  final double? t;
+  try {
+    t = box.layer.getModelHit(
+        origin: [eye.$1, eye.$2, eye.$3], direction: [d.$1, d.$2, d.$3]);
+  } catch (_) {
+    return null;
+  }
+  if (t == null) return null;
+  final hit = (eye.$1 + d.$1 * t, eye.$2 + d.$2 * t, eye.$3 + d.$3 * t);
+  return dot(away, hit) + m[2][3];
 }
 
 /// Every layer wholly inside [rect] — what a released marquee selects.
@@ -1697,6 +1769,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// The layer under the pointer, drawn faintly so a click is predictable.
   UuidValue? _hover;
 
+  /// Over a model's box, the wait for the pointer to rest before the click's
+  /// own test says what is under it.
+  Timer? _rest;
+
   /// The mask points that are selected, by [maskPointKey].
   ///
   /// Points, not layers: with a mask on the picture the same marquee that
@@ -1812,6 +1888,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   @override
   void dispose() {
+    _rest?.cancel();
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
     widget.uiState.alignRequest.removeListener(_onAlignRequest);
@@ -2235,10 +2312,22 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final hot = _pick3d(event.localPosition);
     final named = hot == null ? null : (hot.$1.props.first, hot.$2);
     if (named != _hot3d) setState(() => _hot3d = named);
+    _rest?.cancel();
     if (named != null) return _setHover(null);
-    final hit = layerAtPoint(widget.boxes, event.localPosition);
+    final at = event.localPosition;
     final ids = widget.uiState.selectedLayerIds;
-    _setHover(hit == null || ids.contains(hit.id) ? null : hit.id);
+    void show(LayerBox? hit) =>
+        _setHover(hit == null || ids.contains(hit.id) ? null : hit.id);
+    // A model's box promises nothing on the move. Once the pointer rests,
+    // the click's own test says whether it is the model or what is behind.
+    if (widget.boxes.any((box) => box.cube != null && box.contains(at))) {
+      _setHover(null);
+      _rest = Timer(const Duration(milliseconds: 80), () {
+        if (mounted) show(layerAtPoint(widget.boxes, at, exact: true));
+      });
+      return;
+    }
+    show(layerAtPoint(widget.boxes, at));
   }
 
   /// A click selects what is under it — with Shift, adds to or removes from the
@@ -2278,7 +2367,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       return;
     }
 
-    final hit = layerAtPoint(widget.boxes, details.localPosition);
+    final hit = layerAtPoint(widget.boxes, details.localPosition, exact: true);
     if (hit == null) {
       if (!shift) {
         setState(_points.clear);
