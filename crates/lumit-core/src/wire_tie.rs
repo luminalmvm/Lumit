@@ -15,4 +15,9 @@ pub struct WireTie {
     /// Each wire by the socket it ends in, `box/socket`, named as the canvas
     /// names its boxes. A wire that has gone is skipped where the tie is drawn.
     pub wires: Vec<String>,
+    /// A reroute point: every wire through the one spot, where a tie lays
+    /// them side by side.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub point: bool,
 }
+

@@ -2235,7 +2235,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
               tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
-          child: ClipRect(
+          child: tieCursorRegion(ClipRect(
             child: Container(
               key: const ValueKey('comp-graph-canvas'),
               color: t.surface0,
@@ -2337,7 +2337,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                 ],
               ),
             ),
-          ),
+          )),
         ),
       ),
       handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),

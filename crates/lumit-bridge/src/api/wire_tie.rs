@@ -16,6 +16,8 @@ pub struct BridgeWireTie {
     pub y: f64,
     /// Each wire by the socket it ends in, `box/socket`.
     pub wires: Vec<String>,
+    /// A reroute point: every wire through the one spot.
+    pub point: bool,
 }
 
 impl BridgeWireTie {
@@ -24,6 +26,7 @@ impl BridgeWireTie {
             x: tie.at[0],
             y: tie.at[1],
             wires: tie.wires.clone(),
+            point: tie.point,
         }
     }
 
@@ -31,6 +34,7 @@ impl BridgeWireTie {
         WireTie {
             at: [self.x, self.y],
             wires: self.wires,
+            point: self.point,
         }
     }
 }

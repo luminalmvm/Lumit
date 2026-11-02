@@ -28499,12 +28499,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeWireTie dco_decode_bridge_wire_tie(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeWireTie(
       x: dco_decode_f_64(arr[0]),
       y: dco_decode_f_64(arr[1]),
       wires: dco_decode_list_String(arr[2]),
+      point: dco_decode_bool(arr[3]),
     );
   }
 
@@ -36080,7 +36081,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
     var var_wires = sse_decode_list_String(deserializer);
-    return BridgeWireTie(x: var_x, y: var_y, wires: var_wires);
+    var var_point = sse_decode_bool(deserializer);
+    return BridgeWireTie(
+        x: var_x, y: var_y, wires: var_wires, point: var_point);
   }
 
   @protected
@@ -43562,6 +43565,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
     sse_encode_list_String(self.wires, serializer);
+    sse_encode_bool(self.point, serializer);
   }
 
   @protected

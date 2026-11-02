@@ -31618,10 +31618,12 @@ impl SseDecode for crate::api::wire_tie::BridgeWireTie {
         let mut var_x = <f64>::sse_decode(deserializer);
         let mut var_y = <f64>::sse_decode(deserializer);
         let mut var_wires = <Vec<String>>::sse_decode(deserializer);
+        let mut var_point = <bool>::sse_decode(deserializer);
         return crate::api::wire_tie::BridgeWireTie {
             x: var_x,
             y: var_y,
             wires: var_wires,
+            point: var_point,
         };
     }
 }
@@ -43848,6 +43850,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::wire_tie::BridgeWireTie {
             self.x.into_into_dart().into_dart(),
             self.y.into_into_dart().into_dart(),
             self.wires.into_into_dart().into_dart(),
+            self.point.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -49202,6 +49205,7 @@ impl SseEncode for crate::api::wire_tie::BridgeWireTie {
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
         <Vec<String>>::sse_encode(self.wires, serializer);
+        <bool>::sse_encode(self.point, serializer);
     }
 }
 

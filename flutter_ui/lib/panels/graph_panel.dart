@@ -3313,7 +3313,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                   tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
               onPointerSignal: _wheel,
               behavior: HitTestBehavior.opaque,
-              child: Container(
+              child: tieCursorRegion(Container(
                 key: const ValueKey('graph-canvas'),
                 // Clipped, so a box or a group's frame pushed past the top
                 // edge goes under the toolbar and not over it.
@@ -3442,7 +3442,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                     _legend(t),
                   ],
                 ),
-              ),
+              )),
             ),
           ),
           // An effect dragged in from Effects & presets. Translucent, so every
