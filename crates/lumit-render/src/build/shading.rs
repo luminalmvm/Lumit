@@ -26,7 +26,7 @@ pub fn shading_lights(
     t_comp: f64,
     context: &Arc<ExpressionContext>,
 ) -> Vec<lumit_gpu::fx::lighting::LightingLight> {
-    use lumit_core::model::{LayerKind, LightKind};
+    use lumit_core::model::LayerKind;
 
     // Accepts lights off still takes the shadows of the lights that cast
     // them, as in After Effects. And After Effects never lights a 2D layer.
@@ -77,65 +77,70 @@ pub fn shading_lights(
         lights = keyed.iter().map(|&(_, i)| lights[i]).collect();
     }
 
-    lights
-        .iter()
-        .map(|l| {
-            // The same placement maths a layer gets, so a light and a layer
-            // that share a transform occupy the same place in space.
-            let place = lumit_gpu::composite::place_matrix(
-                (l.position.0 as f32, l.position.1 as f32),
-                (0.0, 0.0),
-                (100.0, 100.0),
-                l.rotation_deg as f32,
-                l.z as f32,
-                l.rotation_x_deg as f32,
-                l.rotation_y_deg as f32,
-            );
-            let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
-            let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
-            // A spot is aimed along its own local +z, away from the camera;
-            // anything below -1 tells the kernel "not a spot".
-            let cone_cos = match l.kind {
-                LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
-                _ => -2.0,
-            };
-            use lumit_gpu::fx::lighting::LightingKind as K;
-            lumit_gpu::fx::lighting::LightingLight {
-                corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
-                // A picture lit in display encoding takes the light's colour
-                // encoded too, and its intensity as it is, as After Effects does.
-                colour: if encoded {
-                    l.tint.map(|c| lumit_core::lighting::encode(c) * l.gain)
-                } else {
-                    l.colour
-                },
-                kind: match l.kind {
-                    LightKind::Area if hw > 0.0 && hh > 0.0 => K::Area,
-                    LightKind::Parallel => K::Parallel,
-                    LightKind::Ambient => K::Ambient,
-                    _ => K::Point,
-                },
-                falloff: l.falloff as u32,
-                radius_px: l.radius_px as f32,
-                falloff_px: l.falloff_px as f32,
-                legacy: l.legacy_shape,
-                cone_cos,
-                // The feather is a share of the cone's angle, as After Effects
-                // has it. An old light's is a share of its cosine, which at a
-                // tenth is the edge spots had before it was a row.
-                cone_inner: if l.legacy_shape {
-                    cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32
-                } else {
-                    (l.cone_deg * (1.0 - l.cone_feather / 100.0))
-                        .to_radians()
-                        .cos() as f32
-                },
-                axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
-                shadow_darkness: l.shadow_darkness,
-                shadow_diffusion: l.shadow_diffusion,
-            }
-        })
-        .collect()
+    lights.iter().map(|l| lighting_light(l, encoded)).collect()
+}
+
+/// One resolved light as the lighting kernel reads it, for a picture lit in
+/// display encoding when `encoded`.
+pub(crate) fn lighting_light(
+    l: &lumit_core::model::ResolvedLight,
+    encoded: bool,
+) -> lumit_gpu::fx::lighting::LightingLight {
+    use lumit_core::model::LightKind;
+    // The same placement maths a layer gets, so a light and a layer
+    // that share a transform occupy the same place in space.
+    let place = lumit_gpu::composite::place_matrix(
+        (l.position.0 as f32, l.position.1 as f32),
+        (0.0, 0.0),
+        (100.0, 100.0),
+        l.rotation_deg as f32,
+        l.z as f32,
+        l.rotation_x_deg as f32,
+        l.rotation_y_deg as f32,
+    );
+    let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
+    let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
+    // A spot is aimed along its own local +z, away from the camera;
+    // anything below -1 tells the kernel "not a spot".
+    let cone_cos = match l.kind {
+        LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
+        _ => -2.0,
+    };
+    use lumit_gpu::fx::lighting::LightingKind as K;
+    lumit_gpu::fx::lighting::LightingLight {
+        corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
+        // A picture lit in display encoding takes the light's colour
+        // encoded too, and its intensity as it is, as After Effects does.
+        colour: if encoded {
+            l.tint.map(|c| lumit_core::lighting::encode(c) * l.gain)
+        } else {
+            l.colour
+        },
+        kind: match l.kind {
+            LightKind::Area if hw > 0.0 && hh > 0.0 => K::Area,
+            LightKind::Parallel => K::Parallel,
+            LightKind::Ambient => K::Ambient,
+            _ => K::Point,
+        },
+        falloff: l.falloff as u32,
+        radius_px: l.radius_px as f32,
+        falloff_px: l.falloff_px as f32,
+        legacy: l.legacy_shape,
+        cone_cos,
+        // The feather is a share of the cone's angle, as After Effects
+        // has it. An old light's is a share of its cosine, which at a
+        // tenth is the edge spots had before it was a row.
+        cone_inner: if l.legacy_shape {
+            cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32
+        } else {
+            (l.cone_deg * (1.0 - l.cone_feather / 100.0))
+                .to_radians()
+                .cos() as f32
+        },
+        axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
+        shadow_darkness: l.shadow_darkness,
+        shadow_diffusion: l.shadow_diffusion,
+    }
 }
 
 /// A layer's Material options at comp time `t_comp`, as what the lighting
@@ -198,4 +203,20 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
         return [0.0, 0.0, 1.0];
     }
     v.map(|c| c / len)
+}
+
+/// A casting 3D layer's plane, as its shadows read it.
+pub(crate) fn caster_plane(
+    tex: &wgpu::Texture,
+    l: &crate::draw::CompLayerDraw,
+    g: (f32, f32),
+) -> lumit_gpu::fx::lighting::CasterPlane {
+    let world = crate::realise::placed_in_3d(tex, l, g).world();
+    lumit_gpu::fx::lighting::CasterPlane {
+        origin: world.col(3).truncate().to_array(),
+        u: world.col(0).truncate().to_array(),
+        v: world.col(1).truncate().to_array(),
+        transmission: l.material.transmission,
+        opacity: (l.opacity / 100.0).clamp(0.0, 1.0),
+    }
 }

@@ -2853,20 +2853,17 @@ impl Realiser<'_> {
         (sets, each)
     }
 
-    /// A 3D viewport's ground laid over `frame`, hidden wherever one of
-    /// `layers` is nearer the eye.
-    fn ground_over(
+    /// How far the 3D in `layers` is from the camera `cam` at each pixel, as
+    /// clip w counted from the returned near. The near sits just short of the
+    /// nearest corner, so a view from far off (an orthographic one is a
+    /// hundred comps away) keeps a pixel's worth of precision where the
+    /// layers are.
+    pub(crate) fn view_depth(
         &self,
-        frame: wgpu::Texture,
         layers: &[lumit_gpu::composite::CompositeLayer<'_>],
         cam: glam::Mat4,
-        pose: &lumit_core::model::CameraPose,
         (width, height): (u32, u32),
-        ground: ViewGround,
-    ) -> wgpu::Texture {
-        // The depth is counted from just short of the nearest corner, so a
-        // view from far off (an orthographic one is a hundred comps away)
-        // keeps a pixel's worth of precision where the layers are.
+    ) -> (wgpu::Texture, f32) {
         let mut near = f32::INFINITY;
         for l in layers.iter().filter(|l| l.three_d) {
             let m = cam * l.world();
@@ -2890,6 +2887,21 @@ impl Realiser<'_> {
             self.render_scale,
             None,
         );
+        (depth, near)
+    }
+
+    /// A 3D viewport's ground laid over `frame`, hidden wherever one of
+    /// `layers` is nearer the eye.
+    fn ground_over(
+        &self,
+        frame: wgpu::Texture,
+        layers: &[lumit_gpu::composite::CompositeLayer<'_>],
+        cam: glam::Mat4,
+        pose: &lumit_core::model::CameraPose,
+        (width, height): (u32, u32),
+        ground: ViewGround,
+    ) -> wgpu::Texture {
+        let (depth, near) = self.view_depth(layers, cam, (width, height));
         let [right, up, forward] = lumit_core::camera::axes(pose.rotation_deg);
         let v = |p: (f64, f64, f64)| [p.0 as f32, p.1 as f32, p.2 as f32];
         let (tw, th) = (frame.width(), frame.height());
@@ -2955,7 +2967,7 @@ impl Realiser<'_> {
 
 /// A 3D layer's picture where it really sits, motion blur or not: the plane
 /// its rays meet and its place in the depth order.
-fn placed_in_3d<'a>(
+pub(crate) fn placed_in_3d<'a>(
     texture: &'a wgpu::Texture,
     l: &CompLayerDraw,
     g: (f32, f32),
@@ -3395,22 +3407,10 @@ fn run_plan(
         if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 {
             continue;
         }
-        let world = placed_in_3d(tex, l, *g).world();
-        let plane = CasterPlane {
-            origin: world.col(3).truncate().to_array(),
-            u: world.col(0).truncate().to_array(),
-            v: world.col(1).truncate().to_array(),
-            transmission: l.material.transmission,
-            opacity: (l.opacity / 100.0).clamp(0.0, 1.0),
-        };
-        let corners = [
-            plane.origin,
-            (world.col(3) + world.col(0)).truncate().to_array(),
-            (world.col(3) + world.col(1)).truncate().to_array(),
-            (world.col(3) + world.col(0) + world.col(1))
-                .truncate()
-                .to_array(),
-        ];
+        let plane = crate::build::shading::caster_plane(tex, l, *g);
+        let (o, u, v) = (plane.origin, plane.u, plane.v);
+        let at = |a: f32, b: f32| [0, 1, 2].map(|k| o[k] + u[k] * a + v[k] * b);
+        let corners = [o, at(1.0, 0.0), at(0.0, 1.0), at(1.0, 1.0)];
         let mid = centre(&corners);
         // How near it is to the nearest layer it can shade, if any.
         let near = receivers

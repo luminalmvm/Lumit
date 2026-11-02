@@ -380,6 +380,47 @@ fn v4(v: [f32; 3], w: f32) -> [f32; 4] {
     [v[0], v[1], v[2], w]
 }
 
+/// One light as the kernel reads it, with `mask` saying which casters can
+/// shade it.
+fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
+    GpuLight {
+        c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
+        c1: v4(l.corners[1], 0.0),
+        c2: v4(l.corners[2], 0.0),
+        c3: v4(l.corners[3], 0.0),
+        colour: v4(l.colour, l.falloff_px),
+        axis: v4(l.axis, l.cone_cos),
+        flags: [
+            f32::from(l.kind as u8),
+            l.falloff as f32,
+            l.radius_px,
+            l.cone_inner,
+        ],
+        shadow: [
+            l.shadow_darkness,
+            l.shadow_diffusion * DIFFUSION_SPREAD,
+            mask as f32,
+            MAX_STRETCH,
+        ],
+    }
+}
+
+/// The frame's casters as the kernel reads them, how many and their side.
+fn gpu_casters(casters: Option<&ShadowCasters>) -> ([GpuCaster; MAX_SHADOW_CASTERS], usize, u32) {
+    let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];
+    let (count, size) = casters.map_or((0, 0), |c| (c.planes.len(), c.size));
+    let placed = casters.iter().flat_map(|c| c.planes.iter().zip(&c.places));
+    for (slot, (c, place)) in planes.iter_mut().zip(placed) {
+        *slot = GpuCaster {
+            origin: v4(c.origin, c.transmission),
+            u: v4(c.u, 0.0),
+            v: v4(c.v, 0.0),
+            place: *place,
+        };
+    }
+    (planes, count, size)
+}
+
 /// The pass's own layouts and pipelines: the lighting kernel, which reads the
 /// casters' array through a sampler, and the two that make a caster's square
 /// and its smaller levels.
@@ -666,38 +707,9 @@ impl FxEngine {
                     .filter(|&(i, p)| op.own_caster != Some(i) && may_shade(&receiver, l, p))
                     .fold(0, |m, (i, _)| m | (1 << i))
             });
-            *slot = GpuLight {
-                c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
-                c1: v4(l.corners[1], 0.0),
-                c2: v4(l.corners[2], 0.0),
-                c3: v4(l.corners[3], 0.0),
-                colour: v4(l.colour, l.falloff_px),
-                axis: v4(l.axis, l.cone_cos),
-                flags: [
-                    f32::from(l.kind as u8),
-                    l.falloff as f32,
-                    l.radius_px,
-                    l.cone_inner,
-                ],
-                shadow: [
-                    l.shadow_darkness,
-                    l.shadow_diffusion * DIFFUSION_SPREAD,
-                    mask as f32,
-                    MAX_STRETCH,
-                ],
-            };
+            *slot = gpu_light(l, mask);
         }
-        let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];
-        let (count, size) = casters.map_or((0, 0), |c| (c.planes.len(), c.size));
-        let placed = casters.iter().flat_map(|c| c.planes.iter().zip(&c.places));
-        for (slot, (c, place)) in planes.iter_mut().zip(placed) {
-            *slot = GpuCaster {
-                origin: v4(c.origin, c.transmission),
-                u: v4(c.u, 0.0),
-                v: v4(c.v, 0.0),
-                place: *place,
-            };
-        }
+        let (planes, count, size) = gpu_casters(casters);
         let m = &op.material;
         let ubuf = ctx
             .device
