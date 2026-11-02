@@ -1647,8 +1647,11 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
     }
     state.bakes_seen = now;
     // The fill was stopped while the frames were unnameable; there is
-    // something to bank again.
+    // something to bank again. In the browser build a frame the page decoded
+    // may have landed, and the stand-ins held for it go.
     state.fill_exhausted = false;
+    #[cfg(target_arch = "wasm32")]
+    state.renderer.clear_decoded();
     republish_last_frame(state, stream);
 }
 
@@ -2971,7 +2974,9 @@ fn build_viewer_renderer(
                 .iter()
                 .any(|id| !worth_building_for(&ProjectReference::new(*id)));
         let left = give_up.saturating_duration_since(web_time::Instant::now());
-        if !coming || left.is_zero() {
+        // The browser build's one thread can't wait for the other worker to
+        // finish, so it builds its own at once.
+        if !coming || left.is_zero() || cfg!(target_arch = "wasm32") {
             break;
         }
         pool = ENGINES_BACK

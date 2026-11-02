@@ -522,8 +522,8 @@ fn send(st: &AudioState, cmd: Cmd) {
 /// Kick the prepare worker for `comp` (or park the request in the mailbox
 /// while one runs). Callers hold the state lock.
 fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::model::Document>) {
-    if matches!(st.device, Device::Unavailable) {
-        return; // calm terminal state: no sound, no worker
+    if matches!(st.device, Device::Unavailable) || cfg!(target_arch = "wasm32") {
+        return; // calm terminal state: no sound, no worker, as in the browser build
     }
     if st.worker_busy {
         st.pending_prepare = Some((comp, doc));
@@ -741,6 +741,9 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::model::Document>
 /// Returns at once: the file is opened on its own thread, so a slow disk does
 /// not hold the press.
 pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_s: f64) {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
     // `max` answers zero for a start that is not a number.
     let start_s = start_s.max(0.0);
     {

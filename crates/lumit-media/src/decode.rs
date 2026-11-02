@@ -95,9 +95,9 @@ pub struct LumaFrame {
     pub luma: Vec<f32>,
 }
 
-/// The browser build has no FFmpeg, so no decoder is ever opened there.
+/// The browser build reads the frames the page decodes (`crate::web`).
 #[cfg(target_arch = "wasm32")]
-pub struct VideoDecoder(pub(crate) std::convert::Infallible);
+pub struct VideoDecoder(pub(crate) crate::web::frames::Video);
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct VideoDecoder {
@@ -774,7 +774,7 @@ fn convert_linear_f32(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<Decoded
 /// The size a frame is converted to: `target_width` wide if that is narrower
 /// than the picture, and as tall as keeps its shape. `pixel_aspect` widens (or
 /// narrows) the picture first, so its pixels come out square.
-fn scaled_size(
+pub(crate) fn scaled_size(
     src_w: i32,
     src_h: i32,
     target_width: Option<u32>,
@@ -854,8 +854,7 @@ fn turn(frame: DecodedFrame, turns: u8) -> DecodedFrame {
 }
 
 /// A colour frame's brightness, 0 to 1, by the Rec. 709 weights.
-#[cfg(not(target_arch = "wasm32"))]
-fn luma_of(frame: &DecodedFrame) -> LumaFrame {
+pub(crate) fn luma_of(frame: &DecodedFrame) -> LumaFrame {
     let size = frame.format.bytes_per_px();
     let channel = |px: &[u8], c: usize| match frame.format {
         PixelFormat::Srgb8 => px.get(c).map_or(0.0, |v| f32::from(*v) / 255.0),

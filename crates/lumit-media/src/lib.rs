@@ -21,7 +21,7 @@ pub mod slate;
 #[cfg(not(target_arch = "wasm32"))]
 mod vaapi;
 #[cfg(target_arch = "wasm32")]
-mod web;
+pub mod web;
 
 use std::path::Path;
 
@@ -68,6 +68,53 @@ pub enum MediaError {
 #[must_use]
 pub fn reads_own(src: &MediaSource) -> bool {
     src.source_layer.is_some() || ai::is_ai(src.on_disk()) || exr::reads_pass(src)
+}
+
+/// Whether `path` is a file footage can be read from. In the browser build a
+/// file the page has handed in (`web`) is one too, though no disk holds it.
+#[must_use]
+pub fn is_file(path: &Path) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    if web::holds(path) {
+        return true;
+    }
+    path.is_file()
+}
+
+/// How many frames the page has handed in, in the browser build. A picture
+/// drawn while one was on its way is worth drawing again once this moves.
+/// Nought on the desktop, which decodes its own.
+#[must_use]
+pub fn frames_landed() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return web::frames::landed();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+/// How many times a render has drawn another frame in place of one still on
+/// its way, in the browser build. A picture drawn while this moved is never
+/// kept. Nought on the desktop.
+#[must_use]
+pub fn stand_ins() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return web::frames::stand_ins();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl decode::VideoDecoder {
+    /// Frame `n` for a render, which may draw a stand-in while the real one is
+    /// on its way. The desktop decodes every frame it is asked for, so this is
+    /// [`Self::frame_rgba`]. The browser build's is in `web`.
+    pub fn frame_or_stand_in(
+        &mut self,
+        n: usize,
+        target_width: Option<u32>,
+    ) -> Result<DecodedFrame, MediaError> {
+        self.frame_rgba(n, target_width)
+    }
 }
 
 /// The picture of a source that [`reads_own`], at `frame` when it is a run of
@@ -152,6 +199,10 @@ pub struct Fingerprint {
 impl Fingerprint {
     pub fn of(path: &Path) -> Result<Self, MediaError> {
         use std::io::{Read, Seek, SeekFrom};
+        #[cfg(target_arch = "wasm32")]
+        if let Some(print) = web::fingerprint(path) {
+            return Ok(print);
+        }
         let meta = std::fs::metadata(path)?;
         let size = meta.len();
         let mtime_unix = meta

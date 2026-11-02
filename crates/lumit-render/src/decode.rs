@@ -945,7 +945,7 @@ fn decode(
         .map_err(|e| e.to_string())?;
     let frame = req.frame.min(dec.frame_count().saturating_sub(1));
     let out = dec
-        .frame_rgba(frame, req.target_width)
+        .frame_or_stand_in(frame, req.target_width)
         .map_err(|e| e.to_string())?;
     cache.insert(
         cache_key,

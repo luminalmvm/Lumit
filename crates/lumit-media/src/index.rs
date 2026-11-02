@@ -173,8 +173,10 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
 }
 
 #[cfg(target_arch = "wasm32")]
-fn scan(_src: &MediaSource, _fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
-    Err(crate::no_ffmpeg())
+fn scan(src: &MediaSource, _fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    let mut index = crate::web::index(src.on_disk()).ok_or_else(crate::no_ffmpeg)?;
+    index.interpret = src.interpret;
+    Ok(index)
 }
 
 /// The packet scan itself, for everything ffmpeg opens.

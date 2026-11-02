@@ -1,0 +1,214 @@
+// Footage for the browser build. Each file is read here with the browser's
+// own decoders, through MediaBunny (mediabunny/, MPL 2.0, version 1.65.0,
+// source at github.com/Vanilagy/mediabunny), and its bytes stay here. The
+// engine is handed the file's numbers and sound when it is opened and each
+// frame as it is decoded (crates/lumit-bridge/src/web_media.rs), and asks for
+// frames through `want`.
+
+import {
+  ALL_FORMATS,
+  AudioBufferSink,
+  BlobSource,
+  CanvasSink,
+  EncodedPacketSink,
+  Input,
+} from './mediabunny/mediabunny.min.mjs';
+
+// Rates a camera records at, which a rate read off the frames is snapped to.
+const RATES = [
+  [24000, 1001], [24, 1], [25, 1], [30000, 1001], [30, 1], [48, 1], [50, 1],
+  [60000, 1001], [60, 1], [100, 1], [120000, 1001], [120, 1], [240, 1],
+];
+
+// A frame wanted further on than this from the last one decoded starts the
+// decoder again from the keyframe before it, rather than decoding up to it.
+const REACH_SECONDS = 2;
+
+// The most frames waiting to be decoded. Past it the oldest are dropped.
+const MOST_WAITING = 64;
+
+const files = new Map();
+let waiting = [];
+let decoding = false;
+
+// The rate over the whole run of frames, so a clock in milliseconds still
+// tells 30 from 30000/1001.
+function rateOf(stamps, ticks) {
+  const span = stamps[stamps.length - 1] - stamps[0];
+  if (!(span > 0)) return [0, 1];
+  const fps = ((stamps.length - 1) * ticks) / span;
+  const off = ([n, d]) => Math.abs(fps * d / n - 1);
+  const near = RATES.reduce((best, rate) => (off(rate) < off(best) ? rate : best));
+  return off(near) < 0.0005 ? near : [Math.round(fps * 1000), 1000];
+}
+
+// The file's first and last 64 KiB, which the engine fingerprints it by.
+async function ends(file) {
+  const chunk = 65536;
+  const head = new Uint8Array(await file.slice(0, chunk).arrayBuffer());
+  if (file.size <= chunk * 2) return head;
+  const tail = new Uint8Array(await file.slice(file.size - chunk).arrayBuffer());
+  const both = new Uint8Array(head.length + tail.length);
+  both.set(head);
+  both.set(tail, head.length);
+  return both;
+}
+
+// The whole sound as interleaved stereo at its own rate.
+// ponytail: all of it in memory, about 23 MB a minute. Decode stretches as
+// they are played if long files run the page out of memory.
+async function stereo(track) {
+  const parts = [];
+  let frames = 0;
+  for await (const { buffer } of new AudioBufferSink(track).buffers()) {
+    parts.push(buffer);
+    frames += buffer.length;
+  }
+  const out = new Float32Array(frames * 2);
+  let at = 0;
+  for (const buffer of parts) {
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1));
+    for (let i = 0; i < buffer.length; i++) {
+      out[at++] = left[i];
+      out[at++] = right[i];
+    }
+  }
+  return out;
+}
+
+// Open `file` (a File) and hand it to the engine. Its path, or null when the
+// browser can decode none of it.
+async function open(file) {
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+  if (!(await input.canRead())) return null;
+  let video = await input.getPrimaryVideoTrack();
+  let audio = await input.getPrimaryAudioTrack();
+  if (video && !(await video.canDecode())) video = null;
+  if (audio && !(await audio.canDecode())) audio = null;
+  if (!video && !audio) return null;
+
+  const path = `/web/${crypto.randomUUID().slice(0, 8)}/${file.name}`;
+  const probe = {
+    duration_seconds: await input.computeDuration(),
+    container: (await input.getFormat()).name.toLowerCase(),
+    video: null,
+    audio: null,
+  };
+  let ticks = 1;
+  const stamps = [];
+  const keys = [];
+  if (video) {
+    ticks = Math.round(await video.getTimeResolution());
+    const packets = new EncodedPacketSink(video).packets(undefined, undefined, { metadataOnly: true });
+    const frames = [];
+    for await (const packet of packets) {
+      if (packet.timestamp + packet.duration <= 0) continue;
+      frames.push([Math.round(packet.timestamp * ticks), packet.type === 'key' ? 1 : 0]);
+    }
+    frames.sort((a, b) => a[0] - b[0]);
+    for (const [stamp, key] of frames) {
+      stamps.push(stamp);
+      keys.push(key);
+    }
+    const [fpsNum, fpsDen] = rateOf(stamps, ticks);
+    probe.video = {
+      width: await video.getDisplayWidth(),
+      height: await video.getDisplayHeight(),
+      fps_num: fpsNum,
+      fps_den: fpsDen,
+      codec: (await video.getCodec()) ?? 'unknown',
+    };
+  }
+  if (audio) {
+    probe.audio = {
+      sample_rate: await audio.getSampleRate(),
+      channels: await audio.getNumberOfChannels(),
+      codec: (await audio.getCodec()) ?? 'unknown',
+    };
+  }
+  const registered = wasm_bindgen.lumit_web_register(
+    path, JSON.stringify(probe), file.size, Math.floor(file.lastModified / 1000),
+    await ends(file), ticks, Float64Array.from(stamps), Uint8Array.from(keys));
+  if (!registered) return null;
+  if (audio) {
+    wasm_bindgen.lumit_web_sound(path, probe.audio.sample_rate, await stereo(audio));
+  }
+  files.set(path, { video, runs: new Map() });
+  return path;
+}
+
+// The engine wants frame `frame` of `path`, the one showing `at` seconds in,
+// at `width` by `height`. One a render is waiting on goes first, and one
+// playback will want soon (`ahead`) goes last.
+function want(path, frame, at, width, height, ahead) {
+  waiting = waiting.filter((w) => !(w.path === path && w.frame === frame && w.width === width));
+  const wanted = { path, frame, at, width, height };
+  if (ahead) waiting.push(wanted);
+  else waiting.unshift(wanted);
+  if (waiting.length > MOST_WAITING) waiting.length = MOST_WAITING;
+  // Never inside the engine's own call: the frames land after it returns.
+  if (!decoding) {
+    decoding = true;
+    queueMicrotask(decodeWaiting);
+  }
+}
+
+async function decodeWaiting() {
+  try {
+    while (waiting.length) {
+      const wanted = waiting.shift();
+      const file = files.get(wanted.path);
+      if (!file?.video) continue;
+      try {
+        await decode(file, wanted);
+      } catch (e) {
+        console.warn(`lumit: no frame ${wanted.frame} of ${wanted.path}`, e);
+      }
+    }
+  } finally {
+    decoding = false;
+  }
+}
+
+function land(wanted, canvas) {
+  const pixels = canvas.getContext('2d').getImageData(0, 0, wanted.width, wanted.height).data;
+  wasm_bindgen.lumit_web_frame(wanted.path, wanted.frame, wanted.width, wanted.height,
+    new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength));
+}
+
+// Decode on from where this file was last decoded at this size when the
+// frame is a little further on, and from the keyframe before it otherwise.
+// Frames passed on the way that are also waiting land too.
+async function decode(file, wanted) {
+  const size = `${wanted.width}x${wanted.height}`;
+  let run = file.runs.get(size);
+  if (!run || wanted.at < run.at || wanted.at > run.at + REACH_SECONDS) {
+    await run?.frames.return();
+    const sink = run?.sink ?? new CanvasSink(file.video, {
+      width: wanted.width, height: wanted.height, fit: 'fill',
+    });
+    run = { sink, frames: sink.canvases(wanted.at), at: -Infinity, last: null };
+    file.runs.set(size, run);
+  }
+  for (;;) {
+    const { value, done } = await run.frames.next();
+    if (done) {
+      file.runs.delete(size);
+      if (run.last) land(wanted, run.last);
+      return;
+    }
+    run.at = value.timestamp;
+    run.last = value.canvas;
+    const end = value.timestamp + value.duration;
+    if (wanted.at < end) {
+      land(wanted, value.canvas);
+      return;
+    }
+    const passed = waiting.findIndex((w) => w.path === wanted.path && w.width === wanted.width
+      && w.height === wanted.height && w.at >= value.timestamp && w.at < end);
+    if (passed >= 0) land(waiting.splice(passed, 1)[0], value.canvas);
+  }
+}
+
+globalThis.lumitMedia = { open, want };

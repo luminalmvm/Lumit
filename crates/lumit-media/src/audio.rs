@@ -52,8 +52,8 @@ pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaErr
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn decode_all(_path: &Path, _target_rate: u32) -> Result<AudioBuffer, MediaError> {
-    Err(crate::no_ffmpeg())
+pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaError> {
+    crate::web::sound::decode_all(path, target_rate)
 }
 
 /// Decode all of `sound`, resampled to stereo f32 at `target_rate`: what
@@ -240,9 +240,9 @@ pub struct AudioReader {
     overshot: bool,
 }
 
-/// The browser build has no FFmpeg, so no reader is ever opened there.
+/// The browser build reads the sound the page decoded (`crate::web`).
 #[cfg(target_arch = "wasm32")]
-pub struct AudioReader(pub(crate) std::convert::Infallible);
+pub struct AudioReader(pub(crate) crate::web::sound::Sound);
 
 /// A landing being checked: every frame after a jump has to sit exactly where
 /// its timestamp says, each one touching the last, or the jump is not trusted.

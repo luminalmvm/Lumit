@@ -207,9 +207,14 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     file_facts(src)
 }
 
+/// The page reads a picture as the browser shows it, in square pixels.
 #[cfg(target_arch = "wasm32")]
-fn file_facts(_src: &MediaSource) -> Result<FileFacts, MediaError> {
-    Err(crate::no_ffmpeg())
+fn file_facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
+    crate::web::probe(src.on_disk()).ok_or_else(crate::no_ffmpeg)?;
+    Ok(FileFacts {
+        pixel_aspect: (1, 1),
+        ..FileFacts::default()
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -362,8 +367,8 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn probe_container(_src: &MediaSource) -> Result<MediaProbe, MediaError> {
-    Err(crate::no_ffmpeg())
+fn probe_container(src: &MediaSource) -> Result<MediaProbe, MediaError> {
+    crate::web::probe(src.on_disk()).ok_or_else(crate::no_ffmpeg)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

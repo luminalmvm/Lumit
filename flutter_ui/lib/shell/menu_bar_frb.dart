@@ -58,6 +58,8 @@ import '../state/viewer_views.dart';
 import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
+import '../state/web_media.dart'
+    if (dart.library.js_interop) '../state/web_media_web.dart';
 import '../state/keymap.dart';
 import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
@@ -2225,7 +2227,8 @@ Future<void> openProjectFrb(LumitState app,
 /// brought in, chosen from a list.
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
-  final picked = await (picker ?? () => pickFootage(projects: true))();
+  final picked = await (picker ??
+      (kIsWeb ? pickWebMedia : () => pickFootage(projects: true)))();
   final projects = [
     for (final path in picked)
       if (path.toLowerCase().endsWith('.lum')) path,

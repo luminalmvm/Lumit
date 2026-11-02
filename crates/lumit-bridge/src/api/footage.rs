@@ -873,7 +873,7 @@ impl FootageReference {
                 // and a media-less build used to answer "ready" for a path that
                 // plainly was not on disk. Asking the filesystem costs
                 // one stat and gives both builds the same answer.
-                if !path.exists() {
+                if !path.exists() && !lumit_media::is_file(&path) {
                     return Ok(LumitMediaStatus::Missing);
                 }
 

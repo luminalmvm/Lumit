@@ -177,6 +177,11 @@ fn run(rx: &Receiver<Job>) {
 /// we can read at all — which is the same answer a probe of it would give.
 #[cfg(feature = "media")]
 fn stamp(path: &Path) -> Option<Stamp> {
+    // A file the browser build's page holds never changes under its path.
+    #[cfg(target_arch = "wasm32")]
+    if lumit_media::is_file(path) {
+        return Some((0, None));
+    }
     let meta = std::fs::metadata(path).ok()?;
     if !meta.is_file() {
         return None;
