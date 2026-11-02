@@ -61,6 +61,7 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/state/window_backdrop.dart';
 import 'package:lumit_flutter/theme/motion.dart';
 import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
@@ -128,9 +129,11 @@ class LumitAppNew extends StatelessWidget {
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
                   // deepest surface.
-                  color: uiState.theme.tokens.roomed
-                      ? uiState.theme.room
-                      : uiState.theme.surface0,
+                  color: !uiState.theme.tokens.roomed
+                      ? uiState.theme.surface0
+                      : WindowBackdrop.showing
+                          ? WindowBackdrop.tint
+                          : uiState.theme.room,
                   // Settings → Interface → UI scale, the Flutter counterpart of
                   // egui's `set_pixels_per_point`: layout and hit-testing scale
                   // together (see widgets/ui_scale.dart).

@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
+import 'window_backdrop.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import '../theme/theme_tokens.dart' show applyTokens;
@@ -1340,19 +1341,36 @@ class Workspace extends ChangeNotifier {
     StyleSheet.current = style;
     StyleSheet.solid = interface.reduceTransparency;
     final shape = style?.tokens();
+    final backdrop =
+        StyleSheet.solid ? Backdrop.none : style?.backdrop ?? Backdrop.none;
+    // Going solid, the room is solid in this frame, before the material
+    // behind it goes, so nothing black shows between the two.
+    if (backdrop == Backdrop.none) WindowBackdrop.showing = false;
     // A style's own colours, if it sets any, go over the scheme.
-    LumitTheme dressed(LumitTheme t) {
-      if (style == null) return t;
-      final own = applyTokens(t, style.colours(t));
-      // A room picture shows through wherever the room is painted.
-      final picture = style.roomPicture;
-      return picture == null || StyleSheet.solid || !File(picture).existsSync()
-          ? own
-          : own.copyWith(room: const Color(0x00000000));
+    LumitTheme dressed(LumitTheme t) =>
+        style == null ? t : applyTokens(t, style.colours(t));
+    // A room picture shows through wherever the room is painted, and so does
+    // a see-through window, clear unless the style tints the room. Last, so
+    // the Room setting can't paint over either.
+    LumitTheme seen(LumitTheme t) {
+      WindowBackdrop.tint = const Color(0x00000000);
+      final picture = style?.roomPicture;
+      if (picture != null && !StyleSheet.solid && File(picture).existsSync()) {
+        return t.copyWith(room: const Color(0x00000000));
+      }
+      if (style != null && WindowBackdrop.showing) {
+        // The window's root paints the style's tint once. Painted by every
+        // part that stands on the room, it would build up where they overlap.
+        WindowBackdrop.tint =
+            style.colours(t)['room'] ?? const Color(0x00000000);
+        return t.copyWith(room: const Color(0x00000000));
+      }
+      return t;
     }
     if (_preview != null) {
-      _theme =
-          _withRoom(_preview!.copyWith(tokens: shape, density: density));
+      _theme = seen(
+          _withRoom(_preview!.copyWith(tokens: shape, density: density)));
+      _askBackdrop(backdrop);
       notifyListeners();
       return;
     }
@@ -1366,16 +1384,24 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = _withRoom(dressed(
-          custom.build(themeShape).copyWith(tokens: shape, density: density)));
+      _theme = seen(_withRoom(dressed(
+          custom.build(themeShape).copyWith(tokens: shape, density: density))));
     } else {
-      _theme = _withRoom(dressed(LumitTheme.forScheme(
+      _theme = seen(_withRoom(dressed(LumitTheme.forScheme(
         looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: _lookingAccent ?? accentOverride,
-      ).copyWith(tokens: shape, density: density)));
+      ).copyWith(tokens: shape, density: density))));
     }
+    _askBackdrop(backdrop);
     notifyListeners();
+  }
+
+  /// The window behind it all, dark or light as the theme is. Its answer
+  /// comes back to [recompose] when it changes.
+  void _askBackdrop(Backdrop kind) {
+    WindowBackdrop.onChange ??= recompose;
+    WindowBackdrop.want(kind, dark: _theme.mode == ThemeMode2.dark);
   }
 
   /// The room Lantern's cards stand in, from the setting: the theme's own

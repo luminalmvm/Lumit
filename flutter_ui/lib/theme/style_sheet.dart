@@ -25,6 +25,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/window_backdrop.dart';
 
 import 'theme.dart';
 import 'theme_tokens.dart';
@@ -272,6 +273,11 @@ class StyleSheet {
   /// How far the room picture is blurred, from `--room-blur`.
   double get roomBlur => _number(_vars['roomblur'], null) ?? 0;
 
+  /// What shows through the window where the room is clear, from
+  /// `--backdrop: tint` or `blur`.
+  Backdrop get backdrop =>
+      Backdrop.values.asNameMap()[_vars['backdrop']?.trim()] ?? Backdrop.none;
+
   /// Read a style file's text.
   factory StyleSheet.parse(String text,
       {required String name, String folder = ''}) {
@@ -431,7 +437,9 @@ class StyleSheet {
       actionRadius: num('actionradius', b.actionRadius),
       wellRadius: num('wellradius', b.wellRadius),
       contentRadius: num('contentradius', b.contentRadius),
-      roomed: flag('roomed', b.roomed),
+      // A see-through window shows through the room, so it has one unless
+      // the style says otherwise.
+      roomed: flag('roomed', b.roomed || backdrop != Backdrop.none),
       pillInset: num('pillinset', b.pillInset),
       sansFamily: face('sans', b.sansFamily),
       monoFamily: face('mono', b.monoFamily),
