@@ -18397,5 +18397,28 @@
         "example": "3"
       }
     }
-  }
+  },
+  "fxSortDistribution": "Distribuzione ordinata",
+  "fxMathPoints": "Punti matematici",
+  "fxRose": "Rosa",
+  "fxWaveX": "Onda x",
+  "fxWaveY": "Onda y",
+  "fxAmplitudeX": "Ampiezza x",
+  "fxAmplitudeY": "Ampiezza y",
+  "fxFrequencyX": "Frequenza x",
+  "fxFrequencyY": "Frequenza y",
+  "fxPhaseX": "Fase x",
+  "fxPhaseY": "Fase y",
+  "fxPetals": "Petali",
+  "fxDenominator": "Denominatore",
+  "fxTurns": "Giri",
+  "fxCosine": "Coseno",
+  "fxContourPoints": "Punti sui contorni",
+  "fxSizeFromArea": "Dimensione dall'area",
+  "fxIntersectionPoints": "Punti di intersezione",
+  "fxShuffle": "Rimescola",
+  "fxTimeLoop": "Loop temporale",
+  "fxCrossfadeBastiuni": "Crossfade Bastiuni",
+  "fxFadeLength": "Durata dissolvenza",
+  "fxFadeCurve": "Curva dissolvenza"
 }

@@ -38,6 +38,8 @@ Altitude
 Ambient
 Amount
 Amplitude
+Amplitude x
+Amplitude y
 Analyse
 Anamorphic squeeze
 Anchor
@@ -254,6 +256,7 @@ Connect points
 Connections
 Constant
 Constant length
+Contour points
 Contrast
 Controls
 Conversion
@@ -271,11 +274,13 @@ Corner radius
 Corner x
 Corner y
 Corners
+Cosine
 Count
 Count nested inputs
 Create corner pin
 Create transform keys
 Crop
+Crossfade Bastiuni
 Curl noise
 Curve
 Curves
@@ -301,6 +306,7 @@ Deep yellow
 Deform
 Deformer
 Delay
+Denominator
 Density
 Density layer
 Depth
@@ -416,7 +422,9 @@ Expression
 Extract channels
 F-stop
 Fade
+Fade curve
 Fade in
+Fade length
 Fade out
 Fade power
 Falloff
@@ -474,6 +482,8 @@ Frame rate
 Frames
 Free
 Frequency
+Frequency x
+Frequency y
 Friction
 From
 From group
@@ -585,6 +595,7 @@ Intensity
 Interlace offset
 Interpolation
 Intersect
+Intersection points
 Interval
 Inverse
 Invert
@@ -704,6 +715,7 @@ Mask points
 Mask/Path
 Master
 Math
+Math points
 Matte
 Matte inverted
 Matte key
@@ -845,10 +857,13 @@ Per clone
 Per-axis wobble
 Perlin
 Persistence
+Petals
 Phase
 Phase from
 Phase offset
 Phase per copy
+Phase x
+Phase y
 Phaser
 Photo filter
 Pick
@@ -986,6 +1001,7 @@ Roll
 Roll speed
 Rolloff
 Room size
+Rose
 Rotation
 Rotation amount
 Rotation frequency
@@ -1064,6 +1080,7 @@ Shift per row
 Shift x
 Shift y
 Show points
+Shuffle
 Shutter
 Shutter angle
 Shutter phase
@@ -1075,6 +1092,7 @@ Single layer, straw
 Size
 Size by
 Size from
+Size from area
 Size from width
 Size jitter
 Size over life
@@ -1094,6 +1112,7 @@ Soft light
 Softness
 Sort
 Sort by
+Sort distribution
 Source
 Source alpha
 Source blue
@@ -1206,6 +1225,7 @@ Tile centre y
 Tile height
 Tile width
 Time
+Time loop
 Time offset
 Time samples
 Time since last
@@ -1248,6 +1268,7 @@ Turbulent
 Turbulent displace
 Turn
 Turn points
+Turns
 Twirl
 Twist
 Twitch frequency
@@ -1323,6 +1344,8 @@ Wave height
 Wave type
 Wave warp
 Wave width
+Wave x
+Wave y
 Wavelength
 Waves
 Wet

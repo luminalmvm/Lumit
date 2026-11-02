@@ -464,6 +464,10 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &PointsField,
     &EmitFromImage,
     &PointsAlongPath,
+    &MathPoints,
+    &TimeLoop,
+    &ContourPoints,
+    &IntersectionPoints,
     &TrackPoints,
     &TextToPoints,
     &LabelPoints,
@@ -475,6 +479,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &PointsModifier("relax_points"),
     &PointsModifier("flow_points"),
     &PointsModifier("bake_points"),
+    &PointsModifier("sort_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -6401,6 +6406,156 @@ impl GpuEffect for AddGrain {
                 mix: g.mix,
             },
         )
+    }
+}
+
+/// A stream worked out on the host, drawn through the shared points draw in
+/// `style` under the comp's camera, as Grid's is.
+#[allow(clippy::too_many_arguments)]
+fn draw_host_stream(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    tex: &Tex,
+    w: u32,
+    h: u32,
+    stream: &lumit_core::fx::points::PointsStream,
+    style: lumit_core::fx::points::DrawStyle,
+    projection: Option<lumit_core::fx::points::Projection>,
+) -> Tex {
+    let points = draw_points_of(stream);
+    fx.points_draw(
+        ctx,
+        tex,
+        w,
+        h,
+        None,
+        &lumit_gpu::fx::points_draw::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: projection.map(|proj| proj.m),
+            field: lumit_gpu::fx::points_draw::FieldTest::None,
+            seed: 0,
+            mode: 0,
+            sprite: None,
+        },
+    )
+}
+
+/// Math points: a formula worked out on the host, as Grid's lattice is.
+struct MathPoints;
+impl GpuEffect for MathPoints {
+    fn match_name(&self) -> &'static str {
+        "math_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::math_points::MathPoints as M;
+        let inst = M::read(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(M::px_scale_of(p)));
+        let stream = inst.stream(projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Contour points: the pieces of the mask's or the shapes' flattened line,
+/// worked out on the host, as Points along path is.
+struct ContourPoints;
+impl GpuEffect for ContourPoints {
+    fn match_name(&self) -> &'static str {
+        "contour_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::contour_points::ContourPoints as C;
+        let inst = C::read(p);
+        let px_scale = C::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Intersection points: where the mask's or the shapes' flattened line
+/// crosses itself, worked out on the host, as Points along path is.
+struct IntersectionPoints;
+impl GpuEffect for IntersectionPoints {
+    fn match_name(&self) -> &'static str {
+        "intersection_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::intersection_points::IntersectionPoints as I;
+        let inst = I::read(p);
+        let px_scale = I::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Time loop: its Source layer at the loop's moments, made by the builder,
+/// faded together while a crossfade runs and laid over the picture.
+struct TimeLoop;
+impl GpuEffect for TimeLoop {
+    fn match_name(&self) -> &'static str {
+        "time_loop"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::time_loop::TimeLoop as L;
+        let pictures = aux.layer_inputs();
+        let picture = |k: usize| pictures.get(k).and_then(Option::as_ref).map(|l| &l.tex);
+        // No source, or none at that moment: the picture passes through.
+        let Some(now) = picture(0) else {
+            return tex.clone();
+        };
+        let mix = (L::read(p).mix / 100.0).clamp(0.0, 1.0);
+        let share = p.float(L::DERIVED_NEXT_SHARE, 0.0);
+        fx.time_loop(ctx, tex, now, picture(1), share, w, h, mix)
     }
 }
 

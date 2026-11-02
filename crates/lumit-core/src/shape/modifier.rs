@@ -50,6 +50,9 @@ pub struct ShapeGroup {
     pub name: String,
     #[serde(deserialize_with = "read_entries")]
     pub entries: Vec<ShapeEntry>,
+    /// Switched off by its eye: nothing in the group is drawn.
+    #[serde(default, skip_serializing_if = "super::is_shown")]
+    pub hidden: bool,
     /// Unknown fields from newer Lumit versions, preserved on load/save.
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -63,6 +66,7 @@ impl ShapeGroup {
             id: Uuid::now_v7(),
             name: name.into(),
             entries,
+            hidden: false,
             extra: serde_json::Map::new(),
         }
     }
@@ -73,6 +77,10 @@ impl ShapeGroup {
 pub struct ShapeModifier {
     pub id: Uuid,
     pub name: String,
+    /// Switched off by its eye: the art is drawn as if the modifier were not
+    /// there, its numbers kept for when it comes back.
+    #[serde(default, skip_serializing_if = "super::is_shown")]
+    pub hidden: bool,
     #[serde(flatten)]
     pub kind: ModifierKind,
 }
@@ -409,28 +417,47 @@ fn lower<'a>(entries: &'a [ShapeEntry], outer: &[&'a ShapeModifier], out: &mut V
             entries[i + 1..]
                 .iter()
                 .filter_map(|e| match e {
-                    ShapeEntry::Modifier(m) => Some(m),
+                    ShapeEntry::Modifier(m) if !m.hidden => Some(m),
                     _ => None,
                 })
                 .chain(outer.iter().copied())
                 .collect::<Vec<_>>()
         };
         match entry {
+            // An item whose eye is off is not drawn, and one combined into
+            // it draws on its own.
+            ShapeEntry::Item(item) if item.hidden => {}
             ShapeEntry::Item(item) => out.push(Lowered {
                 item,
                 mods: below(),
-                joins: item.combine != 0 && i > 0 && matches!(entries[i - 1], ShapeEntry::Item(_)),
+                joins: item.combine != 0
+                    && i > 0
+                    && matches!(&entries[i - 1], ShapeEntry::Item(above) if !above.hidden),
             }),
+            ShapeEntry::Group(group) if group.hidden => {}
             ShapeEntry::Group(group) => lower(&group.entries, &below(), out),
             ShapeEntry::Modifier(_) => {}
         }
     }
 }
 
-/// Every piece of art in `entries`, groups opened, in list order.
+/// Every piece of art in `entries`, groups opened, in list order, whether
+/// its eye is on or off.
 #[must_use]
 pub fn items(entries: &[ShapeEntry]) -> Vec<&ShapeItem> {
-    lowered(entries).into_iter().map(|l| l.item).collect()
+    let mut out = Vec::new();
+    every_item(entries, &mut out);
+    out
+}
+
+fn every_item<'a>(entries: &'a [ShapeEntry], out: &mut Vec<&'a ShapeItem>) {
+    for entry in entries {
+        match entry {
+            ShapeEntry::Item(item) => out.push(item),
+            ShapeEntry::Group(group) => every_item(&group.entries, out),
+            ShapeEntry::Modifier(_) => {}
+        }
+    }
 }
 
 /// The piece of art `id` names, wherever it sits.
@@ -660,6 +687,7 @@ impl LegacyMods {
                 id: lifted_id(item, kind.label()),
                 name: kind.label().into(),
                 kind,
+                hidden: false,
             });
         };
         if let Some(smooth) = self.smooth {
@@ -760,6 +788,7 @@ fn lifted(wire: Vec<Wire>) -> Vec<ShapeEntry> {
             id,
             name,
             entries,
+            hidden: false,
             extra: serde_json::Map::new(),
         }));
     }

@@ -57,6 +57,9 @@ void main() {
         gradientEndOpacity: const BridgeScalar.static_(100),
         gradientStops: const [],
         combine: 0,
+        hidden: false,
+        fillHidden: false,
+        strokeHidden: false,
         pathKeys: const [],
         taper: null,
       )));
@@ -67,6 +70,7 @@ void main() {
       kind: BridgeShapeEntryKind.modifier(BridgeShapeModifier(
         id: UuidValue.fromString(const Uuid().v4()),
         name: 'Repeater',
+        hidden: false,
         kind: BridgeShapeModifierKind.repeat(BridgeShapeRepeater(
           copies: BridgeScalar.static_(copies),
           offset: const BridgeScalar.static_(0),

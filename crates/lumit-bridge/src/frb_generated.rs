@@ -30080,9 +30080,11 @@ impl SseDecode for crate::api::shape::BridgeShapeGroup {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_hidden = <bool>::sse_decode(deserializer);
         return crate::api::shape::BridgeShapeGroup {
             id: var_id,
             name: var_name,
+            hidden: var_hidden,
         };
     }
 }
@@ -30114,6 +30116,9 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_gradientStops =
             <Vec<crate::api::layer::BridgeGradientStop>>::sse_decode(deserializer);
         let mut var_combine = <u32>::sse_decode(deserializer);
+        let mut var_hidden = <bool>::sse_decode(deserializer);
+        let mut var_fillHidden = <bool>::sse_decode(deserializer);
+        let mut var_strokeHidden = <bool>::sse_decode(deserializer);
         let mut var_pathKeys = <Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(deserializer);
         let mut var_taper = <Option<crate::api::layer::BridgeShapeTaper>>::sse_decode(deserializer);
         let mut var_primitive =
@@ -30139,6 +30144,9 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             gradient_end_opacity: var_gradientEndOpacity,
             gradient_stops: var_gradientStops,
             combine: var_combine,
+            hidden: var_hidden,
+            fill_hidden: var_fillHidden,
+            stroke_hidden: var_strokeHidden,
             path_keys: var_pathKeys,
             taper: var_taper,
             primitive: var_primitive,
@@ -30152,10 +30160,12 @@ impl SseDecode for crate::api::shape::BridgeShapeModifier {
         let mut var_id = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_kind = <crate::api::shape::BridgeShapeModifierKind>::sse_decode(deserializer);
+        let mut var_hidden = <bool>::sse_decode(deserializer);
         return crate::api::shape::BridgeShapeModifier {
             id: var_id,
             name: var_name,
             kind: var_kind,
+            hidden: var_hidden,
         };
     }
 }
@@ -42047,6 +42057,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeGroup {
         [
             self.id.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
+            self.hidden.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -42086,6 +42097,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.gradient_end_opacity.into_into_dart().into_dart(),
             self.gradient_stops.into_into_dart().into_dart(),
             self.combine.into_into_dart().into_dart(),
+            self.hidden.into_into_dart().into_dart(),
+            self.fill_hidden.into_into_dart().into_dart(),
+            self.stroke_hidden.into_into_dart().into_dart(),
             self.path_keys.into_into_dart().into_dart(),
             self.taper.into_into_dart().into_dart(),
             self.primitive.into_into_dart().into_dart(),
@@ -42111,6 +42125,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeModifier {
             self.id.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
             self.kind.into_into_dart().into_dart(),
+            self.hidden.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -48069,6 +48084,7 @@ impl SseEncode for crate::api::shape::BridgeShapeGroup {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <uuid::Uuid>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.name, serializer);
+        <bool>::sse_encode(self.hidden, serializer);
     }
 }
 
@@ -48098,6 +48114,9 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_opacity, serializer);
         <Vec<crate::api::layer::BridgeGradientStop>>::sse_encode(self.gradient_stops, serializer);
         <u32>::sse_encode(self.combine, serializer);
+        <bool>::sse_encode(self.hidden, serializer);
+        <bool>::sse_encode(self.fill_hidden, serializer);
+        <bool>::sse_encode(self.stroke_hidden, serializer);
         <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(self.path_keys, serializer);
         <Option<crate::api::layer::BridgeShapeTaper>>::sse_encode(self.taper, serializer);
         <Option<crate::api::shape::BridgeShapePrimitive>>::sse_encode(self.primitive, serializer);
@@ -48110,6 +48129,7 @@ impl SseEncode for crate::api::shape::BridgeShapeModifier {
         <uuid::Uuid>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.name, serializer);
         <crate::api::shape::BridgeShapeModifierKind>::sse_encode(self.kind, serializer);
+        <bool>::sse_encode(self.hidden, serializer);
     }
 }
 

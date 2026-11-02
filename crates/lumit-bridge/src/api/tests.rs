@@ -3199,6 +3199,9 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_end_opacity: BridgeScalar::Static(100.0),
         gradient_stops: Vec::new(),
         combine: 0,
+        hidden: false,
+        fill_hidden: false,
+        stroke_hidden: false,
         path_keys: Vec::new(),
         taper: None,
         primitive: None,
@@ -3290,6 +3293,7 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: Uuid::now_v7(),
             name: "Trim paths".into(),
+            hidden: false,
             kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
                 start: BridgeScalar::Static(-40.0),
                 offset: BridgeScalar::Static(180.0),
@@ -3522,6 +3526,7 @@ fn expanding_a_repeater_makes_its_copies_real() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: repeater,
             name: "Repeater".into(),
+            hidden: false,
             kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                 copies: BridgeScalar::Static(3.0),
                 offset: BridgeScalar::Static(0.0),

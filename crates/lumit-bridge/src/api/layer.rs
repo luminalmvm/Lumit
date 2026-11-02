@@ -226,6 +226,11 @@ pub struct BridgeShapeItem {
     /// them covers. The run that makes is drawn once, with the paint and the
     /// modifiers of the item that starts it.
     pub combine: u32,
+    /// The eyes: the item's own, and its fill's and outline's. Off leaves
+    /// that part out of the picture and keeps it.
+    pub hidden: bool,
+    pub fill_hidden: bool,
+    pub stroke_hidden: bool,
     /// This item's **shape** keys — empty when its path does not animate.
     /// Composition time, carried out by the layer's start offset
     /// exactly as a mask's path keys cross.
@@ -292,6 +297,9 @@ impl BridgeShapeItem {
             name: item.name.clone(),
             vertices: item.path.vertices.iter().map(BridgeVertex::read).collect(),
             closed: item.path.closed,
+            hidden: item.hidden,
+            fill_hidden: item.fill_hidden,
+            stroke_hidden: item.stroke_hidden,
             fill: crate::shape_paint::read(item.fill.as_ref(), offset),
             stroke: crate::shape_paint::read(item.stroke.as_ref(), offset),
             stroke_width: BridgeScalar::read_at(&item.stroke_width, offset),
@@ -372,6 +380,9 @@ impl BridgeShapeItem {
                 None => self.sent_path(),
             },
             primitive,
+            hidden: self.hidden,
+            fill_hidden: self.fill_hidden,
+            stroke_hidden: self.stroke_hidden,
             fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
             stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
             stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,

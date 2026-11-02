@@ -356,7 +356,10 @@ List<BridgeShapeEntry> addedToShape(
           ? shapeAddLabel(add)
           : '${shapeAddLabel(add)} ${alike + 1}';
       final modifier = BridgeShapeEntryKind.modifier(BridgeShapeModifier(
-          id: UuidValue.fromString(const Uuid().v4()), name: name, kind: kind));
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: name,
+          kind: kind,
+          hidden: false));
       final inside = entries.any((e) =>
           e.kind is BridgeShapeEntryKind_Group && shapeEntryId(e) == at);
       return inside
@@ -412,7 +415,8 @@ class ShapeModifierRow extends StatelessWidget {
       valueColumn: valueColumn,
       onRename: (name) => _write((e) => e.withModifier(
           modifier.id,
-          (m) => BridgeShapeModifier(id: m.id, name: name, kind: m.kind))),
+          (m) => BridgeShapeModifier(
+              id: m.id, name: name, kind: m.kind, hidden: m.hidden))),
       onDelete: () => _write((e) => e.without(modifier.id)),
       deleteLabel: l10n.deleteShapeModifier,
       removeButton: true,

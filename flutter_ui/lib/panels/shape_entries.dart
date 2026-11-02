@@ -93,14 +93,22 @@ extension ShapeEntries on List<BridgeShapeEntry> {
       ];
 
   /// The list with the group [id] renamed.
-  List<BridgeShapeEntry> withGroupName(UuidValue id, String name) => [
+  List<BridgeShapeEntry> withGroupName(UuidValue id, String name) =>
+      withGroup(id, name: name);
+
+  /// The list with the group [id] renamed, or its eye switched.
+  List<BridgeShapeEntry> withGroup(UuidValue id,
+          {String? name, bool? hidden}) =>
+      [
         for (final e in this)
           switch (e.kind) {
             BridgeShapeEntryKind_Group(:final field0) when field0.id == id =>
               BridgeShapeEntry(
                   depth: e.depth,
-                  kind: BridgeShapeEntryKind.group(
-                      BridgeShapeGroup(id: id, name: name))),
+                  kind: BridgeShapeEntryKind.group(BridgeShapeGroup(
+                      id: id,
+                      name: name ?? field0.name,
+                      hidden: hidden ?? field0.hidden))),
             _ => e,
           },
       ];
@@ -149,7 +157,9 @@ extension ShapeEntries on List<BridgeShapeEntry> {
       BridgeShapeEntry(
           depth: this[i].depth,
           kind: BridgeShapeEntryKind.group(BridgeShapeGroup(
-              id: UuidValue.fromString(const Uuid().v4()), name: name))),
+              id: UuidValue.fromString(const Uuid().v4()),
+              name: name,
+              hidden: false))),
       for (final e in sublist(i, end)) shapeEntryAt(e, e.depth + 1),
       ...sublist(end),
     ];

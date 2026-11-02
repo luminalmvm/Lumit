@@ -9037,6 +9037,56 @@ mod tests {
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
     }
 
+    /// **A Time loop shows its source at the loop's moment.** The source
+    /// darkens over its first second and is hidden; the base layer loops its
+    /// first half second. Frame 20 is frame 5 again, and with the loop off the
+    /// source does not show.
+    #[test]
+    fn a_time_loop_shows_its_source_at_the_loops_moment() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let build = |looped: bool| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(32, 16, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
+            for p in &mut darken.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
+                }
+            }
+            comp.layers[0].effects = vec![darken];
+            comp.layers[0].switches.visible = false;
+            let mut time_loop = lumit_core::fx::builtins::instantiate("time_loop").unwrap();
+            for p in &mut time_loop.params {
+                match p.id.as_str() {
+                    "source" => p.value = EffectValue::Layer(Some(top)),
+                    "duration" => p.value = EffectValue::Float(Property::fixed(0.5)),
+                    _ => {}
+                }
+            }
+            time_loop.enabled = looped;
+            comp.layers[1].effects = vec![time_loop];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let mut frame = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid), f: u64| {
+            r.render_rgba(doc, *comp_id, f, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let looped = build(true);
+        assert_eq!(frame(&looped, 20), frame(&looped, 5), "a lap later, the same picture");
+        assert_ne!(frame(&looped, 5), frame(&looped, 10), "the source moves within a lap");
+        let plain = build(false);
+        assert_ne!(frame(&plain, 5), frame(&looped, 5), "the loop lays the source over");
+    }
+
     /// **A stamp shown at another moment is rendered at that moment.**
     ///
     /// The clone layer darkens over its first second and is stamped on a

@@ -3354,6 +3354,59 @@ fn comp_walk(
         )
     };
 
+    // **Time loop's pictures**: its Source layer at each moment the loop
+    // shows, one or two, each as the layer is at that moment and placed by
+    // its transform then. `TimeLoop::planned` says which, as the planner and
+    // the frame key ask it too.
+    let time_loop_pictures = |owner: uuid::Uuid,
+                              e: &lumit_core::model::EffectInstance|
+     -> LayerInputDraw {
+        use lumit_core::fx::effects::time_loop::TimeLoop;
+        let lt = comp
+            .layers
+            .iter()
+            .find(|l| l.id == owner)
+            .map_or(t_comp, |l| lumit_core::time::layer_time(t_comp, l.start_offset.0));
+        let whole = doc.comp(comp.id).unwrap_or(comp);
+        LayerInputDraw::Several(
+            TimeLoop::planned(e, whole, t_comp, lt)
+                .into_iter()
+                .map(|(_, at)| {
+                    if at.to_bits() == t_comp.to_bits() {
+                        return layer_slot(e, "source")
+                            .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
+                    }
+                    let mut probe = Probe::Picture {
+                        effect: e,
+                        row: "source",
+                        found: None,
+                    };
+                    comp_walk(
+                        doc,
+                        comp,
+                        at,
+                        frame_t,
+                        frame_pixels,
+                        &mut visited_path.clone(),
+                        None,
+                        true,
+                        Walk {
+                            clone: clone_number,
+                            values: &[],
+                            rebuild: with.rebuild,
+                            seen_through: None,
+                        },
+                        Some(&mut probe),
+                    );
+                    match probe {
+                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
+                        _ => LayerInputDraw::Absent,
+                    }
+                })
+                .collect(),
+        )
+    };
+
     // A probe wants one thing made at this walk's time and nothing else.
     match probe {
         Some(Probe::Picture { effect, row, found }) => {
@@ -3464,6 +3517,10 @@ fn comp_walk(
                     // Clone to points lays its own list out.
                     if e.effect.match_name == "clone_to_points" {
                         return clone_pictures(owner, e, None);
+                    }
+                    // Time loop's are its Source layer at other moments.
+                    if e.effect.match_name == "time_loop" {
+                        return time_loop_pictures(owner, e);
                     }
                     // An effect with several layer rows hands them over as one
                     // list in row order, so it is still one slot for one op.

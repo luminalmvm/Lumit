@@ -484,3 +484,15 @@ double identityStart(
   }
   return x;
 }
+
+/// Where the switches group starts in [order]: the column the layer's eye is
+/// in, which the entries of a shape layer's contents put their own eyes in.
+double switchesStart(
+    List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
+  var x = 8.0; // the row's edge padding
+  for (final group in order) {
+    if (group == TimelineGroup.switches) return x;
+    x += (widths[group] ?? 0) + groupDividerWidth;
+  }
+  return x;
+}

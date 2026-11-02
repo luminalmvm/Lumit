@@ -197,6 +197,71 @@ impl FxEngine {
         out
     }
 
+    /// Lay a looped picture over `current` (Time loop): `now`, faded with
+    /// `next` by `next_share` while a crossfade runs, laid in front, then
+    /// mixed back toward `current` by `mix`. Echo's own two kernels, so the
+    /// blend is the one its In front mode draws.
+    #[allow(clippy::too_many_arguments)]
+    pub fn time_loop(
+        &self,
+        ctx: &GpuContext,
+        current: &wgpu::Texture,
+        now: &wgpu::Texture,
+        next: Option<&wgpu::Texture>,
+        next_share: f32,
+        w: u32,
+        h: u32,
+        mix: f32,
+    ) -> wgpu::Texture {
+        let params = |weight: f32, mode: u32| EchoParams {
+            weight,
+            mode,
+            matte_on: 0.0,
+            tap: 0,
+        };
+        // mix(now, next, share): echo_mix lerps `other` toward `src`.
+        let looped = match next {
+            Some(next) if next_share > 0.0 => {
+                let faded = work_texture(ctx, w, h, "fx-time-loop-fade");
+                self.dispatch(
+                    ctx,
+                    &self.echo_mix,
+                    next,
+                    now,
+                    &faded,
+                    w,
+                    h,
+                    bytemuck::bytes_of(&params(next_share, 0)),
+                );
+                faded
+            }
+            _ => now.clone(),
+        };
+        let over = work_texture(ctx, w, h, "fx-time-loop-over");
+        self.dispatch(
+            ctx,
+            &self.echo_accumulate,
+            current,
+            &looped,
+            &over,
+            w,
+            h,
+            bytemuck::bytes_of(&params(1.0, 1)),
+        );
+        let out = work_texture(ctx, w, h, "fx-time-loop-out");
+        self.dispatch(
+            ctx,
+            &self.echo_mix,
+            &over,
+            current,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params(mix, 0)),
+        );
+        out
+    }
+
     /// Apply one flow motion blur (docs/08 §3.2) to a linear working texture,
     /// returning a new texture of the same size. The Guertin-class
     /// reconstruction (docs/impl/optical-flow.md §4.5 item 3).

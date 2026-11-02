@@ -1169,7 +1169,7 @@ impl PointsStream {
 
     /// The same points in another order: place `k` takes the point that was
     /// at `order[k]`.
-    fn reorder(&mut self, order: &[usize]) {
+    pub(crate) fn reorder(&mut self, order: &[usize]) {
         fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
             *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
         }

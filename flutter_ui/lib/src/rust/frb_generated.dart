@@ -27421,11 +27421,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeGroup dco_decode_bridge_shape_group(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeShapeGroup(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
+      hidden: dco_decode_bool(arr[2]),
     );
   }
 
@@ -27433,8 +27434,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 23)
-      throw Exception('unexpected arr length: expect 23 but see ${arr.length}');
+    if (arr.length != 26)
+      throw Exception('unexpected arr length: expect 26 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -27456,9 +27457,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       gradientEndOpacity: dco_decode_bridge_scalar(arr[17]),
       gradientStops: dco_decode_list_bridge_gradient_stop(arr[18]),
       combine: dco_decode_u_32(arr[19]),
-      pathKeys: dco_decode_list_bridge_keyframe(arr[20]),
-      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[21]),
-      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[22]),
+      hidden: dco_decode_bool(arr[20]),
+      fillHidden: dco_decode_bool(arr[21]),
+      strokeHidden: dco_decode_bool(arr[22]),
+      pathKeys: dco_decode_list_bridge_keyframe(arr[23]),
+      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[24]),
+      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[25]),
     );
   }
 
@@ -27466,12 +27470,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeModifier dco_decode_bridge_shape_modifier(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeShapeModifier(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
       kind: dco_decode_bridge_shape_modifier_kind(arr[2]),
+      hidden: dco_decode_bool(arr[3]),
     );
   }
 
@@ -34878,7 +34883,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_Uuid(deserializer);
     var var_name = sse_decode_String(deserializer);
-    return BridgeShapeGroup(id: var_id, name: var_name);
+    var var_hidden = sse_decode_bool(deserializer);
+    return BridgeShapeGroup(id: var_id, name: var_name, hidden: var_hidden);
   }
 
   @protected
@@ -34905,6 +34911,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_gradientEndOpacity = sse_decode_bridge_scalar(deserializer);
     var var_gradientStops = sse_decode_list_bridge_gradient_stop(deserializer);
     var var_combine = sse_decode_u_32(deserializer);
+    var var_hidden = sse_decode_bool(deserializer);
+    var var_fillHidden = sse_decode_bool(deserializer);
+    var var_strokeHidden = sse_decode_bool(deserializer);
     var var_pathKeys = sse_decode_list_bridge_keyframe(deserializer);
     var var_taper = sse_decode_opt_box_autoadd_bridge_shape_taper(deserializer);
     var var_primitive =
@@ -34930,6 +34939,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gradientEndOpacity: var_gradientEndOpacity,
         gradientStops: var_gradientStops,
         combine: var_combine,
+        hidden: var_hidden,
+        fillHidden: var_fillHidden,
+        strokeHidden: var_strokeHidden,
         pathKeys: var_pathKeys,
         taper: var_taper,
         primitive: var_primitive);
@@ -34942,7 +34954,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_id = sse_decode_Uuid(deserializer);
     var var_name = sse_decode_String(deserializer);
     var var_kind = sse_decode_bridge_shape_modifier_kind(deserializer);
-    return BridgeShapeModifier(id: var_id, name: var_name, kind: var_kind);
+    var var_hidden = sse_decode_bool(deserializer);
+    return BridgeShapeModifier(
+        id: var_id, name: var_name, kind: var_kind, hidden: var_hidden);
   }
 
   @protected
@@ -42682,6 +42696,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.id, serializer);
     sse_encode_String(self.name, serializer);
+    sse_encode_bool(self.hidden, serializer);
   }
 
   @protected
@@ -42709,6 +42724,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.gradientEndOpacity, serializer);
     sse_encode_list_bridge_gradient_stop(self.gradientStops, serializer);
     sse_encode_u_32(self.combine, serializer);
+    sse_encode_bool(self.hidden, serializer);
+    sse_encode_bool(self.fillHidden, serializer);
+    sse_encode_bool(self.strokeHidden, serializer);
     sse_encode_list_bridge_keyframe(self.pathKeys, serializer);
     sse_encode_opt_box_autoadd_bridge_shape_taper(self.taper, serializer);
     sse_encode_opt_box_autoadd_bridge_shape_primitive(
@@ -42722,6 +42740,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_Uuid(self.id, serializer);
     sse_encode_String(self.name, serializer);
     sse_encode_bridge_shape_modifier_kind(self.kind, serializer);
+    sse_encode_bool(self.hidden, serializer);
   }
 
   @protected

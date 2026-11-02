@@ -23145,5 +23145,97 @@
   "fxCurveLeft": "Curve left",
   "@fxCurveLeft": {
     "description": "Effect controls: a control on Four point warp."
+  },
+  "fxSortDistribution": "Sort distribution",
+  "@fxSortDistribution": {
+    "description": "Effect name: a points effect (Cavalry's Sort and Shuffle) that puts a stream's points in another order, or shuffles them."
+  },
+  "fxMathPoints": "Math points",
+  "@fxMathPoints": {
+    "description": "Effect name: a points effect that lays out points by a formula (waves, a rose, a spiral)."
+  },
+  "fxRose": "Rose",
+  "@fxRose": {
+    "description": "Effect controls — a Shape on Math points: a rose curve of petals."
+  },
+  "fxWaveX": "Wave x",
+  "@fxWaveX": {
+    "description": "Effect controls — Math points: the wave the points follow across."
+  },
+  "fxWaveY": "Wave y",
+  "@fxWaveY": {
+    "description": "Effect controls — Math points: the wave the points follow down."
+  },
+  "fxAmplitudeX": "Amplitude x",
+  "@fxAmplitudeX": {
+    "description": "Effect controls — Math points: how far the wave across reaches."
+  },
+  "fxAmplitudeY": "Amplitude y",
+  "@fxAmplitudeY": {
+    "description": "Effect controls — Math points: how far the wave down reaches."
+  },
+  "fxFrequencyX": "Frequency x",
+  "@fxFrequencyX": {
+    "description": "Effect controls — Math points: how many times the wave across runs."
+  },
+  "fxFrequencyY": "Frequency y",
+  "@fxFrequencyY": {
+    "description": "Effect controls — Math points: how many times the wave down runs."
+  },
+  "fxPhaseX": "Phase x",
+  "@fxPhaseX": {
+    "description": "Effect controls — Math points: where the wave across starts."
+  },
+  "fxPhaseY": "Phase y",
+  "@fxPhaseY": {
+    "description": "Effect controls — Math points: where the wave down starts."
+  },
+  "fxPetals": "Petals",
+  "@fxPetals": {
+    "description": "Effect controls — Math points' Rose: the petals, over Denominator."
+  },
+  "fxDenominator": "Denominator",
+  "@fxDenominator": {
+    "description": "Effect controls — Math points' Rose: what Petals is divided by."
+  },
+  "fxTurns": "Turns",
+  "@fxTurns": {
+    "description": "Effect controls — Math points' Spiral: how many times it winds round."
+  },
+  "fxCosine": "Cosine",
+  "@fxCosine": {
+    "description": "Effect controls — a wave on Math points."
+  },
+  "fxContourPoints": "Contour points",
+  "@fxContourPoints": {
+    "description": "Effect name: a points effect that puts one point on each closed piece of a path."
+  },
+  "fxSizeFromArea": "Size from area",
+  "@fxSizeFromArea": {
+    "description": "Effect controls — Contour points: each point as big as its piece."
+  },
+  "fxIntersectionPoints": "Intersection points",
+  "@fxIntersectionPoints": {
+    "description": "Effect name: a points effect that puts a point where paths cross."
+  },
+  "fxShuffle": "Shuffle",
+  "@fxShuffle": {
+    "description": "Effect controls — a Sort by on Sort points: the points in an order of their own dice."
+  },
+  "fxTimeLoop": "Time loop",
+  "@fxTimeLoop": {
+    "description": "Effect name: plays a stretch of another layer over and over."
+  },
+  "fxCrossfadeBastiuni": "Crossfade Bastiuni",
+  "@fxCrossfadeBastiuni": {
+    "description": "Effect controls — a Type on Time loop: each lap fades from the next one in, with no cut. Bastiuni is a name; keep it."
+  },
+  "fxFadeLength": "Fade length",
+  "@fxFadeLength": {
+    "description": "Effect controls — Time loop: how long each lap fades in from the next."
+  },
+  "fxFadeCurve": "Fade curve",
+  "@fxFadeCurve": {
+    "description": "Effect controls — Time loop: the fade at an even pace or eased."
   }
 }

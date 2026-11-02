@@ -2070,6 +2070,12 @@ class BridgeShapeItem {
   /// modifiers of the item that starts it.
   final int combine;
 
+  /// The eyes: the item's own, and its fill's and outline's. Off leaves
+  /// that part out of the picture and keeps it.
+  final bool hidden;
+  final bool fillHidden;
+  final bool strokeHidden;
+
   /// This item's **shape** keys — empty when its path does not animate.
   /// Composition time, carried out by the layer's start offset
   /// exactly as a mask's path keys cross.
@@ -2109,6 +2115,9 @@ class BridgeShapeItem {
     required this.gradientEndOpacity,
     required this.gradientStops,
     required this.combine,
+    required this.hidden,
+    required this.fillHidden,
+    required this.strokeHidden,
     required this.pathKeys,
     this.taper,
     this.primitive,
@@ -2136,6 +2145,9 @@ class BridgeShapeItem {
       gradientEndOpacity.hashCode ^
       gradientStops.hashCode ^
       combine.hashCode ^
+      hidden.hashCode ^
+      fillHidden.hashCode ^
+      strokeHidden.hashCode ^
       pathKeys.hashCode ^
       taper.hashCode ^
       primitive.hashCode;
@@ -2165,6 +2177,9 @@ class BridgeShapeItem {
           gradientEndOpacity == other.gradientEndOpacity &&
           gradientStops == other.gradientStops &&
           combine == other.combine &&
+          hidden == other.hidden &&
+          fillHidden == other.fillHidden &&
+          strokeHidden == other.strokeHidden &&
           pathKeys == other.pathKeys &&
           taper == other.taper &&
           primitive == other.primitive;

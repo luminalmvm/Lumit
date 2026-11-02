@@ -91,7 +91,7 @@ impl ShapeItem {
         if self.gradient == 0 {
             return None;
         }
-        let from = colour::at(self.fill.as_ref()?, t);
+        let from = colour::at(self.fill_shown()?, t);
         let to = self
             .gradient_colour
             .unwrap_or(crate::model::LinearColour::BLACK);
@@ -362,7 +362,7 @@ impl<'a> Art<'a> {
     /// its dashes grow with.
     pub(super) fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Pressed> {
         let item = self.item;
-        let outlined = item.stroke.is_some() && item.stroke_width.value_at(t) > 0.0;
+        let outlined = item.stroke_shown().is_some() && item.stroke_width.value_at(t) > 0.0;
         // Dashes cut the outline into pieces, each of which is a brush run
         // of its own. A solid outline is one piece, which is the
         // same single run it always was. An item with no outline has no

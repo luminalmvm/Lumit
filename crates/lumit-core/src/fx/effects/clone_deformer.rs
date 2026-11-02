@@ -788,7 +788,7 @@ pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
         let (ua, ub) = ([(a[0] - p[0]) / la, (a[1] - p[1]) / la], [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb]);
         // Half the angle between the two sides.
         let half = (ua[0] * ub[0] + ua[1] * ub[1]).clamp(-1.0, 1.0).acos() * 0.5;
-        if half > std::f32::consts::FRAC_PI_2 - 1e-3 || half < 1e-4 {
+        if !(1e-4..=std::f32::consts::FRAC_PI_2 - 1e-3).contains(&half) {
             out.push(p);
             continue;
         }

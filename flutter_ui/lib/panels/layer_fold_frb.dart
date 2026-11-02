@@ -1578,6 +1578,9 @@ BridgeShapeItem shapeItemWith(
   bool removeTaper = false,
   bool removeFill = false,
   bool removeStroke = false,
+  bool? hidden,
+  bool? fillHidden,
+  bool? strokeHidden,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -1640,6 +1643,9 @@ BridgeShapeItem shapeItemWith(
           _ => item.gradientStops,
         },
     combine: combine ?? item.combine,
+    hidden: hidden ?? item.hidden,
+    fillHidden: fillHidden ?? item.fillHidden,
+    strokeHidden: strokeHidden ?? item.strokeHidden,
     pathKeys: item.pathKeys,
     // Writing a dash or a gap into an item that has neither makes the pair:
     // there is no separate "add dashes" gesture, and a list of one would only
@@ -1776,7 +1782,7 @@ BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
 /// [modifier] with the one number [value] names replaced by [to], or with
 /// its deform reading set to [deformMode].
 BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
-    {ShapeValue? value, BridgeScalar? to, int? deformMode}) {
+    {ShapeValue? value, BridgeScalar? to, int? deformMode, bool? hidden}) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final kind = switch (modifier.kind) {
@@ -1821,7 +1827,11 @@ BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
         endOpacity: at(ShapeValue.repeatEndOpacity, field0.endOpacity),
       )),
   };
-  return BridgeShapeModifier(id: modifier.id, name: modifier.name, kind: kind);
+  return BridgeShapeModifier(
+      id: modifier.id,
+      name: modifier.name,
+      kind: kind,
+      hidden: hidden ?? modifier.hidden);
 }
 
 /// The whole list with the one number [row] names replaced by [to]: on its
