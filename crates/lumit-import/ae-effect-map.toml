@@ -505,6 +505,14 @@ lumit = "point_control"
 conversion = "point_control"
 pending_audit = true
 
+# --- Time ------------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Timewarp"
+name = "Timewarp"
+lumit = "timewarp"
+conversion = "timewarp"
+
 # --- Deliberate placeholders (docs/11 §5) ----------------------------------
 
 [[effect]]
@@ -512,10 +520,6 @@ ae = "VISINF Grain Removal"
 name = "Remove Grain"
 suggest = "removing grain is a programme of its own rather than an effect port"
 
-[[effect]]
-ae = "ADBE Timewarp"
-name = "Timewarp"
-suggest = "Retime with flow frame interpolation does the same job"
 
 # --- Third-party effects (docs/11 §5) --------------------------------------
 #
