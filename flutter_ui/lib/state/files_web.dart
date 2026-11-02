@@ -5,11 +5,11 @@
 // and every part of Lumit that reads or writes a file works unchanged. The
 // files are the engine's, kept in memory (`lumit_ingress::files`), so a file
 // picked in the page is one the engine can open and a project it saved is one
-// the page can hand over. Those under the settings folder are also kept in
-// the browser's local storage, so the settings outlast the page.
+// the page can hand over. The ones worth keeping outlast the page in the
+// browser's own storage (web/files.js).
 
 import 'dart:async';
-import 'dart:convert';
+import 'dart:convert' show Encoding, LineSplitter, utf8;
 import 'dart:io' hide Platform;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -20,29 +20,29 @@ import 'package:lumit_flutter/src/rust/api/web_files.dart';
 import 'package:web/web.dart' as web;
 import 'package:lumit_flutter/state/web_media_web.dart';
 
-/// Where the settings are kept (`HOME` in platform_web.dart, then `.config`).
-const String _kept = '/home/.config/';
+@JS('lumitFiles.restore')
+external JSPromise<JSAny?> _restore();
 
-/// The prefix every kept file has in local storage.
-const String _key = 'lumit-file:';
+@JS('lumitFiles.used')
+external JSPromise<JSNumber?> _used();
 
 /// Put the browser's files in place of `dart:io`'s, before anything reads one.
 /// The engine's store is what they live in, so this comes after the bridge.
 Future<void> installFiles() async {
-  final storage = web.window.localStorage;
-  for (var i = 0; i < storage.length; i++) {
-    final key = storage.key(i);
-    if (key == null || !key.startsWith(_key)) continue;
-    final path = key.substring(_key.length);
-    final value = storage.getItem(key);
-    if (value == null) continue;
-    try {
-      _put(path, base64Decode(value), keep: false);
-    } on FormatException {
-      storage.removeItem(key);
-    }
-  }
+  await _restore().toDart;
   IOOverrides.global = _WebOverrides();
+}
+
+/// How much this browser keeps for Lumit on this computer, in bytes.
+Future<int?> storageUsed() async => (await _used().toDart)?.toDartDouble.round();
+
+/// Have the browser ask before the page goes, while [unsaved] says so.
+void warnBeforeLeaving(bool Function() unsaved) {
+  web.window.addEventListener(
+      'beforeunload',
+      (web.Event event) {
+        if (unsaved()) event.preventDefault();
+      }.toJS);
 }
 
 /// How many files the page has been handed, which keeps their folders apart.
@@ -148,23 +148,10 @@ String _parentOf(String path) {
   return at <= 0 ? '/' : p.substring(0, at);
 }
 
-void _put(String path, List<int> bytes, {bool keep = true}) {
-  final p = _clean(path);
-  webFileWrite(path: p, bytes: bytes);
-  if (keep && p.startsWith(_kept)) {
-    try {
-      web.window.localStorage.setItem('$_key$p', base64Encode(bytes));
-    } catch (_) {
-      // Full. The file is still here for as long as the page is open.
-    }
-  }
-}
+void _put(String path, List<int> bytes) =>
+    webFileWrite(path: _clean(path), bytes: bytes);
 
-void _drop(String path) {
-  final p = _clean(path);
-  webFileRemove(path: p);
-  if (p.startsWith(_kept)) web.window.localStorage.removeItem('$_key$p');
-}
+void _drop(String path) => webFileRemove(path: _clean(path));
 
 FileSystemEntityType _typeOf(String path) {
   final stat = webFileStat(path: _clean(path));

@@ -114,6 +114,8 @@ mod shape_paint;
 mod streams;
 mod turns;
 #[cfg(target_arch = "wasm32")]
+mod web_kept;
+#[cfg(target_arch = "wasm32")]
 mod web_media;
 
 pub mod api;

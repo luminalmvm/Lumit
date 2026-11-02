@@ -21,6 +21,8 @@ import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
+import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.dart'
+    show storageUsed;
 
 /// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
 /// dialog row is 30 under both densities). A row carrying a live readout under
@@ -140,6 +142,21 @@ String byteSize(int bytes) {
   }
   return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
 }
+
+/// How much the browser keeps for Lumit, once it has said.
+Widget storageUsedText(LumitTheme t) => FutureBuilder<int?>(
+      future: storageUsed(),
+      builder: (context, used) => Text(
+          switch (used.data) {
+            null => '',
+            // To a tenth, since settings and a few projects come to less
+            // than one.
+            final bytes when bytes < 1 << 30 =>
+              '${(bytes / (1 << 20)).toStringAsFixed(1)} ${l10n.unitMb}',
+            final bytes => byteSize(bytes),
+          },
+          style: t.body),
+    );
 
 /// A size in bytes as a whole number of megabytes, without the unit.
 String mibText(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);

@@ -507,7 +507,12 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// states where nothing is at risk.
   Widget _savedState(LumitTheme t, LumitState state) {
     final project = state.project;
-    final dirty = project?.isDirty() ?? false;
+    var dirty = false;
+    try {
+      dirty = project?.isDirty() ?? false;
+    } catch (_) {
+      // Closed already, as one project gives way to the next.
+    }
     _unsaved = dirty;
     final label = project == null
         ? l10n.noProject

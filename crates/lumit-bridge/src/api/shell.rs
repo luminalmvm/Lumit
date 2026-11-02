@@ -249,7 +249,7 @@ pub fn list_autosaves(project: String) -> Vec<BridgeAutosave> {
     // The ceiling is belt and braces against a folder somebody filled by hand.
     for slot in 1_u32..=999 {
         let candidate = dir.join(format!("{stem}.autosave-{slot}.lum"));
-        if !candidate.is_file() {
+        if !lumit_ingress::files::is_file(&candidate) {
             break;
         }
         out.push(BridgeAutosave {

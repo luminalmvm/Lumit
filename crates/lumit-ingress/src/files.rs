@@ -40,6 +40,19 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     std::fs::write(path, bytes)
 }
 
+/// Add `bytes` to the end of a file, making it if it isn't there, and wait
+/// until they are on the disk.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn append(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    file.write_all(bytes)?;
+    file.sync_data()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     std::fs::rename(from, to)
@@ -119,12 +132,15 @@ struct Store {
     files: BTreeMap<String, (Arc<[u8]>, SystemTime)>,
     /// Every folder made, and every folder a file has been written into.
     dirs: BTreeSet<String>,
+    /// Every file written or deleted since [`take_changed`] was last asked.
+    changed: BTreeSet<String>,
 }
 
 #[cfg(target_arch = "wasm32")]
 static STORE: Mutex<Store> = Mutex::new(Store {
     files: BTreeMap::new(),
     dirs: BTreeSet::new(),
+    changed: BTreeSet::new(),
 });
 
 /// The store. The page has one thread, so nothing ever waits here.
@@ -189,7 +205,15 @@ fn put(key: String, bytes: Vec<u8>) {
             break;
         }
     }
+    store.changed.insert(key.clone());
     store.files.insert(key, (bytes.into(), now()));
+}
+
+/// Every file written or deleted since this was last asked, which the page
+/// keeps in the browser's own storage so it outlasts the page.
+#[cfg(target_arch = "wasm32")]
+pub fn take_changed() -> Vec<String> {
+    std::mem::take(&mut store().changed).into_iter().collect()
 }
 
 /// A file open for reading.
@@ -273,6 +297,18 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+// ponytail: the whole file is copied on each append, which a journal of a
+// few megabytes bears. A list of pieces per file if one ever grows past that.
+#[cfg(target_arch = "wasm32")]
+pub fn append(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let key = key(path);
+    let had = store().files.get(&key).map(|(had, _)| had.clone());
+    let mut all = had.map(|had| had.to_vec()).unwrap_or_default();
+    all.extend_from_slice(bytes);
+    put(key, all);
+    Ok(())
+}
+
 /// Moves a file, or a folder and everything in it.
 #[cfg(target_arch = "wasm32")]
 pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
@@ -303,6 +339,7 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
     }
     for key in moving {
         let file = store().files.remove(&key);
+        store().changed.insert(key.clone());
         if let Some((bytes, _)) = file {
             put(
                 format!("{to}{}", key.get(from.len()..).unwrap_or("")),
@@ -315,18 +352,27 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 pub fn remove_file(path: &Path) -> io::Result<()> {
-    store()
-        .files
-        .remove(&key(path))
-        .map(|_| ())
-        .ok_or_else(not_found)
+    let key = key(path);
+    let mut store = store();
+    store.files.remove(&key).ok_or_else(not_found)?;
+    store.changed.insert(key);
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn remove_dir_all(path: &Path) -> io::Result<()> {
     let dir = key(path);
     let mut store = store();
-    store.files.retain(|key, _| !inside(key, &dir));
+    let gone: Vec<String> = store
+        .files
+        .keys()
+        .filter(|key| inside(key, &dir))
+        .cloned()
+        .collect();
+    for key in gone {
+        store.files.remove(&key);
+        store.changed.insert(key);
+    }
     store.dirs.retain(|key| *key != dir && !inside(key, &dir));
     Ok(())
 }

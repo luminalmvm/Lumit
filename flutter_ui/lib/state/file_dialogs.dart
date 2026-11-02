@@ -67,8 +67,8 @@ Future<String?> pickProjectToOpen() async {
   return file == null ? null : keepPicked(file);
 }
 
-/// [path] as it is, or picked again where the browser build has not kept it,
-/// which it never does past the page. Null when that was cancelled.
+/// [path] as it is, or picked again where the browser build no longer has
+/// it. Null when that was cancelled.
 Future<String?> pickIfGone(String path) async =>
     File(path).existsSync() ? path : pickProjectToOpen();
 

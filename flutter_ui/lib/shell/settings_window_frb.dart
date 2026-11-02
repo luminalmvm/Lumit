@@ -2321,8 +2321,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   // ---- Autosave ------------------------------------------------------------
 
   /// How often Lumit writes a spare copy of the work, and how many it keeps.
-  /// The Autosave page was drawn in the Settings drawing and left unbuilt
-  /// until the engine had a timer to set.
   ///
   /// Two numbers and nothing else, because there are only two answers to give.
   /// The copies rotate beside the project in an `autosaves/` folder, newest
@@ -2385,6 +2383,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
             ),
           ),
+          if (kIsWeb) _row(t, l10n.settingsBrowserStorage, storageUsedText(t)),
         ],
       ),
     ]);

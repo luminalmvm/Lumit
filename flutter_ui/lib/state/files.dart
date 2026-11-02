@@ -17,3 +17,9 @@ Future<void> handOver(String path) async {}
 
 /// Every file imports here, since FFmpeg reads it.
 bool importsHere(String path) => true;
+
+/// Nothing to say: the machine's own disk is not the browser's to measure.
+Future<int?> storageUsed() async => null;
+
+/// Nothing to do: quitting asks about unsaved work itself (ui_state.dart).
+void warnBeforeLeaving(bool Function() unsaved) {}

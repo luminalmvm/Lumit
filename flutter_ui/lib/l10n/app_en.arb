@@ -12981,6 +12981,10 @@
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
+  "settingsBrowserStorage": "Kept in this browser",
+  "@settingsBrowserStorage": {
+    "description": "Settings window, Autosave, browser version only: the name of the row that shows how much space this browser is using to keep Lumit's settings, projects and spare copies on this computer."
+  },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."

@@ -95,6 +95,7 @@ Future<void> _start(List<String> args) async {
   await ExpressionsMetadata.load();
   await ExpressionTextEditingController.initSyntaxHighlighting();
   final state = LumitState();
+  warnBeforeLeaving(() => state.unsavedNeedsAsking);
   // Start with an empty project rather than nothing at all. Every document
   // command — import, new composition, save — is disabled while there is no
   // project, so booting without one left the whole File and Composition menu

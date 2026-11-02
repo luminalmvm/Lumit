@@ -631,7 +631,7 @@ pub fn autosave(doc: &Document, project_path: &Path, keep: usize) -> Result<Path
         .parent()
         .unwrap_or(Path::new("."))
         .join("autosaves");
-    fs::create_dir_all(&dir)?;
+    lumit_ingress::files::create_dir_all(&dir)?;
     let stem = project_path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -639,9 +639,9 @@ pub fn autosave(doc: &Document, project_path: &Path, keep: usize) -> Result<Path
     let slot = |k: usize| dir.join(format!("{stem}.autosave-{k}.lum"));
 
     // Shift older copies up; the oldest falls off the end.
-    let _ = fs::remove_file(slot(keep));
+    let _ = lumit_ingress::files::remove_file(&slot(keep));
     for k in (1..keep).rev() {
-        let _ = fs::rename(slot(k), slot(k + 1));
+        let _ = lumit_ingress::files::rename(&slot(k), &slot(k + 1));
     }
     let newest = slot(1);
     save(doc, &newest)?;
@@ -663,7 +663,7 @@ pub fn latest_autosave(project_path: &Path) -> Option<PathBuf> {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "project".into());
     let slot1 = dir.join(format!("{stem}.autosave-1.lum"));
-    slot1.is_file().then_some(slot1)
+    lumit_ingress::files::is_file(&slot1).then_some(slot1)
 }
 
 /// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4)
@@ -1142,14 +1142,14 @@ pub enum Resolved {
 /// by content, so it recognises a file that was moved or renamed.
 pub fn resolve_media(media: &MediaRef, project_dir: &Path, search_roots: &[PathBuf]) -> Resolved {
     let rel = project_dir.join(&media.relative_path);
-    if rel.is_file() {
+    if lumit_ingress::files::is_file(&rel) {
         return Resolved::Found {
             path: rel,
             how: ResolveStep::RelativePath,
         };
     }
     let abs = Path::new(&media.absolute_path);
-    if abs.is_file() {
+    if lumit_ingress::files::is_file(abs) {
         return Resolved::Found {
             path: abs.to_path_buf(),
             how: ResolveStep::AbsolutePath,
@@ -1669,9 +1669,9 @@ impl JournalFile {
         let _ = other.clear();
         if self.size() > 0 {
             if let Some(parent) = other.path.parent() {
-                let _ = fs::create_dir_all(parent);
+                let _ = lumit_ingress::files::create_dir_all(parent);
             }
-            let _ = fs::rename(&self.path, &other.path);
+            let _ = lumit_ingress::files::rename(&self.path, &other.path);
         }
         let _ = self.clear();
     }
@@ -1682,24 +1682,19 @@ impl JournalFile {
 
     pub fn append(&self, op: &Op) -> Result<(), ProjectError> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
+            lumit_ingress::files::create_dir_all(parent)?;
         }
         // The first edit after a clean close starts the journal afresh. What
         // was left in it are edits somebody chose not to save, and they must
         // not come back underneath new ones.
         let closed = self.closed_marker();
-        if closed.exists() {
-            let _ = fs::remove_file(&self.path);
-            let _ = fs::remove_file(&closed);
+        if lumit_ingress::files::exists(&closed) {
+            let _ = lumit_ingress::files::remove_file(&self.path);
+            let _ = lumit_ingress::files::remove_file(&closed);
         }
-        let mut f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
         let mut line = serde_json::to_string(op)?;
         line.push('\n');
-        f.write_all(line.as_bytes())?;
-        f.sync_data()?;
+        lumit_ingress::files::append(&self.path, line.as_bytes())?;
         Ok(())
     }
 
@@ -1707,7 +1702,7 @@ impl JournalFile {
     /// tolerated and dropped; a malformed line mid-file stops the replay there
     /// (later ops may depend on the lost one).
     pub fn read(&self) -> Result<Vec<Op>, ProjectError> {
-        let file = match File::open(&self.path) {
+        let file = match lumit_ingress::files::open(&self.path) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => return Err(e.into()),
@@ -1729,18 +1724,18 @@ impl JournalFile {
     /// How many bytes are journalled so far.
     #[must_use]
     pub fn size(&self) -> u64 {
-        fs::metadata(&self.path).map_or(0, |m| m.len())
+        lumit_ingress::files::len(&self.path).unwrap_or(0)
     }
 
     /// Drop the first `bytes` of the journal, which a save has just written
     /// into the project file, and keep the edits made after them.
     pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
-        let mut all = match File::open(&self.path) {
+        let mut all = match lumit_ingress::files::open(&self.path) {
             Ok(all) => all,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(e) => return Err(e.into()),
         };
-        if bytes >= all.metadata()?.len() {
+        if bytes >= lumit_ingress::files::len(&self.path)? {
             drop(all);
             return self.clear();
         }
@@ -1749,9 +1744,9 @@ impl JournalFile {
         // and never read whole: a long day's journal is a long file.
         let beside = self.path.with_extension("tmp");
         all.seek(SeekFrom::Start(bytes))?;
-        std::io::copy(&mut all, &mut File::create(&beside)?)?;
+        std::io::copy(&mut all, &mut lumit_ingress::files::create(&beside)?)?;
         drop(all);
-        fs::rename(&beside, &self.path)?;
+        lumit_ingress::files::rename(&beside, &self.path)?;
         Ok(())
     }
 
@@ -1760,7 +1755,7 @@ impl JournalFile {
     /// left behind.
     pub fn mark_closed(&self) {
         if self.size() > 0 {
-            let _ = fs::write(self.closed_marker(), b"");
+            let _ = lumit_ingress::files::write(&self.closed_marker(), b"");
         }
     }
 
@@ -1768,7 +1763,7 @@ impl JournalFile {
     /// project, which is a crash or a power cut.
     #[must_use]
     pub fn ended_badly(&self) -> bool {
-        self.size() > 0 && !self.closed_marker().exists()
+        self.size() > 0 && !lumit_ingress::files::exists(&self.closed_marker())
     }
 
     fn closed_marker(&self) -> PathBuf {
@@ -1776,8 +1771,8 @@ impl JournalFile {
     }
 
     pub fn clear(&self) -> Result<(), ProjectError> {
-        let _ = fs::remove_file(self.closed_marker());
-        match fs::remove_file(&self.path) {
+        let _ = lumit_ingress::files::remove_file(&self.closed_marker());
+        match lumit_ingress::files::remove_file(&self.path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
