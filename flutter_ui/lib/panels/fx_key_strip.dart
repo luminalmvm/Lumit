@@ -40,7 +40,7 @@ import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
-import 'graph_maths.dart' show keyframeAmong;
+import 'graph_maths.dart' show easyEase, keyframeAmong;
 import 'key_block.dart';
 import 'layer_fold_frb.dart'
     show asOneUndoStep, laneKeyFrame, timeOfSubframe;
@@ -468,7 +468,19 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final picked = await showMenuAt<String>(
       context: context,
       position: position,
+      width: 170,
       rows: (close) => [
+        // The Timeline key menu's three eases, on the same keys.
+        for (final (name, label) in [
+          ('linear', l10n.easeLinear),
+          ('ease', l10n.easeEasy),
+          ('hold', l10n.easeHold),
+        ])
+          MenuRow(
+            key: ValueKey('fx-key-menu-$name'),
+            onPressed: () => close(name),
+            child: Text(label),
+          ),
         MenuRow(
           key: const ValueKey('fx-key-menu-delete'),
           onPressed: () => close('delete'),
@@ -476,7 +488,45 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
         ),
       ],
     );
-    if (picked == 'delete' && mounted) _deleteSelected();
+    if (!mounted) return;
+    switch (picked) {
+      case 'delete':
+        _deleteSelected();
+      case 'linear':
+        _ease(const BridgeSideInterp.linear());
+      case 'ease':
+        _ease(easyEase);
+      case 'hold':
+        _ease(const BridgeSideInterp.hold());
+    }
+  }
+
+  /// Both sides of every picked key to [side], one undo step.
+  void _ease(BridgeSideInterp side) {
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    asOneUndoStep(project, () {
+      for (final row in _byRow(_selection).entries) {
+        final lane = _lanes[row.key];
+        if (lane == null) continue;
+        lane.onWrite([
+          for (final scalar in lane.scalars)
+            if (scalar case BridgeScalar_Keyframed(field0: final keys))
+              BridgeScalar.keyframed([
+                for (var i = 0; i < keys.length; i++)
+                  row.value.contains(i)
+                      ? BridgeKeyframe(
+                          time: keys[i].time,
+                          value: keys[i].value,
+                          interpIn: side,
+                          interpOut: side,
+                        )
+                      : keys[i],
+              ])
+            else
+              scalar,
+        ]);
+      }
+    });
   }
 
   ({double fps, int fpsNum, int fpsDen}) get _scopeValues {
