@@ -11997,6 +11997,10 @@
   "@fxWaveHeight": {
     "description": "Effect controls — a control on Ripple and on Wave warp."
   },
+  "fxWaveSpeed": "Wave speed",
+  "@fxWaveSpeed": {
+    "description": "Effect controls: a control on Ripple and on Wave warp, how many waves pass a second."
+  },
   "fxWaveType": "Wave type",
   "@fxWaveType": {
     "description": "Effect controls — a control on Wave warp."

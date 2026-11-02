@@ -4405,6 +4405,23 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
     }
 }
 
+// A Wave warp or Ripple saved before Wave speed holds still, and a fresh one
+// moves.
+#[test]
+fn a_saved_wave_holds_still() {
+    for name in ["wave_warp", "ripple"] {
+        let mut saved = instantiate(name).unwrap();
+        saved.effect.version = 1;
+        saved.params.retain(|p| p.id != "wave_speed");
+        let mut effects = vec![saved, instantiate(name).unwrap()];
+        backfill_builtin_params(&mut effects);
+        let speed = |e: &EffectInstance| e.float_at("wave_speed", 0.0);
+        assert_eq!(speed(&effects[0]), Some(0.0), "{name} saved before it");
+        assert_eq!(effects[0].effect.version, 2);
+        assert_eq!(speed(&effects[1]), Some(1.0), "{name} added now");
+    }
+}
+
 // The share-of-the-frame → px@comp conversions read old projects
 // forward, which is the forward-migration rule applied to a *unit* change
 // rather than to a missing row: what a saved file rendered, it still renders.

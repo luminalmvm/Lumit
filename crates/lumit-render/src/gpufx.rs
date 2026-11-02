@@ -1920,7 +1920,8 @@ impl GpuEffect for Ripple {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let r = effects::ripple::Ripple::read(p).packed();
+        let travel = p.float(effects::ripple::Ripple::DERIVED_TRAVEL, 0.0);
+        let r = effects::ripple::Ripple::read(p).packed(travel);
         fx.ripple(
             ctx,
             tex,
@@ -1956,7 +1957,8 @@ impl GpuEffect for WaveWarp {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let v = effects::wave_warp::WaveWarp::read(p).packed();
+        let travel = p.float(effects::wave_warp::WaveWarp::DERIVED_TRAVEL, 0.0);
+        let v = effects::wave_warp::WaveWarp::read(p).packed(travel);
         fx.wave_warp(
             ctx,
             tex,
