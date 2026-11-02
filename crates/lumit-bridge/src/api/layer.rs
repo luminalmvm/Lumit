@@ -8416,6 +8416,7 @@ impl LayerReference {
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
         self.migrate_in(

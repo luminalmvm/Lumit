@@ -909,7 +909,7 @@ fn feed_effect_stack(
                 if name == "origin" {
                     continue;
                 }
-                // The inner graph's `layout` is canvas positions (CS4, §4.2):
+                // The inner graph's `layout` and `ties` (CS4, §4.2) are
                 // presentation state, absent from the key for the reason
                 // `LayerGraph::layout` is — moving a box changes no pixel.
                 let text = if name == "graph" {
@@ -917,7 +917,7 @@ fn feed_effect_stack(
                         serde_json::Value::Object(graph) => serde_json::Value::Object(
                             graph
                                 .iter()
-                                .filter(|(k, _)| *k != "layout")
+                                .filter(|(k, _)| !matches!(k.as_str(), "layout" | "ties"))
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect(),
                         )
