@@ -29,6 +29,9 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/solid.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import '../shell/run_script_frb.dart' show isScriptFile;
+import 'project_panel_frb.dart' show importDroppedPaths;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeAudioStreams;
 import 'package:provider/provider.dart';
@@ -3858,9 +3861,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           true,
         ),
       SolidDragData(:final label) => (still, label, true),
-      _ => (0, '', false),
+      // Files from outside: where they land, with no length yet.
+      _Files() => (0, '', false),
+      _ => (-1, '', false),
     };
-    if (length <= 0) return null;
+    if (length < 0) return null;
     final index = cutTrackAt(_tracks, at.dy, _tops);
     final kind = index == null ? null : _tracks[index].kind;
     final fits = picture
@@ -3884,6 +3889,62 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       caught: snapped.caught,
     );
   }
+
+  /// Whether files from outside Lumit are over the lanes.
+  bool _filesOver = false;
+
+  /// Files dropped from outside Lumit: imported, then put down at [global]
+  /// as footage dragged from the Project panel is.
+  Future<void> _dropFiles(
+      CompositionReference comp, List<String> paths, Offset global,
+      {int? atFrame}) async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    final project = state.project;
+    if (project == null) return;
+    Iterable<FootageReference> footage() => [
+          for (final item in project.getItems())
+            if (item case ItemReference_Footage(:final field0)) field0,
+        ];
+    final known = {for (final f in footage()) f.internalid};
+    final imported = await importDroppedPaths(
+        state, paths.where((path) => !isScriptFile(path)).toList());
+    if (!imported || !mounted) return;
+    final fresh = [
+      for (final f in footage())
+        if (!known.contains(f.internalid)) f,
+    ];
+    if (fresh.isNotEmpty) {
+      await _dropFootage(comp, fresh, global, atFrame: atFrame);
+    }
+  }
+
+  /// Files from outside Lumit can be let go anywhere on the lanes too.
+  /// Files from outside Lumit have no length until they are read, so they
+  /// are shown as the point they will land at rather than as a clip.
+  Widget _filesTarget(CompositionReference comp, Widget child) => DropTarget(
+        onDragEntered: (_) => setState(() => _filesOver = true),
+        onDragUpdated: (details) {
+          final landing = _landingOf(const _Files(), details.globalPosition);
+          _landing.value = landing;
+          _caught.value = landing?.caught;
+        },
+        onDragExited: (_) {
+          setState(() => _filesOver = false);
+          _landing.value = null;
+          _caught.value = null;
+        },
+        onDragDone: (details) {
+          final frame =
+              _landingOf(const _Files(), details.globalPosition)?.frame;
+          setState(() => _filesOver = false);
+          _landing.value = null;
+          _caught.value = null;
+          _dropFiles(comp, [for (final f in details.files) f.path],
+              details.globalPosition,
+              atFrame: frame);
+        },
+        child: child,
+      );
 
   /// Footage let go on the table: the whole of it put down on the track it
   /// landed on at the frame under the pointer, overwriting what is there, or
@@ -4030,6 +4091,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final height = track == null
         ? _trackHeight
         : _tops[track + 1] - _tops[track];
+    if (landing.length == 0) {
+      return Positioned(
+        key: const ValueKey<String>('ctl-landing'),
+        left: axis.xOf(landing.frame.toDouble()) - 1,
+        top: top + 1,
+        width: 2,
+        height: max(2.0, height - 2),
+        child: IgnorePointer(child: ColoredBox(color: t.accent)),
+      );
+    }
     return Positioned(
       key: const ValueKey<String>('ctl-landing'),
       left: axis.xOf(landing.frame.toDouble()),
@@ -4141,7 +4212,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ),
         _strip(t, ui),
         Expanded(
-          child: DragTarget<Object>(
+          child: _filesTarget(comp, DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
@@ -4189,10 +4260,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               // An effect lands on one clip, and the clip is.
               foregroundDecoration: BoxDecoration(
                   border: Border.all(
-                      color: candidate.any((data) =>
-                              data is FootageDragData ||
-                              data is CompDragData ||
-                              data is SolidDragData)
+                      color: _filesOver ||
+                              candidate.any((data) =>
+                                  data is FootageDragData ||
+                                  data is CompDragData ||
+                                  data is SolidDragData)
                           ? t.accent
                           : t.accent.withValues(alpha: 0),
                       width: 2)),
@@ -4264,7 +4336,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 },
               ),
             ),
-          ),
+          )),
         ),
       ],
     );
@@ -5345,4 +5417,9 @@ class _SeamsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SeamsPainter old) =>
       old.tops != tops || old.colour != colour || old.scrolled != scrolled;
+}
+
+/// Files dragged in from outside Lumit, as `_landingOf` reads them.
+class _Files {
+  const _Files();
 }
