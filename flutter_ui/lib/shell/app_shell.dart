@@ -20,6 +20,8 @@ import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
+import 'package:lumit_flutter/shell/look_fade.dart';
+import 'package:lumit_flutter/shell/style_import.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
@@ -61,6 +63,7 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/state/window_backdrop.dart';
 import 'package:lumit_flutter/theme/motion.dart';
 import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
@@ -123,14 +126,18 @@ class LumitAppNew extends StatelessWidget {
               wireStyle: uiState.workspace.interface.wireStyle,
               child: Directionality(
                 textDirection: TextDirection.ltr,
-                child: _RoomPicture(
+                child: LookFade(
+                  workspace: uiState.workspace,
+                  child: _RoomPicture(
                   child: ColoredBox(
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
                   // deepest surface.
-                  color: uiState.theme.tokens.roomed
-                      ? uiState.theme.room
-                      : uiState.theme.surface0,
+                  color: !uiState.theme.tokens.roomed
+                      ? uiState.theme.surface0
+                      : WindowBackdrop.showing
+                          ? WindowBackdrop.tint
+                          : uiState.theme.room,
                   // Settings → Interface → UI scale, the Flutter counterpart of
                   // egui's `set_pixels_per_point`: layout and hit-testing scale
                   // together (see widgets/ui_scale.dart).
@@ -146,6 +153,7 @@ class LumitAppNew extends StatelessWidget {
                       ]),
                     ),
                   ),
+                ),
                 ),
                 ),
               ),
@@ -392,6 +400,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           installExtensionPackage(context, app, ui.extensions, package);
           return;
         }
+        final style = app.launchStyle;
+        if (style != null) {
+          app.launchStyle = null;
+          importStyle(context, app, ui, style);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
@@ -410,11 +424,12 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project or an extension package double-clicked, or an invite link
-  /// clicked in a browser, while Lumit is running. On macOS all three come to
-  /// this Lumit. Elsewhere a package always does, and the others when it is
-  /// kept running in the background. They are opened as File ▸ Open, the
-  /// install window and the Shared project window would.
+  /// A project, an extension package or a style double-clicked, or an invite
+  /// link clicked in a browser, while Lumit is running. On macOS all of them
+  /// come to this Lumit. Elsewhere a package or a style always does, and the
+  /// others when it is kept running in the background. They are opened as
+  /// File ▸ Open, the install window, Import style and the Shared project
+  /// window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -424,6 +439,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (package != null) {
       installExtensionPackage(
           context, app, context.read<LumitUiState>().extensions, package);
+    }
+    final style = stylePathFromArgs(asked);
+    if (style != null) {
+      importStyle(context, app, context.read<LumitUiState>(), style);
     }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);

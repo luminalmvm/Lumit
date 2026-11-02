@@ -59,6 +59,11 @@ String? projectPathFromArgs(List<String> args) => _fileFromArgs(args, '.lum');
 /// as [projectPathFromArgs] reads a project.
 String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
 
+/// The style a double-click or a drop asked Lumit to take in, read as
+/// [projectPathFromArgs] reads a project.
+String? stylePathFromArgs(List<String> args) =>
+    _fileFromArgs(args, '.lumstyle');
+
 String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
@@ -151,6 +156,9 @@ class LumitState extends ChangeNotifier {
   /// The extension package Lumit was started with, until its install
   /// window has opened.
   String? launchPackage;
+
+  /// The style Lumit was started with, until it is taken in.
+  String? launchStyle;
 
   StreamSubscription? currentDocumentStream;
 

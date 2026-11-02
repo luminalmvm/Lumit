@@ -39,6 +39,7 @@ import 'api/shell.dart';
 import 'api/solid.dart';
 import 'api/state.dart';
 import 'api/streams.dart';
+import 'api/styles.dart';
 import 'api/system.dart';
 import 'api/track.dart';
 import 'api/wire_tie.dart';
@@ -1367,6 +1368,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStyleInfo dco_decode_bridge_style_info(dynamic raw);
+
+  @protected
+  BridgeStyleOutcome dco_decode_bridge_style_outcome(dynamic raw);
 
   @protected
   BridgeSwatch dco_decode_bridge_swatch(dynamic raw);
@@ -3695,6 +3699,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStyleInfo sse_decode_bridge_style_info(SseDeserializer deserializer);
+
+  @protected
+  BridgeStyleOutcome sse_decode_bridge_style_outcome(
+      SseDeserializer deserializer);
 
   @protected
   BridgeSwatch sse_decode_bridge_swatch(SseDeserializer deserializer);
@@ -6302,6 +6310,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_style_info(
       BridgeStyleInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_style_outcome(
+      BridgeStyleOutcome self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_swatch(BridgeSwatch self, SseSerializer serializer);

@@ -2324,6 +2324,79 @@
     "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
     "placeholders": {"name": {"type": "String"}}
   },
+  "styleFontNeeds": "@font-face needs a font-family and a src",
+  "@styleFontNeeds": {
+    "description": "Why a style file's @font-face rule was skipped: it is missing the family name or the url of the font file. Keep @font-face, font-family and src as they are."
+  },
+  "styleFontMissing": "can't find {file}",
+  "@styleFontMissing": {
+    "description": "Why a font a style names wasn't loaded: there's no file of that name in the style's folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFontKind": "{file} isn't a TTF or OTF font",
+  "@styleFontKind": {
+    "description": "Why a font a style names wasn't loaded: the file is another kind, such as WOFF. Keep TTF and OTF as they are.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "settingsStylesMakePackage": "Make a package",
+  "@settingsStylesMakePackage": {
+    "description": "Settings window, Appearance, Your styles: the button that packs the style in use, with its pictures, icons and fonts, into one .lumstyle file to share."
+  },
+  "settingsStylesShowFolder": "Show folder",
+  "@settingsStylesShowFolder": {
+    "description": "Settings window, Appearance, Your styles: the button that opens the folder Lumit reads styles from in the file manager."
+  },
+  "fileTypeStyle": "Lumit style",
+  "@fileTypeStyle": {
+    "description": "The file type a style is saved and opened as, in the system's file dialogue."
+  },
+  "styleInUse": "Using {name}",
+  "@styleInUse": {
+    "description": "Status line, after a style is imported, double-clicked or dropped on the window: it is now the style in use. {name} is the style's name.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleUndo": "Undo",
+  "@styleUndo": {
+    "description": "Status line: the action beside \"Using {name}\" that puts back the style that was in use before."
+  },
+  "styleReplace": "Replace the style {name}?",
+  "@styleReplace": {
+    "description": "Asked when a style being imported has the same name as one already in the styles folder.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleReplaceYes": "Replace",
+  "@styleReplaceYes": {
+    "description": "The button that answers yes to \"Replace the style {name}?\"."
+  },
+  "styleNotOne": "{file} isn't a style",
+  "@styleNotOne": {
+    "description": "Status line: the file imported, double-clicked or dropped is neither a style file nor a style's folder packed into one.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleTooLarge": "{file} is too large to be a style",
+  "@styleTooLarge": {
+    "description": "Status line: a style package holds more files or bytes than Lumit takes.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleUnsafe": "{file} has a file that would land outside its folder",
+  "@styleUnsafe": {
+    "description": "Status line: a style package was refused because a file in it, or a link, points outside the style's own folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFailed": "{file} couldn't be put in the styles folder",
+  "@styleFailed": {
+    "description": "Status line: a style's files couldn't be written, for instance because the folder is read-only.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackaged": "Saved {file}",
+  "@stylePackaged": {
+    "description": "Status line, after Make a package: the style's package was written. {file} is its file name.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackageOverItself": "A package can't be saved over its own style",
+  "@stylePackageOverItself": {
+    "description": "Status line, after Make a package: the place chosen for the package is the style's own file, which it would replace."
+  },
   "styleChoice": "Style's choice",
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
