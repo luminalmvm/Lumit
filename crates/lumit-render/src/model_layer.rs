@@ -3,26 +3,27 @@
 //! compositor joins the two with
 //! [`lumit_gpu::composite::Compositor::composite_joined`].
 
-use crate::draw::CompLayerDraw;
+use crate::draw::{CompLayerDraw, DrawSource};
+use crate::model::ModelDraw;
 use crate::realise::Realiser;
 use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
-use lumit_scene::ModelScene;
-use std::sync::Arc;
 
+// ponytail: a model takes no motion blur yet (motion_blur_samples gives it
+// none). It needs its placement at each shutter sample, a mesh pass at each,
+// their average, and the nearest depth of them all, so the smear isn't cut
+// to the still model's outline where it joins.
 impl Realiser<'_> {
-    /// One Model draw seen through the comp's camera, or the default one when
+    /// Model draw `m` seen through the comp's camera, or the default one when
     /// it has none, and lit by `l`'s lights as `l`'s Material options take
-    /// them, at this render's scale and anti-aliasing. `model_to_comp` takes
-    /// the model's metres to comp pixels, column-major, the half turn about X
-    /// in it. `None` when the card can't hold the model, which leaves it out
-    /// of the frame rather than failing it.
+    /// them, at this render's scale and anti-aliasing. `None` when the card
+    /// can't hold the model, which leaves it out of the frame rather than
+    /// failing it.
     pub fn model_picture(
         &self,
         l: &CompLayerDraw,
-        scene: &Arc<ModelScene>,
-        model_to_comp: [[f32; 4]; 4],
+        m: &ModelDraw,
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
     ) -> Option<ModelPicture> {
@@ -35,12 +36,54 @@ impl Realiser<'_> {
             render_scale: self.render_scale,
             samples: self.samples,
             camera: crate::export::camera_mat(width, height, pose),
-            model_to_comp: Mat4::from_cols_array_2d(&model_to_comp),
+            model_to_comp: to_comp(m),
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial { eye, ..l.material },
         };
-        self.fx.model(&self.ctx, scene, &view).ok()
+        self.fx.model(&self.ctx, &m.scene, &view).ok()
     }
+}
+
+/// A Model draw's metres to comp pixels, parents and all.
+fn to_comp(m: &ModelDraw) -> Mat4 {
+    Mat4::from_cols_array_2d(&m.placement) * Mat4::from_cols_array_2d(&m.model_to_comp)
+}
+
+/// The middle of a Model draw's box in comp pixels, `None` for any other draw.
+pub(crate) fn middle(l: &CompLayerDraw) -> Option<Vec3> {
+    let DrawSource::Model(m) = &l.source else {
+        return None;
+    };
+    let (lo, hi) = (
+        Vec3::from(m.scene.bounds.min),
+        Vec3::from(m.scene.bounds.max),
+    );
+    Some(to_comp(m).transform_point3((lo + hi) / 2.0))
+}
+
+/// Each model's picture after its effects, with the depth the mesh pass
+/// drew beside it. `depths` names each model by its place in `pictures`. An
+/// effect that grew the picture is cropped back to the frame, so each pixel
+/// still lines up with its depth.
+pub(crate) fn joined(
+    ctx: &lumit_gpu::GpuContext,
+    pictures: &mut [wgpu::Texture],
+    depths: Vec<(usize, wgpu::Texture)>,
+) -> Vec<ModelPicture> {
+    depths
+        .into_iter()
+        .filter_map(|(i, depth)| {
+            let colour = pictures.get_mut(i)?;
+            if (colour.width(), colour.height()) != (depth.width(), depth.height()) {
+                *colour =
+                    lumit_gpu::fx::fit_centred(ctx, colour.clone(), depth.width(), depth.height());
+            }
+            Some(ModelPicture {
+                colour: colour.clone(),
+                depth,
+            })
+        })
+        .collect()
 }
 
 /// How a run of 3D layers that holds a model draws: cut by depth throughout,

@@ -4567,11 +4567,12 @@ fn comp_walk(
         // kind: a Pixels stack already resolved at its decode scale above.
         let fx_ref_width = match &source {
             DrawSource::Nested { width, .. } => Some(*width as f32),
+            // A model is drawn at the comp's size too.
+            DrawSource::Model(_) => Some(comp.width as f32),
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
             | DrawSource::Graph(_)
-            | DrawSource::Haze(_)
-            | DrawSource::Model(_) => None,
+            | DrawSource::Haze(_) => None,
         };
         // The name the per-effect cache files this stack's outputs under: a
         // picture made from bytes, or a nested comp's frame, whose texture is

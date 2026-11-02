@@ -2,6 +2,7 @@
 
 use super::{placed_in_3d, shadow_only};
 use crate::draw::CompLayerDraw;
+use crate::model_layer::{middle, model_run_order};
 
 /// The order a segment's layers draw in: each run of adjacent 3D layers
 /// farthest first, as After Effects draws them, with how each draw is cut
@@ -36,8 +37,16 @@ pub(super) fn draw_order(
         // A motion-blurred layer draws as a flat smear, which can't be cut
         // itself, so whatever it crosses is cut along its plane instead.
         let flat: Vec<bool> = run.iter().map(|&i| !layers[i].mb.is_empty()).collect();
-        order.extend(
+        // A run holding a model is cut by depth throughout, the model placed
+        // by the middle of its box.
+        let middles: Vec<_> = run.iter().map(|&i| middle(&layers[i])).collect();
+        let sorted = if middles.iter().any(Option::is_some) {
+            model_run_order(&worlds, &middles, &flat, view_proj)
+        } else {
             lumit_gpu::composite::order::depth_order(&worlds, &flat, view_proj, eye)
+        };
+        order.extend(
+            sorted
                 .into_iter()
                 .filter_map(|(i, cut)| Some((*run.get(i)?, cut))),
         );

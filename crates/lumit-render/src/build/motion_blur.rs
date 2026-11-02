@@ -25,7 +25,8 @@ pub fn samples(
     natural: (f32, f32),
     context: Arc<ExpressionContext>,
 ) -> Vec<MbSample> {
-    if !layer.switches.motion_blur {
+    let model = matches!(layer.kind, lumit_core::model::LayerKind::Model { .. });
+    if !layer.switches.motion_blur || model {
         return Vec::new();
     }
     let blur = comp.motion_blur;

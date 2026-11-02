@@ -124,14 +124,16 @@ pub(crate) fn peel(layers: &[CompLayerDraw]) -> (Option<&HazeLights>, &[CompLaye
 impl Realiser<'_> {
     /// `frame` with the haze of `lights` laid over it, if there is any, seen
     /// through `camera`. `drawn` is the segment's draws with each one's
-    /// finished picture and grow, and `placed` the same as the compositor
-    /// draws them.
+    /// finished picture and grow, `placed` the same as the compositor draws
+    /// them, and `models` the models among them, which the haze stops at.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn haze_over(
         &self,
         frame: wgpu::Texture,
         lights: Option<&HazeLights>,
         (layers, textures, grown): (&[CompLayerDraw], &[wgpu::Texture], &[(f32, f32)]),
         placed: &[lumit_gpu::composite::CompositeLayer<'_>],
+        models: &[lumit_gpu::mesh::ModelPicture],
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
     ) -> wgpu::Texture {
@@ -143,7 +145,7 @@ impl Realiser<'_> {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
         let cam = crate::export::camera_mat(width, height, pose);
-        let (depth, near) = self.view_depth(placed, cam, (width, height));
+        let (depth, near) = self.view_depth(placed, models, cam, (width, height));
         // The shafts: every casting 3D layer cuts every light that casts.
         let shadowed = lights.iter().any(|(l, _)| l.shadow_darkness > 0.0);
         let casting: Vec<(&wgpu::Texture, CasterPlane)> = layers
@@ -151,8 +153,11 @@ impl Realiser<'_> {
             .zip(textures)
             .zip(grown)
             .filter(|((l, _), _)| {
+                // ponytail: a model casts no shafts until models take
+                // shadows.
                 shadowed
                     && l.three_d
+                    && !matches!(l.source, DrawSource::Model(_))
                     && l.material.casts_shadows != LightingShadows::Off
                     && l.opacity > 0.0
             })
