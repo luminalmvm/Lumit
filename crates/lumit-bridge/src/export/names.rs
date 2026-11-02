@@ -7,7 +7,11 @@ use super::preset_default_file_name;
 /// `shell::export_default_file_name`: with no (or a blank) template, the preset's
 /// own default file name byte-for-byte; otherwise the template with `{comp}`/
 /// `{preset}`/`{date}` substituted, sanitised, and forced to end in `.mp4`.
-pub(super) fn export_default_file_name(preset: &str, comp_name: &str, template: Option<&str>) -> String {
+pub(super) fn export_default_file_name(
+    preset: &str,
+    comp_name: &str,
+    template: Option<&str>,
+) -> String {
     match template.map(str::trim).filter(|t| !t.is_empty()) {
         Some(t) => {
             let stem = preset_default_file_name(preset).trim_end_matches(".mp4");

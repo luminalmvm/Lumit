@@ -3,12 +3,14 @@
     Build the browser version of Lumit into flutter_ui\build\web.
 
 .DESCRIPTION
-    Four steps, each printed before it runs:
+    Five steps, each printed before it runs:
 
       1. cargo build      - the engine and bridge, for wasm32-unknown-unknown
       2. wasm-bindgen     - the page's side of the bridge, into flutter_ui\web\pkg
       3. wasm-opt         - shrinks the engine's wasm, when binaryen is on PATH
       4. flutter build web
+      5. fallback fonts   - the Noto fonts Flutter asks for, into
+                            build\web\fonts\fallback
 
     Needs the wasm32-unknown-unknown target (rustup target add
     wasm32-unknown-unknown) and wasm-bindgen-cli at the version in Cargo.lock
@@ -64,4 +66,30 @@ try {
     Run 'flutter build web --wasm --no-web-resources-cdn'
 } finally {
     Pop-Location
+}
+
+# Text in a script none of Lumit's fonts covers, Chinese or Arabic say, is
+# drawn with a Noto font Flutter fetches as it needs it. They are served from
+# this site, never from Google: the build fetches them once into a cache
+# (LUMIT_WEB_FONTS, or web-fonts beside the cargo build) and copies them in.
+# The list is read from the Flutter doing the build, so it can't drift.
+Write-Host '> fallback fonts' -ForegroundColor Cyan
+$sdk = Split-Path (Split-Path (Get-Command flutter).Source -Parent) -Parent
+$list = Join-Path $sdk 'bin/cache/flutter_web_sdk/lib/_engine/engine/font_fallback_data.dart'
+$fonts = Select-String -AllMatches -Pattern '[a-z0-9]+/v\d+/[\w.-]+\.woff2' -Path $list |
+    ForEach-Object { $_.Matches.Value } | Sort-Object -Unique
+if (-not $fonts) { throw "no fallback fonts listed in $list" }
+$cache = if ($env:LUMIT_WEB_FONTS) { $env:LUMIT_WEB_FONTS } else { Join-Path $target 'web-fonts' }
+$served = Join-Path $repo 'flutter_ui/build/web/fonts/fallback'
+$ProgressPreference = 'SilentlyContinue'
+foreach ($font in $fonts) {
+    $kept = Join-Path $cache $font
+    if (-not (Test-Path $kept)) {
+        New-Item -ItemType Directory -Force (Split-Path $kept) | Out-Null
+        Invoke-WebRequest -UseBasicParsing "https://fonts.gstatic.com/s/$font" -OutFile "$kept.part"
+        Move-Item -Force "$kept.part" $kept
+    }
+    $to = Join-Path $served $font
+    New-Item -ItemType Directory -Force (Split-Path $to) | Out-Null
+    Copy-Item $kept $to
 }

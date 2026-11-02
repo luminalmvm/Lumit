@@ -674,7 +674,11 @@ pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
 
 /// [`journal_path`] for a document saved as `project`.
 pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf> {
-    Some(journal_in(dirs::project_dirs()?.cache_dir(), doc_id, project))
+    Some(journal_in(
+        dirs::project_dirs()?.cache_dir(),
+        doc_id,
+        project,
+    ))
 }
 
 /// The journal of the document `doc_id` saved as `project`, under `cache`.

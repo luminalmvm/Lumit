@@ -14,11 +14,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::decode::DecodedFrame;
 use crate::encode::{
     AudioSettings, BitDepth, ColourTags, Encoder, GifEncoder, GifOptions, ImageFormat,
     ImageSequenceEncoder, Metadata, VideoSettings,
 };
-use crate::decode::DecodedFrame;
 use crate::index::{FrameIndex, IndexEntry};
 use crate::probe::MediaProbe;
 use crate::{no_ffmpeg, Fingerprint, MediaError};

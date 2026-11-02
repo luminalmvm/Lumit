@@ -43,8 +43,11 @@ pub fn boot_log() -> Vec<String> {
             "zero-copy Viewer: {}",
             if cfg!(all(windows, feature = "shared-texture"))
                 || cfg!(all(target_os = "linux", feature = "shared-texture-linux"))
+                || cfg!(all(target_os = "macos", feature = "shared-texture-macos"))
             {
                 "shared texture"
+            } else if cfg!(target_arch = "wasm32") {
+                "canvas"
             } else {
                 "read-back path"
             }

@@ -74,8 +74,7 @@ pub fn start(
     }
     let span = Span::of(c, &spec);
     let sound = frame::sound(&spec, c, audio, &span);
-    let mut renderer =
-        HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
+    let mut renderer = HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
     renderer.refuse_substitution();
     renderer.keep_attachments();
     renderer.sync_colour(&doc);
@@ -92,7 +91,9 @@ pub fn start(
         height: size.1,
         fps_num,
         fps_den,
-        bit_rate: spec.resolved_bitrate(size, span.out_fps).map(|(target, _)| target),
+        bit_rate: spec
+            .resolved_bitrate(size, span.out_fps)
+            .map(|(target, _)| target),
         sound: sound.as_ref().map(|_| {
             (
                 spec.audio_rate,

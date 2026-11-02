@@ -11,7 +11,9 @@ pub(super) fn extension(codec: &str) -> Option<&'static str> {
 
 /// Whether the page can write `codec`.
 pub(super) fn offers(codec: &str) -> bool {
-    lumit_media::web::export::codecs().iter().any(|c| c == codec)
+    lumit_media::web::export::codecs()
+        .iter()
+        .any(|c| c == codec)
 }
 
 /// Start the export, and give it a turn of its own until it ends.

@@ -220,13 +220,19 @@ pub fn show_on_canvas(
                     view_formats: Vec::new(),
                 };
                 surface.configure(&ctx.device, &config);
-                canvases.push((view, Canvas { canvas, surface, config }));
+                canvases.push((
+                    view,
+                    Canvas {
+                        canvas,
+                        surface,
+                        config,
+                    },
+                ));
                 canvases.len() - 1
             }
         };
         let shown = &mut canvases[at].1;
-        if (shown.config.width, shown.config.height, shown.config.format)
-            != (width, height, format)
+        if (shown.config.width, shown.config.height, shown.config.format) != (width, height, format)
         {
             shown.canvas.set_width(width);
             shown.canvas.set_height(height);
@@ -235,10 +241,15 @@ pub fn show_on_canvas(
             shown.config.format = format;
             shown.surface.configure(&ctx.device, &shown.config);
         }
-        let target = shown.surface.get_current_texture().map_err(|e| e.to_string())?;
+        let target = shown
+            .surface
+            .get_current_texture()
+            .map_err(|e| e.to_string())?;
         let mut encoder = ctx
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("canvas") });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("canvas"),
+            });
         encoder.copy_texture_to_texture(
             picture.as_image_copy(),
             target.texture.as_image_copy(),

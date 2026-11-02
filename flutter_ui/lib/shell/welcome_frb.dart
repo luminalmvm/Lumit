@@ -23,6 +23,7 @@
 
 import 'dart:io' hide Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -773,15 +774,18 @@ class _RecentRowState extends State<_RecentRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    MiddleEllipsis(
-                      widget.detail ?? shortenHomePath(widget.path),
-                      style: t.mono.copyWith(
-                        fontSize: 9,
-                        color: t.textDisabled,
+                    // In the browser the path is a made-up folder.
+                    if (widget.detail != null || !kIsWeb) ...[
+                      const SizedBox(height: 2),
+                      MiddleEllipsis(
+                        widget.detail ?? shortenHomePath(widget.path),
+                        style: t.mono.copyWith(
+                          fontSize: 9,
+                          color: t.textDisabled,
+                        ),
+                        tip: widget.detail ?? widget.path,
                       ),
-                      tip: widget.detail ?? widget.path,
-                    ),
+                    ],
                   ],
                 ),
               ),

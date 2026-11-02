@@ -976,7 +976,7 @@ List<MenuSection> lumitMenus(
                 for (final path in ui.workspace.recentProjects)
                   MenuEntry(projectDisplayName(path),
                       () => app.openProject(path),
-                      tip: path),
+                      tip: kIsWeb ? null : path),
             ]),
             if (!kIsWeb)
               MenuEntry(l10n.backupMenuOpen, () => showBackups(context),

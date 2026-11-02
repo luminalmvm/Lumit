@@ -1917,8 +1917,10 @@ class Workspace extends ChangeNotifier {
   /// this does not notify listeners.
   void rememberProject(String path) {
     lastProjectPath = path;
+    // In the browser every open is a new folder, so the name is the file.
     recentProjects
-      ..remove(path)
+      ..removeWhere((p) =>
+          p == path || kIsWeb && p.split('/').last == path.split('/').last)
       ..insert(0, path);
     _recentOpened[path] = DateTime.now().toIso8601String();
     if (recentProjects.length > maxRecentProjects) {
