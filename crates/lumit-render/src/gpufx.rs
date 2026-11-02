@@ -443,6 +443,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &DropShadow,
     &LinearWipe,
     &crate::gpufx_crop::Crop,
+    &crate::gpufx_film::Film,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,
@@ -3571,7 +3572,12 @@ impl GpuEffect for Glow {
 /// A glow's halo in the shape the GPU takes it. The GPU crate doesn't see
 /// `lumit-core`, so the numbers are worked out here, once, from the same
 /// functions the CPU reference reads.
-fn glow_shape(radius_px: f32, falloff: f32, w: u32, h: u32) -> lumit_gpu::fx::blur::GlowShape {
+pub(crate) fn glow_shape(
+    radius_px: f32,
+    falloff: f32,
+    w: u32,
+    h: u32,
+) -> lumit_gpu::fx::blur::GlowShape {
     use lumit_core::fx::cpu::{glow_gaussian_plan, glow_grid, glow_octaves, GLOW_REACH};
     use lumit_gpu::fx::{blur::GlowGaussianOp, blur::GlowOctaveOp, blur::GlowShape};
     if falloff > 0.0 {

@@ -23597,6 +23597,648 @@
       "matte_role": "strength"
     },
     {
+      "slug": "film",
+      "match_name": "film",
+      "label": "Film",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "stock",
+          "label": "Stock",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Vision3 50D",
+            "Vision3 250D",
+            "Vision3 200T",
+            "Vision3 500T",
+            "Portra 160",
+            "Portra 400",
+            "Portra 800",
+            "Ektar 100",
+            "Gold 200",
+            "Ultramax 400",
+            "Fujicolor C200",
+            "Fujicolor Pro 400H",
+            "Superia X-TRA 400",
+            "Ektachrome 100",
+            "Kodachrome 64",
+            "Provia 100F",
+            "Velvia 100"
+          ],
+          "dividers_after": [
+            3,
+            12
+          ]
+        },
+        {
+          "id": "format",
+          "label": "Format",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Super 8",
+            "16 mm",
+            "Super 16",
+            "35 mm",
+            "35 mm stills",
+            "65 mm"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "exposure",
+          "label": "Exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -10.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "highlights",
+          "label": "Highlights",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 6.0,
+          "hard_min": 0.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "colour",
+          "label": "Film colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "push",
+          "label": "Push or pull",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 2.0,
+          "hard_min": -1.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "interlayer",
+          "label": "Interlayer",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "print",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "print_stock",
+          "label": "Print stock",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Vision 2383",
+            "Vision Premier 2393",
+            "Portra Endura paper",
+            "Crystal Archive paper"
+          ],
+          "dividers_after": [
+            1
+          ]
+        },
+        {
+          "id": "print_brightness",
+          "label": "Brightness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -2.0,
+          "slider_max": 2.0,
+          "hard_min": -6.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "contrast",
+          "label": "Contrast",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 50.0,
+          "slider_max": 200.0,
+          "hard_min": 10.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "halation",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "halation_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 4000.0
+        },
+        {
+          "id": "halation_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "backing",
+          "label": "Backing",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "The stock's own",
+            "Strong",
+            "Weak",
+            "Removed"
+          ],
+          "dividers_after": [
+            0
+          ]
+        },
+        {
+          "id": "bloom",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "bloom_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "bloom_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "grain_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain_colour",
+          "label": "Colour",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "animate",
+          "label": "Animate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "weave",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "weave_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "weave_speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.5,
+          "slider_min": 0.1,
+          "slider_max": 8.0,
+          "hard_min": 0.0,
+          "hard_max": 50.0
+        },
+        {
+          "id": "flicker",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "flicker_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Negative",
+          "params": [
+            "colour",
+            "push",
+            "interlayer"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Print",
+          "params": [
+            "print",
+            "print_stock",
+            "print_brightness",
+            "contrast",
+            "red",
+            "green",
+            "blue"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Halation",
+          "params": [
+            "halation",
+            "halation_amount",
+            "halation_size",
+            "backing"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Bloom",
+          "params": [
+            "bloom",
+            "bloom_amount",
+            "bloom_size"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Grain",
+          "params": [
+            "grain",
+            "grain_amount",
+            "grain_size",
+            "grain_colour",
+            "animate",
+            "seed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Gate weave",
+          "params": [
+            "weave",
+            "weave_amount",
+            "weave_speed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_amount"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "push",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "interlayer",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print_stock",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print_brightness",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "contrast",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "red",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "green",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "blue",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "halation_amount",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "halation_size",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "backing",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bloom_amount",
+          "on": "bloom",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bloom_size",
+          "on": "bloom",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_amount",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_size",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_colour",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "animate",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "seed",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "weave_amount",
+          "on": "weave",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "weave_speed",
+          "on": "weave",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "flicker_amount",
+          "on": "flicker",
+          "cond": "bool_is",
+          "value": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "drop-shadow",
       "match_name": "drop_shadow",
       "label": "Drop shadow",

@@ -18,6 +18,8 @@ pub mod custom_shader;
 pub mod distort;
 pub mod dof;
 mod engine;
+/// Film's passes, built on first use.
+pub mod film;
 pub mod generate;
 pub mod grid_lines;
 pub mod ground;
@@ -351,6 +353,7 @@ pub struct FxEngine {
     lens_blur: lens_blur::LazyLensBlur,
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
+    film: film::LazyFilm,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with

@@ -4,13 +4,17 @@
 1 kHz
 125 Hz
 16 kHz
+16 mm
 2 kHz
 250 Hz
 31 Hz
+35 mm
+35 mm stills
 3D point
 4 kHz
 500 Hz
 63 Hz
+65 mm
 8 kHz
 A
 APS-C
@@ -69,6 +73,7 @@ Auto
 Away from points
 B
 Background
+Backing
 Backwards
 Bake
 Bake points
@@ -262,6 +267,7 @@ Count nested inputs
 Create corner pin
 Create transform keys
 Crop
+Crystal Archive paper
 Curl noise
 Curve
 Curves
@@ -350,6 +356,8 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Ektachrome 100
+Ektar 100
 Element 1
 Element 10
 Element 11
@@ -413,6 +421,8 @@ Field of view
 File
 Fill
 Fill cell
+Film
+Film colour
 Filter
 Final
 Final result
@@ -446,6 +456,7 @@ For
 Force on all layers
 Forces
 Forking
+Format
 Forwards
 Fractal influence
 Fractal noise
@@ -457,6 +468,8 @@ Frequency
 Friction
 From
 From group
+Fujicolor C200
+Fujicolor Pro 400H
 Full body
 Full frame
 Full off
@@ -464,6 +477,7 @@ Full on
 Gain
 Gamma
 Gate
+Gate weave
 Gaussian
 Gaussian blur
 Generate
@@ -475,6 +489,7 @@ Glow
 Glow colour
 Glow opacity
 Glow radius
+Gold 200
 Gradient
 Gradient 1
 Gradient 2
@@ -483,6 +498,7 @@ Gradient 4
 Gradient overlay
 Gradient stops
 Gradient type
+Grain
 Graphic EQ
 Gravity
 Green
@@ -501,6 +517,7 @@ Grow max
 Grow min
 H line rel width
 Hairs
+Halation
 Half
 Hard
 Hard colour
@@ -563,6 +580,7 @@ Inside colour
 Inside mask
 Intensity
 Interlace offset
+Interlayer
 Interpolation
 Interval
 Inverse
@@ -587,6 +605,7 @@ Key out safe
 Key out unsafe
 Kill
 Knee
+Kodachrome 64
 LUT
 Label points
 Label rotation
@@ -737,6 +756,7 @@ Nearby
 Nearest
 Nearest (m)
 Nearest distance
+Negative
 Node graph
 Noise
 Noise scale
@@ -767,6 +787,7 @@ Offset x
 Offset y
 Offset z
 Omni
+On
 On contact
 On original
 On transparent
@@ -867,6 +888,10 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Portra 160
+Portra 400
+Portra 800
+Portra Endura paper
 Portrait
 Position
 Position x
@@ -878,11 +903,15 @@ Power
 Pre-delay
 Preserve luminance
 Preserve luminosity
+Print
+Print stock
 Producer x
 Producer y
 Propagate
+Provia 100F
 Pull
 Pulse
+Push or pull
 Quality
 Quarter
 RGB split
@@ -929,6 +958,7 @@ Remove background
 Remove edge leak
 Remove from picked
 Remove input
+Removed
 Render
 Rendered
 Repeat
@@ -1121,6 +1151,7 @@ Stereo phase
 Stereo width
 Stick
 Stillness
+Stock
 Stops
 Store
 Streak
@@ -1138,13 +1169,17 @@ Stroke colour
 Stroke emboss
 Stroke width
 Strokes
+Strong
 Style
 Stylise
 Sub influence
 Sub scaling
 Sub settings
 Subtract
+Super 16
 Super 35
+Super 8
+Superia X-TRA 400
 Surface
 Swing
 Switch
@@ -1164,6 +1199,7 @@ Texture contrast
 Texture layer
 Textures
 Texturize
+The stock's own
 Thickness max
 Thickness min
 This comp
@@ -1227,6 +1263,7 @@ Two-way strike
 Type
 Type fill
 Ultra
+Ultramax 400
 Uncircle
 Uncoated
 Underwater
@@ -1259,6 +1296,7 @@ Vector blur
 Vector scale
 Vectors from
 Vegas
+Velvia 100
 Venetian blinds
 Vertical
 Vertical amount
@@ -1272,6 +1310,12 @@ Vibrato
 View
 Vignette
 Violet
+Vision 2383
+Vision Premier 2393
+Vision3 200T
+Vision3 250D
+Vision3 500T
+Vision3 50D
 Vivid light
 Voices
 Volume
@@ -1289,6 +1333,7 @@ Wave warp
 Wave width
 Wavelength
 Waves
+Weak
 Wet
 Width
 Wiggle

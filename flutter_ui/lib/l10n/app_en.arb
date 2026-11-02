@@ -22941,5 +22941,181 @@
   "fxCurveLeft": "Curve left",
   "@fxCurveLeft": {
     "description": "Effect controls: a control on Four point warp."
+  },
+  "fxFilm": "Film",
+  "@fxFilm": {
+    "description": "Effect name in the Add effect menu: the picture shot on a film stock and printed, with halation, grain and the rest as parts that turn on and off."
+  },
+  "fxStock": "Stock",
+  "@fxStock": {
+    "description": "Effect controls: Film's choice of the film stock in the camera."
+  },
+  "fxFormat": "Format",
+  "@fxFormat": {
+    "description": "Effect controls: Film's choice of how big the frame is on the film, which sets how big its grain and halation look."
+  },
+  "fxSuper8": "Super 8",
+  "@fxSuper8": {
+    "description": "Effect controls: a Format on Film: the Super 8 home movie gauge."
+  },
+  "fx16Mm": "16 mm",
+  "@fx16Mm": {
+    "description": "Effect controls: a Format on Film: the 16 mm gauge."
+  },
+  "fxSuper16": "Super 16",
+  "@fxSuper16": {
+    "description": "Effect controls: a Format on Film: the Super 16 gauge."
+  },
+  "fx35Mm": "35 mm",
+  "@fx35Mm": {
+    "description": "Effect controls: a Format on Film: a 35 mm motion picture frame."
+  },
+  "fx35MmStills": "35 mm stills",
+  "@fx35MmStills": {
+    "description": "Effect controls: a Format on Film: the larger frame a 35 mm stills camera exposes."
+  },
+  "fx65Mm": "65 mm",
+  "@fx65Mm": {
+    "description": "Effect controls: a Format on Film: the 65 mm gauge."
+  },
+  "fxNegative": "Negative",
+  "@fxNegative": {
+    "description": "Effect controls: a group of rows on Film about the negative and its development."
+  },
+  "fxFilmColour": "Film colour",
+  "@fxFilmColour": {
+    "description": "Effect controls: a switch on Film. Off keeps the picture's own colour and adds only grain, halation and the other parts."
+  },
+  "fxPushOrPull": "Push or pull",
+  "@fxPushOrPull": {
+    "description": "Effect controls: Film's stops of push (more contrast) or pull (less) in development."
+  },
+  "fxInterlayer": "Interlayer",
+  "@fxInterlayer": {
+    "description": "Effect controls: how hard each of the film's layers holds back the others as it develops, per cent."
+  },
+  "fxPrint": "Print",
+  "@fxPrint": {
+    "description": "Effect controls: a group and a switch on Film: printing the negative onto print stock."
+  },
+  "fxPrintStock": "Print stock",
+  "@fxPrintStock": {
+    "description": "Effect controls: Film's choice of what the negative is printed on."
+  },
+  "fxHalation": "Halation",
+  "@fxHalation": {
+    "description": "Effect controls: a group and a switch on Film: light bouncing off the film's base back into it, a red glow round bright lights."
+  },
+  "fxBacking": "Backing",
+  "@fxBacking": {
+    "description": "Effect controls: Film's choice of the layer behind the film that stops halation."
+  },
+  "fxTheStockSOwn": "The stock's own",
+  "@fxTheStockSOwn": {
+    "description": "Effect controls: a Backing on Film: whatever the chosen stock has."
+  },
+  "fxStrong": "Strong",
+  "@fxStrong": {
+    "description": "Effect controls: a Backing on Film: one that stops most of the bounce."
+  },
+  "fxWeak": "Weak",
+  "@fxWeak": {
+    "description": "Effect controls: a Backing on Film: one that lets more of the bounce through."
+  },
+  "fxRemoved": "Removed",
+  "@fxRemoved": {
+    "description": "Effect controls: a Backing on Film: the backing taken off, which glows the most."
+  },
+  "fxGateWeave": "Gate weave",
+  "@fxGateWeave": {
+    "description": "Effect controls: a group and a switch on Film: the frame wandering a little in the camera's gate."
+  },
+  "fxVision350D": "Vision3 50D",
+  "@fxVision350D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3250D": "Vision3 250D",
+  "@fxVision3250D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3200T": "Vision3 200T",
+  "@fxVision3200T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3500T": "Vision3 500T",
+  "@fxVision3500T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra160": "Portra 160",
+  "@fxPortra160": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra400": "Portra 400",
+  "@fxPortra400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra800": "Portra 800",
+  "@fxPortra800": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktar100": "Ektar 100",
+  "@fxEktar100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxGold200": "Gold 200",
+  "@fxGold200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxUltramax400": "Ultramax 400",
+  "@fxUltramax400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorC200": "Fujicolor C200",
+  "@fxFujicolorC200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorPro400H": "Fujicolor Pro 400H",
+  "@fxFujicolorPro400H": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxSuperiaXTRA400": "Superia X-TRA 400",
+  "@fxSuperiaXTRA400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktachrome100": "Ektachrome 100",
+  "@fxEktachrome100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxKodachrome64": "Kodachrome 64",
+  "@fxKodachrome64": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxProvia100F": "Provia 100F",
+  "@fxProvia100F": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVelvia100": "Velvia 100",
+  "@fxVelvia100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision2383": "Vision 2383",
+  "@fxVision2383": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxVisionPremier2393": "Vision Premier 2393",
+  "@fxVisionPremier2393": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxPortraEnduraPaper": "Portra Endura paper",
+  "@fxPortraEnduraPaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxCrystalArchivePaper": "Crystal Archive paper",
+  "@fxCrystalArchivePaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxOn": "On",
+  "@fxOn": {
+    "description": "Effect controls: the switch at the top of one of Film's parts (Print, Halation, Bloom, Grain, Gate weave, Flicker) that turns that part on."
   }
 }

@@ -871,7 +871,7 @@ impl FxEngine {
     /// The halo at Falloff 0: shrunk onto a grid, blurred there by the shared
     /// gaussian read 6σ out, and scaled back up. The CPU reference is
     /// `cpu::glow_gaussian`.
-    fn glow_gaussian(
+    pub(super) fn glow_gaussian(
         &self,
         ctx: &GpuContext,
         bright: &wgpu::Texture,
@@ -996,7 +996,7 @@ impl FxEngine {
     /// The halo for a Falloff above 0: each exponential is shrunk onto its
     /// own grid, convolved there, and added back up at full size. The CPU
     /// reference is `cpu::glow_exponential`.
-    fn glow_exponential(
+    pub(super) fn glow_exponential(
         &self,
         ctx: &GpuContext,
         bright: &wgpu::Texture,

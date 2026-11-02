@@ -106,6 +106,7 @@ use super::effects::{
     exposure::{Exposure, ExposureDef},
     extract_channels::{ExtractChannels, ExtractChannelsDef},
     fill::{Fill, FillDef},
+    film::{Film, FilmDef},
     find_edges::{FindEdges, FindEdgesDef},
     flash::{Flash, FlashDef},
     flow_points::{FlowPoints, FlowPointsDef},
@@ -367,6 +368,7 @@ crate::catalogue![
     ShadowHighlightDef => ShadowHighlight,
     LensFlareDef => LensFlare,
     LensDirtDef => LensDirt,
+    FilmDef => Film,
     // Drop shadow, at the Stylise family's end.
     DropShadowDef => DropShadow,
     // Roughen edges (docs/08 §3.57), at the Stylise family's end after it.

@@ -55,6 +55,7 @@ pub mod emit_from_image;
 pub mod exposure;
 pub mod extract_channels;
 pub mod fill;
+pub mod film;
 pub mod find_edges;
 pub mod flash;
 pub mod flow_points;
