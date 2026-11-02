@@ -2,7 +2,7 @@
 //! band (docs/impl/roto.md §2 and §4).
 
 use crate::gdt;
-use crate::guided::{box_mean, Guided};
+use crate::guided::{box_mean, BoxScratch, Guided};
 use crate::{check_plane, stroke::Seeds, FrameRgb, RotoError, RotoSettings};
 
 /// Solves frames, one at a time, reusing every buffer.
@@ -23,7 +23,7 @@ pub struct RotoSolver {
     filtered: Vec<f32>,
     band: Vec<f32>,
     band_dilated: Vec<f32>,
-    tmp: Vec<f32>,
+    boxes: BoxScratch,
     guided: Guided,
 }
 
@@ -41,7 +41,7 @@ impl RotoSolver {
             filtered: Vec::new(),
             band: Vec::new(),
             band_dilated: Vec::new(),
-            tmp: Vec::new(),
+            boxes: BoxScratch::default(),
             guided: Guided::default(),
         }
     }
@@ -108,14 +108,9 @@ impl RotoSolver {
             let a = self.alpha_raw.get(i).copied().unwrap_or(0.0);
             *slot = if (a - 0.5).abs() < half { 1.0 } else { 0.0 };
         }
-        box_mean(
-            &self.band,
-            w,
-            h,
-            radius,
-            &mut self.tmp,
-            &mut self.band_dilated,
-        );
+        box_mean(w, h, radius, &mut self.boxes, &mut self.band_dilated, |i| {
+            self.band[i]
+        });
         for i in 0..n {
             let raw = self.alpha_raw.get(i).copied().unwrap_or(0.0);
             let in_band = self.band_dilated.get(i).copied().unwrap_or(0.0) > 0.0;
@@ -148,7 +143,6 @@ impl RotoSolver {
             &mut self.filtered,
             &mut self.band,
             &mut self.band_dilated,
-            &mut self.tmp,
         ] {
             plane.clear();
             plane.resize(len, 0.0);
