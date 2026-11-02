@@ -232,6 +232,15 @@ class FxKeyStripHost extends StatefulWidget {
   /// Added to every key's time before it is placed. Zero for a layer's own
   /// keys.
   final int keyOffset;
+
+  /// Lanes this wide and nothing else: no ruler, ground, playhead or divider,
+  /// and no switch or remembered width. For a panel that lays the lanes under
+  /// a ruler of its own, as the Timeline does over a node graph. Null for the
+  /// Effect controls strip.
+  final double? width;
+
+  /// The panel whose Delete takes the picked keys.
+  final Panel panel;
   final Widget child;
 
   const FxKeyStripHost({
@@ -239,6 +248,8 @@ class FxKeyStripHost extends StatefulWidget {
     required this.spanStart,
     required this.spanFrames,
     this.keyOffset = 0,
+    this.width,
+    this.panel = Panel.effectControls,
     required this.child,
   });
 
@@ -309,7 +320,7 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final ui = _ui;
     if (!mounted ||
         ui == null ||
-        ui.activePanel != Panel.effectControls ||
+        ui.activePanel != widget.panel ||
         _selection.isEmpty) {
       return _priorDeleteClaim?.call() ?? false;
     }
@@ -554,6 +565,25 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final scope = ThemeScope.of(context);
+    if (widget.width case final width?) {
+      final (fpsNum, fpsDen) = ui.model.fpsExact;
+      return FxKeyStripScope._(
+        width: width,
+        stacked: false,
+        reveal: 1,
+        playhead: ui.playheadFrame,
+        axis: TimelineAxis(frames: widget.spanFrames, width: width),
+        spanStart: widget.spanStart,
+        keyOffset: widget.keyOffset,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        selected: _selected,
+        stretch: _stretch,
+        host: this,
+        child: widget.child,
+      );
+    }
     return ListenableBuilder(
       listenable: ui.workspace,
       builder: (context, _) => LayoutBuilder(
