@@ -604,6 +604,25 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
             }
             e.effect.version = 12;
         }
+        // Shake v1 → v2: Phase brought the shake forward and now holds it
+        // back, so an old value is turned round and the picture stays the same.
+        // One an expression drives is left on version 1, which the resolver
+        // reads the old way, since a script cannot be turned round safely.
+        let scripted = |e: &EffectInstance| {
+            matches!(e.param("phase"), Some(EffectValue::Float(p))
+                if matches!(p.animation, crate::anim::Animation::Expression(_)))
+        };
+        if e.effect.match_name == "shake" && e.effect.version < 2 && !scripted(e) {
+            for p in &mut e.params {
+                if p.id != "phase" {
+                    continue;
+                }
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, -1.0);
+                }
+            }
+            e.effect.version = 2;
+        }
     }
 }
 

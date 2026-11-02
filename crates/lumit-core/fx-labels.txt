@@ -119,8 +119,10 @@ Block glitch
 Block size
 Bloom
 Blue
+Blue amount
 Blue blur
 Blue from
+Blue phase
 Blues
 Blur & sharpen
 Blur size
@@ -172,6 +174,7 @@ Change above
 Channel
 Channel blur
 Channel offset
+Channels
 Character
 Checkbox
 Checkbox control
@@ -262,6 +265,10 @@ Count nested inputs
 Create corner pin
 Create transform keys
 Crop
+Crop bottom
+Crop left
+Crop right
+Crop top
 Curl noise
 Curve
 Curves
@@ -486,8 +493,10 @@ Gradient type
 Graphic EQ
 Gravity
 Green
+Green amount
 Green blur
 Green from
+Green phase
 Greens
 Grid
 Grid size
@@ -895,6 +904,7 @@ Ramp
 Random
 Random hue
 Random offset scale
+Random rate
 Random span offsets
 Randomness
 Range
@@ -908,8 +918,10 @@ Rectangle
 Rectangle outline
 Rectangular to polar
 Red
+Red amount
 Red blur
 Red from
+Red phase
 Reds
 Reduce brightness
 Reduce saturation

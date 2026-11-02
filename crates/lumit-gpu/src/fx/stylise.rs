@@ -267,6 +267,9 @@ pub struct ShakeMbOp {
     /// The revealed border's edge policy (P3): 0 Transparent, 1 Repeat,
     /// 2 Mirror.
     pub edge: u32,
+    /// The part of the input the edge policy treats as the whole,
+    /// `[x0, y0, x1, y1]` in pixels (Shake's Crop).
+    pub crop: [u32; 4],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
 }
@@ -277,13 +280,15 @@ pub struct ShakeMbOp {
 pub struct ShakeMbTap {
     pub m: [f32; 4],
     pub off: [f32; 2],
+    /// The channels it feeds: 1 red, 2 green, 4 blue. Alpha takes them all.
+    pub channels: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ShakeMbTapUniform {
     m: [f32; 4],
-    off: [f32; 4], // .xy used; .zw pad to the uniform's 16-byte stride
+    off: [f32; 4], // .xy used; .z the channels it feeds; .w pads to 16 bytes
 }
 
 #[repr(C)]
@@ -295,6 +300,7 @@ struct ShakeMbParams {
     mix_amt: f32,
     /// 1 = scale every tap's displacement by the matte.
     matte_on: f32,
+    crop: [u32; 4],
 }
 
 /// One resolved Block glitch (docs/08 §3.12, split out of the old combined
@@ -774,7 +780,7 @@ impl FxEngine {
         }; SHAKE_MB_SAMPLES];
         for (dst, s) in taps.iter_mut().zip(op.taps.iter()) {
             dst.m = s.m;
-            dst.off = [s.off[0], s.off[1], 0.0, 0.0];
+            dst.off = [s.off[0], s.off[1], s.channels as f32, 0.0];
         }
         self.dispatch_matted(
             ctx,
@@ -791,6 +797,7 @@ impl FxEngine {
                 edge: op.edge,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
+                crop: op.crop,
             }),
         );
         out
