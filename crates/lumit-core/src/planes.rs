@@ -251,4 +251,51 @@ mod tests {
             before.len()
         );
     }
+
+    /// **The Frames row picks the source seconds an analysis reads**, through
+    /// the layer's own clock on a layer and the comp's on a node graph box.
+    #[test]
+    fn the_frames_row_picks_the_source_span() {
+        use crate::model::{LinearColour, MotionBlur};
+        use crate::time::{Duration, FrameRate, Rational};
+        let secs = |n: i64| CompTime(Rational::new(n, 1).unwrap());
+        let mut comp = Composition {
+            id: uuid::Uuid::now_v7(),
+            name: "Comp".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(25, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            groups: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: MotionBlur::default(),
+            master_volume_db: 0.0,
+            lighting: Default::default(),
+            sound_mix: false,
+            beat_grid: None,
+            graph: None,
+            extra: serde_json::Map::new(),
+        };
+        let mut layer = crate::edits::null_layer(&comp);
+        layer.in_point = secs(2);
+        layer.out_point = secs(6);
+        layer.start_offset = secs(1);
+        let mut fx = instantiate(DEPTH).expect("declared");
+
+        assert_eq!(source_span(&fx, Some(&layer), &comp), None, "All frames");
+
+        set(&mut fx, "frames", EffectValue::Choice(1));
+        // On screen from 2s to the frame before 6s, which is 1s later in the
+        // layer's own time.
+        assert_eq!(source_span(&fx, Some(&layer), &comp), Some((1.0, 4.96)));
+        assert_eq!(source_span(&fx, None, &comp), Some((0.0, 9.96)), "a box");
+
+        set(&mut fx, "frames", EffectValue::Choice(2));
+        assert_eq!(source_span(&fx, None, &comp), None, "no work area set");
+        comp.work_area = Some((secs(3), secs(4)));
+        assert_eq!(source_span(&fx, None, &comp), Some((3.0, 3.96)));
+    }
 }
