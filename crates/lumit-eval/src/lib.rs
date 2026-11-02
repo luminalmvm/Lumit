@@ -85,7 +85,8 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-pub const ALGO_VERSION: u32 = 23;
+/// * 24: Corner pin on a node graph box draws past the picture it is handed.
+pub const ALGO_VERSION: u32 = 24;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).

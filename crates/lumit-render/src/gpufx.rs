@@ -1765,7 +1765,7 @@ impl GpuEffect for CornerPin {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let c = effects::corner_pin::CornerPin::read(p).packed();
+        let c = effects::corner_pin::CornerPin::packed_in(p, w, h);
         fx.corner_pin(
             ctx,
             tex,
