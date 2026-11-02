@@ -134,11 +134,25 @@ pub struct MarkerWindow {
 /// The §1.4 window `e` consumes at layer time `lt` — None when the
 /// instance is not marker-driven right now (an effect without marker
 /// input, or a Flash in Manual mode), which is what keeps such instances'
-/// frame keys time-free. v1: Flash is the only marker consumer; a new
+/// frame keys time-free. Flash and Jolt are the marker consumers; a new
 /// marker-driven effect adds its arm here, so the frame key learns it in
 /// the same place resolution does.
 pub fn marker_window(e: &EffectInstance, lt: f64, markers: &MarkerContext) -> Option<MarkerWindow> {
-    if e.effect.namespace != EffectNamespace::Builtin || e.effect.match_name != "flash" {
+    if e.effect.namespace != EffectNamespace::Builtin {
+        return None;
+    }
+    // Jolt reads the nearest marker at or before the frame, so that pair is
+    // what its key needs.
+    if e.effect.match_name == "jolt" {
+        let times = crate::fx::effects::jolt::trigger_times(e, markers)?;
+        let i = times.partition_point(|t| *t <= lt);
+        return Some(MarkerWindow {
+            fps: markers.fps,
+            before: i.checked_sub(1).and_then(|j| times.get(j).copied()),
+            after: times.get(i).copied(),
+        });
+    }
+    if e.effect.match_name != "flash" {
         return None;
     }
     let mode = match e.param("mode") {
@@ -185,6 +199,9 @@ pub struct MarkerContext {
     /// Comp frames per second; 0 in the no-comp default (guarded wherever
     /// frames convert to seconds).
     pub fps: f64,
+    /// Every other marker the layer sees, in the same time base, sorted: its
+    /// own markers and the comp's markers that are not beats.
+    pub cues: Vec<f64>,
 }
 
 impl MarkerContext {
@@ -194,13 +211,19 @@ impl MarkerContext {
     pub const NONE: MarkerContext = MarkerContext {
         beats: Vec::new(),
         fps: 0.0,
+        cues: Vec::new(),
     };
 
-    /// The context for one layer of `comp`: the comp's beat markers only
-    /// (the v1 §1.4 scope — named-layer binding and label filters follow),
-    /// each translated into the layer's local time, sorted ascending.
+    /// The context for one layer of `comp`: the comp's beat markers, and the
+    /// comp's other markers with the layer's own as cues, each translated into
+    /// the layer's local time, sorted ascending.
     pub fn for_layer(comp: &Composition, layer: &Layer) -> Self {
-        Self::at_offset(comp, layer.start_offset.0)
+        let mut ctx = Self::at_offset(comp, layer.start_offset.0);
+        // A layer marker's time is already the layer's own.
+        ctx.cues
+            .extend(layer.markers.iter().map(|m| m.time.0.to_f64()));
+        ctx.cues.sort_by(f64::total_cmp);
+        ctx
     }
 
     /// The context at comp time itself — for an effect stack with no layer
@@ -218,9 +241,17 @@ impl MarkerContext {
             .map(|m| crate::time::layer_time(m.time.0.to_f64(), off))
             .collect();
         beats.sort_by(f64::total_cmp);
+        let mut cues: Vec<f64> = comp
+            .markers
+            .iter()
+            .filter(|m| !m.is_beat())
+            .map(|m| crate::time::layer_time(m.time.0.to_f64(), off))
+            .collect();
+        cues.sort_by(f64::total_cmp);
         Self {
             beats,
             fps: comp.frame_rate.fps(),
+            cues,
         }
     }
 

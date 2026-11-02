@@ -38,6 +38,7 @@ mod fx_colour;
 mod fx_distort;
 mod fx_energy;
 mod fx_grid;
+mod fx_jolt;
 mod fx_luma_fade;
 mod fx_timewarp;
 mod layers;

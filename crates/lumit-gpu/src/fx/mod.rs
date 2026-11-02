@@ -24,6 +24,7 @@ pub mod film;
 pub mod generate;
 pub mod grid_lines;
 pub mod ground;
+pub mod jolt;
 pub mod lens_blur;
 mod lens_blur_pipes;
 pub mod lens_dirt;
@@ -293,6 +294,8 @@ pub struct FxEngine {
     /// than the Transform kernel because it reads the input at several affines
     /// in one pass; it uses the shared two-input layout all the same.
     shake_mb: wgpu::ComputePipeline,
+    /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
+    jolt: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.

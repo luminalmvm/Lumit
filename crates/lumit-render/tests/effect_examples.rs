@@ -200,6 +200,9 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("motion_blur", on(true)),
             ("mb_amount", f(0.3)),
         ],
+        // A fresh Jolt's seed is new each time, and most frames have no jolt
+        // on them. This seed lands a scale, a slide and a blur on the frame.
+        "jolt" => vec![("seed", EffectValue::Seed(408))],
 
         // --- geometry ---
         "transform" => vec![

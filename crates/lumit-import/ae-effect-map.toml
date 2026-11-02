@@ -386,6 +386,13 @@ name = "Warp"
 lumit = "warp"
 conversion = "warp"
 
+[[effect]]
+ae = "VIDEOCOPILOT Twitch"
+name = "Twitch"
+lumit = "jolt"
+conversion = "twitch"
+pending_audit = true
+
 # --- Stylise ---------------------------------------------------------------
 
 [[effect]]
