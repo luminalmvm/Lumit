@@ -165,6 +165,7 @@ impl HazeFx {
             source: wgpu::ShaderSource::Wgsl(
                 concat!(
                     include_str!("../fx_noise_core.wgsl"),
+                    include_str!("../light_core.wgsl"),
                     include_str!("../fx_lighting.wgsl"),
                     include_str!("../fx_volumetric.wgsl")
                 )
