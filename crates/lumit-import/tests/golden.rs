@@ -263,11 +263,7 @@ fn the_composition_keeps_its_settings_shutter_and_background() {
     assert_eq!(c.motion_blur.shutter_angle, 200.0);
     assert_eq!(c.motion_blur.shutter_phase, -100.0);
     assert_eq!(c.motion_blur.samples, 24);
-    assert_eq!(
-        c.extra.get("ae").and_then(|ae| ae.get("adaptive_limit")),
-        Some(&serde_json::json!(64)),
-        "AE's adaptive sample limit has no Lumit field and is kept"
-    );
+    assert_eq!(c.motion_blur.limit, 64);
 
     // bgColor [0.05, 0.05, 0.06] — AE rounds each to the nearest 8-bit step
     // before reporting, so the expected value is that step, linearised.

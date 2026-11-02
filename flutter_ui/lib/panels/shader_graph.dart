@@ -30,6 +30,7 @@ import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -38,6 +39,7 @@ import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'graph_ties.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'graph_panel.dart'
     show
@@ -147,14 +149,21 @@ class _Inner {
   final List<Map<String, dynamic>> edges;
   final Map<int, Offset> layout;
 
-  _Inner(this.nodes, this.edges, this.layout);
+  /// The ties on its wires, kept as they are stored: `{x, y, wires}`.
+  List<Map<String, dynamic>> ties;
+
+  _Inner(this.nodes, this.edges, this.layout, [this.ties = const []]);
 
   static _Inner parse(String json) {
     final raw = jsonDecode(json);
     final nodes = <Map<String, dynamic>>[];
     final edges = <Map<String, dynamic>>[];
     final layout = <int, Offset>{};
+    final ties = <Map<String, dynamic>>[];
     if (raw is Map) {
+      for (final t in raw['ties'] as List? ?? const []) {
+        if (t is Map) ties.add(t.cast<String, dynamic>());
+      }
       for (final n in raw['nodes'] as List? ?? const []) {
         if (n is Map) nodes.add(n.cast<String, dynamic>());
       }
@@ -170,7 +179,7 @@ class _Inner {
         }
       }
     }
-    return _Inner(nodes, edges, layout);
+    return _Inner(nodes, edges, layout, ties);
   }
 
   /// A fresh graph: one Result box, nothing wired — what entering a shader
@@ -187,6 +196,7 @@ class _Inner {
         [for (final n in nodes) Map<String, dynamic>.of(n)],
         [for (final e in edges) Map<String, dynamic>.of(e)],
         Map<int, Offset>.of(layout),
+        [for (final t in ties) Map<String, dynamic>.of(t)],
       );
 
   String encode() => jsonEncode({
@@ -197,6 +207,7 @@ class _Inner {
             for (final e in layout.entries)
               {'node': e.key, 'x': e.value.dx, 'y': e.value.dy},
           ],
+        if (ties.isNotEmpty) 'ties': ties,
       });
 
   int nextId() {
@@ -281,7 +292,8 @@ class ShaderGraphPanel extends StatefulWidget {
   State<ShaderGraphPanel> createState() => _ShaderGraphPanelState();
 }
 
-class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
+class _ShaderGraphPanelState extends State<ShaderGraphPanel>
+    with GraphTies<ShaderGraphPanel> {
   LumitUiState? _ui;
 
   /// The held graph and the engine's reading of it. One read on entry and on
@@ -549,6 +561,69 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     _commit(next);
   }
 
+  // --- Ties ---------------------------------------------------------------
+
+  @override
+  List<BridgeWireTie> get ties => [
+        for (final t in _graph?.ties ?? const <Map<String, dynamic>>[])
+          BridgeWireTie(
+            x: (t['x'] as num?)?.toDouble() ?? 0,
+            y: (t['y'] as num?)?.toDouble() ?? 0,
+            wires: [
+              for (final w in t['wires'] as List? ?? const [])
+                if (w is String) w,
+            ],
+            point: t['point'] == true,
+          ),
+      ];
+
+  @override
+  void commitTies(List<BridgeWireTie> next) {
+    final graph = _graph;
+    if (graph == null) return;
+    _commit(graph.clone()
+      ..ties = [
+        for (final t in next)
+          {
+            'x': t.x,
+            'y': t.y,
+            'wires': t.wires,
+            if (t.point) 'point': true,
+          },
+      ]);
+  }
+
+  @override
+  double get tieZoom => _zoom;
+
+  /// Every wire, as the ties name it and in its type's colour.
+  List<(TieWire, Color, double)> _tieWires(List<_Box> boxes, LumitTheme t) {
+    final byId = {for (final b in boxes) b.node.id: b};
+    return [
+      for (final e in _graph?.edges ?? const <Map<String, dynamic>>[])
+        if ((byId[e['from']], byId[e['to']], e['from_port'] as int? ?? 0)
+            case (final from?, final to?, final port)
+            when port < from.node.outputs.length)
+          (
+            (
+              key: tieWireKey('n${e['to']}', '${e['to_port'] ?? 0}'),
+              from: from.socket(port, isInput: false),
+              to: to.socket(e['to_port'] as int? ?? 0, isInput: true),
+            ),
+            shaderPortColour(t, from.node.outputs[port].ty),
+            1.0,
+          ),
+    ];
+  }
+
+  @override
+  List<TieWire> tieWiresNow() => _wiresOf(_boxes());
+
+  List<TieWire> _wiresOf(List<_Box> boxes) => [
+        for (final (w, _, _) in _tieWires(boxes, ThemeScope.of(context).theme))
+          w,
+      ];
+
   // --- Geometry -----------------------------------------------------------
 
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
@@ -587,7 +662,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
-    final socket = _socketAt(boxes, at);
+    // Ctrl and a press on a point is a press on the socket its wires leave.
+    final socket =
+        _socketAt(boxes, tieWireFrom(event, at, _wiresOf(boxes)) ?? at);
     if (socket != null) {
       // A wired input is grabbed by its far end, exactly as the outer canvas
       // grabs one: drop it elsewhere to move it, on nothing to take it off.
@@ -611,6 +688,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     }
 
     final box = _boxAt(boxes, at);
+    if (box == null && tieDown(event, at, _wiresOf(boxes))) return;
     if (box != null) {
       setState(() {
         if (!_selection.contains(box.node.id)) {
@@ -646,6 +724,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
       setState(() => flight.to = at);
       return;
     }
+    if (tieMove(at, _wiresOf(boxes))) return;
     if (_drag case final drag?) {
       setState(() {
         var delta = at - drag.grab;
@@ -680,6 +759,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
+      tieWireLanded();
       final landed = _socketAt(boxes, at);
       if (flight.detached case final held?) {
         if (moved && landed != null) {
@@ -699,6 +779,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
       return;
     }
 
+    if (tieUp(at, moved, _wiresOf(boxes))) return;
     if (_drag != null) {
       setState(() => _drag = null);
       if (moved && _graph != null) _commit(_graph!.clone());
@@ -793,7 +874,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
           // answered through [_consoleClaim].
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
-            return _deleteSelected()
+            return tieDelete() || _deleteSelected()
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
           }
@@ -803,9 +884,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
           onPointerDown: (e) => _down(e, boxes),
           onPointerMove: (e) => _move(e, boxes),
           onPointerUp: (e) => _up(e, boxes),
+          onPointerHover: (e) =>
+              tieHover(_toCanvas(e.localPosition), _wiresOf(boxes)),
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
-          child: Container(
+          child: tieCursorRegion(Container(
             key: const ValueKey<String>('shader-canvas'),
             color: t.surface0,
             child: Stack(
@@ -826,13 +909,13 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
                 Positioned.fill(
                   child: CustomPaint(
                     painter: _WirePainter(
-                      boxes: boxes,
-                      edges: _graph?.edges ?? const [],
+                      wires: _tieWires(boxes, t),
+                      ties: tieView(),
                       flight: _flight,
                       pan: _pan,
                       zoom: _zoom,
                       theme: t,
-                      wires: ThemeScope.of(context).wireStyle,
+                      style: ThemeScope.of(context).wireStyle,
                     ),
                   ),
                 ),
@@ -874,7 +957,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
                   ),
               ],
             ),
-          ),
+          )),
         ),
       );
 
@@ -1045,56 +1128,42 @@ class _ShaderNodeCard extends StatelessWidget {
 
 /// Every wire, coloured by its source port's type, and the dashed one in hand.
 class _WirePainter extends CustomPainter {
-  final List<_Box> boxes;
-  final List<Map<String, dynamic>> edges;
+  final List<(TieWire, Color, double)> wires;
+  final TieView ties;
   final _Flight? flight;
   final Offset pan;
   final double zoom;
   final LumitTheme theme;
-  final WireStyle wires;
+  final WireStyle style;
 
   const _WirePainter({
-    required this.boxes,
-    required this.edges,
+    required this.wires,
+    required this.ties,
     required this.flight,
     required this.pan,
     required this.zoom,
     required this.theme,
-    required this.wires,
+    required this.style,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final byId = {for (final b in boxes) b.node.id: b};
-    for (final e in edges) {
-      final from = byId[e['from']];
-      final to = byId[e['to']];
-      if (from == null || to == null) continue;
-      final port = e['from_port'] as int? ?? 0;
-      if (port >= from.node.outputs.length) continue;
-      final a = from.socket(port, isInput: false);
-      final b = to.socket(e['to_port'] as int? ?? 0, isInput: true);
-      _wire(canvas, a, b,
-          shaderPortColour(theme, from.node.outputs[port].ty),
-          dashes: false);
-    }
+    paintTiedWires(canvas, wires, ties,
+        pan: pan, zoom: zoom, style: style, theme: theme);
     if (flight case final f?) {
-      final (a, b) = f.from.isInput ? (f.to, f.from.at) : (f.from.at, f.to);
-      _wire(canvas, a, b, theme.textPrimary, dashes: true);
+      final (a, b) =
+          f.from.isInput ? (f.to, f.from.at) : (ties.via ?? f.from.at, f.to);
+      final path =
+          graphWirePath(_screen(a), _screen(b), zoom: zoom, wires: style);
+      canvas.drawPath(
+          graphDashPath(path),
+          Paint()
+            ..color = theme.textPrimary
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = graphWireWidth * zoom);
     }
-  }
-
-  void _wire(Canvas canvas, Offset from, Offset to, Color colour,
-      {required bool dashes}) {
-    final path = graphWirePath(_screen(from), _screen(to),
-        zoom: zoom, wires: wires);
-    final paint = Paint()
-      ..color = colour
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = graphWireWidth * zoom;
-    canvas.drawPath(dashes ? graphDashPath(path) : path, paint);
   }
 
   @override

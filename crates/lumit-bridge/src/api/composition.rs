@@ -291,11 +291,13 @@ pub struct BridgeCompSettings {
     /// anyway: without it here the op had to be handed the colour the comp
     /// already had, purely so the dialog could not change it.
     pub background: [f32; 4],
-    /// The master shutter's angle in degrees, and how many sub-frame samples a
-    /// blurred layer is drawn at — the drawing's Motion blur section.
-    /// The shutter's *phase* is not in the dialog and is left as it stands.
+    /// The master shutter's angle in degrees, and the fewest and most
+    /// sub-frame samples a blurred layer is drawn at — the drawing's Motion
+    /// blur section. The shutter's *phase* is not in the dialog and is left as
+    /// it stands.
     pub shutter_angle: f64,
     pub motion_blur_samples: u32,
+    pub motion_blur_limit: u32,
 }
 
 impl BridgeCompSettings {
@@ -320,6 +322,7 @@ impl BridgeCompSettings {
             background: d.background,
             shutter_angle: d.shutter_angle,
             motion_blur_samples: d.motion_blur_samples,
+            motion_blur_limit: d.motion_blur_limit,
         }
     }
 
@@ -339,6 +342,7 @@ impl BridgeCompSettings {
             background: self.background,
             shutter_angle: self.shutter_angle,
             motion_blur_samples: self.motion_blur_samples,
+            motion_blur_limit: self.motion_blur_limit,
         })
     }
 }
@@ -478,6 +482,7 @@ impl CompositionReference {
             background: comp.background.0,
             shutter_angle: comp.motion_blur.shutter_angle,
             motion_blur_samples: comp.motion_blur.samples,
+            motion_blur_limit: comp.motion_blur.limit,
         })
     }
 
@@ -946,9 +951,7 @@ impl CompositionReference {
                     .into_iter()
                     .filter(|c| c.place_duration > Rational::ZERO)
                     .map(|clip| {
-                        let source = match clip.source {
-                            ClipSource::Footage(id) | ClipSource::Comp(id) => id,
-                        };
+                        let source = clip.source.id();
                         let (start, end) = (clip.place_start, clip.place_end());
                         let mut l = crate::edits::base_layer(
                             doc.item(source)
@@ -1120,6 +1123,31 @@ impl CompositionReference {
 
         self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, id))
+    }
+
+    /// Place a solid from the Project panel as a Solid layer at `row`,
+    /// centred and as long as this composition, as a dropped composition is.
+    #[frb(sync)]
+    pub fn add_solid_item_layer(
+        &self,
+        solid: &crate::api::solid::SolidReference,
+        row: Option<u32>,
+    ) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let doc = self.document()?;
+        let sd = doc.solid(solid.id).ok_or(BridgeError::InvalidItem)?;
+        let layer = crate::edits::base_layer(
+            sd.name.clone(),
+            lumit_core::model::LayerKind::Solid { def: sd.id },
+            comp.duration.0,
+            crate::edits::centred_transform(
+                f64::from(sd.width),
+                f64::from(sd.height),
+                comp.width,
+                comp.height,
+            ),
+        );
+        self.add_at(layer, row)
     }
 
     /// Place another composition into this one as a Precomp layer.
@@ -3541,6 +3569,7 @@ impl CompositionReference {
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         if named {
             graph.groups.push(added.group);
             graph.groups.extend(added.inner);

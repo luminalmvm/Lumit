@@ -626,9 +626,15 @@ pub struct BridgePresetInfo {
 /// things in, and a stray file there is not a fault.
 #[frb(sync)]
 pub fn list_presets() -> Vec<BridgePresetInfo> {
-    lumit_project::presets_dir()
-        .map(|dir| presets_in(&dir, lumit_core::preset::PRESET_EXTENSION))
-        .unwrap_or_default()
+    let extension = lumit_core::preset::PRESET_EXTENSION;
+    let mut presets: Vec<BridgePresetInfo> = lumit_project::presets_dir()
+        .map(|dir| presets_in(&dir, extension))
+        .unwrap_or_default();
+    // The presets that come with Lumit, in their own group.
+    if let Some(dir) = crate::api::presets::shipped_dir() {
+        presets.extend(presets_in(&dir, extension));
+    }
+    presets
 }
 
 /// Every `.lumgrp` **node group** in the same library folder, sorted by name —

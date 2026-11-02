@@ -17,11 +17,15 @@ pub mod common;
 pub mod custom_shader;
 pub mod distort;
 pub mod dof;
+pub mod energy_line;
 mod engine;
+/// Film's passes, built on first use.
+pub mod film;
 pub mod generate;
 pub mod grid_lines;
 pub mod ground;
 pub mod lens_blur;
+mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
@@ -32,6 +36,7 @@ pub mod split;
 pub mod sprite_flare;
 pub mod stylise;
 pub mod temporal;
+pub mod timewarp;
 pub mod utility;
 
 #[cfg(test)]
@@ -58,6 +63,8 @@ pub struct FxEngine {
     sharpen_simple: wgpu::ComputePipeline,
     /// Sprite flare, built the first time one is drawn.
     sprite_flare: sprite_flare::LazySpriteFlare,
+    /// Energy line, compiled in the background as the engine starts.
+    energy_line: energy_line::LazyEnergyLine,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
@@ -274,6 +281,8 @@ pub struct FxEngine {
     /// The first kernel to put a camera in front of a pixel, and it *inverts*
     /// the projection rather than drawing it — Lumit's effects gather.
     card_wipe: wgpu::ComputePipeline,
+    /// Luma fade: the picture goes away in order of brightness.
+    luma_fade: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
@@ -345,11 +354,16 @@ pub struct FxEngine {
     /// pass — its pipelines, layouts and bake cache live in their own
     /// sub-struct rather than six more fields here.
     lens_flare: lens_flare::LazyFlare,
+    /// What a pass keeps on this device between frames and makes the first
+    /// time: Timewarp's motion measurement. Taken out while in use, so no
+    /// lock is held across a dispatch, and dropped with the engine.
+    kept: std::sync::Mutex<Vec<Box<dyn std::any::Any + Send>>>,
     /// Depth of field pro: its own layouts, pipelines and traced lenses, built
     /// the first time one is drawn.
     lens_blur: lens_blur::LazyLensBlur,
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
+    film: film::LazyFilm,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with
@@ -478,6 +492,25 @@ impl FxEngine {
         // The one flare call that *does* wait for the pipelines: a caller
         // asking for a bake by name has decided a flare is wanted.
         self.lens_flare.get().warm(key, bake)
+    }
+
+    /// Take what a pass keeps here of type `T`, or `None` the first time.
+    /// Hand it back with [`Self::keep`] when done.
+    pub fn take_kept<T: std::any::Any + Send>(&self) -> Option<Box<T>> {
+        let mut kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let at = kept.iter().position(|k| k.is::<T>())?;
+        kept.swap_remove(at).downcast().ok()
+    }
+
+    /// Keep `value` here for the next [`Self::take_kept`].
+    pub fn keep<T: std::any::Any + Send>(&self, value: Box<T>) {
+        self.kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(value);
     }
 
     /// One compute pass: `src` and `orig` sampled, `dst` written, `params`

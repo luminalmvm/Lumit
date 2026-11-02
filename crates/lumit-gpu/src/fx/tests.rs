@@ -2159,22 +2159,33 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     }
     let centre = samples[SHAKE_MB_SAMPLES / 2];
 
-    for (name, edge, mix) in [
-        ("smear-transparent", 0u32, 1.0f32),
-        ("smear-repeat", 1, 1.0),
-        ("smear-mirror-mixed", 2, 0.7),
+    // The last case shakes the channels apart and crops, which the same
+    // kernel does by feeding each tap to some channels and moving the edges.
+    for (name, edge, mix, apart) in [
+        ("smear-transparent", 0u32, 1.0f32, false),
+        ("smear-repeat", 1, 1.0, false),
+        ("smear-mirror-mixed", 2, 0.7, false),
+        ("channels-crop-mirror", 2, 1.0, true),
     ] {
         use lumit_core::fx::effects::shake::{Shake, ShakeDef, Shaken};
+        use lumit_core::fx::params::Value;
         use lumit_core::fx::{params::Params, registry::EffectDef, registry::EffectMetadata};
-        let bag = shake_bag(centre, edge, mix, Some(samples));
+        let mut bag = shake_bag(centre, edge, mix, Some(samples));
+        if apart {
+            bag.push((Shake::DERIVED_SPLIT, Value::Bool(true)));
+            bag.push((Shake::CROP_LEFT, Value::Float(20.0)));
+            bag.push((Shake::CROP_BOTTOM, Value::Float(15.0)));
+        }
         let p = Params::new(&bag);
         let mut cpu = img.clone();
         ShakeDef.apply_cpu(&mut cpu, w, h, p);
 
         // The exact `gpufx` mapping: the bag → `packed` → each sub-frame's
         // shared affine → transform op → one tap of the averaging kernel.
-        let Shaken::Blurred {
+        let Shaken::Taps {
             samples: packed_samples,
+            split,
+            crop,
             ..
         } = Shake::read(p).packed(Shake::derived_of(p))
         else {
@@ -2187,8 +2198,9 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         let mut taps = [ShakeMbTap {
             m: [1.0, 0.0, 0.0, 1.0],
             off: [0.0, 0.0],
+            channels: 7,
         }; SHAKE_MB_SAMPLES];
-        for (t, s) in taps.iter_mut().zip(packed_samples.iter()) {
+        for (i, (t, s)) in taps.iter_mut().zip(packed_samples.iter()).enumerate() {
             let (anchor, position, scale, rotation) =
                 lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
             let (m, off, _opacity) = lumit_core::fx::maths::transform_op(
@@ -2199,12 +2211,17 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
                 lumit_core::fx::maths::NO_SKEW,
                 1.0,
             );
-            *t = ShakeMbTap { m, off };
+            *t = ShakeMbTap {
+                m,
+                off,
+                channels: Shaken::tap_channels(i, SHAKE_MB_SAMPLES, split),
+            };
         }
         let op = ShakeMbOp {
             taps,
             count: SHAKE_MB_SAMPLES as u32,
             edge,
+            crop: Shaken::crop_px(crop, w, h),
             mix,
         };
         let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -2242,8 +2259,13 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     let mut taps = [ShakeMbTap {
         m: [1.0, 0.0, 0.0, 1.0],
         off: [0.0, 0.0],
+        channels: 7,
     }; SHAKE_MB_SAMPLES];
-    taps[0] = ShakeMbTap { m, off };
+    taps[0] = ShakeMbTap {
+        m,
+        off,
+        channels: 7,
+    };
     let single = fx.shake_mb(
         &ctx,
         &tex,
@@ -2254,6 +2276,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
             taps,
             count: 1,
             edge: 1,
+            crop: [0, 0, w, h],
             mix: 1.0,
         },
     );
@@ -14303,8 +14326,9 @@ fn the_matte_scales_the_shake_displacement() {
     let mut taps = [ShakeMbTap {
         m: [1.0, 0.0, 0.0, 1.0],
         off: [0.0, 0.0],
+        channels: 7,
     }; SHAKE_MB_SAMPLES];
-    let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
+    let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0], 7); SHAKE_MB_SAMPLES];
     for ((t, o), s) in taps.iter_mut().zip(ops.iter_mut()).zip(samples.iter()) {
         let (anchor, position, scale, rot) =
             lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
@@ -14316,13 +14340,19 @@ fn the_matte_scales_the_shake_displacement() {
             lumit_core::fx::maths::NO_SKEW,
             1.0,
         );
-        *t = ShakeMbTap { m, off };
-        *o = (m, off);
+        *t = ShakeMbTap {
+            m,
+            off,
+            channels: 7,
+        };
+        *o = (m, off, 7);
     }
+    let crop = [0, 0, w, h];
     let mbop = ShakeMbOp {
         taps,
         count: SHAKE_MB_SAMPLES as u32,
         edge,
+        crop,
         mix,
     };
     check_matte_claim(
@@ -14333,9 +14363,9 @@ fn the_matte_scales_the_shake_displacement() {
             h,
             img: &img,
             cpu: &|px, mt| {
-                lumit_core::fx::cpu::transform_average_matted(px, w, h, &ops, edge, mix, mt);
+                lumit_core::fx::cpu::transform_average_matted(px, w, h, &ops, edge, crop, mix, mt);
             },
-            plain: &|px| lumit_core::fx::cpu::transform_average(px, w, h, &ops, edge, mix),
+            plain: &|px| lumit_core::fx::cpu::transform_average(px, w, h, &ops, edge, crop, mix),
             gpu: &|t, mt| fx.shake_mb(&ctx, t, w, h, mt, &mbop),
             tol: 2e-2,
         },

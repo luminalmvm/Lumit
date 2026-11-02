@@ -1209,7 +1209,7 @@ pub fn run_ops(
         // may want a layer input *and* something else: Motion blur reads a
         // whole flow field and a Motion vectors layer, and a variant per pair
         // is the combinatorial seam the matte was kept out of.
-        let layer_input = if resolved.def.schema().layer_input().is_some() {
+        let layer_input = if lumit_core::fx::moments::takes_layer_pictures(resolved.def) {
             let slot = layer_inputs.get(dof_i);
             dof_i += 1;
             slot
@@ -1974,7 +1974,7 @@ fn op_keys(
             // may take a layer input beside any other aux, so it is no longer
             // an AuxKind. A bound plate is a picture nobody named - it breaks
             // the chain exactly as a bound matte does.
-            if schema.layer_input().is_some() {
+            if lumit_core::fx::moments::takes_layer_pictures(resolved.def) {
                 if layer_inputs
                     .get(dof_i)
                     .is_some_and(LayerInput::binds_a_picture)

@@ -490,6 +490,7 @@ fn tracked_source_at(
             match source {
                 ClipSource::Footage(item) => Some((item, st)),
                 ClipSource::Comp(nested) => descend(doc, nested, st, depth),
+                ClipSource::Solid(_) => None,
             }
         }
         _ => None,

@@ -1,10 +1,11 @@
-// Depth of field pro. Six passes over one set of bindings, each pass binding only
+// Depth of field pro. Seven passes over one set of bindings, each pass binding only
 // what it reads:
 //
 //   lb_prep    depth to metres to defocus, and which traced kernel a pixel uses
 //   lb_tiles   the widest blur in each 16 px tile
 //   lb_dilate  ...spread to every tile it can reach
 //   lb_gather  every pixel collects the light its neighbours' kernels throw on it
+//   lb_smooth  the grain taken out of what was gathered
 //   lb_sprite  highlights drawn as whole kernels, added on top
 //   lb_finish  Mix against the input, or the metres for the Depth view
 //
@@ -438,6 +439,38 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
         mix(b.rgb, f.rgb, cover),
         mix(b.a, f.a, cover.g),
     ));
+}
+
+// The blurred picture, each pixel averaged with its neighbours that blur about
+// as much. A wide blur reads only some of the pixels under it, and Ray traced
+// only some of the lens, each pixel its own way round, so fine detail comes
+// out as grain from one pixel to the next. A box an eighth of the blur across
+// takes most of it out and softens nothing that can be seen. The highlights
+// are drawn after it, so their edges stay sharp.
+@compute @workgroup_size(8, 8)
+fn lb_smooth(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x >= p.w || gid.y >= p.h) {
+        return;
+    }
+    let xy = vec2<i32>(gid.xy);
+    let span = textureLoad(info, xy, 0).x;
+    let r = i32(clamp(floor(span / 8.0), 0.0, 2.0));
+    var sum = vec4<f32>(0.0);
+    var n = 0.0;
+    for (var dy = -r; dy <= r; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+            let j = xy + vec2<i32>(dx, dy);
+            if (any(j < vec2<i32>(0)) || j.x >= i32(p.w) || j.y >= i32(p.h)) {
+                continue;
+            }
+            if (abs(textureLoad(info, j, 0).x - span) > 0.25 * span) {
+                continue;
+            }
+            sum += textureLoad(acc, j, 0);
+            n += 1.0;
+        }
+    }
+    textureStore(acc_out, xy, sum / n);
 }
 
 struct SpriteOut {

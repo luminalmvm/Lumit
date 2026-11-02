@@ -42,6 +42,7 @@ void main() {
           background: was.background,
           shutterAngle: was.shutterAngle,
           motionBlurSamples: was.motionBlurSamples,
+          motionBlurLimit: was.motionBlurLimit,
         ),
       );
       comp.addSolidLayer();

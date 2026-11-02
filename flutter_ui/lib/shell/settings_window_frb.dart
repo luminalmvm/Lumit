@@ -32,12 +32,14 @@
 // their page names, and on this one it asks the engine the same question.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -70,6 +72,7 @@ import '../state/workspace.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
 import '../theme/motion.dart';
+import '../theme/style_sheet.dart' show styleFileExtension;
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
@@ -91,6 +94,7 @@ import 'menu_bar_frb.dart';
 import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
+import 'style_import.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
 import 'update_dialog_frb.dart';
@@ -1413,21 +1417,47 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
-          // A person's own styles: one file each, in the folder beside the
-          // workspace store. Read again when a file changes or the window
-          // comes back.
+          // A person's own styles: one file each, or a folder each, in the
+          // folder beside the workspace store. Read again when a file
+          // changes or the window comes back.
           _row(
             t,
             l10n.settingsStylesFolder,
-            SizedBox(
-              width: 240,
-              child: Text(
-                Workspace.stylesFolder(),
-                key: const ValueKey('settings-styles-folder'),
-                style: t.small.copyWith(color: t.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                HouseButton(
+                  key: const ValueKey('settings-style-import'),
+                  small: true,
+                  onPressed: () => importStyleFromDisk(
+                      context, context.read<LumitState>(), ui),
+                  child: Text(l10n.menuImport, style: t.small),
+                ),
+                HouseButton(
+                  key: const ValueKey('settings-style-package'),
+                  small: true,
+                  onPressed: ui.workspace.activeStyle == null
+                      ? null
+                      : () =>
+                          makeStylePackage(context.read<LumitState>(), ui),
+                  child: Text(l10n.settingsStylesMakePackage, style: t.small),
+                ),
+                HouseButton(
+                  key: const ValueKey('settings-styles-folder'),
+                  small: true,
+                  frameless: true,
+                  // The style in use, picked out, or the folder itself.
+                  onPressed: () => revealInFolder(
+                      path: switch (ui.workspace.activeStyle) {
+                    final style? =>
+                      '${style.folder}${Platform.pathSeparator}'
+                          '${style.name}.$styleFileExtension',
+                    null => Workspace.stylesFolder(),
+                  }),
+                  child: Text(l10n.settingsStylesShowFolder, style: t.small),
+                ),
+              ],
             ),
             description: ui.workspace.activeStyle?.problems.firstOrNull ?? '',
           ),
@@ -1435,6 +1465,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsReduceTransparency,
               value: settings.reduceTransparency, set: (on) {
             settings.reduceTransparency = on;
+            ui.workspace.beforeLookChange?.call();
             ui.workspace.recompose();
             ui.workspace.settingsChanged();
           }),

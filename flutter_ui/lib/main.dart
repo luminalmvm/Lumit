@@ -112,6 +112,8 @@ Future<void> _start(List<String> args) async {
   state.launchInvite = inviteFromArgs(args);
   // And a double-clicked extension package asks to be installed.
   state.launchPackage = packagePathFromArgs(args);
+  // And a double-clicked style asks to be used.
+  state.launchStyle = stylePathFromArgs(args);
   final ui = LumitUiState(state);
   // Up once the settings are read, so it speaks the person's language.
   _splash = await BootSplash.open(
@@ -158,7 +160,8 @@ Future<void> _start(List<String> args) async {
   runApp(LumitAppNew(state, ui,
       welcome: fromArgs == null &&
           state.launchInvite == null &&
-          state.launchPackage == null));
+          state.launchPackage == null &&
+          state.launchStyle == null));
   // The probe drives the measured gestures and writes its table, only when
   // asked for by the define — an ordinary build compiles all of it out of reach.
   if (probeProjectPath.isNotEmpty) startPerfProbe(state, ui, probeBridge);

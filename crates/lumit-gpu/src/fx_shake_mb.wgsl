@@ -20,7 +20,8 @@ const MAX_TAPS: u32 = 64u;
 
 struct Tap {
     m: vec4<f32>,   // row-major inverse linear 2×2: (m00, m01, m10, m11)
-    off: vec4<f32>, // .xy = inverse translation; .zw unused padding
+    off: vec4<f32>, // .xy = inverse translation; .z = the channels it feeds
+                    // (1 red, 2 green, 4 blue, alpha always); .w padding
 };
 
 struct Params {
@@ -29,6 +30,7 @@ struct Params {
     edge: u32,      // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,   // 0..1, blended against the unprocessed input
     matte_on: f32,  // 1 = the matte scales every tap's displacement
+    crop: vec4<u32>, // x0, y0, x1, y1: the part the edge policy treats as the whole
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -81,9 +83,12 @@ fn edge_idx(i: i32, len: i32, e: u32) -> i32 {
 fn tap(x: i32, y: i32, size: vec2<i32>) -> vec4<f32> {
     // Bits 2 and up hold a separate y policy plus one (== cpu::edge_y).
     let ey = select((p.edge >> 2u) - 1u, p.edge & 3u, (p.edge >> 2u) == 0u);
-    let xi = edge_idx(x, size.x, p.edge & 3u);
-    let yi = edge_idx(y, size.y, ey);
-    let c = clamp(vec2<i32>(xi, yi), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+    // Outside the Crop reads as outside the frame (== cpu::bilinear_edge_in).
+    let lo = vec2<i32>(p.crop.xy);
+    let len = vec2<i32>(p.crop.zw) - lo;
+    let xi = edge_idx(x - lo.x, len.x, p.edge & 3u);
+    let yi = edge_idx(y - lo.y, len.y, ey);
+    let c = clamp(vec2<i32>(xi, yi) + lo, vec2<i32>(0, 0), size - vec2<i32>(1, 1));
     return select(textureLoad(src, c, 0), vec4<f32>(0.0), xi < 0 || yi < 0);
 }
 
@@ -124,6 +129,7 @@ fn shake_mb(@builtin(global_invocation_id) gid: vec3<u32>) {
         mk = matte_k(xy);
     }
     var acc = vec4<f32>(0.0);
+    var fed = vec4<f32>(0.0);
     for (var k: u32 = 0u; k < n; k = k + 1u) {
         let m = p.taps[k].m;
         let off = p.taps[k].off;
@@ -134,9 +140,13 @@ fn shake_mb(@builtin(global_invocation_id) gid: vec3<u32>) {
             qx = matte_toward(qx, pos.x, mk);
             qy = matte_toward(qy, pos.y, mk);
         }
-        acc = acc + bilinear_edge(qx, qy, size);
+        // Each channel is the mean of the taps that feed it (== the cpu path).
+        let bits = u32(off.z);
+        let f = vec4<f32>(f32(bits & 1u), f32((bits >> 1u) & 1u), f32((bits >> 2u) & 1u), 1.0);
+        acc = acc + bilinear_edge(qx, qy, size) * f;
+        fed = fed + f;
     }
-    let avg = acc / f32(n);
+    let avg = acc / fed;
     let outv = o * (1.0 - p.mix_amt) + avg * p.mix_amt;
     textureStore(dst, xy, outv);
 }

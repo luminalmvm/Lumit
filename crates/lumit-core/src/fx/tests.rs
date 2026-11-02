@@ -2608,7 +2608,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     assert!(
         matches!(
             shake_packed(&smeared, 0.4, 1000.0),
-            effects::shake::Shaken::Blurred { .. }
+            effects::shake::Shaken::Taps { .. }
         ),
         "motion blur on carries sub-frames"
     );
@@ -4524,6 +4524,46 @@ fn beams_percent_length_converts_against_its_own_run() {
     );
 }
 
+// Shake's Phase now holds the shake back, so an old shake's Phase is turned
+// round on load and its wobble is the one it always had.
+#[test]
+fn an_old_shakes_phase_is_turned_round_and_shakes_the_same() {
+    let noise_of = |inst: &crate::model::EffectInstance| {
+        let packed = shake_packed(inst, 0.4, 1000.0);
+        format!("{packed:?}")
+    };
+    let mut old = instantiate("shake").unwrap();
+    old.effect.version = 1;
+    let mut new = old.clone();
+    new.effect.version = 2;
+    for (inst, phase) in [(&mut old, 0.3), (&mut new, -0.3)] {
+        for p in &mut inst.params {
+            if p.id == "phase" {
+                p.value = EffectValue::Float(Property::fixed(phase));
+            }
+        }
+    }
+    let mut effects = vec![old.clone()];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert_eq!(effects[0].effect.version, 2);
+    assert_eq!(noise_of(&effects[0]), noise_of(&new));
+
+    // A Phase an expression drives stays on version 1 and reads as before.
+    let mut scripted = old;
+    for p in &mut scripted.params {
+        if p.id == "phase" {
+            p.value = EffectValue::Float(Property {
+                animation: crate::anim::Animation::Expression("0.3".into()),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+    let mut effects = vec![scripted.clone()];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert_eq!(effects[0].effect.version, 1);
+    assert_eq!(noise_of(&effects[0]), noise_of(&new));
+}
+
 // Card wipe's Transition width was a per cent of the frame measured along
 // whichever axis Flip order runs, so its conversion reads the
 // instance's own order: 25 % is 480 pixels across a 1920 frame going left to
@@ -6261,8 +6301,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 4,
-        "Scanlines, the two flares and Transform points are the four today"
+        declaring, 5,
+        "Scanlines, the two flares, Transform points and Energy line are the five today"
     );
 }
 
@@ -6638,6 +6678,15 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            ("energy_line", "start_x"),
+            ("energy_line", "start_y"),
+            ("energy_line", "end_x"),
+            ("energy_line", "end_y"),
+            ("energy_line", "core_size"),
+            ("energy_line", "glow_size"),
+            ("energy_line", "core_distortion"),
+            ("energy_line", "glow_distortion"),
+            ("energy_line", "distortion_size"),
             // Particulate (px@comp through a particle system): eleven, all
             // px@comp, and every one of them has to follow the raster or a
             // half-resolution preview would show a different picture from the
@@ -7516,6 +7565,7 @@ fn every_effect_carries_a_matte_row() {
                 | "venetian_blinds"
                 | "iris_wipe"
                 | "card_wipe"
+                | "luma_fade"
                 // Scatter: the matte is *where the points go*, which is
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
@@ -7593,10 +7643,11 @@ fn every_effect_carries_a_matte_row() {
         // channel choices), Vector blur (its three), the Lens flare (source
         // detection) and Scatter, which reads **alpha and only alpha** — carry
         // none, and the seam leaves their matte raw. Set matte used to be one
-        // more, and carries no Matte row at all now.
+        // more, and carries no Matte row at all now. Luma fade reads the matte's
+        // luminance itself, as it reads its own picture's.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter" | "luma_fade"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

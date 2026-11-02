@@ -13,6 +13,7 @@ import 'dart:ui' show AppExitType;
 import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
+import 'window_backdrop.dart';
 import 'workspace.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
@@ -54,6 +55,8 @@ void listenToRunner({required VoidCallback hidden}) {
             .exitApplication(AppExitType.cancelable);
       case 'hidden':
         hidden();
+      case 'backdrop':
+        WindowBackdrop.refresh();
     }
   });
 }

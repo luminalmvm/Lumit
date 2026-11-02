@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lumit_flutter/l10n/strings.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
+import '../theme/style_sheet.dart' show styleFileExtension;
 import 'workspace.dart' show workspaceFileExtension;
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -383,6 +384,35 @@ XTypeGroup _addonGroup() =>
 Future<String?> pickAddonManifest() async {
   final file = await openFile(acceptedTypeGroups: [_addonGroup()]);
   return file?.path;
+}
+
+/// A style, as a file or its folder packed into one. A zip is offered too,
+/// since that is how a folder is often sent.
+XTypeGroup _styleGroup() => XTypeGroup(
+    label: l10n.fileTypeStyle, extensions: const [styleFileExtension, 'zip']);
+
+/// Pick a style to take in, or null when cancelled.
+Future<String?> pickStyleToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_styleGroup()]);
+  return file?.path;
+}
+
+/// Choose where to save a style's package, named [suggestedName] to begin
+/// with, or null when cancelled.
+Future<String?> pickStylePackageSaveLocation(String suggestedName) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(
+          label: l10n.fileTypeStyle, extensions: const [styleFileExtension]),
+    ],
+    suggestedName: suggestedName,
+  );
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is.
+  return path.toLowerCase().endsWith('.$styleFileExtension')
+      ? path
+      : '$path.$styleFileExtension';
 }
 
 /// An extension packed as one file.

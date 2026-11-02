@@ -1,6 +1,7 @@
 // Files dropped anywhere on the window are imported, the way files dropped on
 // the Project panel are. An extension package dropped anywhere opens its
-// install window instead, and a script is run after a question.
+// install window instead, a style is taken in and used, and a script is run
+// after a question.
 //
 // The drop plugin tells every drop target about every drop, and each one acts
 // if the drop was inside its own box. A target the size of the window would
@@ -17,6 +18,8 @@ import 'package:provider/provider.dart';
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../state/file_dialogs.dart' show droppedPaths;
 import 'extension_install_frb.dart';
+import 'style_import.dart';
+import '../src/rust/api/styles.dart';
 import '../state/app_state.dart';
 import '../state/dock.dart';
 import '../state/ui_state.dart';
@@ -37,6 +40,17 @@ class WindowDropFrb extends StatelessWidget {
           if (package != null) {
             unawaited(installExtensionPackage(
                 context, context.read<LumitState>(), ui.extensions, package));
+          }
+          // A style too, and a zipped folder that holds one.
+          final style = stylePathFromArgs(paths) ??
+              paths
+                  .where((path) => path.toLowerCase().endsWith('.zip'))
+                  .where((path) =>
+                      styleReadPackage(path: path) is BridgeStyleOutcome_Ready)
+                  .firstOrNull;
+          if (style != null) {
+            unawaited(
+                importStyle(context, context.read<LumitState>(), ui, style));
           }
           if (_inAnotherTarget(context, details.globalPosition)) return;
           final imported = await importDroppedPaths(context.read<LumitState>(),

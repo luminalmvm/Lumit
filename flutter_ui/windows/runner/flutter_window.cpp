@@ -7,12 +7,14 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <thread>
 #include <variant>
 
+#include "backdrop.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
 #include "utils.h"
@@ -179,12 +181,17 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package goes to any Lumit that is open. Anything else only
-  // to one kept running in the background.
+  // An extension package or a style goes to any Lumit that is open.
+  // Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
-        return argument.size() > 4 &&
-               _stricmp(argument.c_str() + argument.size() - 4, ".lfx") == 0;
+        auto ends = [&argument](const char* ending) {
+          const size_t size = std::strlen(ending);
+          return argument.size() > size &&
+                 _stricmp(argument.c_str() + argument.size() - size, ending) ==
+                     0;
+        };
+        return ends(".lfx") || ends(".lumstyle");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
@@ -262,6 +269,21 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  // Which card Flutter draws with, for the engine, which shares the Viewer's
+  // picture onto that card and checks it is the one it draws on. The LUID as
+  // 16 hex digits, high part first. Set long before the first Viewer frame.
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  DXGI_ADAPTER_DESC adapter_desc;
+  if (flutter_controller_->engine()->GetGraphicsAdapter(
+          adapter.GetAddressOf()) &&
+      SUCCEEDED(adapter->GetDesc(&adapter_desc))) {
+    wchar_t luid[17];
+    swprintf_s(luid, L"%08lx%08lx",
+               static_cast<unsigned long>(adapter_desc.AdapterLuid.HighPart),
+               adapter_desc.AdapterLuid.LowPart);
+    ::SetEnvironmentVariableW(L"LUMIT_FLUTTER_ADAPTER", luid);
+  }
 
   // The zero-copy Viewer texture bridge: registers engine-created D3D
   // shared textures with Flutter over the 'lumit/viewer_texture' channel. Built
@@ -432,6 +454,32 @@ bool FlutterWindow::OnCreate() {
           }
         } else if (method == "show") {
           Reveal();
+        } else if (method == "backdrop") {
+          // The style's see-through window (backdrop.cpp).
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          std::string kind;
+          bool dark = true;
+          if (args) {
+            auto found = args->find(flutter::EncodableValue("kind"));
+            if (found != args->end()) {
+              if (const auto* value = std::get_if<std::string>(&found->second)) {
+                kind = *value;
+              }
+            }
+            found = args->find(flutter::EncodableValue("dark"));
+            if (found != args->end()) {
+              if (const auto* value = std::get_if<bool>(&found->second)) {
+                dark = *value;
+              }
+            }
+          }
+          backdrop_ = kind;
+          backdrop_dark_ = dark;
+          const bool showing = SetBackdrop(hwnd, kind, dark);
+          // The window's own surface is cleared under Flutter (WM_ERASEBKGND).
+          ::InvalidateRect(hwnd, nullptr, TRUE);
+          result->Success(flutter::EncodableValue(showing));
+          return;
         }
         result->Success(flutter::EncodableValue(::IsZoomed(hwnd) != 0));
       });
@@ -528,6 +576,30 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // The window's own surface shows wherever Flutter's room is clear, so
+    // under a see-through window it is painted clear: black, over a stretched
+    // frame. It starts white, never painted, which is fine under a solid one.
+    case WM_ERASEBKGND:
+      if (backdrop_ == "tint" || backdrop_ == "blur") {
+        RECT client;
+        ::GetClientRect(hwnd, &client);
+        ::FillRect(reinterpret_cast<HDC>(wparam), &client,
+                   static_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH)));
+        return 1;
+      }
+      break;
+    // Transparency effects switched in Windows' settings, or the colours
+    // changed, which puts the frame's own dark or light back. Flutter asks
+    // for the backdrop again and learns whether it is showing.
+    case WM_SETTINGCHANGE:
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+      if (backdrop_ == "tint" || backdrop_ == "blur") {
+        Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+        SetBackdrop(hwnd, backdrop_, backdrop_dark_);
+        Tell("lumit/window", "backdrop");
+        return 0;
+      }
       break;
     case kTrayMessage:
       if (lparam == WM_LBUTTONUP) {

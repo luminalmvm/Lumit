@@ -375,6 +375,7 @@ fn drawn(
         z: at.2 as f32,
         rotation_x_deg: p.rotation_deg.0 as f32,
         rotation_y_deg: p.rotation_deg.1 as f32,
+        pre: None,
     }
 }
 
@@ -1504,51 +1505,6 @@ fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
     Some(out)
 }
 
-/// The per-layer motion-blur sub-frame placements for `layer` at comp time
-/// `t_comp` (docs/06 §4): the layer's own transform re-evaluated at each
-/// shutter sample time. Empty — so the layer draws normally — unless the comp
-/// master (`comp.motion_blur.enabled`) and the layer's own switch are both on
-/// and `samples` ≥ 2.
-///
-/// Each sample's comp time is `t_comp + offset · dt` (dt = one frame in comp
-/// seconds; offsets from [`MotionBlur::sample_offsets`], centred on the frame),
-/// and its layer time subtracts the layer's `start_offset`. Shared by every
-/// caller of the one comp walk so all paths smear identically. Parent motion
-/// within the shutter is a follow-up: only the layer's OWN transform is sampled
-/// here — a parented layer keeps its frame-time parent placement (`pre`) for
-/// every sub-copy.
-pub fn motion_blur_samples(
-    comp: &lumit_core::model::Composition,
-    layer: &lumit_core::model::Layer,
-    t_comp: f64,
-    context: Arc<ExpressionContext>,
-) -> Vec<lumit_gpu::composite::MbSample> {
-    if !layer.switches.motion_blur {
-        return Vec::new();
-    }
-    let offsets = comp.motion_blur.sample_offsets();
-    if offsets.is_empty() {
-        return Vec::new();
-    }
-    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-
-    offsets
-        .iter()
-        .map(|off| {
-            let lt = lumit_core::time::layer_time(t_comp + off * dt, layer.start_offset.0);
-            // Each shutter sample is a different moment, so an expression that
-            // reads `time` has to be evaluated at that moment. Reusing the
-            // frame's context would return the same placement for every sample
-            // and an expression-driven layer would simply not smear.
-            let context = Arc::new(ExpressionContext {
-                comp_time: t_comp + off * dt,
-                ..(*context).clone()
-            });
-            drawn(layer, lt, &context)
-        })
-        .collect()
-}
-
 /// The comp's Light layers, reduced to what the lighting pass needs (docs/06):
 /// each light's emitting rectangle as four corners in comp pixels,
 /// wound the same way for every light so the form-factor integral has a
@@ -1935,6 +1891,13 @@ enum Probe<'a> {
         row: &'a str,
         found: Option<DofInputDraw>,
     },
+    /// Layer `owner` as the first `upto` effects of its stack leave it: what
+    /// an effect that shows its own input at another moment reads.
+    Own {
+        owner: uuid::Uuid,
+        upto: usize,
+        found: Option<DofInputDraw>,
+    },
     /// Every picture of the Clone to points `effect` on layer `owner`, now
     /// that its stream is known to hold `points` points.
     Clones {
@@ -1986,7 +1949,7 @@ pub fn late_clone_pictures(
     );
     match probe {
         Probe::Clones { found, .. } => found,
-        Probe::Picture { .. } => Vec::new(),
+        Probe::Picture { .. } | Probe::Own { .. } => Vec::new(),
     }
 }
 
@@ -2900,13 +2863,29 @@ fn comp_walk(
     // **A backdrop effect's shape**: the layer it sits on, with its other
     // effects and styles run on its own picture, placed in the comp as the
     // layer is, since the effect runs over the comp-sized composite below.
-    // `None` on an adjustment layer, which has no picture to give.
-    let own_shape = |owner: uuid::Uuid| -> Option<DofInputDraw> {
-        let src = comp
+    // `None` on an adjustment layer, which has no picture to give. With `upto`,
+    // the layer as its first `upto` effects leave it, where it is, for an
+    // effect that shows its own input at another moment.
+    let own_picture = |owner: uuid::Uuid, upto: Option<usize>| -> Option<DofInputDraw> {
+        let (idx, src) = comp
             .layers
             .iter()
-            .find(|l| l.id == owner)
-            .filter(|l| !l.is_adjustment())?;
+            .enumerate()
+            .find(|(_, l)| l.id == owner)?;
+        // An adjustment layer's picture is the composite below it.
+        let below = match (src.is_adjustment(), upto) {
+            (true, None) => return None,
+            (true, Some(_)) => Some(moments::below_picture(
+                doc,
+                comp,
+                idx,
+                (t_comp, frame_t),
+                frame_pixels,
+                &visited_path,
+                clone_number,
+            )),
+            (false, _) => None,
+        };
         let context = Arc::new(ExpressionContext {
             document: expr_doc.clone(),
             comp: Some(comp.id),
@@ -2915,13 +2894,16 @@ fn comp_walk(
             current_depth: 0,
             inputs: None,
         });
-        let place = Some(Box::new(crate::draw::MapPlace {
-            placed: Some(world_placement(comp, src, t_comp, context.clone())),
-            ground: [0.0; 4],
-        }));
-        let mut input = match nested_input_for(src) {
-            Some(nested) => nested,
-            None => {
+        let place = upto.is_none().then(|| {
+            Box::new(crate::draw::MapPlace {
+                placed: Some(world_placement(comp, src, t_comp, context.clone())),
+                ground: [0.0; 4],
+            })
+        });
+        let mut input = match (below, nested_input_for(src)) {
+            (Some(below), _) => below,
+            (None, Some(nested)) => nested,
+            (None, None) => {
                 let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
                 DofInputDraw {
                     rgba: rgba.to_vec(),
@@ -2947,9 +2929,16 @@ fn comp_walk(
                 effects: src
                     .effects
                     .iter()
-                    .filter(|e| !is_backdrop(e))
-                    .cloned()
+                    .enumerate()
+                    .filter(|(i, e)| upto.map_or(!is_backdrop(e), |n| *i < n))
+                    .map(|(_, e)| e.clone())
                     .collect(),
+                // Styles come after the whole stack.
+                styles: if upto.is_some() {
+                    Vec::new()
+                } else {
+                    src.styles.clone()
+                },
                 ..src.clone()
             };
             let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
@@ -3121,6 +3110,10 @@ fn comp_walk(
             *found = layer_slot(effect, row);
             return Vec::new();
         }
+        Some(Probe::Own { owner, upto, found }) => {
+            *found = own_picture(*owner, Some(*upto));
+            return Vec::new();
+        }
         Some(Probe::Clones {
             owner,
             effect,
@@ -3170,14 +3163,27 @@ fn comp_walk(
                 })
                 .filter_map(|e| {
                     let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                    let param = def.schema().layer_input()?;
-                    def.is_image_op().then_some((e, def, param))
+                    let takes = lumit_core::fx::moments::takes_layer_pictures(def);
+                    let param = def.schema().layer_input().unwrap_or_default();
+                    (takes && def.is_image_op()).then_some((e, def, param))
                 })
                 .map(|(e, def, param)| {
+                    // An effect that shows its own input at other moments.
+                    if def.shows_own_moments() {
+                        return moments::own_moments_pictures(
+                            doc,
+                            comp,
+                            (t_comp, frame_t),
+                            frame_pixels,
+                            &visited_path,
+                            clone_number,
+                            (owner, e),
+                        );
+                    }
                     // A backdrop effect on a layer with a picture takes that
                     // picture wherever its row picks no other layer.
                     if def.backdrop() && e.layer_ref(param).is_none_or(|id| id == owner) {
-                        if let Some(d) = own_shape(owner) {
+                        if let Some(d) = own_picture(owner, None) {
                             return LayerInputDraw::Layer(d);
                         }
                     }
@@ -3337,6 +3343,18 @@ fn comp_walk(
                     .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
+                if e.effect.match_name == "energy_line" {
+                    return energy_line_path::path(
+                        doc,
+                        comp,
+                        e,
+                        param,
+                        self_default,
+                        layer,
+                        slt,
+                        t_comp,
+                    );
+                }
                 // The one rule the driver walk also asks, so a wire reads
                 // the path the picture draws.
                 lumit_core::mask::effect_path_at(e, param, self_default, layer, slt)
@@ -4057,7 +4075,8 @@ fn comp_walk(
         let comp_clips = match &layer.kind {
             LayerKind::Sequence { clips } if !adjusts => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
-                let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
+                let plays =
+                    |c: &Clip| matches!(c.source, ClipSource::Comp(_) | ClipSource::Solid(_));
                 let shown = lumit_core::sequence::shown_at(clips, lt);
                 if let Shown::Two { opacity, .. } = shown {
                     clip_share = opacity as f32;
@@ -4119,6 +4138,28 @@ fn comp_walk(
                             ));
                         }
                         ClipSource::Comp(id) => id,
+                        // A tile stretched to the solid's size, as a plain
+                        // Solid layer draws, unless something on the layer
+                        // or the clip works on its pixels.
+                        ClipSource::Solid(def) => {
+                            let sd = doc.solid(def)?;
+                            let plain = layer.masks.is_empty()
+                                && layer.paint.is_empty()
+                                && !layer.effects.iter().any(|e| e.enabled)
+                                && !layer.styles.iter().any(|e| e.enabled)
+                                && !clip.effects.iter().any(|e| e.enabled);
+                            let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
+                            return Some((
+                                DrawSource::Pixels {
+                                    rgba: Arc::new(px_tile(&solid_rgba(sd.colour), tw, th)),
+                                    tex_w: tw,
+                                    tex_h: th,
+                                    format: lumit_media::decode::PixelFormat::Srgb8,
+                                    colour_space: None,
+                                },
+                                (sd.width as f32, sd.height as f32),
+                            ));
+                        }
                     };
                     let nested = doc
                         .comp(nested_id)
@@ -4283,13 +4324,13 @@ fn comp_walk(
                             Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
-                        // Per-layer motion blur on an inner layer of a collapsed
-                        // Precomp is a follow-up (docs/06 §4): the export
-                        // splice (collect_collapsed) carries no sub-frame
-                        // samples, so clearing them here keeps preview and export
-                        // identical. A non-collapsed Precomp layer still
-                        // blurs via its own switch on the main path.
-                        d.mb = Vec::new();
+                        // An inner layer's blur copies sit inside the
+                        // collapsed layer's placement too.
+                        for s in &mut d.mb {
+                            if let Some(p) = s.pre {
+                                s.pre = Some(lumit_gpu::composite::concat_place(parent, p));
+                            }
+                        }
                         // A Posterize Time adjustment inside a collapsed Precomp
                         // is a follow-up too (docs/08 §3.25): its held below-draws
                         // were sized for the nested comp, so splicing them into
@@ -4569,6 +4610,7 @@ fn comp_walk(
                         z: 0.0,
                         rotation_x_deg: 0.0,
                         rotation_y_deg: 0.0,
+                        pre: None,
                     }
                 };
                 draws.push(crate::trails::with_sprites(CompLayerDraw {
@@ -4905,10 +4947,9 @@ fn comp_walk(
             graph_fx: graph_fx_for(Some(layer), &layer.effects, effect_lt, frame_lt),
             fx_ref_width,
             fx_input_key,
-            // Per-layer motion blur (docs/06 §4): the layer's own
-            // transform sampled across the open shutter, empty unless it blurs.
-            // Built the same way export does, so the two smear identically.
-            mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
+            // Per-layer motion blur (docs/06 §4): where the layer is across
+            // the open shutter, empty unless it blurs.
+            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp, &context),
             material: shading_material(comp, layer, t_comp),
@@ -7047,6 +7088,10 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
         }
     }
 }
+
+mod energy_line_path;
+mod moments;
+pub(crate) mod motion_blur;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

@@ -496,6 +496,10 @@
   "@fxAddGrain": {
     "description": "Effect name in the Add effect menu — lays film grain on the picture."
   },
+  "fxAllAtOnce": "All at once",
+  "@fxAllAtOnce": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: every path lights together, each on its own."
+  },
   "fxAltitude": "Altitude",
   "@fxAltitude": {
     "description": "A Bevel and emboss layer style's Altitude parameter: how high above the surface the light sits, in degrees."
@@ -515,6 +519,10 @@
   "fxBevelStyle": "Bevel style",
   "@fxBevelStyle": {
     "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
+  },
+  "fxBlueBlade": "Blue blade",
+  "@fxBlueBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a blue blade of light with a white core."
   },
   "fxBottomToTop": "Bottom to top",
   "@fxBottomToTop": {
@@ -604,13 +612,25 @@
   "@fxCoreColour": {
     "description": "Effect controls — a control on Lightning: the filament's colour."
   },
+  "fxCoreDistortion": "Core distortion",
+  "@fxCoreDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the core about, in pixels."
+  },
   "fxCoreRadius": "Core radius",
   "@fxCoreRadius": {
     "description": "Effect controls — a control on Lightning: how thick the bright filament is."
   },
+  "fxCoreSoftness": "Core softness",
+  "@fxCoreSoftness": {
+    "description": "Effect controls — a control on Energy line: how much of the core's width its edge fades over."
+  },
   "fxCornerPin": "Corner pin",
   "@fxCornerPin": {
     "description": "Effect name in the Add effect menu — the picture pulled onto four points."
+  },
+  "fxCrackle": "Crackle",
+  "@fxCrackle": {
+    "description": "Effect controls — an option of Energy line's noise Type: a fast, jagged noise."
   },
   "fxCreateCornerPin": "Create corner pin",
   "@fxCreateCornerPin": {
@@ -624,9 +644,45 @@
   "@fxDown": {
     "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
   },
+  "fxDrawAlong": "Draw along",
+  "@fxDrawAlong": {
+    "description": "Effect controls — a control on Energy line: what the light is drawn along: a line, a mask, a shape's paths or text."
+  },
   "fxEdge": "Edge",
   "@fxEdge": {
     "description": "Option of an Inner glow layer style's Source: the glow grows in from the shape's edge."
+  },
+  "fxElectric": "Electric",
+  "@fxElectric": {
+    "description": "Effect controls — a Preset option on Energy line: a thin, crackling violet arc."
+  },
+  "fxEndSize": "End size",
+  "@fxEndSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the end of the lit stretch, as a share of Core size."
+  },
+  "fxEnergy": "Energy",
+  "@fxEnergy": {
+    "description": "Effect controls — a Preset option on Energy line: a teal light with a gently moving glow."
+  },
+  "fxEnergyLine": "Energy line",
+  "@fxEnergyLine": {
+    "description": "Effect name in the Add effect menu — draws a hot core of light with a glow along a line, a mask, a shape or text."
+  },
+  "fxEveryMask": "Every mask",
+  "@fxEveryMask": {
+    "description": "Effect controls — a control on Energy line: on, the light runs along all of the layer's masks."
+  },
+  "fxEvolutionSpeed": "Evolution speed",
+  "@fxEvolutionSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise changes, a second."
+  },
+  "fxFire": "Fire",
+  "@fxFire": {
+    "description": "Effect controls — a Preset option on Energy line: an orange flame that rises off the line."
+  },
+  "fxFlickerSpeed": "Flicker speed",
+  "@fxFlickerSpeed": {
+    "description": "Effect controls — a control on Energy line: how many times a second the light dips."
   },
   "fxFlowResolution": "Flow resolution",
   "@fxFlowResolution": {
@@ -635,6 +691,22 @@
   "fxFlowSmoothness": "Flow smoothness",
   "@fxFlowSmoothness": {
     "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
+  },
+  "fxFromX": "From x",
+  "@fxFromX": {
+    "description": "Effect controls — a control on Energy line: where the line starts, across, in pixels."
+  },
+  "fxFromY": "From y",
+  "@fxFromY": {
+    "description": "Effect controls — a control on Energy line: where the line starts, down, in pixels."
+  },
+  "fxGlowDistortion": "Glow distortion",
+  "@fxGlowDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the glow about, in pixels."
+  },
+  "fxGlowFalloff": "Glow falloff",
+  "@fxGlowFalloff": {
+    "description": "Effect controls — a control on Energy line: how much of the glow is sent far out rather than kept near the core."
   },
   "fxGradientOverlay": "Gradient overlay",
   "@fxGradientOverlay": {
@@ -656,6 +728,10 @@
   "@fxHighlightOpacity": {
     "description": "A Bevel and emboss layer style's Highlight opacity: how strong the lit face is, per cent."
   },
+  "fxIce": "Ice",
+  "@fxIce": {
+    "description": "Effect controls — a Preset option on Energy line: a pale cyan tube."
+  },
   "fxInnerBevel": "Inner bevel",
   "@fxInnerBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits inside the shape's edge."
@@ -671,6 +747,10 @@
   "fxInside": "Inside",
   "@fxInside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits inside the layer's edge."
+  },
+  "fxLaser": "Laser",
+  "@fxLaser": {
+    "description": "Effect controls — a Preset option on Energy line: a thin red beam with a tight glow."
   },
   "fxLayer": "Layer",
   "@fxLayer": {
@@ -692,6 +772,18 @@
   "@fxNative": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at the source's own size."
   },
+  "fxNeon": "Neon",
+  "@fxNeon": {
+    "description": "Effect controls — a Preset option on Energy line: a pink neon tube."
+  },
+  "fxNoiseSize": "Noise size",
+  "@fxNoiseSize": {
+    "description": "Effect controls — a control on Energy line: the size of the distortion noise's swirls, in pixels."
+  },
+  "fxOneAfterAnother": "One after another",
+  "@fxOneAfterAnother": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: each path lights after the one before."
+  },
   "fxOuterBevel": "Outer bevel",
   "@fxOuterBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits outside the shape's edge."
@@ -704,6 +796,10 @@
   "@fxOutside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits outside the layer's edge."
   },
+  "fxPaths": "Paths",
+  "@fxPaths": {
+    "description": "Effect controls — a control on Energy line: whether several paths light one after another or all at once."
+  },
   "fxPillowEmboss": "Pillow emboss",
   "@fxPillowEmboss": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
@@ -712,6 +808,30 @@
   "@fxFollow": {
     "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points. Also on Points along path and Particulate: whether the points follow one of the layer’s masks or a Shape layer’s own paths."
   },
+  "fxPlasma": "Plasma",
+  "@fxPlasma": {
+    "description": "Effect controls — a Preset option on Energy line: a violet light in curling smoke."
+  },
+  "fxPreset": "Preset",
+  "@fxPreset": {
+    "description": "Effect controls — a control on Energy line: a look to start from; picking one sets the look controls."
+  },
+  "fxRedBlade": "Red blade",
+  "@fxRedBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a red blade of light that crackles a little."
+  },
+  "fxSmoke": "Smoke",
+  "@fxSmoke": {
+    "description": "Effect controls — an option of Energy line's noise Type: curling, smoke-like noise."
+  },
+  "fxSolar": "Solar",
+  "@fxSolar": {
+    "description": "Effect controls — a Preset option on Energy line: a wide golden glow."
+  },
+  "fxStartSize": "Start size",
+  "@fxStartSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the start of the lit stretch, as a share of Core size."
+  },
   "fxSurface": "Surface",
   "@fxSurface": {
     "description": "Option of a Planar track's Follow control: the four corners are followed as one flat surface."
@@ -719,6 +839,18 @@
   "fxOnePoint": "One point",
   "@fxOnePoint": {
     "description": "Option of a Planar track's Follow control: one small region is followed, giving a position and nothing else."
+  },
+  "fxToX": "To x",
+  "@fxToX": {
+    "description": "Effect controls — a control on Energy line: where the line ends, across, in pixels."
+  },
+  "fxToxic": "Toxic",
+  "@fxToxic": {
+    "description": "Effect controls — a Preset option on Energy line: an acid green light that crackles."
+  },
+  "fxToY": "To y",
+  "@fxToY": {
+    "description": "Effect controls — a control on Energy line: where the line ends, down, in pixels."
   },
   "fxTwoPoints": "Two points",
   "@fxTwoPoints": {
@@ -2192,6 +2324,79 @@
     "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
     "placeholders": {"name": {"type": "String"}}
   },
+  "styleFontNeeds": "@font-face needs a font-family and a src",
+  "@styleFontNeeds": {
+    "description": "Why a style file's @font-face rule was skipped: it is missing the family name or the url of the font file. Keep @font-face, font-family and src as they are."
+  },
+  "styleFontMissing": "can't find {file}",
+  "@styleFontMissing": {
+    "description": "Why a font a style names wasn't loaded: there's no file of that name in the style's folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFontKind": "{file} isn't a TTF or OTF font",
+  "@styleFontKind": {
+    "description": "Why a font a style names wasn't loaded: the file is another kind, such as WOFF. Keep TTF and OTF as they are.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "settingsStylesMakePackage": "Make a package",
+  "@settingsStylesMakePackage": {
+    "description": "Settings window, Appearance, Your styles: the button that packs the style in use, with its pictures, icons and fonts, into one .lumstyle file to share."
+  },
+  "settingsStylesShowFolder": "Show folder",
+  "@settingsStylesShowFolder": {
+    "description": "Settings window, Appearance, Your styles: the button that opens the folder Lumit reads styles from in the file manager."
+  },
+  "fileTypeStyle": "Lumit style",
+  "@fileTypeStyle": {
+    "description": "The file type a style is saved and opened as, in the system's file dialogue."
+  },
+  "styleInUse": "Using {name}",
+  "@styleInUse": {
+    "description": "Status line, after a style is imported, double-clicked or dropped on the window: it is now the style in use. {name} is the style's name.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleUndo": "Undo",
+  "@styleUndo": {
+    "description": "Status line: the action beside \"Using {name}\" that puts back the style that was in use before."
+  },
+  "styleReplace": "Replace the style {name}?",
+  "@styleReplace": {
+    "description": "Asked when a style being imported has the same name as one already in the styles folder.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleReplaceYes": "Replace",
+  "@styleReplaceYes": {
+    "description": "The button that answers yes to \"Replace the style {name}?\"."
+  },
+  "styleNotOne": "{file} isn't a style",
+  "@styleNotOne": {
+    "description": "Status line: the file imported, double-clicked or dropped is neither a style file nor a style's folder packed into one.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleTooLarge": "{file} is too large to be a style",
+  "@styleTooLarge": {
+    "description": "Status line: a style package holds more files or bytes than Lumit takes.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleUnsafe": "{file} has a file that would land outside its folder",
+  "@styleUnsafe": {
+    "description": "Status line: a style package was refused because a file in it, or a link, points outside the style's own folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFailed": "{file} couldn't be put in the styles folder",
+  "@styleFailed": {
+    "description": "Status line: a style's files couldn't be written, for instance because the folder is read-only.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackaged": "Saved {file}",
+  "@stylePackaged": {
+    "description": "Status line, after Make a package: the style's package was written. {file} is its file name.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackageOverItself": "A package can't be saved over its own style",
+  "@stylePackageOverItself": {
+    "description": "Status line, after Make a package: the place chosen for the package is the style's own file, which it would replace."
+  },
   "styleChoice": "Style's choice",
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
@@ -2663,6 +2868,14 @@
   "fxCorners": "Corners",
   "@fxCorners": {
     "description": "Effect controls — a Placement option on Points along path: one point on each vertex of the mask."
+  },
+  "fxWindDirection": "Wind direction",
+  "@fxWindDirection": {
+    "description": "Effect controls — a control on Energy line: which way the distortion noise is carried, in degrees; 0 is up."
+  },
+  "fxWindSpeed": "Wind speed",
+  "@fxWindSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise is carried, in pixels a second."
   },
   "fxWrap": "Wrap",
   "@fxWrap": {
@@ -4196,6 +4409,22 @@
   "@fxCrop": {
     "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
   },
+  "fxLumaFade": "Luma fade",
+  "@fxLumaFade": {
+    "description": "Effect name in the Add effect menu — fades the picture away in order of brightness, darkest first."
+  },
+  "fxLumaReveal": "Luma reveal",
+  "@fxLumaReveal": {
+    "description": "A built-in preset in Luma fade's menu: the layer appears in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxLumaHide": "Luma hide",
+  "@fxLumaHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxHardHide": "Hard hide",
+  "@fxHardHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a hard edge."
+  },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
     "description": "Effect controls — a depth-channel option on Depth of field."
@@ -4607,6 +4836,54 @@
   "fxYEdges": "Y edges",
   "@fxYEdges": {
     "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
+  },
+  "fxRedAmount": "Red amount",
+  "@fxRedAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the red channel shakes, × the whole shake."
+  },
+  "fxRedPhase": "Red phase",
+  "@fxRedPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the red channel's shake runs behind the rest."
+  },
+  "fxGreenAmount": "Green amount",
+  "@fxGreenAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the green channel shakes, × the whole shake."
+  },
+  "fxGreenPhase": "Green phase",
+  "@fxGreenPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the green channel's shake runs behind the rest."
+  },
+  "fxBlueAmount": "Blue amount",
+  "@fxBlueAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the blue channel shakes, × the whole shake."
+  },
+  "fxBluePhase": "Blue phase",
+  "@fxBluePhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the blue channel's shake runs behind the rest."
+  },
+  "fxRandomRate": "Random rate",
+  "@fxRandomRate": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how fast each colour channel's own wobble moves, × Frequency."
+  },
+  "fxChannels": "Channels",
+  "@fxChannels": {
+    "description": "Effect controls — the twirl on Shake that shakes the red, green and blue channels apart."
+  },
+  "fxCropLeft": "Crop left",
+  "@fxCropLeft": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the left before shaking."
+  },
+  "fxCropRight": "Crop right",
+  "@fxCropRight": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the right before shaking."
+  },
+  "fxCropTop": "Crop top",
+  "@fxCropTop": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the top before shaking."
+  },
+  "fxCropBottom": "Crop bottom",
+  "@fxCropBottom": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the bottom before shaking."
   },
   "fxSame": "Same",
   "@fxSame": {
@@ -8222,6 +8499,10 @@
   "@savePresetEllipsis": {
     "description": "Button that writes the current effect stack to a file."
   },
+  "effectPresets": "Presets",
+  "@effectPresets": {
+    "description": "Effect controls: the menu row on an effect that opens the list of built-in presets it ships with. Picking one sets the effect."
+  },
   "saved": "Saved",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."
@@ -11242,6 +11523,14 @@
   "@cutPanEnvelope": {
     "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
   },
+  "envelopePointSet": "Set value…",
+  "@envelopePointSet": {
+    "description": "Cut timeline — envelope point menu: type the value for this point in a small field."
+  },
+  "envelopeThin": "Thin points",
+  "@envelopeThin": {
+    "description": "Cut timeline — envelope menu: take away the points the curve does not need."
+  },
   "envelopePointReset": "Reset",
   "@envelopePointReset": {
     "description": "Volume or pan envelope, right-click a point: put it back to 0 dB, or to centre for pan."
@@ -11923,6 +12212,58 @@
   "fxTimeOffset": "Time offset",
   "@fxTimeOffset": {
     "description": "Node graph box name - shows its input picture at another time, shifted by its Offset in seconds."
+  },
+  "fxTimewarp": "Timewarp",
+  "@fxTimewarp": {
+    "description": "Effect name in the Add effect menu: shows the layer at another time, by a speed or a keyframed source frame, with the frames between made from the motion."
+  },
+  "fxAdjustTimeBy": "Adjust time by",
+  "@fxAdjustTimeBy": {
+    "description": "Effect controls, Timewarp: whether a Speed or a Source frame says what time is shown."
+  },
+  "fxSourceFrame": "Source frame",
+  "@fxSourceFrame": {
+    "description": "Effect controls, Timewarp: the frame of the layer shown now. Keyframed, it remaps time."
+  },
+  "fxWholeFrames": "Whole frames",
+  "@fxWholeFrames": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the earlier one is held."
+  },
+  "fxFrameMix": "Frame mix",
+  "@fxFrameMix": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the two are crossfaded."
+  },
+  "fxPixelMotion": "Pixel motion",
+  "@fxPixelMotion": {
+    "description": "Effect controls, Timewarp: a Method option. The frame between two is made from the motion measured between them."
+  },
+  "fxInputRate": "Input rate",
+  "@fxInputRate": {
+    "description": "Effect controls, Timewarp: frames a second the layer is counted in. 0 is the composition's rate."
+  },
+  "fxMotionGroup": "Motion",
+  "@fxMotionGroup": {
+    "description": "Effect controls, Timewarp: the heading over the controls for measuring motion."
+  },
+  "fxHalfSpeed": "Half speed",
+  "@fxHalfSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at half speed, the frames between made from the motion."
+  },
+  "fxQuarterSpeed": "Quarter speed",
+  "@fxQuarterSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at a quarter of its speed, measured closely."
+  },
+  "fxSlowMotionWithBlur": "Slow motion with blur",
+  "@fxSlowMotionWithBlur": {
+    "description": "A built-in preset in Timewarp's menu: slow motion with motion blur along the measured motion."
+  },
+  "fxSpeedRamp": "Speed ramp",
+  "@fxSpeedRamp": {
+    "description": "A built-in preset in Timewarp's menu: from the playhead the layer slows to a fifth of its speed for a second, then speeds up again."
+  },
+  "fxFastForwardBlur": "Fast forward blur",
+  "@fxFastForwardBlur": {
+    "description": "A built-in preset in Timewarp's menu: four times as fast, each frame smeared along its motion."
   },
   "fxMerge": "Merge",
   "@fxMerge": {
@@ -13536,7 +13877,11 @@
   },
   "compSamples": "Samples",
   "@compSamples": {
-    "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
+    "description": "New composition / Composition settings dialog: label beside the shutter angle: the fewest sub-frame samples a moving blurred layer is drawn at."
+  },
+  "compSamplesTo": "to",
+  "@compSamplesTo": {
+    "description": "New composition / Composition settings dialog: the word between the two sample counts, read as 'Samples 16 to 128': the fewest a moving blurred layer is drawn at, then the most a fast one is."
   },
   "compBackground": "Background",
   "@compBackground": {
@@ -22961,5 +23306,181 @@
   "fxCurveLeft": "Curve left",
   "@fxCurveLeft": {
     "description": "Effect controls: a control on Four point warp."
+  },
+  "fxFilm": "Film",
+  "@fxFilm": {
+    "description": "Effect name in the Add effect menu: the picture shot on a film stock and printed, with halation, grain and the rest as parts that turn on and off."
+  },
+  "fxStock": "Stock",
+  "@fxStock": {
+    "description": "Effect controls: Film's choice of the film stock in the camera."
+  },
+  "fxFormat": "Format",
+  "@fxFormat": {
+    "description": "Effect controls: Film's choice of how big the frame is on the film, which sets how big its grain and halation look."
+  },
+  "fxSuper8": "Super 8",
+  "@fxSuper8": {
+    "description": "Effect controls: a Format on Film: the Super 8 home movie gauge."
+  },
+  "fx16Mm": "16 mm",
+  "@fx16Mm": {
+    "description": "Effect controls: a Format on Film: the 16 mm gauge."
+  },
+  "fxSuper16": "Super 16",
+  "@fxSuper16": {
+    "description": "Effect controls: a Format on Film: the Super 16 gauge."
+  },
+  "fx35Mm": "35 mm",
+  "@fx35Mm": {
+    "description": "Effect controls: a Format on Film: a 35 mm motion picture frame."
+  },
+  "fx35MmStills": "35 mm stills",
+  "@fx35MmStills": {
+    "description": "Effect controls: a Format on Film: the larger frame a 35 mm stills camera exposes."
+  },
+  "fx65Mm": "65 mm",
+  "@fx65Mm": {
+    "description": "Effect controls: a Format on Film: the 65 mm gauge."
+  },
+  "fxNegative": "Negative",
+  "@fxNegative": {
+    "description": "Effect controls: a group of rows on Film about the negative and its development."
+  },
+  "fxFilmColour": "Film colour",
+  "@fxFilmColour": {
+    "description": "Effect controls: a switch on Film. Off keeps the picture's own colour and adds only grain, halation and the other parts."
+  },
+  "fxPushOrPull": "Push or pull",
+  "@fxPushOrPull": {
+    "description": "Effect controls: Film's stops of push (more contrast) or pull (less) in development."
+  },
+  "fxInterlayer": "Interlayer",
+  "@fxInterlayer": {
+    "description": "Effect controls: how hard each of the film's layers holds back the others as it develops, per cent."
+  },
+  "fxPrint": "Print",
+  "@fxPrint": {
+    "description": "Effect controls: a group and a switch on Film: printing the negative onto print stock."
+  },
+  "fxPrintStock": "Print stock",
+  "@fxPrintStock": {
+    "description": "Effect controls: Film's choice of what the negative is printed on."
+  },
+  "fxHalation": "Halation",
+  "@fxHalation": {
+    "description": "Effect controls: a group and a switch on Film: light bouncing off the film's base back into it, a red glow round bright lights."
+  },
+  "fxBacking": "Backing",
+  "@fxBacking": {
+    "description": "Effect controls: Film's choice of the layer behind the film that stops halation."
+  },
+  "fxTheStockSOwn": "The stock's own",
+  "@fxTheStockSOwn": {
+    "description": "Effect controls: a Backing on Film: whatever the chosen stock has."
+  },
+  "fxStrong": "Strong",
+  "@fxStrong": {
+    "description": "Effect controls: a Backing on Film: one that stops most of the bounce."
+  },
+  "fxWeak": "Weak",
+  "@fxWeak": {
+    "description": "Effect controls: a Backing on Film: one that lets more of the bounce through."
+  },
+  "fxRemoved": "Removed",
+  "@fxRemoved": {
+    "description": "Effect controls: a Backing on Film: the backing taken off, which glows the most."
+  },
+  "fxGateWeave": "Gate weave",
+  "@fxGateWeave": {
+    "description": "Effect controls: a group and a switch on Film: the frame wandering a little in the camera's gate."
+  },
+  "fxVision350D": "Vision3 50D",
+  "@fxVision350D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3250D": "Vision3 250D",
+  "@fxVision3250D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3200T": "Vision3 200T",
+  "@fxVision3200T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3500T": "Vision3 500T",
+  "@fxVision3500T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra160": "Portra 160",
+  "@fxPortra160": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra400": "Portra 400",
+  "@fxPortra400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra800": "Portra 800",
+  "@fxPortra800": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktar100": "Ektar 100",
+  "@fxEktar100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxGold200": "Gold 200",
+  "@fxGold200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxUltramax400": "Ultramax 400",
+  "@fxUltramax400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorC200": "Fujicolor C200",
+  "@fxFujicolorC200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorPro400H": "Fujicolor Pro 400H",
+  "@fxFujicolorPro400H": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxSuperiaXTRA400": "Superia X-TRA 400",
+  "@fxSuperiaXTRA400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktachrome100": "Ektachrome 100",
+  "@fxEktachrome100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxKodachrome64": "Kodachrome 64",
+  "@fxKodachrome64": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxProvia100F": "Provia 100F",
+  "@fxProvia100F": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVelvia100": "Velvia 100",
+  "@fxVelvia100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision2383": "Vision 2383",
+  "@fxVision2383": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxVisionPremier2393": "Vision Premier 2393",
+  "@fxVisionPremier2393": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxPortraEnduraPaper": "Portra Endura paper",
+  "@fxPortraEnduraPaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxCrystalArchivePaper": "Crystal Archive paper",
+  "@fxCrystalArchivePaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxOn": "On",
+  "@fxOn": {
+    "description": "Effect controls: the switch at the top of one of Film's parts (Print, Halation, Bloom, Grain, Gate weave, Flicker) that turns that part on."
   }
 }

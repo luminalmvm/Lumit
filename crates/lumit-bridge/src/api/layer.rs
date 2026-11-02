@@ -1521,6 +1521,8 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// Whether the clip plays a solid: a colour, with no file behind it.
+    pub source_is_solid: bool,
     /// The footage item or composition the clip plays: its take's, when T
     /// has stepped to another.
     pub source: Uuid,
@@ -1553,6 +1555,8 @@ pub(crate) fn clip_source_duration(
 ) -> Option<lumit_core::time::Rational> {
     match source {
         lumit_core::sequence::ClipSource::Comp(id) => Some(doc.comp(id)?.duration.0),
+        // A colour is the same for ever, so it can be stretched as far as asked.
+        lumit_core::sequence::ClipSource::Solid(_) => None,
         lumit_core::sequence::ClipSource::Footage(id) => {
             let lumit_core::model::ProjectItem::Footage(footage) = doc.item(id)? else {
                 return None;
@@ -1608,12 +1612,10 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
-    let name = |source| match source {
-        lumit_core::sequence::ClipSource::Footage(id)
-        | lumit_core::sequence::ClipSource::Comp(id) => doc
-            .item(id)
+    let name = |source: lumit_core::sequence::ClipSource| {
+        doc.item(source.id())
             .map(|i| i.name().to_string())
-            .unwrap_or_default(),
+            .unwrap_or_default()
     };
     BridgeClip {
         id: clip.id,
@@ -1658,10 +1660,8 @@ fn bridge_clip(
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
-        source: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => id,
-        },
+        source_is_solid: matches!(clip.source, lumit_core::sequence::ClipSource::Solid(_)),
+        source: clip.source.id(),
         blend: clip.blend.map(|blend| {
             lumit_core::model::BlendMode::ALL
                 .iter()
@@ -7697,7 +7697,10 @@ impl LayerReference {
     /// a header row's stopwatch, drag and expression the *same* code as an
     /// effect row's (the shared route, grown its fourth arm).
     #[frb(ignore)]
-    fn instance_home(&self, instance: &EffectInstance) -> Result<InstanceHome, BridgeError> {
+    pub(crate) fn instance_home(
+        &self,
+        instance: &EffectInstance,
+    ) -> Result<InstanceHome, BridgeError> {
         let id = instance.id;
         let layer = self.item()?;
         if layer.effects.iter().any(|e| e.id == id) {
@@ -8129,17 +8132,53 @@ impl LayerReference {
         {
             return Err(BridgeError::UnknownEffectName);
         }
-        let comp = self.composition()?;
-        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
-            &name,
-            f64::from(comp.width),
-            f64::from(comp.height),
-        )
-        .ok_or(BridgeError::UnknownEffectName)?;
+        // The clip's own picture is the raster its effects run on, so a
+        // Transform lands centred on that, not on the composition.
+        let (width, height) = self.clip_picture_size(clip)?;
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(&name, width, height)
+            .ok_or(BridgeError::UnknownEffectName)?;
         lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         self.with_instances(InstanceHome::Clip(clip), move |effects| {
             effects.push(instance);
             Ok(())
+        })
+    }
+
+    /// How big clip `clip`'s picture is in its own pixels: its file's, its
+    /// composition's or its solid's size, and the composition's when that
+    /// cannot be told.
+    #[frb(ignore)]
+    fn clip_picture_size(&self, clip: Uuid) -> Result<(f64, f64), BridgeError> {
+        use lumit_core::sequence::ClipSource;
+        let comp = self.composition()?;
+        let own = (f64::from(comp.width), f64::from(comp.height));
+        let source = match &self.item()?.kind {
+            lumit_core::model::LayerKind::Sequence { clips } => {
+                clips.iter().find(|c| c.id == clip).map(|c| c.source)
+            }
+            _ => None,
+        };
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        Ok(match source {
+            Some(ClipSource::Footage(item)) => match doc.item(item) {
+                Some(lumit_core::model::ProjectItem::Footage(f)) => {
+                    let (_, w, h) =
+                        crate::api::composition::CompositionReference::footage_span_and_size(
+                            &state, f, &comp,
+                        );
+                    (w, h)
+                }
+                _ => own,
+            },
+            Some(ClipSource::Comp(id)) => doc
+                .comp(id)
+                .map_or(own, |c| (f64::from(c.width), f64::from(c.height))),
+            Some(ClipSource::Solid(id)) => doc
+                .solid(id)
+                .map_or(own, |s| (f64::from(s.width), f64::from(s.height))),
+            None => own,
         })
     }
 
@@ -8416,6 +8455,7 @@ impl LayerReference {
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
         self.migrate_in(

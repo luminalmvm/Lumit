@@ -1,0 +1,103 @@
+---
+title: Timewarp
+description: "Shows the layer at another time, at a speed or a keyframed frame."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Timewarp is a **Temporal** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Timewarp" category="temporal" slug="timewarp" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Shows the layer as it was at another moment, set by a **Speed** or a keyframed **Source
+frame**. Between two frames it holds the first, mixes the two, or makes the frame between
+them from the motion it measures. On a precomp it retimes the comp inside, and on an
+adjustment layer everything below it.
+
+The effects above Timewarp in the stack are retimed with the layer. The effects below it
+are not. A layer's own transform keeps its own time, so on a text or shape layer the
+motion of the layer itself is not retimed; precompose it to retime that too.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Adjust time by** | Dropdown | Speed · Source frame | Speed | - |
+| **Speed** | Slider | -400 to 400; down to -10000 and up to 10000 | 50 | Per cent |
+| **Source frame** | Slider | 0 to 300; any value by typing | 0 | Frames |
+| **Method** | Dropdown | Whole frames · Frame mix · Pixel motion | Pixel motion | - |
+| **Quality** | Dropdown | Draft · Normal · High | Normal | - |
+| **Smoothness** | Slider | 0 to 100 | 50 | - |
+| **Motion blur** | Checkbox | On or off | Off | - |
+| **Shutter angle** | Slider | 0 to 720; up to 3600 | 180 | Degrees |
+| **Samples** | Slider | 2 to 64 | 16 | - |
+| **Input rate** | Slider | 0 to 120; up to 1000 | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Motion** groups **Quality**, **Smoothness**.
+- **Motion blur** groups **Motion blur**, **Shutter angle**, **Samples**, and starts closed.
+- **Input** groups **Input rate**, and starts closed.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Adjust time by** picks whether **Speed** or **Source frame** sets the time shown.
+- **Speed** is a percentage of real time, counted from the start of the layer. A negative
+  speed runs backwards.
+- **Source frame** is the frame shown now, at the composition's rate. Keyframed, it remaps
+  time.
+- **Method** sets how a time between two frames is shown. **Whole frames** holds the
+  earlier frame, **Frame mix** crossfades the two and **Pixel motion** makes the frame
+  between them from the motion.
+- **Quality** sets how closely the motion is measured.
+- **Smoothness** sets how smooth the measured motion is kept. Higher tears less; lower
+  keeps the edges between moving things sharper.
+- **Motion blur** smears the picture along the measured motion.
+- **Shutter angle** sets how long the shutter is open, in degrees of one frame.
+- **Samples** is a maximum on the number of samples along each streak.
+- **Input rate** is the frame rate the layer is counted in. At 0 it is the composition's.
+  Footage shot faster than the composition shows every frame it has at its own rate.
+- **Mix**: how much of the result replaces the original.
+
+## Presets
+
+On the effect's menu, under **Presets**. Keyframes start at the playhead.
+
+- **Half speed** plays at 50%.
+- **Quarter speed** plays at 25%, at High quality.
+- **Slow motion with blur** plays at 30% with motion blur.
+- **Speed ramp** slows to 20% for a second and back.
+- **Fast forward blur** plays at 400% in whole frames, with motion blur.
+
+:::note[Not built]
+- One effect a stack moves the layer in time: the first Timewarp, or Jolt with Time on. The
+  others show the frame as it is.
+- Above Timewarp, effects that read another layer, a mask path or neighbouring frames read
+  nothing at its other moments.
+- An expression on Speed or Source frame is read as one value, not over time.
+- As a clip effect in Cut, Timewarp shows the frame as it is.
+:::
+
+## Related
+
+- [Retime](/use/retime/)
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Posterize time](/effects/temporal/posterize-time/)
+- [Temporal](/effects/#temporal)
+- [Effects](/use/effects/)

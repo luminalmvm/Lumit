@@ -588,6 +588,7 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
         background: [0.0, 0.0, 0.0, 1.0],
         shutter_angle: 180.0,
         motion_blur_samples: 16,
+        motion_blur_limit: 128,
     })
     .expect("applied");
 
@@ -6259,6 +6260,7 @@ fn switching_retime_off_re_hangs_the_layer_on_its_source() {
                 background: [0.0, 0.0, 0.0, 1.0],
                 shutter_angle: 180.0,
                 motion_blur_samples: 16,
+                motion_blur_limit: 128,
             }),
         )
         .expect("comp");
@@ -6360,6 +6362,7 @@ fn a_flattened_retime_is_removed_rather_than_freezing_the_layer() {
                 background: [0.0, 0.0, 0.0, 1.0],
                 shutter_angle: 180.0,
                 motion_blur_samples: 16,
+                motion_blur_limit: 128,
             }),
         )
         .expect("comp");
@@ -6946,6 +6949,7 @@ fn a_tracked_layer() -> (
                 background: [0.0, 0.0, 0.0, 1.0],
                 shutter_angle: 180.0,
                 motion_blur_samples: 16,
+                motion_blur_limit: 128,
             }),
         )
         .expect("comp");
@@ -8162,6 +8166,7 @@ fn a_planar_tracked_layer() -> (
                 background: [0.0, 0.0, 0.0, 1.0],
                 shutter_angle: 180.0,
                 motion_blur_samples: 16,
+                motion_blur_limit: 128,
             }),
         )
         .expect("comp");

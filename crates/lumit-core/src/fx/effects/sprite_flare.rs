@@ -850,6 +850,10 @@ impl EffectDef for SpriteFlareDef {
         &<SpriteFlare as EffectMetadata>::SCHEMA
     }
 
+    fn moves_with_time(&self, inst: &EffectInstance) -> bool {
+        moves_with_time(inst)
+    }
+
     /// The version 1 rows an old flare kept because they move.
     fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
         if keeps_v1_rows(inst) {
@@ -904,17 +908,38 @@ impl EffectDef for SpriteFlareDef {
         // budget.
         let room = (MAX_LIGHTS / now.len().max(1)) as u32;
         if shutter.len() > room as usize {
-            shutter = crate::model::MotionBlur {
-                samples: room,
-                ..comp.motion_blur
-            }
-            .sample_offsets();
+            shutter = comp.motion_blur.offsets(room);
         }
         let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-        let samples: Vec<Vec<Found>> = shutter
-            .iter()
-            .map(|off| lights_at(cx, comp, mode, off * dt))
-            .collect();
+        let at = |shutter: &[f64]| -> Vec<Vec<Found>> {
+            shutter
+                .iter()
+                .map(|off| lights_at(cx, comp, mode, off * dt))
+                .collect()
+        };
+        let mut samples = at(&shutter);
+        // A light that travels far is drawn at more moments, as a blurred
+        // layer is, so its streak stays smooth.
+        if samples.len() > 1 {
+            let n = samples.len() as f64;
+            let travel: f64 = samples
+                .windows(2)
+                .map(|pair| {
+                    pair[0]
+                        .iter()
+                        .zip(&pair[1])
+                        .map(|(a, b)| f64::from((b.0[0] - a.0[0]).hypot(b.0[1] - a.0[1])))
+                        .fold(0.0, f64::max)
+                })
+                .sum();
+            let wanted = comp
+                .motion_blur
+                .samples_for(travel * n / (n - 1.0))
+                .min(room);
+            if wanted as usize > samples.len() {
+                samples = at(&comp.motion_blur.offsets(wanted));
+            }
+        }
         // A light that holds still across the shutter is drawn once.
         let lights: Vec<Found> = if samples.iter().all(|s| *s == now) {
             now

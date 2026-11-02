@@ -6,7 +6,8 @@
 ; Registers the .lum, .lumfx and .lumtheme associations with their document icons
 ; (assets/brand) and an open command; Lumit itself reads the document
 ; path from the command line (projectPathFromArgs in flutter_ui/lib/main.dart).
-; .lfx extension packages open the same way, with no icon of their own yet.
+; .lfx extension packages open the same way, with no icon of their own yet,
+; and .lumstyle styles with the theme's icon.
 
 ; Keep in step with flutter_ui/pubspec.yaml `version:` when cutting a release.
 ; The release workflow overrides this from the tag (iscc /DMyAppVersion=...).
@@ -118,6 +119,16 @@ Root: HKA; Subkey: "Software\Classes\.lfx"; ValueType: string; \
 Root: HKA; Subkey: "Software\Classes\Lumit.Extension"; ValueType: string; \
   ValueData: "Lumit extension"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Lumit.Extension\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; .lumstyle: styles, a file or a folder packed into one. Opening one takes it
+; in and uses it.
+Root: HKA; Subkey: "Software\Classes\.lumstyle"; ValueType: string; \
+  ValueData: "Lumit.Style"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Lumit.Style"; ValueType: string; \
+  ValueData: "Lumit style"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Lumit.Style\DefaultIcon"; ValueType: string; \
+  ValueData: "{app}\icons\lumit-theme.ico"
+Root: HKA; Subkey: "Software\Classes\Lumit.Style\shell\open\command"; ValueType: string; \
   ValueData: """{app}\{#MyAppExe}"" ""%1"""
 ; .lumfx — presets. No open verb: a preset is applied inside a project, not
 ; opened on its own, so it gets the icon and a name only.

@@ -393,6 +393,7 @@ void main() {
           background: was.background,
           shutterAngle: was.shutterAngle,
           motionBlurSamples: was.motionBlurSamples,
+          motionBlurLimit: was.motionBlurLimit,
           duration: const BridgeRational(num: 1, den: 10),
         ),
       );
@@ -474,6 +475,7 @@ void main() {
           background: settings.background,
           shutterAngle: settings.shutterAngle,
           motionBlurSamples: settings.motionBlurSamples,
+          motionBlurLimit: settings.motionBlurLimit,
         ),
       );
       await mount(tester, p);
