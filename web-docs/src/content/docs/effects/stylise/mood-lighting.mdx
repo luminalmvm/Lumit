@@ -18,7 +18,7 @@ Mood lighting is a **Stylise** effect.
 Soft pools of light are laid over the picture, warm where a pool lands and cool
 between them, and the contrast is lifted under them. The pools are a noise field,
 repeatable from a seed. **Drift** moves through the field rather than redrawing
-it.
+it. **Style** sets the shape of the pools.
 
 ## Parameters
 
@@ -26,6 +26,7 @@ it.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Style** | Dropdown | Amorphous · Digital · Streaks | Amorphous | - |
 | **Intensity** | Slider | 0 to 200; higher | 100 | Per cent |
 | **Light colour** | Colour | Each channel 0 to 4, scene-linear | 0.98, 0.72, 0.42, 1 | - |
 | **Shade colour** | Colour | Each channel 0 to 4, scene-linear | 0.1, 0.16, 0.34, 1 | - |
@@ -47,6 +48,9 @@ In the Effect Controls panel:
 
 ## What each control does
 
+- **Style**: **Amorphous** is soft round pools. **Digital** breaks them into square
+  blocks an eighth of **Scale** across. **Streaks** stretches them into horizontal
+  bands four times **Scale** long and a third of it tall.
 - **Intensity**: how far the light pulls the picture either side of neutral. At 0
   only **Contrast** is left.
 - **Light colour**: the colour of the light inside a pool. A mid grey changes
@@ -60,12 +64,6 @@ In the Effect Controls panel:
 - **Seed**: which arrangement of pools this instance lights with.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
-
-:::note[Not built]
-The **digital** and **streaks** variants of the After Effects preset are not
-built. The pools are round and soft, and there is no way to square them off or
-stretch them into streaks.
-:::
 
 ## Related
 
