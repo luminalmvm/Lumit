@@ -271,3 +271,68 @@ impl EffectDef for CornerPinDef {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fx::params::{ParamId, Value};
+
+    fn pin(corners: [f32; 8], frame: [f32; 4]) -> Vec<(ParamId, Value)> {
+        let ids = [
+            "upper_left_x",
+            "upper_left_y",
+            "upper_right_x",
+            "upper_right_y",
+            "lower_left_x",
+            "lower_left_y",
+            "lower_right_x",
+            "lower_right_y",
+        ];
+        let mut p: Vec<_> = ids
+            .iter()
+            .zip(corners)
+            .map(|(id, v)| (ParamId::new(id), Value::Float(v)))
+            .collect();
+        p.push((ParamId::new("mix"), Value::Float(100.0)));
+        p.push((crate::fx::schema::FRAME_RECT, Value::Vec4(frame)));
+        p
+    }
+
+    /// Pulled out past the frame, a node graph box gives it room out to
+    /// the corners. On a raster grown past the frame, the frame is what is
+    /// pinned, so a pin onto the frame's own corners leaves every pixel be.
+    #[test]
+    fn a_pin_reaches_its_corners_and_pins_the_frame() {
+        let out = pin(
+            [-32.0, -32.0, 96.0, -32.0, -32.0, 96.0, 96.0, 96.0],
+            [0.0, 0.0, 64.0, 64.0],
+        );
+        let r = CornerPinDef.bounds(Params::new(&out), [0.0, 0.0, 64.0, 64.0]);
+        assert!(
+            r[0] <= -32.0 && r[1] <= -32.0 && r[2] >= 96.0 && r[3] >= 96.0,
+            "{r:?}"
+        );
+
+        let (n, at) = (128u32, 32.0);
+        let held = pin(
+            [at, at, at + 64.0, at, at, at + 64.0, at + 64.0, at + 64.0],
+            [at, at, 64.0, 64.0],
+        );
+        let picture: Vec<f32> = (0..n * n)
+            .flat_map(|i| {
+                let (x, y) = (i % n, i / n);
+                let inside = (32..96).contains(&x) && (32..96).contains(&y);
+                let v = if inside { (x + y) as f32 / 256.0 } else { 0.0 };
+                [v, v, v, f32::from(u8::from(inside))]
+            })
+            .collect();
+        let mut rgba = picture.clone();
+        CornerPinDef.apply_cpu(&mut rgba, n, n, Params::new(&held));
+        let worst = rgba
+            .iter()
+            .zip(&picture)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f32::max);
+        assert!(worst < 1e-3, "{worst}");
+    }
+}
