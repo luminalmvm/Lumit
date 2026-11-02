@@ -33,6 +33,8 @@ pub(super) struct LightDefFile {
     shadow_diffusion: Property,
     #[serde(default)]
     legacy_shape: bool,
+    #[serde(default)]
+    haze: crate::haze::LightHaze,
     // What a light held before it had rows.
     intensity: Option<Property>,
     half_size: Option<[Property; 2]>,
@@ -77,6 +79,7 @@ impl From<LightDefFile> for LightDef {
             shadow_darkness: f.shadow_darkness,
             shadow_diffusion: f.shadow_diffusion,
             legacy_shape,
+            haze: f.haze,
         }
     }
 }

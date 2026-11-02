@@ -125,6 +125,7 @@ Not interchangeable.
 | **Flock** | Particulate's particles steering by their neighbours: apart, the same way, together. Worked out from the frame before, as Collide with is |
 | **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
 | **Trails** | Particulate drawing each frame's particles over the picture it kept from the frame before, faded, zoomed and turned, so they leave smears |
+| **Volumetric light** | A light seen in the air it shines through: its beam, the shafts 3D layers cut in it, its glow |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 

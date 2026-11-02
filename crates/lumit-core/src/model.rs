@@ -1009,6 +1009,17 @@ pub enum TransformProp {
     LightHeight,
     ShadowDarkness,
     ShadowDiffusion,
+    /// How a light shows in the air, in [`crate::haze::LightHaze`].
+    HazeAmount,
+    HazeDensity,
+    HazeColourR,
+    HazeColourG,
+    HazeColourB,
+    HazeFalloff,
+    HazeScatter,
+    HazeNoise,
+    HazeNoiseSize,
+    HazeNoiseSpeed,
     /// A layer's Material options, in [`Material`].
     Ambient,
     Diffuse,
@@ -2661,6 +2672,8 @@ pub struct LightDef {
     /// After Effects does.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub legacy_shape: bool,
+    #[serde(default, skip_serializing_if = "crate::haze::LightHaze::is_default")]
+    pub haze: crate::haze::LightHaze,
 }
 
 impl LightDef {
@@ -2707,7 +2720,7 @@ impl LightDef {
             TransformProp::PoiZ => &self.point_of_interest[2],
             TransformProp::ShadowDarkness => &self.shadow_darkness,
             TransformProp::ShadowDiffusion => &self.shadow_diffusion,
-            _ => return None,
+            _ => return self.haze.channel(prop),
         })
     }
 
@@ -2728,7 +2741,7 @@ impl LightDef {
             TransformProp::PoiZ => &mut self.point_of_interest[2],
             TransformProp::ShadowDarkness => &mut self.shadow_darkness,
             TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
-            _ => return None,
+            _ => return self.haze.channel_mut(prop),
         })
     }
 
@@ -2773,6 +2786,7 @@ impl Default for LightDef {
             shadow_darkness: Self::hundred(),
             shadow_diffusion: Property::zero(),
             legacy_shape: false,
+            haze: crate::haze::LightHaze::default(),
         }
     }
 }
@@ -2829,6 +2843,8 @@ pub struct ResolvedLight {
     /// casts none, and how many comp pixels their edges spread over.
     pub shadow_darkness: f32,
     pub shadow_diffusion: f32,
+    /// How it shows in the air.
+    pub haze: crate::haze::HazeLook,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -3086,6 +3102,7 @@ impl Composition {
                         0.0
                     },
                     shadow_diffusion: light.shadow_diffusion.value_at(lt).max(0.0) as f32,
+                    haze: light.haze.at(lt),
                 })
             })
             .collect()

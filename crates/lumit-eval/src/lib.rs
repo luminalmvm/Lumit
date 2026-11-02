@@ -464,14 +464,13 @@ fn feed_comp(
             ] {
                 feed_f64(h, v);
             }
-            for c in l.colour {
-                feed_f64(h, f64::from(c));
-            }
+            l.colour.iter().for_each(|c| feed_f64(h, f64::from(*c)));
             if l.shadow_darkness > 0.0 {
                 h.update(b"shadows/");
                 feed_f64(h, f64::from(l.shadow_darkness));
                 feed_f64(h, f64::from(l.shadow_diffusion));
             }
+            l.haze.cache_key(|v| feed_f64(h, f64::from(v)));
         }
     }
     // **A node graph composition** (docs/impl/node-graph-comp.md §2.5). The

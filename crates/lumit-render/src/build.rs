@@ -4517,7 +4517,10 @@ fn comp_walk(
                 // its stack runs on the comp-sized intermediate, factor 1.
                 // A node graph comp's own draw never reaches here: its arm
                 // returns the whole list before the layer walk starts.
-                DrawSource::Nested { .. } | DrawSource::Adjust | DrawSource::Graph(_) => 1.0,
+                DrawSource::Nested { .. }
+                | DrawSource::Adjust
+                | DrawSource::Graph(_)
+                | DrawSource::Haze(_) => 1.0,
             };
             if layer.switches.fx {
                 // scale doubles as the §2.3 preview-resolution factor:
@@ -4551,7 +4554,10 @@ fn comp_walk(
         // kind: a Pixels stack already resolved at its decode scale above.
         let fx_ref_width = match &source {
             DrawSource::Nested { width, .. } => Some(*width as f32),
-            DrawSource::Pixels { .. } | DrawSource::Adjust | DrawSource::Graph(_) => None,
+            DrawSource::Pixels { .. }
+            | DrawSource::Adjust
+            | DrawSource::Graph(_)
+            | DrawSource::Haze(_) => None,
         };
         // The name the per-effect cache files this stack's outputs under: a
         // picture made from bytes, or a nested comp's frame, whose texture is
@@ -4562,7 +4568,7 @@ fn comp_walk(
                 fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
             DrawSource::Nested { key, .. } => *key,
-            DrawSource::Adjust | DrawSource::Graph(_) => None,
+            DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack, and where a
@@ -4730,6 +4736,9 @@ fn comp_walk(
                 at_own_size(d);
             }
         }
+    }
+    if !spliced {
+        crate::haze::add(&mut draws, doc, comp, t_comp);
     }
     draws
 }

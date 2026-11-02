@@ -163,7 +163,7 @@ pub struct CasterPlane {
 
 /// The frame's casters, made once and read by every layer's lighting.
 pub struct ShadowCasters {
-    texture: wgpu::Texture,
+    pub(super) texture: wgpu::Texture,
     planes: Vec<CasterPlane>,
     /// Where each picture sits in its square, as shares of the side.
     places: Vec<[f32; 4]>,
@@ -421,6 +421,31 @@ fn gpu_casters(casters: Option<&ShadowCasters>) -> ([GpuCaster; MAX_SHADOW_CASTE
     (planes, count, size)
 }
 
+/// The kernel's uniform for lights seen in the air rather than on a layer:
+/// no plane, and every caster can cut every light.
+pub(super) fn air_params(lights: &[LightingLight], casters: Option<&ShadowCasters>) -> Vec<u8> {
+    let (planes, count, size) = gpu_casters(casters);
+    let mask = (1u32 << count) - 1;
+    let mut slots = [GpuLight::default(); MAX_LIT_LIGHTS];
+    for (slot, l) in slots.iter_mut().zip(lights) {
+        *slot = gpu_light(l, mask);
+    }
+    let live = lights.len().min(MAX_LIT_LIGHTS) as f32;
+    bytemuck::bytes_of(&LightingParams {
+        origin: [0.0; 4],
+        du: [0.0; 4],
+        dv: [0.0; 4],
+        normal: [0.0, 0.0, 0.0, live],
+        material: [0.0; 4],
+        eye: [0.0; 4],
+        base: [0.0; 4],
+        casters_head: [count as f32, size as f32, 0.0, 0.0],
+        lights: slots,
+        casters: planes,
+    })
+    .to_vec()
+}
+
 /// The pass's own layouts and pipelines: the lighting kernel, which reads the
 /// casters' array through a sampler, and the two that make a caster's square
 /// and its smaller levels.
@@ -430,9 +455,9 @@ pub(super) struct LightingFx {
     square_layout: wgpu::BindGroupLayout,
     square: wgpu::ComputePipeline,
     halve: wgpu::ComputePipeline,
-    sampler: wgpu::Sampler,
+    pub(super) sampler: wgpu::Sampler,
     /// Bound when the frame has no casters, and never read.
-    empty: wgpu::Texture,
+    pub(super) empty: wgpu::Texture,
 }
 
 /// The format a caster's square is kept in. Eight bits is plenty for how much

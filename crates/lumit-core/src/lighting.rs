@@ -176,7 +176,7 @@ impl ShadingMaterial {
 
 const INV_TWO_PI: f32 = 0.159_154_94;
 
-fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+pub(crate) fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
@@ -188,18 +188,18 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+pub(crate) fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-fn length(a: [f32; 3]) -> f32 {
+pub(crate) fn length(a: [f32; 3]) -> f32 {
     dot(a, a).sqrt()
 }
 
 /// Unit vector, or `None` when the input is too short to have a direction —
 /// which is a real case here (a light passing exactly through the point it
 /// lights), and one that must not divide by zero.
-fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
+pub(crate) fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
     let len = length(a);
     if len < 1e-6 || !len.is_finite() {
         return None;
@@ -275,7 +275,7 @@ pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f3
 /// Which way `light` arrives at `p` from, and how much of it is left there
 /// after its falloff and its cone, as the two factors. `None` where none of it
 /// arrives, and for an ambient light, which comes from nowhere.
-fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
+pub(crate) fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
     let centre = light.centre();
     let to_light = match light.kind {
         ShadingKind::Ambient => return None,
@@ -602,7 +602,7 @@ impl ShadowCaster {
 /// How much of `light` gets past the casters to `p`, per channel, before the
 /// shadow's darkness. `own` is the layer being shaded, which never shades
 /// itself.
-fn transmitted(
+pub(crate) fn transmitted(
     p: [f32; 3],
     light: &ShadingLight,
     casters: &[ShadowCaster],

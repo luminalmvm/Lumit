@@ -67,6 +67,7 @@ pub mod gpufx;
 mod gpufx_crop;
 mod gpufx_luma_fade;
 mod grid_lines;
+mod haze;
 pub mod headless;
 pub mod media_index;
 pub mod plan;

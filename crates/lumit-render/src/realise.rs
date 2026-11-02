@@ -977,7 +977,9 @@ impl Realiser<'_> {
                         // A Read box makes no other kind of source; a
                         // transparent texel keeps the no-panic rule if that
                         // ever regresses.
-                        DrawSource::Adjust | DrawSource::Graph(_) => self.transparent(1, 1),
+                        DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => {
+                            self.transparent(1, 1)
+                        }
                     };
                     // The placement is in the graph's own pixels, so it is
                     // carried into the raster by the one factor everything
@@ -1446,7 +1448,9 @@ impl Realiser<'_> {
         const FRAME_PEAK_TEXTURES: u64 = 6;
         let staged = layers
             .iter()
-            .filter(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
+            .filter(|l| {
+                matches!(l.source, DrawSource::Adjust | DrawSource::Haze(_)) || !l.mb.is_empty()
+            })
             .count() as u64;
         lumit_gpu::texture_bytes(self.ctx.working(), tw, th)
             .saturating_mul(FRAME_PEAK_TEXTURES.saturating_add(staged))
@@ -1461,7 +1465,7 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
         region: Option<lumit_gpu::composite::Region>,
-        ground: Option<ViewGround>,
+        mut ground: Option<ViewGround>,
     ) -> wgpu::Texture {
         // The actual raster this comp's composites land on; all geometry
         // below stays in the logical `width`×`height` comp pixels.
@@ -1478,7 +1482,9 @@ impl Realiser<'_> {
         });
         let mut depth: Option<wgpu::Texture> = None;
         for (i, l) in layers.iter().enumerate() {
-            if !matches!(l.source, DrawSource::Adjust) {
+            // The haze ends its segment, which lays it over what is below.
+            let haze = matches!(l.source, DrawSource::Haze(_));
+            if !haze && !matches!(l.source, DrawSource::Adjust) {
                 continue;
             }
             let below = self.realise_segment(
@@ -1486,14 +1492,18 @@ impl Realiser<'_> {
                 width,
                 height,
                 background,
-                &layers[start..i],
+                &layers[start..i + usize::from(haze)],
                 &acc,
                 region,
                 None,
                 None,
                 metres_per_w.map(|m| (m, &mut depth)),
-                None,
+                if haze { ground.take() } else { None },
             );
+            if haze {
+                (acc, start) = (Some(below), i + 1);
+                continue;
+            }
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames. A temporal effect's neighbours are
             // the below-stack built again (`measure_below_flow`). Its LUT and
@@ -2106,6 +2116,7 @@ impl Realiser<'_> {
         below: Option<(f32, &mut Option<wgpu::Texture>)>,
         ground: Option<ViewGround>,
     ) -> wgpu::Texture {
+        let (haze, layers) = crate::haze::peel(layers);
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // A layer's picture before the camera blurred it, for the depth pass,
         // where a small solid far off focus would otherwise fade out of it.
@@ -2194,7 +2205,7 @@ impl Realiser<'_> {
                     );
                     self.realise_graph(plan, None, gw, gh, self.render_scale)
                 }
-                DrawSource::Adjust => {
+                DrawSource::Adjust | DrawSource::Haze(_) => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic
                     // rule (and draws nothing) if that ever regresses.
@@ -2697,6 +2708,14 @@ impl Realiser<'_> {
             self.samples,
             region,
             &cuts[..split],
+        );
+        let below = self.haze_over(
+            below,
+            haze,
+            (layers, &linear_textures, &grown),
+            &comp_layers[..split],
+            camera,
+            (width, height),
         );
         let Some((ground, pose, cam)) = ground else {
             return below;
@@ -3489,7 +3508,7 @@ fn shadow_only(l: &CompLayerDraw) -> bool {
 fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
     !layers
         .iter()
-        .any(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
+        .any(|l| matches!(l.source, DrawSource::Adjust | DrawSource::Haze(_)) || !l.mb.is_empty())
 }
 
 /// One propagated matte on the card: a gray8 plane at the source's own
