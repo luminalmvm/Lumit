@@ -21,6 +21,7 @@ Add grain
 Add input
 Add to picked
 Add up
+Adjust time by
 Age
 Align to motion
 Align to path
@@ -425,6 +426,7 @@ Fade power
 Falloff
 Far blur
 Farthest (m)
+Fast forward blur
 Feather
 Feature density
 Features
@@ -473,6 +475,7 @@ Forwards
 Fractal influence
 Fractal noise
 Fractal type
+Frame mix
 Frame rate
 Frames
 Free
@@ -534,6 +537,7 @@ Grow min
 H line rel width
 Hairs
 Half
+Half speed
 Halo
 Hard
 Hard colour
@@ -591,6 +595,7 @@ Inner shadow
 Input
 Input black
 Input colour space
+Input rate
 Input space
 Input white
 Inside
@@ -765,6 +770,7 @@ Mood lighting
 More layers
 More options
 Mosaic
+Motion
 Motion blur
 Motion vectors
 Multiply
@@ -882,6 +888,7 @@ Pin to
 Ping-pong
 Pinned
 Pinning
+Pixel motion
 Pixel sort
 Pixels
 Place
@@ -930,6 +937,7 @@ Pull
 Pulse
 Quality
 Quarter
+Quarter speed
 RGB split
 Radial
 Radial blur
@@ -1106,9 +1114,11 @@ Slide
 Slider
 Slider control
 Slope channel
+Slow motion with blur
 Smoke
 Smooth
 Smooth noise
+Smoothness
 Smudges
 Soft colour
 Soft light
@@ -1119,6 +1129,7 @@ Sort by
 Source
 Source alpha
 Source blue
+Source frame
 Source green
 Source height
 Source layer
@@ -1139,6 +1150,7 @@ Speed
 Speed jitter
 Speed max
 Speed min
+Speed ramp
 Speed variance
 Spherize
 Spiky
@@ -1232,6 +1244,7 @@ Time samples
 Time since last
 Time step
 Times
+Timewarp
 Tint
 Tint colour
 To
@@ -1345,6 +1358,7 @@ Wave width
 Wavelength
 Waves
 Wet
+Whole frames
 Width
 Wiggle
 Wiggle type

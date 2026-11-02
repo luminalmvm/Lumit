@@ -135,6 +135,7 @@ pub mod texturize;
 pub mod threshold;
 pub mod tile;
 pub mod time_offset;
+pub mod timewarp;
 pub mod tint;
 pub mod track_points;
 pub mod trail;

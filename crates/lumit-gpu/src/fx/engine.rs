@@ -644,6 +644,7 @@ impl FxEngine {
             particulate_draw: particulate.draw,
             particulate_blend: particulate.blend,
             lens_flare,
+            kept: Default::default(),
             blur: blur.wait(),
             dir_blur: dir_blur.wait(),
             vector_blur: vector_blur.wait(),

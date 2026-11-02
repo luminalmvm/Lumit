@@ -12132,6 +12132,58 @@
   "@fxTimeOffset": {
     "description": "Node graph box name - shows its input picture at another time, shifted by its Offset in seconds."
   },
+  "fxTimewarp": "Timewarp",
+  "@fxTimewarp": {
+    "description": "Effect name in the Add effect menu: shows the layer at another time, by a speed or a keyframed source frame, with the frames between made from the motion."
+  },
+  "fxAdjustTimeBy": "Adjust time by",
+  "@fxAdjustTimeBy": {
+    "description": "Effect controls, Timewarp: whether a Speed or a Source frame says what time is shown."
+  },
+  "fxSourceFrame": "Source frame",
+  "@fxSourceFrame": {
+    "description": "Effect controls, Timewarp: the frame of the layer shown now. Keyframed, it remaps time."
+  },
+  "fxWholeFrames": "Whole frames",
+  "@fxWholeFrames": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the earlier one is held."
+  },
+  "fxFrameMix": "Frame mix",
+  "@fxFrameMix": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the two are crossfaded."
+  },
+  "fxPixelMotion": "Pixel motion",
+  "@fxPixelMotion": {
+    "description": "Effect controls, Timewarp: a Method option. The frame between two is made from the motion measured between them."
+  },
+  "fxInputRate": "Input rate",
+  "@fxInputRate": {
+    "description": "Effect controls, Timewarp: frames a second the layer is counted in. 0 is the composition's rate."
+  },
+  "fxMotionGroup": "Motion",
+  "@fxMotionGroup": {
+    "description": "Effect controls, Timewarp: the heading over the controls for measuring motion."
+  },
+  "fxHalfSpeed": "Half speed",
+  "@fxHalfSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at half speed, the frames between made from the motion."
+  },
+  "fxQuarterSpeed": "Quarter speed",
+  "@fxQuarterSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at a quarter of its speed, measured closely."
+  },
+  "fxSlowMotionWithBlur": "Slow motion with blur",
+  "@fxSlowMotionWithBlur": {
+    "description": "A built-in preset in Timewarp's menu: slow motion with motion blur along the measured motion."
+  },
+  "fxSpeedRamp": "Speed ramp",
+  "@fxSpeedRamp": {
+    "description": "A built-in preset in Timewarp's menu: from the playhead the layer slows to a fifth of its speed for a second, then speeds up again."
+  },
+  "fxFastForwardBlur": "Fast forward blur",
+  "@fxFastForwardBlur": {
+    "description": "A built-in preset in Timewarp's menu: four times as fast, each frame smeared along its motion."
+  },
   "fxMerge": "Merge",
   "@fxMerge": {
     "description": "Node graph box name - lays one picture over another with a blend mode and an opacity."

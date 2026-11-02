@@ -45,6 +45,7 @@ pub mod lens_library;
 pub mod lfx;
 pub mod markers;
 pub mod maths;
+pub mod moments;
 /// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and
 /// Perlin noise and the fractal sum over them, reused by the displacement
 /// family.

@@ -427,15 +427,31 @@ pub fn collect_comp_jobs(
     let mut rebuilt = moments.to_vec();
     let mut layer_moments = Vec::with_capacity(comp.layers.len());
     for (idx, l) in comp.layers.iter().enumerate() {
-        // And the moments a Clone to points shows this layer at.
+        // And the moments a Clone to points shows this layer at, and the ones
+        // an effect on it shows its own input at, which on an adjustment
+        // layer are the layers' below.
         let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
+        // At the frame and at each moment an adjustment above builds this
+        // layer again at, as that rebuild draws the layer's own moments too.
+        let own: Vec<f64> = if l.switches.visible && !l.audio_only {
+            std::iter::once(t)
+                .chain(rebuilt.iter().copied())
+                .flat_map(|tau| lumit_core::fx::moments::own_moment_comp_times(comp, l, tau))
+                .collect()
+        } else {
+            Vec::new()
+        };
         layer_moments.push(
             rebuilt
                 .iter()
                 .copied()
                 .chain(cloned.map(|(_, tau)| *tau))
+                .chain(own.iter().copied().filter(|_| !l.is_adjustment()))
                 .collect::<Vec<f64>>(),
         );
+        if l.is_adjustment() {
+            rebuilt.extend(own);
+        }
         if l.is_adjustment()
             && l.switches.visible
             && !l.graph.out_unwired
