@@ -26212,6 +26212,7 @@ impl SseDecode for crate::api::composition::BridgeCompSettings {
         let mut var_background = <[f32; 4]>::sse_decode(deserializer);
         let mut var_shutterAngle = <f64>::sse_decode(deserializer);
         let mut var_motionBlurSamples = <u32>::sse_decode(deserializer);
+        let mut var_motionBlurLimit = <u32>::sse_decode(deserializer);
         return crate::api::composition::BridgeCompSettings {
             name: var_name,
             width: var_width,
@@ -26222,6 +26223,7 @@ impl SseDecode for crate::api::composition::BridgeCompSettings {
             background: var_background,
             shutter_angle: var_shutterAngle,
             motion_blur_samples: var_motionBlurSamples,
+            motion_blur_limit: var_motionBlurLimit,
         };
     }
 }
@@ -37052,6 +37054,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::composition::BridgeCompSettin
             self.background.into_into_dart().into_dart(),
             self.shutter_angle.into_into_dart().into_dart(),
             self.motion_blur_samples.into_into_dart().into_dart(),
+            self.motion_blur_limit.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -45145,6 +45148,7 @@ impl SseEncode for crate::api::composition::BridgeCompSettings {
         <[f32; 4]>::sse_encode(self.background, serializer);
         <f64>::sse_encode(self.shutter_angle, serializer);
         <u32>::sse_encode(self.motion_blur_samples, serializer);
+        <u32>::sse_encode(self.motion_blur_limit, serializer);
     }
 }
 

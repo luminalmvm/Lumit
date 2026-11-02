@@ -813,17 +813,12 @@ fn composition(
                 "preserve_nested_resolution",
                 serde_json::json!(ae.preserve_nested_resolution),
             ),
-            (
-                "adaptive_limit",
-                serde_json::json!(ae.motion_blur.as_ref().and_then(|m| m.adaptive_limit)),
-            ),
         ]),
     }
 }
 
-/// The comp's shutter. Angle, phase and sample count all have Lumit
-/// counterparts in the same units; AE's adaptive sample limit does not, and
-/// rides in the `ae` namespace.
+/// The comp's shutter. Angle, phase, Samples per frame and Adaptive sample
+/// limit all have Lumit counterparts in the same units.
 fn motion_blur(ae: &Comp) -> MotionBlur {
     let default = MotionBlur::default();
     let Some(mb) = ae.motion_blur.as_ref() else {
@@ -834,6 +829,7 @@ fn motion_blur(ae: &Comp) -> MotionBlur {
         shutter_angle: mb.shutter_angle.unwrap_or(default.shutter_angle),
         shutter_phase: mb.shutter_phase.unwrap_or(default.shutter_phase),
         samples: mb.samples.unwrap_or(default.samples).max(2),
+        limit: mb.adaptive_limit.unwrap_or(default.limit),
     }
 }
 

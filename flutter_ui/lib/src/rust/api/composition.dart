@@ -243,11 +243,13 @@ class BridgeCompSettings {
   /// already had, purely so the dialog could not change it.
   final F32Array4 background;
 
-  /// The master shutter's angle in degrees, and how many sub-frame samples a
-  /// blurred layer is drawn at — the drawing's Motion blur section.
-  /// The shutter's *phase* is not in the dialog and is left as it stands.
+  /// The master shutter's angle in degrees, and the fewest and most
+  /// sub-frame samples a blurred layer is drawn at — the drawing's Motion
+  /// blur section. The shutter's *phase* is not in the dialog and is left as
+  /// it stands.
   final double shutterAngle;
   final int motionBlurSamples;
+  final int motionBlurLimit;
 
   const BridgeCompSettings({
     required this.name,
@@ -259,6 +261,7 @@ class BridgeCompSettings {
     required this.background,
     required this.shutterAngle,
     required this.motionBlurSamples,
+    required this.motionBlurLimit,
   });
 
   /// What a comp gets when nobody chose: 1920×1080, 60 fps, 30 seconds.
@@ -279,7 +282,8 @@ class BridgeCompSettings {
       duration.hashCode ^
       background.hashCode ^
       shutterAngle.hashCode ^
-      motionBlurSamples.hashCode;
+      motionBlurSamples.hashCode ^
+      motionBlurLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -294,7 +298,8 @@ class BridgeCompSettings {
           duration == other.duration &&
           background == other.background &&
           shutterAngle == other.shutterAngle &&
-          motionBlurSamples == other.motionBlurSamples;
+          motionBlurSamples == other.motionBlurSamples &&
+          motionBlurLimit == other.motionBlurLimit;
 }
 
 /// A composition's pixel dimensions.

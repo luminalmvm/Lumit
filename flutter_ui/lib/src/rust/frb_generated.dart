@@ -24577,8 +24577,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCompSettings dco_decode_bridge_comp_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return BridgeCompSettings(
       name: dco_decode_String(arr[0]),
       width: dco_decode_u_32(arr[1]),
@@ -24589,6 +24589,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       background: dco_decode_f_32_array_4(arr[6]),
       shutterAngle: dco_decode_f_64(arr[7]),
       motionBlurSamples: dco_decode_u_32(arr[8]),
+      motionBlurLimit: dco_decode_u_32(arr[9]),
     );
   }
 
@@ -31868,6 +31869,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_background = sse_decode_f_32_array_4(deserializer);
     var var_shutterAngle = sse_decode_f_64(deserializer);
     var var_motionBlurSamples = sse_decode_u_32(deserializer);
+    var var_motionBlurLimit = sse_decode_u_32(deserializer);
     return BridgeCompSettings(
         name: var_name,
         width: var_width,
@@ -31877,7 +31879,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         duration: var_duration,
         background: var_background,
         shutterAngle: var_shutterAngle,
-        motionBlurSamples: var_motionBlurSamples);
+        motionBlurSamples: var_motionBlurSamples,
+        motionBlurLimit: var_motionBlurLimit);
   }
 
   @protected
@@ -40413,6 +40416,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_f_32_array_4(self.background, serializer);
     sse_encode_f_64(self.shutterAngle, serializer);
     sse_encode_u_32(self.motionBlurSamples, serializer);
+    sse_encode_u_32(self.motionBlurLimit, serializer);
   }
 
   @protected

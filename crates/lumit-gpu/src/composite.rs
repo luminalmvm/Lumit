@@ -198,9 +198,8 @@ pub struct CompositeLayer<'a> {
 /// layer's own transform re-evaluated at one shutter sample time. The layer's
 /// SAME texture is drawn at each of these placements and the draws averaged
 /// ([`Compositor::motion_blur_average`]), so the layer smears along its own
-/// motion. Carries only the per-sample transform; the layer's `three_d`,
-/// parent placement (`pre`) and camera are the same for every sample and are
-/// passed to the averaging helper separately.
+/// motion. The layer's `three_d` and camera are the same for every sample and
+/// are passed to the averaging helper separately.
 #[derive(Debug, Clone, Copy)]
 pub struct MbSample {
     pub position: (f32, f32),
@@ -210,6 +209,10 @@ pub struct MbSample {
     pub z: f32,
     pub rotation_x_deg: f32,
     pub rotation_y_deg: f32,
+    /// Where this copy's parents put it, and for a 3D layer how far the
+    /// camera has moved since the frame. `None` draws it inside the layer's
+    /// own `pre`.
+    pub pre: Option<[[f32; 4]; 4]>,
 }
 
 /// A layer transform as a comp-pixel placement matrix — the single source of
@@ -289,6 +292,7 @@ pub fn unplace_matrix(m: [[f32; 4]; 4], anchor: (f32, f32)) -> MbSample {
         z: at.z,
         rotation_x_deg: rx.to_degrees(),
         rotation_y_deg: ry.to_degrees(),
+        pre: None,
     }
 }
 
@@ -2356,9 +2360,8 @@ impl Compositor {
     /// in proportion to how much of the shutter each pixel was covered.
     ///
     /// `three_d`, `pre` and `camera` place every sub-copy exactly as the
-    /// layer's own draw would be placed. Parent motion within the shutter is a
-    /// follow-up: `pre` is the frame-time parent placement, applied to every
-    /// sample. The caller composites the returned comp-sized texture 1:1
+    /// layer's own draw would be placed, a sample's own `pre` standing in for
+    /// the layer's when its parents or the camera move. The caller composites the returned comp-sized texture 1:1
     /// (identity placement, `size = (width, height)`) carrying the layer's real
     /// blend, opacity, matte and mask, so those apply once to the averaged
     /// image, never per sub-copy.
@@ -2443,7 +2446,7 @@ impl Compositor {
                     rotation_y_deg: s.rotation_y_deg,
                     three_d,
                     layer_mask: None,
-                    pre,
+                    pre: s.pre.or(pre),
                 };
                 let uniform = LayerUniform {
                     matrix: layer
@@ -2608,9 +2611,12 @@ impl Compositor {
         });
 
         let mut prev_is_a = true;
-        for bind in &binds {
-            // Render this placement into a cleared temp: Normal-over transparent
-            // lays down premul(source)·weight where the quad falls, 0 elsewhere.
+        // A few placements are summed into the temp at a time, so a fast
+        // layer drawn a hundred times does not pay a full-frame add for each.
+        // Four keep the half-float sum within a tenth of a percent.
+        for batch in binds.chunks(4) {
+            // Sum these placements into a cleared temp: premul(source) where
+            // each quad falls, 0 elsewhere.
             {
                 let (draw_view, resolve) = match &temp_msaa_view {
                     Some(ms) => (ms, Some(&temp_view)),
@@ -2628,9 +2634,11 @@ impl Compositor {
                     })],
                     ..Default::default()
                 });
-                rp.set_pipeline(&pipelines.normal);
-                rp.set_bind_group(0, bind, &[0]);
-                rp.draw(0..6, 0..1);
+                rp.set_pipeline(&pipelines.plus);
+                for bind in batch {
+                    rp.set_bind_group(0, bind, &[0]);
+                    rp.draw(0..6, 0..1);
+                }
             }
             // Add the temp into the fp32 running sum (whole frame at once).
             let (prev_view, next_view) = if prev_is_a {
@@ -4326,6 +4334,7 @@ mod tests {
             z: 0.0,
             rotation_x_deg: 0.0,
             rotation_y_deg: 0.0,
+            pre: None,
         };
         let readback = |samples: &[MbSample]| {
             let tex = compositor.motion_blur_average(
