@@ -89,7 +89,8 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Amplitude**: the overall scale for the intensity of the shake.
+- **Amplitude**: the overall scale for the intensity of the shake, rotation and depth
+  included. At 0 the picture holds still.
 - **Frequency**: how fast wobbles happen, in cycles per second.
 - **Phase**: how far the whole shake runs behind, in seconds. Below 0 it runs ahead.
 - **Style**: how the shake moves. Normal wobbles smoothly. Twitchy holds still between bursts
@@ -99,7 +100,7 @@ In the Effect Controls panel:
 - **Drift** (Jumpy): how far the picture moves towards its next place before it jumps. At 0
   it holds still between jumps.
 - **Centre bias** (Jumpy): the chance a jump goes back to the centre. At 1 every jump does.
-- **Rotation amount**: how much the frame rotates as it moves.
+- **Rotation amount**: how much the frame rotates as it moves, at the default amplitude.
 - **Scale**: a steady zoom on top of the shake. 100% is natural size.
 - **Edges**: what fills the border. Mirror reflects the
   picture back. Repeat holds the edge pixel. Transparent leaves it clear.
@@ -116,8 +117,8 @@ The **Per-axis wobble** group biases the movement rather than adding to it:
 
 The **Wave** group adds a steady swing on top of the random shake, per axis:
 
-- **X wave**, **Y wave**, **Z wave**, **Rotation wave**: how far it swings. X and Y are
-  multipliers on the amplitude.
+- **X wave**, **Y wave**, **Z wave**, **Rotation wave**: how far it swings. All four
+  follow the amplitude.
 - **X wave frequency** and the others: multipliers on the frequency, like **X frequency**.
 - **X wave phase** and the others: where in the swing it starts, in degrees. X and Y at 90
   degrees apart move in a circle.
