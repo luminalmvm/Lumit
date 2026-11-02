@@ -640,11 +640,30 @@ class Workspace extends ChangeNotifier {
       );
     }
     final style = activeStyle;
-    if (style != null) themeShape = style.base;
+    if (style != null) {
+      themeShape = style.base;
+      // Its own fonts, if it has any. Those loaded before are in use at once.
+      // A font that can't be read redraws only for its line in Settings,
+      // and only once, though the folder is read every time the window
+      // comes back.
+      unawaited(style.loadFonts().then((loaded) {
+        if (!identical(activeStyle, style)) return;
+        final said = style.problems.join('\n');
+        if (loaded) {
+          recompose();
+        } else if (said != _saidProblems) {
+          recompose();
+        }
+        _saidProblems = said;
+      }));
+    }
     // Under the person's own icons: the style's.
     IconStyle.under = [if (style?.iconFolder case final icons?) icons];
     IconStyle.reload();
   }
+
+  /// The style's problems as Settings last showed them.
+  String _saidProblems = '';
 
   /// Use the person's own style called [name].
   void setCustomStyle(String name) {

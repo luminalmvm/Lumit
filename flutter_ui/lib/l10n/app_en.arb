@@ -2324,6 +2324,20 @@
     "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
     "placeholders": {"name": {"type": "String"}}
   },
+  "styleFontNeeds": "@font-face needs a font-family and a src",
+  "@styleFontNeeds": {
+    "description": "Why a style file's @font-face rule was skipped: it is missing the family name or the url of the font file. Keep @font-face, font-family and src as they are."
+  },
+  "styleFontMissing": "can't find {file}",
+  "@styleFontMissing": {
+    "description": "Why a font a style names wasn't loaded: there's no file of that name in the style's folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFontKind": "{file} isn't a TTF or OTF font",
+  "@styleFontKind": {
+    "description": "Why a font a style names wasn't loaded: the file is another kind, such as WOFF. Keep TTF and OTF as they are.",
+    "placeholders": {"file": {"type": "String"}}
+  },
   "styleChoice": "Style's choice",
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
