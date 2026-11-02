@@ -38,6 +38,8 @@ use web_time::{Duration, Instant};
 
 use crate::api::export::BridgeExportSpec;
 
+mod analyses;
+
 /// How fast this machine sends and takes footage. One for the machine, kept
 /// to across every shared project.
 pub(crate) static LIMITS: LazyLock<Arc<Limits>> = LazyLock::new(|| Arc::new(Limits::default()));
@@ -463,6 +465,9 @@ impl Footage for Carrier {
             return self.made.lock().ok()?.get(job).cloned();
         }
         let doc = self.store.snapshot();
+        if let Wanted::Analysis { id } = wanted {
+            return self.analysis_file(&doc, *id);
+        }
         let item = footage(&doc, wanted.item()?)?;
         let give = GIVE.load(Ordering::Relaxed);
         // Only ever the file the item is of. Anyone in the project can add an
@@ -539,6 +544,9 @@ impl Footage for Carrier {
             return (asked.0 == *job).then(|| folder.join(format!("{job}.{ext}")));
         }
         let doc = self.store.snapshot();
+        if let Wanted::Analysis { id } = wanted {
+            return self.analysis_room(&doc, *id);
+        }
         let item = footage(&doc, wanted.item()?)?;
         match wanted {
             Wanted::StandIn { .. } => stand_in_path(self.root.as_deref(), item),
@@ -546,7 +554,7 @@ impl Footage for Carrier {
                 parts_path(self.root.as_deref(), item, &[(*first, *count)])
             }
             Wanted::Original { .. } => original_path(self.root.as_deref(), item),
-            Wanted::Export { .. } => None,
+            Wanted::Export { .. } | Wanted::Analysis { .. } => None,
         }
     }
 
@@ -652,7 +660,8 @@ impl Carrier {
         // An edit says the document changed, and a drag is a great many
         // edits. What this machine has and wants is looked at again once
         // they have stopped coming for a moment, not once for each. And
-        // again until what it has is heard.
+        // again until what it has is heard, and every few seconds anyway: an
+        // analysis finishing changes nothing in the document.
         let (mut changed, mut settled) = (!self.settle(tell), Instant::now());
         while !self.stop.load(Ordering::Relaxed) {
             match queue.recv_timeout(Duration::from_millis(250)) {
@@ -662,7 +671,8 @@ impl Carrier {
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
-            if changed && settled.elapsed() >= Duration::from_millis(500) {
+            let due = changed || settled.elapsed() >= Duration::from_secs(5);
+            if due && settled.elapsed() >= Duration::from_millis(500) {
                 settled = Instant::now();
                 changed = !self.settle(tell);
             }
@@ -686,10 +696,13 @@ impl Carrier {
                     item: item.id,
                     bytes: std::fs::metadata(path).map_or(0, |m| m.len()),
                 }),
-                Here::Missing if doc.item_is_used(item.id) => wants.push(item.id),
+                Here::Missing if doc.item_is_used(item.id) => {
+                    wants.push(Wanted::StandIn { item: item.id });
+                }
                 _ => {}
             }
         }
+        wants.extend(self.settle_analyses(&doc, &mut held));
         // Kept as said only once it is heard. A carrier starts before its
         // sharing is filed or carries footage, and what it says then is lost.
         if self.held.lock().is_ok_and(|was| *was != held) {
@@ -704,9 +717,9 @@ impl Carrier {
         if !TAKE.load(Ordering::Relaxed) {
             return true;
         }
-        for item in wants {
-            let wanted = Wanted::StandIn { item };
+        for wanted in wants {
             let refused = self.refused.lock().is_ok_and(|r| r.contains(&wanted));
+            let item = wanted.item().unwrap_or_default();
             let someone = self.sharing(|s| !s.holders(item).is_empty()) == Some(true);
             if someone && !refused {
                 self.want(wanted);
@@ -823,6 +836,11 @@ impl Carrier {
                 }
             }
             Wanted::Part { .. } => {}
+            Wanted::Analysis { id } => {
+                if self.take_in(&doc, *id, path) {
+                    tell(Told::Placed);
+                }
+            }
             Wanted::Export { job } => {
                 if let Ok(mut asked) = self.asked.lock() {
                     if asked.0 == *job {

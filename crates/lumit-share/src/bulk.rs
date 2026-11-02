@@ -40,23 +40,26 @@ pub enum Wanted {
     Original { item: Uuid },
     /// The file an export this machine asked another to do came to.
     Export { job: Uuid },
+    /// What an analysis made of a shot, such as depth or a track.
+    Analysis { id: Uuid },
 }
 
 impl Wanted {
-    /// The footage item this is of, or `None` for an export.
+    /// The footage item or analysis this is, or `None` for an export.
     #[must_use]
     pub fn item(&self) -> Option<Uuid> {
         match self {
             Wanted::StandIn { item } | Wanted::Part { item, .. } | Wanted::Original { item } => {
                 Some(*item)
             }
+            Wanted::Analysis { id } => Some(*id),
             Wanted::Export { .. } => None,
         }
     }
 }
 
-/// A footage item one machine has the original of, and how big that file
-/// is, which is what fetching it would cost.
+/// A footage item one machine has the original of, or an analysis it has,
+/// and how big that file is, which is what fetching it would cost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Held {
     pub item: Uuid,
