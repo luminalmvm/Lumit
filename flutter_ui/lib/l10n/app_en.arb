@@ -15445,11 +15445,7 @@
   },
   "popOutPanel": "Pop out",
   "@popOutPanel": {
-    "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "Not available",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
+    "description": "The right-click menu on a panel's tab: the row that moves the Viewer into a separate window of its own, which can be dragged to another monitor. Closing that window puts the Viewer back where it was."
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {

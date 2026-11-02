@@ -570,6 +570,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       onLayoutChanged: uiState.saveLayout,
       activePanel: uiState.activePane,
       maximised: uiState.maximisedPane,
+      uiScale: uiState.workspace.interface.uiScale,
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
