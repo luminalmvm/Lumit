@@ -219,6 +219,15 @@ linearised.
   light casts none.
 - **Shadow darkness** and **Shadow diffusion**, while it casts: how dark its shadows are, and
   how soft their edges get with the distance from the layer casting them.
+- **Volumetric**: how much the light shows in the air, as a beam or a glow, seen from every
+  3D view. At nought it shows none. While it casts shadows, 3D layers that cast cut shafts
+  in it, tinted by any light they let through. An ambient light has none.
+- **Haze density**, **Haze colour**, **Height falloff**, **Forward scatter** and **Noise**,
+  while Volumetric is above nought or keyed: how thick the air is, the colour it tints the
+  light, how fast it thins above the ground (the floor the 3D views draw, through the
+  comp's middle), how much brighter the light shows looking towards it, and how patchy the
+  air is. **Noise size** and **Noise speed**, while Noise is above nought or keyed: how big
+  its patches are and how fast they drift.
 
 Every row but the type and the falloff can be keyframed. **Point of interest**, in Light
 settings, aims a spot, parallel or area light at a point rather than by its rotation; the

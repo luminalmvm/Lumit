@@ -1300,6 +1300,19 @@ class BridgeLightChannels {
   /// Comp pixels.
   final BridgeScalar shadowDiffusion;
 
+  /// How it shows in the air: percentages and a linear colour, then the
+  /// noise's size in comp pixels and its speed in comp pixels a second.
+  final BridgeScalar hazeAmount;
+  final BridgeScalar hazeDensity;
+  final BridgeScalar hazeColourR;
+  final BridgeScalar hazeColourG;
+  final BridgeScalar hazeColourB;
+  final BridgeScalar hazeFalloff;
+  final BridgeScalar hazeScatter;
+  final BridgeScalar hazeNoise;
+  final BridgeScalar hazeNoiseSize;
+  final BridgeScalar hazeNoiseSpeed;
+
   const BridgeLightChannels({
     required this.poiX,
     required this.poiY,
@@ -1316,6 +1329,16 @@ class BridgeLightChannels {
     required this.height,
     required this.shadowDarkness,
     required this.shadowDiffusion,
+    required this.hazeAmount,
+    required this.hazeDensity,
+    required this.hazeColourR,
+    required this.hazeColourG,
+    required this.hazeColourB,
+    required this.hazeFalloff,
+    required this.hazeScatter,
+    required this.hazeNoise,
+    required this.hazeNoiseSize,
+    required this.hazeNoiseSpeed,
   });
 
   @override
@@ -1334,7 +1357,17 @@ class BridgeLightChannels {
       width.hashCode ^
       height.hashCode ^
       shadowDarkness.hashCode ^
-      shadowDiffusion.hashCode;
+      shadowDiffusion.hashCode ^
+      hazeAmount.hashCode ^
+      hazeDensity.hashCode ^
+      hazeColourR.hashCode ^
+      hazeColourG.hashCode ^
+      hazeColourB.hashCode ^
+      hazeFalloff.hashCode ^
+      hazeScatter.hashCode ^
+      hazeNoise.hashCode ^
+      hazeNoiseSize.hashCode ^
+      hazeNoiseSpeed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1355,7 +1388,17 @@ class BridgeLightChannels {
           width == other.width &&
           height == other.height &&
           shadowDarkness == other.shadowDarkness &&
-          shadowDiffusion == other.shadowDiffusion;
+          shadowDiffusion == other.shadowDiffusion &&
+          hazeAmount == other.hazeAmount &&
+          hazeDensity == other.hazeDensity &&
+          hazeColourR == other.hazeColourR &&
+          hazeColourG == other.hazeColourG &&
+          hazeColourB == other.hazeColourB &&
+          hazeFalloff == other.hazeFalloff &&
+          hazeScatter == other.hazeScatter &&
+          hazeNoise == other.hazeNoise &&
+          hazeNoiseSize == other.hazeNoiseSize &&
+          hazeNoiseSpeed == other.hazeNoiseSpeed;
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -1386,11 +1429,18 @@ class BridgeLightSettings {
   final bool twoNode;
   final bool castsShadows;
 
+  /// Shows in the air, so its haze rows show, and has Noise, so the
+  /// noise's size and speed show. Read only.
+  final bool inAir;
+  final bool noisy;
+
   const BridgeLightSettings({
     required this.kind,
     required this.falloff,
     required this.twoNode,
     required this.castsShadows,
+    required this.inAir,
+    required this.noisy,
   });
 
   @override
@@ -1398,7 +1448,9 @@ class BridgeLightSettings {
       kind.hashCode ^
       falloff.hashCode ^
       twoNode.hashCode ^
-      castsShadows.hashCode;
+      castsShadows.hashCode ^
+      inAir.hashCode ^
+      noisy.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1408,7 +1460,9 @@ class BridgeLightSettings {
           kind == other.kind &&
           falloff == other.falloff &&
           twoNode == other.twoNode &&
-          castsShadows == other.castsShadows;
+          castsShadows == other.castsShadows &&
+          inAir == other.inAir &&
+          noisy == other.noisy;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
@@ -2618,6 +2672,16 @@ enum BridgeTransformProp {
   lightHeight,
   shadowDarkness,
   shadowDiffusion,
+  hazeAmount,
+  hazeDensity,
+  hazeColourR,
+  hazeColourG,
+  hazeColourB,
+  hazeFalloff,
+  hazeScatter,
+  hazeNoise,
+  hazeNoiseSize,
+  hazeNoiseSpeed,
   ambient,
   diffuse,
   specular,

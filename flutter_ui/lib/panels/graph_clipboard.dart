@@ -288,6 +288,29 @@ LumitClipGroup _transformClipGroup(
         l10n.lightShadowDiffusion,
         l10n.unitPixels
       ),
+    BridgeTransformProp.hazeAmount => (l10n.lightVolumetric, l10n.unitPercent),
+    BridgeTransformProp.hazeDensity => (
+        l10n.lightHazeDensity,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeColourR ||
+    BridgeTransformProp.hazeColourG ||
+    BridgeTransformProp.hazeColourB =>
+      (l10n.lightHazeColour, ''),
+    BridgeTransformProp.hazeFalloff => (
+        l10n.lightHeightFalloff,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeScatter => (
+        l10n.lightForwardScatter,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeNoise => (l10n.lightNoise, l10n.unitPercent),
+    BridgeTransformProp.hazeNoiseSize => (l10n.lightNoiseSize, l10n.unitPixels),
+    BridgeTransformProp.hazeNoiseSpeed => (
+        l10n.lightNoiseSpeed,
+        l10n.unitPerSecond(l10n.unitPixels)
+      ),
     BridgeTransformProp.lightTransmission => (
         l10n.materialLightTransmission,
         l10n.unitPercent

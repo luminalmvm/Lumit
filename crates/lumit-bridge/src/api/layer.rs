@@ -2123,9 +2123,11 @@ pub(crate) fn read_layer_info(
             _ => None,
         },
         light: match &layer.kind {
-            lumit_core::model::LayerKind::Light { light } => {
-                Some(BridgeLightSettings::of(light.settings()))
-            }
+            lumit_core::model::LayerKind::Light { light } => Some(BridgeLightSettings {
+                in_air: light.haze.shows(),
+                noisy: light.haze.noisy(),
+                ..BridgeLightSettings::of(light.settings())
+            }),
             _ => None,
         },
         material: (layer.switches.three_d && layer.can_adjust())
@@ -2391,6 +2393,18 @@ pub struct BridgeLightChannels {
     pub shadow_darkness: BridgeScalar,
     /// Comp pixels.
     pub shadow_diffusion: BridgeScalar,
+    /// How it shows in the air: percentages and a linear colour, then the
+    /// noise's size in comp pixels and its speed in comp pixels a second.
+    pub haze_amount: BridgeScalar,
+    pub haze_density: BridgeScalar,
+    pub haze_colour_r: BridgeScalar,
+    pub haze_colour_g: BridgeScalar,
+    pub haze_colour_b: BridgeScalar,
+    pub haze_falloff: BridgeScalar,
+    pub haze_scatter: BridgeScalar,
+    pub haze_noise: BridgeScalar,
+    pub haze_noise_size: BridgeScalar,
+    pub haze_noise_speed: BridgeScalar,
 }
 
 /// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
@@ -2423,6 +2437,10 @@ pub struct BridgeLightSettings {
     /// Aimed at its point of interest.
     pub two_node: bool,
     pub casts_shadows: bool,
+    /// Shows in the air, so its haze rows show, and has Noise, so the
+    /// noise's size and speed show. Read only.
+    pub in_air: bool,
+    pub noisy: bool,
 }
 
 impl BridgeLightSettings {
@@ -2444,6 +2462,8 @@ impl BridgeLightSettings {
             },
             two_node: s.two_node,
             casts_shadows: s.casts_shadows,
+            in_air: false,
+            noisy: false,
         }
     }
 
@@ -2685,6 +2705,16 @@ pub enum BridgeTransformProp {
     LightHeight,
     ShadowDarkness,
     ShadowDiffusion,
+    HazeAmount,
+    HazeDensity,
+    HazeColourR,
+    HazeColourG,
+    HazeColourB,
+    HazeFalloff,
+    HazeScatter,
+    HazeNoise,
+    HazeNoiseSize,
+    HazeNoiseSpeed,
     Ambient,
     Diffuse,
     Specular,
@@ -2833,6 +2863,16 @@ impl BridgeTransformProp {
             BridgeTransformProp::Metal => P::Metal,
             BridgeTransformProp::ShadowDarkness => P::ShadowDarkness,
             BridgeTransformProp::ShadowDiffusion => P::ShadowDiffusion,
+            BridgeTransformProp::HazeAmount => P::HazeAmount,
+            BridgeTransformProp::HazeDensity => P::HazeDensity,
+            BridgeTransformProp::HazeColourR => P::HazeColourR,
+            BridgeTransformProp::HazeColourG => P::HazeColourG,
+            BridgeTransformProp::HazeColourB => P::HazeColourB,
+            BridgeTransformProp::HazeFalloff => P::HazeFalloff,
+            BridgeTransformProp::HazeScatter => P::HazeScatter,
+            BridgeTransformProp::HazeNoise => P::HazeNoise,
+            BridgeTransformProp::HazeNoiseSize => P::HazeNoiseSize,
+            BridgeTransformProp::HazeNoiseSpeed => P::HazeNoiseSpeed,
             BridgeTransformProp::LightTransmission => P::LightTransmission,
         }
     }
@@ -2901,6 +2941,16 @@ impl BridgeTransform {
                 height: read(&light.size[1]),
                 shadow_darkness: read(&light.shadow_darkness),
                 shadow_diffusion: read(&light.shadow_diffusion),
+                haze_amount: read(&light.haze.amount),
+                haze_density: read(&light.haze.density),
+                haze_colour_r: read(&light.haze.colour[0]),
+                haze_colour_g: read(&light.haze.colour[1]),
+                haze_colour_b: read(&light.haze.colour[2]),
+                haze_falloff: read(&light.haze.falloff),
+                haze_scatter: read(&light.haze.scatter),
+                haze_noise: read(&light.haze.noise),
+                haze_noise_size: read(&light.haze.noise_size),
+                haze_noise_speed: read(&light.haze.noise_speed),
             });
         }
         if layer.is_3d() {
@@ -2957,6 +3007,7 @@ impl BridgeTransform {
             let [poi_x, poi_y, poi_z] = &mut light.point_of_interest;
             let [r, g, b] = &mut light.colour;
             let [width, height] = &mut light.size;
+            let [haze_r, haze_g, haze_b] = &mut light.haze.colour;
             for (to, from) in [
                 (poi_x, &c.poi_x),
                 (poi_y, &c.poi_y),
@@ -2973,6 +3024,16 @@ impl BridgeTransform {
                 (height, &c.height),
                 (&mut light.shadow_darkness, &c.shadow_darkness),
                 (&mut light.shadow_diffusion, &c.shadow_diffusion),
+                (&mut light.haze.amount, &c.haze_amount),
+                (&mut light.haze.density, &c.haze_density),
+                (haze_r, &c.haze_colour_r),
+                (haze_g, &c.haze_colour_g),
+                (haze_b, &c.haze_colour_b),
+                (&mut light.haze.falloff, &c.haze_falloff),
+                (&mut light.haze.scatter, &c.haze_scatter),
+                (&mut light.haze.noise, &c.haze_noise),
+                (&mut light.haze.noise_size, &c.haze_noise_size),
+                (&mut light.haze.noise_speed, &c.haze_noise_speed),
             ] {
                 to.animation = from.animation_at(offset)?;
             }

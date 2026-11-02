@@ -28394,6 +28394,16 @@ impl SseDecode for crate::api::layer::BridgeLightChannels {
         let mut var_height = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_shadowDarkness = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_shadowDiffusion = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeDensity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeColourR = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeColourG = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeColourB = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeFalloff = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeScatter = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeNoise = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeNoiseSize = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_hazeNoiseSpeed = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeLightChannels {
             poi_x: var_poiX,
             poi_y: var_poiY,
@@ -28410,6 +28420,16 @@ impl SseDecode for crate::api::layer::BridgeLightChannels {
             height: var_height,
             shadow_darkness: var_shadowDarkness,
             shadow_diffusion: var_shadowDiffusion,
+            haze_amount: var_hazeAmount,
+            haze_density: var_hazeDensity,
+            haze_colour_r: var_hazeColourR,
+            haze_colour_g: var_hazeColourG,
+            haze_colour_b: var_hazeColourB,
+            haze_falloff: var_hazeFalloff,
+            haze_scatter: var_hazeScatter,
+            haze_noise: var_hazeNoise,
+            haze_noise_size: var_hazeNoiseSize,
+            haze_noise_speed: var_hazeNoiseSpeed,
         };
     }
 }
@@ -28449,11 +28469,15 @@ impl SseDecode for crate::api::layer::BridgeLightSettings {
         let mut var_falloff = <crate::api::layer::BridgeLightFalloff>::sse_decode(deserializer);
         let mut var_twoNode = <bool>::sse_decode(deserializer);
         let mut var_castsShadows = <bool>::sse_decode(deserializer);
+        let mut var_inAir = <bool>::sse_decode(deserializer);
+        let mut var_noisy = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeLightSettings {
             kind: var_kind,
             falloff: var_falloff,
             two_node: var_twoNode,
             casts_shadows: var_castsShadows,
+            in_air: var_inAir,
+            noisy: var_noisy,
         };
     }
 }
@@ -31582,12 +31606,22 @@ impl SseDecode for crate::api::layer::BridgeTransformProp {
             32 => crate::api::layer::BridgeTransformProp::LightHeight,
             33 => crate::api::layer::BridgeTransformProp::ShadowDarkness,
             34 => crate::api::layer::BridgeTransformProp::ShadowDiffusion,
-            35 => crate::api::layer::BridgeTransformProp::Ambient,
-            36 => crate::api::layer::BridgeTransformProp::Diffuse,
-            37 => crate::api::layer::BridgeTransformProp::Specular,
-            38 => crate::api::layer::BridgeTransformProp::Shininess,
-            39 => crate::api::layer::BridgeTransformProp::Metal,
-            40 => crate::api::layer::BridgeTransformProp::LightTransmission,
+            35 => crate::api::layer::BridgeTransformProp::HazeAmount,
+            36 => crate::api::layer::BridgeTransformProp::HazeDensity,
+            37 => crate::api::layer::BridgeTransformProp::HazeColourR,
+            38 => crate::api::layer::BridgeTransformProp::HazeColourG,
+            39 => crate::api::layer::BridgeTransformProp::HazeColourB,
+            40 => crate::api::layer::BridgeTransformProp::HazeFalloff,
+            41 => crate::api::layer::BridgeTransformProp::HazeScatter,
+            42 => crate::api::layer::BridgeTransformProp::HazeNoise,
+            43 => crate::api::layer::BridgeTransformProp::HazeNoiseSize,
+            44 => crate::api::layer::BridgeTransformProp::HazeNoiseSpeed,
+            45 => crate::api::layer::BridgeTransformProp::Ambient,
+            46 => crate::api::layer::BridgeTransformProp::Diffuse,
+            47 => crate::api::layer::BridgeTransformProp::Specular,
+            48 => crate::api::layer::BridgeTransformProp::Shininess,
+            49 => crate::api::layer::BridgeTransformProp::Metal,
+            50 => crate::api::layer::BridgeTransformProp::LightTransmission,
             _ => unreachable!("Invalid variant for BridgeTransformProp: {}", inner),
         };
     }
@@ -39747,6 +39781,16 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLightChannels {
             self.height.into_into_dart().into_dart(),
             self.shadow_darkness.into_into_dart().into_dart(),
             self.shadow_diffusion.into_into_dart().into_dart(),
+            self.haze_amount.into_into_dart().into_dart(),
+            self.haze_density.into_into_dart().into_dart(),
+            self.haze_colour_r.into_into_dart().into_dart(),
+            self.haze_colour_g.into_into_dart().into_dart(),
+            self.haze_colour_b.into_into_dart().into_dart(),
+            self.haze_falloff.into_into_dart().into_dart(),
+            self.haze_scatter.into_into_dart().into_dart(),
+            self.haze_noise.into_into_dart().into_dart(),
+            self.haze_noise_size.into_into_dart().into_dart(),
+            self.haze_noise_speed.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -39816,6 +39860,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLightSettings {
             self.falloff.into_into_dart().into_dart(),
             self.two_node.into_into_dart().into_dart(),
             self.casts_shadows.into_into_dart().into_dart(),
+            self.in_air.into_into_dart().into_dart(),
+            self.noisy.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -43695,12 +43741,22 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransformProp {
             Self::LightHeight => 32.into_dart(),
             Self::ShadowDarkness => 33.into_dart(),
             Self::ShadowDiffusion => 34.into_dart(),
-            Self::Ambient => 35.into_dart(),
-            Self::Diffuse => 36.into_dart(),
-            Self::Specular => 37.into_dart(),
-            Self::Shininess => 38.into_dart(),
-            Self::Metal => 39.into_dart(),
-            Self::LightTransmission => 40.into_dart(),
+            Self::HazeAmount => 35.into_dart(),
+            Self::HazeDensity => 36.into_dart(),
+            Self::HazeColourR => 37.into_dart(),
+            Self::HazeColourG => 38.into_dart(),
+            Self::HazeColourB => 39.into_dart(),
+            Self::HazeFalloff => 40.into_dart(),
+            Self::HazeScatter => 41.into_dart(),
+            Self::HazeNoise => 42.into_dart(),
+            Self::HazeNoiseSize => 43.into_dart(),
+            Self::HazeNoiseSpeed => 44.into_dart(),
+            Self::Ambient => 45.into_dart(),
+            Self::Diffuse => 46.into_dart(),
+            Self::Specular => 47.into_dart(),
+            Self::Shininess => 48.into_dart(),
+            Self::Metal => 49.into_dart(),
+            Self::LightTransmission => 50.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -46773,6 +46829,16 @@ impl SseEncode for crate::api::layer::BridgeLightChannels {
         <crate::api::effect::BridgeScalar>::sse_encode(self.height, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.shadow_darkness, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.shadow_diffusion, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_amount, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_density, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_colour_r, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_colour_g, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_colour_b, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_falloff, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_scatter, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise_size, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise_speed, serializer);
     }
 }
 
@@ -46819,6 +46885,8 @@ impl SseEncode for crate::api::layer::BridgeLightSettings {
         <crate::api::layer::BridgeLightFalloff>::sse_encode(self.falloff, serializer);
         <bool>::sse_encode(self.two_node, serializer);
         <bool>::sse_encode(self.casts_shadows, serializer);
+        <bool>::sse_encode(self.in_air, serializer);
+        <bool>::sse_encode(self.noisy, serializer);
     }
 }
 
@@ -49201,12 +49269,22 @@ impl SseEncode for crate::api::layer::BridgeTransformProp {
                 crate::api::layer::BridgeTransformProp::LightHeight => 32,
                 crate::api::layer::BridgeTransformProp::ShadowDarkness => 33,
                 crate::api::layer::BridgeTransformProp::ShadowDiffusion => 34,
-                crate::api::layer::BridgeTransformProp::Ambient => 35,
-                crate::api::layer::BridgeTransformProp::Diffuse => 36,
-                crate::api::layer::BridgeTransformProp::Specular => 37,
-                crate::api::layer::BridgeTransformProp::Shininess => 38,
-                crate::api::layer::BridgeTransformProp::Metal => 39,
-                crate::api::layer::BridgeTransformProp::LightTransmission => 40,
+                crate::api::layer::BridgeTransformProp::HazeAmount => 35,
+                crate::api::layer::BridgeTransformProp::HazeDensity => 36,
+                crate::api::layer::BridgeTransformProp::HazeColourR => 37,
+                crate::api::layer::BridgeTransformProp::HazeColourG => 38,
+                crate::api::layer::BridgeTransformProp::HazeColourB => 39,
+                crate::api::layer::BridgeTransformProp::HazeFalloff => 40,
+                crate::api::layer::BridgeTransformProp::HazeScatter => 41,
+                crate::api::layer::BridgeTransformProp::HazeNoise => 42,
+                crate::api::layer::BridgeTransformProp::HazeNoiseSize => 43,
+                crate::api::layer::BridgeTransformProp::HazeNoiseSpeed => 44,
+                crate::api::layer::BridgeTransformProp::Ambient => 45,
+                crate::api::layer::BridgeTransformProp::Diffuse => 46,
+                crate::api::layer::BridgeTransformProp::Specular => 47,
+                crate::api::layer::BridgeTransformProp::Shininess => 48,
+                crate::api::layer::BridgeTransformProp::Metal => 49,
+                crate::api::layer::BridgeTransformProp::LightTransmission => 50,
                 _ => {
                     unimplemented!("");
                 }

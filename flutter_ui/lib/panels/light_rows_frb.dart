@@ -45,6 +45,8 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
   falloff: BridgeLightFalloff.none,
   twoNode: false,
   castsShadows: false,
+  inAir: false,
+  noisy: false,
 );
 
 /// The same for a material, on After Effects' defaults.
@@ -128,6 +130,8 @@ BridgeLightSettings lightSettingsWith(
       falloff: falloff ?? s.falloff,
       twoNode: twoNode ?? s.twoNode,
       castsShadows: castsShadows ?? s.castsShadows,
+      inAir: s.inAir,
+      noisy: s.noisy,
     );
 
 /// One choice row. Each pick is one op, so one undo step.
