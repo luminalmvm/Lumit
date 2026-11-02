@@ -3280,7 +3280,7 @@ fn lighting_op(
     h: u32,
     eye: [f32; 3],
 ) -> Option<lumit_gpu::fx::lighting::LightingOp> {
-    use crate::build::{place_dir, place_point, unit};
+    use crate::build::shading::{place_dir, place_point, unit};
 
     if l.lights.is_empty() || w == 0 || h == 0 {
         return None;
