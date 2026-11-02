@@ -2681,6 +2681,11 @@ String _basename(String path) {
   return cut < 0 ? path : path.substring(cut + 1);
 }
 
+/// A placed node graph's Inputs on [layer] as a list of one, or none: the
+/// shape `setEffects` takes, so a row on them commits as any effect row does.
+List<BridgeEffectInstance> graphInputsOf(LayerReference layer) =>
+    [if (layer.getGraphInputs() case final inputs?) inputs];
+
 /// The staging behind a drag on an effect parameter, and the writes that end it.
 ///
 /// Held by whichever panel is showing the rows — the Effect controls card and
@@ -2741,13 +2746,14 @@ class EffectStackEditor {
     var stack = effects;
     if (!_staged.keys.every((key) => ids.contains(key.$1))) {
       // Styles next, then - for an editor showing a group header's or a clip's
-      // rows - that container's own list: the same order the engine's shared
-      // lookup searches, so the commit lands on the list the id lives in.
+      // rows - that container's own list, and last a placed graph's Inputs:
+      // the same order the engine's shared lookup searches, so the commit
+      // lands on the list the id lives in.
       final styles = layer.getStyles();
       final styleIds = {for (final s in styles) s.id()};
       stack = _staged.keys.every((key) => styleIds.contains(key.$1))
           ? styles
-          : ((groupStack ?? clipStack)?.call() ?? styles);
+          : ((groupStack ?? clipStack)?.call() ?? graphInputsOf(layer));
     }
     for (final instance in stack) {
       final id = instance.id();
