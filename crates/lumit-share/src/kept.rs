@@ -27,8 +27,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
+use web_time::Instant;
 
 /// An edit and what it replaced where it was made.
 pub(crate) type Pair = (Op, Op);

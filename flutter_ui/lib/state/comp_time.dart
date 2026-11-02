@@ -229,7 +229,7 @@ void _sampleHot(BridgeRational time, {BridgeScalar? scalar, _Turn? turn}) {
 /// [revision] moves. The halves of a point carry the same text and each
 /// reads its own number, so the row is part of what is held.
 double sampledExpression(BridgeScalar scalar, BridgeRational time,
-    LayerReference layer, BigInt? revision,
+    LayerReference layer, int? revision,
     {BridgeExpressionRow? row}) {
   if (_expressionRevision != revision || _expressionSamples.length >= 2048) {
     _expressionSamples.clear();
@@ -242,7 +242,7 @@ double sampledExpression(BridgeScalar scalar, BridgeRational time,
 
 final Map<(BridgeScalar, Object, BridgeExpressionRow?, BridgeRational), double>
     _expressionSamples = {};
-BigInt? _expressionRevision;
+int? _expressionRevision;
 
 /// Note that [scalar] or [turn] was wanted at [time], starting the sets over
 /// when the time has moved on.

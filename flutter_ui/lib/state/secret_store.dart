@@ -9,11 +9,12 @@
 // A Linux machine without `secret-tool` falls back to a file only its owner
 // can read. That is weaker, and it is what the machine offers.
 
-import 'dart:convert';
-import 'dart:ffi';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
-import 'package:ffi/ffi.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What every entry is filed under, so they can be told from anything else
 /// the system holds.
@@ -32,7 +33,7 @@ Future<bool> writeSecret(String name, String secret) async {
     return true;
   }
   try {
-    if (Platform.isWindows) return _winWrite(name, secret);
+    if (Platform.isWindows) return winWrite(name, secret);
     if (Platform.isMacOS) return await _macWrite(name, secret);
     return await _linuxWrite(name, secret);
   } catch (_) {
@@ -45,7 +46,7 @@ Future<String?> readSecret(String name) async {
   final fake = secretStoreOverride;
   if (fake != null) return fake[name];
   try {
-    if (Platform.isWindows) return _winRead(name);
+    if (Platform.isWindows) return winRead(name);
     if (Platform.isMacOS) return await _macRead(name);
     return await _linuxRead(name);
   } catch (_) {
@@ -62,7 +63,7 @@ Future<void> deleteSecret(String name) async {
   }
   try {
     if (Platform.isWindows) {
-      _winDelete(name);
+      winDelete(name);
     } else if (Platform.isMacOS) {
       await Process.run('security',
           ['delete-generic-password', '-s', _service, '-a', name]);
@@ -71,113 +72,6 @@ Future<void> deleteSecret(String name) async {
     }
   } catch (_) {
     // Nothing to forget.
-  }
-}
-
-// --- Windows: Credential Manager ------------------------------------------
-
-/// `CREDENTIALW`, as `wincred.h` lays it out.
-final class _Credential extends Struct {
-  @Uint32()
-  external int flags;
-  @Uint32()
-  external int type;
-  external Pointer<Utf16> targetName;
-  external Pointer<Utf16> comment;
-  @Uint32()
-  external int lastWrittenLow;
-  @Uint32()
-  external int lastWrittenHigh;
-  @Uint32()
-  external int blobSize;
-  external Pointer<Uint8> blob;
-  @Uint32()
-  external int persist;
-  @Uint32()
-  external int attributeCount;
-  external Pointer<Void> attributes;
-  external Pointer<Utf16> targetAlias;
-  external Pointer<Utf16> userName;
-}
-
-/// `CRED_TYPE_GENERIC`, and `CRED_PERSIST_LOCAL_MACHINE`: kept for this
-/// person on this machine, and not carried to another by a roaming profile.
-const int _generic = 1;
-const int _thisMachine = 2;
-
-final DynamicLibrary _advapi = DynamicLibrary.open('advapi32.dll');
-
-final int Function(Pointer<_Credential>, int) _credWrite = _advapi.lookupFunction<
-    Int32 Function(Pointer<_Credential>, Uint32),
-    int Function(Pointer<_Credential>, int)>('CredWriteW');
-
-final int Function(Pointer<Utf16>, int, int, Pointer<Pointer<_Credential>>)
-    _credRead = _advapi.lookupFunction<
-        Int32 Function(
-            Pointer<Utf16>, Uint32, Uint32, Pointer<Pointer<_Credential>>),
-        int Function(Pointer<Utf16>, int, int,
-            Pointer<Pointer<_Credential>>)>('CredReadW');
-
-final int Function(Pointer<Utf16>, int, int) _credDelete =
-    _advapi.lookupFunction<Int32 Function(Pointer<Utf16>, Uint32, Uint32),
-        int Function(Pointer<Utf16>, int, int)>('CredDeleteW');
-
-final void Function(Pointer<Void>) _credFree = _advapi.lookupFunction<
-    Void Function(Pointer<Void>), void Function(Pointer<Void>)>('CredFree');
-
-String _target(String name) => '$_service/$name';
-
-bool _winWrite(String name, String secret) {
-  final bytes = utf8.encode(secret);
-  final target = _target(name).toNativeUtf16();
-  final user = name.toNativeUtf16();
-  final blob = calloc<Uint8>(bytes.length);
-  final credential = calloc<_Credential>();
-  try {
-    blob.asTypedList(bytes.length).setAll(0, bytes);
-    credential.ref
-      ..type = _generic
-      ..targetName = target
-      ..blobSize = bytes.length
-      ..blob = blob
-      ..persist = _thisMachine
-      ..userName = user;
-    return _credWrite(credential, 0) != 0;
-  } finally {
-    // Not left lying in freed memory for the next allocation to find.
-    blob.asTypedList(bytes.length).fillRange(0, bytes.length, 0);
-    calloc
-      ..free(blob)
-      ..free(credential)
-      ..free(target)
-      ..free(user);
-  }
-}
-
-String? _winRead(String name) {
-  final target = _target(name).toNativeUtf16();
-  final found = calloc<Pointer<_Credential>>();
-  try {
-    if (_credRead(target, _generic, 0, found) == 0) return null;
-    final credential = found.value.ref;
-    final secret = utf8.decode(
-        credential.blob.asTypedList(credential.blobSize),
-        allowMalformed: true);
-    _credFree(found.value.cast());
-    return secret;
-  } finally {
-    calloc
-      ..free(target)
-      ..free(found);
-  }
-}
-
-void _winDelete(String name) {
-  final target = _target(name).toNativeUtf16();
-  try {
-    _credDelete(target, _generic, 0);
-  } finally {
-    calloc.free(target);
   }
 }
 

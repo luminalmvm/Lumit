@@ -56,8 +56,8 @@ pub(crate) fn record(line: &str) {
 /// The write itself, with the file passed in so the size cap can be tested
 /// without filling the one a real session is writing to.
 fn record_to(file: &std::path::Path, line: &str) {
-    let when = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let when = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     // Started afresh once it is too big. Checked before the open rather than
@@ -162,7 +162,12 @@ pub(crate) fn watch() {
                 Some(at) => format!("{}:{}:{}", at.file(), at.line(), at.column()),
                 None => "an unknown place".to_string(),
             };
-            record(&format!("panic on thread {name} at {place}: {info}"));
+            let said = format!("panic on thread {name} at {place}: {info}");
+            // The browser build has no file to write it to, so the page's
+            // console has it.
+            #[cfg(target_arch = "wasm32")]
+            web_sys::console::error_1(&said.as_str().into());
+            record(&said);
             previous(info);
         }));
     });

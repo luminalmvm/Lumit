@@ -23,7 +23,7 @@
 //   $env:LUMIT_SHOTS_PROJECT='<dir>/Something.lum'
 //   flutter run -d windows -t tool/shots/shots_audio.dart
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +40,8 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 
 import 'shots_common.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void say(Object? what) {
   // ignore: avoid_print

@@ -47,7 +47,7 @@ class BridgeFileComp {
   final int fpsDen;
 
   /// How long it is, in frames at its own rate.
-  final PlatformInt64 durationFrames;
+  final int durationFrames;
 
   const BridgeFileComp({
     required this.id,
@@ -1138,7 +1138,7 @@ class ProjectReference {
   bool shareNote(
           {required String text,
           CompositionReference? comp,
-          PlatformInt64? frame,
+          int? frame,
           LayerReference? layer}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShareNote(
           that: this, text: text, comp: comp, frame: frame, layer: layer);
@@ -1300,7 +1300,7 @@ class ProjectReference {
   void sharePresence(
           {CompositionReference? comp,
           required List<LayerReference> layers,
-          PlatformInt64? playhead,
+          int? playhead,
           double? cursorX,
           double? cursorY,
           required List<String> properties,

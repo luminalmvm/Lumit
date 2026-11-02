@@ -42,8 +42,7 @@ BridgeRotoStatus rotoStatus(
 /// `NotFootage` for any other kind of layer, and for media that will not
 /// probe: a Roto brush on a layer with nothing behind it has no source frame
 /// to name, which is a refusal rather than a guess at zero.
-PlatformInt64 rotoSourceFrame(
-        {required LayerReference layer, required PlatformInt64 frame}) =>
+int rotoSourceFrame({required LayerReference layer, required int frame}) =>
     BridgeLib.instance.api
         .crateApiRotoRotoSourceFrame(layer: layer, frame: frame);
 
@@ -66,8 +65,7 @@ PlatformInt64 rotoSourceFrame(
 /// draws as dots rather than as a line. The upgrade is a contour traced once and
 /// filed with the run. Observable trigger: the boundary reading as dotted at
 /// ordinary magnification, or a scrub with the overlay up dropping frames.
-Float32List rotoBoundary(
-        {required UuidValue effect, required PlatformInt64 frame}) =>
+Float32List rotoBoundary({required UuidValue effect, required int frame}) =>
     BridgeLib.instance.api
         .crateApiRotoRotoBoundary(effect: effect, frame: frame);
 
@@ -89,7 +87,7 @@ Float32List rotoBoundary(
 bool rotoSolveFrame(
         {required LayerReference layer,
         required UuidValue effect,
-        required PlatformInt64 frame}) =>
+        required int frame}) =>
     BridgeLib.instance.api
         .crateApiRotoRotoSolveFrame(layer: layer, effect: effect, frame: frame);
 
@@ -140,7 +138,7 @@ class BridgeRotoPrompt {
 
   /// One byte a point: 1 for a tap on the subject, 0 for one against it.
   final Uint8List labels;
-  final PlatformInt64 frame;
+  final int frame;
 
   const BridgeRotoPrompt({
     required this.id,
@@ -209,8 +207,8 @@ class BridgeRotoStatus {
   /// The span the matte actually covers, in **source** frames, or `None`
   /// before anything has been propagated. Outside it the effect is a
   /// passthrough and the panel says so.
-  final PlatformInt64? firstFrame;
-  final PlatformInt64? lastFrame;
+  final int? firstFrame;
+  final int? lastFrame;
 
   /// How many frames the clip has, against which the span is whole or
   /// partial. Zero when nothing has been propagated.
@@ -218,7 +216,7 @@ class BridgeRotoStatus {
 
   /// Whether there is a base frame at all — what makes Propagate offerable
   /// rather than a button that refuses.
-  final PlatformInt64? baseFrame;
+  final int? baseFrame;
 
   /// How many strokes the instance holds.
   final int strokes;
@@ -289,7 +287,7 @@ class BridgeRotoStroke {
   final Float32List points;
   final double radius;
   final BridgeRotoStrokeKind kind;
-  final PlatformInt64 frame;
+  final int frame;
 
   const BridgeRotoStroke({
     required this.id,

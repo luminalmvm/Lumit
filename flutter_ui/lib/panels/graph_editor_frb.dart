@@ -3361,7 +3361,7 @@ const double graphGutterWidth = 34;
 /// An expression's curve across a span, held until the document or the span
 /// moves, so a scroll repainting the graph asks the engine nothing.
 List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
-    BridgeRational end, int samples, BigInt? revision) {
+    BridgeRational end, int samples, int? revision) {
   if (_curvesRevision != revision || _curves.length >= 64) {
     _curves.clear();
     _curvesRevision = revision;
@@ -3383,7 +3383,7 @@ List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
 }
 
 final Map<Object, List<double>> _curves = {};
-BigInt? _curvesRevision;
+int? _curvesRevision;
 
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;

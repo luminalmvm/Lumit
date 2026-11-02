@@ -34,14 +34,14 @@ BridgeTrackStatus trackStatus({required LayerReference layer}) =>
 /// footage's own raster centred on the comp. Exact for the ordinary case — a
 /// comp made from the shot — and off by the size ratio otherwise.
 List<BridgeTrackPoint> trackedPoints(
-        {required LayerReference layer, required PlatformInt64 frame}) =>
+        {required LayerReference layer, required int frame}) =>
     BridgeLib.instance.api
         .crateApiTrackTrackedPoints(layer: layer, frame: frame);
 
 /// `camera`'s solve link and how it is reading at composition frame `frame` —
 /// the badge, in one crossing.
 BridgeCameraLink cameraLink(
-        {required LayerReference camera, required PlatformInt64 frame}) =>
+        {required LayerReference camera, required int frame}) =>
     BridgeLib.instance.api
         .crateApiTrackCameraLink(camera: camera, frame: frame);
 
@@ -61,7 +61,7 @@ void fireEffectAction(
         {required LayerReference layer,
         required UuidValue effect,
         required String param,
-        BigInt? frame}) =>
+        int? frame}) =>
     BridgeLib.instance.api.crateApiTrackFireEffectAction(
         layer: layer, effect: effect, param: param, frame: frame);
 
@@ -120,7 +120,7 @@ void setCameraSolveLink({required LayerReference camera, UuidValue? tracked}) =>
 LayerReference addLayerAtPoints(
         {required LayerReference tracked,
         required List<int> tracks,
-        required PlatformInt64 frame,
+        required int frame,
         required bool solid}) =>
     BridgeLib.instance.api.crateApiTrackAddLayerAtPoints(
         tracked: tracked, tracks: tracks, frame: frame, solid: solid);

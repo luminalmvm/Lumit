@@ -393,8 +393,11 @@ pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, Medi
     use exr::block::reader::ChunksReader;
     let fail = |e: exr::error::Error| MediaError::Ffmpeg(format!("could not read the EXR: {e}"));
 
-    let reader = exr::block::read(std::io::BufReader::new(std::fs::File::open(path)?), false)
-        .map_err(fail)?;
+    let reader = exr::block::read(
+        std::io::BufReader::new(lumit_ingress::files::open(path)?),
+        false,
+    )
+    .map_err(fail)?;
     let passes = passes_in(reader.meta_data());
     let pass = pick(&passes, wanted)
         .ok_or_else(|| MediaError::Ffmpeg("the EXR holds no picture".into()))?;

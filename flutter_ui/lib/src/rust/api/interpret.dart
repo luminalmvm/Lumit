@@ -95,7 +95,7 @@ class BridgeFootageFacts {
   final bool float;
   final int fpsNum;
   final int fpsDen;
-  final BigInt frames;
+  final int frames;
   final BridgeRational duration;
   final int width;
   final int height;
@@ -318,7 +318,7 @@ class BridgeInterpretation {
 class BridgeInterpreted {
   final int fpsNum;
   final int fpsDen;
-  final BigInt frames;
+  final int frames;
   final BridgeRational duration;
   final int width;
   final int height;

@@ -416,8 +416,8 @@ class BridgeClip {
   /// zero already added. The two are the same number only while that zero
   /// is itself zero, which stopped being true the moment a clip could be
   /// dragged back past the start of its row.
-  final PlatformInt64 startFrame;
-  final PlatformInt64 endFrame;
+  final int startFrame;
+  final int endFrame;
 
   /// The clip's single playback speed in per cent, or `None` when its map
   /// says something one number cannot — a ramp, or a richer curve. The row
@@ -456,8 +456,8 @@ class BridgeClip {
   ///
   /// Carried in comp frames, like `start_frame`/`end_frame` beside it, so the
   /// ghost is one more positioned box and no time↔frame trip rides a rebuild.
-  final PlatformInt64? reachStartFrame;
-  final PlatformInt64? reachEndFrame;
+  final int? reachStartFrame;
+  final int? reachEndFrame;
 
   /// The fade stored at each end (docs/impl/audio-timeline.md §3). Zero
   /// seconds is no fade; where the clip overlaps its neighbour the overlap
@@ -784,12 +784,12 @@ class BridgeLayerInfo {
   final BridgeSpan span;
 
   /// The span at the comp's own rate, so drawing needs no time↔frame trips.
-  final PlatformInt64 inFrame;
-  final PlatformInt64 outFrame;
+  final int inFrame;
+  final int outFrame;
 
   /// Sequence clip starts as comp frames (empty on other kinds) — what the
   /// bar draws its split lines from.
-  final Int64List clipFrames;
+  final List<int> clipFrames;
 
   /// Every clip on a Sequence layer, in list order (empty on other kinds) —
   /// what the expanded sequence view draws.
@@ -937,7 +937,7 @@ class BridgeLayerInfo {
   /// How long the source runs, **in this comp's frames** — a Precomp's own
   /// length, which is what decides where its bar's source-end ghost falls.
   /// None for every other kind; footage length arrives with the probe.
-  final PlatformInt64? sourceFrames;
+  final int? sourceFrames;
 
   /// The layer's volume in decibels, the one property an audio row
   /// draws that is not otherwise in the model. Carried for the same reason
@@ -1140,7 +1140,7 @@ enum BridgeLayerKind {
 /// comp's rate, worked out here so drawing costs nothing across the seam.
 class BridgeLayerMarker {
   final BridgeMarker marker;
-  final PlatformInt64 frame;
+  final int frame;
 
   const BridgeLayerMarker({
     required this.marker,
@@ -1694,7 +1694,7 @@ class BridgeMatte {
 class BridgeMotionKey {
   /// Comp time, carried out by the layer's start offset as every key is.
   final BridgeRational time;
-  final PlatformInt64 frame;
+  final int frame;
   final double x;
   final double y;
 
@@ -1758,7 +1758,7 @@ class BridgeMotionKey {
 /// the render follows, automatic tangents and expressions included.
 class BridgeMotionPath {
   /// The comp frame of the first sample; one sample per frame follows.
-  final PlatformInt64 firstFrame;
+  final int firstFrame;
 
   /// x and y interleaved, in comp pixels: `samples[2 * i]` and
   /// `samples[2 * i + 1]` are the position at `first_frame + i`.
@@ -2765,7 +2765,7 @@ class LayerReference {
   /// layer time and cannot go negative.
   void addClip(
           {required FootageReference footage,
-          required PlatformInt64 atFrame,
+          required int atFrame,
           required bool overlap}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceAddClip(
           that: this, footage: footage, atFrame: atFrame, overlap: overlap);
@@ -2847,7 +2847,7 @@ class LayerReference {
   ///
   /// Returns the new pin's id, so the caller can select the row it just made.
   UuidValue addPuppetPinAt(
-          {required PlatformInt64 frame,
+          {required int frame,
           required BridgePuppetPinKind kind,
           required String name,
           required double x,
@@ -2891,7 +2891,7 @@ class LayerReference {
   void applyEffectPreset(
           {required BridgeEffectInstance effect,
           required int preset,
-          required PlatformInt64 atFrame}) =>
+          required int atFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceApplyEffectPreset(
           that: this, effect: effect, preset: preset, atFrame: atFrame);
 
@@ -2990,9 +2990,8 @@ class LayerReference {
   /// zoom, with a solve link and its parents followed (docs/impl/camera.md
   /// §2). The point of interest comes out of the parent's space the same way.
   /// What the camera tools start a drag from. `None` on any other kind.
-  BridgeCameraAim? cameraAimAt({required BigInt frame}) =>
-      BridgeLib.instance.api
-          .crateApiLayerLayerReferenceCameraAimAt(that: this, frame: frame);
+  BridgeCameraAim? cameraAimAt({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceCameraAimAt(that: this, frame: frame);
 
   /// The camera's own values that put it at `aim` in the comp at `frame`:
   /// the eye, the rotation rows and the point of interest carried back into
@@ -3000,14 +2999,14 @@ class LayerReference {
   /// What a camera drag writes, so a parented camera lands where the drag
   /// put it. `aim` comes back as it is with no parent and no Orientation.
   BridgeCameraAim cameraOwnAim(
-          {required BigInt frame, required BridgeCameraAim aim}) =>
+          {required int frame, required BridgeCameraAim aim}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCameraOwnAim(
           that: this, frame: frame, aim: aim);
 
   /// This camera's own placement at `frame`, inside its parents: its eye, and
   /// its turn with a two-node camera's aim and a solve link in it. What a
   /// layer parented to it is placed by. `None` on any other kind.
-  BridgeCameraPose? cameraOwnPoseAt({required BigInt frame}) =>
+  BridgeCameraPose? cameraOwnPoseAt({required int frame}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
@@ -3244,7 +3243,7 @@ class LayerReference {
   ///
   /// Not sync: a large Illustrator file can take seconds to read.
   Future<LayerReference> createShapes(
-          {required PlatformInt64 frame, required bool apart}) =>
+          {required int frame, required bool apart}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapes(
           that: this, frame: frame, apart: apart);
 
@@ -3257,7 +3256,7 @@ class LayerReference {
   /// What still refuses is a moment on one of the clip's own ends, and a
   /// retime driven by an expression — both calm errors rather than a cut that
   /// changes what plays.
-  void cutClipAt({required PlatformInt64 frame}) => BridgeLib.instance.api
+  void cutClipAt({required int frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCutClipAt(that: this, frame: frame);
 
   /// Remove this layer from its composition.
@@ -3280,7 +3279,7 @@ class LayerReference {
   /// A gap is legal on the Vegas surface, so the clips after it stay
   /// where they are rather than rippling back — again so a cut never moves
   /// anything that was already in time with the music.
-  void deleteClipAt({required PlatformInt64 frame}) => BridgeLib.instance.api
+  void deleteClipAt({required int frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteClipAt(that: this, frame: frame);
 
   /// Take the last stroke off — the undo inside the tool, for a brush drag
@@ -3403,8 +3402,7 @@ class LayerReference {
   ///
   /// Refused on a Sequence layer (its clips carry the maps) and at a moment
   /// on or outside the layer's own ends, where there is nothing to split.
-  void freezeAtPlayhead({required PlatformInt64 frame}) => BridgeLib
-      .instance.api
+  void freezeAtPlayhead({required int frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceFreezeAtPlayhead(that: this, frame: frame);
 
   /// This layer's blend mode, as an index into [`list_blend_modes`].
@@ -3872,7 +3870,7 @@ class LayerReference {
   void moveClip(
           {required UuidValue clip,
           LayerReference? target,
-          required PlatformInt64 toFrame,
+          required int toFrame,
           required bool overlap}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceMoveClip(
           that: this,
@@ -3918,7 +3916,7 @@ class LayerReference {
   /// through the layer's start offset and Retime map, and the two comps may
   /// keep different frame rates, so an outer frame and an inner frame are not
   /// the same count of anything (docs/14 §2).
-  PlatformInt64? nestedEntryFrame({required PlatformInt64 outerFrame}) =>
+  int? nestedEntryFrame({required int outerFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceNestedEntryFrame(
           that: this, outerFrame: outerFrame);
 
@@ -3946,7 +3944,7 @@ class LayerReference {
   /// `at_frame` is a **comp** frame; the shift is worked out in the target
   /// layer's own local time, so pasting onto a layer that starts later does
   /// not double-count its offset.
-  void pasteEffects({required String text, required PlatformInt64 atFrame}) =>
+  void pasteEffects({required String text, required int atFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteEffects(
           that: this, text: text, atFrame: atFrame);
 
@@ -4042,7 +4040,7 @@ class LayerReference {
   /// a clone of the document, down the ordinary transport, nothing
   /// committed.
   void renderView(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required int width,
           required int height,
@@ -4058,7 +4056,7 @@ class LayerReference {
           view: view);
 
   /// Move this layer to `new_index` in the stack (0 = top).
-  void reorder({required BigInt newIndex}) => BridgeLib.instance.api
+  void reorder({required int newIndex}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceReorder(that: this, newIndex: newIndex);
 
   /// Move `effect` to `new_index` in the stack — drag-to-reorder.
@@ -4068,8 +4066,7 @@ class LayerReference {
   /// the list is an ordinary thing for a pointer to do, and refusing it would
   /// leave the effect where it started with no explanation.
   void reorderEffect(
-          {required BridgeEffectInstance effect,
-          required PlatformInt64 newIndex}) =>
+          {required BridgeEffectInstance effect, required int newIndex}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceReorderEffect(
           that: this, effect: effect, newIndex: newIndex);
 
@@ -4103,7 +4100,7 @@ class LayerReference {
           {required List<double> points,
           required double radius,
           required BridgeRotoStrokeKind kind,
-          required PlatformInt64 frame}) =>
+          required int frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceRotoFirstStroke(
           that: this, points: points, radius: radius, kind: kind, frame: frame);
 
@@ -4483,7 +4480,7 @@ class LayerReference {
   /// **The layer does not move.** Its transform is rewritten in the same
   /// undo step so it sits where it sat at `frame`, the playhead. Only what
   /// the parent does afterwards carries it.
-  void setParent({UuidValue? parent, required PlatformInt64 frame}) =>
+  void setParent({UuidValue? parent, required int frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
           that: this, parent: parent, frame: frame);
 
@@ -4690,9 +4687,9 @@ class LayerReference {
   /// frames.
   void slideClip(
           {required UuidValue clip,
-          required PlatformInt64 toFrame,
+          required int toFrame,
           required bool overlap,
-          required PlatformInt64 nudgeTicks}) =>
+          required int nudgeTicks}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSlideClip(
           that: this,
           clip: clip,
@@ -4718,9 +4715,8 @@ class LayerReference {
   /// `frame` must land strictly inside the layer's span: cutting at either end
   /// would make a layer of no length, so it is a calm error rather than a
   /// zero-length layer nobody asked for.
-  LayerReference splitAt({required PlatformInt64 frame}) =>
-      BridgeLib.instance.api
-          .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
+  LayerReference splitAt({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
 
   /// **Split audio streams**: give every audio stream this layer sounds a
   /// row of its own.
@@ -4779,8 +4775,8 @@ class LayerReference {
   /// dragging a clip's edge with Shift held does.
   void stretchClip(
           {required UuidValue clip,
-          required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame}) =>
+          required int startFrame,
+          required int endFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStretchClip(
           that: this, clip: clip, startFrame: startFrame, endFrame: endFrame);
 
@@ -4850,8 +4846,8 @@ class LayerReference {
   /// is not refused. Nothing else on the row moves: no ripple, ever.
   void trimClip(
           {required UuidValue clip,
-          required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame}) =>
+          required int startFrame,
+          required int endFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceTrimClip(
           that: this, clip: clip, startFrame: startFrame, endFrame: endFrame);
 

@@ -177,11 +177,16 @@ fn run(rx: &Receiver<Job>) {
 /// we can read at all — which is the same answer a probe of it would give.
 #[cfg(feature = "media")]
 fn stamp(path: &Path) -> Option<Stamp> {
-    let meta = std::fs::metadata(path).ok()?;
-    if !meta.is_file() {
+    // A file the browser build's page holds never changes under its path.
+    #[cfg(target_arch = "wasm32")]
+    if lumit_media::is_file(path) && lumit_ingress::files::len(path).is_err() {
+        return Some((0, None));
+    }
+    if !lumit_ingress::files::is_file(path) {
         return None;
     }
-    Some((meta.len(), meta.modified().ok()))
+    let len = lumit_ingress::files::len(path).ok()?;
+    Some((len, lumit_ingress::files::modified(path).ok()))
 }
 
 /// Open the container and read its statistics. The one place this crate calls

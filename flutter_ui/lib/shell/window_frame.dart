@@ -18,7 +18,7 @@
 // macOS keeps its title bar. Its menus are in the system's bar, so Lumit has
 // no line of its own there to put the buttons in.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -29,14 +29,19 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
 
 /// Whether Lumit draws the window's buttons itself here. Asked of the target
-/// platform, so a widget test draws none unless it says it is a desktop.
+/// platform, so a widget test draws none unless it says it is a desktop. In a
+/// browser the window is the browser's.
 bool get windowFrameDrawn =>
-    defaultTargetPlatform == TargetPlatform.windows ||
-    (defaultTargetPlatform == TargetPlatform.linux && _startedWithOwnTitleBar);
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+        (defaultTargetPlatform == TargetPlatform.linux &&
+            _startedWithOwnTitleBar));
 
 /// On Linux, the file whose being there turns Lumit's own title bar on. A file
 /// rather than a setting in the store, because the runner reads it before the

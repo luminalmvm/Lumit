@@ -5,6 +5,7 @@
 // It is one function because the menu is one gesture: the rows it draws and
 // the work it does after the click are two halves of the same answer.
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -267,7 +268,7 @@ Future<void> showProjectMenuFrb({
               child: Text(
                   missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
             ),
-          if (isFootage && !missing)
+          if (isFootage && !missing && !kIsWeb)
             MenuRow(
               key: const ValueKey('project-menu-reveal'),
               onPressed: () => close(_ProjectMenuAction.reveal),

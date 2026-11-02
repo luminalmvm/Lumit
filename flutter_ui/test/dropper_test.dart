@@ -48,7 +48,7 @@ BridgeSampledPixels windowOf(
     height: height,
     x: cx,
     y: cy,
-    frame: BigInt.zero,
+    frame: 0,
     view: 0,
     layerAlone: layerAlone,
   );

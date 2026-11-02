@@ -12,12 +12,10 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data' show BytesBuilder;
 
 import 'package:crypto/crypto.dart';
-import 'package:ffi/ffi.dart' show calloc;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
@@ -27,6 +25,10 @@ import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The version of the messages below. Raised when one changes meaning, and
 /// what `app.info` tells a page so it can tell an older Lumit from a newer.
@@ -288,7 +290,7 @@ class ExtensionHost with WidgetsBindingObserver {
 
   /// Whether Lumit is the app in front.
   bool _focused() => Platform.isWindows
-      ? _lumitInFront()
+      ? lumitInFront()
       : WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   void _tellFocus() {
@@ -791,31 +793,6 @@ String _oneLine(String text) {
   return runes.length <= 80
       ? plain
       : String.fromCharCodes(runes.take(80)).trimRight();
-}
-
-typedef _ForegroundC = IntPtr Function();
-typedef _ForegroundD = int Function();
-typedef _OwnerC = Uint32 Function(IntPtr window, Pointer<Uint32> process);
-typedef _OwnerD = int Function(int window, Pointer<Uint32> process);
-
-final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
-final _foreground =
-    _user32.lookupFunction<_ForegroundC, _ForegroundD>('GetForegroundWindow');
-final _owner =
-    _user32.lookupFunction<_OwnerC, _OwnerD>('GetWindowThreadProcessId');
-
-/// Whether the window in front is one of Lumit's, on Windows. A page is
-/// inside Lumit's window, so a press in one leaves it in front.
-bool _lumitInFront() {
-  final window = _foreground();
-  if (window == 0) return false;
-  final process = calloc<Uint32>();
-  try {
-    _owner(window, process);
-    return process.value == pid;
-  } finally {
-    calloc.free(process);
-  }
 }
 
 /// What a page is given before any of its own script runs: `window.lumit`,

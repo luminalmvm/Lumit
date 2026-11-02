@@ -12,7 +12,12 @@
 // checked anyway, so a `file:` or a `javascript:` cannot be handed to the
 // desktop by a caller that meant a web page.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
 
 /// The documentation site, and the page that walks a newcomer through their
 /// first composition. Both are real pages on `web-docs/`; the sidebar
@@ -53,6 +58,8 @@ Future<bool> Function(String url) openExternalLink = launchInDefaultBrowser;
 /// line instead.
 Future<bool> launchInDefaultBrowser(String url) async {
   if (!_isWebAddress(url)) return false;
+  // A page hands the link to the browser it is in.
+  if (kIsWeb) return openInTab(url);
   try {
     switch (Platform.operatingSystem) {
       case 'windows':

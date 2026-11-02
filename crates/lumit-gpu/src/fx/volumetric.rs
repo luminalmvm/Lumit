@@ -72,7 +72,7 @@ pub(super) struct HazeFx {
 /// The passes, compiled on the pool with the rest of the engine but never
 /// waited for until a comp first shows a light in the air.
 pub(super) struct HazeSlot {
-    compiling: std::sync::Mutex<Option<crate::Compiling<HazeFx>>>,
+    compiling: std::sync::Mutex<Option<crate::compiling::Compiling<HazeFx>>>,
     ready: std::sync::OnceLock<HazeFx>,
 }
 
@@ -81,7 +81,7 @@ impl HazeSlot {
         let device = ctx.device.clone();
         let working = ctx.working();
         Self {
-            compiling: std::sync::Mutex::new(Some(crate::Compiling::start(move || {
+            compiling: std::sync::Mutex::new(Some(crate::compiling::Compiling::start(move || {
                 HazeFx::new(&device, working)
             }))),
             ready: std::sync::OnceLock::new(),
@@ -93,7 +93,7 @@ impl HazeSlot {
             let started = self.compiling.lock().ok().and_then(|mut c| c.take());
             started.map_or_else(
                 || HazeFx::new(&ctx.device, ctx.working()),
-                crate::Compiling::wait,
+                crate::compiling::Compiling::wait,
             )
         })
     }

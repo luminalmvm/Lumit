@@ -363,7 +363,7 @@ class LayerBoundsCache extends ChangeNotifier {
   /// second one.
   final Set<UuidValue> _probing = {};
 
-  BigInt? _revision;
+  int? _revision;
 
   /// The probed sizes, in the shape the engine's wireframe call takes: its own
   /// probe lives on the worker and that call runs on the caller's thread, so
@@ -384,7 +384,7 @@ class LayerBoundsCache extends ChangeNotifier {
   /// The probed media sizes survive: what a *file* measures does not depend on
   /// the document, and re-probing on every edit would put FFmpeg in the paint
   /// path.
-  void _atRevision(BigInt? revision) {
+  void _atRevision(int? revision) {
     if (revision == _revision) return;
     _revision = revision;
     _byLayer.clear();
@@ -418,7 +418,7 @@ class LayerBoundsCache extends ChangeNotifier {
   Size boundsOf(
     BridgeLayerEntry entry, {
     required BridgeCompSize compSize,
-    required BigInt? revision,
+    required int? revision,
     double t = 0,
   }) {
     _atRevision(revision);

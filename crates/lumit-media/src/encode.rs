@@ -11,14 +11,29 @@
 //! because a GPU said no. Audio joins as AAC in the same file, interleaved
 //! with the video so players can stream it.
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::MediaError;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avformat::AVFormatContextOutput;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avutil::{AVChannelLayout, AVDictionary, AVFrame, AVRational};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::swscale::SwsContext;
+#[cfg(not(target_arch = "wasm32"))]
 use std::ffi::{CStr, CString};
 use std::path::Path;
+
+#[cfg(not(target_arch = "wasm32"))]
+mod planes;
+#[cfg(not(target_arch = "wasm32"))]
+use planes::{
+    blank_frame, copy_pixels_into, copy_planar_f32_into, f32_to_i16, f32_to_i32, frame_len,
+    plane_f32_mut, plane_i16_mut, plane_i32_mut,
+};
 
 /// Delivery codec choice (docs/06-RENDER-PIPELINE.md §7.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -113,6 +128,7 @@ pub enum ColourTags {
     Unspecified,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ColourTags {
     /// `(colour_primaries, transfer_characteristics, matrix_coefficients)` as
     /// the ISO/IEC 23091-2 code points FFmpeg's `AVCOL_*` enumerations mirror.
@@ -169,6 +185,7 @@ impl ColourTags {
 ///
 /// The range is always **limited** (`AVCOL_RANGE_MPEG`): that is what a
 /// YCbCr delivery codec writes, and saying so beats leaving it unset.
+#[cfg(not(target_arch = "wasm32"))]
 fn set_colour_tags(ctx: &mut AVCodecContext, tags: ColourTags) {
     let (pri, trc, spc) = tags.av();
     // SAFETY: `as_mut_ptr` yields the context this wrapper exclusively owns (no
@@ -187,6 +204,7 @@ fn set_colour_tags(ctx: &mut AVCodecContext, tags: ColourTags) {
 
 /// The same statement on one frame. ProRes writes each frame's header from the
 /// frame, not the context, and leaves it unknown otherwise.
+#[cfg(not(target_arch = "wasm32"))]
 fn stamp_colour(frame: &mut AVFrame, tags: ColourTags) {
     let (pri, trc, spc) = tags.av();
     // SAFETY: the frame is ours alone and these are plain enum fields.
@@ -286,6 +304,7 @@ pub enum AudioCodec {
 }
 
 impl AudioCodec {
+    #[cfg(not(target_arch = "wasm32"))]
     fn codec_id(self) -> ffi::AVCodecID {
         match self {
             AudioCodec::Aac => ffi::AV_CODEC_ID_AAC,
@@ -297,6 +316,7 @@ impl AudioCodec {
     /// The sample format the encoder is fed: AAC takes planar float, 16-bit
     /// PCM takes packed 16-bit, and 24-bit PCM takes packed 32-bit (FFmpeg's
     /// `pcm_s24le` keeps the top three bytes of each sample).
+    #[cfg(not(target_arch = "wasm32"))]
     fn sample_fmt(self) -> i32 {
         match self {
             AudioCodec::Aac => ffi::AV_SAMPLE_FMT_FLTP,
@@ -441,6 +461,7 @@ pub fn pick_first_working<'a>(
 /// The pixel format each encoder is fed. Quick Sync and VAAPI take NV12 only;
 /// everything else on the H.264 and HEVC ladders accepts planar 4:2:0. ProRes
 /// is ten-bit: 4:4:4 with alpha for the 4444 kinds, 4:2:2 for the rest.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
     match codec {
         c if c.has_alpha() => ffi::AV_PIX_FMT_YUVA444P10LE,
@@ -496,6 +517,7 @@ impl ImageFormat {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn codec_id(self) -> ffi::AVCodecID {
         match self {
             ImageFormat::Png => ffi::AV_CODEC_ID_PNG,
@@ -514,6 +536,7 @@ impl ImageFormat {
     /// float depth was asked for, and the encoder's own `format` option decides
     /// whether the file stores half or full — so the pack stage hands over one
     /// shape and the file carries whichever was chosen.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn pix_fmt(self, depth: BitDepth) -> i32 {
         match (self, depth) {
             (ImageFormat::Exr, _) => ffi::AV_PIX_FMT_GBRAPF32LE,
@@ -525,12 +548,14 @@ impl ImageFormat {
 
     /// Whether [`Self::pix_fmt`] wants the pack stage's little-endian samples
     /// byte-swapped on the way in.
+    #[cfg(not(target_arch = "wasm32"))]
     fn swaps_16(self, depth: BitDepth) -> bool {
         depth == BitDepth::Sixteen && self == ImageFormat::Png
     }
 
     /// The value for the EXR encoder's `format` option: 1 half, 2 float
     /// (`ffmpeg -h encoder=exr`). `None` for a format that has no such option.
+    #[cfg(not(target_arch = "wasm32"))]
     fn exr_pixel_type(self, depth: BitDepth) -> Option<i64> {
         (self == ImageFormat::Exr).then_some(match depth {
             BitDepth::Float => 2,
@@ -564,11 +589,16 @@ pub fn sequence_frame_path(path: &Path, n: usize) -> std::path::PathBuf {
     path.with_file_name(format!("{stem}.{n:05}.{ext}"))
 }
 
+/// The browser build has no FFmpeg, so nothing is ever written this way there.
+#[cfg(target_arch = "wasm32")]
+pub struct ImageSequenceEncoder(pub(crate) std::convert::Infallible);
+
 /// Writes one image file per frame through FFmpeg's image2 muxer — the same
 /// packet path the mp4 encoder uses, so there is no second way to be wrong
 /// about timestamps or draining. No scaler and no audio: the frames are
 /// already RGBA (both image codecs take it directly), and a folder of stills
 /// has nowhere for sound to go.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct ImageSequenceEncoder {
     output: AVFormatContextOutput,
     video: AVCodecContext,
@@ -582,6 +612,7 @@ pub struct ImageSequenceEncoder {
     finished: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ImageSequenceEncoder {
     /// Open a sequence at `path` (e.g. `shot.png` — the numbered pattern is
     /// derived beside it), sized `width`×`height`, stamped at `fps_num/fps_den`,
@@ -746,6 +777,7 @@ pub enum GifDither {
     None,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl GifDither {
     /// `paletteuse`'s own name for it.
     fn filter_value(self) -> &'static str {
@@ -769,6 +801,10 @@ pub struct GifOptions {
     pub plays: Option<u32>,
 }
 
+/// The browser build has no FFmpeg, so nothing is ever written this way there.
+#[cfg(target_arch = "wasm32")]
+pub struct GifEncoder(pub(crate) std::convert::Infallible);
+
 /// Writes an animated `.gif`. GIF holds 256 colours a frame, so FFmpeg's
 /// `palettegen` picks them and `paletteuse` dithers the picture onto them,
 /// the same pair the GIF converters use. A pixel under half alpha is written
@@ -777,6 +813,7 @@ pub struct GifOptions {
 /// One palette for the whole GIF can only be made once every frame has been
 /// seen, so the frames wait in a temporary file rather than in memory, and
 /// are written out at [`Self::finish`].
+#[cfg(not(target_arch = "wasm32"))]
 pub struct GifEncoder {
     output: AVFormatContextOutput,
     video: AVCodecContext,
@@ -797,7 +834,7 @@ pub struct GifEncoder {
 /// is an array, and an array argument arrives as a pointer to its first item.
 #[cfg(all(target_arch = "x86_64", not(windows)))]
 type VaList = *mut ffi::__va_list_tag;
-#[cfg(not(all(target_arch = "x86_64", not(windows))))]
+#[cfg(not(any(all(target_arch = "x86_64", not(windows)), target_arch = "wasm32")))]
 type VaList = ffi::va_list;
 
 /// palettegen says how many colours it made at info level, which with a
@@ -807,6 +844,7 @@ type VaList = ffi::va_list;
 /// field is its `AVClass` pointer, which may be null. `item_name` gives a
 /// string that lives at least as long as the context. `fmt` and `vl` are
 /// handed on to FFmpeg's own logger untouched, as it would have been called.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 unsafe extern "C" fn quiet_palettegen(
     avcl: *mut std::ffi::c_void,
@@ -836,6 +874,7 @@ unsafe extern "C" fn quiet_palettegen(
 /// Send FFmpeg's log through [`quiet_palettegen`], once per process.
 ///
 /// SAFETY: the callback is a plain function that lives for the program.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 fn quieten_palettegen() {
     static ONCE: std::sync::Once = std::sync::Once::new();
@@ -846,12 +885,17 @@ fn quieten_palettegen() {
 /// what went wrong in its own words.
 ///
 /// SAFETY: setting the level is a plain store FFmpeg reads before each line.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 pub fn quiet_ffmpeg_log() {
     unsafe { ffi::av_log_set_level(ffi::AV_LOG_QUIET as std::ffi::c_int) };
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn quiet_ffmpeg_log() {}
+
 /// Add one filter to `graph`, named `name`.
+#[cfg(not(target_arch = "wasm32"))]
 fn add_filter<'g>(
     graph: &'g rsmpeg::avfilter::AVFilterGraph,
     filter: &CStr,
@@ -871,6 +915,7 @@ fn add_filter<'g>(
 }
 
 /// The arguments for a `buffer` source taking `w`×`h` frames of `pix_fmt`.
+#[cfg(not(target_arch = "wasm32"))]
 fn buffer_args(w: i32, h: i32, pix_fmt: i32, time_base: AVRational) -> String {
     format!(
         "video_size={w}x{h}:pix_fmt={pix_fmt}:time_base={}/{}:pixel_aspect=1/1",
@@ -878,6 +923,7 @@ fn buffer_args(w: i32, h: i32, pix_fmt: i32, time_base: AVRational) -> String {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn link(
     from: &mut rsmpeg::avfilter::AVFilterContextMut,
     from_pad: u32,
@@ -890,6 +936,7 @@ fn link(
 
 /// Hand a frame (or the end, for `None`) to the source named `source`, and
 /// collect everything the sink lets out.
+#[cfg(not(target_arch = "wasm32"))]
 fn push(
     graph: &rsmpeg::avfilter::AVFilterGraph,
     source: &CStr,
@@ -913,6 +960,7 @@ fn push(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl GifEncoder {
     /// Open `path`, sized `width`×`height`, at `fps_num/fps_den`. Frames are
     /// eight-bit RGBA.
@@ -1157,6 +1205,7 @@ impl GifEncoder {
 }
 
 /// The audio half of the muxer: AAC context plus the sample bookkeeping.
+#[cfg(not(target_arch = "wasm32"))]
 struct AudioTrack {
     ctx: AVCodecContext,
     codec: AudioCodec,
@@ -1174,6 +1223,7 @@ struct AudioTrack {
 }
 
 /// The video half of the muxer: encoder context plus its frame bookkeeping.
+#[cfg(not(target_arch = "wasm32"))]
 struct VideoTrack {
     ctx: AVCodecContext,
     encoder: &'static str,
@@ -1188,6 +1238,11 @@ struct VideoTrack {
     colour: ColourTags,
 }
 
+/// The browser build has no FFmpeg, so nothing is ever written this way there.
+#[cfg(target_arch = "wasm32")]
+pub struct Encoder(pub(crate) std::convert::Infallible);
+
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Encoder {
     output: AVFormatContextOutput,
     video: Option<VideoTrack>,
@@ -1198,6 +1253,7 @@ pub struct Encoder {
     finished: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Encoder {
     /// Open a container: video per `video`, audio per `audio`, container
     /// metadata per `metadata`. The video encoder is the first ladder rung
@@ -1433,6 +1489,7 @@ impl Encoder {
 }
 
 /// Run the encoder ladder and add the video stream to the container.
+#[cfg(not(target_arch = "wasm32"))]
 fn open_video(
     output: &mut AVFormatContextOutput,
     video: &VideoSettings,
@@ -1524,6 +1581,7 @@ fn open_video(
 /// across the machine's cores. On one core it took longer at 4K than the
 /// encoder did. Each slice works its rows out of the whole picture, so the
 /// bytes are the same.
+#[cfg(not(target_arch = "wasm32"))]
 fn sliced_scaler(width: i32, height: i32, from: i32, to: i32) -> Result<SwsContext, MediaError> {
     let failed = || MediaError::Ffmpeg("swscale for encode".into());
     // SAFETY: the context is owned by the wrapper as soon as it exists, so it
@@ -1554,6 +1612,7 @@ fn sliced_scaler(width: i32, height: i32, from: i32, to: i32) -> Result<SwsConte
 /// Write the container's metadata dictionary (docs/06 §7.6), in the order the
 /// [`Metadata`] set holds — an export is deterministic (docs/06 §7.3) and
 /// these bytes land in the file.
+#[cfg(not(target_arch = "wasm32"))]
 fn set_container_metadata(output: &mut AVFormatContextOutput, metadata: &Metadata) {
     if metadata.is_empty() {
         return;
@@ -1591,6 +1650,7 @@ fn set_container_metadata(output: &mut AVFormatContextOutput, metadata: &Metadat
 /// Configure and open one video encoder context. Shared by the test encode
 /// and the real open so a rung is only picked with the exact options it will
 /// run with.
+#[cfg(not(target_arch = "wasm32"))]
 fn build_video_ctx(
     name: &str,
     v: &VideoSettings,
@@ -1663,6 +1723,7 @@ fn build_video_ctx(
 /// fail late and weirdly — a build can carry NVENC on a machine with no
 /// NVIDIA driver, or the driver can be out of sessions). Errors mean "next
 /// rung, please", never a failed export.
+#[cfg(not(target_arch = "wasm32"))]
 fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
     let mut ctx = build_video_ctx(name, v, false)?;
     let blank = blank_frame(pix_fmt_for(v.codec, name), v.width, v.height)?;
@@ -1677,6 +1738,7 @@ fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
 }
 
 /// Pull and drop every ready packet from a test-encode context.
+#[cfg(not(target_arch = "wasm32"))]
 fn discard_packets(ctx: &mut AVCodecContext, at_eof: bool) -> Result<(), MediaError> {
     loop {
         match ctx.receive_packet() {
@@ -1690,6 +1752,7 @@ fn discard_packets(ctx: &mut AVCodecContext, at_eof: bool) -> Result<(), MediaEr
 }
 
 /// Open the audio encoder and add its stream to the container.
+#[cfg(not(target_arch = "wasm32"))]
 fn open_audio(
     output: &mut AVFormatContextOutput,
     a: &AudioSettings,
@@ -1739,6 +1802,7 @@ fn open_audio(
 /// Encode every whole AAC frame waiting in the track's pending buffer; at
 /// EOF the final partial frame is padded with silence to a whole frame
 /// (safer across encoders than a short last frame).
+#[cfg(not(target_arch = "wasm32"))]
 fn pump_audio(
     track: &mut AudioTrack,
     output: &mut AVFormatContextOutput,
@@ -1767,6 +1831,7 @@ fn pump_audio(
 }
 
 /// Encode exactly one AAC frame's worth of interleaved samples.
+#[cfg(not(target_arch = "wasm32"))]
 fn encode_audio_frame(
     track: &mut AudioTrack,
     output: &mut AVFormatContextOutput,
@@ -1831,6 +1896,7 @@ fn encode_audio_frame(
 /// the other stream and rescaled from the encoder's timebase to the
 /// stream's (docs/impl/media-io.md pins the timebase discipline: rescale at
 /// the mux boundary, never guess).
+#[cfg(not(target_arch = "wasm32"))]
 fn drain_packets(
     ctx: &mut AVCodecContext,
     output: &mut AVFormatContextOutput,
@@ -1872,6 +1938,7 @@ fn drain_packets(
 
 /// Name the step an FFmpeg call failed at. The code alone reads the same for a
 /// bad file name, a refused header and a failed write.
+#[cfg(not(target_arch = "wasm32"))]
 fn at(step: &'static str) -> impl Fn(rsmpeg::error::RsmpegError) -> MediaError {
     move |e| MediaError::Ffmpeg(format!("{step}: {e}"))
 }
@@ -1879,6 +1946,7 @@ fn at(step: &'static str) -> impl Fn(rsmpeg::error::RsmpegError) -> MediaError {
 /// Append `key = value` to an FFmpeg options dictionary (creating it on
 /// first use). Keys/values with interior NULs are silently skipped — they
 /// cannot come from our static tables.
+#[cfg(not(target_arch = "wasm32"))]
 fn dict_set(dict: Option<AVDictionary>, key: &str, value: &str) -> Option<AVDictionary> {
     let (Ok(k), Ok(v)) = (CString::new(key), CString::new(value)) else {
         return dict;
@@ -1892,6 +1960,7 @@ fn dict_set(dict: Option<AVDictionary>, key: &str, value: &str) -> Option<AVDict
 /// Write the profile and VBR-peak fields rsmpeg's safe setters do not cover:
 /// one audited raw-struct touch, before `open`, on a context we exclusively
 /// own — the same discipline as the plane helpers below.
+#[cfg(not(target_arch = "wasm32"))]
 fn set_rate_and_profile(ctx: &mut AVCodecContext, profile: Option<i32>, max_rate: Option<i64>) {
     // SAFETY: `as_mut_ptr` yields the context this wrapper exclusively owns
     // (no FFmpeg call is running concurrently), and `profile`,
@@ -1911,261 +1980,6 @@ fn set_rate_and_profile(ctx: &mut AVCodecContext, profile: Option<i32>, max_rate
                 i32::try_from(peak.saturating_mul(2).min(i64::from(i32::MAX))).unwrap_or(i32::MAX);
         }
     }
-}
-
-/// A black frame in the encoder's own pixel format, used by the test encode.
-fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaError> {
-    let mut frame = AVFrame::new();
-    let w = i32::try_from(width).map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
-    let h =
-        i32::try_from(height).map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
-    frame.set_width(w);
-    frame.set_height(h);
-    frame.set_format(pix_fmt);
-    frame
-        .alloc_buffer()
-        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-    let rows = usize::try_from(h).unwrap_or(0);
-    let chroma_rows = rows.div_ceil(2);
-    // The ten-bit ProRes layouts: every plane is full height, and zero is a
-    // valid sample, which is all a test encode needs.
-    if matches!(
-        pix_fmt,
-        ffi::AV_PIX_FMT_YUV422P10LE | ffi::AV_PIX_FMT_YUVA444P10LE
-    ) {
-        let planes = if pix_fmt == ffi::AV_PIX_FMT_YUVA444P10LE {
-            4
-        } else {
-            3
-        };
-        for p in 0..planes {
-            fill_plane(frame.data[p], frame.linesize[p], rows, 0)?;
-        }
-        return Ok(frame);
-    }
-    // Y = 16, chroma = 128 is video-range black for both layouts we feed.
-    fill_plane(frame.data[0], frame.linesize[0], rows, 16)?;
-    match pix_fmt {
-        ffi::AV_PIX_FMT_NV12 => {
-            fill_plane(frame.data[1], frame.linesize[1], chroma_rows, 128)?;
-        }
-        _ => {
-            fill_plane(frame.data[1], frame.linesize[1], chroma_rows, 128)?;
-            fill_plane(frame.data[2], frame.linesize[2], chroma_rows, 128)?;
-        }
-    }
-    Ok(frame)
-}
-
-/// Fill one frame plane with a byte value — a raw-pointer touch, kept small
-/// and auditable like `copy_pixels_into`.
-fn fill_plane(ptr: *mut u8, linesize: i32, rows: usize, value: u8) -> Result<(), MediaError> {
-    if ptr.is_null() {
-        return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
-    }
-    let stride = usize::try_from(linesize).unwrap_or(0);
-    let len = stride
-        .checked_mul(rows)
-        .ok_or_else(|| MediaError::Ffmpeg("frame plane size overflows".into()))?;
-    // SAFETY: the frame was just filled by `alloc_buffer`, which allocates at
-    // least `linesize * rows` bytes per plane; `stride` and `rows` are read
-    // from that same frame, and the null check above rules out the one case
-    // rsmpeg cannot statically guarantee.
-    #[allow(unsafe_code)]
-    let dst = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
-    dst.fill(value);
-    Ok(())
-}
-
-/// View an audio plane as `len` f32 samples — the audio twin of
-/// `fill_plane`, with the same null discipline plus an alignment check.
-fn plane_f32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [f32], MediaError> {
-    if ptr.is_null() {
-        return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
-    }
-    if !(ptr as usize).is_multiple_of(std::mem::align_of::<f32>()) {
-        return Err(MediaError::Ffmpeg("audio plane misaligned".into()));
-    }
-    // SAFETY: the frame was just filled by `alloc_buffer` with
-    // `nb_samples >= len` samples of AV_SAMPLE_FMT_FLTP (4 bytes each), the
-    // null and alignment checks above hold, and FFmpeg's allocator aligns
-    // planes far beyond 4 bytes.
-    #[allow(unsafe_code)]
-    unsafe {
-        Ok(std::slice::from_raw_parts_mut(ptr.cast::<f32>(), len))
-    }
-}
-
-/// View an audio plane as `len` i16 samples — the packed-PCM twin of
-/// [`plane_f32_mut`], with the same null and alignment discipline.
-fn plane_i16_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i16], MediaError> {
-    if ptr.is_null() {
-        return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
-    }
-    if !(ptr as usize).is_multiple_of(std::mem::align_of::<i16>()) {
-        return Err(MediaError::Ffmpeg("audio plane misaligned".into()));
-    }
-    // SAFETY: the frame was just filled by `alloc_buffer` with `nb_samples`
-    // samples of AV_SAMPLE_FMT_S16 across two channels in one packed plane
-    // (`len` i16s, 2 bytes each); the null and alignment checks above hold,
-    // and FFmpeg's allocator aligns planes far beyond 2 bytes.
-    #[allow(unsafe_code)]
-    unsafe {
-        Ok(std::slice::from_raw_parts_mut(ptr.cast::<i16>(), len))
-    }
-}
-
-/// View an audio plane as `len` i32 samples — the 24-bit twin of
-/// [`plane_i16_mut`], with the same null and alignment discipline.
-fn plane_i32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i32], MediaError> {
-    if ptr.is_null() {
-        return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
-    }
-    if !(ptr as usize).is_multiple_of(std::mem::align_of::<i32>()) {
-        return Err(MediaError::Ffmpeg("audio plane misaligned".into()));
-    }
-    // SAFETY: the frame was just filled by `alloc_buffer` with `nb_samples`
-    // samples of AV_SAMPLE_FMT_S32 across the track's channels in one packed
-    // plane (`len` i32s, 4 bytes each); the null and alignment checks above
-    // hold, and FFmpeg's allocator aligns planes far beyond 4 bytes.
-    #[allow(unsafe_code)]
-    unsafe {
-        Ok(std::slice::from_raw_parts_mut(ptr.cast::<i32>(), len))
-    }
-}
-
-/// One float sample as a signed 32-bit PCM word, whose top three bytes are
-/// what `pcm_s24le` writes. Full scale is 8388607 in the written 24 bits, so
-/// the shift lands each sample exactly where the encoder reads it — the same
-/// clip-not-wrap rule as [`f32_to_i16`].
-fn f32_to_i32(s: f32) -> i32 {
-    ((f64::from(s.clamp(-1.0, 1.0)) * 8_388_607.0).round() as i32) << 8
-}
-
-/// One float sample as signed 16-bit PCM: full scale is 32767, and anything
-/// past ±1.0 clips rather than wrapping (`as` on an out-of-range float
-/// saturates in Rust, but the clamp says so where a reader can see it).
-fn f32_to_i16(s: f32) -> i16 {
-    (s.clamp(-1.0, 1.0) * 32767.0).round() as i16
-}
-
-/// Exact byte length of one packed frame at `bytes_per_px`, checked against
-/// overflow so a nonsensical width/height (bad caller input, not file input,
-/// but the rule is the same: no panics — docs/14-ENGINEERING-RULES.md §4)
-/// errors instead of overflowing `i32` arithmetic.
-fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, MediaError> {
-    let bytes = i32::try_from(bytes_per_px)
-        .map_err(|_| MediaError::Ffmpeg("frame dimensions overflow".into()))?;
-    width
-        .checked_mul(height)
-        .and_then(|px| px.checked_mul(bytes))
-        .and_then(|len| usize::try_from(len).ok())
-        .ok_or_else(|| MediaError::Ffmpeg("frame dimensions overflow".into()))
-}
-
-/// Scatter interleaved scene-linear float RGBA into a planar `gbrapf32le`
-/// frame — the one shape OpenEXR's encoder takes.
-///
-/// The mirror of the float decode's interleave (docs/impl/media-io.md §5a):
-/// G, B, R, A planes out of R, G, B, A samples in, four bytes moved per
-/// sample and nothing converted.
-fn copy_planar_f32_into(
-    frame: &mut AVFrame,
-    rgba: &[u8],
-    width: i32,
-    height: i32,
-) -> Result<(), MediaError> {
-    let w = usize::try_from(width).unwrap_or(0);
-    let h = usize::try_from(height).unwrap_or(0);
-    let row = w.saturating_mul(4);
-    if rgba.len() < w.saturating_mul(h).saturating_mul(16) {
-        return Err(MediaError::Ffmpeg(
-            "float buffer too small for frame".into(),
-        ));
-    }
-    // Plane order is G, B, R, A; the source is R, G, B, A.
-    for (plane, channel) in [(0usize, 1usize), (1, 2), (2, 0), (3, 3)] {
-        let stride = usize::try_from(frame.linesize[plane]).unwrap_or(0);
-        if stride < row {
-            return Err(MediaError::Ffmpeg(
-                "encode frame stride smaller than one row".into(),
-            ));
-        }
-        let Some(ptr) = frame.data.get(plane).copied().filter(|p| !p.is_null()) else {
-            return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
-        };
-        let buf_len = stride
-            .checked_mul(h)
-            .ok_or_else(|| MediaError::Ffmpeg("encode frame buffer size overflow".into()))?;
-        // SAFETY: `frame` was just filled by `alloc_buffer` in `write_rgba`,
-        // which allocates at least `linesize[i] * height` bytes for each plane
-        // this format has; `stride`/`h` are read from that same frame, the null
-        // check above rules out the one case rsmpeg cannot statically
-        // guarantee, and the stride check keeps every write below in bounds.
-        #[allow(unsafe_code)]
-        let dst = unsafe { std::slice::from_raw_parts_mut(ptr, buf_len) };
-        for y in 0..h {
-            for x in 0..w {
-                let from = (y * w + x) * 16 + channel * 4;
-                let to = y * stride + x * 4;
-                let Some(sample) = rgba.get(from..from + 4) else {
-                    continue;
-                };
-                dst[to..to + 4].copy_from_slice(sample);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Copy tight packed rows into the (possibly padded) AVFrame planes, any pixel
-/// size, optionally swapping each `u16` sample's two bytes on the way (the
-/// big-endian still formats). The one raw-pointer touch of the frame paths,
-/// kept small and auditable.
-fn copy_pixels_into(
-    frame: &mut AVFrame,
-    rgba: &[u8],
-    width: i32,
-    height: i32,
-    bytes_per_px: usize,
-    swap16: bool,
-) -> Result<(), MediaError> {
-    let stride = usize::try_from(frame.linesize[0]).unwrap_or(0);
-    let row = usize::try_from(width)
-        .unwrap_or(0)
-        .saturating_mul(bytes_per_px);
-    let height = usize::try_from(height).unwrap_or(0);
-    if stride < row {
-        return Err(MediaError::Ffmpeg(
-            "encode frame stride smaller than one row".into(),
-        ));
-    }
-    if frame.data[0].is_null() {
-        return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
-    }
-    let buf_len = stride
-        .checked_mul(height)
-        .ok_or_else(|| MediaError::Ffmpeg("encode frame buffer size overflow".into()))?;
-    if rgba.len() < row.saturating_mul(height) {
-        return Err(MediaError::Ffmpeg("rgba buffer too small for frame".into()));
-    }
-    // SAFETY: `frame` was just filled by `alloc_buffer` in `write_rgba`,
-    // which allocates at least `linesize[0] * height` bytes for plane 0;
-    // `stride`/`height` are read from that same frame, the null check above
-    // rules out the one case rsmpeg cannot statically guarantee, and the
-    // stride/row check makes every row write below stay in bounds.
-    #[allow(unsafe_code)]
-    let dst = unsafe { std::slice::from_raw_parts_mut(frame.data[0], buf_len) };
-    for y in 0..height {
-        let line = &mut dst[y * stride..y * stride + row];
-        line.copy_from_slice(&rgba[y * row..(y + 1) * row]);
-        if swap16 {
-            for pair in line.chunks_exact_mut(2) {
-                pair.swap(0, 1);
-            }
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

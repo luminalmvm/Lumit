@@ -58,7 +58,7 @@ void main() {
           reason: 'numbers are what the column is for');
 
       p.uiState.renderTimings.report(BridgeFrameProfile(
-        frame: BigInt.zero,
+        frame: 0,
         totalMs: 12.5,
         planMs: 0.5,
         decodeMs: 1.0,

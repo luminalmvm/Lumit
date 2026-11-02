@@ -10,12 +10,13 @@
 // stays a thing that draws what it is given: the widget knows nothing about
 // the document, and this is where the document knowledge lives.
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import '../main.dart';
 import '../src/rust/api/export.dart';
 import 'status_line_frb.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Write the frame on screen to a PNG.
 ///

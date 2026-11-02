@@ -29,7 +29,7 @@
 // discover Lumit spending their data.
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -40,6 +40,8 @@ import 'download.dart';
 import 'install_site.dart';
 import 'release_signature.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 // The download, the digest check and the plain text fetch are shared with the
 // addons page, so they live in `download.dart`. This one stays exported from

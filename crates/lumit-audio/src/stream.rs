@@ -436,8 +436,8 @@ impl Source {
 /// that is rendered depends on it.
 #[must_use]
 pub fn now() -> u64 {
-    static START: OnceLock<std::time::Instant> = OnceLock::new();
-    let start = START.get_or_init(std::time::Instant::now);
+    static START: OnceLock<web_time::Instant> = OnceLock::new();
+    let start = START.get_or_init(web_time::Instant::now);
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX - 1) + 1
 }
 

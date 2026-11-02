@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math';
 import 'dart:ui';
 
@@ -24,7 +24,10 @@ import '../theme/theme.dart';
 import '../theme/theme_tokens.dart' show applyTokens;
 import 'dock.dart';
 import 'expression_language.dart';
+import 'landed.dart';
 import 'settings.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
 /// the tone map is engaged. A record rather than a class because it is two
@@ -1970,8 +1973,10 @@ class Workspace extends ChangeNotifier {
   /// this does not notify listeners.
   void rememberProject(String path) {
     lastProjectPath = path;
+    // In the browser every open is a new folder, so the name is the file.
     recentProjects
-      ..remove(path)
+      ..removeWhere((p) =>
+          p == path || kIsWeb && p.split('/').last == path.split('/').last)
       ..insert(0, path);
     _recentOpened[path] = DateTime.now().toIso8601String();
     if (recentProjects.length > maxRecentProjects) {
@@ -2573,7 +2578,7 @@ class Workspace extends ChangeNotifier {
   static Future<Image?> compStill(CompositionReference comp, int frame,
       {int maxEdge = projectThumbnailPixels}) async {
     final still =
-        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
+        await landed(() => comp.thumbnail(frame: frame, maxEdge: maxEdge));
     if (still == null || still.width == 0 || still.height == 0) return null;
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,

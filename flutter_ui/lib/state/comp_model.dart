@@ -24,13 +24,13 @@ class CompModel extends ChangeNotifier {
   /// Comparing it per read is what makes every rebuild honest: a widget that
   /// rebuilds for any reason sees the current document, exactly as when every
   /// widget re-read the engine itself — for one call instead of dozens.
-  BigInt? _revision;
+  int? _revision;
 
   /// The revision listeners were last told about. A getter re-reads without
   /// telling anyone, so after an undo the new revision may already be read
   /// by the time the change event lands. The graph canvases keep their own
   /// copy and still need telling.
-  BigInt? _told;
+  int? _told;
 
   /// The frame [_freshen] last asked the engine for its revision in.
   ///
@@ -92,7 +92,7 @@ class CompModel extends ChangeNotifier {
   /// against: the cache is good for as long as this number is, and an edit
   /// moves it. Reading it freshens the model first, so it never reports a
   /// revision older than what the caller is about to draw.
-  BigInt? get revision {
+  int? get revision {
     _freshen();
     return _revision;
   }
@@ -120,7 +120,7 @@ class CompModel extends ChangeNotifier {
   /// has just *committed* an edit and wants to read it back keeps the checking
   /// getters above.
   List<BridgeLayerEntry> get heldLayers => _model?.layers ?? const [];
-  BigInt? get heldRevision => _revision;
+  int? get heldRevision => _revision;
 
   /// The comp's rate from the copy in hand, on the same terms — what turns a
   /// playhead frame into seconds while a paint is running, which is where a

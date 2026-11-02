@@ -28,7 +28,6 @@
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
 
 use interprocess::local_socket::traits::{Listener as _, Stream as _};
 use interprocess::local_socket::{
@@ -37,6 +36,7 @@ use interprocess::local_socket::{
 };
 use lumit_peer::{Nonce, Proof, Token};
 use serde::{Deserialize, Serialize};
+use web_time::{Duration, Instant};
 
 use interprocess::local_socket::Listener;
 use lumit_peer::Secret;

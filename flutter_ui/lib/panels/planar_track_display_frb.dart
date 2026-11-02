@@ -119,7 +119,7 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
       old.pressed != widget.pressed;
 
   /// The document revision the line was last read at.
-  BigInt? _readAt;
+  int? _readAt;
 
   // An edit can leave an analysis or a bake behind, and the line must stop
   // claiming it. Read after the frame, since a reading that lands tells the

@@ -1597,7 +1597,7 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
       _tiers = frames <= 0
           ? Uint8List(0)
           : widget.comp.cachedFrames(
-              frames: BigInt.from(frames),
+              frames: frames,
               scale: scale,
             );
       _readFrames = frames;
@@ -1906,7 +1906,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _heard = at;
     // After the seek, which stops playback first: the engine only sounds a
     // scrub while the transport is stopped.
-    widget.comp.audioScrub(frame: BigInt.from(at));
+    widget.comp.audioScrub(frame: at);
   }
 
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the

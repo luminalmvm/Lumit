@@ -4,7 +4,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show RustStreamSink;
@@ -17,6 +17,7 @@ import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
 import 'package:lumit_flutter/shell/splash_window.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeScanProgress, BridgeScanStage, rescanPlugins;
+import 'package:lumit_flutter/src/rust/api/system.dart' show prepareGraphics;
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
 import 'package:lumit_flutter/probe/perf_probe.dart';
@@ -26,6 +27,8 @@ import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/background.dart';
 import 'package:lumit_flutter/state/bridge_trace.dart';
 import 'package:lumit_flutter/state/faults.dart';
+import 'package:lumit_flutter/state/files.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/files_web.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
 
@@ -56,6 +59,9 @@ Future<void> main(List<String> args) async {
     // instead: in a window, and — through the same recorder a faulting panel
     // uses — in the diagnostics file.
     recordFault('start-up failed: $error', stack);
+    // The browser build's diagnostics file is in the page's memory, so the
+    // console is where the reason can be read.
+    if (kIsWeb) debugPrint('start-up failed: $error\n$stack');
     await BootSplash.handOver();
     runApp(StartupFailureApp('$error'));
   }
@@ -70,7 +76,8 @@ Future<void> _start(List<String> args) async {
   // version we have just replaced, now that nothing is holding its files, and
   // put it back if a swap was cut in half. Never throws and never blocks — a
   // tidying problem is not a reason for an editor not to open.
-  tidyAfterUpdate(InstallSite.detect());
+  // The browser build is never installed, so there is nothing to tidy.
+  if (!kIsWeb) tidyAfterUpdate(InstallSite.detect());
 
   // The call tracer takes StackTrace.current on every bridge call, which is
   // debugging money a release build must not spend.
@@ -80,9 +87,15 @@ Future<void> _start(List<String> args) async {
       probeProjectPath.isEmpty ? null : CountingBridgeHandler();
   await BridgeLib.init(
       handler: kDebugMode ? CustomHandler() : probeBridge);
+  // The browser build's files live in the engine, so they come after it.
+  await installFiles();
+  // The browser hands its graphics card over as a promise, so it is asked for
+  // here, before a project needs it.
+  if (kIsWeb && !await prepareGraphics()) throw l10n.webNoGraphicsCard;
   await ExpressionsMetadata.load();
   await ExpressionTextEditingController.initSyntaxHighlighting();
   final state = LumitState();
+  warnBeforeLeaving(() => state.unsavedNeedsAsking);
   // Start with an empty project rather than nothing at all. Every document
   // command — import, new composition, save — is disabled while there is no
   // project, so booting without one left the whole File and Composition menu
@@ -126,9 +139,13 @@ Future<void> _start(List<String> args) async {
   // The account and its sync, which a test never starts: nothing else at
   // start-up speaks to a server of Lumit's.
   unawaited(ui.profiles.start());
-  ui.reviews.start();
-  ui.phones.start();
-  ui.friendInvites.start();
+  // Lumit Pro's services. The browser build has no account and sends
+  // nothing anywhere.
+  if (!kIsWeb) {
+    ui.reviews.start();
+    ui.phones.start();
+    ui.friendInvites.start();
+  }
   // Closing the window into the tray, when Settings asks for it. The frames
   // held for the preview are given back meanwhile, nobody is looking at them.
   listenToRunner(hidden: () {

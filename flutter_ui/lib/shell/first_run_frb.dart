@@ -16,6 +16,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 
@@ -346,22 +347,21 @@ class _FirstRunState extends State<_FirstRun> {
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                 child: Row(
                   children: [
-                    // The update tick sits in the footer rather than in a
-                    // section of its own: it is a much smaller question, and
-                    // giving it a heading would suggest it is the others'
-                    // equal.
-                    HouseCheckbox(
-                      key: const ValueKey('first-run-auto-update'),
-                      value: _autoUpdate,
-                      onChanged: (on) => setState(() => _autoUpdate = on),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        l10n.settingsAutomaticUpdates,
-                        style: t.small.copyWith(color: t.textMuted),
+                    // The update tick, a smaller question. A page is newest.
+                    if (kIsWeb) const Spacer() else ...[
+                      HouseCheckbox(
+                        key: const ValueKey('first-run-auto-update'),
+                        value: _autoUpdate,
+                        onChanged: (on) => setState(() => _autoUpdate = on),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          l10n.settingsAutomaticUpdates,
+                          style: t.small.copyWith(color: t.textMuted),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     HouseButton(
                       key: const ValueKey('first-run-skip'),

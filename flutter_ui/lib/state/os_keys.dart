@@ -16,17 +16,11 @@
 // up, that answer stands without a call. Under `flutter test` there is no real
 // keyboard, so simulated modifiers are trusted as sent.
 
-import 'dart:ffi';
-import 'dart:io';
-
 import 'package:flutter/services.dart';
-
-const int _vkMenu = 0x12;
-
-typedef _GetAsyncKeyStateC = Int16 Function(Int32);
-typedef _GetAsyncKeyStateD = int Function(int);
-
-_GetAsyncKeyStateD? _getAsyncKeyState;
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 bool get _canAskOs =>
     Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST');
@@ -36,8 +30,5 @@ bool get _canAskOs =>
 bool altActuallyHeld() {
   if (!HardwareKeyboard.instance.isAltPressed) return false;
   if (!_canAskOs) return true;
-  _getAsyncKeyState ??= DynamicLibrary.open('user32.dll')
-      .lookupFunction<_GetAsyncKeyStateC, _GetAsyncKeyStateD>(
-          'GetAsyncKeyState');
-  return (_getAsyncKeyState!(_vkMenu) & 0x8000) != 0;
+  return altPhysicallyDown();
 }

@@ -113,7 +113,7 @@ pub(crate) fn decode_frame(
     target_width: Option<u32>,
 ) -> Option<lumit_media::decode::DecodedFrame> {
     // A 3D model has no frame to decode.
-    if !src.on_disk().is_file() || lumit_scene::is_model(&src.path) {
+    if !lumit_media::is_file(src.on_disk()) || lumit_scene::is_model(&src.path) {
         return None;
     }
     if let Some(frame) = lumit_media::read_own(src, frame as usize, target_width) {

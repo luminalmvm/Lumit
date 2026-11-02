@@ -13,6 +13,11 @@ lumit-media = { path = "../lumit-media" }
 parking_lot = "0.12"
 realfft = "3.5"
 thiserror = "2"
+web-time = "1"
+
+# The page's sound card (src/web.rs).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
 
 [lints]
 workspace = true

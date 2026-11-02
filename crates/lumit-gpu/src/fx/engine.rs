@@ -290,7 +290,7 @@ impl FxEngine {
                            name: &'static str,
                            entry: &'static str| {
             let (device, layout, shader) = (ctx.device.clone(), layout.clone(), shader.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(name),
                     layout: Some(&layout),

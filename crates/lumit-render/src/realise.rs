@@ -336,9 +336,9 @@ impl Realiser<'_> {
     /// writes a millisecond into per op. Both `None` unless this render is
     /// being measured, which is what keeps an ordinary frame free of them.
     #[allow(clippy::type_complexity)]
-    fn layer_clock(&self) -> (Option<std::time::Instant>, Option<Vec<f32>>) {
+    fn layer_clock(&self) -> (Option<web_time::Instant>, Option<Vec<f32>>) {
         match self.profiler {
-            Some(p) if p.timing() => (Some(std::time::Instant::now()), Some(Vec::new())),
+            Some(p) if p.timing() => (Some(web_time::Instant::now()), Some(Vec::new())),
             _ => (None, None),
         }
     }
@@ -350,7 +350,7 @@ impl Realiser<'_> {
     fn layer_done(
         &self,
         l: &CompLayerDraw,
-        started: Option<std::time::Instant>,
+        started: Option<web_time::Instant>,
         fx_ms: Option<Vec<f32>>,
     ) {
         let Some(p) = self.profiler else {
@@ -1315,11 +1315,10 @@ impl Realiser<'_> {
     ///
     /// ponytail: an 8-bit round trip per painted Precomp per frame — the
     /// nested picture is quantised to the depth every footage layer is
-    /// painted at anyway, and read back synchronously. A GPU stamping pass
-    /// (docs/impl/paint.md, "Not built") is the upgrade if a painted
-    /// Precomp ever shows in a profile; nothing stored changes when it
-    /// arrives. Costs exactly nothing on the Precomp layers — almost all of
-    /// them — that carry no paint.
+    /// painted at anyway, and read back synchronously (in the browser build,
+    /// an earlier frame's copy). A GPU stamping pass (docs/impl/paint.md, "Not
+    /// built") is the upgrade if a painted Precomp ever shows in a profile.
+    /// Costs nothing on the Precomp layers that carry no paint.
     fn paint_over(
         &self,
         tex: wgpu::Texture,
@@ -1335,7 +1334,8 @@ impl Realiser<'_> {
         let display = self
             .engine
             .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL);
-        let Ok(mut rgba) = self.engine.readback8(&self.ctx, &display) else {
+        let read = lumit_gpu::device::read_texture8(&self.ctx, self.engine, "paint", &display);
+        let Ok(mut rgba) = read else {
             // The read failed (a lost device, a surface gone). The unpainted
             // picture is the calm answer; engine crates do not panic.
             return tex;
@@ -2407,7 +2407,7 @@ impl Realiser<'_> {
                 .zip(waiting)
                 .zip(&grown)
                 .map(|((((tex, l), (set, own)), (so_far, fx_ms)), grow)| {
-                    let started = so_far.and_then(|d| std::time::Instant::now().checked_sub(d));
+                    let started = so_far.and_then(|d| web_time::Instant::now().checked_sub(d));
                     let casters = set.and_then(|k| sets.get(k));
                     let size = (width, height);
                     let lit = self.lit(l, tex, eye, camera, casters, own, *grow, size);

@@ -59,16 +59,27 @@
 //! can reach are atomic flags (docs/14 §7). Nothing here blocks on the GPU or
 //! sleeps.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod abi;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod def;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod describe;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod discover;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod instance;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ipc;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod module;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod process;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod quirks;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod schema;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod vst3;
 
 #[cfg(test)]
@@ -194,3 +205,82 @@ pub const VST3_HOST_ACTIONS: [&str; 33] = [
     "controller.terminate",
     "terminate",
 ];
+
+// The browser build has no audio plugins. These are the few calls the bridge
+// makes, answering as a machine with none installed would.
+
+#[cfg(target_arch = "wasm32")]
+pub mod discover {
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+
+    use lumit_core::fx::registry::EffectDef;
+
+    use crate::ipc::broker::DisableList;
+
+    pub type ScanCache = BTreeMap<PathBuf, serde_json::Value>;
+
+    /// A plugin found by a scan. None ever is here.
+    pub struct DiscoveredPlugin {
+        pub match_name: String,
+        pub label: String,
+        pub def: NoPlugin,
+    }
+
+    /// A definition the browser build cannot make.
+    pub enum NoPlugin {}
+
+    impl NoPlugin {
+        #[must_use]
+        pub fn leak(self) -> &'static dyn EffectDef {
+            match self {}
+        }
+    }
+
+    #[derive(Default)]
+    pub struct ScanOutcome {
+        pub found: Vec<DiscoveredPlugin>,
+        pub skipped: Vec<String>,
+    }
+
+    #[must_use]
+    pub fn search_paths() -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    pub fn scan_brokered_reporting(
+        _paths: &[PathBuf],
+        _disabled: &DisableList,
+        _exe: Option<&Path>,
+        _cache: &mut ScanCache,
+        _file: &mut dyn FnMut(&Path, usize, usize),
+    ) -> ScanOutcome {
+        ScanOutcome::default()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub mod ipc {
+    pub mod broker {
+        use std::collections::BTreeSet;
+        use std::sync::{Arc, Mutex};
+
+        pub type DisableList = Arc<Mutex<BTreeSet<String>>>;
+
+        pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
+
+        #[must_use]
+        pub fn session_disabled() -> DisableList {
+            Arc::default()
+        }
+
+        pub fn set_disabled(_identifiers: &BTreeSet<String>) {}
+
+        pub fn set_enabled(_identifier: &str, _enabled: bool) {}
+
+        #[must_use]
+        pub fn broker_exe_name() -> &'static str {
+            "lumit-aplug-broker"
+        }
+    }
+}

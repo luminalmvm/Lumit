@@ -43,6 +43,8 @@ dependencies:
   # The modules of the code a phone scans to pair (shell/add_phone_window.dart).
   # Pure Dart and nothing else: Lumit paints the squares itself.
   qr: ^3.0.2
+  # The page's own APIs, for the browser build (lib/state/files_web.dart).
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

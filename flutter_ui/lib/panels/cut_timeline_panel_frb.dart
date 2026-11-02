@@ -192,7 +192,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// without a walk.
   List<CutTrack> _tracks = const [];
   Map<String, int> _trackOfClip = const {};
-  BigInt? _tracksRevision;
+  int? _tracksRevision;
   CompositionReference? _tracksComp;
 
   /// Whether the tracks stand in stack order with no dividing line, as
@@ -315,7 +315,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// The work area, held between document revisions.
   ({int start, int end, bool whole})? _workArea;
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier<({int start, int end, bool whole})?>(null);
@@ -2393,7 +2393,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       if (end <= start) return;
       try {
         comp.renderFrameWithClipSpan(
-          frame: BigInt.from(max(0, head ? start : end - 1)),
+          frame: max(0, head ? start : end - 1),
           scale: 1.0,
           layer: _tracks[row].entry.layer,
           clip: clip.id,
@@ -4679,7 +4679,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ui.model.heldLayers.indexWhere((e) => e.layer.internallayerId == id);
     if (index < 0) return;
     try {
-      _tracks[from].entry.layer.reorder(newIndex: BigInt.from(index));
+      _tracks[from].entry.layer.reorder(newIndex: index);
     } catch (_) {
       // A locked layer refuses, and quietly.
     }
@@ -5043,7 +5043,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       },
       onTapped: _speedTaps.tap,
       onPreview: (clip, keys) => comp.renderFrameWithClipRetime(
-        frame: BigInt.from(ui.playheadFrame.value),
+        frame: ui.playheadFrame.value,
         scale: 1.0,
         layer: track.entry.layer,
         clip: clip.id,

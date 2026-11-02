@@ -83,6 +83,8 @@ mod audio;
 mod autosave;
 mod beats;
 mod claim;
+// The command line, which the browser build has none of.
+#[cfg(not(target_arch = "wasm32"))]
 mod cli;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod cursor;
@@ -111,6 +113,11 @@ mod scratch;
 mod script;
 mod shape_paint;
 mod streams;
+mod turns;
+#[cfg(target_arch = "wasm32")]
+mod web_kept;
+#[cfg(target_arch = "wasm32")]
+mod web_media;
 
 pub mod api;
 

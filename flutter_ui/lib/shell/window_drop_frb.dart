@@ -16,6 +16,7 @@ import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
+import '../state/file_dialogs.dart' show droppedPaths;
 import 'extension_install_frb.dart';
 import 'style_import.dart';
 import '../src/rust/api/styles.dart';
@@ -31,8 +32,9 @@ class WindowDropFrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DropTarget(
         onDragDone: (details) async {
+          final paths = await droppedPaths(details.files);
+          if (!context.mounted) return;
           final ui = context.read<LumitUiState>();
-          final paths = [for (final f in details.files) f.path];
           // Wherever it lands, since no other target takes a package.
           final package = packagePathFromArgs(paths);
           if (package != null) {

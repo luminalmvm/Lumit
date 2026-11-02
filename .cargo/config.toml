@@ -32,3 +32,7 @@ LUMIT_USER_DIRS = { value = "target/user-dirs", relative = true }
 # extra rpath entry simply finds nothing and the default search proceeds.
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN", "-C", "link-arg=-Wl,-rpath,$ORIGIN/lib"]
+
+# The browser build takes its randomness from the page's own crypto API.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", 'getrandom_backend="wasm_js"']

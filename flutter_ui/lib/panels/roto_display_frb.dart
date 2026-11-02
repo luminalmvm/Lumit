@@ -18,6 +18,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -267,7 +268,8 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
               // The one refusal with somewhere to go: the seed row asked for a
               // model and this machine has no addon for it, which is a button
               // press away from being mended.
-              if (status?.failure == BridgeRotoFailure.modelMissing) ...[
+              if (status?.failure == BridgeRotoFailure.modelMissing &&
+                  !kIsWeb) ...[
                 const SizedBox(width: 6),
                 HouseButton(
                   key: const ValueKey('fx-roto-open-addons'),

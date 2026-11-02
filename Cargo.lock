@@ -1373,9 +1373,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1385,8 +1387,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2114,6 +2118,8 @@ dependencies = [
  "parking_lot",
  "realfft",
  "thiserror 2.0.18",
+ "wasm-bindgen",
+ "web-time",
 ]
 
 [[package]]
@@ -2148,6 +2154,7 @@ dependencies = [
  "lumit-budget",
  "lz4_flex",
  "tempfile",
+ "web-time",
 ]
 
 [[package]]
@@ -2174,6 +2181,7 @@ version = "0.10.1"
 dependencies = [
  "arc-swap",
  "blake3",
+ "getrandom 0.3.4",
  "half",
  "hex",
  "i_overlay",
@@ -2244,6 +2252,7 @@ dependencies = [
  "core-foundation",
  "glam",
  "half",
+ "js-sys",
  "lumit-budget",
  "lumit-core",
  "lumit-eval",
@@ -2258,6 +2267,9 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time",
  "wgpu",
  "windows 0.58.0",
 ]
@@ -2283,6 +2295,7 @@ name = "lumit-ingress"
 version = "0.10.1"
 dependencies = [
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]
@@ -2304,10 +2317,14 @@ dependencies = [
  "libloading 0.8.9",
  "lumit-ingress",
  "miniz_oxide",
+ "png",
  "rsmpeg",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+ "wasm-bindgen",
+ "web-time",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2328,6 +2345,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "web-time",
  "zip",
 ]
 
@@ -2394,6 +2412,7 @@ dependencies = [
  "criterion",
  "directories",
  "lumit-core",
+ "lumit-ingress",
  "serde",
  "serde_json",
  "tempfile",
@@ -2439,6 +2458,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
  "wgpu",
 ]
 
@@ -2480,6 +2500,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
  "widestring",
 ]
 
@@ -2503,6 +2524,7 @@ dependencies = [
  "snow",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -2534,6 +2556,7 @@ version = "0.10.1"
 dependencies = [
  "flutter_rust_bridge",
  "interprocess",
+ "js-sys",
  "libc",
  "libloading 0.8.9",
  "lumit-aplug",
@@ -2564,6 +2587,9 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time",
  "windows 0.58.0",
 ]
 

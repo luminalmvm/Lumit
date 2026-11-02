@@ -29,12 +29,14 @@
 // and the box asks the tree for nothing — see [FaultColours] for why that
 // matters.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/state/cache_dir.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The file the engine appends its own faults to
 /// (`crates/lumit-bridge/src/faults.rs`), which this writes to as well.
