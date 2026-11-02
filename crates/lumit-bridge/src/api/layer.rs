@@ -8129,17 +8129,53 @@ impl LayerReference {
         {
             return Err(BridgeError::UnknownEffectName);
         }
-        let comp = self.composition()?;
-        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
-            &name,
-            f64::from(comp.width),
-            f64::from(comp.height),
-        )
-        .ok_or(BridgeError::UnknownEffectName)?;
+        // The clip's own picture is the raster its effects run on, so a
+        // Transform lands centred on that, not on the composition.
+        let (width, height) = self.clip_picture_size(clip)?;
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(&name, width, height)
+            .ok_or(BridgeError::UnknownEffectName)?;
         lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         self.with_instances(InstanceHome::Clip(clip), move |effects| {
             effects.push(instance);
             Ok(())
+        })
+    }
+
+    /// How big clip `clip`'s picture is in its own pixels: its file's, its
+    /// composition's or its solid's size, and the composition's when that
+    /// cannot be told.
+    #[frb(ignore)]
+    fn clip_picture_size(&self, clip: Uuid) -> Result<(f64, f64), BridgeError> {
+        use lumit_core::sequence::ClipSource;
+        let comp = self.composition()?;
+        let own = (f64::from(comp.width), f64::from(comp.height));
+        let source = match &self.item()?.kind {
+            lumit_core::model::LayerKind::Sequence { clips } => {
+                clips.iter().find(|c| c.id == clip).map(|c| c.source)
+            }
+            _ => None,
+        };
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        Ok(match source {
+            Some(ClipSource::Footage(item)) => match doc.item(item) {
+                Some(lumit_core::model::ProjectItem::Footage(f)) => {
+                    let (_, w, h) =
+                        crate::api::composition::CompositionReference::footage_span_and_size(
+                            &state, f, &comp,
+                        );
+                    (w, h)
+                }
+                _ => own,
+            },
+            Some(ClipSource::Comp(id)) => doc
+                .comp(id)
+                .map_or(own, |c| (f64::from(c.width), f64::from(c.height))),
+            Some(ClipSource::Solid(id)) => doc
+                .solid(id)
+                .map_or(own, |s| (f64::from(s.width), f64::from(s.height))),
+            None => own,
         })
     }
 
