@@ -95,6 +95,7 @@ mod framecache;
 mod layered;
 mod live;
 mod media;
+mod motion_path;
 mod names;
 mod outlines;
 mod packing;
