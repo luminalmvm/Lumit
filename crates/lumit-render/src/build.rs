@@ -4479,6 +4479,28 @@ fn comp_walk(
                 }));
                 continue;
             }
+            LayerKind::Model { item, settings } => {
+                let Some(scene) = crate::model::scene(doc, *item) else {
+                    continue;
+                };
+                let material = &layer.transform.material;
+                let model_to_comp = crate::model::model_to_comp(
+                    settings,
+                    &scene.bounds,
+                    (comp.width as f32, comp.height as f32),
+                );
+                let draw = crate::model::ModelDraw {
+                    item: *item,
+                    placement: world_placement(comp, layer, t_comp, context.clone()),
+                    model_to_comp,
+                    scene,
+                    opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32,
+                    casts_shadows: material.casts_shadows,
+                    accepts_shadows: material.accepts_shadows,
+                    accepts_lights: layer.switches.accepts_lights,
+                };
+                (DrawSource::Model(Box::new(draw)), (1.0, 1.0))
+            }
             _ => {
                 let Some((rgba, w, h, natural, format)) = pixels_for(layer) else {
                     continue;
@@ -4510,7 +4532,8 @@ fn comp_walk(
                 DrawSource::Nested { .. }
                 | DrawSource::Adjust
                 | DrawSource::Graph(_)
-                | DrawSource::Haze(_) => 1.0,
+                | DrawSource::Haze(_)
+                | DrawSource::Model(_) => 1.0,
             };
             if layer.switches.fx {
                 // scale doubles as the §2.3 preview-resolution factor:
@@ -4547,7 +4570,8 @@ fn comp_walk(
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
             | DrawSource::Graph(_)
-            | DrawSource::Haze(_) => None,
+            | DrawSource::Haze(_)
+            | DrawSource::Model(_) => None,
         };
         // The name the per-effect cache files this stack's outputs under: a
         // picture made from bytes, or a nested comp's frame, whose texture is
@@ -4558,7 +4582,10 @@ fn comp_walk(
                 fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
             DrawSource::Nested { key, .. } => *key,
-            DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => None,
+            DrawSource::Adjust
+            | DrawSource::Graph(_)
+            | DrawSource::Haze(_)
+            | DrawSource::Model(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack, and where a

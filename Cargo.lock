@@ -2426,6 +2426,7 @@ dependencies = [
  "lumit-project",
  "lumit-render",
  "lumit-roto",
+ "lumit-scene",
  "lumit-text",
  "lumit-track",
  "lz4_flex",

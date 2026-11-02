@@ -984,9 +984,10 @@ impl Realiser<'_> {
                         // A Read box makes no other kind of source; a
                         // transparent texel keeps the no-panic rule if that
                         // ever regresses.
-                        DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => {
-                            self.transparent(1, 1)
-                        }
+                        DrawSource::Adjust
+                        | DrawSource::Graph(_)
+                        | DrawSource::Haze(_)
+                        | DrawSource::Model(_) => self.transparent(1, 1),
                     };
                     // The placement is in the graph's own pixels, so it is
                     // carried into the raster by the one factor everything
@@ -2212,6 +2213,9 @@ impl Realiser<'_> {
                     );
                     self.realise_graph(plan, None, gw, gh, self.render_scale)
                 }
+                // The mesh pass draws a model; until it is wired in, the
+                // layer leaves a transparent texel and nothing on screen.
+                DrawSource::Model(_) => self.transparent(1, 1),
                 DrawSource::Adjust | DrawSource::Haze(_) => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic

@@ -38,6 +38,67 @@ pub struct ModelScene {
     pub missing: Vec<String>,
 }
 
+impl ModelScene {
+    /// Roughly the memory the scene holds: its vertices, indices and decoded
+    /// pictures, which is all but a sliver of it.
+    #[must_use]
+    pub fn byte_size(&self) -> usize {
+        let primitives: usize = self
+            .meshes
+            .iter()
+            .flat_map(|m| &m.primitives)
+            .map(|p| {
+                let targets: usize = p
+                    .morph_targets
+                    .iter()
+                    .map(|t| (t.positions.len() + t.normals.len() + t.tangents.len()) * 12)
+                    .sum();
+                (p.positions.len() + p.normals.len()) * 12
+                    + (p.tangents.len() + p.colours.len() + p.weights.len()) * 16
+                    + (p.uv0.len() + p.uv1.len() + p.joints.len()) * 8
+                    + p.indices.len() * 4
+                    + targets
+            })
+            .sum();
+        let pictures: usize = self
+            .textures
+            .iter()
+            .filter_map(|t| t.image.as_ref())
+            .map(|i| i.rgba8.len())
+            .sum();
+        primitives + pictures
+    }
+
+    /// Node `k`'s place in model space: its own transform after all its
+    /// parents'.
+    #[must_use]
+    pub fn node_world(&self, mut k: usize) -> glam::Mat4 {
+        let mut world = glam::Mat4::IDENTITY;
+        // Bounded, so a file whose parents loop can't hang the draw.
+        for _ in 0..=self.nodes.len() {
+            let Some(n) = self.nodes.get(k) else {
+                break;
+            };
+            let turn = glam::Quat::from_array(n.rotation);
+            let turn = if turn.length_squared() > 0.0 {
+                turn.normalize()
+            } else {
+                glam::Quat::IDENTITY
+            };
+            world = glam::Mat4::from_scale_rotation_translation(
+                n.scale.into(),
+                turn,
+                n.translation.into(),
+            ) * world;
+            match n.parent {
+                Some(p) => k = p,
+                None => break,
+            }
+        }
+        world
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Node {
     pub name: String,

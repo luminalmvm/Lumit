@@ -792,6 +792,7 @@ impl HeadlessRenderer {
         // the struct: every store below that holds frame-sized memory registers
         // against this one account (docs/13 §3).
         let ledger = std::sync::Arc::clone(gpu.ledger());
+        crate::model::account_against(&ledger);
         Self {
             gpu,
             parts: Some(parts),
