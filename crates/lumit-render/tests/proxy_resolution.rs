@@ -84,6 +84,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: lumit_core::retime::Interpolation::default(),
         parked_flow: None,

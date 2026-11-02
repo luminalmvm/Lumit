@@ -37,6 +37,7 @@ composites over it.
 | **Adjustment layer** | Applies its effects to everything below. Also a switch any drawing layer can carry |
 | **Layer group** | A header row folding layers together in the Timeline. Organisation only, the render never reads it |
 | **Audio layer** | An audio item, or footage's audio |
+| **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
