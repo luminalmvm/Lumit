@@ -1568,6 +1568,7 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeItem item, {
   String? name,
   List<BridgeVertex>? vertices,
+  bool? closed,
   ShapeValue? value,
   BridgeScalar? to,
   BridgeColour? fill,
@@ -1597,7 +1598,7 @@ BridgeShapeItem shapeItemWith(
     id: item.id,
     name: name ?? item.name,
     vertices: vertices ?? item.vertices,
-    closed: item.closed,
+    closed: closed ?? item.closed,
     fill: removeFill
         ? null
         : fill ??
