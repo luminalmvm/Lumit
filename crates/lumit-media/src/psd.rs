@@ -255,7 +255,7 @@ pub fn is_psd(path: &Path) -> bool {
 
 /// The document's size and layer list. No pixels are read.
 pub fn open(path: &Path) -> Result<PsdDocument, MediaError> {
-    let mut r = Reader::new(BufReader::new(std::fs::File::open(path)?))?;
+    let mut r = Reader::new(BufReader::new(lumit_ingress::files::open(path)?))?;
     parse(&mut r, &mut Budget::new(LIMITS))
 }
 
@@ -264,7 +264,7 @@ pub fn open(path: &Path) -> Result<PsdDocument, MediaError> {
 /// `index` counts through [`PsdDocument::layers`]. A record with no picture
 /// reads as an empty frame, and an adjustment layer reads as where it acts.
 pub fn read_layer(path: &Path, index: u32) -> Result<DecodedFrame, MediaError> {
-    let mut r = Reader::new(BufReader::new(std::fs::File::open(path)?))?;
+    let mut r = Reader::new(BufReader::new(lumit_ingress::files::open(path)?))?;
     read_layer_from(&mut r, index)
 }
 

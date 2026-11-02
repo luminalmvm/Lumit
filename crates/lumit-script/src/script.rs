@@ -32,10 +32,15 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 
 use lumit_core::time::{CompTime, FrameRate, Rational};
+#[cfg(not(target_arch = "wasm32"))]
 use rquickjs::context::EvalOptions;
+#[cfg(not(target_arch = "wasm32"))]
 use rquickjs::convert::Coerced;
+#[cfg(not(target_arch = "wasm32"))]
 use rquickjs::function::Opt;
+#[cfg(not(target_arch = "wasm32"))]
 use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Exception, FromJs, Function, Object};
+#[cfg(not(target_arch = "wasm32"))]
 use rquickjs::{Runtime, Value as JsValue};
 use serde_json::{json, Value};
 
@@ -172,6 +177,7 @@ impl std::error::Error for RunError {}
 type Place = Option<(usize, usize)>;
 
 /// Run `source` against `host`'s project as one undo step.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport {
     let log = Arc::new(Mutex::new(Log::default()));
     let desk = Desk {
@@ -281,6 +287,20 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 line: None,
                 column: None,
             },
+        }),
+    }
+}
+
+/// The browser build has no JavaScript engine of its own yet, so a script
+/// cannot run there.
+#[cfg(target_arch = "wasm32")]
+pub fn run(_host: &dyn Host, _source: &str, _options: RunOptions<'_>) -> RunReport {
+    RunReport {
+        log: Vec::new(),
+        result: Err(RunError {
+            error: ScriptError::Failed("Scripts cannot run here.".into()),
+            line: None,
+            column: None,
         }),
     }
 }
@@ -553,6 +573,7 @@ fn cut(text: String) -> String {
 }
 
 /// Run the script on this thread, and answer its last value.
+#[cfg(not(target_arch = "wasm32"))]
 fn evaluate(
     source: &str,
     setup: &Setup,
@@ -613,6 +634,7 @@ fn evaluate(
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn options(file: &str) -> EvalOptions {
     let mut o = EvalOptions::default();
     // After Effects scripts are written for the old, loose rules.
@@ -622,6 +644,7 @@ fn options(file: &str) -> EvalOptions {
 }
 
 /// The functions `lumit.js` builds the `lumit` object over.
+#[cfg(not(target_arch = "wasm32"))]
 fn natives<'js>(
     ctx: &Ctx<'js>,
     lumit: &Lumit,
@@ -784,6 +807,7 @@ fn frame_on(seconds: f64, num: u32, den: u32) -> Result<i64, ScriptError> {
 }
 
 /// Throw `error` into the script as an `Error` carrying its `code`.
+#[cfg(not(target_arch = "wasm32"))]
 fn throw(
     ctx: &Ctx<'_>,
     thrown: &RefCell<Option<ScriptError>>,
@@ -803,6 +827,7 @@ fn throw(
 
 /// Why the script failed, and where in it. `thrown` is the last command
 /// error, which is what the script failed with if the text matches.
+#[cfg(not(target_arch = "wasm32"))]
 fn failure<'js>(
     ctx: &Ctx<'js>,
     error: CaughtError<'js>,

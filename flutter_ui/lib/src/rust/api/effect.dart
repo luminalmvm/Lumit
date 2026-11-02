@@ -284,7 +284,7 @@ Float64List sampleScalarRangeWithContext(
         required LayerReference layer,
         required BridgeRational start,
         required BridgeRational end,
-        required PlatformInt64 samples,
+        required int samples,
         BridgeExpressionRow? row}) =>
     BridgeLib.instance.api.crateApiEffectSampleScalarRangeWithContext(
         scalar: scalar,
@@ -480,7 +480,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   void rotoAddPrompt(
       {required List<double> points,
       required List<int> labels,
-      required PlatformInt64 frame});
+      required int frame});
 
   /// Add one stroke to this Roto brush, on the **staged** copy.
   ///
@@ -502,7 +502,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
       {required List<double> points,
       required double radius,
       required BridgeRotoStrokeKind kind,
-      required PlatformInt64 frame});
+      required int frame});
 
   /// The frame the propagation runs outward from, or `None` on a brush
   /// nothing has been drawn or tapped on yet.
@@ -510,7 +510,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// The Viewer needs it to know whether the frame on screen is the one a tap
   /// may seed: a prompt is only ever read on the base frame, so a tap
   /// anywhere else is the ordinary dab of a stroke it has always been.
-  PlatformInt64? rotoBaseFrame();
+  int? rotoBaseFrame();
 
   /// Throw away every stroke and the base frame, on the staged copy — the
   /// panel's "start again". The cached mattes are not touched: they are keyed
@@ -536,7 +536,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// edit so one undo brings them back: the model is only ever asked about
   /// the base frame, and a tap stranded on the old one would keep renaming
   /// mattes without changing a picture (docs/impl/addons.md §6.2).
-  void rotoSetBaseFrame({PlatformInt64? frame});
+  void rotoSetBaseFrame({int? frame});
 
   /// Every stroke this instance holds, for the overlay to draw.
   ///
@@ -1354,11 +1354,11 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   /// scalar in the model — the kind only asks the row to step, display and
   /// commit whole numbers.
   const factory BridgeParamKind.int({
-    required PlatformInt64 default_,
-    required PlatformInt64 sliderMin,
-    required PlatformInt64 sliderMax,
-    PlatformInt64? hardMin,
-    PlatformInt64? hardMax,
+    required int default_,
+    required int sliderMin,
+    required int sliderMax,
+    int? hardMin,
+    int? hardMax,
   }) = BridgeParamKind_Int;
 
   /// Degrees, drawn as a dial beneath the number (docs/07 §6). The value
@@ -1641,11 +1641,11 @@ class BridgePresetInfo {
 /// at 1/3 s read back as 0.333… and written again would no longer land on the
 /// frame it was set on, and this round trip has to be exact.
 class BridgeRational {
-  final PlatformInt64 num;
+  final int num;
 
   /// Always positive in anything the engine hands out; a zero or negative
   /// denominator coming the other way is refused, not normalised.
-  final PlatformInt64 den;
+  final int den;
 
   const BridgeRational({
     required this.num,

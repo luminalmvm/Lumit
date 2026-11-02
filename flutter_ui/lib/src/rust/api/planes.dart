@@ -98,8 +98,8 @@ class BridgePlaneStatus {
   /// The span the answer actually covers, in **source** frames, or `None`
   /// before anything has been read. Outside it the effect is a passthrough
   /// and the card says so.
-  final PlatformInt64? firstFrame;
-  final PlatformInt64? lastFrame;
+  final int? firstFrame;
+  final int? lastFrame;
 
   /// How many frames the clip has, against which the span is whole or
   /// partial. Zero when nothing has been read.

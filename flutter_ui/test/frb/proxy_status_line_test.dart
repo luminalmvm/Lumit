@@ -34,7 +34,7 @@ void main() {
       await mount(
           tester,
           BridgeProxyState.running(
-              frame: BigInt.from(120), total: BigInt.from(500)));
+              frame: 120, total: 500));
 
       expect(
           find.byKey(const ValueKey('status-proxy-progress')), findsOneWidget);

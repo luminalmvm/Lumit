@@ -4,9 +4,11 @@
 // away on the status line. A style only dresses, so nothing is asked first
 // unless it would replace one of the same name.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/styles.dart';
 

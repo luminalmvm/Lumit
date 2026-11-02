@@ -26,6 +26,7 @@ pub mod flare;
 pub mod folder;
 pub mod footage;
 pub mod graph;
+pub mod handler;
 pub mod import;
 pub mod interpret;
 pub mod keymap;
@@ -49,6 +50,7 @@ pub mod streams;
 pub mod styles;
 pub mod system;
 pub mod track;
+pub mod web_files;
 pub mod wire_tie;
 pub mod wireframes;
 

@@ -127,7 +127,7 @@ class _RetimeRowState extends State<RetimeRow> {
     );
     final ui = Provider.of<LumitUiState>(context, listen: false);
     _preview.request(() => widget.comp.renderFrameWithRetime(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           retime: written,

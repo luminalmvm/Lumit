@@ -63,6 +63,8 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v7"] }
+# Instant and SystemTime that also work in the browser. On the desktop it is std's own.
+web-time = "1"
 
 [features]
 # The shared test renderer over lumit-gpu's shared device and engines

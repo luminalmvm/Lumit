@@ -41,6 +41,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
+#[cfg(target_arch = "wasm32")]
+mod web;
+
 /// The persistent GPU engines a render needs, held between calls so shaders
 /// compile once. Taken out for the duration of one render and put back
 /// afterwards, so a failed frame never discards the compiled pipelines.
@@ -406,7 +409,7 @@ fn shared_pool_evictions(entries: &[(u32, u32, u32)]) -> Vec<usize> {
 
 /// One frame's decoded per-layer pixels, kept alongside the decode plan that
 /// asked for them, so the next render can tell at a glance whether it needs new
-/// ones ([`crate::plan::same_decode`]).
+/// ones ([`crate::plan::same_decode`]). No plan is kept for a stand-in's pixels.
 struct Retained {
     comp: Uuid,
     frame: u64,
@@ -427,7 +430,8 @@ struct Retained {
 /// more (stride, offset, DRM format) and has its own [`SharedFrameInfoLinux`].
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 pub struct SharedFrameInfo {
     /// The NT `HANDLE` value of the shared texture on Windows (a
@@ -872,8 +876,10 @@ impl HeadlessRenderer {
     /// Whether the renders from here on may add to the per-effect cache. On
     /// for a committed document's scrub and edit renders; off for a drag's
     /// provisional values and for playback, which would only churn the budget.
-    /// Lookups happen either way.
+    /// Lookups happen either way. Never in the browser build, where an output
+    /// could hold a footage stand-in.
     pub fn keep_effect_outputs(&mut self, keep: bool) {
+        let keep = keep && cfg!(not(target_arch = "wasm32"));
         if let Some(parts) = self.parts.as_ref() {
             parts.fx_cache.borrow_mut().keep_outputs(keep);
         }
@@ -1225,32 +1231,33 @@ impl HeadlessRenderer {
         }
     }
 
-    /// A number that moves whenever a flare bake is queued or lands.
-    ///
-    /// Read either side of a render to answer "did this frame draw the lens its
-    /// parameters name?", and read on an idle tick to notice that a bake has
-    /// landed and the picture is now worth making again.
+    /// A number that moves whenever a flare bake is queued or lands, or a frame
+    /// the browser build's page decoded lands. Read either side of a render to
+    /// answer "did this frame draw the lens its parameters name?", and on an
+    /// idle tick to notice that the picture is now worth making again.
     #[must_use]
     pub fn flare_bake_generation(&self) -> u64 {
         self.parts.as_ref().map_or(0, |parts| {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_bake_generation)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + lumit_media::frames_landed()
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
-    /// its parameters name. Read either side of a render: unmoved
-    /// means the frame may be banked under the name taken before it.
+    /// its parameters name, or footage the browser build's page is still
+    /// decoding, or a read-back there from an earlier frame. Read either side
+    /// of a render: unmoved means it may be banked.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
         self.parts.as_ref().map_or(0, |parts| {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_substitutions)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + lumit_media::stand_ins()
+            + lumit_gpu::device::read_stand_ins()
     }
 
     /// Whether a flare bake is being made right now.
@@ -1426,6 +1433,7 @@ impl HeadlessRenderer {
         );
         if !reusable {
             let total = jobs.len() as u32;
+            let stood_in = lumit_media::stand_ins();
             let pixels = self
                 .pool
                 .decode_comp(comp_id, frame as usize, &jobs, 0, &|done| {
@@ -1437,7 +1445,11 @@ impl HeadlessRenderer {
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,
-                jobs,
+                jobs: if lumit_media::stand_ins() == stood_in {
+                    jobs
+                } else {
+                    Vec::new()
+                },
                 pixels,
             });
         }
@@ -2002,14 +2014,6 @@ impl HeadlessRenderer {
         );
     }
 
-    /// Forget the retained per-layer pixels. The next [`Self::render_preview`]
-    /// decodes afresh. Called when something outside the document changes what
-    /// the sources *are* — a probe landing, a relink — since the decode plan
-    /// alone cannot see that.
-    pub fn forget_retained(&mut self) {
-        self.retained = None;
-    }
-
     /// The decoded-frame cache's bytes and how many decoders are open — see
     /// [`crate::decode::DecodePool::memory`].
     #[must_use]
@@ -2169,22 +2173,10 @@ impl HeadlessRenderer {
         kind: u32,
         colours: [[u8; 3]; 5],
     ) -> Result<Vec<u8>, String> {
-        let kind = match kind {
-            0 => lumit_gpu::scope::ScopeKind::WaveformLuma,
-            1 => lumit_gpu::scope::ScopeKind::WaveformRgb,
-            2 => lumit_gpu::scope::ScopeKind::Vectorscope,
-            3 => lumit_gpu::scope::ScopeKind::Histogram,
-            other => return Err(format!("headless scope: unknown kind {other}")),
-        };
-        let colours = lumit_gpu::scope::ScopeColours {
-            bg: colours[0],
-            trace: colours[1],
-            red: colours[2],
-            green: colours[3],
-            blue: colours[4],
-        };
+        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
+            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours, rgba, width, height)
+            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 
@@ -2254,7 +2246,7 @@ impl HeadlessRenderer {
                 });
             }
         }
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         // A flare that fell back to the previous lens during this composite
         // made a picture of a lens its name does not describe. The
         // name was taken before the render, so it has to be dropped
@@ -3917,7 +3909,7 @@ impl AudioJobsBuilder {
             }
         }
         // A missing file isn't remembered, so a relinked clip is heard.
-        if !path.is_file() {
+        if !lumit_media::is_file(path) {
             return 0;
         }
         // The lock is not held across the probe: FFI, and as slow as opening a
@@ -4104,7 +4096,7 @@ pub fn source_frames_used(
 /// "missing" would be actively wrong. A clean video caches its exact rate and
 /// frame count, warming the on-disk frame index so the decoder open reuses it.
 fn probe_item(src: &lumit_media::sequence::MediaSource) -> Probe {
-    if !src.on_disk().is_file() {
+    if !lumit_media::is_file(src.on_disk()) {
         return Probe::Slate;
     }
     let Ok(probe) = lumit_media::probe::probe(src) else {
@@ -10030,74 +10022,4 @@ mod tests {
 /// own dev-dependency turns on. A test that needs a *second* renderer beside
 /// this one, or its own device to lose, still calls [`HeadlessRenderer::new`].
 #[cfg(any(test, feature = "test-fixtures"))]
-pub mod test_support {
-    use super::HeadlessRenderer;
-    use lumit_gpu::test_support::{lease, Lease};
-    use lumit_gpu::SharedGpu;
-    use std::ops::{Deref, DerefMut};
-
-    /// A [`HeadlessRenderer`] on borrowed engines. Derefs to the renderer;
-    /// returns the engines on drop.
-    pub struct TestRenderer {
-        /// `Some` for the whole of the test; taken in `drop`.
-        renderer: Option<HeadlessRenderer>,
-        lease: Lease,
-    }
-
-    impl HeadlessRenderer {
-        /// A renderer around the shared device and engines, or `Err` on a
-        /// machine with no adapter — the same shape as [`Self::new`], so a
-        /// test's skip site does not change.
-        pub fn shared() -> Result<TestRenderer, String> {
-            let mut lease = lease().ok_or_else(|| "no GPU adapter".to_string())?;
-            let shared = lease
-                .take()
-                .ok_or_else(|| "the shared GPU is out on loan".to_string())?;
-            let SharedGpu {
-                ctx,
-                colour,
-                compositor,
-                fx,
-                scope,
-            } = shared;
-            let renderer = HeadlessRenderer::from_engines(ctx, colour, compositor, fx, scope);
-            Ok(TestRenderer {
-                renderer: Some(renderer),
-                lease,
-            })
-        }
-    }
-
-    impl Deref for TestRenderer {
-        type Target = HeadlessRenderer;
-
-        // Test-only code; the `Option` is `Some` until `drop` by construction.
-        #[allow(clippy::expect_used)]
-        fn deref(&self) -> &HeadlessRenderer {
-            self.renderer
-                .as_ref()
-                .expect("a test renderer outlives its drop")
-        }
-    }
-
-    impl DerefMut for TestRenderer {
-        #[allow(clippy::expect_used)]
-        fn deref_mut(&mut self) -> &mut HeadlessRenderer {
-            self.renderer
-                .as_mut()
-                .expect("a test renderer outlives its drop")
-        }
-    }
-
-    impl Drop for TestRenderer {
-        fn drop(&mut self) {
-            if let Some(shared) = self
-                .renderer
-                .take()
-                .and_then(HeadlessRenderer::into_engines)
-            {
-                self.lease.restore(shared);
-            }
-        }
-    }
-}
+pub mod test_support;

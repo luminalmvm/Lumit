@@ -104,7 +104,7 @@ class BridgeMediaInfo {
 
   /// The timecode of the first frame, as a frame number at this rate: the
   /// one the item was given, else the file's own, else nought.
-  final BigInt startFrame;
+  final int startFrame;
 
   /// Whether that timecode is written the drop-frame way.
   final bool startDropFrame;
@@ -213,10 +213,10 @@ sealed class BridgeProxyState with _$BridgeProxyState {
   /// Nothing has run since start-up.
   const factory BridgeProxyState.idle() = BridgeProxyState_Idle;
   const factory BridgeProxyState.running({
-    required BigInt frame,
+    required int frame,
 
     /// Zero until the source's length has been read.
-    required BigInt total,
+    required int total,
   }) = BridgeProxyState_Running;
 
   /// The finished file — already attached to its item by the time this is
@@ -349,7 +349,7 @@ class FootageReference {
   /// When the file was last changed, in seconds since 1970, for the Project
   /// panel's Date column. `None` for a file that is not there, and for a
   /// numbered run of stills, which is no one file.
-  Future<PlatformInt64?> modified() =>
+  Future<int?> modified() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceModified(
         that: this,
       );
@@ -462,13 +462,13 @@ class FootageReference {
   /// with no picture in it — because a view showing its empty state is the
   /// honest answer and not a fault.
   void renderView(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required int width,
           required int height,
           required int rateNum,
           required int rateDen,
-          required BigInt frames,
+          required int frames,
           required int view}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceRenderView(
           that: this,
@@ -565,7 +565,7 @@ class FootageReference {
       );
 
   Future<BridgeRenderedFrame?> thumbnail(
-          {required int maxEdge, required PlatformInt64 frame}) =>
+          {required int maxEdge, required int frame}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceThumbnail(
           that: this, maxEdge: maxEdge, frame: frame);
 

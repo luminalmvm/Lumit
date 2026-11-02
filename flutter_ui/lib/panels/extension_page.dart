@@ -15,7 +15,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:math' show Random;
 import 'dart:ui' as ui;
 
@@ -29,6 +28,8 @@ import 'package:webview_windows/webview_windows.dart';
 import '../l10n/strings.dart';
 import '../state/extension_host.dart';
 import '../widgets/controls.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The two ends of one page: what the panel is told, and what it can ask of
 /// the page once it is up.

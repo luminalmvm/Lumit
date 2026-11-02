@@ -176,7 +176,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// down onto the fold rows - it is not in the read model, and a build may not
   /// go and ask for it.
   Map<String, BridgeScalar> _volumeDb = {};
-  BigInt? _readsRevision;
+  int? _readsRevision;
 
   /// The two halves' vertical scrolls, kept in step: they are one table, and a
   /// name that does not line up with its lane is worse than no table at all.
@@ -254,7 +254,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// bridge calls and only an edit can change the answer - and the span staged
   /// while an edge is being dragged.
   ({int start, int end, bool whole})? _workArea;
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier<({int start, int end, bool whole})?>(null);

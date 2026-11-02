@@ -8,6 +8,7 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+web-time = "1"
 # What a password to a shared project is hashed with, so that trying a list
 # of them costs memory as well as time. RustCrypto's own, pure Rust, MIT or
 # Apache-2.0, maintained. Only the hash is built, without the password file
@@ -57,3 +58,7 @@ uuid = { version = "1", features = ["v7", "serde"] }
 
 [lints]
 workspace = true
+
+# The browser build: randomness comes from the page's crypto API.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }

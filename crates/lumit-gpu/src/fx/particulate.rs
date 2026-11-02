@@ -593,15 +593,9 @@ impl FxEngine {
             enc.copy_buffer_to_buffer(&pass.stream, 0, &staging, 16, stream_bytes);
         }
         ctx.flush();
-        let slice = staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        ctx.device.poll(wgpu::Maintain::Wait);
-        rx.recv().ok()?.ok()?;
-        let words: Vec<u32> = bytemuck::cast_slice(&slice.get_mapped_range()).to_vec();
-        staging.unmap();
+        // The browser build answers with the stream an earlier frame left.
+        let words: Vec<u32> =
+            crate::device::read_buffer(ctx, ("particulate", op.cap, w, h), &staging)?;
         // Word 1 of the indirect arguments is the instance count: how many
         // particles the cap rule left standing.
         let count = *words.get(1)?;
@@ -1043,7 +1037,7 @@ impl ParticulatePipelines {
         // draw pipeline and not one after another.
         let compute = |entry: &'static str, label: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), compute_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
                     layout: Some(&layout),
@@ -1195,7 +1189,7 @@ impl ParticulateBlendPipelines {
             });
         let compute = |entry: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), tiles_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(entry),
                     layout: Some(&layout),

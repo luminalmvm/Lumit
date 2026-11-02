@@ -64,6 +64,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod files;
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -471,9 +473,9 @@ pub fn read_capped(path: &Path, limit: u64) -> Result<Vec<u8>> {
         path: path.to_path_buf(),
         reason: e.to_string(),
     };
-    let file = std::fs::File::open(path).map_err(io)?;
+    let file = files::open(path).map_err(io)?;
     // The declared length is a hint for sizing, never a promise about content.
-    let declared = file.metadata().map_err(io)?.len();
+    let declared = files::len(path).map_err(io)?;
     if declared > limit {
         return Err(IngressError::FileTooLarge {
             path: path.to_path_buf(),

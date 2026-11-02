@@ -19,7 +19,7 @@
 // `crates/lumit-bridge/src/api/**` — a stale library fails loudly with a content
 // hash mismatch rather than misbehaving quietly.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -31,6 +31,8 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:provider/provider.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where `cargo build -p lumit_bridge` leaves the library, relative to
 /// `flutter_ui/`. The cargokit-built copy under `build/` is not used: it only

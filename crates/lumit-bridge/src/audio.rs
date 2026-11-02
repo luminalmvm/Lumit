@@ -49,6 +49,9 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 
+mod engine;
+pub(crate) mod mix_peaks;
+
 /// A command for the audio thread — the only code that touches the engine.
 enum Cmd {
     /// Install a plan and rewind, then optionally seek and play — a fresh
@@ -159,7 +162,7 @@ struct AudioState {
     /// a poll can never name a strip the sound is not on.
     meter_strips: Vec<Uuid>,
     /// The plan the engine is playing and the rate it was built at, kept so
-    /// the Timeline's Sound mix row can summarise the mix ([`mix_peaks`])
+    /// the Timeline's Sound mix row can summarise the mix ([`mix_peaks::mix_peaks`])
     /// without a second mixer. Goes with `loaded_comp`.
     loaded_plan: Option<(Arc<MixPlan>, u32)>,
     /// The document the last [`scrub`] asked for a mix of. A scrub arrives
@@ -436,51 +439,10 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
             Device::Untried => (st.wanted_device.clone(), st.device_gen),
         }
     };
-    // Build without the lock: spawn the audio thread and wait for its verdict.
+    // Open it without the lock.
     let (tx, rx) = std::sync::mpsc::channel::<Cmd>();
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let engine = match lumit_audio::AudioEngine::new_on(wanted.as_deref()) {
-            Ok(engine) => {
-                let _ = ready_tx.send(Some((
-                    engine.clock(),
-                    engine.meters(),
-                    engine.device_rate(),
-                )));
-                engine
-            }
-            Err(_) => {
-                let _ = ready_tx.send(None);
-                return; // no device: the thread ends, the state stays Unavailable
-            }
-        };
-        // The engine lives here for the session; each command is a plan swap
-        // or an atomic store — nothing slow, nothing that can block the
-        // realtime callback.
-        while let Ok(cmd) = rx.recv() {
-            match cmd {
-                Cmd::Load { plan, start, play } => {
-                    engine.load_plan(plan);
-                    if let Some(s) = start {
-                        engine.seek_seconds(s);
-                    }
-                    if play {
-                        engine.play();
-                    }
-                }
-                Cmd::Swap(plan) => engine.swap_plan(plan),
-                Cmd::Play => engine.play(),
-                Cmd::Pause => engine.pause(),
-                Cmd::Mute(m) => engine.set_muted(m),
-                Cmd::Slow(s) => engine.set_slow(s),
-                Cmd::Seek(s) => engine.seek_seconds(s),
-                Cmd::Scrub { at, len } => engine.scrub(at, len),
-                Cmd::Unload => engine.unload(),
-            }
-        }
-    });
-    match ready_rx.recv() {
-        Ok(Some((clock, meters, rate))) => {
+    match engine::open(wanted, rx) {
+        Some((clock, meters, rate)) => {
             let mut st = lock();
             // The choice moved again while this stream was opening: let the
             // fresh one win rather than installing a stale engine over it.
@@ -501,7 +463,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
             let _ = tx.send(Cmd::Slow(st.slow));
             Some((tx, rate, generation))
         }
-        _ => {
+        None => {
             let mut st = lock();
             if st.device_gen == generation {
                 st.device = Device::Unavailable;
@@ -516,6 +478,8 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
 fn send(st: &AudioState, cmd: Cmd) {
     if let Device::Ready { tx, .. } = &st.device {
         let _ = tx.send(cmd);
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::wake();
     }
 }
 
@@ -530,7 +494,7 @@ fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::model::Doc
         return;
     }
     st.worker_busy = true;
-    std::thread::spawn(move || run_prepare(comp, doc));
+    engine::spawn(move || run_prepare(comp, doc));
 }
 
 /// The prepare worker: build and install one comp's mix, then drain the
@@ -765,7 +729,7 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
         }
     }
 
-    std::thread::spawn(move || {
+    engine::spawn(move || {
         let Some((tx, rate, generation)) = ensure_device() else {
             return;
         };
@@ -998,63 +962,6 @@ pub(crate) fn set_device(id: Option<String>) {
     // Untried rather than Unavailable even when the last attempt found nothing:
     // choosing a device is exactly the moment to look again.
     st.device = Device::Untried;
-}
-
-/// The loaded mix summarised over `[start_s, end_s)` - `min`, `max`, `rms`
-/// per bucket, the shape the waveform lanes draw - and how long the mix runs,
-/// or `None` when `comp` is not the mix the engine holds (nothing loaded, or
-/// another comp's). A prepare running alongside is not a refusal: the plan in
-/// hand is the mix as it was a moment ago, which is what the row wants over an
-/// empty lane, and the next ask has the new one. The plan's `Arc` is cloned
-/// under the lock and walked outside it, so a wide window never holds the
-/// audio bookkeeping up.
-pub(crate) fn mix_peaks(
-    comp: Uuid,
-    start_s: f64,
-    end_s: f64,
-    buckets: usize,
-) -> Option<(Vec<f32>, f64)> {
-    let (plan, rate) = {
-        let st = lock();
-        // Not `worker_busy`: a prepare marks the worker busy the moment it is
-        // kicked, and the row asks for one on every poll, so refusing while
-        // one runs is refusing always. The loaded plan is only ever replaced
-        // by a prepare that finished, so the worst this answers is the mix as
-        // it stood one poll ago.
-        if st.loaded_comp != Some(comp) {
-            return None;
-        }
-        st.loaded_plan.clone()?
-    };
-    let duration = plan.total_frames as f64 / f64::from(rate);
-    Some((mix_peaks_of(&plan, rate, start_s, end_s, buckets), duration))
-}
-
-/// How many frames a bucket of the Sound mix row may cover and still be read
-/// from the samples. Past it the row is drawn from the files' own peaks.
-/// Four thousand buckets of this are under a minute and a half of mix, which
-/// is as much as this ever has decoded for one answer.
-const MIX_READ_FRAMES: f64 = 1024.0;
-
-/// `plan` summarised over `[start_s, end_s)`: read from the samples where the
-/// window is narrow enough to decode for, and put together from each file's
-/// peak pyramid where it is not ([`MixPlan::peaks_wide`]). Waits, for the
-/// decode in the first case and for any pyramid not yet built in the second,
-/// so it is not for a caller that cannot.
-fn mix_peaks_of(plan: &MixPlan, rate: u32, start_s: f64, end_s: f64, buckets: usize) -> Vec<f32> {
-    let rate_f = f64::from(rate);
-    if buckets == 0 || end_s <= start_s {
-        return plan.peaks(rate, start_s, end_s, buckets);
-    }
-    if (end_s - start_s) * rate_f / buckets as f64 <= MIX_READ_FRAMES {
-        let from = (start_s.max(0.0) * rate_f) as usize;
-        let to = (end_s.max(0.0) * rate_f).ceil() as usize;
-        plan.warm(from, to.min(plan.total_frames));
-        return plan.peaks(rate, start_s, end_s, buckets);
-    }
-    plan.peaks_wide(rate, start_s, end_s, buckets, &mut |sound| {
-        crate::peaks::pyramid_for(sound)
-    })
 }
 
 /// The playback clock: `(seconds, is_playing, loaded)`.

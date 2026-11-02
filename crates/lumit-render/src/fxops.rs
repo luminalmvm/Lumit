@@ -1424,7 +1424,7 @@ pub fn run_ops(
         // time the paperwork rather than the work. One reading per op, whether
         // or not it draws, so the timings stay 1:1 with the resolve's own id
         // list (`resolve_stack_temporal_named`).
-        let started = timings.as_ref().map(|_| std::time::Instant::now());
+        let started = timings.as_ref().map(|_| web_time::Instant::now());
         // The parameters come out of the stack's arena and the kernel out of
         // the GPU table, looked up by the effect's own name. An op with no
         // table entry (an orchestration-only effect) passes the texture through

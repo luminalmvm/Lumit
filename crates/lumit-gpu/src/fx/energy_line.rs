@@ -4,7 +4,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use crate::{Compiling, GpuContext};
+use crate::{compiling::Compiling, GpuContext};
 
 use super::blur::GlowOctaveOp;
 use super::lens_blur::{bind_layout, scratch, Slot};

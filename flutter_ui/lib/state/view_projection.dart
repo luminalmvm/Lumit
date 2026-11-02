@@ -23,7 +23,7 @@ class ViewProjections {
     required CompositionReference comp,
     required int viewId,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
     required BridgeCameraPose? view,
   }) {
@@ -32,7 +32,7 @@ class ViewProjections {
     if (held != null && held.key == key) return held.rows;
     var rows = flatView;
     try {
-      rows = comp.viewProjection(frame: BigInt.from(frame), view: view);
+      rows = comp.viewProjection(frame: frame, view: view);
     } catch (_) {
       // No worker yet, or a comp that has gone. Asked again once the frame,
       // the document or the view moves.
@@ -62,7 +62,7 @@ class CameraPoses {
     LayerReference layer, {
     required Object id,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
   }) {
     final key = (frame, revision, generation);
@@ -70,7 +70,7 @@ class CameraPoses {
     if (held != null && held.$1 == key) return held.$2;
     BridgeCameraPose? pose;
     try {
-      pose = layer.cameraAimAt(frame: BigInt.from(frame))?.pose;
+      pose = layer.cameraAimAt(frame: frame)?.pose;
     } catch (_) {
       // A camera that has gone. Asked again once the document moves.
     }
@@ -86,7 +86,7 @@ class CameraPoses {
     LayerReference layer, {
     required Object id,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
   }) {
     final key = (frame, revision, generation);
@@ -94,7 +94,7 @@ class CameraPoses {
     if (held != null && held.$1 == key) return held.$2;
     BridgeCameraPose? pose;
     try {
-      pose = layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+      pose = layer.cameraOwnPoseAt(frame: frame);
     } catch (_) {
       // A camera that has gone. Asked again once the document moves.
     }

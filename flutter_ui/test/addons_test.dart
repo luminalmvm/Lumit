@@ -7,12 +7,14 @@
 // that was published, stopping part way, and taking a pack away again.
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/download.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void main() {
   late Directory scratch;

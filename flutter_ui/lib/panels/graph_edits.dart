@@ -225,7 +225,7 @@ void previewChannelEdits({
   final layerId = layer.internallayerId.toString();
   bool sameLayer(GraphChannel c) =>
       c.entry.layer.internallayerId.toString() == layerId;
-  final bigFrame = BigInt.from(frame);
+  final bigFrame = frame;
 
   if (lead.retime) {
     comp.renderFrameWithRetime(

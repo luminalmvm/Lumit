@@ -1,6 +1,6 @@
 // The Scopes panel's own chrome, and when it asks the engine for a trace.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +9,8 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Counts the trace requests that cross the bridge. The name is the generated
 /// one for `CompositionReference.renderScope`, so nothing else is counted.

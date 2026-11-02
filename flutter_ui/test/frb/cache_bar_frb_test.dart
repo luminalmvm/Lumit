@@ -70,7 +70,7 @@ void main() {
       p.uiState.setSelectedComp(comp);
 
       expect(
-        comp.cachedFrames(frames: BigInt.from(8), scale: 1.0),
+        comp.cachedFrames(frames: 8, scale: 1.0),
         everyElement(0),
         reason: 'nothing rendered yet',
       );
@@ -89,7 +89,7 @@ void main() {
       late List<int> tiers;
       for (var attempt = 0; attempt < 5; attempt++) {
         comp.renderScope(
-          frame: BigInt.zero,
+          frame: 0,
           scale: p.uiState.viewerScale,
           kind: 0,
           colours: scopeColoursFor(LumitTheme.dark()),
@@ -101,11 +101,11 @@ void main() {
           maxRounds: 200,
           until: () =>
               cacheStorageOf(comp.cachedFrames(
-                  frames: BigInt.from(8), scale: p.uiState.viewerScale)[0]) !=
+                  frames: 8, scale: p.uiState.viewerScale)[0]) !=
               0,
         );
         tiers = comp
-            .cachedFrames(frames: BigInt.from(8), scale: p.uiState.viewerScale)
+            .cachedFrames(frames: 8, scale: p.uiState.viewerScale)
             .map(cacheStorageOf)
             .toList();
         if (tiers[0] != 0) break;
@@ -191,7 +191,7 @@ void main() {
         for (var i = 0; i < 150; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
           final tiers = second
-              .cachedFrames(frames: BigInt.from(8), scale: 1.0)
+              .cachedFrames(frames: 8, scale: 1.0)
               .map(cacheStorageOf)
               .toList();
           if (tiers[0] == 2) return;
@@ -229,7 +229,7 @@ void main() {
       ));
       await tester.pump();
       List<int> tiers() => comp
-          .cachedFrames(frames: BigInt.from(4), scale: p.uiState.viewerScale)
+          .cachedFrames(frames: 4, scale: p.uiState.viewerScale)
           .map(cacheStorageOf)
           .toList();
       await settleFrb(
@@ -267,7 +267,7 @@ void main() {
         (tester) async {
       // Set before anything renders, exactly as the settings restore does.
       const wanted = 1 << 30; // 1 GiB, and not the default
-      setVramCacheBudget(bytes: BigInt.from(wanted));
+      setVramCacheBudget(bytes: wanted);
 
       final p = freshProject();
       final comp = _stampComp(p.state.project!, 'Scene');
@@ -332,7 +332,7 @@ void main() {
       p.uiState.setSelectedComp(comp);
 
       comp.renderFrame(
-        frame: BigInt.from(5),
+        frame: 5,
         scale: 1.0,
         mode: BridgePlaybackMode.everyFrame,
         view: 0,
@@ -347,7 +347,7 @@ void main() {
         for (var i = 0; i < 150; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
           final tiers = comp
-              .cachedFrames(frames: BigInt.from(12), scale: 1.0)
+              .cachedFrames(frames: 12, scale: 1.0)
               .map(cacheStorageOf)
               .toList();
           // Ahead of the playhead fills first (two forward for one back),

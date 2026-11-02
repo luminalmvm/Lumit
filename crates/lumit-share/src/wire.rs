@@ -13,7 +13,7 @@ use std::net::{Shutdown, TcpStream};
 use std::path::Path;
 use std::sync::mpsc::{Receiver as Outbox, RecvTimeoutError};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// Raised whenever a message changes shape.
 pub(crate) const PROTOCOL: u32 = 5;

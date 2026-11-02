@@ -41,7 +41,9 @@
 // it. So the swap steps out to the temporary folder first. Without that, every
 // in-place update failed at the first rename.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What kind of installation this is, which is what decides whether Lumit can
 /// update itself and what a release attachment has to contain.
@@ -176,6 +178,15 @@ class InstallSite {
         kind: InstallKind.flatpak,
         root: Directory(parentOf(exe)),
         launcher: File(exe),
+      );
+    }
+
+    // The browser build is a page, and the page is always the newest.
+    if (os == 'web') {
+      return InstallSite(
+        kind: InstallKind.unknown,
+        root: Directory('/'),
+        launcher: File('/lumit'),
       );
     }
 

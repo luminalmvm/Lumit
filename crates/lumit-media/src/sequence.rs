@@ -24,8 +24,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
+use web_time::Instant;
+
+#[cfg(not(target_arch = "wasm32"))]
 use crate::MediaError;
 
 /// How many frames one sequence may hold (docs/14 §5, budgeted work). Well
@@ -368,6 +371,13 @@ fn briefly_held<T: Clone>(
 
 /// A file's length and modification time.
 pub(crate) fn file_stamp(path: &Path) -> Option<(u64, SystemTime)> {
+    // A file the page holds has no length here, and never changes, but one
+    // handed in after its project opened must not keep the answer from
+    // before.
+    #[cfg(target_arch = "wasm32")]
+    if crate::web::holds(path) {
+        return Some((0, SystemTime::UNIX_EPOCH));
+    }
     type Held = Mutex<HashMap<PathBuf, (Instant, Option<(u64, SystemTime)>)>>;
     static HELD: LazyLock<Held> = LazyLock::new(Held::default);
     briefly_held(&HELD, path, || {
@@ -387,6 +397,7 @@ static UNREADABLE: LazyLock<Mutex<HashMap<PathBuf, HashSet<PathBuf>>>> =
 
 /// Note whether `file` of the run read as `source` read. A file that reads
 /// again, saved over since, is forgotten.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn note_frame(source: &Path, file: impl FnOnce() -> PathBuf, unreadable: bool) {
     let Ok(mut held) = UNREADABLE.lock() else {
         return;
@@ -448,6 +459,7 @@ impl From<&MediaSource> for MediaSource {
 }
 
 /// The `image2` input for `run` at `fps`, ready to open.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn open_run(
     run: &Run,
     fps: (u32, u32),

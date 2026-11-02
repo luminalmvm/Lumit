@@ -400,7 +400,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: box.layer,
           transform: transformWith(box.layer.getTransform(), rotation: degrees),
@@ -575,7 +575,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: layer,
           transform: tf,

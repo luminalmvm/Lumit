@@ -975,7 +975,7 @@ impl LensFlareFx {
                        module: &wgpu::ShaderModule,
                        pl: &wgpu::PipelineLayout| {
             let (device, module, pl) = (device.clone(), module.clone(), pl.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
                     layout: Some(&pl),
@@ -1190,8 +1190,8 @@ impl LensFlareFx {
     /// See [`LazyFlare::reset`]. A bake still on the thread is waited for
     /// first, so it cannot surface later as a lens nobody there asked for.
     pub(super) fn reset(&self) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        while self.bake_pending() && std::time::Instant::now() < deadline {
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(30);
+        while self.bake_pending() && web_time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         if let Ok(mut cache) = self.cache.lock() {

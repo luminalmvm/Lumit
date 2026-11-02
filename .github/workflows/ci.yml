@@ -642,6 +642,71 @@ jobs:
           c++ -std=c++17 -Wall -Wextra -Werror gpu_device_match_test.cc -o "$out"
           "$out"
 
+  web:
+    name: browser build (wasm32 engine + Flutter web)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+      # rust-toolchain.toml picks the version; the target goes on that one.
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The tool that writes the page's half of the bridge has to match the
+      # library's version exactly, so it is read from the lock file.
+      - name: Install wasm-bindgen
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          wasm-bindgen --version 2>/dev/null | grep -q " $version$" \
+            || cargo install wasm-bindgen-cli --version "$version" --locked
+      # build-web.ps1 runs wasm-opt on the engine's wasm when it is on PATH.
+      # Pinned to a release and its checksum, like FFmpeg in the jobs below.
+      - name: Install wasm-opt (binaryen)
+        env:
+          BINARYEN: version_133
+          BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+        run: |
+          url="https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN}/binaryen-${BINARYEN}-x86_64-linux.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/binaryen.tar.gz"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/binaryen.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/binaryen.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-${BINARYEN}/bin" >> "$GITHUB_PATH"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        id: flutter
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+      - name: Cache pub packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      # The fallback fonts build-web.ps1 serves with the app. Flutter lists
+      # them, so a new Flutter starts a new cache.
+      - name: Cache fallback fonts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/web-fonts
+          key: web-fonts-${{ steps.flutter.outputs.VERSION }}
+      - name: flutter pub get
+        working-directory: flutter_ui
+        run: flutter pub get
+      - name: Build
+        shell: pwsh
+        env:
+          LUMIT_WEB_FONTS: ${{ runner.temp }}/web-fonts
+        run: ./scripts/build-web.ps1
+      - name: Keep the build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lumit-web
+          path: flutter_ui/build/web
+          retention-days: 7
+
   # An extension's page is drawn by WebKitGTK from the runner
   # (linux/runner/extension_views.cc), which no `flutter test` reaches: there
   # is no window and no runner in one. This puts a page up on a real window

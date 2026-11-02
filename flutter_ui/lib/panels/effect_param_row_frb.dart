@@ -2787,7 +2787,7 @@ class EffectStackEditor {
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(
-          frame: BigInt.from(frame),
+          frame: frame,
           scale: scale,
           layer: layer,
           effects: stackWith(layer),

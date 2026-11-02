@@ -966,7 +966,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         final document = _typedDocument(_controller.text);
         if (document == null) return;
         widget.comp.renderFrameWithTextPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: layer,
           document: document,

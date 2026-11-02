@@ -2795,7 +2795,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       LayerBox box, BridgeTransform Function(BridgeTransform) patch) {
     try {
       widget.comp.renderFrameWithTransformPreview(
-        frame: BigInt.from(widget.uiState.playheadFrame.value),
+        frame: widget.uiState.playheadFrame.value,
         scale: widget.uiState.viewerScale,
         layer: box.layer,
         transform: patch(box.layer.getTransform()),
@@ -2937,7 +2937,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: layer,
           transform: patched,
@@ -3257,7 +3257,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         final art = shapeContentsRect(contents);
         final shift = art == null ? Offset.zero : art.topLeft - box.artOrigin;
         widget.comp.renderFrameWithShapePreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: box.layer,
           contents: contents,
@@ -3284,7 +3284,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           maskEdited(box, mask, edit) ?? mask,
       ];
       widget.comp.renderFrameWithMaskPreview(
-        frame: BigInt.from(widget.uiState.playheadFrame.value),
+        frame: widget.uiState.playheadFrame.value,
         scale: widget.uiState.viewerScale,
         layer: box.layer,
         masks: masks,
@@ -3461,7 +3461,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithMaskPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: f.box.layer,
           masks: [

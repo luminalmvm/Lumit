@@ -5,11 +5,15 @@
 //! asked for. Closing the pipe is what takes the status down, so quitting
 //! Lumit needs no goodbye.
 
+// Nothing here runs in the browser build, which keeps only its shape.
+#![cfg_attr(target_arch = "wasm32", allow(unused))]
+
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, Once};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use serde_json::json;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Lumit's application id on Discord. Not a secret, every status carries it.
 const CLIENT_ID: &str = "1558750922316976188";
@@ -42,6 +46,8 @@ static THREAD: Once = Once::new();
 pub(crate) fn set(status: Option<Status>) {
     let show = status.is_some();
     *WANTED.lock().unwrap_or_else(|e| e.into_inner()) = status;
+    // The browser build has no Discord on the machine to talk to.
+    #[cfg(not(target_arch = "wasm32"))]
     if show {
         THREAD.call_once(|| {
             // No thread means no status, which is not worth an error.
@@ -52,6 +58,7 @@ pub(crate) fn set(status: Option<Status>) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn run() {
     // When Lumit turned up in the status, for Discord's elapsed clock.
     let since = SystemTime::now()
@@ -86,6 +93,7 @@ fn run() {
 
 /// Discord's `SET_ACTIVITY` command for `status`. A line with nothing to say
 /// is left out, as Discord refuses an empty one.
+#[cfg(not(target_arch = "wasm32"))]
 fn activity(status: &Status, since: u64, nonce: u64) -> serde_json::Value {
     let mut activity = json!({ "timestamps": { "start": since } });
     for (key, name) in [("details", &status.project), ("state", &status.comp)] {
@@ -104,6 +112,7 @@ fn activity(status: &Status, since: u64, nonce: u64) -> serde_json::Value {
 
 /// The first Discord that answers. A second Discord on the machine takes the
 /// next number, up to 9.
+#[cfg(not(target_arch = "wasm32"))]
 fn connect() -> Option<Pipe> {
     (0..10).find_map(|n| {
         let mut pipe = open(n)?;
@@ -120,6 +129,7 @@ fn connect() -> Option<Pipe> {
 //
 // ponytail: the read has no timeout, so a Discord that hangs parks this thread
 // and the status stops following. A read timeout on the pipe if it ever shows.
+#[cfg(not(target_arch = "wasm32"))]
 fn exchange(pipe: &mut Pipe, opcode: u32, body: &serde_json::Value) -> io::Result<()> {
     let body = body.to_string();
     let mut frame = Vec::with_capacity(8 + body.len());

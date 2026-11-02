@@ -5,7 +5,6 @@
 // row-height maths.
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_snap.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -56,7 +55,7 @@ void main() {
           ),
           inFrame: 60,
           outFrame: 180,
-          clipFrames: Int64List.fromList([90]),
+          clipFrames: [90],
           clips: [
             BridgeClip(
               id: id,

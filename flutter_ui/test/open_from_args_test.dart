@@ -2,13 +2,15 @@
 // passes the document path as an argument). projectPathFromArgs picks it out:
 // the first existing .lum on the line, nothing else.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart'
     show listenForOpenRequests, projectPathFromArgs, takeOpenRequests;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void main() {
   late Directory tmp;

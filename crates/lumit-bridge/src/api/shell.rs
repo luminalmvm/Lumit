@@ -27,7 +27,10 @@ pub fn boot_log() -> Vec<String> {
         format!("lumit-bridge {}", env!("CARGO_PKG_VERSION")),
         format!(
             "media (decode/probe): {}",
-            if cfg!(feature = "media") {
+            if cfg!(target_arch = "wasm32") {
+                // The page's own decoders, through MediaBunny.
+                "WebCodecs"
+            } else if cfg!(feature = "media") {
                 "on — FFmpeg linked"
             } else {
                 "off"
@@ -40,8 +43,11 @@ pub fn boot_log() -> Vec<String> {
             "zero-copy Viewer: {}",
             if cfg!(all(windows, feature = "shared-texture"))
                 || cfg!(all(target_os = "linux", feature = "shared-texture-linux"))
+                || cfg!(all(target_os = "macos", feature = "shared-texture-macos"))
             {
                 "shared texture"
+            } else if cfg!(target_arch = "wasm32") {
+                "canvas"
             } else {
                 "read-back path"
             }
@@ -243,7 +249,7 @@ pub fn list_autosaves(project: String) -> Vec<BridgeAutosave> {
     // The ceiling is belt and braces against a folder somebody filled by hand.
     for slot in 1_u32..=999 {
         let candidate = dir.join(format!("{stem}.autosave-{slot}.lum"));
-        if !candidate.is_file() {
+        if !lumit_ingress::files::is_file(&candidate) {
             break;
         }
         out.push(BridgeAutosave {

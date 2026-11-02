@@ -9,7 +9,14 @@ use lumit_render::headless::HeadlessRenderer;
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
 // frontends would then decode at different sizes for the same on-screen scale.
 use crate::render::quality_for;
+use dropper::{cut_patch, soloed};
 use uuid::Uuid;
+#[cfg(target_arch = "wasm32")]
+use web::{sample_pixels, trace_scope};
+
+mod dropper;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 // Each frame type is only constructed by its own platform's `publish_frame`, so
 // importing both unconditionally would warn on one of them in every build.
@@ -19,7 +26,8 @@ use uuid::Uuid;
 // `RenderedSharedTexture` case.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 use crate::api::state::BridgeSharedFrameInfo;
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -60,7 +68,7 @@ pub struct WorkerState {
     /// When the picture after the last one shown was due, in every-frame
     /// playback. The next run starts on it, so a loop turns on the beat
     /// instead of cutting its last frame short.
-    present_due: Option<std::time::Instant>,
+    present_due: Option<web_time::Instant>,
     /// The decode-ahead thread (docs/impl/playback-scheduler.md §5): playback
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
@@ -135,7 +143,7 @@ pub struct WorkerState {
     /// The room on the drive last sent down, and when the drive was last asked
     /// ([`crate::framecache::disk::room`]).
     applied_disk_room: u64,
-    disk_room_asked: std::time::Instant,
+    disk_room_asked: web_time::Instant,
     seen_disk_clears: u64,
     seen_disk_location: (u64, Option<std::path::PathBuf>),
     /// The VRAM budget last applied and the clear-request count last honoured
@@ -160,7 +168,7 @@ pub struct WorkerState {
     /// frontend even though the sweep itself wrote nothing new.
     bar_dirty: bool,
     /// When the strip was last published — see [`BAR_MIN_INTERVAL`].
-    bar_published_at: std::time::Instant,
+    bar_published_at: web_time::Instant,
     /// True when the idle fill has nothing left to do (everything near the
     /// playhead is held, or the budget is full). Cleared whenever the anchor,
     /// the document or the budget moves.
@@ -171,7 +179,7 @@ pub struct WorkerState {
     backup_exhausted: bool,
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
-    last_request: std::time::Instant,
+    last_request: web_time::Instant,
     /// The flare-bake generation this worker has already reacted to.
     /// When the renderer's moves past it, a bake has been queued or has landed
     /// — and a landing is the moment the picture on screen stops being the
@@ -243,7 +251,7 @@ impl WorkerState {
 #[frb(ignore)]
 struct DiskWant {
     provenance: lumit_render::headless::FrameProvenance,
-    asked: std::time::Instant,
+    asked: web_time::Instant,
 }
 
 /// Name one frame through the worker's memo: computed at most once per
@@ -590,7 +598,7 @@ fn sync_disk(state: &mut WorkerState) {
     // The drive is asked now and then rather than every turn, and the answer
     // only sent on when it has moved by more than a frame or two.
     if state.disk_room_asked.elapsed() >= DISK_ROOM_EVERY {
-        state.disk_room_asked = std::time::Instant::now();
+        state.disk_room_asked = web_time::Instant::now();
         let room = root.as_deref().map_or(u64::MAX, |r| {
             crate::framecache::disk::room(
                 r,
@@ -952,7 +960,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
             != (comp_id, view, frames, scale_q, revision)
     });
     state.published_bar = Some(fingerprint);
-    state.bar_published_at = std::time::Instant::now();
+    state.bar_published_at = web_time::Instant::now();
 
     let bgra = zero_copy_wants_bgra();
     let scale = f32::from(scale_q) / 1000.0;
@@ -1291,7 +1299,7 @@ fn line_up_frame(
         key,
         DiskWant {
             provenance,
-            asked: std::time::Instant::now(),
+            asked: web_time::Instant::now(),
         },
     );
     _ = disk
@@ -1458,7 +1466,7 @@ fn prepare_frame(
                         key,
                         DiskWant {
                             provenance,
-                            asked: std::time::Instant::now(),
+                            asked: web_time::Instant::now(),
                         },
                     );
                     _ = state
@@ -1646,8 +1654,11 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
     }
     state.bakes_seen = now;
     // The fill was stopped while the frames were unnameable; there is
-    // something to bank again.
+    // something to bank again. In the browser build a frame the page decoded
+    // may have landed, and the stand-ins held for it go.
     state.fill_exhausted = false;
+    #[cfg(target_arch = "wasm32")]
+    state.renderer.clear_decoded();
     republish_last_frame(state, stream);
 }
 
@@ -1888,6 +1899,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         }
         // Any request stops the fill's frame, which is made again next turn.
         let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
+        let stood_in = lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins();
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
@@ -1895,6 +1907,11 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             Err(e) if e == lumit_render::cancel::CANCELLED => {}
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
+        }
+        // In the browser build a frame drawn from an earlier frame's read-back, or
+        // in place of footage still on its way, is never kept: wait for a landing.
+        if lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins() != stood_in {
+            state.fill_exhausted = true;
         }
         return;
     }
@@ -2088,15 +2105,15 @@ struct Playback {
     /// Where playback started, and when — the wall clock's baseline for as long
     /// as no mix is loaded to be master instead.
     from: u64,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// When the last frame was shown, which the end of a leg waits a frame
     /// from. `None` before the first present of a run.
-    last_presented: Option<std::time::Instant>,
+    last_presented: Option<web_time::Instant>,
     /// When the next every-frame present falls due — a GRID, stepped by one
     /// comp period per present ([`crate::playback::next_present_due`]), so
     /// loop overhead never compounds into a slower rate. `None` before the
     /// first present of a run; adaptive mode paces on the clock instead.
-    next_present_due: Option<std::time::Instant>,
+    next_present_due: Option<web_time::Instant>,
     /// Frames rendered ahead of the clock, oldest first, waiting to be shown.
     ring: std::collections::VecDeque<(u64, lumit_render::headless::PreparedFrame)>,
     /// The document revision the ring and the sound were made from. An edit
@@ -2135,7 +2152,7 @@ struct Playback {
     on_time_run: u32,
     /// Until when the audio clock is not to be believed, because the sound
     /// has just been moved and the move may not have landed yet.
-    audio_settles: Option<std::time::Instant>,
+    audio_settles: Option<web_time::Instant>,
     /// How many frames the last [`Self::advance`] had to jump over to catch the
     /// clock. Zero while playback is keeping up.
     ///
@@ -2152,14 +2169,14 @@ struct Playback {
     /// numbers (see [`Self::report_pace`]).
     present_costs: crate::playback::CostWindow,
     /// When the pace was last printed, so the report stays sparse.
-    pace_reported: std::time::Instant,
+    pace_reported: web_time::Instant,
 }
 
 impl Playback {
     /// The sound has just been moved: leave its clock alone for a moment.
     fn settle_audio(&mut self) {
         const SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
-        self.audio_settles = Some(std::time::Instant::now() + SETTLE);
+        self.audio_settles = Some(web_time::Instant::now() + SETTLE);
     }
 
     /// Print where a playback frame's time is going, at most every couple of
@@ -2175,7 +2192,7 @@ impl Playback {
         if self.pace_reported.elapsed() < PACE_REPORT_EVERY {
             return;
         }
-        self.pace_reported = std::time::Instant::now();
+        self.pace_reported = web_time::Instant::now();
         let ms = |cost: Option<f64>| cost.map_or(0.0, |secs| secs * 1000.0);
         note!(
             "Playback pace: present p95 {:.2} ms, render p95 {:.2} ms, ring {}, budget {:.2} ms",
@@ -2199,7 +2216,7 @@ impl Playback {
         let ours = self.pre_rolled
             && self
                 .audio_settles
-                .is_none_or(|at| std::time::Instant::now() >= at);
+                .is_none_or(|at| web_time::Instant::now() >= at);
         match clock_seconds() {
             Some(seconds) if ours => seconds * f64::from(self.slow),
             _ => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
@@ -2274,7 +2291,7 @@ impl Playback {
             return queued >= 1
                 && self
                     .next_present_due
-                    .is_none_or(|due| std::time::Instant::now() >= due);
+                    .is_none_or(|due| web_time::Instant::now() >= due);
         }
         queued >= PRE_ROLL_FRAMES.min(self.capacity()).max(1)
             || self.started.elapsed() >= PRE_ROLL_BUDGET
@@ -2308,7 +2325,7 @@ impl Playback {
         }
         match self.mode {
             BridgePlaybackMode::EveryFrame => match self.next_present_due {
-                Some(due) if std::time::Instant::now() < due => None,
+                Some(due) if web_time::Instant::now() < due => None,
                 _ => Some(0),
             },
             BridgePlaybackMode::Adaptive => {
@@ -2326,7 +2343,7 @@ impl Playback {
         match self.mode {
             BridgePlaybackMode::EveryFrame => {
                 let due = self.next_present_due?;
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 (due > now).then(|| due - now)
             }
             BridgePlaybackMode::Adaptive => {
@@ -2537,7 +2554,7 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     // still reads where the sound was, which is not a thing to act on.
     let settling = playback
         .audio_settles
-        .is_some_and(|at| std::time::Instant::now() < at);
+        .is_some_and(|at| web_time::Instant::now() < at);
     let lead = sound_lead(frame, fps, playback.slow).filter(|_| !settling);
     let slack = sync_slack(period).as_secs_f64();
     match audio_chase(
@@ -2828,66 +2845,6 @@ pub struct RenderCompRequestWithPreview {
     pub masks: Option<Vec<crate::api::layer::BridgeMask>>,
 }
 
-/// Ask the operating system for 1 ms sleep granularity (Windows; a no-op
-/// elsewhere, where sleeps are already fine-grained).
-///
-/// The worker paces presents with short sleeps, and Windows rounds a sleep UP
-/// to the system timer's next tick — by default ~15.6 ms apart. That is twice
-/// a 120 fps frame period: every sleep-then-present overshot its due time, the
-/// present grid re-anchored, and the achieved rate fell to whatever the timer
-/// allowed (~85 of 120 in practice; at 60 fps the grid held but presents
-/// jittered by several milliseconds, which is what kept stopping the sound).
-/// One millisecond is the granularity every media application requests; the
-/// setting is process-wide and lives for the process, exactly as it does in
-/// any NLE. A refusal is harmless — pacing then leans on the spin window
-/// alone.
-#[cfg(windows)]
-#[frb(ignore)]
-fn raise_timer_resolution() {
-    // SAFETY: `timeBeginPeriod` touches no memory owned by this program; it
-    // adjusts a scheduler setting and reports acceptance or refusal in its
-    // return value, which is ignored because a refusal leaves nothing to do.
-    unsafe {
-        let _ = windows::Win32::Media::timeBeginPeriod(1);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn raise_timer_resolution() {}
-
-/// Run this thread a step above the rest of the machine while it plays, and
-/// back at the ordinary priority when it stops (Windows).
-///
-/// A picture is due at a moment, and on a machine with every core busy the
-/// thread that sends it waited its turn like any other: with sixteen cores
-/// loaded the pictures of a cached span went out ten milliseconds late, and
-/// on time with this. Only while playing, so that an idle fill or a heavy
-/// still frame never takes a core ahead of the interface.
-// ponytail: Windows only. macOS and Linux want their own call (a QoS class,
-// a nice value) and a machine to measure it on.
-#[cfg(windows)]
-#[frb(ignore)]
-fn playback_priority(playing: bool) {
-    use windows::Win32::System::Threading::{
-        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
-    };
-    let priority = if playing {
-        THREAD_PRIORITY_ABOVE_NORMAL
-    } else {
-        THREAD_PRIORITY_NORMAL
-    };
-    // SAFETY: the pseudo-handle of the calling thread and a priority constant.
-    // A refusal leaves the thread as it was, which is all there is to do.
-    unsafe {
-        let _ = SetThreadPriority(GetCurrentThread(), priority);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn playback_priority(_playing: bool) {}
-
 /// The way into the render worker. Each send also turns over the epochs of
 /// the work it replaces, so a render the worker is part way through can see it
 /// is no longer wanted and stop (`lumit_render::cancel`).
@@ -2940,6 +2897,8 @@ impl WorkerSender {
         };
         // Sent first, so a render that sees the turn finds the request queued.
         self.tx.send(request).map_err(|_| WorkerGone)?;
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::wake();
         self.epochs.any.bump();
         if let Some(lane) = lane {
             self.epochs.lane(lane).bump();
@@ -2967,7 +2926,10 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
+    #[cfg(target_arch = "wasm32")]
+    worker_loop(project, receive_from_app, stream, epochs);
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
@@ -3009,10 +2971,10 @@ fn build_viewer_renderer(
     // devices inside a few seconds. Poisoning is nothing to fail over: the
     // lock guards the turn-taking and a set nobody is using.
     let mut pool = ENGINES.lock().unwrap_or_else(|e| e.into_inner());
-    // The worker of a project that has closed is on its way out with a set.
-    // It stops at the end of its turn, which is at once unless it is part
-    // way through a frame, so it is waited for as long as a build would take.
-    let give_up = std::time::Instant::now() + pool.built_in;
+    // The worker of a project that has closed is on its way out with a set,
+    // and stops at the end of its turn, so it is waited for as long as a build
+    // would take. The page can't wait for a later turn, so it builds its own.
+    let give_up = web_time::Instant::now() + pool.built_in;
     loop {
         if !worth_building_for(project) {
             // Quietly: a project closing while its worker waited its turn is
@@ -3024,8 +2986,8 @@ fn build_viewer_renderer(
                 .out
                 .iter()
                 .any(|id| !worth_building_for(&ProjectReference::new(*id)));
-        let left = give_up.saturating_duration_since(std::time::Instant::now());
-        if !coming || left.is_zero() {
+        let left = give_up.saturating_duration_since(web_time::Instant::now());
+        if !coming || left.is_zero() || cfg!(target_arch = "wasm32") {
             break;
         }
         pool = ENGINES_BACK
@@ -3038,7 +3000,7 @@ fn build_viewer_renderer(
     let mut renderer = match pool.parked.take() {
         Some(set) => HeadlessRenderer::reusing(set),
         None => {
-            let began = std::time::Instant::now();
+            let began = web_time::Instant::now();
             match HeadlessRenderer::new() {
                 Ok(renderer) => {
                     pool.built_in = began.elapsed();
@@ -3223,7 +3185,7 @@ fn worker_loop(
         crate::faults::path()
     );
     let mut stream = stream;
-    raise_timer_resolution();
+    crate::turns::raise_timer_resolution();
 
     // Made before the renderer, because the two profiler sinks it installs
     // read it from inside a render.
@@ -3232,9 +3194,9 @@ fn worker_loop(
     let Some(renderer) = build_viewer_renderer(&project, &stream, &view_id) else {
         return;
     };
-    let _out = EnginesOut(project.id);
+    let out = EnginesOut(project.id);
 
-    let mut state = WorkerState {
+    let state = WorkerState {
         project,
         renderer,
         playback: None,
@@ -3263,7 +3225,7 @@ fn worker_loop(
         // see the note on `applied_vram_budget` below.
         applied_disk_budget: 0,
         applied_disk_room: u64::MAX,
-        disk_room_asked: std::time::Instant::now() - DISK_ROOM_EVERY,
+        disk_room_asked: crate::turns::long_ago(DISK_ROOM_EVERY),
         seen_disk_clears: crate::framecache::disk::clears(),
         seen_disk_location: (u64::MAX, None),
         // NOT the wish's current value. A fresh renderer's cache holds the
@@ -3281,10 +3243,10 @@ fn worker_loop(
         bar_strip: Vec::new(),
         bar_refined_to: 0,
         bar_dirty: false,
-        bar_published_at: std::time::Instant::now() - BAR_MIN_INTERVAL,
+        bar_published_at: crate::turns::long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
-        last_request: std::time::Instant::now(),
+        last_request: web_time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
         pending_measure: None,
@@ -3298,7 +3260,15 @@ fn worker_loop(
     // renderer costs seconds of driver work, and a panic that recurs on every
     // turn would spend the session doing nothing else.
     let mut faults_in_a_row = 0u32;
-    loop {
+    let mut state = Some(state);
+    // One turn, and whether to take another. A thread of its own on the
+    // desktop, which goes straight round again; turns from the page's timer in
+    // the browser build (`crate::turns`).
+    let turn = move || -> bool {
+        let _out = &out;
+        let Some(running) = state.as_mut() else {
+            return false;
+        };
         // **The crash net.** Everything a turn does is inside it, because
         // everything a turn does can panic: an effect kernel, a decoder, a
         // wgpu call, an arithmetic overflow in a parameter nobody has typed a
@@ -3307,11 +3277,16 @@ fn worker_loop(
         // for the rest of the session, and nobody told. See `rebuild_renderer`
         // for why the renderer cannot simply carry on afterwards.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            one_turn(&mut state, &receiver, &mut stream)
+            one_turn(running, &receiver, &mut stream)
         }));
         match outcome {
-            Ok(Turn::Continue) => faults_in_a_row = 0,
-            Ok(Turn::Stop) => break,
+            Ok(Turn::Continue) => {
+                faults_in_a_row = 0;
+                #[cfg(target_arch = "wasm32")]
+                crate::turns::engine_ready();
+                return true;
+            }
+            Ok(Turn::Stop) => {}
             Err(payload) => {
                 faults_in_a_row += 1;
                 // Both, and not one or the other: the console line is what a
@@ -3328,17 +3303,27 @@ fn worker_loop(
                     let stopping = "The render worker faulted on every attempt; it is stopping";
                     note!("{stopping}");
                     crate::faults::record(stopping);
-                    return;
+                    state = None;
+                    return false;
                 }
-                rebuild_renderer(&mut state, &mut stream);
+                rebuild_renderer(running, &mut stream);
+                return true;
             }
         }
+        // The device and engines outlive the project, and the next worker takes
+        // them rather than building its own.
+        if let Some(set) = state.take().and_then(|state| state.renderer.into_engines()) {
+            ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
+        }
+        false
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut turn = turn;
+        while turn() {}
     }
-    // The device and engines outlive the project, and the next worker takes
-    // them rather than building its own.
-    if let Some(set) = state.renderer.into_engines() {
-        ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
-    }
+    #[cfg(target_arch = "wasm32")]
+    crate::turns::start(turn);
 }
 
 /// The most consecutive faulting turns to nurse before the worker gives up.
@@ -3385,9 +3370,11 @@ fn one_turn(
     recover_lost_device(state, stream);
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
-        playback_priority(state.prioritised);
+        crate::turns::playback_priority(state.prioritised);
     }
     sync_caches(state);
+    #[cfg(target_arch = "wasm32")]
+    web::finish(state, stream);
 
     // While playing the worker has work of its own, so it must not block on
     // the channel — it takes whatever has arrived and gets on with the next
@@ -3414,7 +3401,7 @@ fn one_turn(
         } else {
             std::time::Duration::from_millis(2)
         };
-        match receiver.recv_timeout(wait) {
+        match crate::turns::take_request(receiver, wait) {
             Ok(request) => Some(request),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // A lens finished baking: the picture on screen was drawn
@@ -3451,7 +3438,7 @@ fn one_turn(
     };
 
     if let Some(request) = request {
-        state.last_request = std::time::Instant::now();
+        state.last_request = web_time::Instant::now();
         // No second sync before serving. There used to be one, and it
         // mattered: a commit landing while the worker was parked in `recv`
         // retired every held frame, and the sync at the top of the turn had
@@ -3508,7 +3495,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // pre-roll's own milliseconds are not playback time, and counting
             // them would have adaptive skip straight over the frames just
             // banked. A silent leg needs the baseline too.
-            playback.started = std::time::Instant::now();
+            playback.started = web_time::Instant::now();
             start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
@@ -3527,7 +3514,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Some((frame, prepared)) = playback.ring.drain(..=chosen).last() else {
                 return;
             };
-            let now = std::time::Instant::now();
+            let now = web_time::Instant::now();
             playback.last_presented = Some(now);
             // How long after it was due this picture is going out. The first
             // of a run was not due at any time.
@@ -3556,7 +3543,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, late);
             }
-            let present_started = std::time::Instant::now();
+            let present_started = web_time::Instant::now();
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
@@ -3699,7 +3686,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         && !playback.ring.is_empty()
                         && card_backed_up(&state.renderer)
                     {
-                        std::thread::sleep(std::time::Duration::from_micros(500));
+                        crate::turns::pause(std::time::Duration::from_micros(500));
                         return;
                     }
                     if !state.renderer.has_frame_texture(key, bgra)
@@ -3712,7 +3699,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                             // A sliver of sleep, not a spin: the copy is
                             // collected at the top of the next turn, and a
                             // stop arriving mid-wait is still seen promptly.
-                            std::thread::sleep(std::time::Duration::from_micros(500));
+                            crate::turns::pause(std::time::Duration::from_micros(500));
                             return;
                         }
                         if asked_ago.is_some() {
@@ -3887,10 +3874,14 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // bakes inside the frame. One drawn with the lens before it is
                 // not kept, and making it again on the next lap stops the sound.
                 let exact = matches!(playback.mode, BridgePlaybackMode::EveryFrame);
+                #[cfg(target_arch = "wasm32")]
+                if web::footage_waits(state, &document, comp_id, frame, quality) {
+                    return;
+                }
                 if exact {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
-                let started = std::time::Instant::now();
+                let started = web_time::Instant::now();
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
                     // Committed document: a warm span plays from the VRAM cache
@@ -3947,7 +3938,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 .last_presented
                 .is_some_and(|at| at.elapsed() < period)
             {
-                std::thread::sleep(std::time::Duration::from_micros(500));
+                crate::turns::pause(std::time::Duration::from_micros(500));
                 return;
             }
             state.playback = None;
@@ -3967,12 +3958,9 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         // the same 2 ms, so a stop arriving mid-wait is still seen promptly.
         const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
         if wait > SPIN {
-            std::thread::sleep((wait - SPIN).min(std::time::Duration::from_millis(4)));
+            crate::turns::pause((wait - SPIN).min(std::time::Duration::from_millis(4)));
         } else {
-            let due = std::time::Instant::now() + wait;
-            while std::time::Instant::now() < due {
-                std::hint::spin_loop();
-            }
+            crate::turns::spin(wait);
         }
     }
 }
@@ -3990,7 +3978,8 @@ fn present_ring_frame(
 ) {
     #[cfg(any(
         all(windows, feature = "shared-texture"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     match renderer.present_prepared(prepared, view) {
         Ok(shared) => {
@@ -4042,7 +4031,8 @@ fn present_ring_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (renderer, frame, prepared, stream, view);
@@ -4158,7 +4148,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
                         scale_q: lumit_render::headless::preview_scale_q(quality),
                         quality,
                     },
-                    asked: std::time::Instant::now(),
+                    asked: web_time::Instant::now(),
                 },
             );
             _ = state
@@ -4190,7 +4180,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         scale: req.scale,
         fps: if fps > 0.0 { fps } else { 60.0 } / f64::from(slow),
         from,
-        started: std::time::Instant::now(),
+        started: web_time::Instant::now(),
         last_presented: None,
         // Where the run before left off. One long past is due at once.
         next_present_due: state.present_due.take(),
@@ -4206,7 +4196,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         audio_settles: None,
         skipped: 0,
         present_costs: crate::playback::CostWindow::default(),
-        pace_reported: std::time::Instant::now(),
+        pace_reported: web_time::Instant::now(),
     });
     // A fresh run starts optimistic at Full and walks down to whatever this
     // machine can actually hold, rather than inheriting the last run's verdict
@@ -5274,6 +5264,7 @@ fn publish_preview(
 /// publishes nothing rather than taking the worker down — a scope that cannot
 /// draw is a blank panel, not a lost session.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn trace_scope(
     req: RenderScopeRequest,
     state: &mut WorkerState,
@@ -5419,6 +5410,7 @@ fn trace_scope(
 /// the composition with the layer soloed and keeps the result in
 /// `layer_sample`.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn sample_pixels(
     req: SamplePixelsRequest,
     state: &mut WorkerState,
@@ -5589,6 +5581,7 @@ fn sample_pixels(
 /// dragging a pointer. An edit moves the document's revision, which retires
 /// the entry.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn sample_layer_alone(
     document: &lumit_core::model::Document,
     revision: u64,
@@ -5603,26 +5596,7 @@ fn sample_layer_alone(
         }
     }
 
-    // A patched *copy* of the snapshot: soloing for the read must never be
-    // something the document remembers, so nothing here goes near `commit`.
-    let mut patched = lumit_core::model::Document::clone(document);
-    let comp = patched.comp_mut(req.comp.id)?;
-    for l in &mut comp.layers {
-        l.switches.solo = l.id == layer;
-        // Soloed and still hidden is nothing at all — and a depth pass is very
-        // often hidden, which is exactly why this read exists.
-        if l.id == layer {
-            l.switches.visible = true;
-        }
-    }
-
-    // Seen through the view's own 3D view, so the read lands where the
-    // pointer is.
-    let patched = viewed_through(
-        None,
-        state.camera_views.get(&req.view).copied(),
-        std::sync::Arc::new(patched),
-    );
+    let patched = soloed(document, layer, req, state)?;
     let (rgba, w, h) = state
         .renderer
         .render_preview(
@@ -5640,61 +5614,6 @@ fn sample_layer_alone(
         rgba: rgba.clone(),
     });
     Some((w, h, rgba))
-}
-
-/// A window cut out of a picture: the pixels, and where its centre landed.
-#[frb(ignore)]
-pub(crate) struct Patch {
-    pub window: u32,
-    pub rgba: Vec<u8>,
-    pub x: u32,
-    pub y: u32,
-}
-
-/// Cut a `window × window` square centred on the fraction `(u, v)` of a
-/// picture.
-///
-/// `window` is forced odd and capped at [`MAX_WINDOW`] here rather than
-/// trusted: the centre must be a single pixel for the magnifier's centre cell
-/// to mean anything, and the payload must stay small enough to be a reading
-/// rather than a picture. Pixels off the edge repeat the edge, so the square is
-/// always exactly `window × window` and the caller never has a ragged one to
-/// draw — and the frontend can index it without a bounds case at the picture's
-/// border.
-#[frb(ignore)]
-pub(crate) fn cut_patch(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    u: f64,
-    v: f64,
-    window: u32,
-) -> Option<Patch> {
-    if width == 0 || height == 0 || rgba.len() < (width as usize * height as usize * 4) {
-        return None;
-    }
-    let grid = window.clamp(1, MAX_WINDOW) | 1;
-    let w = width as i64;
-    let h = height as i64;
-    let cx = ((u * width as f64) as i64).clamp(0, w - 1);
-    let cy = ((v * height as f64) as i64).clamp(0, h - 1);
-    let half = i64::from(grid / 2);
-
-    let mut out = Vec::with_capacity((grid * grid * 4) as usize);
-    for dy in 0..i64::from(grid) {
-        for dx in 0..i64::from(grid) {
-            let px = (cx - half + dx).clamp(0, w - 1);
-            let py = (cy - half + dy).clamp(0, h - 1);
-            let i = ((py * w + px) * 4) as usize;
-            out.extend_from_slice(&rgba[i..i + 4]);
-        }
-    }
-    Some(Patch {
-        window: grid,
-        rgba: out,
-        x: cx as u32,
-        y: cy as u32,
-    })
 }
 
 /// Render one frame and publish it to Dart — always as a GPU handle.
@@ -5726,7 +5645,8 @@ fn publish_frame(
     #[cfg(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     {
         // Everything that reaches here is a scrub, an edit's render or a drag
@@ -5743,7 +5663,8 @@ fn publish_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (state, comp, frame, scale, document, stream, mode, cacheable);
@@ -5757,7 +5678,8 @@ fn publish_frame(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn stand_in(
     state: &mut WorkerState,
@@ -5806,7 +5728,8 @@ fn stand_in(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn remember_shown(
     state: &mut WorkerState,
@@ -5922,7 +5845,8 @@ fn send_dmabuf(
 
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 #[allow(clippy::too_many_arguments)]
 fn publish_zero_copy(
@@ -5979,7 +5903,8 @@ fn publish_zero_copy(
 /// be.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn send_shared(
     state: &mut WorkerState,

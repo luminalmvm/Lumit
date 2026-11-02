@@ -193,7 +193,7 @@ void main() {
           sampleRate: 0,
           audioStreams: 0,
           isStill: false,
-          startFrame: BigInt.zero,
+          startFrame: 0,
           startDropFrame: false,
         );
 

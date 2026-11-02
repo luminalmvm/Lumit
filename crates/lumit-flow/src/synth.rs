@@ -79,6 +79,9 @@ fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
 
 impl GpuSynth {
     pub fn new(ctx: &GpuContext) -> Result<Self, FlowError> {
+        // Its answer is read back in place, which the browser build can't
+        // wait for, so there the processor does this.
+        lumit_gpu::device::wait_here().map_err(|e| FlowError::Readback(e.to_string()))?;
         let ctx = GpuContext::sharing(ctx);
         ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let shader = ctx

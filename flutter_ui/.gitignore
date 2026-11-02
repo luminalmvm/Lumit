@@ -53,3 +53,9 @@ lib/l10n/untranslated.json
 
 # The regular icon scripts/stamp-nightly.sh copies in for a nightly build.
 assets/brand/stable-icon.*
+
+# The bridge built for the browser (scripts/build-web.ps1).
+/web/pkg/
+
+# Wrangler's own files from a deploy.
+/.wrangler/

@@ -241,7 +241,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       draw: comp == null
           ? null
           : (staged) => comp.renderFrameWithPreview(
-                frame: BigInt.from(ui.playheadFrame.value),
+                frame: ui.playheadFrame.value,
                 scale: ui.viewerScale,
                 layer: layer,
                 effects: staged,
@@ -700,7 +700,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// A clip's effects as the cards draw them, read once per document
   /// revision and kept: on the comp's clock, so a card keys at the playhead
   /// as a layer's does.
-  ({BigInt? revision, UuidValue clip, List<BridgeEffectInstanceInfo> stack})?
+  ({int? revision, UuidValue clip, List<BridgeEffectInstanceInfo> stack})?
       _clipRead;
 
   List<BridgeEffectInstanceInfo> _clipInfos(
@@ -884,7 +884,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               layer: layer,
               effect: effect,
               param: param,
-              frame: BigInt.from(ui.playheadFrame.value));
+              frame: ui.playheadFrame.value);
         } catch (_) {
           // Refused; the effect's own status line says why.
         }
@@ -1043,7 +1043,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               layer: layer,
               effect: effect,
               param: param,
-              frame: BigInt.from(ui.playheadFrame.value));
+              frame: ui.playheadFrame.value);
         } catch (_) {
           // Refused; the effect's own status line says why.
         }
@@ -1650,7 +1650,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             param: param,
             onApplied: ui.model.refresh,
             comp: ui.selectedComp,
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
           )) {
             return;
           }
@@ -1665,7 +1665,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 layer: layer,
                 effect: effect,
                 param: param,
-                frame: BigInt.from(ui.playheadFrame.value));
+                frame: ui.playheadFrame.value);
           } catch (_) {
             // Refused — another analysis is already running, or the media
             // cannot be read. The effect's own status line says which; a thrown

@@ -10,7 +10,9 @@
 //! between analyses. A single run of one frame is not interruptible;
 //! cancellation happens between frames, in the caller's own loop.
 
-use std::{borrow::Cow, path::Path};
+#[cfg(not(target_arch = "wasm32"))]
+use std::borrow::Cow;
+use std::path::Path;
 
 use crate::{error::MlError, runtime};
 
@@ -31,7 +33,10 @@ pub type Output = (String, Vec<usize>, Vec<f32>);
 /// An open model.
 #[derive(Debug)]
 pub struct Session {
+    #[cfg(not(target_arch = "wasm32"))]
     inner: ort::session::Session,
+    #[cfg(target_arch = "wasm32")]
+    inner: std::convert::Infallible,
     provider: &'static str,
 }
 
@@ -48,6 +53,7 @@ impl Session {
     /// [`MlError::RuntimeMissing`] when no runtime is installed, and
     /// [`MlError::ModelFailed`] with ONNX Runtime's own words when the graph
     /// will not load.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open(pack_dir: &Path, file: &str, prefer: Prefer) -> Result<Self, MlError> {
         let path = pack_dir.join(file);
         if !path.is_file() {
@@ -93,6 +99,7 @@ impl Session {
     /// against what its manifest claims before it feeds anything. A dimension
     /// the graph leaves open reads `-1`.
     #[must_use]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn inputs(&self) -> Vec<(String, Vec<i64>)> {
         self.inner
             .inputs()
@@ -115,6 +122,7 @@ impl Session {
     /// output is not f32, and [`MlError::ModelFailed`] with ONNX Runtime's own
     /// words for everything the run itself refuses, a tensor name the graph
     /// does not have included.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn run(&mut self, inputs: &[(&str, &[usize], &[f32])]) -> Result<Vec<Output>, MlError> {
         let mut fed: Vec<(Cow<'_, str>, ort::session::SessionInputValue<'_>)> =
             Vec::with_capacity(inputs.len());
@@ -146,6 +154,23 @@ impl Session {
     }
 }
 
+/// The browser build has no ONNX Runtime, so a session never opens there.
+#[cfg(target_arch = "wasm32")]
+impl Session {
+    pub fn open(_pack_dir: &Path, _file: &str, _prefer: Prefer) -> Result<Self, MlError> {
+        Err(MlError::RuntimeFailed(runtime::NOT_HERE.into()))
+    }
+
+    #[must_use]
+    pub fn inputs(&self) -> Vec<(String, Vec<i64>)> {
+        match self.inner {}
+    }
+
+    pub fn run(&mut self, _inputs: &[(&str, &[usize], &[f32])]) -> Result<Vec<Output>, MlError> {
+        match self.inner {}
+    }
+}
+
 /// A session on the platform's accelerator, or `None` when it would not
 /// register. The provider is asked to say so rather than fall back quietly,
 /// so the answer here is honest about which one ran.
@@ -170,12 +195,13 @@ fn accelerated(path: &Path) -> Option<ort::session::Session> {
 
 /// Linux has no accelerator here: the CPU provider is the whole story, and
 /// the runtime row says so.
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_arch = "wasm32")))]
 fn accelerated(_path: &Path) -> Option<ort::session::Session> {
     None
 }
 
 /// ONNX Runtime's own sentence, kept for the badge's detail slot.
+#[cfg(not(target_arch = "wasm32"))]
 fn failed<E: std::fmt::Display>(e: E) -> MlError {
     MlError::ModelFailed(e.to_string())
 }

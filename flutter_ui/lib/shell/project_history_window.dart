@@ -17,7 +17,7 @@
 // names in one go.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
@@ -50,6 +50,8 @@ import 'settings_account.dart' show askBefore;
 import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'sign_in_window.dart';
 import 'welcome_frb.dart' show projectDisplayName;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 const double projectHistoryWidth = 800;
 

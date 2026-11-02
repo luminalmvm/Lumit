@@ -170,7 +170,7 @@ pub struct FrameProfiler {
     /// because the two have different costs: reporting progress is free,
     /// measuring nodes fences the graphics card.
     timing: bool,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// How deep in the comp tree the walk is: 0 outside it, 1 in the
     /// composition being rendered, more inside a Precomp. Only depth 1 is
     /// reported — see the module note.
@@ -186,7 +186,7 @@ pub struct FrameProfiler {
     /// simply stays at zero and nothing is double-counted.
     stage_ms: RefCell<[f32; 5]>,
     /// When the currently open stage began, and which one it is.
-    stage_mark: Cell<std::time::Instant>,
+    stage_mark: Cell<web_time::Instant>,
     open_stage: Cell<RenderStage>,
 }
 
@@ -197,7 +197,7 @@ impl FrameProfiler {
     /// in that case.
     #[must_use]
     pub fn new(comp: Uuid, frame: u64, progress: Option<ProgressSink>, timing: bool) -> Self {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         Self {
             comp,
             frame,
@@ -219,7 +219,7 @@ impl FrameProfiler {
     /// what the stages themselves cost, so this runs whether or not timings
     /// were asked for.
     fn advance_to(&self, next: RenderStage) {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         let open = self.open_stage.get();
         if let Ok(mut ms) = self.stage_ms.try_borrow_mut() {
             ms[open.code() as usize] +=
@@ -327,7 +327,7 @@ impl FrameProfiler {
     /// the clock is read — see the module note on why the fence is there.
     /// Returns the value and the elapsed milliseconds.
     pub fn span<T>(&self, ctx: &lumit_gpu::GpuContext, f: impl FnOnce() -> T) -> (T, f32) {
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let out = f();
         // The span may have recorded into a batched frame buffer; hand it over
         // before fencing, or the wait returns on an empty queue and the number

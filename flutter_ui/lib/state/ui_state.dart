@@ -8,10 +8,9 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show listEquals, mapEquals;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -26,6 +25,8 @@ import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart'
     show orthographic, perspective, poseOfView, viewOfPose;
+import 'package:lumit_flutter/panels/viewer_picture.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/panels/viewer_picture_web.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
@@ -101,6 +102,8 @@ import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/share_marks.dart'
     show valuesHeld, valuesInHand;
 import 'package:uuid/uuid.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What [LumitUiState.colourSummary] reads before anything has been asked, and
 /// whenever the project names no OCIO config: the built-in colour family, which
@@ -789,6 +792,9 @@ class LumitUiState extends ChangeNotifier {
   /// a machine with no network has not done anything wrong, and an editor that
   /// opened with a complaint about the internet would be insufferable.
   Future<void> maybeCheckForUpdates() async {
+    // The browser build is the page, always the newest, and a look would ask
+    // GitHub about the person using it.
+    if (kIsWeb) return;
     if (!workspace.autoUpdate) return;
     // Never under `flutter test`: a suite that mounts the shell would otherwise
     // reach the network, which is slow, flaky, and none of a test's business.
@@ -1141,7 +1147,7 @@ class LumitUiState extends ChangeNotifier {
   /// (docs/impl/multi-viewer.md §2.5): the view named by "always preview this
   /// view" when there is one, otherwise the active view.
   void _playFrom(CompositionReference comp, int frame) => comp.play(
-        from: BigInt.from(frame),
+        from: frame,
         scale: viewerScale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
@@ -1151,7 +1157,7 @@ class LumitUiState extends ChangeNotifier {
         speed: _speed,
         slow: _slow,
         // Where the leg ends, so nothing past it is made.
-        until: BigInt.from(_clockEnd),
+        until: _clockEnd,
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
@@ -1276,7 +1282,7 @@ class LumitUiState extends ChangeNotifier {
     _pushCameraView(view, comp);
     try {
       comp.renderFrame(
-        frame: BigInt.from(frame),
+        frame: frame,
         scale: scale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
@@ -1319,13 +1325,13 @@ class LumitUiState extends ChangeNotifier {
     _askedFor[view.engineId] = stamp;
     try {
       footage.renderView(
-        frame: BigInt.from(frame),
+        frame: frame,
         scale: scale,
         width: facts.width,
         height: facts.height,
         rateNum: facts.fpsNum,
         rateDen: facts.fpsDen,
-        frames: BigInt.from(frames),
+        frames: frames,
         view: view.engineId,
       );
     } catch (_) {
@@ -1917,11 +1923,11 @@ class LumitUiState extends ChangeNotifier {
   /// there is one there and the tray has nothing of its own.
   ///
   /// This is how a copy made in another Lumit window arrives, and how a paste
-  /// still works after something else on the machine has been copied in
-  /// between. Ordinary text is left alone — [lumitDocumentKind] only answers
-  /// for the two shapes the engine's paste calls accept.
+  /// still works after something else was copied in between. Ordinary text is
+  /// left alone ([lumitDocumentKind]), and so is a clipboard a browser refuses.
   Future<bool> adoptSystemClipboard() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
     if (text == null) return false;
     if (text == clipboard.text) return !clipboard.isEmpty;
     switch (lumitDocumentKind(text)) {
@@ -2560,7 +2566,7 @@ class LumitUiState extends ChangeNotifier {
     if (comp == null || arm == null) return;
     try {
       comp.samplePixels(
-        frame: BigInt.from(playheadFrame.value),
+        frame: playheadFrame.value,
         u: u,
         v: v,
         window: dropperWindow,
@@ -2726,11 +2732,11 @@ class LumitUiState extends ChangeNotifier {
     // into the file forever.
     final perf = this.workspace.performance;
     final ramBudget = perf.cacheBudgetBytes;
-    if (ramBudget != null) setCacheBudget(bytes: BigInt.from(ramBudget));
+    if (ramBudget != null) setCacheBudget(bytes: ramBudget);
     final vramBudget = perf.vramBudgetBytes;
-    if (vramBudget != null) setVramCacheBudget(bytes: BigInt.from(vramBudget));
+    if (vramBudget != null) setVramCacheBudget(bytes: vramBudget);
     final diskBudget = perf.diskBudgetBytes;
-    if (diskBudget != null) setDiskCacheBudget(bytes: BigInt.from(diskBudget));
+    if (diskBudget != null) setDiskCacheBudget(bytes: diskBudget);
     // Whether a drag renders at full resolution. Handed over
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
@@ -2888,6 +2894,13 @@ class LumitUiState extends ChangeNotifier {
   /// here. One case for both, because the payload is the same shape.
   /// Leaving `fd` null is what selects the handle argument set.
   void _showSharedTexture(BridgeSharedFrameInfo f) {
+    // The browser build: the picture is on the page, and a view's texture is
+    // named by the view.
+    if (kIsWeb) {
+      takeViewerPicture(f.view).then((_) => _adoptTexture(f.view, f.view));
+      _followFrame(f.frame.toInt(), f.view, f.tier);
+      return;
+    }
     controllerFor(f.view)
         .ensureRegistered(f.handle.toInt(), f.width, f.height)
         .then((id) => _adoptTexture(id, f.view));
@@ -3003,7 +3016,7 @@ class LumitUiState extends ChangeNotifier {
   /// changed, point that view at it.
   void _adoptTexture(int? id, int engineId) {
     if (id == null) return;
-    controllerFor(engineId).frameReady();
+    if (!kIsWeb) controllerFor(engineId).frameReady();
     final slot = textureOf(engineId);
     if (slot.value != id) slot.value = id;
     // The one-Viewer notifier still names the active view's texture, so

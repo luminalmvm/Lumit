@@ -18,7 +18,7 @@
 //   @font-face { font-family: "Fraunces"; src: url("fonts/Fraunces.ttf"); }
 //   :root { --sans: "Fraunces"; }
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
 
@@ -29,6 +29,8 @@ import 'package:lumit_flutter/state/window_backdrop.dart';
 
 import 'theme.dart';
 import 'theme_tokens.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The extension a style file is written under.
 const String styleFileExtension = 'lumstyle';

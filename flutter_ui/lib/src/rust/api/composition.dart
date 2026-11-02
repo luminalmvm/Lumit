@@ -127,7 +127,7 @@ class BridgeCompFlowLink {
 /// holds this and refreshes it when the engine reports a change; panels draw
 /// from it with no bridge calls at all.
 class BridgeCompModel {
-  final PlatformInt64 durationFrames;
+  final int durationFrames;
 
   /// The comp's rate as a plain number, for panels that map seconds to
   /// pixels (the waveform lane) without a bridge call per paint.
@@ -384,8 +384,8 @@ class BridgeLayerGroup {
   /// The combined bar: the earliest in point and the latest out point across
   /// [`Self::members`], at the comp's own rate so the bar needs no time↔frame
   /// trip to draw itself. `(0, 0)` when there are no members.
-  final PlatformInt64 inFrame;
-  final PlatformInt64 outFrame;
+  final int inFrame;
+  final int outFrame;
 
   /// The header's switch faces: **on only when every member is on**, which is
   /// what makes one press a broadcast rather than a guess. Hiding a group
@@ -470,7 +470,7 @@ class BridgeMarker {
   /// every marker of every rebuild. The merge below is what keeps a duration
   /// finer than a frame from being rounded away by a drag that never touched
   /// it.
-  final PlatformInt64? durationFrames;
+  final int? durationFrames;
 
   /// Which label colour the marker wears: an index into the theme's label
   /// palette, the one a layer's label dot picks from. `None` is the theme's
@@ -792,8 +792,7 @@ class CompositionReference {
   /// reconciling vertex counts by splitting cubics, and a second
   /// implementation of that in Dart would drift from the one that draws the
   /// pixels — the wireframe would stop matching the mask it describes.
-  List<BridgeAnimatedMaskPath> animatedMaskPathsAt(
-          {required PlatformInt64 frame}) =>
+  List<BridgeAnimatedMaskPath> animatedMaskPathsAt({required int frame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAnimatedMaskPathsAt(
               that: this, frame: frame);
@@ -851,7 +850,7 @@ class CompositionReference {
   /// sound. How long a burst lasts is the engine's to decide. During
   /// playback it does nothing, and before the mix is loaded it asks for the
   /// mix and is silent until that arrives.
-  void audioScrub({required BigInt frame}) =>
+  void audioScrub({required int frame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioScrub(
           that: this, frame: frame);
 
@@ -903,7 +902,7 @@ class CompositionReference {
   /// what to compute, so a bar that starts drawing a different composition is
   /// answered within a turn or two — all zeros until then, which is the honest
   /// answer rather than another composition's frames.
-  Uint8List cachedFrames({required BigInt frames, required double scale}) =>
+  Uint8List cachedFrames({required int frames, required double scale}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCachedFrames(
               that: this, frames: frames, scale: scale);
@@ -970,7 +969,7 @@ class CompositionReference {
   /// Close the gap on `layer` that `at_frame` falls in: everything after
   /// it moves earlier by its length, on every unlocked Sequence layer.
   BridgeCutResult cutCloseGap(
-          {required LayerReference layer, required PlatformInt64 atFrame}) =>
+          {required LayerReference layer, required int atFrame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutCloseGap(
           that: this, layer: layer, atFrame: atFrame);
 
@@ -1016,7 +1015,7 @@ class CompositionReference {
   BridgeCutResult cutDuplicate(
           {required List<UuidValue> clips,
           required UuidValue grabbed,
-          required PlatformInt64 byFrames,
+          required int byFrames,
           LayerReference? target,
           required bool linked,
           required BridgeCutMove how}) =>
@@ -1037,7 +1036,7 @@ class CompositionReference {
   /// unlocked picture Sequence layer that has a clip there. `None` over a
   /// gap, and for a clip that plays a composition.
   BridgeMatchFrame? cutMatchFrame(
-          {required PlatformInt64 frame, LayerReference? layer}) =>
+          {required int frame, LayerReference? layer}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutMatchFrame(
               that: this, frame: frame, layer: layer);
@@ -1062,7 +1061,7 @@ class CompositionReference {
   BridgeCutResult cutMove(
           {required List<UuidValue> clips,
           required UuidValue grabbed,
-          required PlatformInt64 byFrames,
+          required int byFrames,
           LayerReference? target,
           required bool linked,
           required BridgeCutMove how}) =>
@@ -1098,8 +1097,7 @@ class CompositionReference {
   ///
   /// `Nothing` when nothing has been copied in this project, or an item a
   /// copied clip plays has since been deleted.
-  BridgeCutPaste cutPaste(
-          {required PlatformInt64 atFrame, LayerReference? target}) =>
+  BridgeCutPaste cutPaste({required int atFrame, LayerReference? target}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPaste(
           that: this, atFrame: atFrame, target: target);
 
@@ -1143,7 +1141,7 @@ class CompositionReference {
           required FootageReference footage,
           required BridgeRational sourceIn,
           required BridgeRational sourceOut,
-          required PlatformInt64 atFrame,
+          required int atFrame,
           required bool insert,
           required bool linked,
           required bool withPicture,
@@ -1167,7 +1165,7 @@ class CompositionReference {
   BridgeCutResult cutPlaceComp(
           {LayerReference? target,
           required CompositionReference comp,
-          required PlatformInt64 atFrame}) =>
+          required int atFrame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutPlaceComp(
               that: this, target: target, comp: comp, atFrame: atFrame);
@@ -1177,7 +1175,7 @@ class CompositionReference {
   BridgeCutResult cutPlaceSolid(
           {LayerReference? target,
           required SolidReference solid,
-          required PlatformInt64 atFrame}) =>
+          required int atFrame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutPlaceSolid(
               that: this, target: target, solid: solid, atFrame: atFrame);
@@ -1188,7 +1186,7 @@ class CompositionReference {
   /// linked to each other and no longer to the earlier ones.
   BridgeCutResult cutRazor(
           {required List<LayerReference> layers,
-          required PlatformInt64 atFrame,
+          required int atFrame,
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutRazor(
           that: this, layers: layers, atFrame: atFrame, linked: linked);
@@ -1203,8 +1201,8 @@ class CompositionReference {
   /// Without it the gap is left, a lift, and `Nothing` says no clip was in
   /// the span.
   BridgeCutResult cutRemoveSpan(
-          {required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame,
+          {required int startFrame,
+          required int endFrame,
           required List<LayerReference> layers,
           required bool ripple}) =>
       BridgeLib.instance.api
@@ -1224,7 +1222,7 @@ class CompositionReference {
   BridgeCutResult cutRoll(
           {required UuidValue clip,
           required bool endEdge,
-          required PlatformInt64 toFrame,
+          required int toFrame,
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutRoll(
           that: this,
@@ -1245,7 +1243,7 @@ class CompositionReference {
   /// their own layers.
   BridgeCutResult cutSlide(
           {required UuidValue clip,
-          required PlatformInt64 byFrames,
+          required int byFrames,
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSlide(
           that: this, clip: clip, byFrames: byFrames, linked: linked);
@@ -1255,7 +1253,7 @@ class CompositionReference {
   /// this composition's frames. With `linked` its linked clips slip too.
   BridgeCutResult cutSlip(
           {required UuidValue clip,
-          required PlatformInt64 byFrames,
+          required int byFrames,
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSlip(
           that: this, clip: clip, byFrames: byFrames, linked: linked);
@@ -1276,8 +1274,8 @@ class CompositionReference {
   /// is refused where it would cover a neighbour.
   BridgeCutResult cutStretch(
           {required UuidValue clip,
-          required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame,
+          required int startFrame,
+          required int endFrame,
           required bool ripple,
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutStretch(
@@ -1310,7 +1308,7 @@ class CompositionReference {
   BridgeCutResult cutTransition(
           {required UuidValue clip,
           required bool endEdge,
-          required PlatformInt64 frames,
+          required int frames,
           required bool linked}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutTransition(
@@ -1334,8 +1332,8 @@ class CompositionReference {
   /// media. With `linked` the clips linked to it take the same change.
   BridgeCutResult cutTrim(
           {required UuidValue clip,
-          required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame,
+          required int startFrame,
+          required int endFrame,
           required bool ripple,
           required bool linked,
           required bool overlap}) =>
@@ -1369,7 +1367,7 @@ class CompositionReference {
   /// redo or recovery. The Dart read model compares it per rebuild — one
   /// cheap crossing — and re-reads [`Self::get_model`] only when it moved,
   /// so a rebuild of an unchanged document costs exactly one call.
-  BigInt documentRevision() => BridgeLib.instance.api
+  int documentRevision() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceDocumentRevision(
         that: this,
       );
@@ -1391,7 +1389,7 @@ class CompositionReference {
   ///
   /// Derived rather than stored: the document holds a length in seconds, and
   /// the count is that length read at whatever rate the comp currently has.
-  PlatformInt64 durationFrames() => BridgeLib.instance.api
+  int durationFrames() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceDurationFrames(
         that: this,
       );
@@ -1418,7 +1416,7 @@ class CompositionReference {
   /// is held at comp zero on its own, so a fan dragged into the wall
   /// piles up against it.
   void fanLayers(
-          {required List<UuidValue> layerIds, required Int64List deltas}) =>
+          {required List<UuidValue> layerIds, required List<int> deltas}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceFanLayers(
           that: this, layerIds: layerIds, deltas: deltas);
 
@@ -1454,7 +1452,7 @@ class CompositionReference {
 
   /// The frame containing `time` (floored) — the inverse of
   /// [`Self::time_of_frame`], for drawing a key at a frame position.
-  PlatformInt64 frameAtTime({required BridgeRational time}) =>
+  int frameAtTime({required BridgeRational time}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceFrameAtTime(
           that: this, time: time);
 
@@ -1601,7 +1599,7 @@ class CompositionReference {
   /// ([`CompGraph::read_behind`]), and these are the same calls with the
   /// composition and the box in the layer's place.
   BridgeBoxSource graphBoxSource(
-          {required UuidValue effect, required PlatformInt64 frame}) =>
+          {required UuidValue effect, required int frame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceGraphBoxSource(
               that: this, effect: effect, frame: frame);
@@ -1638,8 +1636,7 @@ class CompositionReference {
   /// following its picture socket upstream to a Read
   /// ([`CompGraph::read_behind`]), and these are the same calls with the
   /// composition and the box in the layer's place.
-  bool graphRotoSolveFrame(
-          {required UuidValue effect, required PlatformInt64 frame}) =>
+  bool graphRotoSolveFrame({required UuidValue effect, required int frame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceGraphRotoSolveFrame(
               that: this, effect: effect, frame: frame);
@@ -1721,7 +1718,7 @@ class CompositionReference {
   /// rarely contains that moment exactly, and rounding keeps the playhead
   /// within half a frame of it instead of dragging it earlier every time the
   /// rate is touched.
-  PlatformInt64 nearestFrameAtTime({required BridgeRational time}) =>
+  int nearestFrameAtTime({required BridgeRational time}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNearestFrameAtTime(
               that: this, time: time);
@@ -1775,7 +1772,7 @@ class CompositionReference {
   /// A parent that came from another composition is dropped rather than left
   /// dangling: a layer parented to nothing visible would be a puzzle, and
   /// re-parenting is one drag.
-  LayerReference pasteLayer({required String text, PlatformInt64? atFrame}) =>
+  LayerReference pasteLayer({required String text, int? atFrame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePasteLayer(
           that: this, text: text, atFrame: atFrame);
 
@@ -1815,14 +1812,14 @@ class CompositionReference {
   /// forwards and its start going back. Nothing past it is composited.
   /// `None` runs to the end of the composition.
   void play(
-          {required BigInt from,
+          {required int from,
           required double scale,
           required BridgePlaybackMode mode,
           required int view,
           required bool reverse,
           required int speed,
           required int slow,
-          BigInt? until}) =>
+          int? until}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePlay(
           that: this,
           from: from,
@@ -1984,7 +1981,7 @@ class CompositionReference {
   /// `active` says it is the view being worked in, which the idle fill, the
   /// cache bar and the drags follow.
   void renderFrame(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required BridgePlaybackMode mode,
           BridgePrefixPoint? prefix,
@@ -2008,7 +2005,7 @@ class CompositionReference {
   /// it does that by riding along with the request and being patched onto a
   /// clone.
   void renderFrameWithClipRetime(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required UuidValue clip,
@@ -2027,12 +2024,12 @@ class CompositionReference {
   /// never touches the document. A moved head moves the source in-point
   /// with it, so the Viewer shows the frame at the edge.
   void renderFrameWithClipSpan(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required UuidValue clip,
-          required PlatformInt64 startFrame,
-          required PlatformInt64 endFrame}) =>
+          required int startFrame,
+          required int endFrame}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceRenderFrameWithClipSpan(
               that: this,
@@ -2053,7 +2050,7 @@ class CompositionReference {
   /// substituted — its wires, layout and badges are the document's, and a
   /// drag on a number changes none of them.
   void renderFrameWithDriverPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required List<BridgeEffectInstance> drivers}) =>
@@ -2075,7 +2072,7 @@ class CompositionReference {
   /// Only the boxes are substituted: the wires, the layout and the badges are
   /// the document's, and a drag on a number changes none of them.
   void renderFrameWithGraphPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required List<BridgeEffectInstance> instances}) =>
       BridgeLib.instance.api
@@ -2085,7 +2082,7 @@ class CompositionReference {
   /// Ask for `frame` with `layer`'s masks replaced by `masks` — the mask's
   /// half of the two calls above.
   void renderFrameWithMaskPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required List<BridgeMask> masks}) =>
@@ -2108,7 +2105,7 @@ class CompositionReference {
   /// whole list, and a preview that took a different shape from the op would
   /// be a second way to describe the same thing.
   void renderFrameWithPaintPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required List<BridgeStroke> strokes}) =>
@@ -2123,7 +2120,7 @@ class CompositionReference {
   /// Ask for `frame` with `layer`'s effect stack replaced by `effects` — the
   /// live drag path, which never touches the document.
   void renderFrameWithPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required List<BridgeEffectInstance> effects}) =>
@@ -2148,7 +2145,7 @@ class CompositionReference {
   /// `retime` arrives on the comp clock like every keyframed value that
   /// crosses the seam; the worker returns it to the layer's own.
   void renderFrameWithRetime(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required BridgeScalar retime}) =>
@@ -2168,7 +2165,7 @@ class CompositionReference {
   /// preview shows the untouched art sliding and the commit puts it back.
   /// Every other caller passes `None`.
   void renderFrameWithShapePreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required List<BridgeShapeEntry> contents,
@@ -2190,7 +2187,7 @@ class CompositionReference {
   /// an undo step per keystroke. So the tool previews as it types and writes
   /// once, when the edit ends.
   void renderFrameWithTextPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required BridgeTextDocument document}) =>
@@ -2206,7 +2203,7 @@ class CompositionReference {
   /// same live-drag path as [`Self::render_frame_with_preview`], for the
   /// Transform rows. Never touches the document.
   void renderFrameWithTransformPreview(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required LayerReference layer,
           required BridgeTransform transform}) =>
@@ -2226,7 +2223,7 @@ class CompositionReference {
   /// know what a Lumit surface looks like. `view` is the Viewer view whose
   /// picture is read.
   void renderScope(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required int kind,
           required List<Uint8List> colours,
@@ -2266,7 +2263,7 @@ class CompositionReference {
   /// ride; a frame with nothing to read publishes nothing, and the magnifier
   /// keeps what it had.
   void samplePixels(
-          {required BigInt frame,
+          {required int frame,
           required double u,
           required double v,
           required int window,
@@ -2574,7 +2571,7 @@ class CompositionReference {
   /// member refuses on its way through the batch, and the batch is
   /// all-or-nothing — so a group holding a locked layer does not move at all,
   /// which is the honest reading of a lock.
-  void shiftGroup({required UuidValue group, required PlatformInt64 delta}) =>
+  void shiftGroup({required UuidValue group, required int delta}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceShiftGroup(
           that: this, group: group, delta: delta);
 
@@ -2596,8 +2593,8 @@ class CompositionReference {
   /// two frames and a picture may not.
   void slideLayers(
           {required List<UuidValue> layerIds,
-          required PlatformInt64 delta,
-          required PlatformInt64 nudgeTicks}) =>
+          required int delta,
+          required int nudgeTicks}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSlideLayers(
           that: this, layerIds: layerIds, delta: delta, nudgeTicks: nudgeTicks);
 
@@ -2615,8 +2612,7 @@ class CompositionReference {
   /// than the one before. A step of 0 lines them all up on that in point.
   /// Each layer's contents travel with it, as a slide's do, and the whole
   /// stagger is one undo step.
-  void staggerLayers(
-          {required List<UuidValue> layerIds, required PlatformInt64 step}) =>
+  void staggerLayers({required List<UuidValue> layerIds, required int step}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceStaggerLayers(
               that: this, layerIds: layerIds, step: step);
@@ -2639,7 +2635,7 @@ class CompositionReference {
   /// # Errors
   /// [`BridgeError::InvalidComp`] when this is not a composition.
   Future<BridgeRenderedFrame?> stillWithoutEffect(
-          {required BigInt frame,
+          {required int frame,
           required int maxEdge,
           required UuidValue effect}) =>
       BridgeLib.instance.api
@@ -2676,7 +2672,7 @@ class CompositionReference {
   /// `None` on a machine with no graphics adapter, which is the same calm
   /// nothing every other render answers there; the row draws its placeholder.
   Future<BridgeRenderedFrame?> thumbnail(
-          {required BigInt frame, required int maxEdge}) =>
+          {required int frame, required int maxEdge}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceThumbnail(
           that: this, frame: frame, maxEdge: maxEdge);
 
@@ -2688,7 +2684,7 @@ class CompositionReference {
   /// worked that out in floating point would place keys that do not land on
   /// the frame they were set on. This is the engine's own
   /// `FrameRate::time_of_frame`, so there is one implementation of it.
-  BridgeRational timeOfFrame({required PlatformInt64 frame}) =>
+  BridgeRational timeOfFrame({required int frame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceTimeOfFrame(
           that: this, frame: frame);
 
@@ -2710,7 +2706,7 @@ class CompositionReference {
   /// the rate cannot name, instead of failing the whole span — the caller
   /// falls back to the single call for that frame and gets its error.
   List<BridgeRational> timesOfFrames(
-          {required PlatformInt64 first, required int count}) =>
+          {required int first, required int count}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
@@ -2748,7 +2744,7 @@ class CompositionReference {
   /// active camera as the render poses it, aim and solve link included, or
   /// the default camera when the comp has none.
   /// Asked once per frame, view or document change and held.
-  Float64List viewProjection({required BigInt frame, BridgeCameraPose? view}) =>
+  Float64List viewProjection({required int frame, BridgeCameraPose? view}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceViewProjection(
               that: this, frame: frame, view: view);
@@ -2761,7 +2757,7 @@ class CompositionReference {
   /// no other layer is; with none given everything is. Asked once per
   /// frame, view or document change, never per rebuild.
   BridgeWireframes wireframes(
-          {required BigInt frame,
+          {required int frame,
           BridgeCameraPose? view,
           required bool ground,
           required bool grid,

@@ -2315,12 +2315,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(double default_, double sliderMin, double sliderMax,
             double? hardMin, double? hardMax)?
         float,
-    TResult Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)?
+    TResult Function(int default_, int sliderMin, int sliderMax, int? hardMin,
+            int? hardMax)?
         int,
     TResult Function(double default_, double dialStep)? angle,
     TResult Function(
@@ -2399,12 +2395,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(double default_, double sliderMin,
             double sliderMax, double? hardMin, double? hardMax)
         float,
-    required TResult Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)
+    required TResult Function(int default_, int sliderMin, int sliderMax,
+            int? hardMin, int? hardMax)
         int,
     required TResult Function(double default_, double dialStep) angle,
     required TResult Function(
@@ -2481,12 +2473,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(double default_, double sliderMin, double sliderMax,
             double? hardMin, double? hardMax)?
         float,
-    TResult? Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)?
+    TResult? Function(int default_, int sliderMin, int sliderMax, int? hardMin,
+            int? hardMax)?
         int,
     TResult? Function(double default_, double dialStep)? angle,
     TResult? Function(
@@ -2673,11 +2661,11 @@ class BridgeParamKind_Int extends BridgeParamKind {
       this.hardMax})
       : super._();
 
-  final PlatformInt64 default_;
-  final PlatformInt64 sliderMin;
-  final PlatformInt64 sliderMax;
-  final PlatformInt64? hardMin;
-  final PlatformInt64? hardMax;
+  final int default_;
+  final int sliderMin;
+  final int sliderMax;
+  final int? hardMin;
+  final int? hardMax;
 
   /// Create a copy of BridgeParamKind
   /// with the given fields replaced by the non-null parameter values.
@@ -2719,11 +2707,7 @@ abstract mixin class $BridgeParamKind_IntCopyWith<$Res>
       _$BridgeParamKind_IntCopyWithImpl;
   @useResult
   $Res call(
-      {PlatformInt64 default_,
-      PlatformInt64 sliderMin,
-      PlatformInt64 sliderMax,
-      PlatformInt64? hardMin,
-      PlatformInt64? hardMax});
+      {int default_, int sliderMin, int sliderMax, int? hardMin, int? hardMax});
 }
 
 /// @nodoc
@@ -2748,23 +2732,23 @@ class _$BridgeParamKind_IntCopyWithImpl<$Res>
       default_: null == default_
           ? _self.default_
           : default_ // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       sliderMin: null == sliderMin
           ? _self.sliderMin
           : sliderMin // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       sliderMax: null == sliderMax
           ? _self.sliderMax
           : sliderMax // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       hardMin: freezed == hardMin
           ? _self.hardMin
           : hardMin // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64?,
+              as int?,
       hardMax: freezed == hardMax
           ? _self.hardMax
           : hardMax // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64?,
+              as int?,
     ));
   }
 }

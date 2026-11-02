@@ -112,7 +112,7 @@ pub(crate) fn decode_frame(
     frame: u64,
     target_width: Option<u32>,
 ) -> Option<lumit_media::decode::DecodedFrame> {
-    if !src.on_disk().is_file() {
+    if !lumit_media::is_file(src.on_disk()) {
         return None;
     }
     if let Some(frame) = lumit_media::read_own(src, frame as usize, target_width) {

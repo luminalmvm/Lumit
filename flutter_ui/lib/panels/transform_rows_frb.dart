@@ -1088,7 +1088,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           }
           final ui = _ui;
           _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-                frame: BigInt.from(ui.playheadFrame.value),
+                frame: ui.playheadFrame.value,
                 scale: ui.viewerScale,
                 layer: widget.layer,
                 transform: staged,
@@ -1158,7 +1158,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     _publishLive(staged);
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: staged,
@@ -1208,7 +1208,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: _staged ?? staged,
@@ -1222,7 +1222,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: _staged ?? staged,

@@ -583,7 +583,7 @@ class StrokeRow extends StatelessWidget {
       onPreview: (opacity) {
         try {
           comp.renderFrameWithPaintPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             layer: layer,
             strokes: [
@@ -717,7 +717,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithPaintPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           strokes: [
@@ -1164,7 +1164,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithShapePreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           contents: _entriesWith(widget.layer.getShapeContents(), v),
@@ -1503,7 +1503,7 @@ class ShapePaintRow extends StatelessWidget {
       onPreview: (ramp) => throttle.request(() {
         try {
           ui.selectedComp?.renderFrameWithShapePreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             layer: layer,
             contents: contents(ramp),

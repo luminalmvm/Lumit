@@ -20,7 +20,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -42,6 +42,8 @@ import 'timecode.dart';
 import 'transfer.dart';
 import 'updates.dart' show versionFromBootLine;
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The largest project file that is backed up, which is the server's own
 /// limit. A packed project past this stays on the machine.
@@ -316,7 +318,7 @@ class BackupState extends ChangeNotifier {
   /// to this whatever is in it.
   static const int _largestStill = 3 << 20;
 
-  final HttpClient _http = HttpClient()
+  late final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
     ..userAgent = 'Lumit';
 
