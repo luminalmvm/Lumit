@@ -3564,6 +3564,7 @@ impl CompositionReference {
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         if named {
             graph.groups.push(added.group);
             graph.groups.extend(added.inner);
