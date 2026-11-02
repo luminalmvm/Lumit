@@ -75,8 +75,20 @@ class MainFlutterWindow: NSWindow {
 
   /// Kept running in the background, closing the window only hides it, and
   /// the Dock icon goes with it. Quit in the menu bar is an ordinary quit.
+  ///
+  /// Otherwise a panel popped out into a window of its own closes with this
+  /// one, as it does on the other systems. Its close docks it, so nothing in
+  /// it is lost, and quitting asks about unsaved work as it always did.
   override func performClose(_ sender: Any?) {
-    guard keepRunning else { return super.performClose(sender) }
+    guard keepRunning else {
+      for window in NSApp.windows
+      where window !== self && window.isVisible
+        && window.contentViewController is FlutterViewController
+      {
+        window.performClose(nil)
+      }
+      return super.performClose(sender)
+    }
     orderOut(nil)
     NSApp.setActivationPolicy(.accessory)
     windowChannel?.invokeMethod("hidden", arguments: nil)
