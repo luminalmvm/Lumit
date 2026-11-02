@@ -383,12 +383,18 @@ pub fn fire_effect_action(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    // What the effect's Frames row limits an analysis to, if it has one.
+    let span = layer
+        .composition()
+        .ok()
+        .and_then(|comp| lumit_core::planes::source_span(fx, Some(&item), &comp));
     // The Roto brush's two go the same way, and so do the Planar
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-        let range = crate::api::roto::analysis_range(&layer, fx);
-        return crate::api::roto::press(crate::api::roto::layer_source(&layer), fx, &param, range);
+        let source = crate::api::roto::layer_source(&layer);
+        let range = crate::api::roto::analysis_range(&source, span);
+        return crate::api::roto::press(source, fx, &param, range);
     }
     // Extract channels' one button, through the same doorway (docs/08 §3.97):
     // read the layer's file again and rebuild the four dropdowns from what it
@@ -486,13 +492,9 @@ pub fn fire_effect_action(
     // And the planes tier's two, on the one predicate `lumit_core::planes`
     // owns rather than a list of names here (docs/impl/addons.md §6.1).
     if lumit_core::planes::task_of(fx).is_some() {
-        let range = crate::api::roto::analysis_range(&layer, fx);
-        return crate::api::planes::press(
-            crate::api::roto::layer_source(&layer),
-            fx,
-            &param,
-            range,
-        );
+        let source = crate::api::roto::layer_source(&layer);
+        let range = crate::api::roto::analysis_range(&source, span);
+        return crate::api::planes::press(source, fx, &param, range);
     }
     if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
         return press_plugin(layer, effect, param, frame.unwrap_or(0));

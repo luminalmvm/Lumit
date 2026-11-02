@@ -23,6 +23,7 @@
 //! does (§7).
 
 use crate::model::{Composition, EffectInstance, EffectValue, Layer};
+use crate::time::CompTime;
 
 /// The `planes/` sidecar tier's version, fed into every hash here so a build
 /// that changes the meaning of a plane cannot read the old one back. Bumping it
@@ -42,17 +43,30 @@ pub const REMOVE_BACKGROUND: &str = "remove_background";
 /// reads exactly as it did.
 pub const FRAMES_OPTIONS: &[&str] = &["All frames", "Layer in to out", "Work area"];
 
-/// The comp frames, first and last, an analysis on `layer` is limited to by
-/// the effect's Frames row, or `None` for every frame of its source.
+/// The source times, first and last, in seconds, an analysis on `layer` is
+/// limited to by the effect's Frames row, or `None` for all of its source.
 ///
-/// Comp frames rather than source frames: this crate knows when a layer is
-/// on screen and not how fast its media runs, so the caller maps the two
-/// ends through the layer's own clock. A comp with no work area set reads as
-/// All frames.
+/// `layer` is `None` for a node graph box. A box is on screen for the whole
+/// composition, so Layer in to out reads as the composition's length, and its
+/// Read has no offset or Retime, so the source runs on the composition's own
+/// clock. A comp with no work area set reads as All frames.
+///
+/// Seconds rather than frames: this crate knows when a layer is on screen and
+/// not how fast its media runs, so the caller picks the frames.
+///
+/// ponytail: only the two ends are mapped, so a Retime that runs backwards
+/// and forwards again inside the span is limited to what its ends show.
 #[must_use]
-pub fn frames_span(fx: &EffectInstance, layer: &Layer, comp: &Composition) -> Option<(i64, i64)> {
+pub fn source_span(
+    fx: &EffectInstance,
+    layer: Option<&Layer>,
+    comp: &Composition,
+) -> Option<(f64, f64)> {
     let (from, to) = match fx.param("frames") {
-        Some(EffectValue::Choice(1)) => (layer.in_point, layer.out_point),
+        Some(EffectValue::Choice(1)) => layer
+            .map_or((CompTime::ZERO, CompTime(comp.duration.0)), |l| {
+                (l.in_point, l.out_point)
+            }),
         Some(EffectValue::Choice(2)) => comp.work_area?,
         _ => return None,
     };
@@ -60,8 +74,15 @@ pub fn frames_span(fx: &EffectInstance, layer: &Layer, comp: &Composition) -> Op
     // before `to`, which is when a layer is on screen.
     let fps = comp.frame_rate.fps();
     let first = (from.0.to_f64() * fps - 1e-9).ceil() as i64;
-    let last = (to.0.to_f64() * fps - 1e-9).ceil() as i64 - 1;
-    Some((first, last.max(first)))
+    let last = ((to.0.to_f64() * fps - 1e-9).ceil() as i64 - 1).max(first);
+    let at = |frame: i64| {
+        let t = comp.frame_rate.time_of_frame(frame).ok()?.0.to_f64();
+        Some(layer.map_or(t, |l| {
+            l.source_time_at(crate::time::layer_time(t, l.start_offset.0))
+        }))
+    };
+    let (a, b) = (at(first)?, at(last)?);
+    Some((a.min(b), a.max(b)))
 }
 
 /// What a planes-tier effect asks a model for.
