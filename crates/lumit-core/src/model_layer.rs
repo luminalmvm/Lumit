@@ -31,3 +31,22 @@ impl Default for ModelSettings {
         }
     }
 }
+
+/// A fresh Model layer for 3D model `item` in `comp`: always 3D, at the comp's
+/// centre, as long as the comp, and sized by the default settings.
+pub fn model_layer(
+    comp: &crate::model::Composition,
+    item: &crate::model::FootageItem,
+) -> crate::model::Layer {
+    let mut layer = crate::edits::base_layer(
+        item.name.clone(),
+        crate::model::LayerKind::Model {
+            item: item.id,
+            settings: Box::default(),
+        },
+        comp.duration.0,
+        crate::edits::centred_transform(0.0, 0.0, comp.width, comp.height),
+    );
+    layer.switches.three_d = true;
+    layer
+}

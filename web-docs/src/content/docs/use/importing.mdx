@@ -27,7 +27,7 @@ folder becomes a project folder of the same name.
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
 M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR,
 Targa, DPX, BMP, WebP, PSD, AI and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
-and WMA.
+and WMA; and the 3D models glTF, GLB, FBX and OBJ.
 
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
 Lumit reads the file rather than its extension, so a container or codec the list does not
@@ -96,6 +96,19 @@ Illustrator writes in the artwork's place.
 A layer is read as pixels at the artboard's size, and softens when scaled past 100%. Only
 the first artboard is read. Sublayers are not split out. Files from before Illustrator 9
 are not read.
+:::
+
+## 3D models
+
+A glTF, GLB, FBX or OBJ file imports as a **3D model** footage item, with the cube on its
+row. Its `.bin`, pictures and `.mtl` are found beside it, or by name in the folders next to
+it, and are packed with it. Dropped into a comp it makes a **Model layer** at the centre and
+opens **Model settings**: **Up axis**, **Fit to comp**, and **Units**, the comp pixels for
+each metre of the model. **Layer ▸ Model settings** opens it again. In a comp with no
+lights, the first model also adds an **Ambient light** and a **Key light**.
+
+:::note[Not built yet]
+A Model layer draws nothing yet. Its materials, animation and parts have no rows.
 :::
 
 ## Interpretation

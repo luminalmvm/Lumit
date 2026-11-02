@@ -69,8 +69,12 @@ List<LayerSetting> layerSettings({
       if (threeD &&
           kind != BridgeLayerKind.camera &&
           kind != BridgeLayerKind.nullLayer) ...[
-        LayerSetting.castsShadows,
-        LayerSetting.acceptsShadows,
+        // ponytail: a model neither casts nor takes shadows until the
+        // shadows item makes it, so it doesn't show the switches.
+        if (kind != BridgeLayerKind.model) ...[
+          LayerSetting.castsShadows,
+          LayerSetting.acceptsShadows,
+        ],
         LayerSetting.acceptsLights,
       ],
     ];

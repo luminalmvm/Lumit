@@ -2551,6 +2551,7 @@ dependencies = [
  "lumit-peer",
  "lumit-project",
  "lumit-render",
+ "lumit-scene",
  "lumit-script",
  "lumit-share",
  "lumit-text",

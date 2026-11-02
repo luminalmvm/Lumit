@@ -514,6 +514,32 @@ class TransformRowsFrb extends StatelessWidget {
     final settings = layerSettings(kind: kind, light: light, threeD: threeD);
     final out = <Widget>[];
     TransformSection? last;
+    final seen = <TransformSection>{};
+    // The Effect controls card names each options group as the Timeline's
+    // headings do.
+    void options(TransformSection section) {
+      seen.add(section);
+      final heading = switch (section) {
+        TransformSection.transform => null,
+        TransformSection.camera => l10n.cameraOptions,
+        TransformSection.light => l10n.lightOptions,
+        TransformSection.material => l10n.materialOptions,
+      };
+      if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
+      for (final setting in settings) {
+        if (setting.section != section) continue;
+        out.add(LayerSettingRowFrb(
+          layer: layer,
+          setting: setting,
+          light: light,
+          material: material,
+          acceptsLights: acceptsLights,
+          onChanged: onChanged,
+          keyPrefix: keyPrefix,
+        ));
+      }
+    }
+
     for (final group in transformGroups(
         threeD: threeD,
         modes: axisModes,
@@ -523,27 +549,7 @@ class TransformRowsFrb extends StatelessWidget {
         material: material)) {
       if (group.section != last) {
         last = group.section;
-        // The Effect controls card names each options group as the
-        // Timeline's headings do.
-        final heading = switch (group.section) {
-          TransformSection.transform => null,
-          TransformSection.camera => l10n.cameraOptions,
-          TransformSection.light => l10n.lightOptions,
-          TransformSection.material => l10n.materialOptions,
-        };
-        if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
-        for (final setting in settings) {
-          if (setting.section != last) continue;
-          out.add(LayerSettingRowFrb(
-            layer: layer,
-            setting: setting,
-            light: light,
-            material: material,
-            acceptsLights: acceptsLights,
-            onChanged: onChanged,
-            keyPrefix: keyPrefix,
-          ));
-        }
+        options(group.section);
       }
       out.add(TransformRowFrb(
         comp: comp,
@@ -558,6 +564,10 @@ class TransformRowsFrb extends StatelessWidget {
         rowPadding: rowPadding,
         twoColumn: twoColumn,
       ));
+    }
+    // A section of switches with no numbers, as a Model layer's materials.
+    for (final section in {for (final s in settings) s.section}) {
+      if (!seen.contains(section)) options(section);
     }
     return out;
   }

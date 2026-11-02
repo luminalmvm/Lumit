@@ -31,6 +31,7 @@ pub mod interpret;
 pub mod keymap;
 pub mod layer;
 pub mod lens;
+pub mod model;
 pub mod notes;
 pub mod place;
 pub mod planes;

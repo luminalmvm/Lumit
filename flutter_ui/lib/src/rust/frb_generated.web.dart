@@ -29,6 +29,7 @@ import 'api/interpret.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/lens.dart';
+import 'api/model.dart';
 import 'api/planes.dart';
 import 'api/presets.dart';
 import 'api/project.dart';
@@ -312,6 +313,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
+
+  @protected
+  BridgeModelSettings dco_decode_box_autoadd_bridge_model_settings(dynamic raw);
 
   @protected
   BridgeMotionPath dco_decode_box_autoadd_bridge_motion_path(dynamic raw);
@@ -1016,6 +1020,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMetadataField dco_decode_bridge_metadata_field(dynamic raw);
 
   @protected
+  BridgeModelSettings dco_decode_bridge_model_settings(dynamic raw);
+
+  @protected
   BridgeMotionKey dco_decode_bridge_motion_key(dynamic raw);
 
   @protected
@@ -1427,6 +1434,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeUnusedParam dco_decode_bridge_unused_param(dynamic raw);
+
+  @protected
+  BridgeUpAxis dco_decode_bridge_up_axis(dynamic raw);
 
   @protected
   BridgeVertex dco_decode_bridge_vertex(dynamic raw);
@@ -2022,6 +2032,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMediaInfo? dco_decode_opt_box_autoadd_bridge_media_info(dynamic raw);
 
   @protected
+  BridgeModelSettings? dco_decode_opt_box_autoadd_bridge_model_settings(
+      dynamic raw);
+
+  @protected
   BridgeMotionPath? dco_decode_opt_box_autoadd_bridge_motion_path(dynamic raw);
 
   @protected
@@ -2462,6 +2476,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo sse_decode_box_autoadd_bridge_media_info(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelSettings sse_decode_box_autoadd_bridge_model_settings(
       SseDeserializer deserializer);
 
   @protected
@@ -3290,6 +3308,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeModelSettings sse_decode_bridge_model_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMotionKey sse_decode_bridge_motion_key(SseDeserializer deserializer);
 
   @protected
@@ -3768,6 +3790,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeUnusedParam sse_decode_bridge_unused_param(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeUpAxis sse_decode_bridge_up_axis(SseDeserializer deserializer);
 
   @protected
   BridgeVertex sse_decode_bridge_vertex(SseDeserializer deserializer);
@@ -4487,6 +4512,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeModelSettings? sse_decode_opt_box_autoadd_bridge_model_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMotionPath? sse_decode_opt_box_autoadd_bridge_motion_path(
       SseDeserializer deserializer);
 
@@ -4946,6 +4975,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_media_info(
       BridgeMediaInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_settings(
+      BridgeModelSettings self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_motion_path(
@@ -5852,6 +5885,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMetadataField self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_model_settings(
+      BridgeModelSettings self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_motion_key(
       BridgeMotionKey self, SseSerializer serializer);
 
@@ -6386,6 +6423,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_unused_param(
       BridgeUnusedParam self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_up_axis(BridgeUpAxis self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_vertex(BridgeVertex self, SseSerializer serializer);
@@ -7119,6 +7159,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_media_info(
       BridgeMediaInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_settings(
+      BridgeModelSettings? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_motion_path(

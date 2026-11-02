@@ -12,6 +12,7 @@ import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
+import 'model.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -3614,6 +3615,12 @@ class LayerReference {
         that: this,
       );
 
+  /// A Model layer's settings, or `None` on any other kind of layer.
+  BridgeModelSettings? getModelSettings() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelSettings(
+        that: this,
+      );
+
   String getName() => BridgeLib.instance.api.crateApiLayerLayerReferenceGetName(
         that: this,
       );
@@ -4431,6 +4438,12 @@ class LayerReference {
   /// set a matte and delete its target without the document becoming invalid.
   void setMatte({BridgeMatte? matte}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetMatte(that: this, matte: matte);
+
+  /// Replace a Model layer's settings, as one undo step. Refused on any
+  /// other kind of layer.
+  void setModelSettings({required BridgeModelSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetModelSettings(
+          that: this, settings: settings);
 
   /// Set the Pan, as one undoable step — the same shape as the Volume, and
   /// animatable in exactly the same way.

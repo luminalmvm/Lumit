@@ -602,6 +602,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
 
+  /// Which footage items are 3D models, asked once per document change.
+  final Map<String, bool> _models = {};
+
   /// The project-wide *use proxies* switch, cached with the rest: it is
   /// a document read, so a rebuild must never ask for it again.
   bool? _useProxies;
@@ -1146,6 +1149,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
             id,
@@ -1544,6 +1548,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Whether this item is a node graph composition. False for every other
   /// kind, and for a comp that has gone from under the panel.
+  bool _isModel(ItemReference item) {
+    if (item case ItemReference_Footage(:final field0)) {
+      try {
+        return field0.isModel();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   bool _isNodeGraph(ItemReference item) {
     if (item case ItemReference_Composition(:final field0)) {
       try {
@@ -1677,6 +1692,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _names.clear();
       _nodeGraphs.clear();
       _proxies.clear();
+      _models.clear();
       _useProxies = null;
       _dropThumbs();
       _dropScrub();

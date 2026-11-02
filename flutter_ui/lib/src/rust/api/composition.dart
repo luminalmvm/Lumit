@@ -640,8 +640,10 @@ class CompositionReference {
   /// does. Without it they all start together, as After Effects stacks them.
   ///
   /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
-  /// `as_sequence` and `arrival` as there.
-  void addFootageLayers(
+  /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
+  /// no lights brings an Ambient light and a Key light with it, in the same
+  /// undo step. Answers the layers made from the items.
+  List<LayerReference> addFootageLayers(
           {required List<FootageReference> footage,
           required bool asSequence,
           int? row,

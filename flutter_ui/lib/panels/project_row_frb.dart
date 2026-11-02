@@ -207,6 +207,9 @@ class ProjectRowFrb extends StatefulWidget {
   /// Handed in from the panel's cache, for the reason the name is.
   final bool nodeGraph;
 
+  /// A 3D model rather than footage that plays, which wears the cube.
+  final bool model;
+
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
 
@@ -320,6 +323,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.label,
     required this.inherited,
     this.nodeGraph = false,
+    this.model = false,
     required this.inUse,
     required this.proxy,
     this.standIn = false,
@@ -994,7 +998,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     final fallback = projectDefaultLabel(item, audio: widget.audio);
     return switch (item) {
       ItemReference_Footage() => (
-          widget.audio ? LumitIcon.audioFile : LumitIcon.footage,
+          widget.model
+              ? LumitIcon.cube3d
+              : widget.audio
+                  ? LumitIcon.audioFile
+                  : LumitIcon.footage,
           t.labelColour(fallback),
         ),
       ItemReference_Folder() => (LumitIcon.folder, t.textMuted),

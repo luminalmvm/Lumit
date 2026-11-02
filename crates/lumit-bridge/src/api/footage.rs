@@ -890,8 +890,8 @@ impl FootageReference {
                 #[cfg(not(feature = "media"))]
                 let probed = true;
                 #[cfg(feature = "media")]
-                let probed =
-                    Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
+                let probed = lumit_scene::is_model(&path)
+                    || Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
 
                 // A run with a file that would not read wears the badge too,
                 // though a neighbour is drawn in that file's place.

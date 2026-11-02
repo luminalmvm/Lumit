@@ -364,6 +364,11 @@ pub enum SceneError {
 /// The extensions [`read`] opens, lower case.
 pub const EXTENSIONS: [&str; 4] = ["gltf", "glb", "fbx", "obj"];
 
+/// Whether the file at `path` is a 3D model [`read`] opens, by its name.
+pub fn is_model(path: impl AsRef<FilePath>) -> bool {
+    EXTENSIONS.contains(&extension(path.as_ref()).as_str())
+}
+
 /// Read the model at `path`, held to `limits` and stopped when `cancel` is
 /// set. Never panics, whatever the file holds.
 pub fn read(

@@ -330,6 +330,12 @@ class FootageReference {
         that: this,
       );
 
+  /// Whether this item is a 3D model rather than footage that plays.
+  bool isModel() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceIsModel(
+        that: this,
+      );
+
   /// Make this item's proxy: transcode the original half as wide, and attach
   /// the result when it lands.
   ///

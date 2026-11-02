@@ -1961,6 +1961,9 @@ impl CompositionReference {
         let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
             return Err(BridgeError::InvalidItem);
         };
+        if lumit_scene::is_model(f.media.on_disk()) {
+            return Ok((lumit_core::model_layer::model_layer(comp, f), Vec::new()));
+        }
 
         let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
         // Media with no picture at all can only ever be an Audio layer, so

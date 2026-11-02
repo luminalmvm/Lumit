@@ -288,7 +288,8 @@ pub enum Op {
     },
     /// Flip a layer between **Solid** and **Adjustment** — the one
     /// kind change the document has, and the whole of the Modes column's
-    /// adjustment toggle.
+    /// adjustment toggle. Also how a Model layer's settings change, its file
+    /// kept.
     ///
     /// **In plain terms.** An adjustment layer is a solid with its picture
     /// taken away: same span, same masks, same effect stack, but what the
@@ -1626,16 +1627,17 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             // anything is written: a refused op leaves the document untouched.
             let convertible =
                 |k: &LayerKind| matches!(k, LayerKind::Solid { .. } | LayerKind::Adjustment);
-            if !convertible(kind) {
-                return Err(OpError::KindNotConvertible);
-            }
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let l = c
                 .layers
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            if !convertible(&l.kind) {
+            let same_model = matches!(
+                (&**kind, &l.kind),
+                (LayerKind::Model { item: a, .. }, LayerKind::Model { item: b, .. }) if a == b
+            );
+            if !same_model && !(convertible(kind) && convertible(&l.kind)) {
                 return Err(OpError::KindNotConvertible);
             }
             let previous = std::mem::replace(&mut l.kind, (**kind).clone());
