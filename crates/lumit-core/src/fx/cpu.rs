@@ -5933,7 +5933,7 @@ fn edge_y(edge: u32) -> u32 {
     }
 }
 
-fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
+pub fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
     if (0..len).contains(&i) {
         return Some(i);
     }
@@ -5970,7 +5970,7 @@ pub fn radial_blur_taps(amount_px: f32) -> i32 {
 /// keeping full weight, exactly like the gaussian's normalisation). An
 /// `edge` past 3 carries a separate policy for y in its upper bits (see
 /// [`edge_y`]).
-fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+pub fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
     bilinear_edge_in(rgba, w, sx, sy, edge, [0, 0, w, h])
 }
 
