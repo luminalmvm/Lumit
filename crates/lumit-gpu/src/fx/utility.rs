@@ -664,3 +664,50 @@ impl FxEngine {
         out
     }
 }
+
+/// One resolved sRGB curve: onto the sRGB curve, or back off it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SrgbCurveOp {
+    /// True for sRGB to linear.
+    pub decode: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SrgbCurveParams {
+    decode: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
+}
+
+impl FxEngine {
+    /// Apply one sRGB curve to a working texture, returning a new texture of
+    /// the same size.
+    pub fn srgb_curve(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &SrgbCurveOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-srgb-curve-out");
+        self.dispatch(
+            ctx,
+            &self.srgb_curve,
+            src,
+            src,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&SrgbCurveParams {
+                decode: f32::from(u8::from(op.decode)),
+                mix_amt: op.mix,
+                _pad: [0.0; 2],
+            }),
+        );
+        out
+    }
+}

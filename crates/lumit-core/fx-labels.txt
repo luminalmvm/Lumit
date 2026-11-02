@@ -723,6 +723,7 @@ Line width
 Linear
 Linear burn
 Linear light
+Linear to sRGB
 Linear wipe
 Lines
 Load from file…
@@ -1469,3 +1470,5 @@ Z wave phase
 Zebra
 Zoom
 sRGB
+sRGB curve
+sRGB to linear

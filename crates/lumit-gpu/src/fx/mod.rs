@@ -288,6 +288,8 @@ pub struct FxEngine {
     card_wipe: wgpu::ComputePipeline,
     /// Luma fade: the picture goes away in order of brightness.
     luma_fade: wgpu::ComputePipeline,
+    /// sRGB curve: onto the sRGB curve, or back off it.
+    srgb_curve: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
