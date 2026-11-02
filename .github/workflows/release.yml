@@ -3,7 +3,8 @@
 # GitHub Release — no local cross-building, which Flutter cannot do anyway.
 #
 # Three things are *installed*: a Windows setup .exe, a macOS .dmg and a
-# Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Beside
+# Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Linux
+# also gets an .AppImage, which runs as it is and replaces itself. Beside
 # them rides the plain macOS .zip the in-place updater fetches, which is not an
 # installer and is not offered as a way to install. Windows updates run the
 # setup .exe again, silently. The setup .exe and the macOS .zip each get a
@@ -310,6 +311,119 @@ jobs:
           path: lumit-*-linux-x64.flatpak
           if-no-files-found: error
 
+  # The same bundle as one file that runs without installing anything, for
+  # distributions where Flatpak isn't set up. It uses the machine's own GTK and
+  # WebKitGTK, so it runs on any glibc at least as new as the build machine's.
+  # That is why this is 22.04 (glibc 2.35, so Debian 12 and Ubuntu 22.04) and
+  # not the Flatpak's 24.04. Jammy has no libclang 18, so LLVM comes from the
+  # same pinned download the Windows job uses.
+  linux-appimage:
+    name: Linux AppImage
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    runs-on: ubuntu-22.04
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
+      APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+      APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+      # libtinfo5 is what the LLVM download's libclang links against.
+      - name: Install desktop + Flutter build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev libgles-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev libtinfo5 libstdc++-12-dev \
+            clang cmake ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Install LLVM 18 (libclang for bindgen)
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: "18.1.8"
+          directory: ${{ runner.temp }}/llvm
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=$RUNNER_TEMP/llvm/lib" >> "$GITHUB_ENV"
+      - name: Install FFmpeg 8.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "FFMPEG_ROOT=$root" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+      - name: Stamp a nightly build
+        if: contains(env.RELEASE_VERSION, '-nightly.')
+        shell: bash
+        run: bash scripts/stamp-nightly.sh "${RELEASE_VERSION#v}"
+      - name: flutter build linux
+        working-directory: flutter_ui
+        run: |
+          flutter pub get
+          flutter build linux --release
+      - name: Build the AppImage
+        run: |
+          version="${RELEASE_VERSION#v}"
+          # The bundle as linux-bundle stages it, with the desktop entry and
+          # icon at the top, where appimagetool looks.
+          cp -r flutter_ui/build/linux/x64/release/bundle AppDir
+          cp -a "$FFMPEG_ROOT"/lib/*.so* AppDir/lib/
+          mkdir -p AppDir/data/colour
+          cp crates/lumit-colour/vendored/*.artefact AppDir/data/colour/
+          cp packaging/linux/io.github.luminalmvm.Lumit.desktop AppDir/
+          cp assets/brand/lumit-mark.svg AppDir/lumit.svg
+          ln -s lumit.svg AppDir/.DirIcon
+          # The Flatpak's rule against web fonts (#538), on top of the
+          # machine's own font setup rather than in place of it.
+          sed 's|^<fontconfig>$|&\n  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>|' \
+            packaging/flatpak/fonts.conf > AppDir/fonts.conf
+          grep -q /etc/fonts/fonts.conf AppDir/fonts.conf
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/sh
+          here="$(dirname "$(readlink -f "$0")")"
+          export FONTCONFIG_FILE="$here/fonts.conf"
+          exec "$here/lumit_flutter" "$@"
+          EOF
+          chmod 755 AppDir/AppRun
+
+          # appimagetool and the runtime it puts at the front of the file,
+          # both pinned. Without --runtime-file it fetches the newest runtime.
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/runtime" \
+            https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          echo "$APPIMAGE_RUNTIME_SHA256  $RUNNER_TEMP/runtime" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          # The runner has no FUSE, so the tool unpacks itself to run.
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$RUNNER_TEMP/appimagetool" \
+            --runtime-file "$RUNNER_TEMP/runtime" \
+            AppDir "lumit-$version-linux-x64.AppImage"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-appimage
+          path: lumit-*-linux-x64.AppImage
+          if-no-files-found: error
+
   macos-dmg:
     name: macOS disk image
     needs: plan
@@ -421,7 +535,7 @@ jobs:
 
   publish:
     name: GitHub release
-    needs: [plan, windows-installer, linux-bundle, macos-dmg]
+    needs: [plan, windows-installer, linux-bundle, linux-appimage, macos-dmg]
     permissions:
       contents: write
     # A manual run publishes only when asked to. A nightly always does.
