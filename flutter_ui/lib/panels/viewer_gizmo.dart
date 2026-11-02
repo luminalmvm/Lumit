@@ -1519,6 +1519,9 @@ BridgeScalar? scalarOf(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.positionX => tf.positionX,
       BridgeTransformProp.positionY => tf.positionY,
       BridgeTransformProp.positionZ => tf.positionZ,
+      BridgeTransformProp.scaleX => tf.scaleX,
+      BridgeTransformProp.scaleY => tf.scaleY,
+      BridgeTransformProp.scaleZ => tf.depth?.scaleZ,
       BridgeTransformProp.rotation => tf.rotation,
       BridgeTransformProp.rotationX => tf.rotationX,
       BridgeTransformProp.rotationY => tf.rotationY,
@@ -1618,11 +1621,37 @@ List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
         })) {
       continue;
     }
-    final gizmo = Gizmo3d.of(map, at: at, local: local, mode: mode);
+    final scales = props.first == BridgeTransformProp.positionX &&
+        _hasScale(box);
+    final gizmo =
+        Gizmo3d.of(map, at: at, local: local, mode: mode, scales: scales);
     if (gizmo != null) out.add(Handles3d(box, gizmo, props));
   }
   return out;
 }
+
+/// Whether [box] has a Scale for the 3D knobs to write: not a light, a
+/// camera, or a Scale an expression drives.
+bool _hasScale(LayerBox box) {
+  final tf = box.transform;
+  return tf != null &&
+      !box.marker &&
+      tf.camera == null &&
+      _scaleProps.every((p) => switch (scalarOf(tf, p)) {
+            null || BridgeScalar_Expression() => false,
+            _ => true,
+          });
+}
+
+const _scaleProps = [
+  BridgeTransformProp.scaleX,
+  BridgeTransformProp.scaleY,
+  BridgeTransformProp.scaleZ,
+];
+
+/// [box]'s Scale, x, y and z in percent.
+Vec3 _scaleOf(LayerBox box) =>
+    (box.map.sx * 100, box.map.sy * 100, box.map.depth?.scaleZ ?? 100);
 
 /// What the pointer is doing to the picture right now.
 enum _GizmoDrag {
@@ -2748,7 +2777,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         setState(() {
           _set = set;
           _part = part;
-          _last3d = set.at;
+          _last3d =
+              part.kind == GizmoKind.scale ? _scaleOf(set.box) : set.at;
           // A point of interest moves alone. Position takes the rest of the
           // selection with it, as a body drag does.
           final carried = set.props.first == BridgeTransformProp.poiX
@@ -3029,6 +3059,15 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   Vec3? _moved3d() {
     final set = _set, part = _part;
     if (set == null || part == null) return null;
+    if (part.kind == GizmoKind.scale) {
+      // One axis, or with Shift all three by the same amount.
+      final k = set.gizmo.scaleBy(part.axis, _origin, _pointer);
+      if (k == null) return _last3d;
+      final s = _scaleOf(set.box);
+      final all = HardwareKeyboard.instance.isShiftPressed;
+      double by(int i, double v) => all || i == part.axis ? v * k : v;
+      return _last3d = (by(0, s.$1), by(1, s.$2), by(2, s.$3));
+    }
     final step = HardwareKeyboard.instance.isShiftPressed ? 10.0 : null;
     final d = switch (part.kind) {
       GizmoKind.arrow =>
@@ -3047,6 +3086,20 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   List<(LayerBox, List<BridgeTransformProp>, Vec3, Vec3)> _moves3d() {
     final set = _set, to = _moved3d();
     if (set == null || to == null) return const [];
+    if (_part?.kind == GizmoKind.scale) {
+      // The rest of the selection in 3D takes the same factor on its own
+      // axes, as a move carries it.
+      final from = _scaleOf(set.box);
+      double k(double was, double now) => was.abs() < 1e-9 ? 1 : now / was;
+      final (kx, ky, kz) = (k(from.$1, to.$1), k(from.$2, to.$2), k(from.$3, to.$3));
+      return [
+        if (!_handlesRide) (set.box, _scaleProps, from, to),
+        for (final box in _carried)
+          if (box.map.projected && _hasScale(box))
+            if (_scaleOf(box) case (final x, final y, final z))
+              (box, _scaleProps, (x, y, z), (x * kx, y * ky, z * kz)),
+      ];
+    }
     final d = (to.$1 - set.at.$1, to.$2 - set.at.$2, to.$3 - set.at.$3);
     final inComp = parentToComp(set.box.map, d);
     const position = [
@@ -3084,10 +3137,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// [tf] with a 3D drag's three values in it.
   BridgeTransform _with3d(
           BridgeTransform tf, List<BridgeTransformProp> props, Vec3 to) =>
-      props.first == BridgeTransformProp.poiX
-          ? transformWith(tf, pointOfInterest: to)
-          : transformWith(tf,
-              positionX: to.$1, positionY: to.$2, positionZ: to.$3);
+      switch (props.first) {
+        BridgeTransformProp.poiX => transformWith(tf, pointOfInterest: to),
+        BridgeTransformProp.scaleX =>
+          transformWith(tf, scaleX: to.$1, scaleY: to.$2, scaleZ: to.$3),
+        _ => transformWith(tf,
+            positionX: to.$1, positionY: to.$2, positionZ: to.$3),
+      };
 
   /// The boxes and the picture follow the drag: the boxes are rebuilt from
   /// the provisional transforms, children included, and one layer moving
@@ -3158,6 +3214,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   List<String> _readout3d() {
     final set = _set, to = _last3d;
     if (set == null || to == null) return const [];
+    if (_part?.kind == GizmoKind.scale) {
+      return _readout(l10n.transformScale, _scaleOf(set.box), to, unit: '%');
+    }
     return _readout(
         set.props.first == BridgeTransformProp.poiX
             ? l10n.transformPointOfInterest
@@ -3178,12 +3237,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         (x, y, z ?? m.depth!.z));
   }
 
-  List<String> _readout(String what, Vec3 from, Vec3 to) {
+  List<String> _readout(String what, Vec3 from, Vec3 to, {String unit = ''}) {
     final d = [to.$1 - from.$1, to.$2 - from.$2, to.$3 - from.$3];
     return [
       what,
       for (var i = 0; i < 3; i++)
-        if (d[i].abs() >= 0.05) '${'xyz'[i]}  ${gizmoAmount(d[i])}',
+        if (d[i].abs() >= 0.05)
+          '${'xyz'[i]}  ${gizmoAmount(d[i], unit: unit)}',
     ];
   }
 
@@ -3808,6 +3868,7 @@ BridgeTransform transformWith(
   double? positionZ,
   double? scaleX,
   double? scaleY,
+  double? scaleZ,
   double? rotation,
   double? rotationX,
   double? rotationY,
@@ -3848,7 +3909,7 @@ BridgeTransform transformWith(
             orientationY: put(orientation?.$2, depth.orientationY),
             orientationZ: put(orientation?.$3, depth.orientationZ),
             anchorZ: depth.anchorZ,
-            scaleZ: depth.scaleZ,
+            scaleZ: put(scaleZ, depth.scaleZ),
             afterEffectsOrder: depth.afterEffectsOrder,
           ),
   );
