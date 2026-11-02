@@ -369,7 +369,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       },
     );
 
-    Overlay.of(context, rootOverlay: true).insert(_overlay!);
+    rootOverlayOf(context)!.insert(_overlay!);
   }
 
   void hideOverlay() {
