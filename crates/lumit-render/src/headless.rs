@@ -6655,6 +6655,7 @@ mod tests {
                     shutter_angle: 180.0,
                     shutter_phase: -90.0,
                     samples: 8,
+                    ..lumit_core::model::MotionBlur::default()
                 };
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.switches.motion_blur = true;
