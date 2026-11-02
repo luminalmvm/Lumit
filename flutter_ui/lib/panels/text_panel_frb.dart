@@ -203,7 +203,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseButton(
                     key: const ValueKey('text-more'),
                     small: true,

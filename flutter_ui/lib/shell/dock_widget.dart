@@ -768,7 +768,7 @@ class _TitleLine extends StatelessWidget {
           Expanded(
             child: t.tokens.titleCentred
                 ? Center(child: child)
-                : Align(alignment: Alignment.centerLeft, child: child),
+                : Align(alignment: AlignmentDirectional.centerStart, child: child),
           ),
           // The dot's own width again, so the words centre on the line rather
           // than on what is left of it.

@@ -471,7 +471,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   Widget _bubble(LumitTheme t, Widget child) => !t.tokens.roomed
       ? child
       : Padding(
-          padding: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsetsDirectional.only(end: 8),
           child: Container(
             key: const ValueKey('status-bubble'),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -554,11 +554,11 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       builder: (context, room) => room.maxWidth < 120
           ? const SizedBox.shrink()
           : Align(
-              alignment: Alignment.centerRight,
+              alignment: AlignmentDirectional.centerEnd,
               child: Padding(
                 // Clear of the readout before it on a flush strip. Bubbles
                 // space themselves.
-                padding: EdgeInsets.only(left: t.tokens.roomed ? 0 : 12),
+                padding: EdgeInsetsDirectional.only(start: t.tokens.roomed ? 0 : 12),
                 child: _bubble(
                   t,
                   Text(
@@ -669,7 +669,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         // hover, and a press follows them, or stops if it already does.
         for (final person in others.take(drawn))
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: LumitTooltip(
               message: [
                 person.name,
@@ -702,7 +702,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         // Whoever there is no room for, as a count that opens the window.
         if (drawn < others.length)
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: LumitTooltip(
               message: others.skip(drawn).map((p) => p.name).join(', '),
               child: MouseRegion(

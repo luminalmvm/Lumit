@@ -151,7 +151,7 @@ class SoundMixOutlineRow extends StatelessWidget {
                   ),
                   if (folded > 0)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsetsDirectional.only(end: 8),
                       child: Text(
                         l10n.timelineSoundMixFolded(folded),
                         key: const ValueKey('tl-sound-mix-count'),

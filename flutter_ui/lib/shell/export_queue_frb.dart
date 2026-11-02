@@ -177,7 +177,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ? SizedBox(
                   height: exportQueueRow,
                   child: Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: AlignmentDirectional.centerStart,
                     child: Text(l10n.exportQueueEmpty,
                         key: const ValueKey('export-queue-empty'),
                         style: t.body.copyWith(color: t.textMuted)),

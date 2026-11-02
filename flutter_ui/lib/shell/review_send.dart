@@ -321,7 +321,7 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
                       width: _labelColumn,
                       height: 22,
                       child: Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(l10n.reviewSendAs, style: t.body),
                       ),
                     ),
@@ -412,7 +412,7 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
               t,
               l10n.exportSpan,
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: dialogDropdown<bool>(
                   t,
                   id: 'review-send-span',

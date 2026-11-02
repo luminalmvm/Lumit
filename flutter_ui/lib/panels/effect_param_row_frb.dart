@@ -428,7 +428,7 @@ class EffectParamRowFrb extends StatelessWidget {
             SizedBox(
               width: col.width,
               child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: control,
               ),
             ),
@@ -749,7 +749,7 @@ class EffectParamRowFrb extends StatelessWidget {
           return SizedBox(
             width: effectCellWidth,
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: HouseCheckbox(
                 key: ValueKey<String>('fx-bool-$id-${param.id}'),
                 value: field0,

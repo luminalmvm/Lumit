@@ -467,7 +467,7 @@ Future<void> showProjectMenuFrb({
                           child: Container(
                             width: 10,
                             height: 10,
-                            margin: const EdgeInsets.only(right: 2),
+                            margin: const EdgeInsetsDirectional.only(end: 2),
                             decoration: BoxDecoration(
                               color: menuTheme.labelColour(i),
                               shape: BoxShape.circle,

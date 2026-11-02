@@ -181,8 +181,8 @@ Widget projectColumnHeader(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.only(
-          left: projectHeaderPadLeft, right: projectRowPadding),
+      padding: const EdgeInsetsDirectional.only(
+          start: projectHeaderPadLeft, end: projectRowPadding),
       child: Row(
         children: [
           // Name is the flexible slot, and what it is left with is
@@ -711,7 +711,7 @@ Widget projectPreviewCard(
       padding: const EdgeInsets.all(_previewPad),
       child: item == null
           ? Align(
-              alignment: Alignment.topLeft,
+              alignment: AlignmentDirectional.topStart,
               child: Text(summary,
                   key: const ValueKey('project-summary'),
                   style: projectMetaStyle(t),
