@@ -16,6 +16,7 @@ pub struct RotoSolver {
     len: usize,
     width: u32,
     height: u32,
+    steps: Vec<[f32; 4]>,
     d_f: Vec<f32>,
     d_b: Vec<f32>,
     alpha_raw: Vec<f32>,
@@ -33,6 +34,7 @@ impl RotoSolver {
             len: 0,
             width: 0,
             height: 0,
+            steps: Vec::new(),
             d_f: Vec::new(),
             d_b: Vec::new(),
             alpha_raw: Vec::new(),
@@ -82,6 +84,7 @@ impl RotoSolver {
             frame,
             seeds,
             self.settings.gamma,
+            &mut self.steps,
             &mut self.d_f,
             &mut self.d_b,
             &mut self.alpha_raw,
@@ -150,6 +153,8 @@ impl RotoSolver {
             plane.clear();
             plane.resize(len, 0.0);
         }
+        self.steps.clear();
+        self.steps.resize(len, [0.0; 4]);
         self.guided.resize(len);
     }
 }
