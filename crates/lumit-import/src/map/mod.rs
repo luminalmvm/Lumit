@@ -36,6 +36,7 @@ mod curves;
 pub mod effects;
 mod fx_colour;
 mod fx_distort;
+mod fx_energy;
 mod fx_grid;
 mod layers;
 mod masks;
