@@ -9,3 +9,4 @@ section below, and when the release note is written the lines move into it.
 - Glow, and the other effects that spread light, no longer show a faint box behind each letter
   of a Text layer.
 - Measure reads footage at its own size, and a Sequence layer at the size of the clip showing, where it used to read the comp's size. An expression's sourceRectAtTime changes the same way, so anything wired to either can change size.
+- Measure in Comp space sees a 3D layer through the camera, where it used to measure it lying flat.

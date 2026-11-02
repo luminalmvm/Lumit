@@ -16,7 +16,8 @@
 //! **Two spaces.** *Layer* is the layer's own pixels, which is what
 //! `sourceRectAtTime` answers in. *Comp* runs the box through the layer's
 //! transform and its parents', so a scaled or moved layer measures where it
-//! is drawn. A turned layer measures the box round its turned corners.
+//! is drawn. A turned layer measures the box round its turned corners, and a
+//! 3D layer the box round its corners as the camera sees them.
 //!
 //! **Nothing to measure reads nought**: a Null, a camera, a light, an empty
 //! text or a shape with no art.
@@ -250,13 +251,9 @@ pub fn layer_rect(
     }
 }
 
-/// `rect` in `layer`'s pixels, run through its transform and its parents' at
-/// comp time `t`, as the box round the four placed corners.
-///
-/// ponytail: flat placement only (position, anchor, scale and Z rotation), the
-/// way `occlusion` reads it. A layer turned in X or Y, or pushed in Z, measures
-/// as if it lay flat; go through the compositor's own matrices if a 3D layer
-/// ever needs measuring through a camera.
+/// `rect` in `layer`'s pixels, placed where the picture has it at comp time
+/// `t`, as the box round its four corners. The walk `toComp` takes, so a 3D
+/// layer is seen through the active camera.
 fn to_comp(
     comp: &Composition,
     layer: &Layer,
@@ -264,18 +261,24 @@ fn to_comp(
     context: &ExpressionContext,
     rect: [f64; 4],
 ) -> [f64; 4] {
-    let world = world(comp, layer, t, context);
+    use crate::expression::space;
+    let read = space::reader(context, comp.id, t);
+    let space = space::space(&context.document, comp, layer, t, &read);
     let corners = [
         (rect[0], rect[1]),
         (rect[2], rect[1]),
         (rect[0], rect[3]),
         (rect[2], rect[3]),
     ];
-    bounds(corners.into_iter().map(|c| world.apply(c))).unwrap_or(rect)
+    let placed = corners.into_iter().map(|(x, y)| {
+        let p = space.to_comp((x, y, 0.0));
+        (p.0, p.1)
+    });
+    bounds(placed).unwrap_or(rect)
 }
 
 /// `layer`'s pixels to the comp's at comp time `t`, through its transform and
-/// its parents', flat as [`to_comp`] reads them.
+/// its parents', flat: position, anchor, scale and Z rotation.
 pub(crate) fn world(
     comp: &Composition,
     layer: &Layer,
