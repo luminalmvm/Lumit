@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration as Wall, Instant};
 
 use lumit_core::model::{Document, Layer, LayerKind};
-use lumit_core::sequence::{self, Clip, ClipSource};
+use lumit_core::sequence::{self, Clip};
 use lumit_core::time::{CompTime, Rational};
 use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_project::JournalFile;
@@ -367,7 +367,7 @@ impl LongHarness {
                         .frame_at(CompTime(offset.checked_add(t).unwrap_or(t)))
                 };
                 for clip in clips_of(layer) {
-                    let (ClipSource::Footage(id) | ClipSource::Comp(id)) = clip.source;
+                    let id = clip.source.id();
                     let name = self.doc.item(id).map(|i| i.name().to_string());
                     let span = (frame(clip.place_start), frame(clip.place_end()));
                     let speed = clip.constant_speed();

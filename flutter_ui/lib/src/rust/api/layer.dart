@@ -506,6 +506,9 @@ class BridgeClip {
   /// Whether the clip plays a composition and not a footage item.
   final bool sourceIsComp;
 
+  /// Whether the clip plays a solid: a colour, with no file behind it.
+  final bool sourceIsSolid;
+
   /// The footage item or composition the clip plays: its take's, when T
   /// has stepped to another.
   final UuidValue source;
@@ -550,6 +553,7 @@ class BridgeClip {
     required this.sourceIn,
     required this.sourceOut,
     required this.sourceIsComp,
+    required this.sourceIsSolid,
     required this.source,
     this.blend,
     this.label,
@@ -583,6 +587,7 @@ class BridgeClip {
       sourceIn.hashCode ^
       sourceOut.hashCode ^
       sourceIsComp.hashCode ^
+      sourceIsSolid.hashCode ^
       source.hashCode ^
       blend.hashCode ^
       label.hashCode ^
@@ -618,6 +623,7 @@ class BridgeClip {
           sourceIn == other.sourceIn &&
           sourceOut == other.sourceOut &&
           sourceIsComp == other.sourceIsComp &&
+          sourceIsSolid == other.sourceIsSolid &&
           source == other.source &&
           blend == other.blend &&
           label == other.label &&

@@ -4094,6 +4094,8 @@ fn collect_comp_footage(
                         crate::sequence::ClipSource::Comp(nested) => {
                             descend_into_comp(doc, nested, found, walked);
                         }
+                        // A colour, with no file to open.
+                        crate::sequence::ClipSource::Solid(_) => {}
                     }
                 }
             }
@@ -4217,6 +4219,7 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
         LayerKind::Sequence { clips } => clips.iter().flat_map(|c| c.sources()).any(|s| match s {
             crate::sequence::ClipSource::Footage(item) => item == id,
             crate::sequence::ClipSource::Comp(comp) => comp == id,
+            crate::sequence::ClipSource::Solid(def) => def == id,
         }),
         // Nothing from the Project panel: a drawn layer carries its own art, a
         // camera is a viewpoint, a light is something other layers see, an

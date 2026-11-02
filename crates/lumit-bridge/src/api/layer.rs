@@ -1521,6 +1521,8 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// Whether the clip plays a solid: a colour, with no file behind it.
+    pub source_is_solid: bool,
     /// The footage item or composition the clip plays: its take's, when T
     /// has stepped to another.
     pub source: Uuid,
@@ -1553,6 +1555,8 @@ pub(crate) fn clip_source_duration(
 ) -> Option<lumit_core::time::Rational> {
     match source {
         lumit_core::sequence::ClipSource::Comp(id) => Some(doc.comp(id)?.duration.0),
+        // A colour is the same for ever, so it can be stretched as far as asked.
+        lumit_core::sequence::ClipSource::Solid(_) => None,
         lumit_core::sequence::ClipSource::Footage(id) => {
             let lumit_core::model::ProjectItem::Footage(footage) = doc.item(id)? else {
                 return None;
@@ -1608,12 +1612,10 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
-    let name = |source| match source {
-        lumit_core::sequence::ClipSource::Footage(id)
-        | lumit_core::sequence::ClipSource::Comp(id) => doc
-            .item(id)
+    let name = |source: lumit_core::sequence::ClipSource| {
+        doc.item(source.id())
             .map(|i| i.name().to_string())
-            .unwrap_or_default(),
+            .unwrap_or_default()
     };
     BridgeClip {
         id: clip.id,
@@ -1658,10 +1660,8 @@ fn bridge_clip(
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
-        source: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => id,
-        },
+        source_is_solid: matches!(clip.source, lumit_core::sequence::ClipSource::Solid(_)),
+        source: clip.source.id(),
         blend: clip.blend.map(|blend| {
             lumit_core::model::BlendMode::ALL
                 .iter()
