@@ -25,8 +25,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver as Queue, RecvTimeoutError, SyncSender};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
-use web_time::Instant;
+use web_time::{Duration, Instant};
 use uuid::Uuid;
 
 /// What one machine asks another for.

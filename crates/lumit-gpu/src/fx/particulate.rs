@@ -1043,7 +1043,7 @@ impl ParticulatePipelines {
         // draw pipeline and not one after another.
         let compute = |entry: &'static str, label: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), compute_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
                     layout: Some(&layout),
@@ -1195,7 +1195,7 @@ impl ParticulateBlendPipelines {
             });
         let compute = |entry: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), tiles_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(entry),
                     layout: Some(&layout),

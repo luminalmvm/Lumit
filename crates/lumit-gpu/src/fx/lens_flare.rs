@@ -975,7 +975,7 @@ impl LensFlareFx {
                        module: &wgpu::ShaderModule,
                        pl: &wgpu::PipelineLayout| {
             let (device, module, pl) = (device.clone(), module.clone(), pl.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
                     layout: Some(&pl),

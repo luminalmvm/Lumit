@@ -2829,66 +2829,6 @@ pub struct RenderCompRequestWithPreview {
     pub masks: Option<Vec<crate::api::layer::BridgeMask>>,
 }
 
-/// Ask the operating system for 1 ms sleep granularity (Windows; a no-op
-/// elsewhere, where sleeps are already fine-grained).
-///
-/// The worker paces presents with short sleeps, and Windows rounds a sleep UP
-/// to the system timer's next tick — by default ~15.6 ms apart. That is twice
-/// a 120 fps frame period: every sleep-then-present overshot its due time, the
-/// present grid re-anchored, and the achieved rate fell to whatever the timer
-/// allowed (~85 of 120 in practice; at 60 fps the grid held but presents
-/// jittered by several milliseconds, which is what kept stopping the sound).
-/// One millisecond is the granularity every media application requests; the
-/// setting is process-wide and lives for the process, exactly as it does in
-/// any NLE. A refusal is harmless — pacing then leans on the spin window
-/// alone.
-#[cfg(windows)]
-#[frb(ignore)]
-fn raise_timer_resolution() {
-    // SAFETY: `timeBeginPeriod` touches no memory owned by this program; it
-    // adjusts a scheduler setting and reports acceptance or refusal in its
-    // return value, which is ignored because a refusal leaves nothing to do.
-    unsafe {
-        let _ = windows::Win32::Media::timeBeginPeriod(1);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn raise_timer_resolution() {}
-
-/// Run this thread a step above the rest of the machine while it plays, and
-/// back at the ordinary priority when it stops (Windows).
-///
-/// A picture is due at a moment, and on a machine with every core busy the
-/// thread that sends it waited its turn like any other: with sixteen cores
-/// loaded the pictures of a cached span went out ten milliseconds late, and
-/// on time with this. Only while playing, so that an idle fill or a heavy
-/// still frame never takes a core ahead of the interface.
-// ponytail: Windows only. macOS and Linux want their own call (a QoS class,
-// a nice value) and a machine to measure it on.
-#[cfg(windows)]
-#[frb(ignore)]
-fn playback_priority(playing: bool) {
-    use windows::Win32::System::Threading::{
-        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
-    };
-    let priority = if playing {
-        THREAD_PRIORITY_ABOVE_NORMAL
-    } else {
-        THREAD_PRIORITY_NORMAL
-    };
-    // SAFETY: the pseudo-handle of the calling thread and a priority constant.
-    // A refusal leaves the thread as it was, which is all there is to do.
-    unsafe {
-        let _ = SetThreadPriority(GetCurrentThread(), priority);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn playback_priority(_playing: bool) {}
-
 /// The way into the render worker. Each send also turns over the epochs of
 /// the work it replaces, so a render the worker is part way through can see it
 /// is no longer wanted and stop (`lumit_render::cancel`).
@@ -3229,7 +3169,7 @@ fn worker_loop(
         crate::faults::path()
     );
     let mut stream = stream;
-    raise_timer_resolution();
+    crate::turns::raise_timer_resolution();
 
     // Made before the renderer, because the two profiler sinks it installs
     // read it from inside a render.
@@ -3269,7 +3209,7 @@ fn worker_loop(
         // see the note on `applied_vram_budget` below.
         applied_disk_budget: 0,
         applied_disk_room: u64::MAX,
-        disk_room_asked: long_ago(DISK_ROOM_EVERY),
+        disk_room_asked: crate::turns::long_ago(DISK_ROOM_EVERY),
         seen_disk_clears: crate::framecache::disk::clears(),
         seen_disk_location: (u64::MAX, None),
         // NOT the wish's current value. A fresh renderer's cache holds the
@@ -3287,7 +3227,7 @@ fn worker_loop(
         bar_strip: Vec::new(),
         bar_refined_to: 0,
         bar_dirty: false,
-        bar_published_at: long_ago(BAR_MIN_INTERVAL),
+        bar_published_at: crate::turns::long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
         last_request: web_time::Instant::now(),
@@ -3368,14 +3308,6 @@ fn worker_loop(
     crate::turns::start(turn);
 }
 
-/// A moment `ago` before now, or now itself when the clock has not run that
-/// long. A page's clock starts when the page loads.
-#[frb(ignore)]
-fn long_ago(ago: std::time::Duration) -> web_time::Instant {
-    let now = web_time::Instant::now();
-    now.checked_sub(ago).unwrap_or(now)
-}
-
 /// The most consecutive faulting turns to nurse before the worker gives up.
 /// Reaching it ends the thread, which closes the response stream — the
 /// frontend's `onDone` is what turns that into a visible preview failure rather
@@ -3403,28 +3335,6 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
     }
 }
 
-/// The next request, waiting up to `wait` for one. The browser build never
-/// waits in place: it takes what is there and comes back after `wait`.
-#[frb(ignore)]
-fn take_request(
-    receiver: &Receiver<WorkerRequest>,
-    wait: std::time::Duration,
-) -> Result<WorkerRequest, std::sync::mpsc::RecvTimeoutError> {
-    #[cfg(not(target_arch = "wasm32"))]
-    return receiver.recv_timeout(wait);
-    #[cfg(target_arch = "wasm32")]
-    match receiver.try_recv() {
-        Ok(request) => Ok(request),
-        Err(std::sync::mpsc::TryRecvError::Empty) => {
-            crate::turns::pause(wait);
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
-        }
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
-        }
-    }
-}
-
 /// One turn of the worker loop: recover, sync, take a request if there is one,
 /// serve it, and play a frame if the transport is running.
 ///
@@ -3442,7 +3352,7 @@ fn one_turn(
     recover_lost_device(state, stream);
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
-        playback_priority(state.prioritised);
+        crate::turns::playback_priority(state.prioritised);
     }
     sync_caches(state);
 
@@ -3471,7 +3381,7 @@ fn one_turn(
         } else {
             std::time::Duration::from_millis(2)
         };
-        match take_request(receiver, wait) {
+        match crate::turns::take_request(receiver, wait) {
             Ok(request) => Some(request),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // A lens finished baking: the picture on screen was drawn

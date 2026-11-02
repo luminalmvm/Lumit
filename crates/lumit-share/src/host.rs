@@ -23,8 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver as Done, SyncSender};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
-use web_time::Instant;
+use web_time::{Duration, Instant};
 use uuid::Uuid;
 
 /// Both ends have to run this, edits being the wire format.

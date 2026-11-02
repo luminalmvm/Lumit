@@ -400,10 +400,10 @@ const SQUARE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 impl LightingFx {
     /// Compiled on the pool with the rest of the engine.
-    pub(super) fn start(ctx: &GpuContext) -> crate::Compiling<Self> {
+    pub(super) fn start(ctx: &GpuContext) -> crate::compiling::Compiling<Self> {
         let device = ctx.device.clone();
         let working = ctx.working();
-        crate::Compiling::start(move || Self::new(&device, working))
+        crate::compiling::Compiling::start(move || Self::new(&device, working))
     }
 
     fn new(device: &wgpu::Device, working: wgpu::TextureFormat) -> Self {

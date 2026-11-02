@@ -1,4 +1,4 @@
-//! How the render worker waits.
+//! How the render worker waits and keeps time.
 //!
 //! On the desktop the worker is a thread of its own, and a wait is a sleep.
 //! The browser build has one thread, the page's, which must never be held. So
@@ -22,6 +22,90 @@ pub(crate) fn pause(wait: Duration) {
         next.set(Some(soonest));
     });
 }
+
+/// A moment `ago` before now, or now itself when the clock has not run that
+/// long. A page's clock starts when the page loads.
+pub(crate) fn long_ago(ago: Duration) -> web_time::Instant {
+    let now = web_time::Instant::now();
+    now.checked_sub(ago).unwrap_or(now)
+}
+
+/// The next request, waiting up to `wait` for one. The browser build never
+/// waits in place: it takes what is there and comes back after `wait`.
+pub(crate) fn take_request<T>(
+    receiver: &std::sync::mpsc::Receiver<T>,
+    wait: Duration,
+) -> Result<T, std::sync::mpsc::RecvTimeoutError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return receiver.recv_timeout(wait);
+    #[cfg(target_arch = "wasm32")]
+    match receiver.try_recv() {
+        Ok(request) => Ok(request),
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            pause(wait);
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        }
+    }
+}
+
+/// Ask the operating system for 1 ms sleep granularity (Windows; a no-op
+/// elsewhere, where sleeps are already fine-grained).
+///
+/// The worker paces presents with short sleeps, and Windows rounds a sleep UP
+/// to the system timer's next tick — by default ~15.6 ms apart. That is twice
+/// a 120 fps frame period: every sleep-then-present overshot its due time, the
+/// present grid re-anchored, and the achieved rate fell to whatever the timer
+/// allowed (~85 of 120 in practice; at 60 fps the grid held but presents
+/// jittered by several milliseconds, which is what kept stopping the sound).
+/// One millisecond is the granularity every media application requests; the
+/// setting is process-wide and lives for the process, exactly as it does in
+/// any NLE. A refusal is harmless — pacing then leans on the spin window
+/// alone.
+#[cfg(windows)]
+pub(crate) fn raise_timer_resolution() {
+    // SAFETY: `timeBeginPeriod` touches no memory owned by this program; it
+    // adjusts a scheduler setting and reports acceptance or refusal in its
+    // return value, which is ignored because a refusal leaves nothing to do.
+    unsafe {
+        let _ = windows::Win32::Media::timeBeginPeriod(1);
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn raise_timer_resolution() {}
+
+/// Run this thread a step above the rest of the machine while it plays, and
+/// back at the ordinary priority when it stops (Windows).
+///
+/// A picture is due at a moment, and on a machine with every core busy the
+/// thread that sends it waited its turn like any other: with sixteen cores
+/// loaded the pictures of a cached span went out ten milliseconds late, and
+/// on time with this. Only while playing, so that an idle fill or a heavy
+/// still frame never takes a core ahead of the interface.
+// ponytail: Windows only. macOS and Linux want their own call (a QoS class,
+// a nice value) and a machine to measure it on.
+#[cfg(windows)]
+pub(crate) fn playback_priority(playing: bool) {
+    use windows::Win32::System::Threading::{
+        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
+    };
+    let priority = if playing {
+        THREAD_PRIORITY_ABOVE_NORMAL
+    } else {
+        THREAD_PRIORITY_NORMAL
+    };
+    // SAFETY: the pseudo-handle of the calling thread and a priority constant.
+    // A refusal leaves the thread as it was, which is all there is to do.
+    unsafe {
+        let _ = SetThreadPriority(GetCurrentThread(), priority);
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn playback_priority(_playing: bool) {}
 
 /// Start a worker: `turn` runs again and again from the page's timer until it
 /// answers false.
