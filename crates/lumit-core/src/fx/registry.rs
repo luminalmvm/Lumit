@@ -478,6 +478,13 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// Whether this effect reads the copies a Clone to points above it
+    /// stamped, as outlines, and a layer's outline, which ride in the
+    /// carriage the points effects get (the Clone deformer).
+    fn reads_clone_shapes(&self) -> bool {
+        false
+    }
+
     /// What this entry produces and consumes. Every effect is
     /// [`Signature::Image`] with neither half filled; a driver declares its
     /// output ports, a points producer declares its Points output beside its

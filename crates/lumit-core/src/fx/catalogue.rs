@@ -82,6 +82,7 @@ use super::effects::{
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
+    clone_deformer::{CloneDeformer, CloneDeformerDef},
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
@@ -297,6 +298,8 @@ crate::catalogue![
     // The consumers, after the producers they read: the
     // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
+    // What Clone to points drew, changed as one group.
+    CloneDeformerDef => CloneDeformer,
     TrailDef => Trail,
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,

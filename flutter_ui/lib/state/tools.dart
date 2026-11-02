@@ -401,6 +401,16 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether a new shape gets a fill at all: the Fill label's None, as in
+  /// After Effects. Text and paint always use the colour.
+  bool _fillOn = true;
+  bool get fillOn => _fillOn;
+  set fillOn(bool value) {
+    if (_fillOn == value) return;
+    _fillOn = value;
+    notifyListeners();
+  }
+
   /// The fill as the bridge wants it. Opaque: a fill's transparency is the
   /// layer's Opacity, which is a transform property and animatable, rather than
   /// a fourth number hidden in a swatch.
@@ -448,6 +458,15 @@ class ToolsState extends ChangeNotifier {
   set stroke(ToolColour value) {
     if (_stroke == value) return;
     _stroke = value;
+    notifyListeners();
+  }
+
+  /// Whether a new shape gets an outline: the Stroke label's None.
+  bool _strokeOn = true;
+  bool get strokeOn => _strokeOn;
+  set strokeOn(bool value) {
+    if (_strokeOn == value) return;
+    _strokeOn = value;
     notifyListeners();
   }
 

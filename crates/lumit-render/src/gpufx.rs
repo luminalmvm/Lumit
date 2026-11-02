@@ -458,6 +458,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Grid,
     &Scatter,
     &CloneToPoints,
+    &CloneDeformer,
     &Trail,
     &ConnectPoints,
     &PointsField,
@@ -5602,7 +5603,23 @@ impl GpuEffect for CloneToPoints {
         ) else {
             return tex.clone();
         };
-        let stamps = inst.stamps(&stream, of);
+        // The effect's own input has no size of its own, so it takes the
+        // frame's.
+        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
+        let mut stamps = inst.stamps(&stream, of);
+        if inst.distribution == lumit_core::fx::effects::clone_to_points::DIST_LAYOUT {
+            // Each copy's length along the line is its picture's.
+            let unit = |i: usize| {
+                let which = stamps.index_of(i) as usize;
+                let size = pictures
+                    .get(which)
+                    .and_then(Option::as_ref)
+                    .map_or(frame, |picture| picture.size.unwrap_or(frame));
+                inst.fit(size, px_scale).unit
+            };
+            let units: Vec<[f32; 2]> = (0..stamps.len()).map(unit).collect();
+            inst.laid_out(&mut stamps, |i| units.get(i).copied().unwrap_or([1.0; 2]));
+        }
         let points = draw_points_of(&stamps);
         // The camera, in the raster this frame is drawn at —
         // `None` on a 2D layer, where it is not the identity matrix but no
@@ -5611,9 +5628,6 @@ impl GpuEffect for CloneToPoints {
             .schedule()
             .and_then(|c| c.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // The effect's own input has no size of its own, so it takes the
-        // frame's.
-        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
         // One draw per run of neighbours that share a picture, so the stamps
         // still go down in the stream's one order whichever layer each takes.
         //
@@ -5653,6 +5667,71 @@ impl GpuEffect for CloneToPoints {
             from = to;
         }
         fx.points_draw_blended(ctx, tex, w, h, &runs, inst.copy_blend)
+    }
+}
+
+/// Clone deformer: the copies a Clone to points above drew, aligned or cut as
+/// one group.
+///
+/// Nothing here decides anything — `CloneDeformer::apply` does it, on the
+/// picture read back. What this settles is the picture, the Boolean layer's
+/// picture at this raster, and the outlines the builder laid beside the op.
+///
+/// ponytail: a read back and an upload per frame. Move the cut and the
+/// shift into a kernel, with the outlines as coverage, if a profile shows it.
+struct CloneDeformer;
+impl GpuEffect for CloneDeformer {
+    fn match_name(&self) -> &'static str {
+        lumit_core::fx::effects::clone_deformer::MATCH_NAME
+    }
+    fn run(
+        &self,
+        _fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::clone_deformer::{CloneDeformer as D, Reads};
+        let inst = D::read(p);
+        let k = D::px_scale_of(p);
+        let Ok(mut rgba) = lumit_gpu::fx::common::readback_linear_f32(ctx, tex, w, h) else {
+            return tex.clone();
+        };
+        // The Boolean layer's picture, centred on this raster where it came
+        // at another size.
+        let other = aux.layer_input().and_then(|t| {
+            let (ow, oh) = (t.width(), t.height());
+            let read = lumit_gpu::fx::common::readback_linear_f32(ctx, t, ow, oh).ok()?;
+            if (ow, oh) == (w, h) {
+                return Some(read);
+            }
+            let (dx, dy) = ((i64::from(w) - i64::from(ow)) / 2, (i64::from(h) - i64::from(oh)) / 2);
+            let mut out = vec![0.0; (w * h * 4) as usize];
+            for y in 0..i64::from(oh) {
+                for x in 0..i64::from(ow) {
+                    let (tx, ty) = (x + dx, y + dy);
+                    if tx < 0 || ty < 0 || tx >= i64::from(w) || ty >= i64::from(h) {
+                        continue;
+                    }
+                    let from = ((y * i64::from(ow) + x) * 4) as usize;
+                    let to = ((ty * i64::from(w) + tx) * 4) as usize;
+                    out[to..to + 4].copy_from_slice(&read[from..from + 4]);
+                }
+            }
+            Some(out)
+        });
+        let sched = aux.schedule();
+        let grow = sched.map_or([0.0; 2], |s| [s.grow[0] as f32, s.grow[1] as f32]);
+        let reads = Reads {
+            copies: sched.and_then(|s| s.clone_shapes.as_deref()).map(|c| &c.copies[..]),
+            other: other.as_deref(),
+            boolean: sched.and_then(|s| s.boolean_shape.as_deref()),
+        };
+        inst.apply(&mut rgba, w, h, k, grow, &reads);
+        lumit_gpu::fx::common::upload_linear_f32(ctx, &rgba, w, h)
     }
 }
 
@@ -7135,6 +7214,18 @@ mod tests {
         // cell, so the cell is empty above and below it, hung off-centre from
         // its point with its corners rounded.
         let inst = lumit_core::fx::effects::clone_to_points::CloneToPoints {
+            distribution: 0,
+            dist_count: 10,
+            dist_columns: 5,
+            dist_rows: 5,
+            dist_spacing_x: 120.0,
+            dist_spacing_y: 120.0,
+            path_layer: false,
+            dist_align: true,
+            dist_direction: 0,
+            dist_spacing: 20.0,
+            dist_position_x: 960.0,
+            dist_position_y: 540.0,
             clone_layer: true,
             clone_layer_2: false,
             clone_layer_3: false,

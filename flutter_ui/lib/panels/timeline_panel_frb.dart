@@ -95,6 +95,7 @@ import 'spectral_lane_frb.dart';
 import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
+import 'shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
@@ -2419,6 +2420,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
+        _deleteSelectedShapeEntries() ||
         _deleteSelectedEffects() ||
         _deleteSequenceClip();
   }
@@ -2437,6 +2439,51 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.cutClip.value = null;
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
     _ui?.model.refresh();
+    return true;
+  }
+
+  /// Delete every picked shape entry — a modifier, a piece of art or a group
+  /// under Contents — rather than its layer, returning whether there was one.
+  /// Their paths are `<layer>/contents/<entry>`; a value row under one is
+  /// deeper and is left alone. One write per layer, so one undo step each.
+  bool _deleteSelectedShapeEntries() {
+    if (!mounted) return false;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final wanted = <String, Set<String>>{};
+    for (final path in _selectedProperties) {
+      final layerId = layerIdOfPath(path);
+      if (layerId == null) continue;
+      final stem = '${contentsPath(layerId)}/';
+      if (!path.startsWith(stem)) continue;
+      final id = path.substring(stem.length);
+      if (id.isEmpty || id.contains('/')) continue;
+      (wanted[layerId] ??= {}).add(id);
+    }
+    if (wanted.isEmpty) return false;
+    var deleted = false;
+    for (final entry in ui.model.layers) {
+      final ids = wanted[entry.layer.internallayerId.toString()];
+      if (ids == null) continue;
+      try {
+        var contents = entry.layer.getShapeContents();
+        final before = contents.length;
+        for (final id in ids) {
+          contents = contents.without(UuidValue.fromString(id));
+        }
+        if (contents.length == before) continue;
+        entry.layer.setShapeContents(contents: contents, at: null);
+        deleted = true;
+      } catch (_) {
+        // Gone between the draw and the press; nothing left to delete.
+      }
+    }
+    if (!deleted) return false;
+    setState(() => _selectedProperties.removeWhere((path) {
+          final owner = layerIdOfPath(path);
+          return owner != null && isUnderPath(contentsPath(owner), path);
+        }));
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
     return true;
   }
 

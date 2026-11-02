@@ -404,7 +404,14 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         // reads, so the socket that lets a consumer be wired and the one the
         // validator accepts a wire onto cannot disagree — and so an unwired one
         // reaches the canvas as the "no stream" mark with no
-        // effect-specific code at the seam.
+        // effect-specific code at the seam. Clone to points that makes its
+        // own points (Distribution other than Points input) reads no stream,
+        // so its unwired socket is left out rather than marked missing.
+        let own_points = effect.effect.match_name == "clone_to_points"
+            && !matches!(
+                effect.param("distribution"),
+                None | Some(lumit_core::model::EffectValue::Choice(0))
+            );
         inputs.extend(
             def.map(|d| d.signature().inputs())
                 .unwrap_or_default()
@@ -417,7 +424,8 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
                             port: port.id.to_owned(),
                         }),
                     )
-                }),
+                })
+                .filter(|port| !(own_points && !port.wired)),
         );
         nodes.push(BridgeGraphNode {
             node: BridgeNodeRef::Effect(effect.id),

@@ -1948,6 +1948,25 @@ fn op_keys(
                     if let Some(label) = &sched.label {
                         h.update(&serde_json::to_vec(label).unwrap_or_default());
                     }
+                    // A Clone deformer's outlines are other layers' art.
+                    let mut outline = |contours: &[Vec<[f32; 2]>], extra: [f32; 2]| {
+                        for v in extra {
+                            h.update(&v.to_le_bytes());
+                        }
+                        for contour in contours {
+                            h.update(&(contour.len() as u32).to_le_bytes());
+                            for v in contour.as_flattened() {
+                                h.update(&v.to_le_bytes());
+                            }
+                        }
+                    };
+                    for copy in sched.clone_shapes.iter().flat_map(|s| &s.copies) {
+                        outline(&copy.contours, [copy.opacity; 2]);
+                    }
+                    if let Some(b) = &sched.boolean_shape {
+                        outline(&b.own, b.size);
+                        outline(&b.placed, [0.0; 2]);
+                    }
                     for row in sched.projection.unwrap_or_default().m {
                         for v in row {
                             h.update(&v.to_le_bytes());

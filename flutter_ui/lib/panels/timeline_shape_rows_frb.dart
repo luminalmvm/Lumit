@@ -82,6 +82,24 @@ class ShapeItemRow extends StatelessWidget {
   /// into the one above lends its path and nothing else, so it is not either.
   /// A fill or an outline is offered where the item has none, and taken away
   /// where it has one.
+  /// What can be added to this item: everything but a fill, outline or taper
+  /// it already has, or one it is not offered.
+  List<ShapeAdd> get _adds {
+    final paints = item.combine == 0;
+    final tapers = item.stroke != null && paints;
+    bool has(ShapeAdd add) => switch (add) {
+          ShapeAdd.fill => item.fill != null,
+          ShapeAdd.stroke => item.stroke != null,
+          _ => item.taper != null,
+        };
+    bool offered(ShapeAdd add) =>
+        add == ShapeAdd.taper ? tapers : (paints || !isItemAdd(add));
+    return [
+      for (final add in ShapeAdd.values)
+        if (!isItemAdd(add) || (offered(add) && !has(add))) add,
+    ];
+  }
+
   List<Widget> _opRows(VoidCallback close, BuildContext context) {
     final paints = item.combine == 0;
     final tapers = item.stroke != null && paints;
@@ -92,10 +110,7 @@ class ShapeItemRow extends StatelessWidget {
         };
     bool offered(ShapeAdd add) =>
         add == ShapeAdd.taper ? tapers : (paints || !isItemAdd(add));
-    final adds = [
-      for (final add in ShapeAdd.values)
-        if (!isItemAdd(add) || (offered(add) && !has(add))) add,
-    ];
+    final adds = _adds;
     final removes = [
       for (final add in ShapeAdd.values)
         if (isItemAdd(add) && offered(add) && has(add)) add,
@@ -157,6 +172,8 @@ class ShapeItemRow extends StatelessWidget {
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
       menuRows: (close) => _opRows(close, context),
+      addRows: (close) => shapeAddRows(close, item.id, _adds,
+          (add) => _writeEntries((e) => addedToShape(e, item.id, add, item))),
     );
   }
 }
@@ -174,6 +191,24 @@ void writeShapeEntries(LayerReference layer, VoidCallback onChanged,
   }
 }
 
+/// [adds] as menu rows, each running [pick] after [dismiss]: the body of
+/// the Add submenu, and the whole menu an entry's own Add button opens.
+List<Widget> shapeAddRows(VoidCallback dismiss, UuidValue id,
+        List<ShapeAdd> adds, void Function(ShapeAdd) pick,
+        {bool remove = false}) =>
+    [
+      for (final add in adds)
+        MenuRow(
+          key: ValueKey<String>(
+              'tl-shape-${remove ? 'remove' : 'add'}-${add.name}-$id'),
+          onPressed: () {
+            dismiss();
+            pick(add);
+          },
+          child: Text(shapeAddLabel(add)),
+        ),
+    ];
+
 /// The Add (or Remove) submenu on a shape row: [adds], each a row.
 Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
         void Function(ShapeAdd) pick,
@@ -186,18 +221,7 @@ Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final add in adds)
-              MenuRow(
-                key: ValueKey<String>(
-                    'tl-shape-${remove ? 'remove' : 'add'}-${add.name}-$id'),
-                onPressed: () {
-                  dismiss();
-                  pick(add);
-                },
-                child: Text(shapeAddLabel(add)),
-              ),
-          ],
+          children: shapeAddRows(dismiss, id, adds, pick, remove: remove),
         ),
       ),
       child: Text(remove ? l10n.shapeOpRemove : l10n.shapeOpAdd),
@@ -391,6 +415,7 @@ class ShapeModifierRow extends StatelessWidget {
           (m) => BridgeShapeModifier(id: m.id, name: name, kind: m.kind))),
       onDelete: () => _write((e) => e.without(modifier.id)),
       deleteLabel: l10n.deleteShapeModifier,
+      removeButton: true,
       menuRows: (close) => [
         // Added under this one, so the two stack.
         shapeAddSubmenu(close, modifier.id, adds,
@@ -501,6 +526,8 @@ class ShapeGroupRow extends StatelessWidget {
       onRename: (name) => _write((e) => e.withGroupName(group.id, name)),
       onDelete: () => _write((e) => e.without(group.id)),
       deleteLabel: l10n.deleteShapeGroup,
+      addRows: (close) => shapeAddRows(close, group.id, adds,
+          (add) => _write((e) => addedToShape(e, group.id, add))),
       menuRows: (close) => [
         // Added at the end of the group, inside it.
         shapeAddSubmenu(close, group.id, adds,

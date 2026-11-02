@@ -253,6 +253,16 @@ class EffectParamRowFrb extends StatelessWidget {
   /// ran on past it under the columns to its right.
   final bool sliderTrack;
 
+  /// Why the row is greyed, shown on its name, or null for no word.
+  final String? disabledReason;
+
+  /// A word on what a Choice option does, shown on it in the list, or null.
+  final String? Function(int option)? optionNote;
+
+  /// Why a Choice option cannot be picked, or null where it can: the option
+  /// stays in the list, greyed, with the reason on it.
+  final String? Function(int option)? optionReason;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -277,6 +287,9 @@ class EffectParamRowFrb extends StatelessWidget {
     this.driven,
     this.nameGroup,
     this.sliderTrack = true,
+    this.disabledReason,
+    this.optionNote,
+    this.optionReason,
   });
 
   @override
@@ -302,6 +315,16 @@ class EffectParamRowFrb extends StatelessWidget {
   bool get _still {
     // A driven row follows the wire, which can move at every frame.
     if (driven != null) return false;
+    // A Curve's plot draws the shape its keyed Ease out / Ease in make of it
+    // at the playhead (Stagger's), so it moves while the curve itself is still.
+    if (param.kind is BridgeParamKind_Curve &&
+        ['ease_out', 'ease_in'].any((row) => switch (siblings[row]) {
+              BridgeEffectValue_Float(:final field0) =>
+                field0 is! BridgeScalar_Static,
+              _ => false,
+            })) {
+      return false;
+    }
     final scalars = _animatableScalarsOf(value);
     return scalars == null || scalars.every((s) => s is BridgeScalar_Static);
   }
@@ -348,14 +371,21 @@ class EffectParamRowFrb extends StatelessWidget {
     final labelStyle = _off
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
-    Widget labelText(double lit) => Text(
-          t.propertyCase(engineLabel(param.label)),
-          style: _off || graphColour != null
-              ? labelStyle
-              : t.body.copyWith(
-                  color: Color.lerp(t.body.color, t.textPrimary, lit)),
-          overflow: TextOverflow.ellipsis,
-        );
+    Widget labelText(double lit) {
+      final text = Text(
+        t.propertyCase(engineLabel(param.label)),
+        style: _off || graphColour != null
+            ? labelStyle
+            : t.body
+                .copyWith(color: Color.lerp(t.body.color, t.textPrimary, lit)),
+        overflow: TextOverflow.ellipsis,
+      );
+      // A greyed row says why on its name. A driven one says so on its mark.
+      final why = disabledReason;
+      return !enabled && driven == null && why != null
+          ? LumitTooltip(message: why, child: text)
+          : text;
+    }
     Widget name(double lit) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onLabelTap,
@@ -881,6 +911,8 @@ class EffectParamRowFrb extends StatelessWidget {
                     // value still asks for its label.
                     label: (i) =>
                         i < options.length ? engineLabel(options[i]) : '',
+                    disabledReason: optionReason,
+                    note: optionNote,
                     onChanged: (i) => _set(BridgeEffectValue.choice(i)),
                   ),
           );
@@ -2667,6 +2699,87 @@ Set<String> disabledParams(
     if (!ok) out.add(rule.param);
   }
   return out;
+}
+
+/// Why each of `effect`'s greyed rows is greyed, by parameter, in words read
+/// off the same rules [disabledParams] judges: which control decides it and
+/// what it has to be. A row a plugin greys itself has no rule, and no word.
+Map<String, String> disabledReasons(
+  String effect,
+  Map<String, BridgeEffectValue> values,
+) {
+  final params = {for (final p in cachedListParameters(effect)) p.id: p};
+  final greyed = disabledParams(effect, values);
+  final out = <String, String>{};
+  for (final rule in cachedListEnabledWhen(effect)) {
+    if (!greyed.contains(rule.param) || out.containsKey(rule.param)) continue;
+    final on = params[rule.on_];
+    if (on == null) continue;
+    final control = engineLabel(on.label);
+    String option(int i) => switch (on.kind) {
+          BridgeParamKind_Choice(:final options) when i < options.length =>
+            engineLabel(options[i]),
+          _ => '$i',
+        };
+    final why = switch (rule.cond) {
+      BridgeEnabledCond_BoolIs(:final field0) => field0
+          ? l10n.tipGreyedWhenOn(control)
+          : l10n.tipGreyedWhenOff(control),
+      BridgeEnabledCond_ChoiceIs(:final field0) =>
+        l10n.tipGreyedWhenIs(control, option(field0.toInt())),
+      BridgeEnabledCond_ChoiceIsNot(:final field0) =>
+        l10n.tipGreyedUnlessIs(control, option(field0.toInt())),
+      BridgeEnabledCond_LayerSet() => l10n.tipGreyedLayerSet(control),
+      BridgeEnabledCond_LayerUnset() => l10n.tipGreyedLayerUnset(control),
+      BridgeEnabledCond_Nought() => l10n.tipGreyedNought(control),
+    };
+    out[rule.param] = why;
+  }
+  return out;
+}
+
+/// A word on what an option of `effect`'s `param` does, for the options that
+/// need one, or null.
+String? optionNoteOf(String effect, String param, int option) =>
+    switch ((effect, param, option)) {
+      ('clone_deformer', 'mode', 0) => l10n.tipCloneModeRaster,
+      ('clone_deformer', 'mode', 1) => l10n.tipCloneModeVector,
+      _ => null,
+    };
+
+/// Why a Clone deformer at `index` in `stack` cannot read outlines, short for
+/// the Vector option and in a sentence for the card, or null where it can: it wants a Clone to points above it with only Clone
+/// deformers between, whose cloned layers are all Shape layers. The rule the
+/// engine's builder follows (`clone_deformer_carriage`), read off the panel's
+/// own model.
+({String tip, String why})? cloneVectorReason(
+  List<BridgeEffectInstanceInfo> stack,
+  int index,
+  List<BridgeLayerEntry> layers,
+) {
+  BridgeEffectInstanceInfo? clone;
+  for (var i = index - 1; i >= 0; i--) {
+    final fx = stack[i];
+    if (!fx.enabled || fx.name == 'clone_deformer') continue;
+    if (fx.name == 'clone_to_points') clone = fx;
+    break;
+  }
+  if (clone == null) {
+    return (tip: l10n.tipVectorNeedsClones, why: l10n.whyVectorNoClone);
+  }
+  final cloned = [
+    for (final v in clone.values)
+      if (v.id.startsWith('clone_layer'))
+        if (v.value case BridgeEffectValue_Layer(:final field0?)) field0,
+  ];
+  final shapes = cloned.isNotEmpty &&
+      cloned.every((id) => layers.any(
+          (l) =>
+              l.layer.internallayerId == id &&
+              l.info.kind == BridgeLayerKind.shape));
+  return shapes
+      ? null
+      : (tip: l10n.tipVectorNeedsShapes, why: l10n.whyVectorNotShapes);
 }
 
 /// An effect's display label from the schema, falling back to its match name

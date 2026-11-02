@@ -1099,6 +1099,155 @@ fn points_input_for(
     )
 }
 
+/// What a Clone deformer at `at` in `layer`'s stack reads beside its picture:
+/// the copies the Clone to points right above it stamped, as outlines, and its
+/// Boolean layer's outline. The copies come only for a Vector deformer right
+/// under a Clone to points whose pictures are all Shape layers, and only when
+/// its points can be made here. `lt` is the layer's time, `projection` the
+/// camera this op draws through.
+#[allow(clippy::too_many_arguments)]
+fn clone_deformer_carriage(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    at: usize,
+    lt: f64,
+    t_comp: f64,
+    projection: lumit_core::fx::points::Projection,
+    audio: &dyn lumit_core::fx::registry::AudioTap,
+    clone: (u32, u32),
+) -> (
+    Option<Arc<lumit_core::fx::effects::clone_deformer::CloneShapes>>,
+    Option<Arc<lumit_core::fx::effects::clone_deformer::BooleanShape>>,
+) {
+    use lumit_core::fx::effects::clone_deformer as d;
+    use lumit_core::fx::effects::clone_to_points::{CloneToPoints, DIST_LAYOUT};
+    use lumit_core::fx::registry::EffectMetadata;
+    use lumit_core::model::{EffectValue, LayerKind};
+    let effects = &layer.effects;
+    let Some(e) = effects.get(at) else {
+        return (None, None);
+    };
+    let context_of = |l: &lumit_core::model::Layer| {
+        Arc::new(ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(l.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        })
+    };
+    let context = context_of(layer);
+    // A layer's outline in its own px at comp time `t`, a Shape layer's art
+    // or another layer's first mask, with the size of its picture.
+    let outline = |l: &lumit_core::model::Layer, t: f64| -> Option<(d::Outline, [f32; 2])> {
+        let llt = lumit_core::time::layer_time(t, l.start_offset.0);
+        let (line, size) = match &l.kind {
+            LayerKind::Shape { contents } => {
+                let contents = lumit_core::shape::contents_at(contents, llt, &context_of(l));
+                let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, llt)?;
+                (
+                    lumit_core::shape::outline_at(&contents, llt),
+                    [(x1 - x0).max(1.0) as f32, (y1 - y0).max(1.0) as f32],
+                )
+            }
+            _ => {
+                let (w, h) = lumit_core::fx::builtins::picture_size(doc, comp, l);
+                (
+                    lumit_core::mask::mask_path_at(&l.masks, None, true, llt),
+                    [w as f32, h as f32],
+                )
+            }
+        };
+        let contours = d::contours_of(&line);
+        (!contours.is_empty()).then_some((contours, size))
+    };
+    let boolean = e
+        .layer_ref(d::BOOLEAN_LAYER)
+        .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+        .and_then(|target| {
+            let (own, size) = outline(target, t_comp)?;
+            let placed = lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
+            Some(Arc::new(d::BooleanShape {
+                own,
+                size,
+                placed: d::contours_of(&placed),
+            }))
+        });
+    let vector = matches!(e.param("mode"), Some(EffectValue::Choice(d::MODE_VECTOR)));
+    // The Clone to points right above, with nothing switched on between.
+    let above = effects[..at].iter().rev().find(|x| x.enabled);
+    let copies = above
+        .filter(|_| vector)
+        .filter(|x| x.effect.match_name == "clone_to_points")
+        .and_then(|x| {
+            let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&x.effect.match_name)?;
+            let mut stream = points_input_for(
+                layer,
+                x,
+                def,
+                lt,
+                0.0,
+                projection,
+                &context,
+                audio,
+                clone,
+            )
+            .streams
+            .into_iter()
+            .next()
+            .filter(|s| !s.is_empty())?;
+            stream.projection = projection;
+            // Every picture the copies show, each a Shape layer's outline.
+            let planned = CloneToPoints::planned(x, doc, comp, t_comp, lt, Some(stream.len()));
+            let pictures: Vec<(d::Outline, [f32; 2])> = planned
+                .iter()
+                .map(|p| {
+                    let p = p.as_ref().filter(|p| p.layer != layer.id)?;
+                    let l = comp.layers.iter().find(|l| l.id == p.layer)?;
+                    matches!(l.kind, LayerKind::Shape { .. })
+                        .then(|| outline(l, p.time))
+                        .flatten()
+                })
+                .collect::<Option<_>>()?;
+            let markers = lumit_core::fx::markers::MarkerContext::for_comp(comp);
+            let diag = (comp.width as f32).hypot(comp.height as f32);
+            let drivers = lumit_core::fx::drivers::ResolvedDrivers::default();
+            let rows = lumit_core::fx::resolved::resolve_instance(
+                x,
+                &drivers,
+                lt,
+                diag,
+                1.0,
+                &markers,
+                context.clone(),
+            );
+            let p = rows.iter().next()?.params;
+            let inst = CloneToPoints {
+                time_step: p.float(CloneToPoints::DERIVED_TIME_STEP, CloneToPoints::read(p).time_step),
+                ..CloneToPoints::read(p)
+            };
+            let of = CloneToPoints::handed(p, pictures.len());
+            let mut stamps = inst.stamps(&stream, of);
+            if inst.distribution == DIST_LAYOUT {
+                let units: Vec<[f32; 2]> = (0..stamps.len())
+                    .map(|i| {
+                        let size = pictures
+                            .get(stamps.index_of(i) as usize)
+                            .map_or([1.0; 2], |(_, size)| *size);
+                        inst.fit(size, 1.0).unit
+                    })
+                    .collect();
+                inst.laid_out(&mut stamps, |i| units.get(i).copied().unwrap_or([1.0; 2]));
+            }
+            Some(Arc::new(d::CloneShapes {
+                copies: d::shape_copies(inst, &stamps, &pictures),
+            }))
+        });
+    (copies, boolean)
+}
+
 /// [`points_input_for`] over any wiring: a layer's graph and stack, or a node
 /// graph's own wires and boxes, which the driver walk then finds the producer
 /// among. `layer` is the layer the consumer is on, which a node graph has none of.
@@ -1140,6 +1289,24 @@ fn points_input_in(
                 .stream(projection)
             });
         if let Some(stream) = read {
+            found.streams.push(stream);
+            found.from.push(None);
+            return found;
+        }
+    }
+    // A Clone to points whose Distribution is not Points input makes its
+    // own points, in place of the wire.
+    if let Some(layer) = layer
+        .filter(|_| consumer.effect.match_name == "clone_to_points")
+    {
+        use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+        let made = context
+            .comp
+            .and_then(|id| context.document.comp(id))
+            .and_then(|comp| {
+                CloneToPoints::distributed(consumer, comp, layer, t, context, projection)
+            });
+        if let Some(stream) = made {
             found.streams.push(stream);
             found.from.push(None);
             return found;
@@ -3487,7 +3654,8 @@ fn comp_walk(
         carried
             .iter()
             .enumerate()
-            .map(|(k, &(_, e, def))| {
+            .map(|(k, &(at, e, def))| {
+                let made = (|| {
                 // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
@@ -3608,6 +3776,8 @@ fn comp_walk(
                         grow,
                         stepped: None,
                         trails: None,
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 // **A Particulate with Trails on** draws every frame from the
@@ -3637,6 +3807,8 @@ fn comp_walk(
                             clone_number,
                             inset,
                         )),
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -3672,6 +3844,8 @@ fn comp_walk(
                         grow,
                         stepped: walked,
                         trails: None,
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 let schedule = birth_schedule(e, t, dt, &context, owner.map(|l| &l.graph), &audio);
@@ -3689,7 +3863,27 @@ fn comp_walk(
                     grow,
                     stepped: None,
                     trails: None,
+                    clone_shapes: None,
+                    boolean_shape: None,
                 }
+                })();
+                // A Clone deformer's outlines ride beside the stream.
+                let mut made = made;
+                if let Some(layer) = owner.filter(|_| def.reads_clone_shapes()) {
+                    (made.clone_shapes, made.boolean_shape) = clone_deformer_carriage(
+                        expr_doc,
+                        comp,
+                        layer,
+                        at,
+                        made.t,
+                        t_comp,
+                        made.projection
+                            .unwrap_or(lumit_core::fx::points::Projection::FLAT),
+                        &audio,
+                        clone_number,
+                    );
+                }
+                made
             })
             .collect()
     };

@@ -10472,6 +10472,19 @@
   "@toolStroke": {
     "description": "Toolbar options strip — label beside the shape outline colour swatch."
   },
+  "toolSolidColour": "Solid colour",
+  "@toolSolidColour": {
+    "description": "Toolbar options strip — the menu a shape tool's Fill or Stroke label opens: draw it in the swatch's colour (the other row is None)."
+  },
+  "tipSwatchKind": "{label} type",
+  "@tipSwatchKind": {
+    "description": "Tooltip on a shape tool's Fill or Stroke label, which opens Solid colour / None. {label} is the label, already translated.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "toolTypeHorizontal": "Horizontal type",
   "@toolTypeHorizontal": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
@@ -22817,6 +22830,117 @@
   "fxPosition5": "Position 5",
   "@fxPosition5": {
     "description": "Effect controls: a control on Conical gradient."
+  },
+  "fxPointsInput": "Points input",
+  "@fxPointsInput": {
+    "description": "Effect controls — an option of Distribution on Clone to points: stamp the points wired in."
+  },
+  "fxPathLayer": "Path layer",
+  "@fxPathLayer": {
+    "description": "Effect controls — a control on Clone to points: the layer whose path the copies are spread along."
+  },
+  "fxDeform": "Deform",
+  "@fxDeform": {
+    "description": "Effect controls — a control and a heading on Points along path: moves the points off the path along its normal."
+  },
+  "fxCloneDeformer": "Clone deformer",
+  "@fxCloneDeformer": {
+    "description": "Effect name: changes the copies a Clone to points above it drew, as one group."
+  },
+  "fxDeformer": "Deformer",
+  "@fxDeformer": {
+    "description": "Effect controls — a control on Clone deformer: what is done to the copies (Align or Boolean)."
+  },
+  "fxAlign": "Align",
+  "@fxAlign": {
+    "description": "Effect controls — an option and a heading on Clone deformer: line the copies' bounds up on a point."
+  },
+  "fxBoolean": "Boolean",
+  "@fxBoolean": {
+    "description": "Effect controls — an option and a heading on Clone deformer: cut the copies with a layer."
+  },
+  "fxBooleanLayer": "Boolean layer",
+  "@fxBooleanLayer": {
+    "description": "Effect controls — a control on Clone deformer: the layer the copies are cut with."
+  },
+  "fxUnion": "Union",
+  "@fxUnion": {
+    "description": "Effect controls — an Operation on Clone deformer: adds the layer to the copies."
+  },
+  "fxIntersect": "Intersect",
+  "@fxIntersect": {
+    "description": "Effect controls — an Operation on Clone deformer: keeps only where the copies and the layer both are."
+  },
+  "fxRaster": "Raster",
+  "@fxRaster": {
+    "description": "Effect controls — a Mode on Clone deformer: reads the picture's pixels."
+  },
+  "fxVector": "Vector",
+  "@fxVector": {
+    "description": "Effect controls — a Mode on Clone deformer: reads the Shape layers' paths."
+  },
+  "tipCloneModeRaster": "Any layer",
+  "@tipCloneModeRaster": {
+    "description": "Tooltip on the Raster option of Clone deformer's Mode."
+  },
+  "tipCloneModeVector": "Shape layers",
+  "@tipCloneModeVector": {
+    "description": "Tooltip on the Vector option of Clone deformer's Mode."
+  },
+  "tipVectorNeedsClones": "Needs clones",
+  "@tipVectorNeedsClones": {
+    "description": "Hover reason on Clone deformer's Vector option when there is no Clone to points right above it."
+  },
+  "tipVectorNeedsShapes": "Needs shapes",
+  "@tipVectorNeedsShapes": {
+    "description": "Hover reason on Clone deformer's Vector option when a layer the Clone to points copies is not a Shape layer."
+  },
+  "badgeCloneVectorReadsPicture": "Vector reads the picture here, as Raster does.",
+  "@badgeCloneVectorReadsPicture": {
+    "description": "Effect controls, above a Clone deformer's rows: its Mode is Vector but it cannot read outlines here. The reason is written beneath."
+  },
+  "whyVectorNoClone": "Needs a Clone to points right above, with only Clone deformers between",
+  "@whyVectorNoClone": {
+    "description": "Why Clone deformer's Vector mode cannot be chosen: there is no Clone to points above it."
+  },
+  "whyVectorNotShapes": "Needs Shape layers as the cloned layers",
+  "@whyVectorNotShapes": {
+    "description": "Why Clone deformer's Vector mode cannot be chosen: a layer the Clone to points copies is not a Shape layer."
+  },
+  "tipGreyedWhenIs": "Needs {option}",
+  "@tipGreyedWhenIs": {
+    "description": "Tooltip on a greyed effect control: it only works while another control is on one option.",
+    "placeholders": {"control": {"type": "String"}, "option": {"type": "String"}}
+  },
+  "tipGreyedUnlessIs": "Set {control}",
+  "@tipGreyedUnlessIs": {
+    "description": "Tooltip on a greyed effect control: it does nothing while another control is on this option.",
+    "placeholders": {"control": {"type": "String"}, "option": {"type": "String"}}
+  },
+  "tipGreyedWhenOn": "Needs {control}",
+  "@tipGreyedWhenOn": {
+    "description": "Tooltip on a greyed effect control: it only works while a switch is on.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedWhenOff": "Without {control}",
+  "@tipGreyedWhenOff": {
+    "description": "Tooltip on a greyed effect control: it only works while a switch is off.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedLayerSet": "Pick {control}",
+  "@tipGreyedLayerSet": {
+    "description": "Tooltip on a greyed effect control: it only works once a layer is picked in another control.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedLayerUnset": "Clear {control}",
+  "@tipGreyedLayerUnset": {
+    "description": "Tooltip on a greyed effect control: it does nothing while a layer is picked in another control.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedNought": "Zero {control}",
+  "@tipGreyedNought": {
+    "description": "Tooltip on a greyed effect control: it only works while another number is nought.",
+    "placeholders": {"control": {"type": "String"}}
   },
   "fxSweepGradient": "Sweep gradient",
   "@fxSweepGradient": {

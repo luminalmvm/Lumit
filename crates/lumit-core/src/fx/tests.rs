@@ -6735,6 +6735,7 @@ fn every_parameter_declares_a_unit() {
             // count per composition area, so neither rescales.
             ("emit_from_image", "size"),
             // Points along path: the disc a point is drawn as, Grid's row.
+            ("points_along_path", "deform_amplitude"),
             ("points_along_path", "size"),
             // Text to points: the disc a point is drawn as, Grid's row.
             ("text_to_points", "size"),
@@ -6746,11 +6747,18 @@ fn every_parameter_declares_a_unit() {
             ("track_points", "size"),
             // Clone to points: the cell a layer is fitted into, and how far
             // a stamp's corners are rounded.
+            ("clone_to_points", "dist_spacing_x"),
+            ("clone_to_points", "dist_spacing_y"),
+            ("clone_to_points", "dist_spacing"),
+            ("clone_to_points", "dist_position_x"),
+            ("clone_to_points", "dist_position_y"),
             ("clone_to_points", "cell_width"),
             ("clone_to_points", "cell_height"),
             ("clone_to_points", "offset_x"),
             ("clone_to_points", "offset_y"),
             ("clone_to_points", "corner_radius"),
+            ("clone_deformer", "position_x"),
+            ("clone_deformer", "position_y"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -11057,4 +11065,244 @@ fn clone_to_points_reads_per_copy_scale_xy_and_offset() {
     assert_eq!(s.stretch_of(1), [0.5, 0.5]);
     assert!((s.position[1][0] - before.position[1][0] - 30.0).abs() < 1e-4);
     assert!((s.position[0][0] - before.position[0][0]).abs() < 1e-4);
+}
+
+/// Sets one row of an instance, adding it when the instance has none yet.
+fn set_row(inst: &mut EffectInstance, id: &str, value: EffectValue) {
+    match inst.params.iter_mut().find(|p| p.id == id) {
+        Some(param) => param.value = value,
+        None => inst.params.push(crate::model::EffectParam {
+            id: id.to_owned(),
+            value,
+            extra: serde_json::Map::new(),
+        }),
+    }
+}
+
+/// Two solid layers in one comp, the second `dx` px to the right, with a
+/// rectangle mask on the second: what Path reads another layer's path from.
+fn two_solids(dx: f64) -> (crate::model::Composition, Layer, Layer, Arc<ExpressionContext>) {
+    use crate::model::*;
+    use crate::time::{Duration, FrameRate};
+    let solid = SolidDef {
+        id: uuid::Uuid::now_v7(),
+        name: "Solid".into(),
+        colour: LinearColour::BLACK,
+        width: 1920,
+        height: 1080,
+        extra: serde_json::Map::new(),
+    };
+    let item = ProjectItem::Solid(solid);
+    let mut comp = Composition {
+        graph: None,
+        master_volume_db: 0.0,
+        lighting: Default::default(),
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: uuid::Uuid::now_v7(),
+        name: "Scene".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(30, 1).unwrap(),
+        duration: Duration(Rational::new(5, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: MotionBlur::default(),
+        extra: serde_json::Map::new(),
+    };
+    let owner = crate::comp_graph::read_layer(uuid::Uuid::now_v7(), &item, &comp).unwrap();
+    let mut target = crate::comp_graph::read_layer(uuid::Uuid::now_v7(), &item, &comp).unwrap();
+    target.transform.position_x = Property::fixed(960.0 + dx);
+    target.masks = vec![crate::mask::Mask::rectangle(100.0, 100.0, 400.0, 200.0)];
+    comp.layers = vec![owner.clone(), target.clone()];
+    let mut doc = Document::new();
+    doc.items.push(item);
+    doc.items.push(ProjectItem::Composition(comp.clone()));
+    let context = Arc::new(ExpressionContext {
+        document: Arc::new(doc),
+        comp: Some(comp.id),
+        layer: Some(owner.id),
+        comp_time: 0.0,
+        current_depth: 0,
+        inputs: None,
+    });
+    (comp, owner, target, context)
+}
+
+/// **Clone to points makes its own points** for Grid, Path and Layout, and
+/// reads the wire for Points input.
+#[test]
+fn clone_to_points_distributions_make_their_own_points() {
+    use effects::clone_to_points::{CloneToPoints, DIST_GRID, DIST_LAYOUT, DIST_PATH};
+    let (comp, owner, target, context) = two_solids(100.0);
+    let flat = points::Projection::FLAT;
+    let mut e = super::builtins::instantiate("clone_to_points").unwrap();
+    assert!(CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).is_none());
+
+    set_row(&mut e, "distribution", EffectValue::Choice(DIST_GRID));
+    set_row(&mut e, "dist_columns", EffectValue::Float(Property::fixed(3.0)));
+    set_row(&mut e, "dist_rows", EffectValue::Float(Property::fixed(2.0)));
+    let grid = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
+    assert_eq!(grid.len(), 6);
+    let xs: Vec<f32> = grid.position.iter().map(|p| p[0]).collect();
+    assert_eq!(xs[..3], [840.0, 960.0, 1080.0], "Grid's spacing round Position");
+
+    set_row(&mut e, "distribution", EffectValue::Choice(DIST_LAYOUT));
+    set_row(&mut e, "dist_count", EffectValue::Float(Property::fixed(4.0)));
+    let line = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
+    assert_eq!(line.len(), 4);
+
+    // Path on the other layer: its mask, seen from this one, 100 px across.
+    set_row(&mut e, "distribution", EffectValue::Choice(DIST_PATH));
+    set_row(&mut e, "dist_count", EffectValue::Float(Property::fixed(2.0)));
+    set_row(&mut e, "path_layer", EffectValue::Layer(Some(target.id)));
+    let along = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
+    let own = crate::mask::mask_path_at(&target.masks, None, true, 0.0);
+    assert_eq!(along.len(), 2);
+    assert!((along.position[0][0] - (own.points[0][0] + 100.0)).abs() < 1e-3);
+    assert!((along.position[0][1] - own.points[0][1]).abs() < 1e-3);
+    // The path layer is read, never stamped.
+    assert!(CloneToPoints::rows(&e).iter().all(|(row, _)| *row != "path_layer"));
+}
+
+/// **Layout lines the copies up by their own size**: each starts Spacing past
+/// where the one before ends, and the line is centred on Position.
+#[test]
+fn layout_lines_the_copies_up_by_their_size() {
+    use effects::clone_to_points::CloneToPoints;
+    let c = CloneToPoints {
+        dist_spacing: 20.0,
+        dist_position_x: 960.0,
+        ..CloneToPoints::read(Params::EMPTY)
+    };
+    let mut s = points::PointsStream::default();
+    for k in 0..3u64 {
+        s.position.push([960.0, 540.0, 0.0]);
+        s.size.push(100.0);
+        s.id.push(k);
+    }
+    let units = [[0.5, 1.0], [1.0, 1.0], [2.0, 1.0]];
+    c.laid_out(&mut s, |i| units[i]);
+    // 50 + 100 + 200 long, two gaps of 20: 390 in all, from 765.
+    let xs: Vec<f32> = s.position.iter().map(|p| p[0]).collect();
+    assert_eq!(xs, [790.0, 885.0, 1055.0]);
+    assert!(s.position.iter().all(|p| p[1] == 540.0));
+}
+
+/// **Deform moves a point along the normal where it stands**, by the wave
+/// measured along the path, and turns it the way the bent path runs.
+#[test]
+fn deform_moves_points_along_the_path_normal() {
+    use effects::points_along_path::PointsAlongPath;
+    let path = crate::mask::MaskPolyline {
+        points: vec![[0.0, 0.0], [100.0, 0.0]],
+        arc: vec![0.0, 100.0],
+        ..Default::default()
+    };
+    let along = PointsAlongPath {
+        count: 1,
+        deform: 1,
+        deform_amplitude: 10.0,
+        deform_frequency: 1.0,
+        deform_phase: 90.0,
+        ..PointsAlongPath::read(Params::EMPTY)
+    };
+    let s = along.stream(&path, points::Projection::FLAT);
+    // A quarter of the way into the wave: its crest, up off the path.
+    assert!((s.position[0][1] + 10.0).abs() < 1e-3, "{:?}", s.position[0]);
+    assert!(s.position[0][0].abs() < 1e-3);
+    // At the crest the bent path runs level again.
+    assert!(s.rotation[0].abs() < 1e-2, "{}", s.rotation[0]);
+    let off = PointsAlongPath {
+        deform: 0,
+        ..along
+    };
+    assert_eq!(off.stream(&path, points::Projection::FLAT).position[0], [0.0, 0.0, 0.0]);
+}
+
+/// **Align lines the group's bounds up on Position**: Raster by the picture's
+/// alpha, here a 2 × 2 block moved so its top left sits on the point.
+#[test]
+fn clone_deformer_aligns_the_group_by_its_bounds() {
+    use effects::clone_deformer::{CloneDeformer, Reads};
+    let (w, h) = (20u32, 10u32);
+    let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+    for (x, y) in [(2, 2), (3, 2), (2, 3), (3, 3)] {
+        rgba[((y * w + x) * 4 + 3) as usize] = 1.0;
+    }
+    let d = CloneDeformer {
+        align_horizontal: 1,
+        align_vertical: 1,
+        position_x: 10.0,
+        position_y: 5.0,
+        ..CloneDeformer::read(Params::EMPTY)
+    };
+    d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &Reads::default());
+    let alpha = |x: u32, y: u32| rgba[((y * w + x) * 4 + 3) as usize];
+    assert_eq!(alpha(10, 5), 1.0);
+    assert_eq!(alpha(11, 6), 1.0);
+    assert_eq!(alpha(2, 2), 0.0);
+}
+
+/// **A copy's outline lands where its stamp does**: a picture of 10 × 10
+/// px stamped at Point size 100 on (50, 50) covers 0 to 100.
+#[test]
+fn clone_deformer_places_each_copy_as_its_stamp() {
+    use effects::clone_deformer::shape_copies;
+    use effects::clone_to_points::CloneToPoints;
+    let c = CloneToPoints::read(Params::EMPTY);
+    let mut s = points::PointsStream::default();
+    s.position.push([50.0, 50.0, 0.0]);
+    s.size.push(100.0);
+    s.colour.push([1.0; 4]);
+    s.index.push(0.0);
+    s.projection = points::Projection::FLAT;
+    s.id.push(0);
+    let square = vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]];
+    let copies = shape_copies(c, &s, &[(square, [10.0, 10.0])]);
+    assert_eq!(
+        copies[0].contours[0],
+        [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]
+    );
+}
+
+/// **Vector cuts by the outlines**: the copy's edge and the Boolean layer's
+/// edge are the paths', whatever the pictures' alpha says.
+#[test]
+fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
+    use effects::clone_deformer::{BooleanShape, CloneDeformer, Reads, ShapeCopy};
+    let (w, h) = (8u32, 4u32);
+    // A soft picture: half alpha everywhere, white.
+    let mut rgba = vec![0.5f32; (w * h * 4) as usize];
+    let other = vec![0.25f32; (w * h * 4) as usize];
+    let copies = [ShapeCopy {
+        contours: vec![vec![[0.0, 0.0], [8.0, 0.0], [8.0, 4.0], [0.0, 4.0]]],
+        opacity: 1.0,
+    }];
+    let right = vec![vec![[4.0, 0.0], [8.0, 0.0], [8.0, 4.0], [4.0, 4.0]]];
+    let shape = BooleanShape {
+        own: right.clone(),
+        size: [8.0, 4.0],
+        placed: right,
+    };
+    let d = CloneDeformer {
+        mode: 1,
+        deformer: 1,
+        operation: 1,
+        ..CloneDeformer::read(Params::EMPTY)
+    };
+    let reads = Reads {
+        copies: Some(&copies),
+        other: Some(&other),
+        boolean: Some(&shape),
+    };
+    d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &reads);
+    let px = |x: u32| &rgba[((w + x) * 4) as usize..((w + x) * 4 + 4) as usize];
+    // Left of the cut: the copy, opaque, its colour white.
+    assert!((px(1)[3] - 1.0).abs() < 1e-5 && (px(1)[0] - 1.0).abs() < 1e-5, "{:?}", px(1));
+    // Right of it: cut away.
+    assert_eq!(px(6)[3], 0.0);
 }

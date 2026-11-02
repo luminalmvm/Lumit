@@ -22,6 +22,7 @@ Add input
 Add to picked
 Add up
 Age
+Align
 Align to motion
 Align to path
 Alignment
@@ -124,6 +125,8 @@ Blue from
 Blues
 Blur & sharpen
 Blur size
+Boolean
+Boolean layer
 Border
 Both
 Both ways
@@ -191,6 +194,7 @@ Clip rollback
 Clip white
 Clock
 Clockwise
+Clone deformer
 Clone index
 Clone layer
 Clone layer 2
@@ -294,6 +298,8 @@ Deep blue
 Deep emerald
 Deep red
 Deep yellow
+Deform
+Deformer
 Delay
 Density
 Density layer
@@ -578,6 +584,7 @@ Inside mask
 Intensity
 Interlace offset
 Interpolation
+Intersect
 Interval
 Inverse
 Invert
@@ -829,6 +836,7 @@ Particle blend
 Particulate
 Passes
 Path
+Path layer
 Path overlap
 Pattern
 Peak
@@ -878,6 +886,7 @@ Points C
 Points D
 Points along path
 Points field
+Points input
 Points layer
 Points sample
 Polar coordinates
@@ -913,6 +922,7 @@ Random offset scale
 Random span offsets
 Randomness
 Range
+Raster
 Rate
 Ratio
 Ray traced
@@ -1252,6 +1262,7 @@ Uncoated
 Underwater
 Uniform
 Uniform scaling
+Union
 Units
 Unsharp mask
 Up
@@ -1276,6 +1287,7 @@ Value noise
 Variation
 Vary by
 Vary points
+Vector
 Vector blur
 Vector scale
 Vectors from

@@ -1260,6 +1260,18 @@ Map<String, String> get _built => {
       "Position 4": l10n.fxPosition4,
       "Colour 5": l10n.fxColour5,
       "Position 5": l10n.fxPosition5,
+      "Points input": l10n.fxPointsInput,
+      "Path layer": l10n.fxPathLayer,
+      "Deform": l10n.fxDeform,
+      "Clone deformer": l10n.fxCloneDeformer,
+      "Deformer": l10n.fxDeformer,
+      "Align": l10n.fxAlign,
+      "Boolean": l10n.fxBoolean,
+      "Boolean layer": l10n.fxBooleanLayer,
+      "Union": l10n.fxUnion,
+      "Intersect": l10n.fxIntersect,
+      "Raster": l10n.fxRaster,
+      "Vector": l10n.fxVector,
       "Sweep gradient": l10n.fxSweepGradient,
       "Multi-point gradient": l10n.fxMultiPointGradient,
       "Point 1": l10n.fxPoint1,
@@ -2211,6 +2223,10 @@ String? effectBadge(String key, [String? detail]) {
     // sentence goes in the detail slot beneath, untranslated.
     case 'shader_failed':
       return l10n.badgeShaderFailed;
+    // A Clone deformer set to Vector with no outlines to read. Why is
+    // written beneath.
+    case 'clone_vector_reads_picture':
+      return l10n.badgeCloneVectorReadsPicture;
     // An effect that asks a trained model for a plane, on a machine without
     // the addon (docs/impl/addons.md §6.1). The detail slot beneath names
     // which one to install, untranslated, because it is an addon id.

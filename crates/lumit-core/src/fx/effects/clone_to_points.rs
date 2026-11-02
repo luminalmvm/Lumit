@@ -57,8 +57,10 @@ use crate::fx::{
     registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
     schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
-use crate::model::{Composition, Document, EffectInstance, EffectValue};
+use crate::expression::ExpressionContext;
+use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer};
 use lumit_fx_macros::Effect;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// The dice a Random choice of layer rolls, kept off the numbers the
@@ -78,6 +80,15 @@ const CHOOSE_EVERY: u32 = 3;
 /// Choose by's Layer index, which reads the Layer index row (or the copy's
 /// own value, where a driver is wired into it).
 const CHOOSE_INDEX: u32 = 4;
+
+/// Distribution's options, by their place in the dropdown.
+pub const DIST_INPUT: u32 = 0;
+pub const DIST_GRID: u32 = 1;
+pub const DIST_PATH: u32 = 2;
+pub const DIST_LAYOUT: u32 = 3;
+
+/// The layer row Path reads its path from, which is not a layer to stamp.
+pub const PATH_LAYER: &str = "path_layer";
 
 /// Time offset's options, by their place in the dropdown.
 const TIME_OFF: u32 = 0;
@@ -165,6 +176,47 @@ pub struct Planned {
 /// index rows behind two more, and the cell rows that only the two cell sizes
 /// read.
 pub const CLONE_GROUPS: &[ParamGroup] = &[
+    // Each Distribution's own rows, shown only under it.
+    ParamGroup {
+        label: "",
+        params: &["dist_count"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_PATH, DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &[
+            "dist_columns",
+            "dist_rows",
+            "dist_spacing_x",
+            "dist_spacing_y",
+        ],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_GRID])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["path_layer", "dist_align"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_PATH])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["dist_direction", "dist_spacing"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["dist_position_x", "dist_position_y"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_GRID, DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
     ParamGroup {
         label: "More layers",
         params: &[
@@ -270,6 +322,107 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     enabled_when = CLONE_ENABLED_WHEN,
 )]
 pub struct CloneToPoints {
+    /// Where the copies go. Points input stamps the wired stream. Grid, Path
+    /// and Layout make the points here, so no producer has to be wired:
+    /// Grid in rows and columns, Path spread along a layer's path, Layout in
+    /// a line where each copy starts where the one before ends.
+    #[choice(
+        label = "Distribution",
+        options = ["Points input", "Grid", "Path", "Layout"],
+        default = 0
+    )]
+    pub distribution: u32,
+
+    /// How many copies Path and Layout make.
+    #[counter(
+        label = "Count",
+        min = 1,
+        max = 200,
+        default = 10,
+        hard_min = 1,
+        hard_max = points::CAP_HARD,
+        unit = Raw
+    )]
+    pub dist_count: i32,
+
+    /// Grid's columns.
+    #[counter(
+        label = "Columns",
+        min = 1,
+        max = 100,
+        default = 5,
+        hard_min = 1,
+        hard_max = 10_000,
+        unit = Raw
+    )]
+    pub dist_columns: i32,
+
+    /// Grid's rows.
+    #[counter(
+        label = "Rows",
+        min = 1,
+        max = 100,
+        default = 5,
+        hard_min = 1,
+        hard_max = 10_000,
+        unit = Raw
+    )]
+    pub dist_rows: i32,
+
+    /// The gap between Grid's columns, px@comp.
+    #[slider(
+        label = "Spacing x",
+        min = 0.0,
+        max = 1000.0,
+        default = 120.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub dist_spacing_x: f32,
+
+    /// The gap between Grid's rows, px@comp.
+    #[slider(
+        label = "Spacing y",
+        min = 0.0,
+        max = 1000.0,
+        default = 120.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub dist_spacing_y: f32,
+
+    /// The layer whose path Path follows: a Shape layer's outlines, or
+    /// another layer's first mask. Unset is this layer's own.
+    #[layer(label = "Path layer")]
+    pub path_layer: bool,
+
+    /// Turns each copy to face the way the path runs.
+    #[toggle(label = "Align to path", default = true)]
+    pub dist_align: bool,
+
+    /// Which way Layout lines the copies up.
+    #[choice(label = "Direction", options = ["Horizontal", "Vertical"], default = 0)]
+    pub dist_direction: u32,
+
+    /// The gap Layout leaves between one copy and the next, px@comp.
+    /// Below nought they overlap.
+    #[slider(
+        label = "Spacing",
+        min = -500.0,
+        max = 1000.0,
+        default = 20.0,
+        unit = Px
+    )]
+    pub dist_spacing: f32,
+
+    /// The centre of Grid and Layout, px@comp.
+    #[slider(label = "Position x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
+    pub dist_position_x: f32,
+
+    /// px@comp; see [`dist_position_x`](Self::dist_position_x).
+    #[slider(label = "Position y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
+    pub dist_position_y: f32,
+
     /// Which points get a stamp.
     #[choice(
         label = "Apply to",
@@ -931,6 +1084,151 @@ impl CloneToPoints {
         c
     }
 
+    /// The points Grid, Path and Layout make at layer time `lt`, px@comp, as a
+    /// wire would bring them. `None` for Points input, which reads the wire.
+    ///
+    /// Grid and Path are Grid's and Points along path's own streams, read
+    /// with these rows, so the copies sit where those producers would put
+    /// them. Layout's copies all start at Position: where each one goes
+    /// depends on how big the copies before it are, which only the draw
+    /// knows ([`laid_out`](Self::laid_out)). The rows read their keys and
+    /// expressions here, not a wire.
+    #[must_use]
+    pub fn distributed(
+        e: &EffectInstance,
+        comp: &Composition,
+        owner: &Layer,
+        lt: f64,
+        context: &Arc<ExpressionContext>,
+        projection: points::Projection,
+    ) -> Option<PointsStream> {
+        let distribution = match e.param("distribution") {
+            Some(EffectValue::Choice(v)) => *v,
+            _ => DIST_INPUT,
+        };
+        if distribution == DIST_INPUT {
+            return None;
+        }
+        let d = Self::read(Params::EMPTY);
+        let number = |id: &str, or: f32| {
+            e.float_at_with_context(id, lt, Arc::clone(context))
+                .filter(|v| v.is_finite())
+                .map_or(or, |v| v as f32)
+        };
+        let count = number("dist_count", d.dist_count as f32) as i32;
+        let at = [
+            number("dist_position_x", d.dist_position_x),
+            number("dist_position_y", d.dist_position_y),
+        ];
+        // A copy of size 100 is the layer at its own size, or a cell, or a
+        // square of 100 px: Size says which.
+        let size = 100.0;
+        let mut stream = match distribution {
+            DIST_GRID => super::grid::Grid {
+                columns: number("dist_columns", d.dist_columns as f32) as i32,
+                rows: number("dist_rows", d.dist_rows as f32) as i32,
+                spacing_x: number("dist_spacing_x", d.dist_spacing_x),
+                spacing_y: number("dist_spacing_y", d.dist_spacing_y),
+                position_x: at[0],
+                position_y: at[1],
+                size,
+                ..super::grid::Grid::read(Params::EMPTY)
+            }
+            .stream(projection),
+            DIST_PATH => {
+                let target = e
+                    .layer_ref(PATH_LAYER)
+                    .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+                    .unwrap_or(owner);
+                let t = lt + owner.start_offset.0.to_f64();
+                let path = points::layer_path(comp, owner, target, t, context);
+                super::points_along_path::PointsAlongPath {
+                    count,
+                    align: !matches!(e.param("dist_align"), Some(EffectValue::Bool(false))),
+                    size,
+                    ..super::points_along_path::PointsAlongPath::read(Params::EMPTY)
+                }
+                .stream(&path, projection)
+            }
+            _ => {
+                let n = count.clamp(0, points::CAP_HARD as i32) as usize;
+                let mut out = PointsStream {
+                    projection,
+                    ..PointsStream::default()
+                };
+                for k in 0..n {
+                    out.position.push([at[0], at[1], 0.0]);
+                    out.speed.push([0.0; 3]);
+                    out.age.push(0.0);
+                    out.life.push(1.0);
+                    out.size.push(size);
+                    out.rotation.push(0.0);
+                    out.colour.push([1.0; 4]);
+                    out.id.push(k as u64);
+                    out.index.push(if n > 1 {
+                        k as f32 / (n - 1) as f32
+                    } else {
+                        0.0
+                    });
+                }
+                out
+            }
+        };
+        stream.projection = projection;
+        Some(stream)
+    }
+
+    /// Layout's line: each stamp moved along Direction so it starts Spacing
+    /// past where the one before ends, and the whole line is centred on
+    /// Position. `unit` is a stamp's size at a point size of 100, across and
+    /// down, which is [`fit`](Self::fit)'s for the picture it shows. Stamps of
+    /// one point (Every layer) share a place, as wide as the widest of them.
+    /// Offset x / y still move each stamp from its place.
+    pub fn laid_out(self, stamps: &mut PointsStream, unit: impl Fn(usize) -> [f32; 2]) {
+        let axis = usize::from(self.dist_direction == 1);
+        let centre = if axis == 0 {
+            self.dist_position_x
+        } else {
+            self.dist_position_y
+        };
+        // How long each point's place is along the line, by its id.
+        let mut places: Vec<(u64, f32)> = Vec::new();
+        let mut extents = Vec::with_capacity(stamps.len());
+        for i in 0..stamps.len() {
+            let size = stamps.size.get(i).copied().unwrap_or(0.0);
+            let long = (unit(i)[axis] * size * stamps.stretch_of(i)[axis]).max(0.0);
+            extents.push(long);
+            let id = stamps.id.get(i).copied().unwrap_or(0);
+            match places.iter_mut().find(|(at, _)| *at == id) {
+                Some((_, l)) => *l = l.max(long),
+                None => places.push((id, long)),
+            }
+        }
+        places.sort_by_key(|(id, _)| *id);
+        let total: f32 = places.iter().map(|(_, l)| l).sum::<f32>()
+            + self.dist_spacing * places.len().saturating_sub(1) as f32;
+        let mut start = centre - total * 0.5;
+        let mut from = Vec::with_capacity(places.len());
+        for (id, long) in &places {
+            from.push((*id, start, *long));
+            start += long + self.dist_spacing;
+        }
+        let anchor = if axis == 0 {
+            self.anchor_x
+        } else {
+            self.anchor_y
+        } / 100.0;
+        for (i, p) in stamps.position.iter_mut().enumerate() {
+            let id = stamps.id.get(i).copied().unwrap_or(0);
+            let Some((_, left, long)) = from.iter().find(|(at, ..)| *at == id) else {
+                continue;
+            };
+            // Centred in its place, with its anchor on the point.
+            let own = extents.get(i).copied().unwrap_or(0.0);
+            p[axis] += left + (long - own) * 0.5 + anchor * own - centre;
+        }
+    }
+
     /// The clone layer rows that name a layer, in row order, each with the
     /// layer it names.
     #[must_use]
@@ -938,6 +1236,7 @@ impl CloneToPoints {
         let schema: &'static EffectSchema = &<Self as EffectMetadata>::SCHEMA;
         schema
             .layer_inputs()
+            .filter(|row| *row != PATH_LAYER)
             .filter_map(|row| Some((row, e.layer_ref(row)?)))
             .collect()
     }

@@ -13247,6 +13247,60 @@
           "default": true
         },
         {
+          "id": "deform",
+          "label": "Deform",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Off",
+            "Oscillator",
+            "Value noise"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "deform_wave",
+          "label": "Wave",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Sine",
+            "Triangle",
+            "Square",
+            "Sawtooth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "deform_amplitude",
+          "label": "Amplitude",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": -500.0,
+          "slider_max": 500.0
+        },
+        {
+          "id": "deform_frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "deform_phase",
+          "label": "Phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "size",
           "label": "Size",
           "kind": "float",
@@ -13381,6 +13435,17 @@
           "collapsed": false
         },
         {
+          "label": "Deform",
+          "params": [
+            "deform",
+            "deform_wave",
+            "deform_amplitude",
+            "deform_frequency",
+            "deform_phase"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Point",
           "params": [
             "size",
@@ -13421,6 +13486,30 @@
           "on": "placement",
           "cond": "choice_is_not",
           "value": 2
+        },
+        {
+          "param": "deform_amplitude",
+          "on": "deform",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "deform_frequency",
+          "on": "deform",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "deform_phase",
+          "on": "deform",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "deform_wave",
+          "on": "deform",
+          "cond": "choice_is",
+          "value": 1
         },
         {
           "param": "mask_path",
@@ -13942,6 +14031,126 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "distribution",
+          "label": "Distribution",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Points input",
+            "Grid",
+            "Path",
+            "Layout"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "dist_count",
+          "label": "Count",
+          "kind": "int",
+          "unit": "raw",
+          "default": 10,
+          "slider_min": 1.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "dist_columns",
+          "label": "Columns",
+          "kind": "int",
+          "unit": "raw",
+          "default": 5,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "dist_rows",
+          "label": "Rows",
+          "kind": "int",
+          "unit": "raw",
+          "default": 5,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "dist_spacing_x",
+          "label": "Spacing x",
+          "kind": "float",
+          "unit": "px",
+          "default": 120.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "dist_spacing_y",
+          "label": "Spacing y",
+          "kind": "float",
+          "unit": "px",
+          "default": 120.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "path_layer",
+          "label": "Path layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "dist_align",
+          "label": "Align to path",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "dist_direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Horizontal",
+            "Vertical"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "dist_spacing",
+          "label": "Spacing",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": -500.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "dist_position_x",
+          "label": "Position x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "dist_position_y",
+          "label": "Position y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
           "id": "apply_to",
           "label": "Apply to",
           "kind": "choice",
@@ -14402,6 +14611,79 @@
       ],
       "groups": [
         {
+          "label": "",
+          "params": [
+            "dist_count"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "distribution",
+            "values": [
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "dist_columns",
+            "dist_rows",
+            "dist_spacing_x",
+            "dist_spacing_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "distribution",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "path_layer",
+            "dist_align"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "distribution",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "dist_direction",
+            "dist_spacing"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "distribution",
+            "values": [
+              3
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "dist_position_x",
+            "dist_position_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "distribution",
+            "values": [
+              1,
+              3
+            ]
+          }
+        },
+        {
           "label": "More layers",
           "params": [
             "clone_layer_2",
@@ -14492,6 +14774,244 @@
           "param": "max_renders",
           "on": "per_clone",
           "cond": "choice_is",
+          "value": 0
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "clone-deformer",
+      "match_name": "clone_deformer",
+      "label": "Clone deformer",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Raster",
+            "Vector"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "deformer",
+          "label": "Deformer",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Align",
+            "Boolean"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "align_horizontal",
+          "label": "Horizontal",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Left",
+            "Centre",
+            "Right"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "align_vertical",
+          "label": "Vertical",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Top",
+            "Centre",
+            "Bottom"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "position_x",
+          "label": "Position x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "position_y",
+          "label": "Position y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "boolean_layer",
+          "label": "Boolean layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "boolean_layer_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "operation",
+          "label": "Operation",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Union",
+            "Subtract",
+            "Intersect",
+            "Difference"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Align",
+          "params": [
+            "align_horizontal",
+            "align_vertical",
+            "position_x",
+            "position_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "deformer",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Boolean",
+          "params": [
+            "boolean_layer",
+            "boolean_layer_placement",
+            "operation"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "deformer",
+            "values": [
+              1
+            ]
+          }
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "position_x",
+          "on": "align_horizontal",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "position_y",
+          "on": "align_vertical",
+          "cond": "choice_is_not",
           "value": 0
         }
       ],
