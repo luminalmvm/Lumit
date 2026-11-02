@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod moments;
 pub mod pool;
 pub mod schedule;
 
@@ -517,6 +518,8 @@ fn feed_comp(
         // As the build draws it: a Sequence layer wearing its clip's effects
         // and blend mode, so a change to either retires the frame.
         let worn = lumit_core::sequence::worn_at(layer, lt);
+        // The builder reads a layer's own moments off the layer itself.
+        moments::feed_own_moments(h, doc, comp, layer, t, quality, stamper, visited)?;
         let layer = worn.as_ref().unwrap_or(layer);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }

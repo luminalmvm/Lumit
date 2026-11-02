@@ -1891,6 +1891,13 @@ enum Probe<'a> {
         row: &'a str,
         found: Option<DofInputDraw>,
     },
+    /// Layer `owner` as the first `upto` effects of its stack leave it: what
+    /// an effect that shows its own input at another moment reads.
+    Own {
+        owner: uuid::Uuid,
+        upto: usize,
+        found: Option<DofInputDraw>,
+    },
     /// Every picture of the Clone to points `effect` on layer `owner`, now
     /// that its stream is known to hold `points` points.
     Clones {
@@ -1942,7 +1949,7 @@ pub fn late_clone_pictures(
     );
     match probe {
         Probe::Clones { found, .. } => found,
-        Probe::Picture { .. } => Vec::new(),
+        Probe::Picture { .. } | Probe::Own { .. } => Vec::new(),
     }
 }
 
@@ -2856,13 +2863,29 @@ fn comp_walk(
     // **A backdrop effect's shape**: the layer it sits on, with its other
     // effects and styles run on its own picture, placed in the comp as the
     // layer is, since the effect runs over the comp-sized composite below.
-    // `None` on an adjustment layer, which has no picture to give.
-    let own_shape = |owner: uuid::Uuid| -> Option<DofInputDraw> {
-        let src = comp
+    // `None` on an adjustment layer, which has no picture to give. With `upto`,
+    // the layer as its first `upto` effects leave it, where it is, for an
+    // effect that shows its own input at another moment.
+    let own_picture = |owner: uuid::Uuid, upto: Option<usize>| -> Option<DofInputDraw> {
+        let (idx, src) = comp
             .layers
             .iter()
-            .find(|l| l.id == owner)
-            .filter(|l| !l.is_adjustment())?;
+            .enumerate()
+            .find(|(_, l)| l.id == owner)?;
+        // An adjustment layer's picture is the composite below it.
+        let below = match (src.is_adjustment(), upto) {
+            (true, None) => return None,
+            (true, Some(_)) => Some(moments::below_picture(
+                doc,
+                comp,
+                idx,
+                (t_comp, frame_t),
+                frame_pixels,
+                &visited_path,
+                clone_number,
+            )),
+            (false, _) => None,
+        };
         let context = Arc::new(ExpressionContext {
             document: expr_doc.clone(),
             comp: Some(comp.id),
@@ -2871,13 +2894,16 @@ fn comp_walk(
             current_depth: 0,
             inputs: None,
         });
-        let place = Some(Box::new(crate::draw::MapPlace {
-            placed: Some(world_placement(comp, src, t_comp, context.clone())),
-            ground: [0.0; 4],
-        }));
-        let mut input = match nested_input_for(src) {
-            Some(nested) => nested,
-            None => {
+        let place = upto.is_none().then(|| {
+            Box::new(crate::draw::MapPlace {
+                placed: Some(world_placement(comp, src, t_comp, context.clone())),
+                ground: [0.0; 4],
+            })
+        });
+        let mut input = match (below, nested_input_for(src)) {
+            (Some(below), _) => below,
+            (None, Some(nested)) => nested,
+            (None, None) => {
                 let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
                 DofInputDraw {
                     rgba: rgba.to_vec(),
@@ -2903,9 +2929,16 @@ fn comp_walk(
                 effects: src
                     .effects
                     .iter()
-                    .filter(|e| !is_backdrop(e))
-                    .cloned()
+                    .enumerate()
+                    .filter(|(i, e)| upto.map_or(!is_backdrop(e), |n| *i < n))
+                    .map(|(_, e)| e.clone())
                     .collect(),
+                // Styles come after the whole stack.
+                styles: if upto.is_some() {
+                    Vec::new()
+                } else {
+                    src.styles.clone()
+                },
                 ..src.clone()
             };
             let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
@@ -3077,6 +3110,10 @@ fn comp_walk(
             *found = layer_slot(effect, row);
             return Vec::new();
         }
+        Some(Probe::Own { owner, upto, found }) => {
+            *found = own_picture(*owner, Some(*upto));
+            return Vec::new();
+        }
         Some(Probe::Clones {
             owner,
             effect,
@@ -3126,14 +3163,27 @@ fn comp_walk(
                 })
                 .filter_map(|e| {
                     let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                    let param = def.schema().layer_input()?;
-                    def.is_image_op().then_some((e, def, param))
+                    let takes = lumit_core::fx::moments::takes_layer_pictures(def);
+                    let param = def.schema().layer_input().unwrap_or_default();
+                    (takes && def.is_image_op()).then_some((e, def, param))
                 })
                 .map(|(e, def, param)| {
+                    // An effect that shows its own input at other moments.
+                    if def.shows_own_moments() {
+                        return moments::own_moments_pictures(
+                            doc,
+                            comp,
+                            (t_comp, frame_t),
+                            frame_pixels,
+                            &visited_path,
+                            clone_number,
+                            (owner, e),
+                        );
+                    }
                     // A backdrop effect on a layer with a picture takes that
                     // picture wherever its row picks no other layer.
                     if def.backdrop() && e.layer_ref(param).is_none_or(|id| id == owner) {
-                        if let Some(d) = own_shape(owner) {
+                        if let Some(d) = own_picture(owner, None) {
                             return LayerInputDraw::Layer(d);
                         }
                     }
@@ -7040,6 +7090,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
 }
 
 mod energy_line_path;
+mod moments;
 pub(crate) mod motion_blur;
 
 #[cfg(test)]

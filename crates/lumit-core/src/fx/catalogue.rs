@@ -188,6 +188,7 @@ use super::effects::{
     threshold::{Threshold, ThresholdDef},
     tile::{Tile, TileDef},
     time_offset::{TimeOffset, TimeOffsetDef},
+    timewarp::{Timewarp, TimewarpDef},
     tint::{Tint, TintDef},
     track_points::{TrackPoints, TrackPointsDef},
     trail::{Trail, TrailDef},
@@ -320,6 +321,7 @@ crate::catalogue![
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,
     MotionBlurDef => MotionBlur,
+    TimewarpDef => Timewarp,
     MatteKeyDef => MatteKey,
     // Set matte, at the Utility family's end.
     SetMatteDef => SetMatte,

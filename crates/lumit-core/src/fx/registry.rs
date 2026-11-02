@@ -483,6 +483,33 @@ pub trait EffectDef: Sync + Send + 'static {
         &[]
     }
 
+    /// The moments of its own input this effect shows at layer time `lt`, with
+    /// the layer's markers and the comp's rate in `markers`: the input is
+    /// rendered again at those layer times, the effects above it included, and
+    /// handed over as its layer pictures. `None` for every effect but the ones
+    /// that show their input at another time.
+    fn own_moments(
+        &self,
+        _e: &EffectInstance,
+        _lt: f64,
+        _markers: &crate::fx::markers::MarkerContext,
+    ) -> Option<crate::fx::moments::OwnMoments> {
+        None
+    }
+
+    /// Whether [`Self::own_moments`] can answer at all: such an effect takes a
+    /// layer-picture slot of its own whatever its rows.
+    fn shows_own_moments(&self) -> bool {
+        false
+    }
+
+    /// Whether this instance, as its rows stand, is the one in its stack that
+    /// shows its input at other moments. Read off the rows rather than the
+    /// clock, so which effect it is never changes from frame to frame.
+    fn wants_own_moments(&self, _e: &EffectInstance) -> bool {
+        self.shows_own_moments()
+    }
+
     /// Whether this effect reads a Text layer's look (its Text
     /// layer row) without being a points effect, so the builder hands it the
     /// carriage the points effects get, with the layer's document in it

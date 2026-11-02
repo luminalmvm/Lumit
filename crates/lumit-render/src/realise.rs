@@ -738,13 +738,17 @@ impl Realiser<'_> {
                         .collect();
                     let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
                         plans.iter().map(|f| &**f).collect();
+                    // A comp comes out at the render scale, so its stack runs
+                    // at that size, its distances scaled to match.
+                    let mut fx = d.fx.clone();
+                    fx.rescale_spatial(lw as f32 / d.tex_w.max(1) as f32);
                     crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
                         linear,
-                        d.tex_w,
-                        d.tex_h,
-                        &d.fx,
+                        lw,
+                        lh,
+                        &fx,
                         &[],
                         &[],
                         &tables,

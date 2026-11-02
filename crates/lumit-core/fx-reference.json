@@ -19595,6 +19595,254 @@
       "matte_role": "own"
     },
     {
+      "slug": "timewarp",
+      "match_name": "timewarp",
+      "label": "Timewarp",
+      "version": 1,
+      "category": "Temporal",
+      "category_slug": "temporal",
+      "params": [
+        {
+          "id": "adjust",
+          "label": "Adjust time by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Speed",
+            "Source frame"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": -400.0,
+          "slider_max": 400.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "source_frame",
+          "label": "Source frame",
+          "kind": "float",
+          "unit": "frames",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 300.0
+        },
+        {
+          "id": "method",
+          "label": "Method",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Whole frames",
+            "Frame mix",
+            "Pixel motion"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "quality",
+          "label": "Quality",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Draft",
+            "Normal",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smoothness",
+          "label": "Smoothness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "motion_blur",
+          "label": "Motion blur",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "shutter_angle",
+          "label": "Shutter angle",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 180.0,
+          "slider_min": 0.0,
+          "slider_max": 720.0,
+          "hard_min": 0.0,
+          "hard_max": 3600.0
+        },
+        {
+          "id": "samples",
+          "label": "Samples",
+          "kind": "float",
+          "unit": "raw",
+          "default": 16.0,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "input_rate",
+          "label": "Input rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 120.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "speed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "adjust",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "source_frame"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "adjust",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "Motion",
+          "params": [
+            "quality",
+            "smoothness"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Motion blur",
+          "params": [
+            "motion_blur",
+            "shutter_angle",
+            "samples"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Input",
+          "params": [
+            "input_rate"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "matte-key",
       "match_name": "matte_key",
       "label": "Matte key",
