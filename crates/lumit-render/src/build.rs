@@ -3293,6 +3293,18 @@ fn comp_walk(
                     .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
+                if e.effect.match_name == "energy_line" {
+                    return energy_line_path::path(
+                        doc,
+                        comp,
+                        e,
+                        param,
+                        self_default,
+                        layer,
+                        slt,
+                        t_comp,
+                    );
+                }
                 // The one rule the driver walk also asks, so a wire reads
                 // the path the picture draws.
                 lumit_core::mask::effect_path_at(e, param, self_default, layer, slt)
@@ -7027,6 +7039,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     }
 }
 
+mod energy_line_path;
 pub(crate) mod motion_blur;
 
 #[cfg(test)]

@@ -6301,8 +6301,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 4,
-        "Scanlines, the two flares and Transform points are the four today"
+        declaring, 5,
+        "Scanlines, the two flares, Transform points and Energy line are the five today"
     );
 }
 
@@ -6678,6 +6678,15 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            ("energy_line", "start_x"),
+            ("energy_line", "start_y"),
+            ("energy_line", "end_x"),
+            ("energy_line", "end_y"),
+            ("energy_line", "core_size"),
+            ("energy_line", "glow_size"),
+            ("energy_line", "core_distortion"),
+            ("energy_line", "glow_distortion"),
+            ("energy_line", "distortion_size"),
             // Particulate (px@comp through a particle system): eleven, all
             // px@comp, and every one of them has to follow the raster or a
             // half-resolution preview would show a different picture from the

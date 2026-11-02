@@ -966,7 +966,7 @@ impl FxEngine {
     /// The halo for a Falloff above 0: each exponential is shrunk onto its
     /// own grid, convolved there, and added back up at full size. The CPU
     /// reference is `cpu::glow_exponential`.
-    fn glow_exponential(
+    pub(super) fn glow_exponential(
         &self,
         ctx: &GpuContext,
         bright: &wgpu::Texture,

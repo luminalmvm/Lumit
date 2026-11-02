@@ -10912,6 +10912,541 @@
       "matte_role": "own"
     },
     {
+      "slug": "energy-line",
+      "match_name": "energy_line",
+      "label": "Energy line",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "preset",
+          "label": "Preset",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Custom",
+            "Blue blade",
+            "Red blade",
+            "Neon",
+            "Ice",
+            "Electric",
+            "Fire",
+            "Energy",
+            "Plasma",
+            "Ghost",
+            "Toxic",
+            "Solar",
+            "Laser"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Draw along",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Line",
+            "Mask",
+            "Shape",
+            "Text"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "start_x",
+          "label": "From x",
+          "kind": "float",
+          "unit": "px",
+          "default": 480.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "start_y",
+          "label": "From y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "end_x",
+          "label": "To x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1440.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "end_y",
+          "label": "To y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "mask_path",
+          "label": "Mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "all_masks",
+          "label": "Every mask",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "paths",
+          "label": "Paths",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "One after another",
+            "All at once"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "start",
+          "label": "Start",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "end",
+          "label": "End",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "core_size",
+          "label": "Core size",
+          "kind": "float",
+          "unit": "px",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "core_softness",
+          "label": "Core softness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "core_colour",
+          "label": "Core colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "halo",
+          "label": "Halo",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "start_size",
+          "label": "Start size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "end_size",
+          "label": "End size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_colour",
+          "label": "Glow colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.06,
+            0.28,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "glow_intensity",
+          "label": "Glow intensity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_size",
+          "label": "Glow size",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_falloff",
+          "label": "Glow falloff",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "flicker",
+          "label": "Flicker",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "flicker_speed",
+          "label": "Flicker speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_type",
+          "label": "Type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Smooth",
+            "Smoke",
+            "Crackle"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "core_distortion",
+          "label": "Core distortion",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_distortion",
+          "label": "Glow distortion",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_size",
+          "label": "Noise size",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 4.0,
+          "slider_max": 400.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "distortion_detail",
+          "label": "Detail",
+          "kind": "int",
+          "unit": "raw",
+          "default": 3,
+          "slider_min": 1.0,
+          "slider_max": 6.0,
+          "hard_min": 1.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "distortion_speed",
+          "label": "Evolution speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "wind_direction",
+          "label": "Wind direction",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0
+        },
+        {
+          "id": "wind_speed",
+          "label": "Wind speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "composite_on_original",
+          "label": "Composite on original",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "start_x",
+            "start_y",
+            "end_x",
+            "end_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "mask_path",
+            "all_masks"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "paths"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "Core",
+          "params": [
+            "core_size",
+            "core_softness",
+            "core_colour",
+            "halo",
+            "start_size",
+            "end_size"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Glow",
+          "params": [
+            "glow_colour",
+            "glow_intensity",
+            "glow_size",
+            "glow_falloff"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_speed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Distortion",
+          "params": [
+            "distortion_type",
+            "core_distortion",
+            "glow_distortion",
+            "distortion_size",
+            "distortion_detail",
+            "distortion_speed",
+            "wind_direction",
+            "wind_speed"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "particulate",
       "match_name": "particulate",
       "label": "Particulate",

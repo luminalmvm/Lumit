@@ -496,6 +496,10 @@
   "@fxAddGrain": {
     "description": "Effect name in the Add effect menu — lays film grain on the picture."
   },
+  "fxAllAtOnce": "All at once",
+  "@fxAllAtOnce": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: every path lights together, each on its own."
+  },
   "fxAltitude": "Altitude",
   "@fxAltitude": {
     "description": "A Bevel and emboss layer style's Altitude parameter: how high above the surface the light sits, in degrees."
@@ -515,6 +519,10 @@
   "fxBevelStyle": "Bevel style",
   "@fxBevelStyle": {
     "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
+  },
+  "fxBlueBlade": "Blue blade",
+  "@fxBlueBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a blue blade of light with a white core."
   },
   "fxBottomToTop": "Bottom to top",
   "@fxBottomToTop": {
@@ -604,13 +612,25 @@
   "@fxCoreColour": {
     "description": "Effect controls — a control on Lightning: the filament's colour."
   },
+  "fxCoreDistortion": "Core distortion",
+  "@fxCoreDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the core about, in pixels."
+  },
   "fxCoreRadius": "Core radius",
   "@fxCoreRadius": {
     "description": "Effect controls — a control on Lightning: how thick the bright filament is."
   },
+  "fxCoreSoftness": "Core softness",
+  "@fxCoreSoftness": {
+    "description": "Effect controls — a control on Energy line: how much of the core's width its edge fades over."
+  },
   "fxCornerPin": "Corner pin",
   "@fxCornerPin": {
     "description": "Effect name in the Add effect menu — the picture pulled onto four points."
+  },
+  "fxCrackle": "Crackle",
+  "@fxCrackle": {
+    "description": "Effect controls — an option of Energy line's noise Type: a fast, jagged noise."
   },
   "fxCreateCornerPin": "Create corner pin",
   "@fxCreateCornerPin": {
@@ -624,9 +644,45 @@
   "@fxDown": {
     "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
   },
+  "fxDrawAlong": "Draw along",
+  "@fxDrawAlong": {
+    "description": "Effect controls — a control on Energy line: what the light is drawn along: a line, a mask, a shape's paths or text."
+  },
   "fxEdge": "Edge",
   "@fxEdge": {
     "description": "Option of an Inner glow layer style's Source: the glow grows in from the shape's edge."
+  },
+  "fxElectric": "Electric",
+  "@fxElectric": {
+    "description": "Effect controls — a Preset option on Energy line: a thin, crackling violet arc."
+  },
+  "fxEndSize": "End size",
+  "@fxEndSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the end of the lit stretch, as a share of Core size."
+  },
+  "fxEnergy": "Energy",
+  "@fxEnergy": {
+    "description": "Effect controls — a Preset option on Energy line: a teal light with a gently moving glow."
+  },
+  "fxEnergyLine": "Energy line",
+  "@fxEnergyLine": {
+    "description": "Effect name in the Add effect menu — draws a hot core of light with a glow along a line, a mask, a shape or text."
+  },
+  "fxEveryMask": "Every mask",
+  "@fxEveryMask": {
+    "description": "Effect controls — a control on Energy line: on, the light runs along all of the layer's masks."
+  },
+  "fxEvolutionSpeed": "Evolution speed",
+  "@fxEvolutionSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise changes, a second."
+  },
+  "fxFire": "Fire",
+  "@fxFire": {
+    "description": "Effect controls — a Preset option on Energy line: an orange flame that rises off the line."
+  },
+  "fxFlickerSpeed": "Flicker speed",
+  "@fxFlickerSpeed": {
+    "description": "Effect controls — a control on Energy line: how many times a second the light dips."
   },
   "fxFlowResolution": "Flow resolution",
   "@fxFlowResolution": {
@@ -635,6 +691,22 @@
   "fxFlowSmoothness": "Flow smoothness",
   "@fxFlowSmoothness": {
     "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
+  },
+  "fxFromX": "From x",
+  "@fxFromX": {
+    "description": "Effect controls — a control on Energy line: where the line starts, across, in pixels."
+  },
+  "fxFromY": "From y",
+  "@fxFromY": {
+    "description": "Effect controls — a control on Energy line: where the line starts, down, in pixels."
+  },
+  "fxGlowDistortion": "Glow distortion",
+  "@fxGlowDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the glow about, in pixels."
+  },
+  "fxGlowFalloff": "Glow falloff",
+  "@fxGlowFalloff": {
+    "description": "Effect controls — a control on Energy line: how much of the glow is sent far out rather than kept near the core."
   },
   "fxGradientOverlay": "Gradient overlay",
   "@fxGradientOverlay": {
@@ -656,6 +728,10 @@
   "@fxHighlightOpacity": {
     "description": "A Bevel and emboss layer style's Highlight opacity: how strong the lit face is, per cent."
   },
+  "fxIce": "Ice",
+  "@fxIce": {
+    "description": "Effect controls — a Preset option on Energy line: a pale cyan tube."
+  },
   "fxInnerBevel": "Inner bevel",
   "@fxInnerBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits inside the shape's edge."
@@ -671,6 +747,10 @@
   "fxInside": "Inside",
   "@fxInside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits inside the layer's edge."
+  },
+  "fxLaser": "Laser",
+  "@fxLaser": {
+    "description": "Effect controls — a Preset option on Energy line: a thin red beam with a tight glow."
   },
   "fxLayer": "Layer",
   "@fxLayer": {
@@ -692,6 +772,18 @@
   "@fxNative": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at the source's own size."
   },
+  "fxNeon": "Neon",
+  "@fxNeon": {
+    "description": "Effect controls — a Preset option on Energy line: a pink neon tube."
+  },
+  "fxNoiseSize": "Noise size",
+  "@fxNoiseSize": {
+    "description": "Effect controls — a control on Energy line: the size of the distortion noise's swirls, in pixels."
+  },
+  "fxOneAfterAnother": "One after another",
+  "@fxOneAfterAnother": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: each path lights after the one before."
+  },
   "fxOuterBevel": "Outer bevel",
   "@fxOuterBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits outside the shape's edge."
@@ -704,6 +796,10 @@
   "@fxOutside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits outside the layer's edge."
   },
+  "fxPaths": "Paths",
+  "@fxPaths": {
+    "description": "Effect controls — a control on Energy line: whether several paths light one after another or all at once."
+  },
   "fxPillowEmboss": "Pillow emboss",
   "@fxPillowEmboss": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
@@ -712,6 +808,30 @@
   "@fxFollow": {
     "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points. Also on Points along path and Particulate: whether the points follow one of the layer’s masks or a Shape layer’s own paths."
   },
+  "fxPlasma": "Plasma",
+  "@fxPlasma": {
+    "description": "Effect controls — a Preset option on Energy line: a violet light in curling smoke."
+  },
+  "fxPreset": "Preset",
+  "@fxPreset": {
+    "description": "Effect controls — a control on Energy line: a look to start from; picking one sets the look controls."
+  },
+  "fxRedBlade": "Red blade",
+  "@fxRedBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a red blade of light that crackles a little."
+  },
+  "fxSmoke": "Smoke",
+  "@fxSmoke": {
+    "description": "Effect controls — an option of Energy line's noise Type: curling, smoke-like noise."
+  },
+  "fxSolar": "Solar",
+  "@fxSolar": {
+    "description": "Effect controls — a Preset option on Energy line: a wide golden glow."
+  },
+  "fxStartSize": "Start size",
+  "@fxStartSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the start of the lit stretch, as a share of Core size."
+  },
   "fxSurface": "Surface",
   "@fxSurface": {
     "description": "Option of a Planar track's Follow control: the four corners are followed as one flat surface."
@@ -719,6 +839,18 @@
   "fxOnePoint": "One point",
   "@fxOnePoint": {
     "description": "Option of a Planar track's Follow control: one small region is followed, giving a position and nothing else."
+  },
+  "fxToX": "To x",
+  "@fxToX": {
+    "description": "Effect controls — a control on Energy line: where the line ends, across, in pixels."
+  },
+  "fxToxic": "Toxic",
+  "@fxToxic": {
+    "description": "Effect controls — a Preset option on Energy line: an acid green light that crackles."
+  },
+  "fxToY": "To y",
+  "@fxToY": {
+    "description": "Effect controls — a control on Energy line: where the line ends, down, in pixels."
   },
   "fxTwoPoints": "Two points",
   "@fxTwoPoints": {
@@ -2655,6 +2787,14 @@
   "fxCorners": "Corners",
   "@fxCorners": {
     "description": "Effect controls — a Placement option on Points along path: one point on each vertex of the mask."
+  },
+  "fxWindDirection": "Wind direction",
+  "@fxWindDirection": {
+    "description": "Effect controls — a control on Energy line: which way the distortion noise is carried, in degrees; 0 is up."
+  },
+  "fxWindSpeed": "Wind speed",
+  "@fxWindSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise is carried, in pixels a second."
   },
   "fxWrap": "Wrap",
   "@fxWrap": {
