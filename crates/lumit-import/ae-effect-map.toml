@@ -625,3 +625,31 @@ ae = "S_TimeWarpRGB"
 name = "S_TimeWarpRGB"
 ofx = ["com.genarts.sapphire.Time.S_TimeWarpRGB", "com.borisfx.sapphire.Time.S_TimeWarpRGB"]
 pending_audit = true
+
+# Film emulation. The match names were read off installed copies (2026-11-01).
+# Film takes the stock, the print, the halation and the grain in their place.
+
+[[effect]]
+ae = "Magic_Bullet_Suite_Magic_Bullet_Film"
+name = "Magic Bullet Film"
+suggest = "Film does the same job"
+ofx = ["com.redgiant.MBS_Film_OFX"]
+
+[[effect]]
+ae = "S_FilmEffect"
+name = "S_FilmEffect"
+suggest = "Film does the same job"
+ofx = [
+  "com.genarts.sapphire.Stylize.S_FilmEffect",
+  "com.borisfx.sapphire.Stylize.S_FilmEffect",
+]
+
+[[effect]]
+ae = "BCC3Film Process"
+name = "BCC Film Process"
+suggest = "Film does the same job"
+
+[[effect]]
+ae = "BCC_FILMSTOCKS"
+name = "BCC Film Stocks"
+suggest = "Film does the same job"
