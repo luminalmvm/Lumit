@@ -2608,9 +2608,12 @@ impl Compositor {
         });
 
         let mut prev_is_a = true;
-        for bind in &binds {
-            // Render this placement into a cleared temp: Normal-over transparent
-            // lays down premul(source)·weight where the quad falls, 0 elsewhere.
+        // A few placements are summed into the temp at a time, so a fast
+        // layer drawn a hundred times does not pay a full-frame add for each.
+        // Four keep the half-float sum within a tenth of a percent.
+        for batch in binds.chunks(4) {
+            // Sum these placements into a cleared temp: premul(source) where
+            // each quad falls, 0 elsewhere.
             {
                 let (draw_view, resolve) = match &temp_msaa_view {
                     Some(ms) => (ms, Some(&temp_view)),
@@ -2628,9 +2631,11 @@ impl Compositor {
                     })],
                     ..Default::default()
                 });
-                rp.set_pipeline(&pipelines.normal);
-                rp.set_bind_group(0, bind, &[0]);
-                rp.draw(0..6, 0..1);
+                rp.set_pipeline(&pipelines.plus);
+                for bind in batch {
+                    rp.set_bind_group(0, bind, &[0]);
+                    rp.draw(0..6, 0..1);
+                }
             }
             // Add the temp into the fp32 running sum (whole frame at once).
             let (prev_view, next_view) = if prev_is_a {
