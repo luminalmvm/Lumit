@@ -32,7 +32,8 @@ import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import '../theme/motion.dart' show MotionSpec;
 import '../theme/theme.dart';
 import '../widgets/controls.dart' show ThemeScope;
-import 'graph_panel.dart' show graphWirePath, graphWireStub, graphWireWidth;
+import 'graph_panel.dart'
+    show graphWireDistance, graphWirePath, graphWireStub, graphWireWidth;
 
 /// How far apart the wires in a tie run, in canvas units.
 const double graphTieGap = 4;
@@ -66,7 +67,9 @@ class TieLayout {
 
   const TieLayout._(this.through, this.bars);
 
-  factory TieLayout.of(List<BridgeWireTie> ties, List<TieWire> wires) {
+  /// [level] runs every bundle level through its ties, for angled wires.
+  factory TieLayout.of(List<BridgeWireTie> ties, List<TieWire> wires,
+      {bool level = false}) {
     final ends = {for (final w in wires) w.key: w};
     Offset at(int i) => Offset(ties[i].x, ties[i].y);
     double dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
@@ -119,6 +122,7 @@ class TieLayout {
       heading = heading.distance < 1e-6
           ? const Offset(1, 0)
           : heading / heading.distance;
+      if (level) heading = Offset(heading.dx < 0 ? -1 : 1, 0);
       final across = Offset(-heading.dy, heading.dx);
       // Side by side in the order their two ends lie, which every tie on the
       // same wires agrees on, so they keep their places from tie to tie.
@@ -173,6 +177,16 @@ Path tiedWirePath(Offset a, Offset b, List<(Offset, Offset)> through,
     {double zoom = 1, WireStyle wires = WireStyle.curved}) {
   if (through.isEmpty) return graphWirePath(a, b, zoom: zoom, wires: wires);
   final path = Path()..moveTo(a.dx, a.dy);
+  if (wires == WireStyle.angled) {
+    // Each stretch is an angled wire of its own, level through every tie.
+    var p = a;
+    for (final q in [for (final (q, _) in through) q, b]) {
+      path.extendWithPath(
+          graphWirePath(p, q, zoom: zoom, wires: wires), Offset.zero);
+      p = q;
+    }
+    return path;
+  }
   final stub = graphWireStub * zoom;
   var (p, u) = (a, const Offset(1, 0));
   final stops = [...through, (b, const Offset(1, 0))];
@@ -235,6 +249,26 @@ Path tiedWireBetween(Offset a, Offset b, List<(Offset, Offset)> from,
       ],
       zoom: zoom,
       wires: wires);
+}
+
+/// How far [at] is from the wire [w] running through [through], sampled
+/// along it as [graphWireDistance] samples an untied one.
+double tiedWireDistance(TieWire w, List<(Offset, Offset)> through, Offset at,
+    {WireStyle wires = WireStyle.curved}) {
+  if (through.isEmpty) {
+    return graphWireDistance(w.from, w.to, at, wires: wires);
+  }
+  var best = double.infinity;
+  final path = tiedWirePath(w.from, w.to, through, wires: wires);
+  for (final metric in path.computeMetrics()) {
+    final steps = math.max(20, (metric.length / 12).ceil());
+    for (var i = 0; i <= steps; i++) {
+      final point =
+          metric.getTangentForOffset(metric.length * i / steps)?.position;
+      if (point != null) best = math.min(best, (point - at).distance);
+    }
+  }
+  return best;
 }
 
 /// How far [p] is from the segment [a] to [b].
@@ -304,8 +338,10 @@ void paintTiedWires(
   required LumitTheme theme,
 }) {
   final plain = [for (final (w, _, _) in wires) w];
-  final now = TieLayout.of(view.ties, plain);
-  final before = view.was == null ? null : TieLayout.of(view.was!, plain);
+  final level = style == WireStyle.angled;
+  final now = TieLayout.of(view.ties, plain, level: level);
+  final before =
+      view.was == null ? null : TieLayout.of(view.was!, plain, level: level);
   Offset screen(Offset canvas) => canvas * zoom + pan;
   List<(Offset, Offset)> onScreen(List<(Offset, Offset)>? points) => [
         for (final (p, d) in points ?? const <(Offset, Offset)>[])
@@ -601,7 +637,13 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     return true;
   }
 
-  TieLayout _layout(List<TieWire> wires) => TieLayout.of(ties, wires);
+  TieLayout _layout(List<TieWire> wires) =>
+      TieLayout.of(ties, wires, level: _style == WireStyle.angled);
+
+  /// How far [at] is from wire [w] as it runs through the ties.
+  double tieWireDistance(TieWire w, Offset at, List<TieWire> wires) =>
+      tiedWireDistance(w, _layout(wires).through[w.key] ?? const [], at,
+          wires: _style);
 
   /// One reroute point per socket the [crossed] wires leave, where they
   /// were crossed, each with its wires.

@@ -1726,14 +1726,13 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
     final at = (_positions[drag.key] ?? box.rect.topLeft) +
         Offset(box.rect.width / 2, box.rect.height / 2);
+    // Measured along each wire as its ties route it.
+    final wires = _wiresOf(layout);
     for (final edge in graph.wiring.edges) {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      if (graphWireDistance(ends.$1, ends.$2, at,
-              wires: _ui!.workspace.interface.wireStyle) >
-          graphWireGrab) {
-        continue;
-      }
+      final wire = (key: tieWireKey(_toKey(edge), edge.toPort), from: ends.$1, to: ends.$2);
+      if (tieWireDistance(wire, at, wires) > graphWireGrab) continue;
       final into = _freeSocket(box, ends.$3, isInput: true);
       final outOf = _freeSocket(box, ends.$3, isInput: false);
       if (into != null && outOf != null) {
