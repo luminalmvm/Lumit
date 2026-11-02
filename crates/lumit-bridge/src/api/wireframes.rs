@@ -525,7 +525,7 @@ impl CompositionReference {
                     current_depth: 0,
                     inputs: None,
                 });
-                lumit_render::build::parent_world_placement(comp, layer, t, context)
+                lumit_render::placement::parent_world_placement(comp, layer, t, context)
                     .map(|m| m.map(|c| c.map(f64::from)))
             };
             // Orientation in the rotations, and the z of anchor and scale.

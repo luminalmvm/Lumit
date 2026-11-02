@@ -73,6 +73,7 @@ mod grid_lines;
 mod haze;
 pub mod headless;
 pub mod media_index;
+pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame
 /// (docs/impl/addons.md §6.1).
