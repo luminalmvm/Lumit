@@ -26,13 +26,14 @@
 // turns it into a sentence from the .arb. The service holds state, not copy.
 
 import 'dart:convert';
-import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 
 import 'download.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
 
 /// Where the official catalogue lives: one file on the `main` branch of the
 /// second repository, read straight rather than through an API, so there is no
@@ -666,7 +667,7 @@ class AddonService extends ChangeNotifier {
 /// `macos-aarch64`, `macos-x86_64` or `linux-x86_64`
 /// (docs/impl/addons.md §4). `Abi` is where Dart says both halves at once.
 String defaultPlatformKey() {
-  final parts = Abi.current().toString().split('_');
+  final parts = abiName().split('_');
   if (parts.length < 2) return parts.first;
   final architecture = switch (parts.last) {
     'x64' => 'x86_64',
