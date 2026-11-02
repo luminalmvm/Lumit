@@ -15,6 +15,7 @@ use std::sync::atomic::AtomicBool;
 
 use lumit_ingress::{Budget, Limits};
 
+#[cfg(not(target_arch = "wasm32"))]
 mod fbx_file;
 mod files;
 mod gltf_file;
@@ -386,6 +387,7 @@ pub fn read(
     let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut scene = match extension(path).as_str() {
             "gltf" | "glb" => gltf_file::read(&mut r),
+            #[cfg(not(target_arch = "wasm32"))]
             "fbx" | "obj" => fbx_file::read(&mut r),
             // .blend, USD, Alembic, PLY, STL and DAE go here: turned into a
             // GLB by the user's Blender, then read by gltf_file::read.
@@ -414,6 +416,7 @@ pub fn dependants(path: &FilePath) -> Vec<PathBuf> {
     let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match extension(path).as_str() {
             "gltf" | "glb" => gltf_file::dependants(&mut r),
+            #[cfg(not(target_arch = "wasm32"))]
             "fbx" | "obj" => fbx_file::dependants(&mut r),
             _ => Vec::new(),
         }

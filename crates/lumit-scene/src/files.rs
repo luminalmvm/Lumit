@@ -194,6 +194,7 @@ pub(crate) fn unescape(uri: &str) -> String {
 }
 
 /// The `mtllib` files an OBJ names, as written.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn obj_libraries(obj: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(obj)
         .lines()
