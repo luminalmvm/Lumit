@@ -1163,21 +1163,45 @@ fn clone_deformer_carriage(
         let contours = d::contours_of(&line);
         (!contours.is_empty()).then_some((contours, size))
     };
-    let boolean = e
-        .layer_ref(d::BOOLEAN_LAYER)
-        .and_then(|id| comp.layers.iter().find(|l| l.id == id))
-        .and_then(|target| {
-            let (own, size) = outline(target, t_comp)?;
-            let placed = lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
-            Some(Arc::new(d::BooleanShape {
-                own,
-                size,
-                placed: d::contours_of(&placed),
-            }))
-        });
-    let vector = matches!(e.param("mode"), Some(EffectValue::Choice(d::MODE_VECTOR)));
-    // The Clone to points right above, with nothing switched on between.
-    let above = effects[..at].iter().rev().find(|x| x.enabled);
+    let boolean_of = |e: &lumit_core::model::EffectInstance| {
+        e.layer_ref(d::BOOLEAN_LAYER)
+            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+            .and_then(|target| {
+                let (own, size) = outline(target, t_comp)?;
+                let placed = lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
+                Some(Arc::new(d::BooleanShape {
+                    own,
+                    size,
+                    placed: d::contours_of(&placed),
+                }))
+            })
+    };
+    let boolean = boolean_of(e);
+    let is_vector = |x: &lumit_core::model::EffectInstance| {
+        x.effect.match_name == d::MATCH_NAME
+            && matches!(x.param("mode"), Some(EffectValue::Choice(d::MODE_VECTOR)))
+    };
+    let vector = is_vector(e);
+    // The Vector deformers between this one and the Clone to points above,
+    // top first, with nothing else switched on between.
+    let mut chain = Vec::new();
+    let mut above = None;
+    for x in effects[..at].iter().rev().filter(|x| x.enabled) {
+        if is_vector(x) {
+            chain.push(x);
+            continue;
+        }
+        above = Some(x);
+        break;
+    }
+    chain.reverse();
+    let markers = lumit_core::fx::markers::MarkerContext::for_comp(comp);
+    let diag = (comp.width as f32).hypot(comp.height as f32);
+    let drivers = lumit_core::fx::drivers::ResolvedDrivers::default();
+    // An effect's rows at this moment, px rows in px@comp.
+    let rows_of = |x: &lumit_core::model::EffectInstance| {
+        lumit_core::fx::resolved::resolve_instance(x, &drivers, lt, diag, 1.0, &markers, context.clone())
+    };
     let copies = above
         .filter(|_| vector)
         .filter(|x| x.effect.match_name == "clone_to_points")
@@ -1211,18 +1235,7 @@ fn clone_deformer_carriage(
                         .flatten()
                 })
                 .collect::<Option<_>>()?;
-            let markers = lumit_core::fx::markers::MarkerContext::for_comp(comp);
-            let diag = (comp.width as f32).hypot(comp.height as f32);
-            let drivers = lumit_core::fx::drivers::ResolvedDrivers::default();
-            let rows = lumit_core::fx::resolved::resolve_instance(
-                x,
-                &drivers,
-                lt,
-                diag,
-                1.0,
-                &markers,
-                context.clone(),
-            );
+            let rows = rows_of(x);
             let p = rows.iter().next()?.params;
             let inst = CloneToPoints {
                 time_step: p.float(CloneToPoints::DERIVED_TIME_STEP, CloneToPoints::read(p).time_step),
@@ -1241,11 +1254,38 @@ fn clone_deformer_carriage(
                     .collect();
                 inst.laid_out(&mut stamps, |i| units.get(i).copied().unwrap_or([1.0; 2]));
             }
-            Some(Arc::new(d::CloneShapes {
-                copies: d::shape_copies(inst, &stamps, &pictures),
-            }))
+            Some(d::shape_copies(inst, &stamps, &pictures))
         });
-    (copies, boolean)
+    let Some(copies) = copies else {
+        return (None, boolean);
+    };
+    let (fw, fh) = lumit_core::fx::builtins::picture_size(doc, comp, layer);
+    let frame = [fw as f32, fh as f32];
+    let deformer = |x: &lumit_core::model::EffectInstance| {
+        let rows = rows_of(x);
+        let read = rows.iter().next().map(|r| d::CloneDeformer::read(r.params));
+        read
+    };
+    // Worked out on the paths, deformer by deformer, while every copy is
+    // opaque, so the outline can stand for the picture.
+    let mut outline: Option<d::Outline> = copies
+        .iter()
+        .all(|c| c.opacity >= 0.999)
+        .then(|| copies.iter().flat_map(|c| c.contours.clone()).collect());
+    for x in &chain {
+        outline = outline.and_then(|o| deformer(x)?.on_paths(&o, boolean_of(x).as_deref(), frame));
+    }
+    // Under another Vector deformer the copies are what that one left.
+    let copies = match (chain.is_empty(), &outline) {
+        (true, _) => copies,
+        (false, Some(o)) => vec![d::ShapeCopy {
+            contours: o.clone(),
+            opacity: 1.0,
+        }],
+        (false, None) => return (None, boolean),
+    };
+    let result = outline.and_then(|o| deformer(e)?.on_paths(&o, boolean.as_deref(), frame));
+    (Some(Arc::new(d::CloneShapes { copies, result })), boolean)
 }
 
 /// [`points_input_for`] over any wiring: a layer's graph and stack, or a node

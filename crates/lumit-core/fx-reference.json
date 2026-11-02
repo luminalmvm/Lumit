@@ -14112,6 +14112,35 @@
           "default": true
         },
         {
+          "id": "dist_length",
+          "label": "Length",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "dist_travel",
+          "label": "Travel",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "dist_offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -500.0,
+          "slider_max": 500.0
+        },
+        {
           "id": "dist_direction",
           "label": "Direction",
           "kind": "choice",
@@ -14296,7 +14325,7 @@
           "default": 0.067,
           "slider_min": 0.0,
           "slider_max": 1.0,
-          "hard_min": 0.0
+          "hard_min": -10.0
         },
         {
           "id": "time_samples",
@@ -14644,7 +14673,10 @@
           "label": "",
           "params": [
             "path_layer",
-            "dist_align"
+            "dist_align",
+            "dist_length",
+            "dist_travel",
+            "dist_offset"
           ],
           "collapsed": false,
           "visible_when": {
@@ -14807,7 +14839,8 @@
           "default": 0,
           "options": [
             "Align",
-            "Boolean"
+            "Boolean",
+            "Round corners"
           ],
           "dividers_after": []
         },
@@ -14887,9 +14920,20 @@
             "Union",
             "Subtract",
             "Intersect",
-            "Difference"
+            "Difference",
+            "Subtract from layer"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "radius",
+          "label": "Radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
         },
         {
           "id": "mix",
@@ -14997,6 +15041,19 @@
             "param": "deformer",
             "values": [
               1
+            ]
+          }
+        },
+        {
+          "label": "Round corners",
+          "params": [
+            "radius"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "deformer",
+            "values": [
+              2
             ]
           }
         }

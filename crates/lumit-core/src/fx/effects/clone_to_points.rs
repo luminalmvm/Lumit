@@ -198,7 +198,7 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
     },
     ParamGroup {
         label: "",
-        params: &["path_layer", "dist_align"],
+        params: &["path_layer", "dist_align", "dist_length", "dist_travel", "dist_offset"],
         collapsed: false,
         visible_when: Some(("distribution", &[DIST_PATH])),
         visible_when_lens_elements: None,
@@ -400,6 +400,22 @@ pub struct CloneToPoints {
     #[toggle(label = "Align to path", default = true)]
     pub dist_align: bool,
 
+    /// How much of the path the copies spread over, per cent of its length.
+    #[slider(label = "Length", min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub dist_length: f32,
+
+    /// Slides the copies along the path, per cent of its length. Past an end
+    /// they come back in at the other.
+    #[slider(label = "Travel", min = -100.0, max = 100.0, default = 0.0, unit = Percent)]
+    pub dist_travel: f32,
+
+    /// Moves each copy off the path, along the normal where it stands,
+    /// px@comp: to the left of the way the path runs, and the other way
+    /// below nought. Round a closed path it rings the copies closer in or
+    /// further out, as Cavalry's Offset does.
+    #[slider(label = "Offset", min = -500.0, max = 500.0, default = 0.0, unit = Px)]
+    pub dist_offset: f32,
+
     /// Which way Layout lines the copies up.
     #[choice(label = "Direction", options = ["Horizontal", "Vertical"], default = 0)]
     pub dist_direction: u32,
@@ -518,12 +534,14 @@ pub struct CloneToPoints {
     pub time_name: ShortText,
 
     /// How far apart two steps are, seconds. The default is about two frames.
+    /// Below nought each step is that much later rather than earlier, as
+    /// Cavalry's Stagger runs the copies ahead; Point age reads it as nought.
     #[slider(
         label = "Time step",
         min = 0.0,
         max = 1.0,
         default = 0.067,
-        hard_min = 0.0,
+        hard_min = -10.0,
         unit = Seconds
     )]
     pub time_step: f32,
@@ -730,6 +748,73 @@ pub struct CloneToPoints {
         unit = Percent
     )]
     pub mix: f32,
+}
+
+/// Points along path's End for `count` copies over `length` per cent of a
+/// path. Round a closed path the copies are a Length / Count apart however
+/// much of it is used, as Cavalry spaces them, where Points along path counts
+/// one gap fewer short of the whole path.
+#[must_use]
+pub fn spread_end(length: f32, count: i32, closed: bool) -> f32 {
+    if closed && length < 100.0 && count > 0 {
+        length * (count - 1) as f32 / count as f32
+    } else {
+        length
+    }
+}
+
+/// The way `path` runs `s` px along it, eased from the way it runs at one
+/// vertex to the way it runs at the next. At a vertex where the flattening
+/// bent the path by less than 30° it runs between its two chords, so a copy
+/// on a curve leans as the curve does, not as the chord it sits on; at a
+/// sharper corner each edge keeps its own way.
+#[must_use]
+pub fn smooth_tangent(path: &crate::mask::MaskPolyline, s: f32) -> [f32; 2] {
+    let n = path.points.len();
+    if n < 2 {
+        return path.tangent_at(s);
+    }
+    let s = s.clamp(0.0, path.length());
+    let e = path.arc.partition_point(|&a| a <= s).saturating_sub(1).min(n - 2);
+    let span = path.arc[e + 1] - path.arc[e];
+    let u = if span > 0.0 { ((s - path.arc[e]) / span).clamp(0.0, 1.0) } else { 0.0 };
+    let own = path.edge_tangent(e);
+    // The edge on the far side of vertex `v` from edge `e`, round the join
+    // of a closed path.
+    let beyond = |v: usize| -> Option<[f32; 2]> {
+        let other = if v == e {
+            e.checked_sub(1).or(path.closed.then_some(n - 2))?
+        } else if e + 2 < n {
+            e + 1
+        } else {
+            path.closed.then_some(0)?
+        };
+        Some(path.edge_tangent(other))
+    };
+    let at = |v: usize| match beyond(v) {
+        Some(t) if t[0] * own[0] + t[1] * own[1] > 30f32.to_radians().cos() => [t[0] + own[0], t[1] + own[1]],
+        _ => own,
+    };
+    let (a, b) = (at(e), at(e + 1));
+    let [x, y] = [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+    let l = x.hypot(y);
+    if l > 0.0 { [x / l, y / l] } else { own }
+}
+
+/// Offset: every point `px` off `path`, along the normal where it stands, to
+/// the left of the way the path runs, as Points along path's Deform moves one.
+/// A point that faces the way the path runs faces the eased way of
+/// [`smooth_tangent`] instead of its chord's.
+pub fn push_off_path(stream: &mut PointsStream, path: &crate::mask::MaskPolyline, px: f32, align: bool) {
+    let length = path.length();
+    for ((p, r), far) in stream.position.iter_mut().zip(&mut stream.rotation).zip(&stream.index) {
+        let [x, y] = smooth_tangent(path, far * length);
+        if align {
+            *r = y.atan2(x);
+        }
+        p[0] += y * px;
+        p[1] -= x * px;
+    }
 }
 
 impl CloneToPoints {
@@ -1049,9 +1134,9 @@ impl CloneToPoints {
     /// frame's own time and `start` the layer's in point.
     #[must_use]
     pub fn moment_time(self, m: usize, t: f64, start: f64) -> f64 {
-        let step = m as f64 * f64::from(self.time_step.max(0.0));
+        let step = m as f64 * f64::from(self.time_step);
         match self.time_offset {
-            TIME_POINT_AGE => start + step,
+            TIME_POINT_AGE => start + step.max(0.0),
             // The frame's own time to the bit, which needs no second render.
             _ if m == 0 => t,
             _ => t - step,
@@ -1142,13 +1227,23 @@ impl CloneToPoints {
                     .unwrap_or(owner);
                 let t = lt + owner.start_offset.0.to_f64();
                 let path = points::layer_path(comp, owner, target, t, context);
-                super::points_along_path::PointsAlongPath {
+                let align = !matches!(e.param("dist_align"), Some(EffectValue::Bool(false)));
+                let mut along = super::points_along_path::PointsAlongPath {
                     count,
-                    align: !matches!(e.param("dist_align"), Some(EffectValue::Bool(false))),
+                    align,
+                    // Round a closed path the copies are a Length / Count
+                    // apart however much of it is used, as Cavalry spaces
+                    // them; Points along path counts one gap fewer short of
+                    // the whole path.
+                    end: spread_end(number("dist_length", d.dist_length), count, path.closed),
+                    offset: number("dist_travel", d.dist_travel),
+                    wrap: true,
                     size,
                     ..super::points_along_path::PointsAlongPath::read(Params::EMPTY)
                 }
-                .stream(&path, projection)
+                .stream(&path, projection);
+                push_off_path(&mut along, &path, number("dist_offset", d.dist_offset), align);
+                along
             }
             _ => {
                 let n = count.clamp(0, points::CAP_HARD as i32) as usize;

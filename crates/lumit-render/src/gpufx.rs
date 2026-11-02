@@ -5729,6 +5729,7 @@ impl GpuEffect for CloneDeformer {
             copies: sched.and_then(|s| s.clone_shapes.as_deref()).map(|c| &c.copies[..]),
             other: other.as_deref(),
             boolean: sched.and_then(|s| s.boolean_shape.as_deref()),
+            result: sched.and_then(|s| s.clone_shapes.as_deref()).and_then(|c| c.result.as_deref()),
         };
         inst.apply(&mut rgba, w, h, k, grow, &reads);
         lumit_gpu::fx::common::upload_linear_f32(ctx, &rgba, w, h)
@@ -7222,6 +7223,9 @@ mod tests {
             dist_spacing_y: 120.0,
             path_layer: false,
             dist_align: true,
+            dist_length: 100.0,
+            dist_travel: 0.0,
+            dist_offset: 0.0,
             dist_direction: 0,
             dist_spacing: 20.0,
             dist_position_x: 960.0,

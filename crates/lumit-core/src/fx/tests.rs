@@ -6749,6 +6749,7 @@ fn every_parameter_declares_a_unit() {
             // a stamp's corners are rounded.
             ("clone_to_points", "dist_spacing_x"),
             ("clone_to_points", "dist_spacing_y"),
+            ("clone_to_points", "dist_offset"),
             ("clone_to_points", "dist_spacing"),
             ("clone_to_points", "dist_position_x"),
             ("clone_to_points", "dist_position_y"),
@@ -6759,6 +6760,7 @@ fn every_parameter_declares_a_unit() {
             ("clone_to_points", "corner_radius"),
             ("clone_deformer", "position_x"),
             ("clone_deformer", "position_y"),
+            ("clone_deformer", "radius"),
             // Connect points: how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -11298,6 +11300,7 @@ fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
         copies: Some(&copies),
         other: Some(&other),
         boolean: Some(&shape),
+        result: None,
     };
     d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &reads);
     let px = |x: u32| &rgba[((w + x) * 4) as usize..((w + x) * 4 + 4) as usize];
@@ -11305,4 +11308,174 @@ fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
     assert!((px(1)[3] - 1.0).abs() < 1e-5 && (px(1)[0] - 1.0).abs() < 1e-5, "{:?}", px(1));
     // Right of it: cut away.
     assert_eq!(px(6)[3], 0.0);
+}
+
+/// **Subtract from layer cuts the copies out of the layer**: where the copy
+/// is, nothing; where only the layer is, the layer's colour.
+#[test]
+fn clone_deformer_subtract_from_layer_keeps_the_layer() {
+    use effects::clone_deformer::{CloneDeformer, Reads};
+    let (w, h) = (4u32, 1u32);
+    // The copy covers the left half, white; the layer is red everywhere.
+    let mut rgba = vec![0.0f32; 16];
+    for x in 0..2 {
+        rgba[x * 4..x * 4 + 4].copy_from_slice(&[1.0; 4]);
+    }
+    let other: Vec<f32> = (0..4).flat_map(|_| [1.0, 0.0, 0.0, 1.0]).collect();
+    let d = CloneDeformer {
+        deformer: 1,
+        operation: 4,
+        ..CloneDeformer::read(Params::EMPTY)
+    };
+    let reads = Reads {
+        other: Some(&other),
+        ..Reads::default()
+    };
+    d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &reads);
+    assert_eq!(rgba[3], 0.0);
+    assert_eq!(&rgba[12..16], &[1.0, 0.0, 0.0, 1.0]);
+}
+
+/// **Round corners rounds a square's corners and leaves its sides**: the
+/// corner pixel goes, the middle of an edge stays.
+#[test]
+fn clone_deformer_rounds_outward_corners() {
+    use effects::clone_deformer::rounded;
+    let (w, h) = (40u32, 40u32);
+    let alpha: Vec<f32> = (0..w * h)
+        .map(|i| {
+            let (x, y) = (i % w, i / w);
+            if (5..35).contains(&x) && (5..35).contains(&y) { 1.0 } else { 0.0 }
+        })
+        .collect();
+    let r = rounded(&alpha, w, h, 8.0);
+    let at = |x: u32, y: u32| r[(y * w + x) as usize];
+    assert_eq!(at(5, 5), 0.0);
+    assert_eq!(at(20, 5), 1.0);
+    assert_eq!(at(20, 20), 1.0);
+    // Half way round the arc: inside it.
+    assert!(at(9, 9) > 0.5);
+    // A strip 6 px tall keeps its body under a radius of 8.
+    let strip: Vec<f32> = (0..w * h)
+        .map(|i| if (5..35).contains(&(i % w)) && (17..23).contains(&(i / w)) { 1.0 } else { 0.0 })
+        .collect();
+    let r = rounded(&strip, w, h, 8.0);
+    assert_eq!(r[(20 * w + 20) as usize], 1.0);
+    assert_eq!(r[(17 * w + 20) as usize], 1.0);
+}
+
+/// **Length and Travel pick the stretch of the path the copies spread on**:
+/// three copies over the first half of a 100 px line, slid on by a tenth.
+#[test]
+fn path_points_spread_over_length_and_slide_by_travel() {
+    use effects::points_along_path::PointsAlongPath;
+    let path = crate::mask::MaskPolyline {
+        expansion: 0.0,
+        feather: 0.0,
+        points: vec![[0.0, 0.0], [100.0, 0.0]],
+        arc: vec![0.0, 100.0],
+        closed: false,
+        corners: Vec::new(),
+    };
+    let s = PointsAlongPath {
+        count: 3,
+        end: 50.0,
+        offset: 10.0,
+        wrap: true,
+        ..PointsAlongPath::read(Params::EMPTY)
+    }
+    .stream(&path, points::Projection::FLAT);
+    let xs: Vec<f32> = s.position.iter().map(|p| p[0].round()).collect();
+    assert_eq!(xs, vec![10.0, 35.0, 60.0]);
+}
+
+/// **Clone to points spaces copies round a closed path as Cavalry does, and
+/// Offset pushes them off it**: four copies over half a 400 px square's edge
+/// are 50 px apart, not 66, and an Offset of 10 moves each 10 px to the left
+/// of the way the path runs.
+#[test]
+fn closed_path_copies_are_length_over_count_apart_and_offset_pushes_them_off() {
+    use effects::clone_to_points::{push_off_path, spread_end};
+    use effects::points_along_path::PointsAlongPath;
+    let path = crate::mask::MaskPolyline {
+        expansion: 0.0,
+        feather: 0.0,
+        points: vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0], [0.0, 0.0]],
+        arc: vec![0.0, 100.0, 200.0, 300.0, 400.0],
+        closed: true,
+        corners: Vec::new(),
+    };
+    assert_eq!(spread_end(50.0, 4, true), 37.5);
+    assert_eq!(spread_end(50.0, 4, false), 50.0);
+    assert_eq!(spread_end(100.0, 4, true), 100.0);
+    let mut s = PointsAlongPath {
+        count: 4,
+        end: spread_end(50.0, 4, true),
+        wrap: true,
+        ..PointsAlongPath::read(Params::EMPTY)
+    }
+    .stream(&path, points::Projection::FLAT);
+    let xs: Vec<f32> = s.position.iter().map(|p| p[0].round()).collect();
+    assert_eq!(xs, vec![0.0, 50.0, 100.0, 100.0]);
+    push_off_path(&mut s, &path, 10.0, true);
+    // Along the top edge, running +x, the left is -y.
+    let first = s.position[0];
+    assert!((first[0] - 0.0).abs() < 1e-3 && (first[1] + 10.0).abs() < 1e-3);
+    let second = s.position[1];
+    assert!((second[0] - 50.0).abs() < 1e-3 && (second[1] + 10.0).abs() < 1e-3);
+    // A square's corner keeps its edge's way.
+    assert!(s.rotation[0].abs() < 1e-6);
+}
+
+/// **On a curve Clone to points faces the curve, not its chord**: on a circle
+/// flattened to 24 chords, a copy on a vertex faces straight along the circle,
+/// where the chord it starts would lean it 7.5°.
+#[test]
+fn copies_on_a_flattened_curve_face_the_curve() {
+    use effects::clone_to_points::smooth_tangent;
+    let n = 24;
+    let points: Vec<[f32; 2]> = (0..=n)
+        .map(|k| {
+            let a = std::f32::consts::TAU * k as f32 / n as f32;
+            [100.0 * a.sin(), -100.0 * a.cos()]
+        })
+        .collect();
+    let mut arc = vec![0.0];
+    for w in points.windows(2) {
+        arc.push(arc.last().unwrap() + (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]));
+    }
+    let chord = arc[1];
+    let path = crate::mask::MaskPolyline { expansion: 0.0, feather: 0.0, points, arc, closed: true, corners: Vec::new() };
+    // At the top, running clockwise: +x.
+    for s in [0.0, chord * 6.0] {
+        let [x, y] = smooth_tangent(&path, s);
+        let want = (s / chord) as f32 * std::f32::consts::TAU / n as f32;
+        assert!((y.atan2(x) - want).abs() < 1e-4, "{s}: {}", y.atan2(x));
+    }
+    // Halfway along a chord it runs with the chord.
+    let [x, y] = smooth_tangent(&path, chord / 2.0);
+    assert!((y.atan2(x) - std::f32::consts::TAU / 48.0).abs() < 1e-4);
+}
+
+/// **On the paths, Subtract from layer and Round corners are Cavalry's
+/// Boolean and Bevel**: a 100 px square less a 10 px bar across its middle is
+/// two slices, and a radius of 20 rounds their corners by the 20 px each has
+/// room for, while a slice 4 px thin is rounded by 2 and stays.
+#[test]
+fn clone_deformer_cuts_and_fillets_on_the_paths() {
+    use effects::clone_deformer::{filleted, overlay};
+    let square = vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]];
+    let bar = vec![vec![[-10.0, 45.0], [110.0, 45.0], [110.0, 55.0], [-10.0, 55.0]]];
+    let slices = overlay(&bar, &square, 4);
+    assert_eq!(slices.len(), 2);
+    let top = slices.iter().find(|c| c.iter().all(|p| p[1] <= 45.0 + 1e-3)).expect("a top slice");
+    let round = filleted(top, 20.0);
+    // The corner is gone, the middle of the side stays.
+    assert!(round.iter().all(|p| (p[0] - 0.0).hypot(p[1] - 0.0) > 5.0));
+    assert!(round.iter().any(|p| p[1].abs() < 1e-3 && p[0] > 19.0 && p[0] < 81.0));
+    let thin = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 4.0], [0.0, 4.0]];
+    let round = filleted(&thin, 20.0);
+    let ys: Vec<f32> = round.iter().map(|p| p[1]).collect();
+    assert!(ys.iter().cloned().fold(f32::MIN, f32::max) > 3.9);
+    assert!(round.iter().any(|p| (p[0] - 50.0).abs() < 49.0 && p[1] > 3.9));
 }

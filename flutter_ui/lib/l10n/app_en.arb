@@ -22879,6 +22879,18 @@
   "@fxVector": {
     "description": "Effect controls — a Mode on Clone deformer: reads the Shape layers' paths."
   },
+  "fxRoundCorners": "Round corners",
+  "@fxRoundCorners": {
+    "description": "Effect controls — an option and a heading on Clone deformer: rounds the copies' outward corners."
+  },
+  "fxSubtractFromLayer": "Subtract from layer",
+  "@fxSubtractFromLayer": {
+    "description": "Effect controls — an Operation on Clone deformer: cuts the copies out of the layer, in the layer's colours."
+  },
+  "fxTravel": "Travel",
+  "@fxTravel": {
+    "description": "Effect controls — a control on Clone to points' Path distribution: slides the copies along the path."
+  },
   "tipCloneModeRaster": "Any layer",
   "@tipCloneModeRaster": {
     "description": "Tooltip on the Raster option of Clone deformer's Mode."

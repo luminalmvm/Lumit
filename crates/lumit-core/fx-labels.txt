@@ -996,6 +996,7 @@ Rotation wave phase
 Roto brush
 Roughen
 Roughen edges
+Round corners
 Roundness
 Row gap
 Rows
@@ -1172,6 +1173,7 @@ Sub influence
 Sub scaling
 Sub settings
 Subtract
+Subtract from layer
 Super 35
 Surface
 Swing
@@ -1232,6 +1234,7 @@ Transform points
 Transition
 Transition width
 Transparent
+Travel
 Tremolo
 Triangle
 Triangles
