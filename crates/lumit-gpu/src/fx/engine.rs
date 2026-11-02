@@ -672,6 +672,7 @@ impl FxEngine {
             vignette: vignette.wait(),
             exposure: exposure.wait(),
             lighting: lighting.wait(),
+            haze: super::volumetric::HazeSlot::start(ctx),
             ground: ground.wait(),
             temperature: temperature.wait(),
             invert: invert.wait(),

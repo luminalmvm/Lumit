@@ -280,6 +280,38 @@
   "@lightShadowDiffusion": {
     "description": "Light row: how soft the shadows the light casts are, in pixels."
   },
+  "lightVolumetric": "Volumetric",
+  "@lightVolumetric": {
+    "description": "Light row: how much the light shows in the air, as a beam or a glow, as a percentage. Nought shows none."
+  },
+  "lightHazeDensity": "Haze density",
+  "@lightHazeDensity": {
+    "description": "Light row: how thick the air the light shows in is, as a percentage."
+  },
+  "lightHazeColour": "Haze colour",
+  "@lightHazeColour": {
+    "description": "Light row: the colour the air tints the light it shows, as a colour swatch."
+  },
+  "lightHeightFalloff": "Height falloff",
+  "@lightHeightFalloff": {
+    "description": "Light row: how quickly the air the light shows in thins out above the ground, as a percentage. Nought keeps it even everywhere."
+  },
+  "lightForwardScatter": "Forward scatter",
+  "@lightForwardScatter": {
+    "description": "Light row: how much brighter the light shows in the air when looking towards it than away from it, as a percentage."
+  },
+  "lightNoise": "Noise",
+  "@lightNoise": {
+    "description": "Light row: how patchy the air the light shows in is, as a percentage."
+  },
+  "lightNoiseSize": "Noise size",
+  "@lightNoiseSize": {
+    "description": "Light row: how wide the patches in the air are, in pixels."
+  },
+  "lightNoiseSpeed": "Noise speed",
+  "@lightNoiseSpeed": {
+    "description": "Light row: how fast the patches in the air drift, in pixels a second."
+  },
   "materialLightTransmission": "Light transmission",
   "@materialLightTransmission": {
     "description": "Material options row: how much of the light passing through the layer takes its colour onto what is behind it, as a percentage."

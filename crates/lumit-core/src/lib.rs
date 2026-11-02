@@ -18,6 +18,8 @@ pub mod fx;
 pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers.
 pub mod group;
+/// Volumetric light: a Light layer seen in the air it shines through.
+pub mod haze;
 pub mod interpretation;
 /// The largest picture the renderer makes, and saying when one was cut to it.
 pub mod largest_picture;

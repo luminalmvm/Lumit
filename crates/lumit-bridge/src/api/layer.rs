@@ -1902,122 +1902,6 @@ pub struct BridgeMotionPath {
     pub keys: Vec<BridgeMotionKey>,
 }
 
-/// The motion path of `layer` in `comp`, or `None` while its Position is
-/// still on both axes — which is most layers, and the answer that costs
-/// nothing.
-#[frb(ignore)]
-pub(crate) fn motion_path_of(
-    comp: &lumit_core::model::Composition,
-    layer: &Layer,
-) -> Option<BridgeMotionPath> {
-    use lumit_core::anim::{resolved_side, SideInterp};
-
-    fn keys_of(property: &Property) -> Option<&[Keyframe]> {
-        match &property.animation {
-            Animation::Keyframed(keys) if !keys.is_empty() => Some(keys.as_slice()),
-            _ => None,
-        }
-    }
-    let (px, py) = (&layer.transform.position_x, &layer.transform.position_y);
-    let (kx, ky) = (keys_of(px), keys_of(py));
-    // A 3D layer moving only in depth still has a path to show.
-    let pz = layer
-        .switches
-        .three_d
-        .then_some(&layer.transform.position_z);
-    let kz = pz.and_then(keys_of);
-    if kx.is_none() && ky.is_none() && kz.is_none() {
-        return None;
-    }
-    let offset = layer.start_offset.0;
-    let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
-
-    // Every time either axis has a key at, on the layer's clock, oldest first.
-    let mut times: Vec<Rational> = kx
-        .into_iter()
-        .chain(ky)
-        .chain(kz)
-        .flatten()
-        .map(|k| k.time)
-        .collect();
-    times.sort_by(|a, b| a.to_f64().total_cmp(&b.to_f64()));
-    times.dedup();
-    let first_frame = comp.frame_rate.frame_at(comp_time(*times.first()?));
-    let last_frame = comp.frame_rate.frame_at(comp_time(*times.last()?));
-
-    let mut samples = Vec::new();
-    let mut depths = Vec::new();
-    for frame in first_frame..=last_frame {
-        let t = comp.frame_rate.time_of_frame(frame).ok()?.0;
-        let local = lumit_core::time::layer_time(t.to_f64(), offset);
-        samples.push(px.value_at(local));
-        samples.push(py.value_at(local));
-        depths.extend(pz.map(|z| z.value_at(local)));
-    }
-
-    // How far one axis' handle sits from its key on one side: the cubic's
-    // first control point less the key, in that axis' own units. A straight
-    // side is a handle a third of the way along the chord, as the evaluator
-    // treats it; a held side has no span to draw a handle across.
-    let reach = |keys: &[Keyframe], i: usize, out: bool| -> Option<f64> {
-        let j = if out {
-            i.checked_add(1)?
-        } else {
-            i.checked_sub(1)?
-        };
-        let neighbour = keys.get(j)?;
-        let key = keys.get(i)?;
-        let dt = (neighbour.time.to_f64() - key.time.to_f64()).abs();
-        match resolved_side(keys, i, out) {
-            SideInterp::Bezier { speed, influence } => {
-                let along = speed * influence.clamp(1e-3, 1.0) * dt;
-                Some(if out { along } else { -along })
-            }
-            SideInterp::Linear => Some((neighbour.value - key.value) / 3.0),
-            SideInterp::Hold | SideInterp::Auto { .. } => None,
-        }
-    };
-    let eased = |keys: &[Keyframe], i: usize, out: bool| {
-        matches!(resolved_side(keys, i, out), SideInterp::Bezier { .. })
-    };
-
-    let keys = times
-        .iter()
-        .map(|&time| {
-            let local = time.to_f64();
-            let (x, y) = (px.value_at(local), py.value_at(local));
-            let index = |keys: Option<&[Keyframe]>| {
-                keys.and_then(|k| k.iter().position(|key| key.time == time))
-            };
-            let (ix, iy) = (index(kx), index(ky));
-            let handle = |out: bool| -> Option<[f64; 2]> {
-                let (kx, ky, ix, iy) = (kx?, ky?, ix?, iy?);
-                if !eased(kx, ix, out) && !eased(ky, iy, out) {
-                    return None;
-                }
-                Some([x + reach(kx, ix, out)?, y + reach(ky, iy, out)?])
-            };
-            BridgeMotionKey {
-                time: rational_of(comp_time(time).0),
-                frame: comp.frame_rate.frame_at(comp_time(time)),
-                x,
-                y,
-                z: pz.map_or(0.0, |z| z.value_at(local)),
-                x_index: ix.and_then(|i| u32::try_from(i).ok()),
-                y_index: iy.and_then(|i| u32::try_from(i).ok()),
-                handle_in: handle(false),
-                handle_out: handle(true),
-            }
-        })
-        .collect();
-    Some(BridgeMotionPath {
-        first_frame,
-        samples,
-        depths,
-        keys,
-    })
-}
-
 /// Build one layer's [`BridgeLayerInfo`] from an already-fetched composition —
 /// the shared body of [`LayerReference::get_info`] and the comp-wide
 /// [`crate::api::composition::CompositionReference::get_model`].
@@ -2239,9 +2123,11 @@ pub(crate) fn read_layer_info(
             _ => None,
         },
         light: match &layer.kind {
-            lumit_core::model::LayerKind::Light { light } => {
-                Some(BridgeLightSettings::of(light.settings()))
-            }
+            lumit_core::model::LayerKind::Light { light } => Some(BridgeLightSettings {
+                in_air: light.haze.shows(),
+                noisy: light.haze.noisy(),
+                ..BridgeLightSettings::of(light.settings())
+            }),
             _ => None,
         },
         material: (layer.switches.three_d && layer.can_adjust())
@@ -2507,6 +2393,18 @@ pub struct BridgeLightChannels {
     pub shadow_darkness: BridgeScalar,
     /// Comp pixels.
     pub shadow_diffusion: BridgeScalar,
+    /// How it shows in the air: percentages and a linear colour, then the
+    /// noise's size in comp pixels and its speed in comp pixels a second.
+    pub haze_amount: BridgeScalar,
+    pub haze_density: BridgeScalar,
+    pub haze_colour_r: BridgeScalar,
+    pub haze_colour_g: BridgeScalar,
+    pub haze_colour_b: BridgeScalar,
+    pub haze_falloff: BridgeScalar,
+    pub haze_scatter: BridgeScalar,
+    pub haze_noise: BridgeScalar,
+    pub haze_noise_size: BridgeScalar,
+    pub haze_noise_speed: BridgeScalar,
 }
 
 /// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
@@ -2539,6 +2437,10 @@ pub struct BridgeLightSettings {
     /// Aimed at its point of interest.
     pub two_node: bool,
     pub casts_shadows: bool,
+    /// Shows in the air, so its haze rows show, and has Noise, so the
+    /// noise's size and speed show. Read only.
+    pub in_air: bool,
+    pub noisy: bool,
 }
 
 impl BridgeLightSettings {
@@ -2560,6 +2462,8 @@ impl BridgeLightSettings {
             },
             two_node: s.two_node,
             casts_shadows: s.casts_shadows,
+            in_air: false,
+            noisy: false,
         }
     }
 
@@ -2801,6 +2705,16 @@ pub enum BridgeTransformProp {
     LightHeight,
     ShadowDarkness,
     ShadowDiffusion,
+    HazeAmount,
+    HazeDensity,
+    HazeColourR,
+    HazeColourG,
+    HazeColourB,
+    HazeFalloff,
+    HazeScatter,
+    HazeNoise,
+    HazeNoiseSize,
+    HazeNoiseSpeed,
     Ambient,
     Diffuse,
     Specular,
@@ -2889,7 +2803,7 @@ impl BridgeAxisModes {
 
 /// A document rational as the integer pair the bridge carries.
 #[frb(ignore)]
-fn rational_of(r: lumit_core::time::Rational) -> BridgeRational {
+pub(crate) fn rational_of(r: lumit_core::time::Rational) -> BridgeRational {
     BridgeRational {
         num: r.num(),
         den: r.den(),
@@ -2949,6 +2863,16 @@ impl BridgeTransformProp {
             BridgeTransformProp::Metal => P::Metal,
             BridgeTransformProp::ShadowDarkness => P::ShadowDarkness,
             BridgeTransformProp::ShadowDiffusion => P::ShadowDiffusion,
+            BridgeTransformProp::HazeAmount => P::HazeAmount,
+            BridgeTransformProp::HazeDensity => P::HazeDensity,
+            BridgeTransformProp::HazeColourR => P::HazeColourR,
+            BridgeTransformProp::HazeColourG => P::HazeColourG,
+            BridgeTransformProp::HazeColourB => P::HazeColourB,
+            BridgeTransformProp::HazeFalloff => P::HazeFalloff,
+            BridgeTransformProp::HazeScatter => P::HazeScatter,
+            BridgeTransformProp::HazeNoise => P::HazeNoise,
+            BridgeTransformProp::HazeNoiseSize => P::HazeNoiseSize,
+            BridgeTransformProp::HazeNoiseSpeed => P::HazeNoiseSpeed,
             BridgeTransformProp::LightTransmission => P::LightTransmission,
         }
     }
@@ -3017,6 +2941,16 @@ impl BridgeTransform {
                 height: read(&light.size[1]),
                 shadow_darkness: read(&light.shadow_darkness),
                 shadow_diffusion: read(&light.shadow_diffusion),
+                haze_amount: read(&light.haze.amount),
+                haze_density: read(&light.haze.density),
+                haze_colour_r: read(&light.haze.colour[0]),
+                haze_colour_g: read(&light.haze.colour[1]),
+                haze_colour_b: read(&light.haze.colour[2]),
+                haze_falloff: read(&light.haze.falloff),
+                haze_scatter: read(&light.haze.scatter),
+                haze_noise: read(&light.haze.noise),
+                haze_noise_size: read(&light.haze.noise_size),
+                haze_noise_speed: read(&light.haze.noise_speed),
             });
         }
         if layer.is_3d() {
@@ -3073,6 +3007,7 @@ impl BridgeTransform {
             let [poi_x, poi_y, poi_z] = &mut light.point_of_interest;
             let [r, g, b] = &mut light.colour;
             let [width, height] = &mut light.size;
+            let [haze_r, haze_g, haze_b] = &mut light.haze.colour;
             for (to, from) in [
                 (poi_x, &c.poi_x),
                 (poi_y, &c.poi_y),
@@ -3089,6 +3024,16 @@ impl BridgeTransform {
                 (height, &c.height),
                 (&mut light.shadow_darkness, &c.shadow_darkness),
                 (&mut light.shadow_diffusion, &c.shadow_diffusion),
+                (&mut light.haze.amount, &c.haze_amount),
+                (&mut light.haze.density, &c.haze_density),
+                (haze_r, &c.haze_colour_r),
+                (haze_g, &c.haze_colour_g),
+                (haze_b, &c.haze_colour_b),
+                (&mut light.haze.falloff, &c.haze_falloff),
+                (&mut light.haze.scatter, &c.haze_scatter),
+                (&mut light.haze.noise, &c.haze_noise),
+                (&mut light.haze.noise_size, &c.haze_noise_size),
+                (&mut light.haze.noise_speed, &c.haze_noise_speed),
             ] {
                 to.animation = from.animation_at(offset)?;
             }
@@ -6309,7 +6254,7 @@ impl LayerReference {
             .iter()
             .find(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-        Ok(motion_path_of(&comp, layer))
+        Ok(crate::motion_path::motion_path_of(&comp, layer))
     }
 
     /// The layer's source audio summarised across `[start_seconds,

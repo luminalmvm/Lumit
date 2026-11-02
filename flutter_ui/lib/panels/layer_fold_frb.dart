@@ -1165,6 +1165,18 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       // Seeded from the comp, as a camera's are.
       BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
       BridgeTransformProp.shadowDarkness => 100,
+      // A fresh light's haze.
+      BridgeTransformProp.hazeAmount => 0,
+      BridgeTransformProp.hazeDensity || BridgeTransformProp.hazeScatter => 30,
+      BridgeTransformProp.hazeNoise => 40,
+      BridgeTransformProp.hazeNoiseSize => 300,
+      BridgeTransformProp.hazeColourR ||
+      BridgeTransformProp.hazeColourG ||
+      BridgeTransformProp.hazeColourB =>
+        1,
+      BridgeTransformProp.hazeFalloff ||
+      BridgeTransformProp.hazeNoiseSpeed =>
+        0,
       BridgeTransformProp.shadowDiffusion ||
       BridgeTransformProp.lightTransmission =>
         0,

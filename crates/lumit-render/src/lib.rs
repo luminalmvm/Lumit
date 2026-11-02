@@ -69,6 +69,7 @@ mod gpufx_film;
 mod gpufx_luma_fade;
 mod gpufx_timewarp;
 mod grid_lines;
+mod haze;
 pub mod headless;
 pub mod media_index;
 pub mod plan;

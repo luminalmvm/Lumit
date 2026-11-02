@@ -38,6 +38,7 @@ pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
 pub mod utility;
+pub mod volumetric;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -96,6 +97,9 @@ pub struct FxEngine {
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
     lighting: lighting::LightingFx,
+    /// Volumetric light, waited for the first time a comp shows a light in
+    /// the air.
+    haze: volumetric::HazeSlot,
     /// A 3D viewport's ground, drawn over its frame. Not an effect either.
     ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,

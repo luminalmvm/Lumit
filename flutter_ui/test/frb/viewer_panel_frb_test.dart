@@ -1952,7 +1952,9 @@ void main() {
               kind: BridgeLightKind.spot,
               falloff: BridgeLightFalloff.none,
               twoNode: true,
-              castsShadows: false));
+              castsShadows: false,
+              inAir: false,
+              noisy: false));
       set(beam, {
         BridgeTransformProp.positionZ: -300,
         BridgeTransformProp.rotation: -15,
