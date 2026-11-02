@@ -365,17 +365,6 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
-/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
-/// a buffer big enough to read one back.
-pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
-    let card = adapter.limits();
-    wgpu::Limits {
-        max_texture_dimension_2d: card.max_texture_dimension_2d,
-        max_buffer_size: card.max_buffer_size,
-        ..Default::default()
-    }
-}
-
 /// Which adapter was picked, as one line, published the first time a context
 /// opens one.
 ///
@@ -1836,6 +1825,7 @@ impl PendingReadback {
 
     /// The bytes, waiting for the copy but not for anything queued after it.
     pub fn wait(&mut self, ctx: &GpuContext) -> Result<Vec<u8>, GpuError> {
+        crate::device::wait_here()?;
         ctx.device.poll(wgpu::Maintain::WaitForSubmissionIndex(
             self.submitted.clone(),
         ));
@@ -2757,6 +2747,7 @@ impl ColourEngine {
     /// The texture holds half floats, so this quantises: one rounding, here,
     /// rather than one on the card and another later.
     pub fn readback16(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u16>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let row = size.width * 8;
         let padded =
@@ -2827,6 +2818,7 @@ impl ColourEngine {
         ctx: &GpuContext,
         tex: &wgpu::Texture,
     ) -> Result<Vec<f32>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let bytes_per_px = match tex.format() {
             wgpu::TextureFormat::Rgba32Float => 16,
@@ -3095,6 +3087,7 @@ impl ColourEngine {
 
     /// Read a display texture back as tight RGBA8 bytes (tests, export).
     pub fn readback8(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u8>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let row = size.width * 4;
         let padded =

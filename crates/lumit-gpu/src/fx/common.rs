@@ -3,7 +3,7 @@
 //! reading a working texture back to linear f32, and the fp16 conversions the
 //! oracle tests round-trip through.
 
-use half::slice::{HalfBitsSliceExt, HalfFloatSliceExt};
+use half::slice::HalfFloatSliceExt;
 
 use crate::{GpuContext, GpuError};
 
@@ -217,12 +217,14 @@ pub fn upload_depth_map(ctx: &GpuContext, depth: &[f32], w: u32, h: u32) -> wgpu
 
 /// Read a working (fp16) texture back as linear f32 RGBA — the exact-linear
 /// counterpart of `ColourEngine::readback8`, for oracle tests.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn readback_linear_f32(
     ctx: &GpuContext,
     tex: &wgpu::Texture,
     w: u32,
     h: u32,
 ) -> Result<Vec<f32>, GpuError> {
+    use half::slice::HalfBitsSliceExt;
     // Inside a frame batch every pass records into one shared encoder that is
     // submitted when the frame ends, and the copy below submits at once. Without
     // this it would run ahead of the drawing that filled the texture and read
@@ -291,6 +293,24 @@ pub fn readback_linear_f32(
             .convert_to_f32_slice(dst);
     }
     Ok(out)
+}
+
+/// The browser build's [`readback_linear_f32`], which can't wait: the last
+/// copy of a texture this size that landed, and an error before one has
+/// ([`crate::device::read`]). Type fill's region is the one reader there.
+#[cfg(target_arch = "wasm32")]
+pub fn readback_linear_f32(
+    ctx: &GpuContext,
+    tex: &wgpu::Texture,
+    w: u32,
+    h: u32,
+) -> Result<Vec<f32>, GpuError> {
+    let bytes = crate::device::read::texture(ctx, ("linear", w, h), tex)
+        .ok_or_else(|| GpuError::Readback("nothing has landed yet".into()))?;
+    Ok(bytes
+        .chunks_exact(2)
+        .map(|b| f16_to_f32(u16::from_le_bytes([b[0], b[1]])))
+        .collect())
 }
 
 /// f32 → IEEE 754 half bits (the working format's texel channel).

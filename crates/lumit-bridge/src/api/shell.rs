@@ -27,7 +27,10 @@ pub fn boot_log() -> Vec<String> {
         format!("lumit-bridge {}", env!("CARGO_PKG_VERSION")),
         format!(
             "media (decode/probe): {}",
-            if cfg!(feature = "media") {
+            if cfg!(target_arch = "wasm32") {
+                // The page's own decoders, through MediaBunny.
+                "WebCodecs"
+            } else if cfg!(feature = "media") {
                 "on — FFmpeg linked"
             } else {
                 "off"

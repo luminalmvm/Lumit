@@ -10,10 +10,113 @@ pub(crate) fn descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'sta
         required_features: adapter.features()
             & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
                 | wgpu::Features::FLOAT32_FILTERABLE),
-        required_limits: crate::widest_texture(adapter),
+        required_limits: widest_texture(adapter),
         ..Default::default()
     }
 }
+
+/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
+/// a buffer big enough to read one back.
+pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    let card = adapter.limits();
+    wgpu::Limits {
+        max_texture_dimension_2d: card.max_texture_dimension_2d,
+        max_buffer_size: card.max_buffer_size,
+        ..Default::default()
+    }
+}
+
+/// An error in the browser build, where nothing may wait for the card: a copy
+/// lands only once the page's event loop runs, so waiting for one in place
+/// never ends. Callers answer it as they answer any failed read-back. Nothing
+/// on the desktop, which waits.
+pub fn wait_here() -> Result<(), crate::GpuError> {
+    if cfg!(target_arch = "wasm32") {
+        return Err(crate::GpuError::Readback(
+            "the browser build reads back between turns".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// The bytes of `buffer`, which the caller has copied into and submitted. The
+/// desktop waits for them. The browser build answers with the last copy that
+/// landed for `key` ([`read`]), and `None` before one has.
+pub fn read_buffer<T: bytemuck::Pod>(
+    ctx: &crate::GpuContext,
+    key: impl std::hash::Hash,
+    buffer: &wgpu::Buffer,
+) -> Option<Vec<T>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = ctx;
+        let bytes = read::buffer(key, buffer)?;
+        let mut out = vec![T::zeroed(); bytes.len() / std::mem::size_of::<T>()];
+        let whole = std::mem::size_of_val(out.as_slice());
+        bytemuck::cast_slice_mut(&mut out).copy_from_slice(bytes.get(..whole)?);
+        Some(out)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = key;
+        let slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        ctx.device.poll(wgpu::Maintain::Wait);
+        rx.recv().ok()?.ok()?;
+        let out = bytemuck::cast_slice(&slice.get_mapped_range()).to_vec();
+        buffer.unmap();
+        Some(out)
+    }
+}
+
+/// [`crate::ColourEngine::readback8`], or in the browser build the last copy of
+/// a texture this size that landed at `place` ([`read`]).
+pub fn read_texture8(
+    ctx: &crate::GpuContext,
+    colour: &crate::ColourEngine,
+    place: &str,
+    tex: &wgpu::Texture,
+) -> Result<Vec<u8>, crate::GpuError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = colour;
+        read::texture(ctx, (place, tex.width(), tex.height()), tex)
+            .ok_or_else(|| crate::GpuError::Readback("nothing has landed yet".into()))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = place;
+        colour.readback8(ctx, tex)
+    }
+}
+
+/// How many read-backs a frame stood in for have since landed with a new
+/// answer, in the browser build ([`read`]). A picture drawn before this moved
+/// is worth drawing again. Nought on the desktop.
+#[must_use]
+pub fn reads_landed() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return read::landed();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+/// How many times a frame has drawn from an earlier read-back than its own,
+/// in the browser build. A picture drawn while this moved is never kept.
+/// Nought on the desktop.
+#[must_use]
+pub fn read_stand_ins() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return read::stand_ins();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+#[cfg(target_arch = "wasm32")]
+pub mod read;
 
 /// The browser's card, once [`prepare_web`] has it.
 #[cfg(target_arch = "wasm32")]

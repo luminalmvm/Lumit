@@ -1305,11 +1305,10 @@ impl Realiser<'_> {
     ///
     /// ponytail: an 8-bit round trip per painted Precomp per frame — the
     /// nested picture is quantised to the depth every footage layer is
-    /// painted at anyway, and read back synchronously. A GPU stamping pass
-    /// (docs/impl/paint.md, "Not built") is the upgrade if a painted
-    /// Precomp ever shows in a profile; nothing stored changes when it
-    /// arrives. Costs exactly nothing on the Precomp layers — almost all of
-    /// them — that carry no paint.
+    /// painted at anyway, and read back synchronously (in the browser build,
+    /// an earlier frame's copy). A GPU stamping pass (docs/impl/paint.md, "Not
+    /// built") is the upgrade if a painted Precomp ever shows in a profile.
+    /// Costs nothing on the Precomp layers that carry no paint.
     fn paint_over(
         &self,
         tex: wgpu::Texture,
@@ -1325,7 +1324,8 @@ impl Realiser<'_> {
         let display = self
             .engine
             .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL);
-        let Ok(mut rgba) = self.engine.readback8(&self.ctx, &display) else {
+        let read = lumit_gpu::device::read_texture8(&self.ctx, self.engine, "paint", &display);
+        let Ok(mut rgba) = read else {
             // The read failed (a lost device, a surface gone). The unpainted
             // picture is the calm answer; engine crates do not panic.
             return tex;

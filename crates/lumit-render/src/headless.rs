@@ -1247,7 +1247,8 @@ impl HeadlessRenderer {
 
     /// How many times a frame has drawn a lens flare with other optics than
     /// its parameters name, or footage the browser build's page is still
-    /// decoding. Read either side of a render: unmoved means it may be banked.
+    /// decoding, or a read-back there from an earlier frame. Read either side
+    /// of a render: unmoved means it may be banked.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
         self.parts.as_ref().map_or(0, |parts| {
@@ -1256,6 +1257,7 @@ impl HeadlessRenderer {
                 .map(lumit_gpu::fx::FxEngine::flare_substitutions)
                 .sum::<u64>()
         }) + lumit_media::stand_ins()
+            + lumit_gpu::device::read_stand_ins()
     }
 
     /// Whether a flare bake is being made right now.
@@ -2173,22 +2175,10 @@ impl HeadlessRenderer {
         kind: u32,
         colours: [[u8; 3]; 5],
     ) -> Result<Vec<u8>, String> {
-        let kind = match kind {
-            0 => lumit_gpu::scope::ScopeKind::WaveformLuma,
-            1 => lumit_gpu::scope::ScopeKind::WaveformRgb,
-            2 => lumit_gpu::scope::ScopeKind::Vectorscope,
-            3 => lumit_gpu::scope::ScopeKind::Histogram,
-            other => return Err(format!("headless scope: unknown kind {other}")),
-        };
-        let colours = lumit_gpu::scope::ScopeColours {
-            bg: colours[0],
-            trace: colours[1],
-            red: colours[2],
-            green: colours[3],
-            blue: colours[4],
-        };
+        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
+            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours, rgba, width, height)
+            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 

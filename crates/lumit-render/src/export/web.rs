@@ -161,7 +161,7 @@ impl WebExport {
         };
         // What has come off the card, in order, to the page.
         while let Some(coming) = self.coming.front_mut() {
-            let Some(rgba) = self.renderer.poll_preview(coming) else {
+            let Some(rgba) = self.renderer.poll_read(coming) else {
                 break;
             };
             self.coming.pop_front();

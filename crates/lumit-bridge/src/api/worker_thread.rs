@@ -9,7 +9,14 @@ use lumit_render::headless::HeadlessRenderer;
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
 // frontends would then decode at different sizes for the same on-screen scale.
 use crate::render::quality_for;
+use dropper::{cut_patch, soloed};
 use uuid::Uuid;
+#[cfg(target_arch = "wasm32")]
+use web::{sample_pixels, trace_scope};
+
+mod dropper;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 // Each frame type is only constructed by its own platform's `publish_frame`, so
 // importing both unconditionally would warn on one of them in every build.
@@ -1892,6 +1899,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         }
         // Any request stops the fill's frame, which is made again next turn.
         let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
+        let stood_in = lumit_gpu::device::read_stand_ins();
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
@@ -1899,6 +1907,11 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             Err(e) if e == lumit_render::cancel::CANCELLED => {}
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
+        }
+        // In the browser build a frame drawn from an earlier frame's read-back
+        // is never kept, so filling would make it again and again.
+        if lumit_gpu::device::read_stand_ins() != stood_in {
+            state.fill_exhausted = true;
         }
         return;
     }
@@ -3358,6 +3371,8 @@ fn one_turn(
         crate::turns::playback_priority(state.prioritised);
     }
     sync_caches(state);
+    #[cfg(target_arch = "wasm32")]
+    web::finish(state, stream);
 
     // While playing the worker has work of its own, so it must not block on
     // the channel — it takes whatever has arrived and gets on with the next
@@ -5251,6 +5266,7 @@ fn publish_preview(
 /// publishes nothing rather than taking the worker down — a scope that cannot
 /// draw is a blank panel, not a lost session.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn trace_scope(
     req: RenderScopeRequest,
     state: &mut WorkerState,
@@ -5396,6 +5412,7 @@ fn trace_scope(
 /// the composition with the layer soloed and keeps the result in
 /// `layer_sample`.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn sample_pixels(
     req: SamplePixelsRequest,
     state: &mut WorkerState,
@@ -5566,6 +5583,7 @@ fn sample_pixels(
 /// dragging a pointer. An edit moves the document's revision, which retires
 /// the entry.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn sample_layer_alone(
     document: &lumit_core::model::Document,
     revision: u64,
@@ -5580,26 +5598,7 @@ fn sample_layer_alone(
         }
     }
 
-    // A patched *copy* of the snapshot: soloing for the read must never be
-    // something the document remembers, so nothing here goes near `commit`.
-    let mut patched = lumit_core::model::Document::clone(document);
-    let comp = patched.comp_mut(req.comp.id)?;
-    for l in &mut comp.layers {
-        l.switches.solo = l.id == layer;
-        // Soloed and still hidden is nothing at all — and a depth pass is very
-        // often hidden, which is exactly why this read exists.
-        if l.id == layer {
-            l.switches.visible = true;
-        }
-    }
-
-    // Seen through the view's own 3D view, so the read lands where the
-    // pointer is.
-    let patched = viewed_through(
-        None,
-        state.camera_views.get(&req.view).copied(),
-        std::sync::Arc::new(patched),
-    );
+    let patched = soloed(document, layer, req, state)?;
     let (rgba, w, h) = state
         .renderer
         .render_preview(
@@ -5617,61 +5616,6 @@ fn sample_layer_alone(
         rgba: rgba.clone(),
     });
     Some((w, h, rgba))
-}
-
-/// A window cut out of a picture: the pixels, and where its centre landed.
-#[frb(ignore)]
-pub(crate) struct Patch {
-    pub window: u32,
-    pub rgba: Vec<u8>,
-    pub x: u32,
-    pub y: u32,
-}
-
-/// Cut a `window × window` square centred on the fraction `(u, v)` of a
-/// picture.
-///
-/// `window` is forced odd and capped at [`MAX_WINDOW`] here rather than
-/// trusted: the centre must be a single pixel for the magnifier's centre cell
-/// to mean anything, and the payload must stay small enough to be a reading
-/// rather than a picture. Pixels off the edge repeat the edge, so the square is
-/// always exactly `window × window` and the caller never has a ragged one to
-/// draw — and the frontend can index it without a bounds case at the picture's
-/// border.
-#[frb(ignore)]
-pub(crate) fn cut_patch(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    u: f64,
-    v: f64,
-    window: u32,
-) -> Option<Patch> {
-    if width == 0 || height == 0 || rgba.len() < (width as usize * height as usize * 4) {
-        return None;
-    }
-    let grid = window.clamp(1, MAX_WINDOW) | 1;
-    let w = width as i64;
-    let h = height as i64;
-    let cx = ((u * width as f64) as i64).clamp(0, w - 1);
-    let cy = ((v * height as f64) as i64).clamp(0, h - 1);
-    let half = i64::from(grid / 2);
-
-    let mut out = Vec::with_capacity((grid * grid * 4) as usize);
-    for dy in 0..i64::from(grid) {
-        for dx in 0..i64::from(grid) {
-            let px = (cx - half + dx).clamp(0, w - 1);
-            let py = (cy - half + dy).clamp(0, h - 1);
-            let i = ((py * w + px) * 4) as usize;
-            out.extend_from_slice(&rgba[i..i + 4]);
-        }
-    }
-    Some(Patch {
-        window: grid,
-        rgba: out,
-        x: cx as u32,
-        y: cy as u32,
-    })
 }
 
 /// Render one frame and publish it to Dart — always as a GPU handle.
