@@ -59,6 +59,10 @@ enum InstallKind {
   /// point of the sandbox — so updating belongs to Flatpak.
   flatpak,
 
+  /// An AppImage: one file, mounted read-only while it runs. The file is what
+  /// gets replaced, by renaming the new one over it.
+  appImage,
+
   /// Somewhere Lumit cannot reason about: a build tree, a test harness, an
   /// unusual layout. Never updated in place; the installer is the answer.
   unknown,
@@ -76,7 +80,8 @@ const String stagedUpdateMarker = '.lumit-staged';
 class InstallSite {
   final InstallKind kind;
 
-  /// The thing that gets replaced: the install folder, or the `.app` bundle.
+  /// The thing that gets replaced: the install folder, the `.app` bundle, or
+  /// the AppImage. An AppImage is a file, so only the names beside it are used.
   final Directory root;
 
   /// What to run to start Lumit again, *after* the swap — so it is expressed
@@ -109,7 +114,11 @@ class InstallSite {
   /// read-only volume or left in `Program Files` by an older installer answers
   /// no, and gets the installer route instead of a confusing failure.
   bool get replaceable {
-    if (kind != InstallKind.folder && kind != InstallKind.bundle) return false;
+    if (kind != InstallKind.folder &&
+        kind != InstallKind.bundle &&
+        kind != InstallKind.appImage) {
+      return false;
+    }
     return _parentIsWritable;
   }
 
@@ -137,10 +146,12 @@ class InstallSite {
     String? executablePath,
     String? operatingSystem,
     bool Function(String path)? isFlatpak,
+    String? appImage,
   }) {
     final exe = executablePath ?? Platform.resolvedExecutable;
     final os = operatingSystem ?? Platform.operatingSystem;
     final flatpak = isFlatpak ?? (path) => File(path).existsSync();
+    final image = appImage ?? Platform.environment['APPIMAGE'] ?? '';
     // Windows accepts both separators; everywhere else a backslash is an
     // ordinary character in a name and must not split anything.
     // Escaped rather than raw: a raw string cannot end in a backslash.
@@ -165,6 +176,16 @@ class InstallSite {
         kind: InstallKind.flatpak,
         root: Directory(parentOf(exe)),
         launcher: File(exe),
+      );
+    }
+
+    // The AppImage runtime names the file it mounted. The executable's own
+    // path is inside the mount, which goes away when Lumit closes.
+    if (os == 'linux' && image.isNotEmpty) {
+      return InstallSite(
+        kind: InstallKind.appImage,
+        root: Directory(image),
+        launcher: File(image),
       );
     }
 
