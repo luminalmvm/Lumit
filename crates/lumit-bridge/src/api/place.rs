@@ -117,6 +117,53 @@ impl CompositionReference {
             .map_err(BridgeError::OpError)?;
         Ok(())
     }
+    /// The Light layer [`Self::add_light_layer`] makes in `comp`.
+    #[frb(ignore)]
+    pub(crate) fn light_layer(
+        comp: &lumit_core::model::Composition,
+        kind: u32,
+    ) -> lumit_core::model::Layer {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{LightDef, LightKind, TransformGroup};
+
+        let kind = match kind {
+            1 => LightKind::Spot,
+            2 => LightKind::Area,
+            3 => LightKind::Parallel,
+            4 => LightKind::Ambient,
+            _ => LightKind::Point,
+        };
+        let (w, h) = (f64::from(comp.width), f64::from(comp.height));
+        let light = Box::new(LightDef {
+            kind,
+            size: [Property::fixed(w * 0.2), Property::fixed(h * 0.2)],
+            two_node: true,
+            point_of_interest: [
+                Property::fixed(w * 0.5),
+                Property::fixed(h * 0.5),
+                Property::zero(),
+            ],
+            ..LightDef::default()
+        });
+        let name = match kind {
+            LightKind::Point => "Point light",
+            LightKind::Spot => "Spot light",
+            LightKind::Area => "Area light",
+            LightKind::Parallel => "Parallel light",
+            LightKind::Ambient => "Ambient light",
+        };
+        crate::edits::base_layer(
+            name.into(),
+            lumit_core::model::LayerKind::Light { light },
+            comp.duration.0,
+            TransformGroup {
+                position_x: Property::fixed(w * 0.4),
+                position_y: Property::fixed(h * 0.35),
+                position_z: Property::fixed(-w * 0.35),
+                ..TransformGroup::default()
+            },
+        )
+    }
 }
 
 /// Move a layer and what it holds later by `by`.
