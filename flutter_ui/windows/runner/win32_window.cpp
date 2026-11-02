@@ -169,11 +169,12 @@ bool OnTopEdge(HWND window, LPARAM point) {
 WNDPROC g_view_proc = nullptr;
 
 // The view covers the whole client area, so it is the window Windows asks
-// about a point on the top edge. Answering "not mine" there hands the question
-// to the frame behind it, which answers with the resize edge.
+// about every point in it. Where the frame behind it has its own answer, the
+// top edge or the maximise button, answering "not mine" hands it over.
 LRESULT CALLBACK ViewProc(HWND view, UINT message, WPARAM wparam,
                           LPARAM lparam) noexcept {
-  if (message == WM_NCHITTEST && OnTopEdge(GetParent(view), lparam)) {
+  if (message == WM_NCHITTEST &&
+      SendMessage(GetParent(view), message, wparam, lparam) != HTCLIENT) {
     return HTTRANSPARENT;
   }
   return CallWindowProc(g_view_proc, view, message, wparam, lparam);
@@ -368,15 +369,18 @@ Win32Window::MessageHandler(HWND hwnd,
 
     case WM_NCHITTEST: {
       const LRESULT hit = DefWindowProc(hwnd, message, wparam, lparam);
-      if (hit != HTCLIENT || !OnTopEdge(hwnd, lparam)) {
+      if (hit != HTCLIENT) {
         return hit;
+      }
+      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(hwnd, &point);
+      if (!OnTopEdge(hwnd, lparam)) {
+        return PtInRect(&maximise_button_, point) ? HTMAXBUTTON : HTCLIENT;
       }
       // The corners reach as far along the top as the frame is thick, as they
       // do down the sides.
       RECT client;
       GetClientRect(hwnd, &client);
-      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-      ScreenToClient(hwnd, &point);
       const int corner = FrameThickness(hwnd);
       return point.x < corner
                  ? HTTOPLEFT
