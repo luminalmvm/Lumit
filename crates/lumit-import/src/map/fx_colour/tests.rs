@@ -659,6 +659,7 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE IRIS_WIPE", "iris_wipe"),
         ("ADBE Venetian Blinds", "venetian_blinds"),
         ("APC CardWipeCam", "card_wipe"),
+        ("ADBE Gradient Wipe", "luma_fade"),
         ("ADBE Slider Control", "slider_control"),
         ("ADBE Angle Control", "angle_control"),
         ("ADBE Checkbox Control", "checkbox_control"),
