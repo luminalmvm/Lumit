@@ -28,7 +28,7 @@ class AnimatedMaskPaths {
   /// meaning no mask on the composition is animated.
   Map<UuidValue, Map<UuidValue, List<BridgeVertex>>> _byLayer = const {};
 
-  BigInt? _revision;
+  int? _revision;
   int? _frame;
   UuidValue? _comp;
 
@@ -60,7 +60,7 @@ class AnimatedMaskPaths {
   void refresh({
     required CompositionReference comp,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required bool anyAnimated,
   }) {
     final id = comp.internalid;

@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::MediaError;
 
 /// How many frames one sequence may hold (docs/14 §5, budgeted work). Well
@@ -387,6 +388,7 @@ static UNREADABLE: LazyLock<Mutex<HashMap<PathBuf, HashSet<PathBuf>>>> =
 
 /// Note whether `file` of the run read as `source` read. A file that reads
 /// again, saved over since, is forgotten.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn note_frame(source: &Path, file: impl FnOnce() -> PathBuf, unreadable: bool) {
     let Ok(mut held) = UNREADABLE.lock() else {
         return;
@@ -448,6 +450,7 @@ impl From<&MediaSource> for MediaSource {
 }
 
 /// The `image2` input for `run` at `fps`, ready to open.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn open_run(
     run: &Run,
     fps: (u32, u32),

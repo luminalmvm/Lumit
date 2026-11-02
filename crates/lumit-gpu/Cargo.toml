@@ -104,6 +104,14 @@ metal = { version = "0.31", optional = true }
 objc = { version = "0.2", optional = true }
 core-foundation = { version = "0.9", optional = true }
 
+# The browser build runs on the page's one thread, where wgpu's types are
+# only Send and Sync with this switched on.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { version = "24", features = ["fragile-send-sync-non-atomic-wasm"] }
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["ImageBitmap", "OffscreenCanvas"] }
+
 [dev-dependencies]
 # The crate itself, with the shared-device fixture on, so the integration
 # tests under tests/ borrow one device and one set of compiled engines the

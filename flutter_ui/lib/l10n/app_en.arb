@@ -16127,6 +16127,10 @@
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
+  "webNoGraphicsCard": "This browser didn't give Lumit a graphics card. Lumit needs WebGPU.",
+  "@webNoGraphicsCard": {
+    "description": "Shown instead of the editor in the browser build when WebGPU gives no graphics card."
+  },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."

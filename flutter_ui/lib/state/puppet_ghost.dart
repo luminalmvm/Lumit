@@ -22,7 +22,7 @@ class PuppetGhosts {
 
   UuidValue? _layer;
   int? _generation;
-  BigInt? _revision;
+  int? _revision;
 
   /// The wireframe to draw, or null when the layer has no mesh — nothing
   /// opaque to cut one from, or no puppet tool armed on it.
@@ -41,7 +41,7 @@ class PuppetGhosts {
   void refresh({
     required LayerReference? layer,
     required int generation,
-    required BigInt? revision,
+    required int? revision,
   }) {
     final id = layer?.internallayerId;
     if (_layer == id && _generation == generation && _revision == revision) {

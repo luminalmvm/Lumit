@@ -2440,8 +2440,8 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   void _watchFootage(LumitState app, {required bool start}) {
     if (!mounted) return;
-    int percent(BigInt done, BigInt total) =>
-        total == BigInt.zero ? 0 : (done.toInt() * 100 / total.toInt()).round();
+    int percent(int done, int total) =>
+        total == 0 ? 0 : (done * 100 / total).round();
     void failed(String why) {
       _waitTimer?.cancel();
       setState(() {
@@ -2478,7 +2478,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         case BridgeShareFetching_Working(:final done, :final total):
           // Nothing has crossed while the others' computers are still
           // making what was asked for.
-          text = total == BigInt.zero
+          text = total == 0
               ? l10n.exportFootageMaking
               : l10n.exportFootageFetching(percent(done, total));
         case BridgeShareFetching_Queued():

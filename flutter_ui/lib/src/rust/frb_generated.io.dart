@@ -109,6 +109,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           dynamic raw);
 
   @protected
+  int dco_decode_CastedPrimitive_i_64(dynamic raw);
+
+  @protected
+  int dco_decode_CastedPrimitive_u_64(dynamic raw);
+
+  @protected
+  int dco_decode_CastedPrimitive_usize(dynamic raw);
+
+  @protected
   Map<String, String> dco_decode_Map_String_String_None(dynamic raw);
 
   @protected
@@ -470,9 +479,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   FootageReference dco_decode_box_autoadd_footage_reference(dynamic raw);
 
   @protected
-  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
-
-  @protected
   ItemReference dco_decode_box_autoadd_item_reference(dynamic raw);
 
   @protected
@@ -489,9 +495,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
-
-  @protected
-  BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_8(dynamic raw);
@@ -1503,6 +1506,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           dynamic raw);
 
   @protected
+  List<int> dco_decode_list_CastedPrimitive_i_64(dynamic raw);
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
@@ -1859,9 +1865,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
 
   @protected
-  Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
-
-  @protected
   List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
 
   @protected
@@ -1884,6 +1887,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress dco_decode_open_progress(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_i_64(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
 
   @protected
   RustStreamSink<BridgeLiveEvent>?
@@ -2110,9 +2119,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
   @protected
-  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
-
-  @protected
   ItemReference? dco_decode_opt_box_autoadd_item_reference(dynamic raw);
 
   @protected
@@ -2126,9 +2132,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
-
-  @protected
-  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
@@ -2220,6 +2223,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEffectInstance
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_i_64(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_usize(SseDeserializer deserializer);
 
   @protected
   Map<String, String> sse_decode_Map_String_String_None(
@@ -2657,9 +2669,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
-
-  @protected
   ItemReference sse_decode_box_autoadd_item_reference(
       SseDeserializer deserializer);
 
@@ -2680,9 +2689,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
-
-  @protected
-  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
@@ -3847,6 +3853,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           SseDeserializer deserializer);
 
   @protected
+  List<int> sse_decode_list_CastedPrimitive_i_64(SseDeserializer deserializer);
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
@@ -4297,9 +4306,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
 
   @protected
-  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
-
-  @protected
   List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
 
   @protected
@@ -4323,6 +4329,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress sse_decode_open_progress(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_i_64(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<BridgeLiveEvent>?
@@ -4581,9 +4593,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
-  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
-
-  @protected
   ItemReference? sse_decode_opt_box_autoadd_item_reference(
       SseDeserializer deserializer);
 
@@ -4600,9 +4609,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
-
-  @protected
-  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
@@ -4698,6 +4704,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           BridgeEffectInstance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_i_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_usize(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_Map_String_String_None(
@@ -5137,10 +5152,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       FootageReference self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_i_64(
-      PlatformInt64 self, SseSerializer serializer);
-
-  @protected
   void sse_encode_box_autoadd_item_reference(
       ItemReference self, SseSerializer serializer);
 
@@ -5161,9 +5172,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
@@ -6469,6 +6477,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           List<BridgeEffectInstance> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_CastedPrimitive_i_64(
+      List<int> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
@@ -6927,10 +6939,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       Float64List self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_i_64_strict(
-      Int64List self, SseSerializer serializer);
-
-  @protected
   void sse_encode_list_prim_u_32_loose(
       List<int> self, SseSerializer serializer);
 
@@ -6958,6 +6966,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_open_progress(OpenProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_i_64(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_u_64(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_bridge_live_event_Sse(
@@ -7210,10 +7224,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_i_64(
-      PlatformInt64? self, SseSerializer serializer);
-
-  @protected
   void sse_encode_opt_box_autoadd_item_reference(
       ItemReference? self, SseSerializer serializer);
 
@@ -7230,9 +7240,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);

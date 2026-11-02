@@ -41,6 +41,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
+#[cfg(target_arch = "wasm32")]
+mod web;
+
 /// The persistent GPU engines a render needs, held between calls so shaders
 /// compile once. Taken out for the duration of one render and put back
 /// afterwards, so a failed frame never discards the compiled pipelines.
@@ -427,7 +430,8 @@ struct Retained {
 /// more (stride, offset, DRM format) and has its own [`SharedFrameInfoLinux`].
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 pub struct SharedFrameInfo {
     /// The NT `HANDLE` value of the shared texture on Windows (a

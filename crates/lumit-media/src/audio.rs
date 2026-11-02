@@ -11,10 +11,15 @@
 //! Runs on whichever thread asks; never the audio callback.
 
 use crate::MediaError;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avcodec::AVCodecContext;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avformat::AVFormatContextInput;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avutil::{AVChannelLayout, AVFrame, AVSamples};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::swresample::SwrContext;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +41,7 @@ impl AudioBuffer {
 
 /// Decode the file's first audio stream entirely, resampled to stereo f32
 /// at `target_rate`.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaError> {
     let mut reader = AudioReader::open(path, target_rate)?;
     while reader.step()? {}
@@ -43,6 +49,11 @@ pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaErr
         rate: target_rate,
         samples: std::mem::take(&mut reader.ready),
     })
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn decode_all(_path: &Path, _target_rate: u32) -> Result<AudioBuffer, MediaError> {
+    Err(crate::no_ffmpeg())
 }
 
 /// Decode all of `sound`, resampled to stereo f32 at `target_rate`: what
@@ -148,10 +159,12 @@ impl SoundSource {
 /// reached by decoding on and throwing the sound between away, in seconds.
 /// Landing costs [`LANDING_SECONDS`] of decode, so anything nearer than that
 /// is cheaper walked to.
+#[cfg(not(target_arch = "wasm32"))]
 const WALK_SECONDS: u64 = 4;
 
 /// How much is decoded ahead of a landing and thrown away, in seconds: one for
 /// the codec to settle after the jump and one for the resampler's filter.
+#[cfg(not(target_arch = "wasm32"))]
 const LANDING_SECONDS: u64 = 2;
 
 /// One file's sound, decoded a stretch at a time at one rate.
@@ -179,6 +192,7 @@ const LANDING_SECONDS: u64 = 2;
 // every jump, which costs the decode of everything before it (about a second
 // per quarter hour of AAC). A table of packet positions written beside the
 // frame index, as `index.rs` writes one for pictures, is the upgrade.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct AudioReader {
     path: PathBuf,
     rate: u32,
@@ -226,8 +240,13 @@ pub struct AudioReader {
     overshot: bool,
 }
 
+/// The browser build has no FFmpeg, so no reader is ever opened there.
+#[cfg(target_arch = "wasm32")]
+pub struct AudioReader(pub(crate) std::convert::Infallible);
+
 /// A landing being checked: every frame after a jump has to sit exactly where
 /// its timestamp says, each one touching the last, or the jump is not trusted.
+#[cfg(not(target_arch = "wasm32"))]
 struct Landing {
     /// The input sample the fresh resampler is fed from.
     feed_from: u64,
@@ -235,6 +254,7 @@ struct Landing {
     expect: Option<u64>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AudioReader {
     /// Open `path`'s first audio stream for decoding at `target_rate`.
     pub fn open(path: &Path, target_rate: u32) -> Result<Self, MediaError> {
@@ -776,6 +796,7 @@ impl SoundReader {
 
 /// A resampler from what `decoder` hands out to interleaved stereo f32 at
 /// `target_rate`, fresh: no history, and in phase with its first sample.
+#[cfg(not(target_arch = "wasm32"))]
 fn resampler(decoder: &AVCodecContext, target_rate: u32) -> Result<SwrContext, MediaError> {
     let out_layout = AVChannelLayout::from_nb_channels(2);
     let mut swr = SwrContext::new(
@@ -794,6 +815,7 @@ fn resampler(decoder: &AVCodecContext, target_rate: u32) -> Result<SwrContext, M
 
 /// Uncompressed sound, or FLAC: codecs whose every packet decodes to the same
 /// samples wherever the decoder came from.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_lossless(par: &rsmpeg::avcodec::AVCodecParameters) -> bool {
     rsmpeg::avcodec::AVCodec::find_decoder(par.codec_id).is_some_and(|c| {
         let name = c.name().to_string_lossy();
@@ -810,6 +832,7 @@ fn is_lossless(par: &rsmpeg::avcodec::AVCodecParameters) -> bool {
 /// hole in its sound has the two disagree after the hole. The table is read
 /// here to rule that out, which costs no file access since the demuxer already
 /// holds it.
+#[cfg(not(target_arch = "wasm32"))]
 fn lands_exactly(
     input: &AVFormatContextInput,
     stream: &rsmpeg::avformat::AVStreamRef<'_>,
@@ -863,6 +886,7 @@ fn lands_exactly(
 /// no fixed width.
 ///
 /// SAFETY: a plain lookup by codec id with no pointers either way.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 fn bits_per_sample(codec: ffi::AVCodecID) -> i32 {
     unsafe { ffi::av_get_bits_per_sample(codec) }
@@ -875,6 +899,7 @@ fn bits_per_sample(codec: ffi::AVCodecID) -> i32 {
 /// count comes from the same stream, and each entry pointer is read at once
 /// and not kept: FFmpeg only promises it until the next call that takes the
 /// stream. A null entry is skipped.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 fn index_entries(stream: &rsmpeg::avformat::AVStreamRef<'_>) -> Vec<(i64, i32)> {
     let raw = stream.as_ptr();
@@ -902,6 +927,7 @@ fn index_entries(stream: &rsmpeg::avformat::AVStreamRef<'_>) -> Vec<(i64, i32)> 
 /// and `in_count = nb_samples - skip`, so the read stays inside the plane, and
 /// a frame has one plane per channel when its format is planar and one
 /// otherwise, which is how many pointers are read here.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 fn convert_samples(
     swr: &mut SwrContext,
@@ -944,6 +970,7 @@ fn convert_samples(
 /// Returns an error rather than dereferencing a null plane pointer — a
 /// defensive check against exotic sample formats/channel layouts where the
 /// resampler could in principle leave a plane unset.
+#[cfg(not(target_arch = "wasm32"))]
 fn plane_slice<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg(
@@ -972,6 +999,7 @@ fn plane_slice<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], MediaError> {
 ///
 /// Wrapped so the unsafety is one auditable function, as the two beside it
 /// are.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 fn cap_downmix(swr: &mut SwrContext) -> Result<(), MediaError> {
     // SAFETY: `swr` is a live `SwrContext`, whose first field is its
@@ -983,6 +1011,7 @@ fn cap_downmix(swr: &mut SwrContext) -> Result<(), MediaError> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn byte_to_f32(bytes: &[u8], out: &mut [f32]) {
     for (i, chunk) in bytes.chunks_exact(4).enumerate().take(out.len()) {
         out[i] = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);

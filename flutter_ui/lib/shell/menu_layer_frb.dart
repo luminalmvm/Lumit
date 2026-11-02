@@ -865,7 +865,7 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
             try {
               all[i]
                   .layer
-                  .reorder(newIndex: BigInt.from(up ? 0 : all.length - 1));
+                  .reorder(newIndex: up ? 0 : all.length - 1);
             } catch (_) {}
           }
           return;
@@ -882,7 +882,7 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
             continue;
           }
           try {
-            all[i].layer.reorder(newIndex: BigInt.from(to));
+            all[i].layer.reorder(newIndex: to);
             taken.add(to);
           } catch (_) {
             taken.add(i);

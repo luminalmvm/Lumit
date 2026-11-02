@@ -862,7 +862,7 @@ bool writeCameraPose(
     // A parented camera's own values are in its parent's space, so the
     // engine carries the pose back there and that is what is written.
     final own = layer.cameraOwnAim(
-      frame: BigInt.from(frame),
+      frame: frame,
       aim: BridgeCameraAim(
         pose: viewOfPose(pose),
         poiX: pose.pointOfInterest.$1,
@@ -1157,7 +1157,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// making both of them, dozens of times a second, to re-answer a question
   /// only an edit or the playhead can change.
   ({LayerReference layer, CameraPose pose, BridgeTransform transform})? _held;
-  BigInt? _heldRevision;
+  int? _heldRevision;
   int? _heldFrame;
 
   /// Whether the active camera was passed over because an expression places
@@ -1262,7 +1262,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       // their own do not carry, and the point of interest is in the comp too.
       BridgeCameraAim? evaluated;
       try {
-        evaluated = entry.layer.cameraAimAt(frame: BigInt.from(frame));
+        evaluated = entry.layer.cameraAimAt(frame: frame);
       } catch (_) {
         // The layer went away between the model and the read.
       }
@@ -2440,7 +2440,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
             try {
               final eye = e.layer
                   .cameraAimAt(
-                      frame: BigInt.from(widget.uiState.playheadFrame.value))
+                      frame: widget.uiState.playheadFrame.value)
                   ?.pose;
               if (eye != null) points.add((eye.x, eye.y, eye.z));
             } catch (_) {

@@ -71,8 +71,7 @@ lumit-project = { path = "../lumit-project" }
 lumit-share = { path = "../lumit-share" }
 # File > Run script: the commands and the script runner behind them.
 lumit-script = { path = "../lumit-script" }
-# The live endpoint's pipe and the secret that guards it.
-interprocess = "2"
+# The secret that guards the live endpoint.
 lumit-peer = { path = "../lumit-peer" }
 # The command line reads the script it is given with a size cap.
 lumit-ingress = { path = "../lumit-ingress" }
@@ -145,6 +144,17 @@ features = [
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
 ]
+
+# The live endpoint's pipe. The browser build has no other programs to talk to.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+interprocess = "2"
+
+# The browser build: the page's own APIs, at the versions the bridge's runtime
+# already uses.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Performance", "Window", "Worker", "console"] }
 
 # libX11, opened at run time for the camera drags' pointer hold under X11.
 [target.'cfg(target_os = "linux")'.dependencies]

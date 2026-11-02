@@ -3,6 +3,7 @@
 
 use crate::sequence::MediaSource;
 use crate::{Fingerprint, MediaError};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
 use std::path::{Path, PathBuf};
 
@@ -168,7 +169,18 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
             interpret: src.interpret,
         });
     }
-    let mut input = crate::probe::open_input(&src)?;
+    scan(&src, fingerprint)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scan(_src: &MediaSource, _fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    Err(crate::no_ffmpeg())
+}
+
+/// The packet scan itself, for everything ffmpeg opens.
+#[cfg(not(target_arch = "wasm32"))]
+fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    let mut input = crate::probe::open_input(src)?;
 
     let (stream_index, timebase, rate) = input
         .streams()
@@ -291,6 +303,7 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
 /// ponytail: the rate is the file's average, so a stretch recorded faster than
 /// that loses frames. The upgrade is to conform to the recording's nominal
 /// rate, which the probe would have to report as the item's rate as well.
+#[cfg(not(target_arch = "wasm32"))]
 fn conformed(
     entries: &[IndexEntry],
     timebase: ffi::AVRational,

@@ -740,7 +740,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
               home: InstanceHome.graph(
                 widget.comp,
                 draw: (staged) => widget.comp.renderFrameWithGraphPreview(
-                  frame: BigInt.from(ui.playheadFrame.value),
+                  frame: ui.playheadFrame.value,
                   scale: ui.viewerScale,
                   instances: staged,
                 ),
@@ -771,7 +771,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           home: InstanceHome.graph(
             widget.comp,
             draw: (staged) => widget.comp.renderFrameWithGraphPreview(
-              frame: BigInt.from(ui.playheadFrame.value),
+              frame: ui.playheadFrame.value,
               scale: ui.viewerScale,
               instances: staged,
             ),
@@ -779,7 +779,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           effect: effect,
           param: param,
           comp: widget.comp,
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           onApplied: () {
             ui.model.refresh();
             _reload();
@@ -861,7 +861,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     _preview.request(() {
       try {
         widget.comp.renderFrameWithGraphPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           instances: _instancesWith(node, values),
         );

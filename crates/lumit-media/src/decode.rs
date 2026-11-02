@@ -14,14 +14,23 @@
 //! unsupported codec — falls back to software decoding with all cores,
 //! never an error.
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::index::FrameIndex;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::sequence::MediaSource;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::MediaError;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avcodec::{AVCodec, AVCodecContext};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avformat::AVFormatContextInput;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avutil::AVFrame;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::swscale::SwsContext;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::UnsafeDerefMut;
 
 /// How wide a decoded frame's samples are, and what they already mean.
@@ -86,6 +95,11 @@ pub struct LumaFrame {
     pub luma: Vec<f32>,
 }
 
+/// The browser build has no FFmpeg, so no decoder is ever opened there.
+#[cfg(target_arch = "wasm32")]
+pub struct VideoDecoder(pub(crate) std::convert::Infallible);
+
+#[cfg(not(target_arch = "wasm32"))]
 pub struct VideoDecoder {
     input: AVFormatContextInput,
     decoder: AVCodecContext,
@@ -121,6 +135,7 @@ pub struct VideoDecoder {
 }
 
 /// How far either way a file of a run that won't read looks for one that does.
+#[cfg(not(target_arch = "wasm32"))]
 const FILL_REACH: usize = 30;
 
 /// Build and open a codec context for `codec`/`par`, with the D3D11VA
@@ -128,6 +143,7 @@ const FILL_REACH: usize = 30;
 /// it. Returns whether hardware is actually in use. A context that fails to
 /// open is unusable, which is why the caller retries with a fresh one in
 /// software rather than reusing this one.
+#[cfg(not(target_arch = "wasm32"))]
 fn open_codec_ctx(
     codec: &AVCodec,
     par: &rsmpeg::avcodec::AVCodecParameters,
@@ -160,6 +176,7 @@ fn open_codec_ctx(
 /// and a gigabyte of working set against six hundred megabytes. Bounding the
 /// pictures in flight at 256 MB leaves 1080p and 4K exactly as they were and
 /// gives 8K five threads.
+#[cfg(not(target_arch = "wasm32"))]
 fn thread_cap(width: i32, height: i32) -> i32 {
     const BUDGET: i64 = 256 * 1024 * 1024;
     // NV12: the shape a hardware surface and an ordinary eight-bit software
@@ -200,7 +217,7 @@ fn attach_d3d11va(codec: &AVCodec, ctx: &mut AVCodecContext) -> bool {
 
 /// The macOS sibling is VideoToolbox and lands with the macOS pass;
 /// until then every other platform decodes in software, on all cores.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_arch = "wasm32")))]
 fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
     false
 }
@@ -215,6 +232,7 @@ pub fn set_hardware_decode(allow: bool) {
     HARDWARE_DECODE.store(allow, std::sync::atomic::Ordering::Relaxed);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl VideoDecoder {
     pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
         let allow = HARDWARE_DECODE.load(std::sync::atomic::Ordering::Relaxed);
@@ -590,6 +608,7 @@ impl VideoDecoder {
 /// point "scale" through swscale is a lossless plane copy plus chroma
 /// deinterleave — no values change, only the memory layout, so the shared
 /// RGBA conversion behaves identically to the software decoder's output.
+#[cfg(not(target_arch = "wasm32"))]
 fn deinterleave_to_yuv420p(src: &AVFrame) -> Result<AVFrame, MediaError> {
     let mut sws = SwsContext::get_context(
         src.width,
@@ -628,6 +647,7 @@ fn deinterleave_to_yuv420p(src: &AVFrame) -> Result<AVFrame, MediaError> {
 /// and a fallback for the rest: for yuv420p — which is what the software and the
 /// repacked hardware path both produce — swscale's gray8 output *is* the Y
 /// plane, so the branch would buy nothing but a second thing to keep correct.
+#[cfg(not(target_arch = "wasm32"))]
 fn convert_luma(frame: &AVFrame) -> Result<LumaFrame, MediaError> {
     let (w, h) = (frame.width, frame.height);
     let mut sws = SwsContext::get_context(
@@ -673,6 +693,7 @@ fn convert_luma(frame: &AVFrame) -> Result<LumaFrame, MediaError> {
 /// Read off libav's own descriptor rather than matched against a list of
 /// format constants, so a float format nobody here has heard of is still
 /// recognised as one.
+#[cfg(not(target_arch = "wasm32"))]
 fn is_float(format: i32) -> bool {
     crate::probe::pix_fmt_flag(format, ffi::AV_PIX_FMT_FLAG_FLOAT)
 }
@@ -687,6 +708,7 @@ fn is_float(format: i32) -> bool {
 /// encoder's own pack stage, and on the common case (an EXR with alpha)
 /// swscale has no conversion to do at all, since that planar format is already
 /// the decoder's own output: the samples are copied, never converted.
+#[cfg(not(target_arch = "wasm32"))]
 fn convert_linear_f32(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
     let src_w = frame.width;
     let src_h = frame.height;
@@ -801,6 +823,7 @@ pub(crate) fn fit(
 ///
 /// ponytail: a pixel at a time on the CPU, tens of milliseconds a 4K frame.
 /// Turn on the graphics card if phone footage ever plays slowly.
+#[cfg(not(target_arch = "wasm32"))]
 fn turn(frame: DecodedFrame, turns: u8) -> DecodedFrame {
     let turns = turns % 4;
     if turns == 0 {
@@ -831,6 +854,7 @@ fn turn(frame: DecodedFrame, turns: u8) -> DecodedFrame {
 }
 
 /// A colour frame's brightness, 0 to 1, by the Rec. 709 weights.
+#[cfg(not(target_arch = "wasm32"))]
 fn luma_of(frame: &DecodedFrame) -> LumaFrame {
     let size = frame.format.bytes_per_px();
     let channel = |px: &[u8], c: usize| match frame.format {
@@ -854,6 +878,7 @@ fn luma_of(frame: &DecodedFrame) -> LumaFrame {
 /// How many rows each plane of a `height`-row picture in `format` has, and
 /// how many bytes one of its rows is. `None` for a format whose planes are
 /// not plain rows of samples: a palette, a bitstream or a hardware surface.
+#[cfg(not(target_arch = "wasm32"))]
 fn plane_rows(format: i32, width: i32, height: i32) -> Option<Vec<(usize, usize)>> {
     // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns a pointer
     // to a static descriptor libav owns for the life of the process, or null
@@ -897,6 +922,7 @@ fn plane_rows(format: i32, width: i32, height: i32) -> Option<Vec<(usize, usize)
 /// copied from the frame and the row `from(r)` names. Every frame it names
 /// must be `like`'s size and format. A row past the end of a plane is its
 /// last row.
+#[cfg(not(target_arch = "wasm32"))]
 fn rows_from<'a>(
     like: &AVFrame,
     height: i32,
@@ -948,6 +974,7 @@ fn rows_from<'a>(
 /// One field of a frame as a picture of its own, half as tall: the rows of
 /// `parity` from every plane. `None` where the planes can't be read as rows,
 /// and the caller separates the converted picture instead.
+#[cfg(not(target_arch = "wasm32"))]
 fn field_planes(frame: &AVFrame, parity: usize) -> Option<AVFrame> {
     let rows = usize::try_from(frame.height).ok()?;
     let height = i32::try_from((rows + 1).saturating_sub(parity & 1) / 2).ok()?;
@@ -959,6 +986,7 @@ fn field_planes(frame: &AVFrame, parity: usize) -> Option<AVFrame> {
 
 /// The rows of `parity` from `first` with the others from `second`, plane by
 /// plane: the two halves of a film frame that pulldown split across two.
+#[cfg(not(target_arch = "wasm32"))]
 fn weave_planes(first: &AVFrame, second: &AVFrame, parity: usize) -> Option<AVFrame> {
     let same =
         (first.format, first.width, first.height) == (second.format, second.width, second.height);
@@ -970,6 +998,7 @@ fn weave_planes(first: &AVFrame, second: &AVFrame, parity: usize) -> Option<AVFr
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn convert_rgba(
     frame: &AVFrame,
     target_width: Option<u32>,
@@ -980,6 +1009,7 @@ fn convert_rgba(
 }
 
 /// A frame as RGBA at exactly this size, eight-bit or float as it arrived.
+#[cfg(not(target_arch = "wasm32"))]
 fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
     if is_float(frame.format) {
         return convert_linear_f32(frame, dst_w, dst_h);
@@ -1034,12 +1064,14 @@ fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame
 
 /// Read the frame's first data plane as a byte slice. Kept in one place so
 /// the raw-pointer handling is auditable (rsmpeg exposes planes as pointers).
+#[cfg(not(target_arch = "wasm32"))]
 fn unsafe_data_slice(frame: &AVFrame, len: usize) -> Result<&[u8], MediaError> {
     unsafe_plane_slice(frame, 0, len)
 }
 
 /// [`unsafe_data_slice`] for a chosen plane — the planar float path reads four
 /// of them, and a packed one only ever asks for plane nought.
+#[cfg(not(target_arch = "wasm32"))]
 fn unsafe_plane_slice(frame: &AVFrame, plane: usize, len: usize) -> Result<&[u8], MediaError> {
     let Some(ptr) = frame.data.get(plane).copied().filter(|p| !p.is_null()) else {
         return Err(MediaError::Ffmpeg("decoded frame has no data plane".into()));
@@ -1062,6 +1094,7 @@ fn unsafe_plane_slice(frame: &AVFrame, plane: usize, len: usize) -> Result<&[u8]
 /// slice index (docs/14-ENGINEERING-RULES.md §4: no panics) — an
 /// inconsistency here becomes a typed error instead of an out-of-bounds
 /// read.
+#[cfg(not(target_arch = "wasm32"))]
 fn copy_tight_rows(
     data: &[u8],
     stride: usize,

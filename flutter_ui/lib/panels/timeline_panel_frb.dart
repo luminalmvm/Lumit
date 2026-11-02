@@ -273,7 +273,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// and a layer's Retime are both one edit away from changing, so the bounds
   /// are taken again whenever the document moves — and never in between, which
   /// is what keeps a rebuild free of bridge calls.
-  BigInt? _boundsRevision;
+  int? _boundsRevision;
 
   /// The comp those bounds were taken on. The master fader and the mix mark
   /// read beside them are the comp's own, and fronting another comp moves no
@@ -608,7 +608,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// region's band in the lanes and the graph follows its flag by listening,
   /// not by this panel rebuilding on every pointer move.
   final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
 
   /// One layer's bounds, from what its kind can be asked cheaply.
@@ -5255,7 +5255,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       hScroll: _hLane,
                       onClipPreview: (entry, clip, keys) =>
                           comp.renderFrameWithClipRetime(
-                        frame: BigInt.from(ui.playheadFrame.value),
+                        frame: ui.playheadFrame.value,
                         scale: 1.0,
                         layer: entry.layer,
                         clip: clip.id,

@@ -52,7 +52,7 @@ class ViewerTrackLayer extends StatefulWidget {
   /// The frame on screen, and the document revision — the two things that move
   /// the cloud, and the only two that make it worth asking again.
   final int playheadFrame;
-  final BigInt? revision;
+  final int? revision;
 
   /// Bumped when an analysis lands a solve. A third thing to key the
   /// read by, because a solve arriving changes what the engine would answer
@@ -114,7 +114,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   /// What the last read was for, so a rebuild that changed neither does not
   /// ask again.
   int? _askedFrame;
-  BigInt? _askedRevision;
+  int? _askedRevision;
   int? _askedGeneration;
 
   @override

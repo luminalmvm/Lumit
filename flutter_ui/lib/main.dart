@@ -4,7 +4,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show RustStreamSink;
@@ -17,6 +17,7 @@ import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
 import 'package:lumit_flutter/shell/splash_window.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeScanProgress, BridgeScanStage, rescanPlugins;
+import 'package:lumit_flutter/src/rust/api/system.dart' show prepareGraphics;
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
 import 'package:lumit_flutter/probe/perf_probe.dart';
@@ -80,6 +81,9 @@ Future<void> _start(List<String> args) async {
       probeProjectPath.isEmpty ? null : CountingBridgeHandler();
   await BridgeLib.init(
       handler: kDebugMode ? CustomHandler() : probeBridge);
+  // The browser hands its graphics card over as a promise, so it is asked for
+  // here, before a project needs it.
+  if (kIsWeb && !await prepareGraphics()) throw l10n.webNoGraphicsCard;
   await ExpressionsMetadata.load();
   await ExpressionTextEditingController.initSyntaxHighlighting();
   final state = LumitState();

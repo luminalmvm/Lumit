@@ -921,6 +921,7 @@ pub(crate) mod disk {
         }
         #[cfg(not(any(windows, unix)))]
         {
+            let _ = path;
             None
         }
     }

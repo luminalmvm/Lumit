@@ -18,12 +18,16 @@ pub mod probe;
 pub mod psd;
 pub mod sequence;
 pub mod slate;
+#[cfg(not(target_arch = "wasm32"))]
 mod vaapi;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 use std::path::Path;
 
 // rsmpeg's bindings are for FFmpeg 8. Against another major the build can go through
 // and then read FFmpeg's structures at the wrong offsets, so stop it here instead.
+#[cfg(not(target_arch = "wasm32"))]
 const _: () = assert!(
     rsmpeg::ffi::LIBAVUTIL_VERSION_MAJOR == 60,
     "Lumit needs FFmpeg 8.x (libavutil 60) and the build found another version. \
@@ -105,6 +109,7 @@ pub fn read_own(
     }))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<rsmpeg::error::RsmpegError> for MediaError {
     fn from(e: rsmpeg::error::RsmpegError) -> Self {
         MediaError::Ffmpeg(e.to_string())
@@ -112,6 +117,7 @@ impl From<rsmpeg::error::RsmpegError> for MediaError {
 }
 
 /// The linked FFmpeg (libavformat) version, for the boot log.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn ffmpeg_version() -> String {
     format!(
         "{}.{}.{}",
@@ -119,6 +125,19 @@ pub fn ffmpeg_version() -> String {
         rsmpeg::ffi::LIBAVFORMAT_VERSION_MINOR,
         rsmpeg::ffi::LIBAVFORMAT_VERSION_MICRO
     )
+}
+
+/// The browser build has no FFmpeg.
+#[cfg(target_arch = "wasm32")]
+pub fn ffmpeg_version() -> String {
+    "none".into()
+}
+
+/// What opening anything that needs FFmpeg answers in the browser build,
+/// where the page decodes video and sound itself.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn no_ffmpeg() -> MediaError {
+    MediaError::Ffmpeg("not in the browser build".into())
 }
 
 /// Content fingerprint for relinking and index-cache keys

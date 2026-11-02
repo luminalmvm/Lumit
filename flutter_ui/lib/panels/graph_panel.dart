@@ -1591,7 +1591,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _driverPreview.request(() {
         try {
           comp.renderFrameWithDriverPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             layer: layer,
             drivers: _driversWith(layer, info.id, values),
@@ -1618,7 +1618,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final layer = _layer;
     if (ui == null || layer == null) return;
     final comp = ui.selectedComp;
-    final frame = BigInt.from(ui.playheadFrame.value);
+    final frame = ui.playheadFrame.value;
     final home = driver
         ? InstanceHome.drivers(layer)
         : InstanceHome.layer(layer,

@@ -6,7 +6,6 @@
 // probing media in a widget tree, exactly as timeline_rows_test.dart checks the
 // twirl's reach.
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/audio_timeline_clips_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_rows_frb.dart';
@@ -76,7 +75,7 @@ void main() {
         ),
         inFrame: 0,
         outFrame: 10,
-        clipFrames: Int64List(0),
+        clipFrames: const [],
         clips: const [],
         transform: BridgeTransform(
           anchorX: const BridgeScalar.static_(0),

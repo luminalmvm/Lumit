@@ -17,11 +17,16 @@
 //! shared project's threads do (docs/14 §1).
 
 pub mod commands;
+// The browser build has no JavaScript engine or local sockets yet, so the
+// script runner is a stub there and the live endpoint is left out.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod include;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod live;
 pub mod mcp;
 mod reach;
 pub mod reference;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 pub mod script;
 
 use std::path::{Path, PathBuf};

@@ -8,7 +8,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 
 BridgeFrameProfile _profile() => BridgeFrameProfile(
-      frame: BigInt.from(48),
+      frame: 48,
       totalMs: 31.5,
       planMs: 0.5,
       decodeMs: 2.0,

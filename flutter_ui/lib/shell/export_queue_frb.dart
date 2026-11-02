@@ -491,7 +491,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
         BridgeExportQueueState_Running(:final total, :final encoder)
-            when total == BigInt.zero =>
+            when total == 0 =>
           l10n.exportPreparing(encoder),
         BridgeExportQueueState_Running(
           :final frame,

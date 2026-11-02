@@ -216,7 +216,7 @@ class _OutlineRowState extends State<OutlineRow> {
     final drag = widget.layerDrag.release(widget.blockHeights);
     if (drag == null || drag.from == drag.to) return;
     widget.layers[drag.from].layer
-        .reorder(newIndex: BigInt.from(_stackIndex(drag.to)));
+        .reorder(newIndex: _stackIndex(drag.to));
     widget.onChanged();
   }
 
@@ -1474,7 +1474,7 @@ class _OutlineRowState extends State<OutlineRow> {
           if (to < 0 || to >= widget.layers.length) continue;
           try {
             widget.layers[i].layer
-                .reorder(newIndex: BigInt.from(_stackIndex(to)));
+                .reorder(newIndex: _stackIndex(to));
           } catch (_) {}
         }
       case 'delete':

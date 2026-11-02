@@ -2974,14 +2974,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
         description: l10n.settingsAddonsPackDetail(pack.licence,
-            _bytes(BigInt.from(pack.sizeBytes)), addonTask(pack.task)),
+            _bytes(pack.sizeBytes), addonTask(pack.task)),
       );
 
   /// One pack the catalogue offers. While it is coming down the row is the bar
   /// and a Cancel; every other button on the page is unpressable meanwhile.
   Widget? _offerRow(LumitTheme t, AddonService service, Addon offer) {
     final coming = service.working == offer.id;
-    final size = _bytes(BigInt.from(offer.sizeBytes));
+    final size = _bytes(offer.sizeBytes);
     return _row(
       t,
       offer.name.isEmpty ? offer.id : offer.name,
@@ -3497,7 +3497,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               width: _ddWide,
               // What one picture that size holds at 16-bit.
               label: (side) => l10n.settingsLargestPictureSize(
-                  '$side', _bytes(BigInt.from(side * side * 8))),
+                  '$side', _bytes(side * side * 8)),
               onChanged: (side) => setState(() {
                 setLargestPicture(side: side);
                 _largest = largestPicture();
@@ -3651,7 +3651,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   t,
                   l10n.settingsThisProcess,
                   Text(
-                    memory.processBytes == BigInt.zero
+                    memory.processBytes == 0
                         ? l10n.settingsMemoryNotKnown
                         : _bytes(memory.processBytes),
                     key: const ValueKey('settings-memory-process'),
@@ -3662,7 +3662,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   t,
                   l10n.settingsNotHeldByAnyCache,
                   Text(
-                    memory.processBytes == BigInt.zero
+                    memory.processBytes == 0
                         ? '—'
                         : _bytes(memory.unaccountedBytes),
                     key: const ValueKey('settings-memory-unaccounted'),
@@ -3682,7 +3682,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 // The byte figures are Vulkan and D3D12 only, so the row is not
                 // drawn at all on a Mac rather than printing two zeroes and
                 // inviting the reader to draw a conclusion from them.
-                if (memory.gpuReservedBytes != BigInt.zero)
+                if (memory.gpuReservedBytes != 0)
                   _row(
                     t,
                     l10n.settingsGraphicsMemoryReserved,
@@ -3915,7 +3915,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     required String key,
     required int bytes,
     required double ceilingMib,
-    required ValueChanged<BigInt> onSet,
+    required ValueChanged<int> onSet,
   }) =>
       _row(
         t,
@@ -3934,7 +3934,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 // A megabyte a pixel is far too fine on a 32 GB ceiling.
                 speed: 16,
                 decimals: 0,
-                onChanged: (mib) => onSet(BigInt.from(mib.round()) << 20),
+                onChanged: (mib) => onSet(mib.round() << 20),
               ),
             ),
             const SizedBox(width: 8),
@@ -3953,7 +3953,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   static final double _systemMib = _mibOf(systemMemoryBytes());
   static final double _vramMib = _mibOf(videoMemoryBytes());
 
-  static double _mibOf(BigInt bytes) {
+  static double _mibOf(int bytes) {
     final mib = (bytes >> 20).toDouble();
     return mib <= 0 ? _unknownMemoryMib : mib;
   }
@@ -4019,7 +4019,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _ => l10n.settingsGovernorFull,
       };
 
-  static String _bytes(BigInt bytes) {
+  static String _bytes(int bytes) {
     final b = bytes.toDouble();
     if (b >= 1 << 30) {
       return '${(b / (1 << 30)).toStringAsFixed(1)} ${l10n.unitGb}';

@@ -19,7 +19,8 @@ use uuid::Uuid;
 // `RenderedSharedTexture` case.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 use crate::api::state::BridgeSharedFrameInfo;
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -2940,6 +2941,8 @@ impl WorkerSender {
         };
         // Sent first, so a render that sees the turn finds the request queued.
         self.tx.send(request).map_err(|_| WorkerGone)?;
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::wake();
         self.epochs.any.bump();
         if let Some(lane) = lane {
             self.epochs.lane(lane).bump();
@@ -2967,7 +2970,10 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
+    #[cfg(target_arch = "wasm32")]
+    worker_loop(project, receive_from_app, stream, epochs);
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
@@ -3232,9 +3238,9 @@ fn worker_loop(
     let Some(renderer) = build_viewer_renderer(&project, &stream, &view_id) else {
         return;
     };
-    let _out = EnginesOut(project.id);
+    let out = EnginesOut(project.id);
 
-    let mut state = WorkerState {
+    let state = WorkerState {
         project,
         renderer,
         playback: None,
@@ -3298,7 +3304,15 @@ fn worker_loop(
     // renderer costs seconds of driver work, and a panic that recurs on every
     // turn would spend the session doing nothing else.
     let mut faults_in_a_row = 0u32;
-    loop {
+    let mut state = Some(state);
+    // One turn, and whether to take another. A thread of its own on the
+    // desktop, which goes straight round again; turns from the page's timer in
+    // the browser build (`crate::turns`).
+    let turn = move || -> bool {
+        let _out = &out;
+        let Some(running) = state.as_mut() else {
+            return false;
+        };
         // **The crash net.** Everything a turn does is inside it, because
         // everything a turn does can panic: an effect kernel, a decoder, a
         // wgpu call, an arithmetic overflow in a parameter nobody has typed a
@@ -3307,11 +3321,14 @@ fn worker_loop(
         // for the rest of the session, and nobody told. See `rebuild_renderer`
         // for why the renderer cannot simply carry on afterwards.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            one_turn(&mut state, &receiver, &mut stream)
+            one_turn(running, &receiver, &mut stream)
         }));
         match outcome {
-            Ok(Turn::Continue) => faults_in_a_row = 0,
-            Ok(Turn::Stop) => break,
+            Ok(Turn::Continue) => {
+                faults_in_a_row = 0;
+                return true;
+            }
+            Ok(Turn::Stop) => {}
             Err(payload) => {
                 faults_in_a_row += 1;
                 // Both, and not one or the other: the console line is what a
@@ -3328,17 +3345,27 @@ fn worker_loop(
                     let stopping = "The render worker faulted on every attempt; it is stopping";
                     note!("{stopping}");
                     crate::faults::record(stopping);
-                    return;
+                    state = None;
+                    return false;
                 }
-                rebuild_renderer(&mut state, &mut stream);
+                rebuild_renderer(running, &mut stream);
+                return true;
             }
         }
+        // The device and engines outlive the project, and the next worker takes
+        // them rather than building its own.
+        if let Some(set) = state.take().and_then(|state| state.renderer.into_engines()) {
+            ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
+        }
+        false
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut turn = turn;
+        while turn() {}
     }
-    // The device and engines outlive the project, and the next worker takes
-    // them rather than building its own.
-    if let Some(set) = state.renderer.into_engines() {
-        ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
-    }
+    #[cfg(target_arch = "wasm32")]
+    crate::turns::start(turn);
 }
 
 /// The most consecutive faulting turns to nurse before the worker gives up.
@@ -3365,6 +3392,28 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
         s
     } else {
         "no message"
+    }
+}
+
+/// The next request, waiting up to `wait` for one. The browser build never
+/// waits in place: it takes what is there and comes back after `wait`.
+#[frb(ignore)]
+fn take_request(
+    receiver: &Receiver<WorkerRequest>,
+    wait: std::time::Duration,
+) -> Result<WorkerRequest, std::sync::mpsc::RecvTimeoutError> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return receiver.recv_timeout(wait);
+    #[cfg(target_arch = "wasm32")]
+    match receiver.try_recv() {
+        Ok(request) => Ok(request),
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            crate::turns::pause(wait);
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        }
     }
 }
 
@@ -3414,7 +3463,7 @@ fn one_turn(
         } else {
             std::time::Duration::from_millis(2)
         };
-        match receiver.recv_timeout(wait) {
+        match take_request(receiver, wait) {
             Ok(request) => Some(request),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // A lens finished baking: the picture on screen was drawn
@@ -3699,7 +3748,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         && !playback.ring.is_empty()
                         && card_backed_up(&state.renderer)
                     {
-                        std::thread::sleep(std::time::Duration::from_micros(500));
+                        crate::turns::pause(std::time::Duration::from_micros(500));
                         return;
                     }
                     if !state.renderer.has_frame_texture(key, bgra)
@@ -3712,7 +3761,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                             // A sliver of sleep, not a spin: the copy is
                             // collected at the top of the next turn, and a
                             // stop arriving mid-wait is still seen promptly.
-                            std::thread::sleep(std::time::Duration::from_micros(500));
+                            crate::turns::pause(std::time::Duration::from_micros(500));
                             return;
                         }
                         if asked_ago.is_some() {
@@ -3947,7 +3996,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 .last_presented
                 .is_some_and(|at| at.elapsed() < period)
             {
-                std::thread::sleep(std::time::Duration::from_micros(500));
+                crate::turns::pause(std::time::Duration::from_micros(500));
                 return;
             }
             state.playback = None;
@@ -3967,12 +4016,17 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         // the same 2 ms, so a stop arriving mid-wait is still seen promptly.
         const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
         if wait > SPIN {
-            std::thread::sleep((wait - SPIN).min(std::time::Duration::from_millis(4)));
+            crate::turns::pause((wait - SPIN).min(std::time::Duration::from_millis(4)));
         } else {
-            let due = std::time::Instant::now() + wait;
-            while std::time::Instant::now() < due {
-                std::hint::spin_loop();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let due = std::time::Instant::now() + wait;
+                while std::time::Instant::now() < due {
+                    std::hint::spin_loop();
+                }
             }
+            #[cfg(target_arch = "wasm32")]
+            crate::turns::pause(wait);
         }
     }
 }
@@ -3990,7 +4044,8 @@ fn present_ring_frame(
 ) {
     #[cfg(any(
         all(windows, feature = "shared-texture"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     match renderer.present_prepared(prepared, view) {
         Ok(shared) => {
@@ -4042,7 +4097,8 @@ fn present_ring_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (renderer, frame, prepared, stream, view);
@@ -5726,7 +5782,8 @@ fn publish_frame(
     #[cfg(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     {
         // Everything that reaches here is a scrub, an edit's render or a drag
@@ -5743,7 +5800,8 @@ fn publish_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (state, comp, frame, scale, document, stream, mode, cacheable);
@@ -5757,7 +5815,8 @@ fn publish_frame(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn stand_in(
     state: &mut WorkerState,
@@ -5806,7 +5865,8 @@ fn stand_in(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn remember_shown(
     state: &mut WorkerState,
@@ -5922,7 +5982,8 @@ fn send_dmabuf(
 
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 #[allow(clippy::too_many_arguments)]
 fn publish_zero_copy(
@@ -5979,7 +6040,8 @@ fn publish_zero_copy(
 /// be.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn send_shared(
     state: &mut WorkerState,

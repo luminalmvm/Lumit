@@ -1149,7 +1149,7 @@ class ReviewsState extends ChangeNotifier {
 
   // --- Whether a composition has moved on -----------------------------------
 
-  final Map<String, (BigInt, String, Map<String, List<String>>)> _prints = {};
+  final Map<String, (int, String, Map<String, List<String>>)> _prints = {};
 
   /// The most layers whose marks are kept for a link. A composition with
   /// more is still known to have changed, and is not said how.

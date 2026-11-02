@@ -300,7 +300,7 @@ void main() {
       final edges = p.graph.getNodeGraph().wiring.edges;
       expect(edges, hasLength(1));
       expect(edges.single.toPort, 'radius');
-      expect(p.graph.documentRevision(), twirled + BigInt.one,
+      expect(p.graph.documentRevision(), twirled + 1,
           reason: 'one gesture, one op');
     });
 
@@ -452,7 +452,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       expect(radiusOf(p.graph, blur), closeTo(12, 0.001));
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
 
       p.state.project!.undo();
       p.uiState.model.refresh();
@@ -487,7 +487,7 @@ void main() {
       await drag.up();
       await tester.pump();
 
-      expect(p.graph.documentRevision(), was + BigInt.one,
+      expect(p.graph.documentRevision(), was + 1,
           reason: 'one drag, one op');
       expect(radiusOf(p.graph, blur), isNot(closeTo(30, 0.001)));
       expect(placeOf(p.graph, blur), const Offset(60, 40),
@@ -559,7 +559,7 @@ void main() {
               matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
           shader);
       expect(shaderOn(p.graph, box), shader);
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
     });
 
     testWidgets("a double-click opens a Custom shader box's inner graph",
@@ -598,7 +598,7 @@ void main() {
           .tap(find.byKey(const ValueKey<String>('fx-console-item-UV')));
       await tester.pump();
       expect(inner(), contains('"uv"'));
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
 
       p.state.project!.undo();
       p.uiState.model.refresh();
@@ -903,7 +903,7 @@ void main() {
               .where((e) => e.from == read && e.to == added),
           hasLength(1),
           reason: 'Auto-wire put it after the picked box, as the console does');
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
     });
 
     testWidgets('a right-click, Tab and Shift+A each open the console',
@@ -987,7 +987,7 @@ void main() {
       final after = p.graph.getNodeGraph();
       expect(after.nodes, hasLength(before.nodes.length + 2),
           reason: 'two boxes, and no second Output');
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
       final fresh = [
         for (final n in after.nodes)
           if (!before.nodes.any((b) => b.id == n.id)) n.id,

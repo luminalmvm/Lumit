@@ -1361,9 +1361,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1373,8 +1375,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2105,6 +2109,7 @@ version = "0.10.1"
 dependencies = [
  "arc-swap",
  "blake3",
+ "getrandom 0.3.4",
  "half",
  "hex",
  "i_overlay",
@@ -2175,6 +2180,7 @@ dependencies = [
  "core-foundation",
  "glam",
  "half",
+ "js-sys",
  "lumit-budget",
  "lumit-core",
  "lumit-eval",
@@ -2188,6 +2194,8 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
  "wgpu",
  "windows 0.58.0",
 ]
@@ -2448,6 +2456,7 @@ version = "0.10.1"
 dependencies = [
  "flutter_rust_bridge",
  "interprocess",
+ "js-sys",
  "libc",
  "libloading 0.8.9",
  "lumit-aplug",
@@ -2477,6 +2486,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
  "windows 0.58.0",
 ]
 

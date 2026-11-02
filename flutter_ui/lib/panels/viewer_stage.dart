@@ -40,6 +40,8 @@ import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
+import 'viewer_picture.dart'
+    if (dart.library.js_interop) 'viewer_picture_web.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith;
 import 'shape_entries.dart';
@@ -1517,7 +1519,7 @@ BridgeLayerEntry? layerAtCompPoint(
   // What a pin points at was seen through the comp's own camera.
   late final List<double> rows = () {
     try {
-      return comp.viewProjection(frame: BigInt.from(frame), view: null);
+      return comp.viewProjection(frame: frame, view: null);
     } catch (_) {
       return flatView;
     }
@@ -1541,7 +1543,7 @@ BridgeLayerEntry? layerAtCompPoint(
           time: () => time,
           cameraPose: (camera) {
             try {
-              return camera.layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+              return camera.layer.cameraOwnPoseAt(frame: frame);
             } catch (_) {
               return null;
             }
@@ -1754,8 +1756,8 @@ class _Picture extends StatelessWidget {
         valueListenable: uiState.previewTier,
         builder: (context, tier, _) {
           final picture = textureId != null
-              ? Texture(
-                  textureId: textureId,
+              ? viewerPicture(
+                  textureId,
                   filterQuality: viewerPictureFilter(
                     shownScale: shownScale,
                     tier: tier,
@@ -1876,7 +1878,7 @@ class ViewerWireframeLayer extends StatefulWidget {
   final List<UuidValue>? only;
 
   final int frame;
-  final BigInt? revision;
+  final int? revision;
 
   /// The footage sizes the frontend has already probed. The engine's own probe
   /// lives on the worker and this call does not, so what is known travels with
@@ -1960,7 +1962,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
     }
     try {
       _wires = widget.comp.wireframes(
-        frame: BigInt.from(widget.frame),
+        frame: widget.frame,
         view: widget.view,
         ground: widget.ground,
         grid: widget.grid,

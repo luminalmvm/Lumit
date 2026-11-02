@@ -363,3 +363,17 @@ pub fn thaw_cursor() {
         *held = None;
     }
 }
+
+/// Open the browser's graphics card, before the first project opens. False
+/// when the browser has none to give, which is the page's cue to say so.
+///
+/// Only the browser build has anything to do here. WebGPU hands the card over
+/// as a promise, and the page's one thread can't wait for that in the middle
+/// of opening a project, so it is awaited once, up front. Everywhere else the
+/// card is opened when it is first needed.
+pub async fn prepare_graphics() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    return lumit_gpu::device::prepare_web().await.is_ok();
+    #[cfg(not(target_arch = "wasm32"))]
+    true
+}

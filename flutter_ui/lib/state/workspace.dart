@@ -2517,7 +2517,7 @@ class Workspace extends ChangeNotifier {
   static Future<Image?> compStill(CompositionReference comp, int frame,
       {int maxEdge = projectThumbnailPixels}) async {
     final still =
-        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
+        await comp.thumbnail(frame: frame, maxEdge: maxEdge);
     if (still == null || still.width == 0 || still.height == 0) return null;
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,

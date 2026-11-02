@@ -1174,13 +1174,26 @@ impl GpuContext {
             backends: wgpu::Backends::METAL,
             ..wgpu::InstanceDescriptor::from_env_or_default()
         });
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(
+            windows,
+            target_os = "linux",
+            target_os = "macos",
+            target_arch = "wasm32"
+        )))]
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        #[cfg(not(target_arch = "wasm32"))]
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             ..Default::default()
         }))
         .ok_or(GpuError::NoAdapter)?;
+        // The browser's, asked for once before anything was drawn
+        // ([`prepare_web`]), because the page can't wait for a promise in place.
+        #[cfg(target_arch = "wasm32")]
+        let (adapter, (device, queue)) = {
+            let (adapter, device, queue) = device::web_device()?;
+            (adapter, (device, queue))
+        };
         // The one moment an adapter is in hand, which is the only place Vulkan
         // will say how big the card is (see [`video_memory_bytes`]).
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -1216,19 +1229,17 @@ impl GpuContext {
         //
         // The widest texture is the card's own, so the largest picture setting
         // can reach it. Every other limit stays what every card guarantees.
-        let descriptor = wgpu::DeviceDescriptor {
-            required_features: adapter.features()
-                & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                    | wgpu::Features::FLOAT32_FILTERABLE),
-            required_limits: widest_texture(&adapter),
-            ..Default::default()
-        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let descriptor = device::descriptor(&adapter);
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
         let (device, queue) = match shared_linux::open_device(&adapter, &descriptor) {
             Ok(dq) => dq,
             Err(why) => shared_linux::plain_device(&adapter, &descriptor, why)?,
         };
-        #[cfg(not(all(target_os = "linux", feature = "shared-texture-linux")))]
+        #[cfg(not(any(
+            all(target_os = "linux", feature = "shared-texture-linux"),
+            target_arch = "wasm32"
+        )))]
         let (device, queue) = pollster::block_on(adapter.request_device(&descriptor, None))
             .map_err(|e| GpuError::Device(e.to_string()))?;
 
@@ -3426,6 +3437,7 @@ mod tests {
 }
 
 pub mod composite;
+pub mod device;
 pub mod drm;
 pub mod fx;
 pub mod scope;

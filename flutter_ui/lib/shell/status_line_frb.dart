@@ -892,7 +892,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             SizedBox(
               width: 120,
               child: HouseProgressBar(
-                fraction: total == BigInt.zero
+                fraction: total == 0
                     ? 0.0
                     : frame.toDouble() / total.toDouble(),
               ),
@@ -951,7 +951,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             SizedBox(
               width: 120,
               child: HouseProgressBar(
-                fraction: total == BigInt.zero
+                fraction: total == 0
                     ? 0.0
                     : frame.toDouble() / total.toDouble(),
               ),

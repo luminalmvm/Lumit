@@ -46,6 +46,7 @@ pub(super) const DEADLINE: Duration = Duration::from_secs(60);
 /// while one layer is picked out and the frame twice while it is drawn, and
 /// this leaves room for both. A file that asks for more is one that would have
 /// taken the machine's memory.
+#[cfg(not(target_arch = "wasm32"))]
 const MEMORY_CAP: u64 = 4 << 30;
 
 /// The longest layer list the caller takes, in bytes. Names are short, and

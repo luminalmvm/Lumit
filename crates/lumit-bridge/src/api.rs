@@ -25,6 +25,7 @@ pub mod flare;
 pub mod folder;
 pub mod footage;
 pub mod graph;
+pub mod handler;
 pub mod import;
 pub mod interpret;
 pub mod keymap;

@@ -20,13 +20,13 @@ class MotionPaths {
   /// still, so there is no path to draw and nothing to ask again.
   final Map<UuidValue, BridgeMotionPath?> _byLayer = {};
 
-  BigInt? _revision;
+  int? _revision;
 
   /// The path [layer] is following, or null when its Position is still.
   ///
   /// [revision] is the document revision the caller is drawing; a move of it
   /// empties everything held, and the first ask after it goes to the engine.
-  BridgeMotionPath? pathOf(LayerReference layer, {required BigInt? revision}) {
+  BridgeMotionPath? pathOf(LayerReference layer, {required int? revision}) {
     if (revision != _revision) {
       _revision = revision;
       _byLayer.clear();
