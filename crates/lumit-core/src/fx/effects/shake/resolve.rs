@@ -81,6 +81,14 @@ pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) 
     if waving {
         push(Shake::DERIVED_PRESCALED, Value::Bool(true));
     }
+    // Amplitude scales the twist and the zoom as well, against its default
+    // of 30, so a fresh shake looks as it always did and 0 stills it. Before
+    // version 3 they ignored it, and a shake load could not carry over still
+    // reads that way.
+    let twist = match e.effect.version < 3 {
+        true => 1.0,
+        false => fl("amplitude").unwrap_or(30.0).max(0.0) / 30.0,
+    };
     // Channels: each colour's amount and phase, and the wobble of its own
     // that Channel randomness adds. Untouched, the channels stay together.
     let colours = [
@@ -111,20 +119,20 @@ pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) 
                 (sample(i, b * f) + randomness * sample(16 + 8 * c + i, b * f * rgb_freq)) * gate
             }
         };
-        let n = [
+        let mut n = [
             axis(0, x_freq),
             axis(1, y_freq),
             axis(2, rot_freq),
             axis(3, z_freq),
         ];
-        if !waving {
-            return n;
+        if waving {
+            for (v, (k, (a, f, p))) in n.iter_mut().zip(amounts.into_iter().zip(waves)) {
+                *v = *v * k + a * (std::f64::consts::TAU * f * b + p).sin();
+            }
         }
-        let mut out = [0.0; 4];
-        for (o, ((v, k), (a, f, p))) in out.iter_mut().zip(n.iter().zip(amounts).zip(waves)) {
-            *o = v * k + a * (std::f64::consts::TAU * f * b + p).sin();
-        }
-        out
+        n[2] *= twist;
+        n[3] *= twist;
+        n
     };
     // × 1 leaves a value as it was, so a shake without Channels keeps its bits.
     let value = |n: [f64; 4], k: f64| Value::Vec4(n.map(|v| (v * k) as f32));

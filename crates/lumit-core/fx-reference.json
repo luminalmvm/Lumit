@@ -5227,7 +5227,7 @@
       "slug": "shake",
       "match_name": "shake",
       "label": "Shake",
-      "version": 2,
+      "version": 3,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [

@@ -23,12 +23,15 @@
 //! step for step — same association, same cast points — so a shake that has not
 //! been touched renders the bits it always did.
 
+use crate::anim::Animation;
+use crate::fx::builtins::scale_property;
 use crate::fx::{
     cpu, maths::shake_affine, maths::transform_op, maths::ShakeSample, maths::NO_SKEW,
     maths::SHAKE_MB_SAMPLES, params::ParamId, params::Params, params::Value, registry::EffectDef,
     registry::EffectMetadata, registry::ResolveCx, schema::EdgesMode, schema::EffectSchema,
     schema::ParamGroup,
 };
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
 mod resolve;
@@ -126,9 +129,10 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
 #[effect(
     match_name = "shake",
     label = "Shake",
-    // 2: Phase holds the shake back rather than bringing it forward. A
-    // version 1 Phase is turned round on load (`migrate_percent_to_px`).
-    version = 2,
+    // 2: Phase holds the shake back rather than bringing it forward.
+    // 3: Amplitude scales the twist and the zoom too. Both are carried over
+    // on load ([`migrate`]).
+    version = 3,
     category = Distortion,
     cost = Cheap,
     roi = FullFrame,
@@ -146,8 +150,9 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     ),
 )]
 pub struct Shake {
-    /// px@comp (§2.3): how far the wobble roams. Declared `Px`, so the resolve
-    /// step scales it to the raster in play and
+    /// px@comp (§2.3): how far the wobble roams. The twist and the zoom go
+    /// with it, × Amplitude / 30, so 0 leaves the picture where it is.
+    /// Declared `Px`, so the resolve step scales it to the raster in play and
     /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     /// The old arm scaled the *resolved offsets* by hand; declaring the unit
@@ -213,7 +218,7 @@ pub struct Shake {
     )]
     pub centre_bias: f32,
 
-    /// Degrees of twist wobble either way.
+    /// Degrees of twist wobble either way at the default Amplitude.
     #[slider(
         label = "Rotation amount",
         min = 0.0,
@@ -771,6 +776,61 @@ impl Shake {
                 mix,
             },
         }
+    }
+}
+
+/// Carry a saved shake over to this version, so it renders as it did.
+/// `wired` says whether a row has a wire into it.
+pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
+    let rows = |e: &mut EffectInstance, ids: &[&str], k: f64| {
+        for p in &mut e.params {
+            if let (true, EffectValue::Float(prop)) = (ids.contains(&p.id.as_str()), &mut p.value) {
+                scale_property(prop, k);
+            }
+        }
+    };
+    // v1 → v2: Phase brought the shake forward and now holds it back, so an
+    // old value is turned round. One an expression drives is left on version
+    // 1, which the resolver reads the old way, since a script cannot be turned
+    // round safely.
+    let scripted = matches!(e.param("phase"), Some(EffectValue::Float(p))
+        if matches!(p.animation, Animation::Expression(_)));
+    if e.effect.version < 2 && !scripted {
+        rows(e, &["phase"], -1.0);
+        e.effect.version = 2;
+    }
+    // v2 → v3: the twist and zoom rows are divided by Amplitude / 30. That
+    // only works for a still Amplitude above 0, and while the rows stay in
+    // range. Any other shake stays on version 2 and reads the old way.
+    if e.effect.version != 2 {
+        return;
+    }
+    let k = match e.param("amplitude") {
+        Some(EffectValue::Float(p)) if !wired("amplitude") => match p.animation {
+            Animation::Static(a) if a > 0.0 => 30.0 / a,
+            _ => return,
+        },
+        _ => return,
+    };
+    let twist = [
+        ("rotation", 360.0),
+        ("rot_wave", 360.0),
+        ("z_amp", 100.0),
+        ("zoom_pump", 100.0),
+        ("z_wave", 100.0),
+    ];
+    let fits = |(id, max): (&str, f64)| match e.param(id) {
+        None => true,
+        Some(EffectValue::Float(p)) if !wired(id) => match &p.animation {
+            Animation::Static(v) => v * k <= max,
+            Animation::Keyframed(keys) => keys.iter().all(|key| key.value * k <= max),
+            Animation::Expression(_) => false,
+        },
+        _ => false,
+    };
+    if twist.into_iter().all(fits) {
+        rows(e, &twist.map(|(id, _)| id), k);
+        e.effect.version = 3;
     }
 }
 
