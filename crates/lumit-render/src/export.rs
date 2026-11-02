@@ -2661,6 +2661,7 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
     std::thread::spawn(move || {
+        crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
         let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
         // No half files, but only a file this export began. One that failed

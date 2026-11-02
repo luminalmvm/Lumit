@@ -1,8 +1,10 @@
 //! Model layers on the way to the mesh pass: each file's scene, read once and
 //! kept, and the draw that carries it.
 
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -47,6 +49,49 @@ impl lumit_cache::ByteSized for Kept {
 
 static KEPT: Mutex<Option<lumit_cache::ByteLru<Key, Kept>>> = Mutex::new(None);
 
+/// The files being read beside the frame.
+static READING: Mutex<Option<HashSet<Key>>> = Mutex::new(None);
+/// Moves when a read beside the frame starts or lands.
+static READS: AtomicU64 = AtomicU64::new(0);
+/// Moves each time a frame leaves out a model that is still being read.
+static LEFT_OUT: AtomicU64 = AtomicU64::new(0);
+
+thread_local! {
+    /// On for the Viewer's thread: a model not read yet is read beside the
+    /// frame and left out of it until it lands. Export never sets it, so it
+    /// waits for every model.
+    static ASIDE: Cell<bool> = const { Cell::new(false) };
+    /// What stops a read on this thread part way: an export's cancel.
+    static STOP: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
+}
+
+/// Stop any model this thread reads from now on when `flag` is raised.
+pub(crate) fn stop_reads_with(flag: Arc<AtomicBool>) {
+    STOP.with(|s| *s.borrow_mut() = Some(flag));
+}
+
+/// Read models beside the frame on this thread from now on, or not.
+pub fn read_aside(on: bool) {
+    ASIDE.with(|a| a.set(on));
+}
+
+/// A number that moves when a read beside the frame starts or lands.
+pub fn reads() -> u64 {
+    READS.load(Ordering::Relaxed)
+}
+
+/// How many frames have left out a model still being read.
+pub fn left_out() -> u64 {
+    LEFT_OUT.load(Ordering::Relaxed)
+}
+
+/// Whether a model is being read beside the frame right now.
+pub fn reading() -> bool {
+    READING
+        .lock()
+        .is_ok_and(|r| r.as_ref().is_some_and(|r| !r.is_empty()))
+}
+
 /// Count kept scenes against the governor's `ledger` from here on.
 pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     if let Ok(mut slot) = KEPT.lock() {
@@ -65,29 +110,69 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     let path = PathBuf::from(f.media.on_disk());
     let meta = std::fs::metadata(&path).ok()?;
     let key = (path, meta.len(), meta.modified().ok());
+    {
+        let mut slot = KEPT.lock().ok()?;
+        let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
+        if let Some(Kept(scene)) = kept.get(&key) {
+            return scene.clone();
+        }
+    }
+    if ASIDE.with(Cell::get) {
+        LEFT_OUT.fetch_add(1, Ordering::Relaxed);
+        read_beside(key);
+        return None;
+    }
+    read_and_keep(key)
+}
+
+/// Read the file `key` names and keep what comes of it.
+fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
+    let stop = STOP.with(|s| s.borrow().clone()).unwrap_or_default();
+    let read = lumit_scene::read(&key.0, lumit_ingress::Limits::MODEL, &stop);
+    // A read stopped part way says nothing about the file, so it isn't kept.
+    if matches!(read, Err(lumit_scene::SceneError::Cancelled)) {
+        return None;
+    }
+    let scene = read.ok().map(Arc::new);
     let mut slot = KEPT.lock().ok()?;
     let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
-    if let Some(Kept(scene)) = kept.get(&key) {
-        return scene.clone();
-    }
     if kept
         .pressure()
         .is_some_and(lumit_budget::Pressure::should_trim)
     {
         kept.evict_cold_half();
     }
-    // ponytail: read on the render thread, with the lock held, so the first
-    // frame with a new model waits for it. A background read with a stand-in
-    // frame is the upgrade if big scenes make that hurt.
-    let scene = lumit_scene::read(
-        &key.0,
-        lumit_ingress::Limits::MODEL,
-        &AtomicBool::new(false),
-    )
-    .ok()
-    .map(Arc::new);
     kept.insert(key, Kept(scene.clone()));
     scene
+}
+
+/// Read `key` on its own thread, once however many frames ask.
+fn read_beside(key: Key) {
+    let started = READING
+        .lock()
+        .is_ok_and(|mut r| r.get_or_insert_with(HashSet::new).insert(key.clone()));
+    if !started {
+        return;
+    }
+    READS.fetch_add(1, Ordering::Relaxed);
+    let done = move |key: &Key| {
+        if let Ok(mut r) = READING.lock() {
+            r.get_or_insert_with(HashSet::new).remove(key);
+        }
+        READS.fetch_add(1, Ordering::Relaxed);
+    };
+    let spawned = std::thread::Builder::new()
+        .name("lumit-model-read".into())
+        .spawn({
+            let key = key.clone();
+            move || {
+                read_and_keep(key.clone());
+                done(&key);
+            }
+        });
+    if spawned.is_err() {
+        done(&key);
+    }
 }
 
 /// Model space to the layer's pixels, for a model whose box at rest is

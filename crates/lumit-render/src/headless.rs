@@ -1204,9 +1204,8 @@ impl HeadlessRenderer {
         self.view
     }
 
-    /// Let this renderer make a Lens flare's bake beside the frame rather than
-    /// inside it, so choosing a lens is a wait you can watch instead of
-    /// half a second of stopped picture.
+    /// Let this renderer make a Lens flare's bake, and read a 3D model, beside
+    /// the frame rather than inside it, so neither stops the picture.
     ///
     /// **Off by default, and the exporter never turns it on.** An export builds
     /// its own renderer on its own device, so it starts with an empty bake
@@ -1219,6 +1218,7 @@ impl HeadlessRenderer {
     /// kept — see [`Self::flare_substitutions`], which says exactly which
     /// frames those were.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
+        crate::model::read_aside(deferred);
         if let Some(parts) = self.parts.as_ref() {
             for fx in parts.fx_all() {
                 fx.set_deferred_flare_bakes(deferred);
@@ -1237,8 +1237,8 @@ impl HeadlessRenderer {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_bake_generation)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + crate::model::reads()
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
@@ -1250,8 +1250,8 @@ impl HeadlessRenderer {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_substitutions)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + crate::model::left_out()
     }
 
     /// Whether a flare bake is being made right now.
@@ -1261,7 +1261,7 @@ impl HeadlessRenderer {
             parts
                 .fx_all()
                 .any(lumit_gpu::fx::FxEngine::flare_bake_pending)
-        })
+        }) || crate::model::reading()
     }
 
     /// The content-hash name of this comp frame ([`crate::cache::frame_key`]),
