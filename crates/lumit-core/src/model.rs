@@ -2161,7 +2161,7 @@ impl Layer {
         self.switches.three_d
             || matches!(
                 self.kind,
-                LayerKind::Camera { .. } | LayerKind::Light { .. }
+                LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Model { .. }
             )
     }
 
@@ -2540,6 +2540,13 @@ pub enum LayerKind {
         #[serde(default)]
         light: Box<LightDef>,
     },
+    /// A Model layer: a 3D model file (a footage item) drawn in the comp's 3D
+    /// space. Always 3D. Boxed for the reason Light is.
+    Model {
+        item: Uuid,
+        #[serde(default)]
+        settings: Box<crate::model_layer::ModelSettings>,
+    },
 }
 
 impl LayerKind {
@@ -2558,6 +2565,7 @@ impl LayerKind {
             Self::Null => 8,
             Self::Shape { .. } => 9,
             Self::Light { .. } => 10,
+            Self::Model { .. } => 11,
         }
     }
 }
@@ -4050,12 +4058,14 @@ fn collect_comp_footage(
             // No media source of their own: a solid is a colour, text and
             // shapes are drawn, a camera is a viewpoint, a light is something
             // other layers see, an adjustment layer works on the composite
-            // below it, a null draws nothing.
+            // below it, a null draws nothing. A model is read by its own
+            // reader, never probed as media.
             LayerKind::Solid { .. }
             | LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
+            | LayerKind::Model { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
         }
@@ -4161,7 +4171,7 @@ fn comp_places(comp: &Composition, id: Uuid) -> bool {
 #[must_use]
 pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     match &layer.kind {
-        LayerKind::Footage { item } => *item == id,
+        LayerKind::Footage { item } | LayerKind::Model { item, .. } => *item == id,
         LayerKind::Solid { def } => *def == id,
         LayerKind::Precomp { comp } => *comp == id,
         LayerKind::Sequence { clips } => clips.iter().flat_map(|c| c.sources()).any(|s| match s {

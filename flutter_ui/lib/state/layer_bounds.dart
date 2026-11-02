@@ -421,8 +421,12 @@ class LayerBoundsCache extends ChangeNotifier {
 
   Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t) {
     // A Null never draws, so its box is the convention above rather than
-    // anything read from the document.
-    if (entry.info.kind == BridgeLayerKind.nullLayer) return nullLayerBounds;
+    // anything read from the document. A Model layer borrows it until its box
+    // comes from the model's own bounds.
+    if (entry.info.kind == BridgeLayerKind.nullLayer ||
+        entry.info.kind == BridgeLayerKind.model) {
+      return nullLayerBounds;
+    }
 
     // A shape layer is exactly as big as its art, and **that changes as the art
     // is edited** — the first kind whose size is not fixed by a source.

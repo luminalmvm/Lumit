@@ -116,11 +116,13 @@ class TransformGroup {
 
 /// Whether a layer of this kind has a 3D switch to flip.
 ///
-/// A Camera and a Light are three-dimensional by being what they are
-/// (docs/impl/camera.md §1), so the switch would be one you cannot turn off:
-/// the Timeline leaves their cell blank and the Layer menu skips them.
+/// A Camera, a Light and a Model layer are three-dimensional by being what
+/// they are (docs/impl/camera.md §1), so the switch would be one you cannot
+/// turn off: the Timeline leaves their cell blank and the Layer menu skips them.
 bool hasThreeDSwitch(BridgeLayerKind kind) =>
-    kind != BridgeLayerKind.camera && kind != BridgeLayerKind.light;
+    kind != BridgeLayerKind.camera &&
+    kind != BridgeLayerKind.light &&
+    kind != BridgeLayerKind.model;
 
 /// Whether a layer of this kind carries the visibility eye.
 ///
@@ -418,8 +420,10 @@ List<TransformGroup> transformGroups({
           suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
     ]),
     // How a 3D layer takes the comp's lights, as After Effects has it. A null
-    // has no picture to light.
-    if (threeD && kind != BridgeLayerKind.nullLayer)
+    // has no picture to light, and a model's materials come from its file.
+    if (threeD &&
+        kind != BridgeLayerKind.nullLayer &&
+        kind != BridgeLayerKind.model)
       for (final (label, prop) in [
         // Light passes through a layer only where it casts a shadow.
         if (material?.castsShadows != BridgeShadowMode.off)

@@ -221,7 +221,10 @@ pub fn layer_rect(
         LayerKind::Footage { .. } | LayerKind::Sequence { .. } | LayerKind::Adjustment => {
             frame(comp.width, comp.height)
         }
-        LayerKind::Null | LayerKind::Camera { .. } | LayerKind::Light { .. } => None,
+        LayerKind::Null
+        | LayerKind::Camera { .. }
+        | LayerKind::Light { .. }
+        | LayerKind::Model { .. } => None,
     }
 }
 

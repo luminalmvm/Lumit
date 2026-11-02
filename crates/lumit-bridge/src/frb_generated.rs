@@ -28304,6 +28304,7 @@ impl SseDecode for crate::api::layer::BridgeLayerKind {
             8 => crate::api::layer::BridgeLayerKind::NullLayer,
             9 => crate::api::layer::BridgeLayerKind::Light,
             10 => crate::api::layer::BridgeLayerKind::Audio,
+            11 => crate::api::layer::BridgeLayerKind::Model,
             _ => unreachable!("Invalid variant for BridgeLayerKind: {}", inner),
         };
     }
@@ -39648,6 +39649,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerKind {
             Self::NullLayer => 8.into_dart(),
             Self::Light => 9.into_dart(),
             Self::Audio => 10.into_dart(),
+            Self::Model => 11.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -46850,6 +46852,7 @@ impl SseEncode for crate::api::layer::BridgeLayerKind {
                 crate::api::layer::BridgeLayerKind::NullLayer => 8,
                 crate::api::layer::BridgeLayerKind::Light => 9,
                 crate::api::layer::BridgeLayerKind::Audio => 10,
+                crate::api::layer::BridgeLayerKind::Model => 11,
                 _ => {
                     unimplemented!("");
                 }

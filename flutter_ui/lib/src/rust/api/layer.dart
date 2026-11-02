@@ -1129,6 +1129,9 @@ enum BridgeLayerKind {
   /// `audio_only` set — but the frontend draws it as its own kind (its own
   /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
   audio,
+
+  /// A Model layer: a 3D model file drawn in the comp's 3D space.
+  model,
   ;
 }
 
