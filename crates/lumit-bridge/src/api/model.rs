@@ -36,6 +36,18 @@ impl FootageReference {
             _ => false,
         })
     }
+
+    /// The pictures this 3D model names that are missing or won't read, as
+    /// it names them. Reads the model if nothing has yet, so never from a
+    /// build.
+    pub fn get_model_missing(&self) -> Result<Vec<String>, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        Ok(lumit_render::model::missing(&doc, self.id()))
+    }
 }
 
 impl LayerReference {
@@ -63,11 +75,7 @@ impl LayerReference {
         let LayerKind::Model { item, settings } = self.item()?.kind else {
             return Ok(Vec::new());
         };
-        let doc = {
-            let proj = self.project()?;
-            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-            proj.store.snapshot()
-        };
+        let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
         let size = (comp.width as f32, comp.height as f32);
         let corners = lumit_render::model::layer_box(&doc, item, &settings, size);
@@ -77,6 +85,67 @@ impl LayerReference {
             .flatten()
             .map(|v| f64::from(*v))
             .collect())
+    }
+
+    /// The comp pixels a metre Fit to comp gives a Model layer's model with
+    /// `up_axis` up, once its file has been read. `None` before that and on
+    /// any other kind of layer.
+    #[frb(sync)]
+    pub fn get_model_fitted_units(
+        &self,
+        up_axis: BridgeUpAxis,
+    ) -> Result<Option<f64>, BridgeError> {
+        let LayerKind::Model { item, .. } = self.item()?.kind else {
+            return Ok(None);
+        };
+        let doc = self.snapshot()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let up = match up_axis {
+            BridgeUpAxis::Y => UpAxis::Y,
+            BridgeUpAxis::Z => UpAxis::Z,
+        };
+        let size = (comp.width as f32, comp.height as f32);
+        Ok(lumit_render::model::fitted_units(&doc, item, up, size).map(f64::from))
+    }
+
+    /// How far along the ray from `origin` by `direction`, three numbers
+    /// each in the layer's own pixels, it first meets a Model layer's model,
+    /// in parts of `direction`. `None` where it misses, before the file has
+    /// been read and on any other kind of layer. Asked once a click.
+    #[frb(sync)]
+    pub fn get_model_hit(
+        &self,
+        origin: Vec<f64>,
+        direction: Vec<f64>,
+    ) -> Result<Option<f64>, BridgeError> {
+        let LayerKind::Model { item, settings } = self.item()?.kind else {
+            return Ok(None);
+        };
+        let (Ok([ox, oy, oz]), Ok([dx, dy, dz])) = (
+            <[f64; 3]>::try_from(origin),
+            <[f64; 3]>::try_from(direction),
+        ) else {
+            return Ok(None);
+        };
+        let doc = self.snapshot()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        Ok(lumit_render::model::hit(
+            &doc,
+            item,
+            &settings,
+            (comp.width as f32, comp.height as f32),
+            [ox, oy, oz].map(|v| v as f32),
+            [dx, dy, dz].map(|v| v as f32),
+        )
+        .map(f64::from))
+    }
+
+    /// The document as it is now.
+    #[frb(ignore)]
+    fn snapshot(&self) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(proj.store.snapshot())
     }
 
     /// Replace a Model layer's settings, as one undo step. Refused on any

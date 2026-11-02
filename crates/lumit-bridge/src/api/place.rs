@@ -31,7 +31,8 @@ impl CompositionReference {
     /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
     /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
     /// no lights brings an Ambient light and a Key light with it, in the same
-    /// undo step. Answers the layers made from the items.
+    /// undo step, named by `light_names` (ambient, then key) when given.
+    /// Answers the layers made from the items.
     #[frb(sync)]
     pub fn add_footage_layers(
         &self,
@@ -40,6 +41,7 @@ impl CompositionReference {
         row: Option<u32>,
         arrival: Option<BridgeStreamsArrival>,
         end_to_end: bool,
+        light_names: Option<Vec<String>>,
     ) -> Result<Vec<LayerReference>, BridgeError> {
         let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
         let proj = self.project()?;
@@ -120,6 +122,10 @@ impl CompositionReference {
             let mut ambient = Self::light_layer(&comp, 4);
             let mut key = Self::light_layer(&comp, 3);
             key.name = "Key light".into();
+            if let Some([a, k]) = light_names.as_deref() {
+                ambient.name.clone_from(a);
+                key.name.clone_from(k);
+            }
             // Up and to the left, about 45 degrees each way from the lens,
             // so the model shows its shape.
             let w = f64::from(comp.width);
@@ -159,6 +165,7 @@ impl CompositionReference {
             .map_err(BridgeError::OpError)?;
         Ok(placed)
     }
+
     /// The Light layer [`Self::add_light_layer`] makes in `comp`.
     #[frb(ignore)]
     pub(crate) fn light_layer(

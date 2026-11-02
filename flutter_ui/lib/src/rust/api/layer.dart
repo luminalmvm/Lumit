@@ -3623,6 +3623,22 @@ class LayerReference {
         that: this,
       );
 
+  /// The comp pixels a metre Fit to comp gives a Model layer's model with
+  /// `up_axis` up, once its file has been read. `None` before that and on
+  /// any other kind of layer.
+  double? getModelFittedUnits({required BridgeUpAxis upAxis}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelFittedUnits(
+          that: this, upAxis: upAxis);
+
+  /// How far along the ray from `origin` by `direction`, three numbers
+  /// each in the layer's own pixels, it first meets a Model layer's model,
+  /// in parts of `direction`. `None` where it misses, before the file has
+  /// been read and on any other kind of layer. Asked once a click.
+  double? getModelHit(
+          {required List<double> origin, required List<double> direction}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelHit(
+          that: this, origin: origin, direction: direction);
+
   /// A Model layer's settings, or `None` on any other kind of layer.
   BridgeModelSettings? getModelSettings() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelSettings(

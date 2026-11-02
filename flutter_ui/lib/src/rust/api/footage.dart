@@ -296,6 +296,14 @@ class FootageReference {
         that: this,
       );
 
+  /// The pictures this 3D model names that are missing or won't read, as
+  /// it names them. Reads the model if nothing has yet, so never from a
+  /// build.
+  Future<List<String>> getModelMissing() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceGetModelMissing(
+        that: this,
+      );
+
   /// The proxy attached to this item, or `None` when there is none.
   BridgeProxy? getProxy() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceGetProxy(

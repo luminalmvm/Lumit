@@ -2,7 +2,7 @@
 //! kept, and the draw that carries it.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,6 +52,10 @@ impl lumit_cache::ByteSized for Kept {
 }
 
 static KEPT: Mutex<Option<lumit_cache::ByteLru<Key, Kept>>> = Mutex::new(None);
+
+/// Each file's missing pictures, kept after its scene goes so its badge
+/// never reads it again.
+static MISSING: Mutex<Option<HashMap<Key, Vec<String>>>> = Mutex::new(None);
 
 /// The files being read beside the frame.
 static READING: Mutex<Option<HashSet<Key>>> = Mutex::new(None);
@@ -216,6 +220,93 @@ pub fn layer_box(
     }))
 }
 
+/// The pictures model item `item` names that are missing or won't read, as
+/// it names them. Reads the file if nothing has yet.
+pub fn missing(doc: &Document, item: Uuid) -> Vec<String> {
+    let known = key_of(doc, item).and_then(|key| MISSING.lock().ok()?.as_ref()?.get(&key).cloned());
+    known.unwrap_or_else(|| scene(doc, item).map_or_else(Vec::new, |s| s.missing.clone()))
+}
+
+/// How far along the ray from `origin` by `direction`, in its layer's pixels,
+/// model item `item` placed by `settings` in a comp `comp` pixels in size is
+/// first met, in parts of `direction`. `None` where it misses and before the
+/// file has been read, which this never does.
+pub fn hit(
+    doc: &Document,
+    item: Uuid,
+    settings: &ModelSettings,
+    comp: (f32, f32),
+    origin: [f32; 3],
+    direction: [f32; 3],
+) -> Option<f32> {
+    use glam::{Mat4, Vec3};
+    let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
+    let scene = kept(&key_of(doc, item)?)??;
+    let placed = Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
+    let mut nearest = None::<f32>;
+    for (k, node) in scene.nodes.iter().enumerate() {
+        let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {
+            continue;
+        };
+        // The ray in the node's own space, which keeps its parts of direction.
+        let back = (placed * scene.node_world(k)).inverse();
+        let (o, d) = (
+            back.transform_point3(origin),
+            back.transform_vector3(direction),
+        );
+        // ponytail: a layer mirrored by a negative Scale isn't seen here, so
+        // its single-sided parts are culled from the wrong side.
+        let mirrored = (placed * scene.node_world(k)).determinant() < 0.0;
+        for p in &mesh.primitives {
+            // Parts the pass leaves out: cut out or see-through all over.
+            let m = p.material.and_then(|m| scene.materials.get(m));
+            let gone = m.is_some_and(|m| match m.alpha_mode {
+                lumit_scene::AlphaMode::Mask => m.base_colour[3] < m.alpha_cutoff,
+                lumit_scene::AlphaMode::Blend => m.base_colour[3] <= 0.0,
+                lumit_scene::AlphaMode::Opaque => false,
+            });
+            if gone {
+                continue;
+            }
+            // glTF's default is one-sided.
+            let culled = !mirrored && !m.is_some_and(|m| m.double_sided);
+            let corner = |i: u32| p.positions.get(i as usize).copied().map(Vec3::from);
+            let count = if p.indices.is_empty() {
+                p.positions.len()
+            } else {
+                p.indices.len()
+            };
+            let index = |i: usize| p.indices.get(i).copied().unwrap_or(i as u32);
+            for t in 0..count / 3 {
+                let (Some(a), Some(b), Some(c)) = (
+                    corner(index(t * 3)),
+                    corner(index(t * 3 + 1)),
+                    corner(index(t * 3 + 2)),
+                ) else {
+                    continue;
+                };
+                // Moller and Trumbore's test.
+                let (e1, e2) = (b - a, c - a);
+                let q = d.cross(e2);
+                let det = e1.dot(q);
+                // Seen from behind when the ray runs with the face's normal.
+                if !det.is_normal() || (culled && det < 0.0) {
+                    continue;
+                }
+                let s = o - a;
+                let u = s.dot(q) / det;
+                let r = s.cross(e1);
+                let v = d.dot(r) / det;
+                let along = e2.dot(r) / det;
+                if u >= 0.0 && v >= 0.0 && u + v <= 1.0 && along > 0.0 {
+                    nearest = Some(nearest.map_or(along, |n| n.min(along)));
+                }
+            }
+        }
+    }
+    nearest
+}
+
 /// Read the file `key` names and keep what comes of it.
 fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
     let stop = STOP.with(|s| s.borrow().clone()).unwrap_or_default();
@@ -225,6 +316,10 @@ fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
         return None;
     }
     let scene = read.ok().map(Arc::new);
+    if let (Some(s), Ok(mut m)) = (&scene, MISSING.lock()) {
+        m.get_or_insert_with(HashMap::new)
+            .insert(key.clone(), s.missing.clone());
+    }
     let mut slot = KEPT.lock().ok()?;
     let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
     if kept
@@ -303,4 +398,10 @@ fn fitted(up: UpAxis, bounds: &Bounds, comp: (f32, f32)) -> Option<f32> {
     let z = lumit_core::camera::default_zoom(f64::from(comp.0)) as f32;
     let fit = |c: f32, across: f32| c * z / (across * z + c * size.z / 2.0);
     (size.x > 0.0 && size.y > 0.0).then(|| fit(comp.0, size.x).min(fit(comp.1, size.y)) * 0.9)
+}
+
+/// What [`fitted`] gives model item `item` turned by `up` in a comp `comp`
+/// pixels in size, once its file has been read, which this never does.
+pub fn fitted_units(doc: &Document, item: Uuid, up: UpAxis, comp: (f32, f32)) -> Option<f32> {
+    fitted(up, &kept(&key_of(doc, item)?)??.bounds, comp)
 }
