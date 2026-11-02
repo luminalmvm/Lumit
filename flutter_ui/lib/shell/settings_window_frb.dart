@@ -2033,26 +2033,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Future<void> _importTheme(LumitUiState ui) async {
     final path = await pickThemeToOpen();
     if (path == null) return;
-    String text;
-    try {
-      text = await File(path).readAsString();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _themeMessage = l10n.keymapFileUnreadable);
-      }
-      return;
-    }
-    final file = path.split(RegExp(r'[\\/]')).last;
-    final read = readThemeFile(text,
-        name: file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file);
-    if (!mounted) return;
-    final theme = read.theme;
-    if (theme == null) {
-      setState(() => _themeMessage = read.refusal);
-      return;
-    }
-    ui.workspace.importCustomTheme(theme);
-    setState(() => _themeMessage = null);
+    final refusal = await ui.workspace.importThemeFile(path);
+    if (mounted) setState(() => _themeMessage = refusal);
   }
 
   /// Write the theme in use out as a file. Offered from a built-in scheme too:
