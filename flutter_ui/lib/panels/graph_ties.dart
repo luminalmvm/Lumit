@@ -4,8 +4,9 @@
 // through it. A drag with the right button across some wires ties them. With
 // Shift held the drag reroutes instead: each wire it crosses gets a point of
 // its own there, and wires from the same socket share one and fan out after
-// it. A tie is moved by dragging it, and let go by a right-click on it or a
-// drag across it.
+// it. A tie is moved by dragging it, and let go by a right-click on it, a drag
+// across it, or a click to pick it and Delete. Ctrl and a drag out of a point
+// draws a new wire from the socket its wires leave, through the point.
 //
 // A reroute point takes its wires through the one spot and is drawn as a
 // dot, as a tie on a single wire is.
@@ -314,6 +315,8 @@ class TieView {
   /// The tie under the pointer or in hand.
   final int? lit;
 
+  /// Where a wire in hand comes out of, when it is drawn out of a point.
+  final Offset? via;
 
   const TieView({
     this.ties = const [],
@@ -323,6 +326,7 @@ class TieView {
     this.crossed = const {},
     this.landing = const [],
     this.lit,
+    this.via,
   });
 }
 
@@ -476,6 +480,15 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
 
   int? _tieHover;
 
+  /// The tie a click picked, which Delete takes away.
+  int? _tiePicked;
+
+  /// A wire being drawn out of a point: the tie, and the socket it leaves.
+  (int, Offset)? _growing;
+
+  /// The canvas's wires as they stand now.
+  List<TieWire> tieWiresNow();
+
   List<BridgeWireTie>? _tiesWas;
   double _tieT = 1;
   MotionSpec _tieSpec = MotionSpec.still;
@@ -517,13 +530,18 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
         stroke: _stroke,
         crossed: _crossed,
         landing: _landing,
-        lit: _tieDrag?.$1 ?? _tieHover,
+        lit: _tieDrag?.$1 ?? _tiePicked ?? _tieHover,
+        via: switch (_growing) {
+          (final i, _) when i < ties.length => Offset(ties[i].x, ties[i].y),
+          _ => null,
+        },
       );
 
   /// A press on empty canvas. The right button starts a stroke, with Shift a
   /// reroute, and the left takes hold of a tie under it. True when the press
   /// was the ties'.
   bool tieDown(PointerDownEvent event, Offset at, List<TieWire> wires) {
+    if (_tiePicked != null) setState(() => _tiePicked = null);
     if (event.buttons == kSecondaryMouseButton) {
       setState(() {
         _stroke = (at, at);
@@ -538,6 +556,63 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     final held = Offset(ties[hit].x, ties[hit].y);
     _tieGrab = held - at;
     setState(() => _tieDrag = (hit, held));
+    return true;
+  }
+
+  /// With Ctrl held, a press on a tie starts a new wire from the socket its
+  /// first wire leaves: where that socket is, for the canvas to start the
+  /// wire from as if the socket itself were pressed. Null otherwise.
+  Offset? tieWireFrom(PointerDownEvent event, Offset at, List<TieWire> wires) {
+    final keys = HardwareKeyboard.instance;
+    if (event.buttons != kPrimaryMouseButton ||
+        !(keys.isControlPressed || keys.isMetaPressed)) {
+      return null;
+    }
+    final hit = _layout(wires).barAt(at, tieZoom);
+    if (hit == null) return null;
+    final ends = {for (final w in wires) w.key: w.from};
+    final from = ties[hit].wires.map((k) => ends[k]).nonNulls.firstOrNull;
+    if (from == null) return null;
+    _growing = (hit, from);
+    return from;
+  }
+
+  /// A wire in hand was let go. One drawn out of a point joins that point
+  /// once the canvas has it.
+  void tieWireLanded() {
+    final growing = _growing;
+    _growing = null;
+    if (growing == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final (i, from) = growing;
+      if (i >= ties.length) return;
+      final wires = tieWiresNow();
+      final tie = ties[i];
+      final joining = [
+        for (final w in wires)
+          if (w.from == from && !tie.wires.contains(w.key)) w.key,
+      ];
+      if (joining.isEmpty) return;
+      _write([
+        for (final (j, t) in ties.indexed)
+          j == i
+              ? BridgeWireTie(
+                  x: t.x,
+                  y: t.y,
+                  wires: [...t.wires, ...joining],
+                  point: t.point)
+              : t,
+      ], wires);
+    });
+  }
+
+  /// Delete with a tie picked takes it away. True when there was one.
+  bool tieDelete() {
+    final i = _tiePicked;
+    if (i == null || i >= ties.length) return false;
+    setState(() => _tiePicked = null);
+    _write([...ties]..removeAt(i), tieWiresNow());
     return true;
   }
 
@@ -571,7 +646,11 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
   /// canvas then treats as its own.
   bool tieUp(Offset at, bool moved, List<TieWire> wires) {
     if (_tieDrag case (final i, final where)?) {
-      setState(() => _tieDrag = null);
+      setState(() {
+        _tieDrag = null;
+        // A click, not a drag, picks the tie.
+        if (!moved) _tiePicked = i;
+      });
       if (moved && i < ties.length) {
         _write([
           for (final (j, tie) in ties.indexed)

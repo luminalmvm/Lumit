@@ -616,6 +616,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     ];
   }
 
+  @override
+  List<TieWire> tieWiresNow() => _wiresOf(_boxes());
+
   List<TieWire> _wiresOf(List<_Box> boxes) => [
         for (final (w, _, _) in _tieWires(boxes, ThemeScope.of(context).theme))
           w,
@@ -659,7 +662,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
-    final socket = _socketAt(boxes, at);
+    // Ctrl and a press on a point is a press on the socket its wires leave.
+    final socket =
+        _socketAt(boxes, tieWireFrom(event, at, _wiresOf(boxes)) ?? at);
     if (socket != null) {
       // A wired input is grabbed by its far end, exactly as the outer canvas
       // grabs one: drop it elsewhere to move it, on nothing to take it off.
@@ -754,6 +759,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
+      tieWireLanded();
       final landed = _socketAt(boxes, at);
       if (flight.detached case final held?) {
         if (moved && landed != null) {
@@ -868,7 +874,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
           // answered through [_consoleClaim].
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
-            return _deleteSelected()
+            return tieDelete() || _deleteSelected()
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
           }
@@ -1147,7 +1153,8 @@ class _WirePainter extends CustomPainter {
     paintTiedWires(canvas, wires, ties,
         pan: pan, zoom: zoom, style: style, theme: theme);
     if (flight case final f?) {
-      final (a, b) = f.from.isInput ? (f.to, f.from.at) : (f.from.at, f.to);
+      final (a, b) =
+          f.from.isInput ? (f.to, f.from.at) : (ties.via ?? f.from.at, f.to);
       final path =
           graphWirePath(_screen(a), _screen(b), zoom: zoom, wires: style);
       canvas.drawPath(
