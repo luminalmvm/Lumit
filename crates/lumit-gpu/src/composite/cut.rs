@@ -4,6 +4,7 @@ use super::{
     scaled_size, Blend, CompositeLayer, Compositor, Cut, LayerUniform, Region, CUT_DEPTH,
     PIECE_CORNERS,
 };
+use crate::mesh::ModelPicture;
 use crate::GpuContext;
 use glam::Mat4;
 
@@ -38,6 +39,37 @@ impl Compositor {
         render_scale: f32,
         under: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
+        self.composite_depth_joined(
+            ctx,
+            width,
+            height,
+            runs,
+            camera,
+            metres_per_w,
+            near,
+            render_scale,
+            under,
+            &[],
+        )
+    }
+
+    /// As [`Self::composite_depth`], with `models`: a layer whose picture is
+    /// one of theirs is a model's, placed full frame, and lays down the
+    /// model's own depth at each pixel.
+    #[allow(clippy::too_many_arguments)]
+    pub fn composite_depth_joined(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        runs: &[&[CompositeLayer<'_>]],
+        camera: Mat4,
+        metres_per_w: f32,
+        near: f32,
+        render_scale: f32,
+        under: Option<&wgpu::Texture>,
+        models: &[ModelPicture],
+    ) -> wgpu::Texture {
         let (tw, th) = scaled_size(width, height, render_scale);
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("comp-depth"),
@@ -58,7 +90,19 @@ impl Compositor {
         });
         let under = under.filter(|u| (u.width(), u.height()) == (tw, th));
         let pipelines = self.pipelines(ctx, 1, None);
+        let joins = (!models.is_empty()).then(|| self.join_set(ctx, 1));
         let bind = |layer: &CompositeLayer<'_>, clear: bool| {
+            if let Some(model) = models.iter().find(|m| &m.colour == layer.texture) {
+                let params = [
+                    (layer.opacity / 100.0).clamp(0.0, 1.0),
+                    0.0,
+                    near,
+                    metres_per_w,
+                ];
+                let flags = [f32::from(u8::from(clear)), 0.0, 0.0, 0.0];
+                let matrix = self.full_frame_matrix(width, height, None);
+                return (true, self.join_group(ctx, model, matrix, params, flags));
+            }
             let uniform = LayerUniform {
                 matrix: layer
                     .matrix(width as f32, height as f32, Some(&camera), None)
@@ -82,7 +126,7 @@ impl Compositor {
                 },
             );
             let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("composite-depth-layer"),
                 layout: &self.layout,
                 entries: &[
@@ -113,12 +157,14 @@ impl Compositor {
                         )),
                     },
                 ],
-            })
+            });
+            (false, group)
         };
         // Each run's 3D layers, after a clear of where they cover when the run
         // lies over something. The first run over nothing needs no clear.
         let mut over = under.is_some();
-        let mut draws: Vec<(Vec<wgpu::BindGroup>, Vec<wgpu::BindGroup>)> = Vec::new();
+        type Draws = Vec<(bool, wgpu::BindGroup)>;
+        let mut draws: Vec<(Draws, Draws)> = Vec::new();
         for run in runs {
             let solid: Vec<&CompositeLayer<'_>> = run.iter().filter(|l| l.three_d).collect();
             if solid.is_empty() {
@@ -170,13 +216,24 @@ impl Compositor {
             });
             if let (Some(depth), Some(clear)) = (&pipelines.depth, &pipelines.depth_clear) {
                 for (clears, binds) in &draws {
-                    for (pipeline, list) in [(clear, clears), (depth, binds)] {
+                    for (join, (pipeline, list)) in
+                        [4, 3].into_iter().zip([(clear, clears), (depth, binds)])
+                    {
                         if list.is_empty() {
                             continue;
                         }
-                        pass.set_pipeline(pipeline);
-                        for bind in list {
-                            pass.set_bind_group(0, bind, &[0]);
+                        for (model, bind) in list {
+                            // A model's own draw, the depth or the clear.
+                            match joins.as_ref().filter(|_| *model) {
+                                Some(j) => {
+                                    pass.set_pipeline(&j[join]);
+                                    pass.set_bind_group(0, bind, &[]);
+                                }
+                                None => {
+                                    pass.set_pipeline(pipeline);
+                                    pass.set_bind_group(0, bind, &[0]);
+                                }
+                            }
                             pass.draw(0..6, 0..1);
                         }
                     }
@@ -206,6 +263,46 @@ impl Compositor {
         region: Option<Region>,
         cuts: &[Option<Cut>],
     ) -> wgpu::Texture {
+        self.composite_joined(
+            ctx,
+            width,
+            height,
+            background,
+            layers,
+            camera,
+            seed,
+            render_scale,
+            samples,
+            region,
+            cuts,
+            &[],
+        )
+    }
+
+    /// As [`Self::composite_cut`], with `models`: a layer whose picture is one
+    /// of theirs is a model's, placed full frame. In a run cut by depth each
+    /// of its pixels sits at the model's own depth there, so models and 3D
+    /// layers cut through each other.
+    ///
+    /// ponytail: a model draws Normal in a run cut by depth, whatever its
+    /// blend mode, and takes no track matte or mask there.
+    #[allow(clippy::too_many_arguments)]
+    pub fn composite_joined(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        background: [f64; 4],
+        layers: &[CompositeLayer<'_>],
+        camera: Option<Mat4>,
+        seed: Option<&wgpu::Texture>,
+        render_scale: f32,
+        samples: u32,
+        region: Option<Region>,
+        cuts: &[Option<Cut>],
+        models: &[ModelPicture],
+    ) -> wgpu::Texture {
+        let model_of = |l: &CompositeLayer<'_>| models.iter().find(|m| &m.colour == l.texture);
         let cut_of = |i: usize| cuts.get(i).copied().flatten();
         let (tw, th) = match region {
             Some(r) => r.target_size(render_scale),
@@ -315,9 +412,12 @@ impl Compositor {
         let mut bytes = vec![0u8; (stride * layers.len().max(1) as u64) as usize];
         for (i, layer) in layers.iter().enumerate() {
             let uniform = LayerUniform {
-                matrix: layer
-                    .matrix(width as f32, height as f32, camera.as_ref(), region)
-                    .to_cols_array_2d(),
+                matrix: match model_of(layer) {
+                    Some(_) => self.full_frame_matrix(width, height, region),
+                    None => layer
+                        .matrix(width as f32, height as f32, camera.as_ref(), region)
+                        .to_cols_array_2d(),
+                },
                 params: [
                     (layer.opacity / 100.0).clamp(0.0, 1.0),
                     f32::from(layer.matte.is_some()),
@@ -467,7 +567,7 @@ impl Compositor {
                 ),
                 Some(ms) => {
                     let uniform = LayerUniform {
-                        matrix: self.full_frame_matrix(width, height),
+                        matrix: self.full_frame_matrix(width, height, None),
                         params: [1.0, 0.0, 0.0, 0.0],
                         target: [tw as f32, th as f32, -1.0, 0.0],
                         cut: [0.0; 4],
@@ -593,6 +693,25 @@ impl Compositor {
                 depth.create_view(&Default::default()),
             )
         });
+        // A model in a run cut by depth draws its own way, each pixel at the
+        // model's own depth.
+        let joins =
+            (cut_depth.is_some() && !models.is_empty()).then(|| self.join_set(ctx, samples));
+        let joined: Vec<Option<wgpu::BindGroup>> = match joins {
+            Some(_) => layers
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    let (Some(Cut::Depth(z)), Some(model)) = (cut_of(i), model_of(l)) else {
+                        return None;
+                    };
+                    let params = [(l.opacity / 100.0).clamp(0.0, 1.0), z, 0.0, 0.0];
+                    let matrix = self.full_frame_matrix(width, height, region);
+                    Some(self.join_group(ctx, model, matrix, params, [0.0; 4]))
+                })
+                .collect(),
+            None => Vec::new(),
+        };
         // A draw that reads the snapshot, which has to be taken first, unless
         // it is the next piece of the picture just drawn: pieces of a layer
         // never overlap, so they read the same one.
@@ -678,6 +797,18 @@ impl Compositor {
                 });
                 first_pass = false;
                 for &(idx, go, _) in &draws[k..end] {
+                    if let (Some(Some(group)), Some(j)) = (joined.get(idx), &joins) {
+                        rpass.set_pipeline(
+                            &j[match go {
+                                Go::Depth => 0,
+                                Go::Front => 1,
+                                _ => 2,
+                            }],
+                        );
+                        rpass.set_bind_group(0, group, &[]);
+                        rpass.draw(0..6, 0..1);
+                        continue;
+                    }
                     let set = match (go, &cut_depth) {
                         (Go::Behind, Some((behind, _, _))) => behind,
                         (Go::Depth | Go::Front, Some((_, front, _))) => front,

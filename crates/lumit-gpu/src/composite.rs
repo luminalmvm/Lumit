@@ -11,6 +11,7 @@ use crate::{ColourEngine, GpuContext};
 use glam::Mat4;
 
 mod cut;
+mod join;
 pub mod order;
 
 /// Premultiplied "over": the alpha component of every composite blend state,
@@ -564,6 +565,8 @@ pub struct Compositor {
     /// [`Self::keep_attachment`] has been asked for.
     kept: std::sync::Mutex<Option<(wgpu::Texture, lumit_budget::Reservation)>>,
     keep: std::sync::atomic::AtomicBool,
+    /// How a model's picture joins a run of 3D layers, built on first use.
+    joins: join::Joins,
 }
 
 impl Compositor {
@@ -863,6 +866,7 @@ impl Compositor {
             black,
             kept: std::sync::Mutex::new(None),
             keep: std::sync::atomic::AtomicBool::new(false),
+            joins: Default::default(),
         }
     }
 
@@ -1055,7 +1059,7 @@ impl Compositor {
     /// so they share one matrix rather than each restating the identity layer.
     /// The texture named here is only a placeholder: [`CompositeLayer::matrix`]
     /// reads the placement, never the pixels.
-    fn full_frame_matrix(&self, width: u32, height: u32) -> [[f32; 4]; 4] {
+    fn full_frame_matrix(&self, width: u32, height: u32, region: Option<Region>) -> [[f32; 4]; 4] {
         CompositeLayer {
             texture: &self.white,
             size: (width as f32, height as f32),
@@ -1073,7 +1077,7 @@ impl Compositor {
             layer_mask: None,
             pre: None,
         }
-        .matrix(width as f32, height as f32, None, None)
+        .matrix(width as f32, height as f32, None, region)
         .to_cols_array_2d()
     }
 
@@ -1421,7 +1425,7 @@ impl Compositor {
         let b_view = accum_b.create_view(&Default::default());
 
         // Identity full-frame placement for the add and resolve passes.
-        let ident_matrix = self.full_frame_matrix(width, height);
+        let ident_matrix = self.full_frame_matrix(width, height, None);
         // Full-frame uniform for the add/resolve passes; `px` is the add weight
         // (1/N), applied in f32 by fs_add_f32 (fs_copy_f32 ignores it).
         let full_uniform = |px: f32| {
@@ -1852,7 +1856,7 @@ impl Compositor {
         weight: f32,
     ) -> wgpu::Buffer {
         let uniform = LayerUniform {
-            matrix: self.full_frame_matrix(width, height),
+            matrix: self.full_frame_matrix(width, height, None),
             params: [weight, 0.0, 0.0, 0.0],
             target: [width as f32, height as f32, -1.0, 0.0],
             cut: [0.0; 4],
@@ -1884,7 +1888,7 @@ impl Compositor {
     ) -> wgpu::Texture {
         // Identity full-frame placement, shared by every pass: the matrix maps
         // the unit quad across the whole target; the weight rides in params.x.
-        let ident_matrix = self.full_frame_matrix(width, height);
+        let ident_matrix = self.full_frame_matrix(width, height, None);
         let uniform_for = |weight: f32| {
             let uniform = LayerUniform {
                 matrix: ident_matrix,

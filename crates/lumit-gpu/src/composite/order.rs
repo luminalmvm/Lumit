@@ -284,7 +284,6 @@ pub fn depth_order(
     // A sliver of a piece, in twice the layer's own area, is left out.
     const SLIVER: f32 = 1e-7;
     let eye = glam::Vec3::from(eye);
-    let flat = |i: usize| flat.get(i) == Some(&true);
     let square: Vec<glam::Vec2> = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
         .map(|(u, v)| glam::vec2(u, v))
         .to_vec();
@@ -294,24 +293,11 @@ pub fn depth_order(
         .map(|(i, m)| Shape::new(i, square.clone(), *m, view_proj))
         .collect();
     let n = layers.len();
-    // Cut by depth: a smear draws as a card at its middle's distance, and
-    // each layer a hair nearer per `lift`.
-    let by_depth = |i: usize, lift: u32| {
-        Cut::Depth(if flat(i) {
-            CUT_NEAR / layers[i].depth.max(CUT_NEAR)
-        } else {
-            CUT_NEAR * (1.0 + lift as f32 * CUT_LIFT)
-        })
-    };
     if n > PAIRED {
-        // Lifted by stack order, so layers on one plane keep it.
-        let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by_key(|&i| std::cmp::Reverse(Far(layers[i].depth, i)));
-        return order
-            .into_iter()
-            .map(|i| (i, Some(by_depth(i, i as u32))))
-            .collect();
+        return cut_by_depth(&layers.iter().map(|s| s.depth).collect::<Vec<_>>(), flat);
     }
+    let flat = |i: usize| flat.get(i) == Some(&true);
+    let by_depth = |i: usize, lift: u32| depth_cut(layers[i].depth, flat(i), lift);
     let planes: Vec<Option<(glam::Vec3, glam::Vec3)>> = layers
         .iter()
         .map(|s| {
@@ -432,4 +418,29 @@ pub fn depth_order(
         out.push((i, cut));
     }
     out
+}
+
+/// A run cut by depth throughout, as a run holding a model is: farthest
+/// first by `depths`, each draw's clip w at its middle, and lifted by stack
+/// order, so layers on one plane keep it. `flat` as for [`depth_order`].
+pub fn cut_by_depth(depths: &[f32], flat: &[bool]) -> Vec<(usize, Option<Cut>)> {
+    let mut order: Vec<usize> = (0..depths.len()).collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(Far(depths[i], i)));
+    order
+        .into_iter()
+        .map(|i| {
+            let cut = depth_cut(depths[i], flat.get(i) == Some(&true), i as u32);
+            (i, Some(cut))
+        })
+        .collect()
+}
+
+/// How one draw is cut by depth: a smear as a card at its middle's distance,
+/// anything else a hair nearer per `lift`.
+fn depth_cut(depth: f32, flat: bool, lift: u32) -> Cut {
+    Cut::Depth(if flat {
+        CUT_NEAR / depth.max(CUT_NEAR)
+    } else {
+        CUT_NEAR * (1.0 + lift as f32 * CUT_LIFT)
+    })
 }
