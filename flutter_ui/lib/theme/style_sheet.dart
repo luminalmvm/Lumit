@@ -13,7 +13,7 @@
 // never throws, a line it can't use is skipped and counted, so a typo costs a
 // line rather than the whole style.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/widgets.dart';
@@ -21,6 +21,8 @@ import 'package:lumit_flutter/l10n/strings.dart';
 
 import 'theme.dart';
 import 'theme_tokens.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The extension a style file is written under.
 const String styleFileExtension = 'lumstyle';

@@ -1,5 +1,6 @@
 //! Opening the graphics device, and in the browser build, showing a picture.
 
+#[cfg(target_arch = "wasm32")]
 use crate::GpuError;
 
 /// What every device is opened with: the card's own format features and

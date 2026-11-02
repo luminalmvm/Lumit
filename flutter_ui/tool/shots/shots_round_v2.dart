@@ -17,7 +17,7 @@
 //   $env:LUMIT_SHOTS_OUT='C:/tmp/lumit-shots/round-v2'
 //   flutter run -d windows -t tool/shots/shots_round_v2.dart
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -33,6 +33,8 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'shots_common.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 Future<void> main() async {
   final (state, ui) = await bootLumit();

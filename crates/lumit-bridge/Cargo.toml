@@ -120,6 +120,7 @@ flutter_rust_bridge = { version = "=2.12.0", features = ["uuid"] }
 # `GlobalMemoryStatusEx` for installed RAM and the first DXGI adapter's
 # dedicated video memory. Pinned to the 0.58 lumit-gpu's shared-texture path
 # already links, so the workspace resolves one copy rather than two.
+web-time = "1"
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 default-features = false

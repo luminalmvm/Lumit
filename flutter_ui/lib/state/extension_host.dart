@@ -12,7 +12,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data' show BytesBuilder;
 
 import 'package:crypto/crypto.dart';
@@ -27,6 +27,8 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/updates.dart' show versionFromBootLine;
 import 'package:lumit_flutter/state/win32.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The version of the messages below. Raised when one changes meaning, and
 /// what `app.info` tells a page so it can tell an older Lumit from a newer.

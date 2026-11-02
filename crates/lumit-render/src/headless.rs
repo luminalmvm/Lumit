@@ -2257,7 +2257,7 @@ impl HeadlessRenderer {
                 });
             }
         }
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         // A flare that fell back to the previous lens during this composite
         // made a picture of a lens its name does not describe. The
         // name was taken before the render, so it has to be dropped

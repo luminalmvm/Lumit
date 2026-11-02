@@ -24,7 +24,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -100,6 +100,8 @@ import 'welcome_frb.dart' show projectDisplayName;
 import 'window_frame.dart';
 import 'wordmark.dart';
 import 'workspace_shortcut_frb.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
 /// arrangement on screen under a name of the user's own, and renaming,
@@ -2224,17 +2226,21 @@ Future<void> openProjectFrb(LumitState app,
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
   final picked = await (picker ?? () => pickFootage(projects: true))();
-  bool project(String path) => path.toLowerCase().endsWith('.lum');
+  final projects = [
+    for (final path in picked)
+      if (path.toLowerCase().endsWith('.lum')) path,
+  ];
   var landed = await app.importFootagePaths([
     for (final path in picked)
-      if (!project(path)) path,
+      if (!projects.contains(path)) path,
   ]);
-  for (final path in picked.where(project)) {
+  for (final path in projects) {
     if (!context.mounted) break;
-    landed |= await bringCompositionFrom(context, path,
+    final brought = await bringCompositionFrom(context, path,
         earlierSave: false,
         subject: projectDisplayName(path),
         source: projectDisplayName(path));
+    landed = landed || brought;
   }
   return landed;
 }

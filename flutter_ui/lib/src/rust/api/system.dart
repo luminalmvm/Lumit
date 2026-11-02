@@ -60,3 +60,13 @@ void restoreFrozenCursor() =>
 
 /// Let the pointer go again, at the end of the drag.
 void thawCursor() => BridgeLib.instance.api.crateApiSystemThawCursor();
+
+/// Open the browser's graphics card, before the first project opens. False
+/// when the browser has none to give, which is the page's cue to say so.
+///
+/// Only the browser build has anything to do here. WebGPU hands the card over
+/// as a promise, and the page's one thread can't wait for that in the middle
+/// of opening a project, so it is awaited once, up front. Everywhere else the
+/// card is opened when it is first needed.
+Future<bool> prepareGraphics() =>
+    BridgeLib.instance.api.crateApiSystemPrepareGraphics();

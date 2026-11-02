@@ -14,7 +14,7 @@
 // kept online and in step with the server. Nothing here is on a rebuild path.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -27,6 +27,8 @@ import 'account.dart';
 import 'app_state.dart';
 import 'transfer.dart';
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where one file has got to.
 enum MoveStage { waiting, working, failed }

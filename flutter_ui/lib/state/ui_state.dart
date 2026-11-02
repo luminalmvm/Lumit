@@ -8,7 +8,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals, mapEquals;
@@ -103,6 +102,8 @@ import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/share_marks.dart'
     show valuesHeld, valuesInHand;
 import 'package:uuid/uuid.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What [LumitUiState.colourSummary] reads before anything has been asked, and
 /// whenever the project names no OCIO config: the built-in colour family, which
@@ -791,6 +792,9 @@ class LumitUiState extends ChangeNotifier {
   /// a machine with no network has not done anything wrong, and an editor that
   /// opened with a complaint about the internet would be insufferable.
   Future<void> maybeCheckForUpdates() async {
+    // The browser build is the page, always the newest, and a look would ask
+    // GitHub about the person using it.
+    if (kIsWeb) return;
     if (!workspace.autoUpdate) return;
     // Never under `flutter test`: a suite that mounts the shell would otherwise
     // reach the network, which is slow, flaky, and none of a test's business.

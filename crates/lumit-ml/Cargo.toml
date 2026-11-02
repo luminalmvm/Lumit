@@ -21,6 +21,7 @@ thiserror = "2"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # Native only: the browser build has no ONNX Runtime.
+web-time = "1"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # ONNX Runtime through its safe Rust wrapper. `load-dynamic` is the whole
 # point: the library is an addon the user installs, so nothing links against it

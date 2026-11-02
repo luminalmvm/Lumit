@@ -143,8 +143,8 @@ const FILL_HOLD_MS: u64 = 2_000;
 
 /// Nanoseconds since the first call, for placing the clock between callbacks.
 fn nanos() -> u64 {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    let start = START.get_or_init(std::time::Instant::now);
+    static START: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(web_time::Instant::now);
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 

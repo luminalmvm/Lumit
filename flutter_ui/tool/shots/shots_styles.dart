@@ -16,7 +16,7 @@
 //   $env:LUMIT_SHOTS_OUT='C:/tmp/lumit-shots/styles'
 //   flutter run -d windows -t tool/shots/shots_styles.dart
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -32,6 +32,8 @@ import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'shots_common.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// One picture: the file name and the look it shows.
 class _Look {

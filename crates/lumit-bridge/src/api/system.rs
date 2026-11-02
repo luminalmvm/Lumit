@@ -372,6 +372,10 @@ pub fn thaw_cursor() {
 /// of opening a project, so it is awaited once, up front. Everywhere else the
 /// card is opened when it is first needed.
 pub async fn prepare_graphics() -> bool {
+    // The first call the browser build makes, and it has no library loading
+    // to arm the panic hook on.
+    #[cfg(target_arch = "wasm32")]
+    crate::faults::watch();
     #[cfg(target_arch = "wasm32")]
     return lumit_gpu::device::prepare_web().await.is_ok();
     #[cfg(not(target_arch = "wasm32"))]

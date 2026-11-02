@@ -16,11 +16,11 @@
 // up, that answer stands without a call. Under `flutter test` there is no real
 // keyboard, so simulated modifiers are trusted as sent.
 
-import 'dart:io';
-
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/state/win32.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 bool get _canAskOs =>
     Platform.isWindows && !Platform.environment.containsKey('FLUTTER_TEST');

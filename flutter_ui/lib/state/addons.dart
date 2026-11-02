@@ -26,7 +26,7 @@
 // turns it into a sentence from the .arb. The service holds state, not copy.
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
@@ -34,6 +34,8 @@ import 'package:flutter/foundation.dart';
 import 'download.dart';
 import 'package:lumit_flutter/state/win32.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where the official catalogue lives: one file on the `main` branch of the
 /// second repository, read straight rather than through an API, so there is no

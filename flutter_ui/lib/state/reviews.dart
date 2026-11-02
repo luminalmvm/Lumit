@@ -14,7 +14,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
@@ -30,6 +30,8 @@ import 'comp_time.dart';
 import 'profiles.dart';
 import 'transfer.dart';
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 int _int(Object? v) => v is num ? v.toInt() : 0;
 int? _intOrNull(Object? v) => v is num ? v.toInt() : null;

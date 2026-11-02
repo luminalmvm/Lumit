@@ -15,10 +15,11 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use lumit_script::Host;
 use serde_json::Value;
+use web_time::Instant;
 
 use crate::api::{
     project::ProjectReference,

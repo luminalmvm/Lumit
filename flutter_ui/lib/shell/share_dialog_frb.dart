@@ -11,7 +11,7 @@
 // The frame is the dialog pattern's: title strip, body, footer.
 
 import 'dart:async';
-import 'dart:io' show File, FileSystemException, Platform;
+import 'dart:io' show File, FileSystemException;
 import 'dart:math' as math;
 import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
@@ -54,6 +54,8 @@ import 'settings_window_frb.dart';
 import 'sign_in_window.dart';
 import 'update_dialog_frb.dart';
 import 'welcome_frb.dart' show projectDisplayName;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The width both take, the column their labels sit in, and how tall the list
 /// of conflicts and the list of footage grow before they scroll.

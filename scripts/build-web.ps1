@@ -13,15 +13,16 @@
     wasm32-unknown-unknown) and wasm-bindgen-cli at the version in Cargo.lock
     (cargo install wasm-bindgen-cli --version <it> --locked).
 
-.PARAMETER Debug
-    Build the engine without optimisations. Much quicker, much slower to run.
+.PARAMETER Quick
+    Build the engine without release optimisations. Quicker to build, slower
+    to run.
 
 .EXAMPLE
     .\scripts\build-web.ps1
 #>
 [CmdletBinding()]
 param(
-    [switch]$Debug
+    [switch]$Quick
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,13 +35,13 @@ function Run([string]$line) {
 
 $repo = Split-Path $PSScriptRoot -Parent
 $target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $repo 'target' }
-$profile = if ($Debug) { 'debug' } else { 'release' }
-$release = if ($Debug) { '' } else { '--release' }
+$build = if ($Quick) { 'debug' } else { 'release' }
+$release = if ($Quick) { '' } else { '--release' }
 
 Push-Location $repo
 try {
     Run "cargo build -p lumit_bridge --lib --target wasm32-unknown-unknown $release"
-    $wasm = Join-Path $target "wasm32-unknown-unknown\$profile\lumit_bridge.wasm"
+    $wasm = Join-Path $target "wasm32-unknown-unknown/$build/lumit_bridge.wasm"
     Run "wasm-bindgen --target no-modules --no-typescript --out-dir flutter_ui/web/pkg `"$wasm`""
 } finally {
     Pop-Location

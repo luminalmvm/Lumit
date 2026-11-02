@@ -1460,7 +1460,7 @@ fn decode_comp(
     media_epoch: u64,
     progress: &dyn Fn(usize),
 ) -> Result<CompFrame, String> {
-    let decode_started = std::time::Instant::now();
+    let decode_started = web_time::Instant::now();
     let mut layers = Vec::with_capacity(jobs.len());
     for (i, job) in jobs.iter().enumerate() {
         let req = Request {

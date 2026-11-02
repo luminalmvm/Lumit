@@ -128,10 +128,10 @@ pub(crate) fn lookahead_frames(p95_cost: Option<f64>, fps: f64) -> usize {
 /// never bursts faster than the comp's rate to catch up, so time lost
 /// to a stall stays lost — playback continues at rate from where it is.
 pub(crate) fn next_present_due(
-    scheduled: Option<std::time::Instant>,
-    now: std::time::Instant,
+    scheduled: Option<web_time::Instant>,
+    now: web_time::Instant,
     period: std::time::Duration,
-) -> std::time::Instant {
+) -> web_time::Instant {
     match scheduled {
         Some(due) if now < due + period => due + period,
         _ => now + period,

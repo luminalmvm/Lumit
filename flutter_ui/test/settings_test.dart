@@ -1,13 +1,15 @@
 // Settings defaults must be a no-op for existing installs, and the workspace
 // JSON must round-trip.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A settings file of this test's own, never the developer's real one — every
 /// setter calls `save()`, and the store is machine state a test must not reach.

@@ -1,12 +1,12 @@
 {
-    "name": "lumit_flutter",
-    "short_name": "lumit_flutter",
+    "name": "Lumit",
+    "short_name": "Lumit",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0d0f13",
+    "theme_color": "#0d0f13",
+    "description": "The motion graphics and compositing editor, in your browser.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

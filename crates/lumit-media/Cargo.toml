@@ -30,6 +30,7 @@ thiserror = "2"
 
 # FFmpeg is native only. The browser decodes video and sound itself and hands
 # the frames in, so there opening a file that needs FFmpeg answers an error.
+web-time = "1"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "link_system_ffmpeg"] }
 # A self-deleting file for the frames a one-palette GIF holds until the end.

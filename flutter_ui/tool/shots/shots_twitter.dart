@@ -14,7 +14,7 @@
 //   $env:LUMIT_SHOTS_PROJECT='C:/.../Something.lum'
 //   flutter run -d windows -t tool/shots/shots_twitter.dart
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -26,6 +26,8 @@ import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'shots_common.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 Future<void> main() async {
   final (state, ui) = await bootLumit();

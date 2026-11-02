@@ -25,8 +25,8 @@ pub static FLUTTER_RUST_BRIDGE_HANDLER: std::sync::LazyLock<
 /// A pool of no threads: the call runs now, on the page.
 ///
 /// The bridge only hands a call over by posting it to a worker, so this gives
-/// it something shaped like one whose `postMessage` runs the call straight
-/// away, as a worker's own script would.
+/// it something shaped like one, from the page, whose `postMessage` runs the
+/// call straight away, as a worker's own script would.
 #[cfg(target_family = "wasm")]
 pub struct OnThePage;
 
@@ -37,16 +37,11 @@ impl flutter_rust_bridge::for_generated::BaseThreadPool for OnThePage {
         closure: flutter_rust_bridge::for_generated::TransferClosure<wasm_bindgen::JsValue>,
     ) {
         thread_local! {
-            static WORKER: web_sys::Worker = {
-                let post = js_sys::Function::new_with_args(
-                    "data",
-                    "const [payload, ...transfer] = data; \
-                     wasm_bindgen.receive_transfer_closure(payload, transfer);",
-                );
-                let worker = js_sys::Object::new();
-                let _ = js_sys::Reflect::set(&worker, &"postMessage".into(), &post);
-                wasm_bindgen::JsCast::unchecked_into(worker)
-            };
+            // Set up by the page (flutter_ui/web/flutter_bootstrap.js).
+            static WORKER: web_sys::Worker = wasm_bindgen::JsCast::unchecked_into(
+                js_sys::Reflect::get(&js_sys::global(), &"lumitOnThePage".into())
+                    .unwrap_or_default(),
+            );
         }
         WORKER.with(|worker| {
             if let Err(err) = closure.apply(worker) {

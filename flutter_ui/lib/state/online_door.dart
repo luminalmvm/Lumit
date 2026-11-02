@@ -112,7 +112,7 @@ class OnlineDoor {
   OnlineDoor(this.account, this.tell, {String? base})
       : base = base ?? cloudUrl;
 
-  final HttpClient _http = HttpClient()
+  late final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
     ..userAgent = 'Lumit';
 

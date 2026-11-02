@@ -12,7 +12,9 @@
 // checked anyway, so a `file:` or a `javascript:` cannot be handed to the
 // desktop by a caller that meant a web page.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The documentation site, and the page that walks a newcomer through their
 /// first composition. Both are real pages on `web-docs/`; the sidebar

@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math';
 import 'dart:ui';
 
@@ -24,6 +24,8 @@ import '../theme/theme_tokens.dart' show applyTokens;
 import 'dock.dart';
 import 'expression_language.dart';
 import 'settings.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
 /// the tone map is engaged. A record rather than a class because it is two

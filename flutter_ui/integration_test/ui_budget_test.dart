@@ -39,7 +39,7 @@
 
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -58,6 +58,8 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/widgets/time_readout.dart' show TimeReadout;
 import 'package:uuid/uuid.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// docs/13 B1: the UI-thread budget for one interaction frame, at p95.
 const double b1BudgetMs = 8.3;

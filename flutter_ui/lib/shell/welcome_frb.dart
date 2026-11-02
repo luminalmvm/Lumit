@@ -21,7 +21,7 @@
 // start work, in the two places somebody can be standing when they have not
 // started yet.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
@@ -46,6 +46,8 @@ import 'menu_bar_frb.dart';
 import 'project_history_window.dart'
     show BackupStill, backupErrorText, noticeMissingFootage;
 import 'wordmark.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 // --- The drawing's measurements -------------------------------------------
 //

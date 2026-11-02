@@ -24,7 +24,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
+
+use web_time::Instant;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::MediaError;

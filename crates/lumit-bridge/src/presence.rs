@@ -10,9 +10,10 @@
 
 use std::io::{self, Read, Write};
 use std::sync::{Mutex, Once};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use serde_json::json;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// Lumit's application id on Discord. Not a secret, every status carries it.
 const CLIENT_ID: &str = "1558750922316976188";

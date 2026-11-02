@@ -9,10 +9,12 @@
 // A Linux machine without `secret-tool` falls back to a file only its owner
 // can read. That is weaker, and it is what the machine offers.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:lumit_flutter/state/win32.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What every entry is filed under, so they can be told from anything else
 /// the system holds.

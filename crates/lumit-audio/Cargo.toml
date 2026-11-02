@@ -13,6 +13,7 @@ lumit-media = { path = "../lumit-media" }
 parking_lot = "0.12"
 realfft = "3.5"
 thiserror = "2"
+web-time = "1"
 
 [lints]
 workspace = true

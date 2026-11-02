@@ -63,6 +63,7 @@ naga = { version = "24", features = ["wgsl-in"] }
 # selector metal-rs does not wrap and `core-foundation` for the IOSurface
 # property dictionary. The Metal interop is additionally
 # `cfg(target_os = "macos")`-gated, so enabling the feature off macOS is inert.
+web-time = "1"
 [features]
 # The shared test device and engines (src/test_support.rs), for downstream
 # crates' tests. Test-only by construction: no shipped path enables it.

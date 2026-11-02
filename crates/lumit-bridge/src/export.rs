@@ -729,8 +729,8 @@ fn sanitise_windows_filename(raw: &str) -> String {
 /// Today's UTC date as `YYYY-MM-DD` (the `{date}` token) — a faithful port
 /// of `shell::today_utc_date` and its `civil_from_days`.
 fn today_utc_date() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let secs = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let days = (secs / 86_400) as i64;

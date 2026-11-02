@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 /// Snapshot magic and version.
 const SNAPSHOT_MAGIC: [u8; 4] = *b"KIX1";
@@ -80,8 +80,8 @@ pub struct IndexEntry {
 /// Never panics: an engine crate does not unwrap a clock.
 #[must_use]
 pub fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }

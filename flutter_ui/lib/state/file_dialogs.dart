@@ -3,13 +3,15 @@
 // cannot open in a widget test, so tests supply their own stubs and never touch
 // a plugin channel; this file is only ever exercised in the running app.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
 import 'workspace.dart' show workspaceFileExtension;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The `.lum` project type group (docs/10 §1). The egui open filter also lists
 /// the pre-rename `kir` leftover; a fresh frontend only ever offers `.lum`.

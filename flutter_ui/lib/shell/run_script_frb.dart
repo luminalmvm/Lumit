@@ -2,7 +2,6 @@
 // project, picked, from the Scripts folder or dropped on the window.
 
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -18,6 +17,8 @@ import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'script_dialog_frb.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
 /// when there is none.

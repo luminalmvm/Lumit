@@ -61,7 +61,7 @@ pub struct WorkerState {
     /// When the picture after the last one shown was due, in every-frame
     /// playback. The next run starts on it, so a loop turns on the beat
     /// instead of cutting its last frame short.
-    present_due: Option<std::time::Instant>,
+    present_due: Option<web_time::Instant>,
     /// The decode-ahead thread (docs/impl/playback-scheduler.md §5): playback
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
@@ -136,7 +136,7 @@ pub struct WorkerState {
     /// The room on the drive last sent down, and when the drive was last asked
     /// ([`crate::framecache::disk::room`]).
     applied_disk_room: u64,
-    disk_room_asked: std::time::Instant,
+    disk_room_asked: web_time::Instant,
     seen_disk_clears: u64,
     seen_disk_location: (u64, Option<std::path::PathBuf>),
     /// The VRAM budget last applied and the clear-request count last honoured
@@ -161,7 +161,7 @@ pub struct WorkerState {
     /// frontend even though the sweep itself wrote nothing new.
     bar_dirty: bool,
     /// When the strip was last published — see [`BAR_MIN_INTERVAL`].
-    bar_published_at: std::time::Instant,
+    bar_published_at: web_time::Instant,
     /// True when the idle fill has nothing left to do (everything near the
     /// playhead is held, or the budget is full). Cleared whenever the anchor,
     /// the document or the budget moves.
@@ -172,7 +172,7 @@ pub struct WorkerState {
     backup_exhausted: bool,
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
-    last_request: std::time::Instant,
+    last_request: web_time::Instant,
     /// The flare-bake generation this worker has already reacted to.
     /// When the renderer's moves past it, a bake has been queued or has landed
     /// — and a landing is the moment the picture on screen stops being the
@@ -244,7 +244,7 @@ impl WorkerState {
 #[frb(ignore)]
 struct DiskWant {
     provenance: lumit_render::headless::FrameProvenance,
-    asked: std::time::Instant,
+    asked: web_time::Instant,
 }
 
 /// Name one frame through the worker's memo: computed at most once per
@@ -591,7 +591,7 @@ fn sync_disk(state: &mut WorkerState) {
     // The drive is asked now and then rather than every turn, and the answer
     // only sent on when it has moved by more than a frame or two.
     if state.disk_room_asked.elapsed() >= DISK_ROOM_EVERY {
-        state.disk_room_asked = std::time::Instant::now();
+        state.disk_room_asked = web_time::Instant::now();
         let room = root.as_deref().map_or(u64::MAX, |r| {
             crate::framecache::disk::room(
                 r,
@@ -953,7 +953,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
             != (comp_id, view, frames, scale_q, revision)
     });
     state.published_bar = Some(fingerprint);
-    state.bar_published_at = std::time::Instant::now();
+    state.bar_published_at = web_time::Instant::now();
 
     let bgra = zero_copy_wants_bgra();
     let scale = f32::from(scale_q) / 1000.0;
@@ -1292,7 +1292,7 @@ fn line_up_frame(
         key,
         DiskWant {
             provenance,
-            asked: std::time::Instant::now(),
+            asked: web_time::Instant::now(),
         },
     );
     _ = disk
@@ -1459,7 +1459,7 @@ fn prepare_frame(
                         key,
                         DiskWant {
                             provenance,
-                            asked: std::time::Instant::now(),
+                            asked: web_time::Instant::now(),
                         },
                     );
                     _ = state
@@ -2089,15 +2089,15 @@ struct Playback {
     /// Where playback started, and when — the wall clock's baseline for as long
     /// as no mix is loaded to be master instead.
     from: u64,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// When the last frame was shown, which the end of a leg waits a frame
     /// from. `None` before the first present of a run.
-    last_presented: Option<std::time::Instant>,
+    last_presented: Option<web_time::Instant>,
     /// When the next every-frame present falls due — a GRID, stepped by one
     /// comp period per present ([`crate::playback::next_present_due`]), so
     /// loop overhead never compounds into a slower rate. `None` before the
     /// first present of a run; adaptive mode paces on the clock instead.
-    next_present_due: Option<std::time::Instant>,
+    next_present_due: Option<web_time::Instant>,
     /// Frames rendered ahead of the clock, oldest first, waiting to be shown.
     ring: std::collections::VecDeque<(u64, lumit_render::headless::PreparedFrame)>,
     /// The document revision the ring and the sound were made from. An edit
@@ -2136,7 +2136,7 @@ struct Playback {
     on_time_run: u32,
     /// Until when the audio clock is not to be believed, because the sound
     /// has just been moved and the move may not have landed yet.
-    audio_settles: Option<std::time::Instant>,
+    audio_settles: Option<web_time::Instant>,
     /// How many frames the last [`Self::advance`] had to jump over to catch the
     /// clock. Zero while playback is keeping up.
     ///
@@ -2153,14 +2153,14 @@ struct Playback {
     /// numbers (see [`Self::report_pace`]).
     present_costs: crate::playback::CostWindow,
     /// When the pace was last printed, so the report stays sparse.
-    pace_reported: std::time::Instant,
+    pace_reported: web_time::Instant,
 }
 
 impl Playback {
     /// The sound has just been moved: leave its clock alone for a moment.
     fn settle_audio(&mut self) {
         const SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
-        self.audio_settles = Some(std::time::Instant::now() + SETTLE);
+        self.audio_settles = Some(web_time::Instant::now() + SETTLE);
     }
 
     /// Print where a playback frame's time is going, at most every couple of
@@ -2176,7 +2176,7 @@ impl Playback {
         if self.pace_reported.elapsed() < PACE_REPORT_EVERY {
             return;
         }
-        self.pace_reported = std::time::Instant::now();
+        self.pace_reported = web_time::Instant::now();
         let ms = |cost: Option<f64>| cost.map_or(0.0, |secs| secs * 1000.0);
         note!(
             "Playback pace: present p95 {:.2} ms, render p95 {:.2} ms, ring {}, budget {:.2} ms",
@@ -2200,7 +2200,7 @@ impl Playback {
         let ours = self.pre_rolled
             && self
                 .audio_settles
-                .is_none_or(|at| std::time::Instant::now() >= at);
+                .is_none_or(|at| web_time::Instant::now() >= at);
         match clock_seconds() {
             Some(seconds) if ours => seconds * f64::from(self.slow),
             _ => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
@@ -2275,7 +2275,7 @@ impl Playback {
             return queued >= 1
                 && self
                     .next_present_due
-                    .is_none_or(|due| std::time::Instant::now() >= due);
+                    .is_none_or(|due| web_time::Instant::now() >= due);
         }
         queued >= PRE_ROLL_FRAMES.min(self.capacity()).max(1)
             || self.started.elapsed() >= PRE_ROLL_BUDGET
@@ -2309,7 +2309,7 @@ impl Playback {
         }
         match self.mode {
             BridgePlaybackMode::EveryFrame => match self.next_present_due {
-                Some(due) if std::time::Instant::now() < due => None,
+                Some(due) if web_time::Instant::now() < due => None,
                 _ => Some(0),
             },
             BridgePlaybackMode::Adaptive => {
@@ -2327,7 +2327,7 @@ impl Playback {
         match self.mode {
             BridgePlaybackMode::EveryFrame => {
                 let due = self.next_present_due?;
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 (due > now).then(|| due - now)
             }
             BridgePlaybackMode::Adaptive => {
@@ -2538,7 +2538,7 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     // still reads where the sound was, which is not a thing to act on.
     let settling = playback
         .audio_settles
-        .is_some_and(|at| std::time::Instant::now() < at);
+        .is_some_and(|at| web_time::Instant::now() < at);
     let lead = sound_lead(frame, fps, playback.slow).filter(|_| !settling);
     let slack = sync_slack(period).as_secs_f64();
     match audio_chase(
@@ -3018,7 +3018,7 @@ fn build_viewer_renderer(
     // The worker of a project that has closed is on its way out with a set.
     // It stops at the end of its turn, which is at once unless it is part
     // way through a frame, so it is waited for as long as a build would take.
-    let give_up = std::time::Instant::now() + pool.built_in;
+    let give_up = web_time::Instant::now() + pool.built_in;
     loop {
         if !worth_building_for(project) {
             // Quietly: a project closing while its worker waited its turn is
@@ -3030,7 +3030,7 @@ fn build_viewer_renderer(
                 .out
                 .iter()
                 .any(|id| !worth_building_for(&ProjectReference::new(*id)));
-        let left = give_up.saturating_duration_since(std::time::Instant::now());
+        let left = give_up.saturating_duration_since(web_time::Instant::now());
         if !coming || left.is_zero() {
             break;
         }
@@ -3044,7 +3044,7 @@ fn build_viewer_renderer(
     let mut renderer = match pool.parked.take() {
         Some(set) => HeadlessRenderer::reusing(set),
         None => {
-            let began = std::time::Instant::now();
+            let began = web_time::Instant::now();
             match HeadlessRenderer::new() {
                 Ok(renderer) => {
                     pool.built_in = began.elapsed();
@@ -3269,7 +3269,7 @@ fn worker_loop(
         // see the note on `applied_vram_budget` below.
         applied_disk_budget: 0,
         applied_disk_room: u64::MAX,
-        disk_room_asked: std::time::Instant::now() - DISK_ROOM_EVERY,
+        disk_room_asked: long_ago(DISK_ROOM_EVERY),
         seen_disk_clears: crate::framecache::disk::clears(),
         seen_disk_location: (u64::MAX, None),
         // NOT the wish's current value. A fresh renderer's cache holds the
@@ -3287,10 +3287,10 @@ fn worker_loop(
         bar_strip: Vec::new(),
         bar_refined_to: 0,
         bar_dirty: false,
-        bar_published_at: std::time::Instant::now() - BAR_MIN_INTERVAL,
+        bar_published_at: long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
-        last_request: std::time::Instant::now(),
+        last_request: web_time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
         pending_measure: None,
@@ -3366,6 +3366,14 @@ fn worker_loop(
     }
     #[cfg(target_arch = "wasm32")]
     crate::turns::start(turn);
+}
+
+/// A moment `ago` before now, or now itself when the clock has not run that
+/// long. A page's clock starts when the page loads.
+#[frb(ignore)]
+fn long_ago(ago: std::time::Duration) -> web_time::Instant {
+    let now = web_time::Instant::now();
+    now.checked_sub(ago).unwrap_or(now)
 }
 
 /// The most consecutive faulting turns to nurse before the worker gives up.
@@ -3500,7 +3508,7 @@ fn one_turn(
     };
 
     if let Some(request) = request {
-        state.last_request = std::time::Instant::now();
+        state.last_request = web_time::Instant::now();
         // No second sync before serving. There used to be one, and it
         // mattered: a commit landing while the worker was parked in `recv`
         // retired every held frame, and the sync at the top of the turn had
@@ -3557,7 +3565,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // pre-roll's own milliseconds are not playback time, and counting
             // them would have adaptive skip straight over the frames just
             // banked. A silent leg needs the baseline too.
-            playback.started = std::time::Instant::now();
+            playback.started = web_time::Instant::now();
             start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
@@ -3576,7 +3584,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Some((frame, prepared)) = playback.ring.drain(..=chosen).last() else {
                 return;
             };
-            let now = std::time::Instant::now();
+            let now = web_time::Instant::now();
             playback.last_presented = Some(now);
             // How long after it was due this picture is going out. The first
             // of a run was not due at any time.
@@ -3605,7 +3613,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, late);
             }
-            let present_started = std::time::Instant::now();
+            let present_started = web_time::Instant::now();
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
@@ -3939,7 +3947,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 if exact {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
-                let started = std::time::Instant::now();
+                let started = web_time::Instant::now();
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
                     // Committed document: a warm span plays from the VRAM cache
@@ -4020,8 +4028,8 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         } else {
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let due = std::time::Instant::now() + wait;
-                while std::time::Instant::now() < due {
+                let due = web_time::Instant::now() + wait;
+                while web_time::Instant::now() < due {
                     std::hint::spin_loop();
                 }
             }
@@ -4214,7 +4222,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
                         scale_q: lumit_render::headless::preview_scale_q(quality),
                         quality,
                     },
-                    asked: std::time::Instant::now(),
+                    asked: web_time::Instant::now(),
                 },
             );
             _ = state
@@ -4246,7 +4254,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         scale: req.scale,
         fps: if fps > 0.0 { fps } else { 60.0 } / f64::from(slow),
         from,
-        started: std::time::Instant::now(),
+        started: web_time::Instant::now(),
         last_presented: None,
         // Where the run before left off. One long past is due at once.
         next_present_due: state.present_due.take(),
@@ -4262,7 +4270,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         audio_settles: None,
         skipped: 0,
         present_costs: crate::playback::CostWindow::default(),
-        pace_reported: std::time::Instant::now(),
+        pace_reported: web_time::Instant::now(),
     });
     // A fresh run starts optimistic at Full and walks down to whatever this
     // machine can actually hold, rather than inheriting the last run's verdict

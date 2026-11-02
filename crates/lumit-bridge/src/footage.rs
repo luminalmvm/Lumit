@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use lumit_core::model::{FootageItem, ProjectItem};
 use lumit_core::{model::Document, store::DocumentStore};
@@ -35,6 +35,7 @@ use lumit_render::standin::Smaller;
 use lumit_share::{bulk::Footage, bulk::Held, bulk::Limits, bulk::News, bulk::Wanted};
 use serde_json::{json, Value};
 use uuid::Uuid;
+use web_time::Instant;
 
 use crate::api::export::BridgeExportSpec;
 

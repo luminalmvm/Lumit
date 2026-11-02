@@ -2,6 +2,7 @@
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
 pub mod bring;
+mod dirs;
 pub mod fixtures;
 pub mod pack;
 pub mod plugins;
@@ -665,22 +666,6 @@ pub fn latest_autosave(project_path: &Path) -> Option<PathBuf> {
     slot1.is_file().then_some(slot1)
 }
 
-/// Lumit's own folders on this machine, which every path below is built from.
-///
-/// `LUMIT_USER_DIRS` moves all of them under one folder. `cargo test` sets it
-/// in `.cargo/config.toml`, so tests never write into the real ones.
-fn project_dirs() -> Option<directories::ProjectDirs> {
-    // This crate's own tests check the real layout and write nothing there.
-    let moved = std::env::var_os("LUMIT_USER_DIRS")
-        .map(PathBuf::from)
-        .filter(|root| root.is_absolute() && !cfg!(test));
-    match moved {
-        // Joining an absolute path replaces the platform's base folder.
-        Some(root) => directories::ProjectDirs::from_path(root),
-        None => directories::ProjectDirs::from("dev", "Lumit", "Lumit"),
-    }
-}
-
 /// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4)
 /// while it has no file of its own.
 pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
@@ -689,7 +674,7 @@ pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
 
 /// [`journal_path`] for a document saved as `project`.
 pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf> {
-    Some(journal_in(project_dirs()?.cache_dir(), doc_id, project))
+    Some(journal_in(dirs::project_dirs()?.cache_dir(), doc_id, project))
 }
 
 /// The journal of the document `doc_id` saved as `project`, under `cache`.
@@ -736,7 +721,7 @@ fn path_key(project: &Path) -> String {
 pub fn auto_pack_note(doc_id: Uuid, project: &Path) -> Option<PathBuf> {
     let name = format!("{doc_id}-{}", path_key(project));
     Some(
-        project_dirs()?
+        dirs::project_dirs()?
             .data_local_dir()
             .join("auto-pack")
             .join(name),
@@ -770,7 +755,7 @@ impl OpenClaim {
     /// `Err` when somebody holds it, with the process id they wrote, or 0
     /// when that can't be read.
     pub fn take(project: &Path) -> Result<Option<Self>, u32> {
-        match project_dirs() {
+        match dirs::project_dirs() {
             Some(dirs) => Self::take_in(&dirs.cache_dir().join("open"), project),
             None => Ok(None),
         }
@@ -842,7 +827,7 @@ impl OpenClaim {
 /// edits since its last save, and the edits a guest made while its host was
 /// away. With the journals, and for the same reason.
 pub fn shared_dir() -> Option<PathBuf> {
-    Some(project_dirs()?.cache_dir().join("shared"))
+    Some(dirs::project_dirs()?.cache_dir().join("shared"))
 }
 
 /// Where a document's parked frames live when the disk frame cache is kept in
@@ -877,7 +862,7 @@ pub fn shared_dir() -> Option<PathBuf> {
 /// `None` only when the platform has no home directory; the caller then runs
 /// with no disk tier rather than failing.
 pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
 }
 
@@ -887,7 +872,7 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
 /// The cache, because the `.lum` still holds every byte: deleting this costs
 /// the next open the time to read them out again and nothing else.
 pub fn packed_media_dir(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("packed").join(doc_id.to_string()))
 }
 
@@ -899,14 +884,14 @@ pub fn packed_media_dir(doc_id: Uuid) -> Option<PathBuf> {
 ///
 /// The cache, because all of it can be sent again by whoever has the file.
 pub fn shared_footage_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("shared-footage"))
 }
 
 /// The application's own cache directory, the parent of every folder below,
 /// which unlike `/tmp` belongs to one user on every platform.
 pub fn cache_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().to_path_buf())
 }
 
@@ -920,7 +905,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 /// its solves already there. Rebuildable and deletable at any time, like every
 /// tier under this root.
 pub fn track_cache_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("track"))
 }
 
@@ -933,7 +918,7 @@ pub fn track_cache_dir() -> Option<PathBuf> {
 /// happened to ask, so one shot's mattes serve every composition that cuts it.
 /// Rebuildable and deletable at any time, like every tier under this root.
 pub fn roto_cache_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("roto"))
 }
 
@@ -945,7 +930,7 @@ pub fn roto_cache_dir() -> Option<PathBuf> {
 /// rebuildable and deletable at any time the same way: throwing it away costs
 /// an Analyse and nothing else.
 pub fn planes_cache_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("planes"))
 }
 
@@ -971,7 +956,7 @@ pub fn planes_cache_dir() -> Option<PathBuf> {
 /// when the platform has no home directory; the Addons page then says so
 /// rather than failing.
 pub fn addons_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_local_dir().join("addons"))
 }
 
@@ -979,21 +964,21 @@ pub fn addons_dir() -> Option<PathBuf> {
 /// holding an `extension.json` and the page it names. Beside the addons, and
 /// for the same reason: it is nothing Lumit could rebuild.
 pub fn extensions_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_local_dir().join("extensions"))
 }
 
 /// The Scripts folder File > Scripts lists, unless the person chose another.
 /// Beside the extensions, since nothing here could be rebuilt either.
 pub fn scripts_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_local_dir().join("scripts"))
 }
 
 /// Where the extension `id` keeps what its page stores, such as a sign-in.
 /// Not in its own folder, which an update replaces whole.
 pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_local_dir().join("extension-data").join(id))
 }
 
@@ -1001,14 +986,14 @@ pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
 /// there only while the person allows it (`lumit_script::live`). Its folder
 /// is this user's alone.
 pub fn live_endpoint_file() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_local_dir().join("live").join("endpoint"))
 }
 
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.cache_dir().join("media-index"))
 }
 
@@ -1018,7 +1003,7 @@ pub fn media_index_dir() -> Option<PathBuf> {
 /// in the platform's roaming app-data area beside the config. `None` only when
 /// the platform has no home directory; callers create it lazily.
 pub fn presets_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("presets"))
 }
 
@@ -1026,14 +1011,14 @@ pub fn presets_dir() -> Option<PathBuf> {
 /// offered to every project. Beside the effect presets. `None` only when the
 /// platform has no home directory; callers create it lazily.
 pub fn lenses_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("lenses"))
 }
 
 /// The user's own flare designs, as `.flare` files saved from the Flare
 /// window. Beside the lenses, and lazily made the same way.
 pub fn flares_dir() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("flares"))
 }
 
@@ -1047,7 +1032,7 @@ pub fn flares_dir() -> Option<PathBuf> {
 /// platform has no home directory; the library then lives for the session and
 /// says so rather than failing.
 pub fn export_presets_path() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("export-presets.json"))
 }
 
@@ -1061,7 +1046,7 @@ pub fn export_presets_path() -> Option<PathBuf> {
 /// `.lum`. `None` only when the platform has no home directory, in which case
 /// the dialogue simply opens on its built-in defaults.
 pub fn export_defaults_path() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("export-defaults.json"))
 }
 
@@ -1074,7 +1059,7 @@ pub const EXPORT_DONE_SOUND: &str = "export-done.wav";
 /// one without touching an installed build. `None` when the platform has no
 /// home directory; the hook is then simply silent.
 pub fn export_done_sound_path() -> Option<PathBuf> {
-    let dirs = project_dirs()?;
+    let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("sounds").join(EXPORT_DONE_SOUND))
 }
 

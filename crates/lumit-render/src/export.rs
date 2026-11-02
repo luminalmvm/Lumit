@@ -3565,7 +3565,7 @@ fn run(
                 Vec::new()
             };
             if let Some(prefetch) = ahead.as_ref() {
-                let since = std::time::Instant::now();
+                let since = web_time::Instant::now();
                 let mut bytes = 0usize;
                 let mut landed = prefetch.drain();
                 loop {

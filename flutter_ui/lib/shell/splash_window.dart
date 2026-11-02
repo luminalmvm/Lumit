@@ -14,7 +14,7 @@
 // home-made picture leaves those parts quiet.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
@@ -24,6 +24,8 @@ import '../state/workspace.dart';
 import '../theme/brand.dart';
 import '../theme/theme.dart';
 import 'wordmark.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The template, in logical pixels. The picture fills the canvas, and the card
 /// it is drawn round sits at 110, 110, 480 by 360.

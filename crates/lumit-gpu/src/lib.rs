@@ -3161,9 +3161,13 @@ impl<T: Send + 'static> Compiling<T> {
         let compile: std::sync::Arc<dyn Fn() -> T + Send + Sync> = std::sync::Arc::new(compile);
         let (send, done) = std::sync::mpsc::channel();
         let job = std::sync::Arc::clone(&compile);
+        // The browser build has no pool to compile on, so `wait` compiles it.
+        #[cfg(not(target_arch = "wasm32"))]
         rayon::spawn(move || {
             let _ = send.send(job());
         });
+        #[cfg(target_arch = "wasm32")]
+        let _ = (send, job);
         Self { done, compile }
     }
 
