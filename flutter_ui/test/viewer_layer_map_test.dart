@@ -116,6 +116,7 @@ void main() {
             internalprojectId: id, internalcompId: id, internallayerId: id),
         info: BridgeLayerInfo(
           pitchFollowsSpeed: false,
+          sends: const [],
           name: 'Layer',
           kind: BridgeLayerKind.nullLayer,
           switches: BridgeLayerSwitches(
