@@ -760,6 +760,7 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
         to_port: to_port.to_owned(),
     };
     let graph = CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
         edges: vec![

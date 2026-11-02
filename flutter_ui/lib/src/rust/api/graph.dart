@@ -271,14 +271,18 @@ class BridgeNodePosition {
   final double x;
   final double y;
 
+  /// The width an edge drag gave the box; none keeps the panel's own.
+  final double? width;
+
   const BridgeNodePosition({
     required this.node,
     required this.x,
     required this.y,
+    this.width,
   });
 
   @override
-  int get hashCode => node.hashCode ^ x.hashCode ^ y.hashCode;
+  int get hashCode => node.hashCode ^ x.hashCode ^ y.hashCode ^ width.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -287,7 +291,8 @@ class BridgeNodePosition {
           runtimeType == other.runtimeType &&
           node == other.node &&
           x == other.x &&
-          y == other.y;
+          y == other.y &&
+          width == other.width;
 }
 
 @freezed

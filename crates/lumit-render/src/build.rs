@@ -9596,6 +9596,7 @@ mod render_below_at_tests {
         let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
         let mut graph = comp_with(10, Vec::new());
         graph.graph = Some(CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             nodes: vec![

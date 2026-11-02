@@ -2188,6 +2188,7 @@ mod tests {
         let graph = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -2224,6 +2225,7 @@ mod tests {
         let reader = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -2293,6 +2295,7 @@ mod tests {
         let outer = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
@@ -2368,6 +2371,7 @@ mod tests {
             let comp = comp_of(
                 Vec::new(),
                 Some(CompGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     nodes,

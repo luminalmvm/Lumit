@@ -2637,6 +2637,7 @@ mod tests {
         let wiggle = crate::fx::builtins::instantiate("wiggle").expect("the catalogue knows it");
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             out_unwired: false,

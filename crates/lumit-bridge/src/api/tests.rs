@@ -7458,6 +7458,7 @@ fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
                     },
                 }],
                 layout: vec![BridgeNodePosition {
+                    width: None,
                     node: BridgeNodeRef::Driver(wiggle_id),
                     x: -120.0,
                     y: 40.0,
@@ -9553,6 +9554,7 @@ fn a_read_is_added_wired_and_undone_in_one_step() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: read,
         x: -240.0,
         y: 20.0,
@@ -9796,11 +9798,13 @@ fn a_graph_group_saves_its_boxes_and_inserts_them_fresh() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: blur_id,
         x: -400.0,
         y: 0.0,
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: glow_id,
         x: -200.0,
         y: 0.0,

@@ -3100,6 +3100,7 @@ mod tests {
         let wiggle_id = wiggle.id;
 
         let wired = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             out_unwired: false,
@@ -4913,6 +4914,7 @@ mod tests {
         let fx_id = fx.id;
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             nodes: vec![

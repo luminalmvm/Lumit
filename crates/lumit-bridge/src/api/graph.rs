@@ -253,6 +253,8 @@ pub struct BridgeNodePosition {
     pub node: BridgeNodeRef,
     pub x: f64,
     pub y: f64,
+    /// The width an edge drag gave the box; none keeps the panel's own.
+    pub width: Option<f64>,
 }
 
 /// A named region of the canvas: a tinted wash behind a set of boxes.
@@ -305,6 +307,7 @@ impl BridgeGraphWiring {
                     node: BridgeNodeRef::of(*node),
                     x: *x,
                     y: *y,
+                    width: g.widths.iter().find(|(n, _)| n == node).map(|(_, w)| *w),
                 })
                 .collect(),
             exposed: g.exposed.iter().copied().map(BridgeNodeRef::of).collect(),
@@ -642,6 +645,11 @@ pub(crate) fn wiring_into(
             .edges
             .into_iter()
             .map(BridgeGraphEdge::core)
+            .collect(),
+        widths: wiring
+            .layout
+            .iter()
+            .filter_map(|p| p.width.map(|w| (p.node.core(), w)))
             .collect(),
         layout: wiring
             .layout

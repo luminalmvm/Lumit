@@ -2889,10 +2889,9 @@ List<LayerFoldRow> layerFoldRows({
 
   // The drivers on the layer's Node graph, after Styles and only once there
   // are some, so a Stagger's keyed Maximum has diamonds to see and drag.
-  // Read here rather than off the entry: the graph is not part of it.
-  final drivers = [
-    for (final d in entry.layer.getGraphDrivers()) d.getInfo(),
-  ];
+  // Off the entry, read with the rest of the layer: a redraw that changes
+  // nothing (a column seam dragged) asks the engine nothing.
+  final drivers = info.drivers;
   if (drivers.isNotEmpty) {
     final driversOpen = open.contains(driversPath(id));
     rows.add(FoldGroupRow(

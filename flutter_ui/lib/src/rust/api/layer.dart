@@ -819,6 +819,12 @@ class BridgeLayerInfo {
   /// carrying it here free.
   final List<BridgeEffectInstanceInfo> styles;
 
+  /// The drivers on the layer's Node graph, the same shape as
+  /// [`Self::effects`], for the Timeline's Drivers heading: read with the
+  /// rest of the drawing data rather than asked for per redraw. Empty on
+  /// nearly every layer.
+  final List<BridgeEffectInstanceInfo> drivers;
+
   /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
   /// the `node_graph` instance bound to the comp this Precomp layer places,
   /// with its Inputs copy refreshed from the live graph as every clone's is.
@@ -979,6 +985,7 @@ class BridgeLayerInfo {
     required this.axisModes,
     required this.effects,
     required this.styles,
+    required this.drivers,
     this.graphInputs,
     required this.collapseForced,
     required this.label,
@@ -1022,6 +1029,7 @@ class BridgeLayerInfo {
       axisModes.hashCode ^
       effects.hashCode ^
       styles.hashCode ^
+      drivers.hashCode ^
       graphInputs.hashCode ^
       collapseForced.hashCode ^
       label.hashCode ^
@@ -1067,6 +1075,7 @@ class BridgeLayerInfo {
           axisModes == other.axisModes &&
           effects == other.effects &&
           styles == other.styles &&
+          drivers == other.drivers &&
           graphInputs == other.graphInputs &&
           collapseForced == other.collapseForced &&
           label == other.label &&

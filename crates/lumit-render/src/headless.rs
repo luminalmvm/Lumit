@@ -4966,6 +4966,7 @@ mod tests {
             8,
             8,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -5814,6 +5815,7 @@ mod tests {
         }
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
             c.graph = Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes,
@@ -6744,6 +6746,7 @@ mod tests {
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     out_unwired: false,
@@ -7849,6 +7852,7 @@ mod tests {
             if let Some(enabled) = graph {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     out_unwired: false,
@@ -8552,6 +8556,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -8603,6 +8608,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -8666,6 +8672,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -8757,6 +8764,7 @@ mod tests {
         let sampler_id = sampler.id;
 
         let graph = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             out_unwired: false,

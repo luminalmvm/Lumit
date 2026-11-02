@@ -410,6 +410,57 @@ void main() {
       expect(placed().y, 313);
     });
 
+    /// A box's left or right edge drags its width, which commits with its
+    /// position: the right edge keeps the left one still, and the reverse.
+    testWidgets('dragging a box edge commits its width', (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(40, 300));
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-snap')));
+      await tester.pump();
+
+      final box = find.byKey(ValueKey<String>('graph-node-driver:$wiggle'));
+      final start = tester.getRect(box);
+      BridgeNodePosition placed() => p.layer
+          .getGraph()
+          .wiring
+          .layout
+          .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
+
+      // On the header, where no socket sits.
+      await tester.dragFrom(
+          Offset(start.right - 1, start.top + 6), const Offset(60, 0));
+      await tester.pump();
+      expect(placed().width, closeTo(start.width - 2 + 60, 1.5));
+      expect(placed().x, 40, reason: 'the left edge stays');
+
+      final wider = tester.getRect(box);
+      await tester.dragFrom(
+          Offset(wider.left + 1, wider.top + 6), const Offset(-30, 0));
+      await tester.pump();
+      expect(placed().width, closeTo(start.width - 2 + 90, 1.5));
+      expect(placed().x, closeTo(10, 1.5), reason: 'the right edge stays');
+    });
+
+    /// M mutes the picked box, as node editors have it, and M again brings
+    /// it back: the bypass its tick sets.
+    testWidgets('M bypasses the picked box and M again restores it',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+
+      await tester.tap(find.byKey(ValueKey<String>('graph-node-$key')));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isTrue);
+    });
+
     /// **N7 — a box dropped on a wire falls into it.** The wire splits: what
     /// fed the consumer now feeds the box, and the box feeds the consumer. One
     /// `setGraph`, so one undo step, like every other gesture on this canvas.

@@ -26100,10 +26100,12 @@ impl SseDecode for crate::api::comp_graph::BridgeCompNodePosition {
         let mut var_node = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_x = <f64>::sse_decode(deserializer);
         let mut var_y = <f64>::sse_decode(deserializer);
+        let mut var_width = <Option<f64>>::sse_decode(deserializer);
         return crate::api::comp_graph::BridgeCompNodePosition {
             node: var_node,
             x: var_x,
             y: var_y,
+            width: var_width,
         };
     }
 }
@@ -27922,6 +27924,8 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
             <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_decode(deserializer);
         let mut var_styles =
             <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_decode(deserializer);
+        let mut var_drivers =
+            <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_decode(deserializer);
         let mut var_graphInputs =
             <Option<crate::api::effect::BridgeEffectInstanceInfo>>::sse_decode(deserializer);
         let mut var_collapseForced = <bool>::sse_decode(deserializer);
@@ -27970,6 +27974,7 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
             axis_modes: var_axisModes,
             effects: var_effects,
             styles: var_styles,
+            drivers: var_drivers,
             graph_inputs: var_graphInputs,
             collapse_forced: var_collapseForced,
             label: var_label,
@@ -28620,10 +28625,12 @@ impl SseDecode for crate::api::graph::BridgeNodePosition {
         let mut var_node = <crate::api::graph::BridgeNodeRef>::sse_decode(deserializer);
         let mut var_x = <f64>::sse_decode(deserializer);
         let mut var_y = <f64>::sse_decode(deserializer);
+        let mut var_width = <Option<f64>>::sse_decode(deserializer);
         return crate::api::graph::BridgeNodePosition {
             node: var_node,
             x: var_x,
             y: var_y,
+            width: var_width,
         };
     }
 }
@@ -36929,6 +36936,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::comp_graph::BridgeCompNodePos
             self.node.into_into_dart().into_dart(),
             self.x.into_into_dart().into_dart(),
             self.y.into_into_dart().into_dart(),
+            self.width.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -39239,6 +39247,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerInfo {
             self.axis_modes.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
             self.styles.into_into_dart().into_dart(),
+            self.drivers.into_into_dart().into_dart(),
             self.graph_inputs.into_into_dart().into_dart(),
             self.collapse_forced.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
@@ -40082,6 +40091,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeNodePosition {
             self.node.into_into_dart().into_dart(),
             self.x.into_into_dart().into_dart(),
             self.y.into_into_dart().into_dart(),
+            self.width.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -45051,6 +45061,7 @@ impl SseEncode for crate::api::comp_graph::BridgeCompNodePosition {
         <uuid::Uuid>::sse_encode(self.node, serializer);
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
+        <Option<f64>>::sse_encode(self.width, serializer);
     }
 }
 
@@ -46401,6 +46412,7 @@ impl SseEncode for crate::api::layer::BridgeLayerInfo {
         <crate::api::layer::BridgeAxisModes>::sse_encode(self.axis_modes, serializer);
         <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_encode(self.effects, serializer);
         <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_encode(self.styles, serializer);
+        <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_encode(self.drivers, serializer);
         <Option<crate::api::effect::BridgeEffectInstanceInfo>>::sse_encode(
             self.graph_inputs,
             serializer,
@@ -46891,6 +46903,7 @@ impl SseEncode for crate::api::graph::BridgeNodePosition {
         <crate::api::graph::BridgeNodeRef>::sse_encode(self.node, serializer);
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
+        <Option<f64>>::sse_encode(self.width, serializer);
     }
 }
 

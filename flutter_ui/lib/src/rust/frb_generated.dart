@@ -24474,12 +24474,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCompNodePosition dco_decode_bridge_comp_node_position(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeCompNodePosition(
       node: dco_decode_Uuid(arr[0]),
       x: dco_decode_f_64(arr[1]),
       y: dco_decode_f_64(arr[2]),
+      width: dco_decode_opt_box_autoadd_f_64(arr[3]),
     );
   }
 
@@ -25833,8 +25834,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeLayerInfo dco_decode_bridge_layer_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 39)
-      throw Exception('unexpected arr length: expect 39 but see ${arr.length}');
+    if (arr.length != 40)
+      throw Exception('unexpected arr length: expect 40 but see ${arr.length}');
     return BridgeLayerInfo(
       name: dco_decode_String(arr[0]),
       kind: dco_decode_bridge_layer_kind(arr[1]),
@@ -25851,31 +25852,32 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       axisModes: dco_decode_bridge_axis_modes(arr[12]),
       effects: dco_decode_list_bridge_effect_instance_info(arr[13]),
       styles: dco_decode_list_bridge_effect_instance_info(arr[14]),
+      drivers: dco_decode_list_bridge_effect_instance_info(arr[15]),
       graphInputs:
-          dco_decode_opt_box_autoadd_bridge_effect_instance_info(arr[15]),
-      collapseForced: dco_decode_bool(arr[16]),
-      label: dco_decode_u_8(arr[17]),
-      matte: dco_decode_opt_box_autoadd_bridge_matte(arr[18]),
-      retime: dco_decode_opt_box_autoadd_bridge_scalar(arr[19]),
-      pitchFollowsSpeed: dco_decode_bool(arr[20]),
-      masks: dco_decode_list_bridge_mask(arr[21]),
-      paint: dco_decode_list_bridge_stroke(arr[22]),
-      puppet: dco_decode_opt_box_autoadd_bridge_puppet(arr[23]),
-      shapeContents: dco_decode_list_bridge_shape_entry(arr[24]),
-      markers: dco_decode_list_bridge_layer_marker(arr[25]),
-      flow: dco_decode_bool(arr[26]),
-      flowInputRate: dco_decode_bridge_scalar(arr[27]),
-      trackCorrected: dco_decode_bool(arr[28]),
-      textAnimators: dco_decode_list_bridge_text_animator(arr[29]),
-      source: dco_decode_opt_box_autoadd_item_reference(arr[30]),
-      sourceSize: dco_decode_opt_box_autoadd_bridge_comp_size(arr[31]),
-      sourceFrames: dco_decode_opt_box_autoadd_i_64(arr[32]),
-      volumeDb: dco_decode_bridge_scalar(arr[33]),
-      pan: dco_decode_bridge_scalar(arr[34]),
-      wired: dco_decode_bool(arr[35]),
-      camera: dco_decode_opt_box_autoadd_bridge_camera_settings(arr[36]),
-      light: dco_decode_opt_box_autoadd_bridge_light_settings(arr[37]),
-      material: dco_decode_opt_box_autoadd_bridge_material_settings(arr[38]),
+          dco_decode_opt_box_autoadd_bridge_effect_instance_info(arr[16]),
+      collapseForced: dco_decode_bool(arr[17]),
+      label: dco_decode_u_8(arr[18]),
+      matte: dco_decode_opt_box_autoadd_bridge_matte(arr[19]),
+      retime: dco_decode_opt_box_autoadd_bridge_scalar(arr[20]),
+      pitchFollowsSpeed: dco_decode_bool(arr[21]),
+      masks: dco_decode_list_bridge_mask(arr[22]),
+      paint: dco_decode_list_bridge_stroke(arr[23]),
+      puppet: dco_decode_opt_box_autoadd_bridge_puppet(arr[24]),
+      shapeContents: dco_decode_list_bridge_shape_entry(arr[25]),
+      markers: dco_decode_list_bridge_layer_marker(arr[26]),
+      flow: dco_decode_bool(arr[27]),
+      flowInputRate: dco_decode_bridge_scalar(arr[28]),
+      trackCorrected: dco_decode_bool(arr[29]),
+      textAnimators: dco_decode_list_bridge_text_animator(arr[30]),
+      source: dco_decode_opt_box_autoadd_item_reference(arr[31]),
+      sourceSize: dco_decode_opt_box_autoadd_bridge_comp_size(arr[32]),
+      sourceFrames: dco_decode_opt_box_autoadd_i_64(arr[33]),
+      volumeDb: dco_decode_bridge_scalar(arr[34]),
+      pan: dco_decode_bridge_scalar(arr[35]),
+      wired: dco_decode_bool(arr[36]),
+      camera: dco_decode_opt_box_autoadd_bridge_camera_settings(arr[37]),
+      light: dco_decode_opt_box_autoadd_bridge_light_settings(arr[38]),
+      material: dco_decode_opt_box_autoadd_bridge_material_settings(arr[39]),
     );
   }
 
@@ -26328,12 +26330,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeNodePosition dco_decode_bridge_node_position(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeNodePosition(
       node: dco_decode_bridge_node_ref(arr[0]),
       x: dco_decode_f_64(arr[1]),
       y: dco_decode_f_64(arr[2]),
+      width: dco_decode_opt_box_autoadd_f_64(arr[3]),
     );
   }
 
@@ -31767,7 +31770,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_node = sse_decode_Uuid(deserializer);
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
-    return BridgeCompNodePosition(node: var_node, x: var_x, y: var_y);
+    var var_width = sse_decode_opt_box_autoadd_f_64(deserializer);
+    return BridgeCompNodePosition(
+        node: var_node, x: var_x, y: var_y, width: var_width);
   }
 
   @protected
@@ -33233,6 +33238,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_axisModes = sse_decode_bridge_axis_modes(deserializer);
     var var_effects = sse_decode_list_bridge_effect_instance_info(deserializer);
     var var_styles = sse_decode_list_bridge_effect_instance_info(deserializer);
+    var var_drivers = sse_decode_list_bridge_effect_instance_info(deserializer);
     var var_graphInputs =
         sse_decode_opt_box_autoadd_bridge_effect_instance_info(deserializer);
     var var_collapseForced = sse_decode_bool(deserializer);
@@ -33278,6 +33284,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         axisModes: var_axisModes,
         effects: var_effects,
         styles: var_styles,
+        drivers: var_drivers,
         graphInputs: var_graphInputs,
         collapseForced: var_collapseForced,
         label: var_label,
@@ -33788,7 +33795,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_node = sse_decode_bridge_node_ref(deserializer);
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
-    return BridgeNodePosition(node: var_node, x: var_x, y: var_y);
+    var var_width = sse_decode_opt_box_autoadd_f_64(deserializer);
+    return BridgeNodePosition(
+        node: var_node, x: var_x, y: var_y, width: var_width);
   }
 
   @protected
@@ -40320,6 +40329,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_Uuid(self.node, serializer);
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.width, serializer);
   }
 
   @protected
@@ -41413,6 +41423,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_axis_modes(self.axisModes, serializer);
     sse_encode_list_bridge_effect_instance_info(self.effects, serializer);
     sse_encode_list_bridge_effect_instance_info(self.styles, serializer);
+    sse_encode_list_bridge_effect_instance_info(self.drivers, serializer);
     sse_encode_opt_box_autoadd_bridge_effect_instance_info(
         self.graphInputs, serializer);
     sse_encode_bool(self.collapseForced, serializer);
@@ -41795,6 +41806,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_node_ref(self.node, serializer);
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.width, serializer);
   }
 
   @protected

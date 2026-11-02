@@ -1738,6 +1738,11 @@ pub struct BridgeLayerInfo {
     /// paste would land. Empty on nearly every layer, which is what makes
     /// carrying it here free.
     pub styles: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The drivers on the layer's Node graph, the same shape as
+    /// [`Self::effects`], for the Timeline's Drivers heading: read with the
+    /// rest of the drawing data rather than asked for per redraw. Empty on
+    /// nearly every layer.
+    pub drivers: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
     /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
     /// the `node_graph` instance bound to the comp this Precomp layer places,
     /// with its Inputs copy refreshed from the live graph as every clone's is.
@@ -2110,6 +2115,15 @@ pub(crate) fn read_layer_info(
                     layer.start_offset.0,
                     !layer.is_adjustment(),
                 )
+            })
+            .collect(),
+        drivers: layer
+            .graph
+            .nodes
+            .iter()
+            .map(|d| {
+                crate::api::effect::BridgeEffectInstance::new(d.clone(), layer.start_offset.0)
+                    .get_info()
             })
             .collect(),
         graph_inputs: layer.graph_inputs.as_ref().map(|inputs| {
