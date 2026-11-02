@@ -107,8 +107,13 @@ opens **Model settings**: **Up axis**, **Fit to comp**, and **Units**, the comp 
 each metre of the model. **Layer ▸ Model settings** opens it again. In a comp with no
 lights, the first model also adds an **Ambient light** and a **Key light**.
 
+A Model layer is drawn through the comp's camera with the file's own materials, lit by the
+comp's lights, and passes through other 3D layers by depth. Its effects run on its
+picture, which keeps its depth. In the Viewer it is outlined and picked by its box.
+
 :::note[Not built yet]
-A Model layer draws nothing yet. Its materials, animation and parts have no rows.
+A Model layer has no rows for its materials, animation or parts. It takes no motion blur,
+no shadows and no blur from the camera's depth of field.
 :::
 
 ## Interpretation
