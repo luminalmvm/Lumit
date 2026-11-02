@@ -38,9 +38,9 @@ pub const DEPTH: &str = "depth";
 pub const REMOVE_BACKGROUND: &str = "remove_background";
 
 /// The **Frames** row's options, in index order, on every effect whose
-/// analysis reads a whole shot: Depth, Remove background and the Roto brush.
-/// **All frames** is the default, so a project made before the row existed
-/// reads exactly as it did.
+/// analysis reads a whole shot: Depth, Remove background, the Roto brush and
+/// the three trackers. **All frames** is the default, so a project made before
+/// the row existed reads exactly as it did.
 pub const FRAMES_OPTIONS: &[&str] = &["All frames", "Layer in to out", "Work area"];
 
 /// The source times, first and last, in seconds, an analysis on `layer` is

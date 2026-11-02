@@ -160,6 +160,10 @@ pub struct TrackPoints {
     #[slider(min = 0.0, max = 500.0, default = 50.0, hard_min = 0.0, unit = Px)]
     pub max_distance: f32,
 
+    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
+
     /// Start the analysis. A button, not a value.
     #[action(label = "Analyse")]
     pub analyse: (),

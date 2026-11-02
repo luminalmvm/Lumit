@@ -14809,6 +14809,19 @@
           "hard_min": 0.0
         },
         {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "analyse",
           "label": "Analyse",
           "kind": "action",
@@ -21077,6 +21090,19 @@
           "default": true
         },
         {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "show_points",
           "label": "Show points",
           "kind": "bool",
@@ -21275,6 +21301,19 @@
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         }
       ],
       "groups": [],

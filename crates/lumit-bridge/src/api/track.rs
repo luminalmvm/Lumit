@@ -113,13 +113,14 @@ pub struct BridgeTrackStatus {
     pub mean_error: f64,
     pub points: u32,
     /// How many frames of the clip carry a solved camera. The span always
-    /// starts at the clip's first frame — the analysis tracks the source from
-    /// its beginning and can only stop early, never start late — so this and
+    /// starts where the analysis started, the clip's first frame or the Frames
+    /// row's, and can only stop early, never start late, so this and
     /// `clip_frames` are the whole of the bar the panel draws.
     pub frames: u32,
-    /// How many frames the clip has. `frames < clip_frames` is a **partial**
-    /// track: the shot could not be followed all the way through, and what was
-    /// solved is the part before it stopped carrying
+    /// How many frames the clip has, or the Frames row's span of it.
+    /// `frames < clip_frames` is a **partial** track: the shot could not be
+    /// followed all the way through, and what was solved is the part before it
+    /// stopped carrying
     /// ([`lumit_render::track::Solved::is_partial`]).
     pub clip_frames: u32,
 }
@@ -428,7 +429,7 @@ pub fn fire_effect_action(
                     }
                 }
                 .ok_or(BridgeError::NotFootage)?;
-                match lumit_render::track::request(job) {
+                match lumit_render::track::request(job.within(span)) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
                 }
@@ -457,7 +458,7 @@ pub fn fire_effect_action(
                     ),
                 }
                 .ok_or(BridgeError::NotFootage)?;
-                match lumit_render::track::request(job) {
+                match lumit_render::track::request(job.within(span)) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
                 }
@@ -520,7 +521,7 @@ pub fn fire_effect_action(
                 _ => lumit_render::track::job_for_precomp(&snapshot(&layer)?, &item, true),
             }
             .ok_or(BridgeError::NotFootage)?;
-            match lumit_render::track::request(job) {
+            match lumit_render::track::request(job.within(span)) {
                 lumit_render::track::Requested::Started => Ok(()),
                 _ => Err(BridgeError::AnalysisBusy),
             }
