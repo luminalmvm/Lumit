@@ -76,6 +76,7 @@ Future<void> main() async {
       background: defaults.background,
       shutterAngle: defaults.shutterAngle,
       motionBlurSamples: defaults.motionBlurSamples,
+      motionBlurLimit: defaults.motionBlurLimit,
     ),
   );
   final music = project.importFootage(path: '$fixtures/Music.wav');

@@ -13524,7 +13524,11 @@
   },
   "compSamples": "Samples",
   "@compSamples": {
-    "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
+    "description": "New composition / Composition settings dialog: label beside the shutter angle: the fewest sub-frame samples a moving blurred layer is drawn at."
+  },
+  "compSamplesTo": "to",
+  "@compSamplesTo": {
+    "description": "New composition / Composition settings dialog: the word between the two sample counts, read as 'Samples 16 to 128': the fewest a moving blurred layer is drawn at, then the most a fast one is."
   },
   "compBackground": "Background",
   "@compBackground": {

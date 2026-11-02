@@ -39,6 +39,7 @@ CompositionReference _stampComp(ProjectReference project, String name,
       background: was.background,
       shutterAngle: was.shutterAngle,
       motionBlurSamples: was.motionBlurSamples,
+      motionBlurLimit: was.motionBlurLimit,
     ),
   );
   comp.addSolidLayer();
@@ -140,6 +141,7 @@ void main() {
           background: settings.background,
           shutterAngle: settings.shutterAngle,
           motionBlurSamples: settings.motionBlurSamples,
+          motionBlurLimit: settings.motionBlurLimit,
           duration: const BridgeRational(num: 200, den: 3),
         ),
       );
@@ -323,6 +325,7 @@ void main() {
           background: was.background,
           shutterAngle: was.shutterAngle,
           motionBlurSamples: was.motionBlurSamples,
+          motionBlurLimit: was.motionBlurLimit,
         ),
       );
       comp.addSolidLayer();
