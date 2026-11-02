@@ -32,6 +32,9 @@ lumit-gpu = { path = "../lumit-gpu" }
 # crash journal, and the journal is this crate's.
 lumit-project = { path = "../lumit-project" }
 lumit-render = { path = "../lumit-render" }
+# B30's model, built in code, and the matrices that place it.
+lumit-scene = { path = "../lumit-scene", features = ["test-fixtures"] }
+glam = "0.29"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = "1"

@@ -2120,12 +2120,14 @@ dependencies = [
 name = "lumit-bench"
 version = "0.10.1"
 dependencies = [
+ "glam",
  "lumit-audio",
  "lumit-core",
  "lumit-gpu",
  "lumit-media",
  "lumit-project",
  "lumit-render",
+ "lumit-scene",
  "serde",
  "serde_json",
  "uuid",
