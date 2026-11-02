@@ -21,3 +21,35 @@ pub(crate) fn feed(
     }
     Some(())
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use lumit_core::model_layer::UpAxis;
+
+    struct Named;
+    impl SourceStamper for Named {
+        fn stamp(&self, item: Uuid, _lt: f64, _native: bool) -> Option<(String, u64)> {
+            Some((item.to_string(), 0))
+        }
+    }
+
+    /// Changing how the model sits in its layer renames the frame, so a cached
+    /// picture with the old Up axis is never shown.
+    #[test]
+    fn settings_rename_the_frame() {
+        let item = Uuid::now_v7();
+        let name = |settings: &ModelSettings| {
+            let mut h = blake3::Hasher::new();
+            feed(&mut h, item, settings, &Named).unwrap();
+            h.finalize()
+        };
+        let z = ModelSettings {
+            up_axis: UpAxis::Z,
+            ..ModelSettings::default()
+        };
+        assert_eq!(name(&z), name(&z.clone()));
+        assert_ne!(name(&z), name(&ModelSettings::default()));
+    }
+}
