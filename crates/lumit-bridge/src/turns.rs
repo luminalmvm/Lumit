@@ -115,6 +115,23 @@ pub(crate) fn start(turn: impl FnMut() -> bool + 'static) {
     web::schedule(0.0);
 }
 
+/// A render worker's turn has run, so its renderer is built and the page can
+/// stop showing that it is loading (`lumitEngineReady` in
+/// flutter_ui/web/flutter_bootstrap.js). Said once.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn engine_ready() {
+    thread_local!(static SAID: std::cell::Cell<bool> = const { std::cell::Cell::new(false) });
+    if SAID.with(|said| said.replace(true)) {
+        return;
+    }
+    let global = js_sys::global();
+    if let Ok(ready) = js_sys::Reflect::get(&global, &"lumitEngineReady".into()) {
+        if let Some(ready) = wasm_bindgen::JsCast::dyn_ref::<js_sys::Function>(&ready) {
+            let _ = ready.call0(&global);
+        }
+    }
+}
+
 /// A request is waiting: take the next turn now.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn wake() {

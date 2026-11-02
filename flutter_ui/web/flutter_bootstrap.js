@@ -13,7 +13,31 @@ globalThis.lumitOnThePage = {
 
 // Lumit draws with WebGPU. Without it there is no Viewer, so say so before
 // anything is downloaded.
+const loading = document.getElementById('lumit-loading');
+// The loading card goes once Lumit has drawn (lib/state/page_web.dart) and the
+// engine has built its renderer (crates/lumit-bridge/src/turns.rs): on a first
+// visit that build holds the page for a few seconds while the browser compiles
+// every shader, and the card's bar keeps moving through it. A start that never
+// gets a renderer still shows what it drew, after a while.
+let drawn = false;
+let built = false;
+const fade = () => {
+  if (!drawn || !built || !loading.isConnected) return;
+  loading.classList.add('gone');
+  setTimeout(() => loading.remove(), 250);
+};
+globalThis.lumitReady = () => {
+  drawn = true;
+  fade();
+  setTimeout(() => { built = true; fade(); }, 20000);
+};
+globalThis.lumitEngineReady = () => {
+  built = true;
+  fade();
+};
+
 if (!navigator.gpu) {
+  loading.remove();
   document.getElementById('lumit-no-webgpu').style.display = 'flex';
 } else {
   _flutter.loader.load({

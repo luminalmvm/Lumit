@@ -2051,6 +2051,7 @@ dependencies = [
  "parking_lot",
  "realfft",
  "thiserror 2.0.18",
+ "wasm-bindgen",
  "web-time",
 ]
 

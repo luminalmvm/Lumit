@@ -49,6 +49,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 
+mod engine;
 pub(crate) mod mix_peaks;
 
 /// A command for the audio thread — the only code that touches the engine.
@@ -438,51 +439,10 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
             Device::Untried => (st.wanted_device.clone(), st.device_gen),
         }
     };
-    // Build without the lock: spawn the audio thread and wait for its verdict.
+    // Open it without the lock.
     let (tx, rx) = std::sync::mpsc::channel::<Cmd>();
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let engine = match lumit_audio::AudioEngine::new_on(wanted.as_deref()) {
-            Ok(engine) => {
-                let _ = ready_tx.send(Some((
-                    engine.clock(),
-                    engine.meters(),
-                    engine.device_rate(),
-                )));
-                engine
-            }
-            Err(_) => {
-                let _ = ready_tx.send(None);
-                return; // no device: the thread ends, the state stays Unavailable
-            }
-        };
-        // The engine lives here for the session; each command is a plan swap
-        // or an atomic store — nothing slow, nothing that can block the
-        // realtime callback.
-        while let Ok(cmd) = rx.recv() {
-            match cmd {
-                Cmd::Load { plan, start, play } => {
-                    engine.load_plan(plan);
-                    if let Some(s) = start {
-                        engine.seek_seconds(s);
-                    }
-                    if play {
-                        engine.play();
-                    }
-                }
-                Cmd::Swap(plan) => engine.swap_plan(plan),
-                Cmd::Play => engine.play(),
-                Cmd::Pause => engine.pause(),
-                Cmd::Mute(m) => engine.set_muted(m),
-                Cmd::Slow(s) => engine.set_slow(s),
-                Cmd::Seek(s) => engine.seek_seconds(s),
-                Cmd::Scrub { at, len } => engine.scrub(at, len),
-                Cmd::Unload => engine.unload(),
-            }
-        }
-    });
-    match ready_rx.recv() {
-        Ok(Some((clock, meters, rate))) => {
+    match engine::open(wanted, rx) {
+        Some((clock, meters, rate)) => {
             let mut st = lock();
             // The choice moved again while this stream was opening: let the
             // fresh one win rather than installing a stale engine over it.
@@ -503,7 +463,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
             let _ = tx.send(Cmd::Slow(st.slow));
             Some((tx, rate, generation))
         }
-        _ => {
+        None => {
             let mut st = lock();
             if st.device_gen == generation {
                 st.device = Device::Unavailable;
@@ -518,21 +478,23 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
 fn send(st: &AudioState, cmd: Cmd) {
     if let Device::Ready { tx, .. } = &st.device {
         let _ = tx.send(cmd);
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::wake();
     }
 }
 
 /// Kick the prepare worker for `comp` (or park the request in the mailbox
 /// while one runs). Callers hold the state lock.
 fn kick_prepare(st: &mut AudioState, comp: Uuid, doc: Arc<lumit_core::model::Document>) {
-    if matches!(st.device, Device::Unavailable) || cfg!(target_arch = "wasm32") {
-        return; // calm terminal state: no sound, no worker, as in the browser build
+    if matches!(st.device, Device::Unavailable) {
+        return; // calm terminal state: no sound, no worker
     }
     if st.worker_busy {
         st.pending_prepare = Some((comp, doc));
         return;
     }
     st.worker_busy = true;
-    std::thread::spawn(move || run_prepare(comp, doc));
+    engine::spawn(move || run_prepare(comp, doc));
 }
 
 /// The prepare worker: build and install one comp's mix, then drain the
@@ -743,9 +705,6 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::model::Document>
 /// Returns at once: the file is opened on its own thread, so a slow disk does
 /// not hold the press.
 pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_s: f64) {
-    if cfg!(target_arch = "wasm32") {
-        return;
-    }
     // `max` answers zero for a start that is not a number.
     let start_s = start_s.max(0.0);
     {
@@ -770,7 +729,7 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
         }
     }
 
-    std::thread::spawn(move || {
+    engine::spawn(move || {
         let Some((tx, rate, generation)) = ensure_device() else {
             return;
         };

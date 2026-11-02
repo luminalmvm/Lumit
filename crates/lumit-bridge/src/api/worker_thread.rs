@@ -3282,6 +3282,8 @@ fn worker_loop(
         match outcome {
             Ok(Turn::Continue) => {
                 faults_in_a_row = 0;
+                #[cfg(target_arch = "wasm32")]
+                crate::turns::engine_ready();
                 return true;
             }
             Ok(Turn::Stop) => {}
