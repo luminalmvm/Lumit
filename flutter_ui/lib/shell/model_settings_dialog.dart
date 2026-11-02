@@ -24,6 +24,11 @@ import 'camera_settings_dialog.dart'
         cameraWell;
 import 'dialog_frame.dart';
 
+/// The names the Ambient light and the Key light a first model brings with it
+/// take, in that order.
+List<String> modelLightNames() =>
+    [l10n.lightLayerName(l10n.lightAmbient), l10n.keyLightName];
+
 /// The Model settings of the first Model layer in [placed], the layers a drop
 /// just made, if there is one.
 Future<void> showDroppedModelSettingsFrb(

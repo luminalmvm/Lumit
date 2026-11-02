@@ -243,6 +243,10 @@
   "@modelPixelsPerMetre": {
     "description": "Unit after the Units number in Model settings: comp pixels for each metre of the 3D model."
   },
+  "keyLightName": "Key light",
+  "@keyLightName": {
+    "description": "The name of the light a first 3D model dropped into a composition with no lights brings with it, the main light that shows the model's shape. Beside it comes an Ambient light."
+  },
   "lightLayerName": "{kind} light",
   "@lightLayerName": {
     "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",

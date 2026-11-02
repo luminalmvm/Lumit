@@ -53,7 +53,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
 import '../shell/model_settings_dialog.dart'
-    show showDroppedModelSettingsFrb;
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
@@ -4277,7 +4277,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       asSequence: _videoAsSequence(context),
                       row: at,
                       arrival: ui.streamsArrival,
-                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed,
+                      lightNames: modelLightNames());
                   // A 3D model asks how it sits as it lands.
                   showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
