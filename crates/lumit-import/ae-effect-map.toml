@@ -225,6 +225,12 @@ lumit = "lightning"
 conversion = "lightning"
 
 [[effect]]
+ae = "VIDEOCOPILOT LightSaber"
+name = "Saber"
+lumit = "energy_line"
+conversion = "energy_line"
+
+[[effect]]
 ae = "ADBE Grid"
 name = "Grid"
 lumit = "grid"

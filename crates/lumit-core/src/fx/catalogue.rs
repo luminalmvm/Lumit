@@ -103,6 +103,7 @@ use super::effects::{
     echo::{Echo, EchoDef},
     emboss::{Emboss, EmbossDef},
     emit_from_image::{EmitFromImage, EmitFromImageDef},
+    energy_line::{EnergyLine, EnergyLineDef},
     exposure::{Exposure, ExposureDef},
     extract_channels::{ExtractChannels, ExtractChannelsDef},
     fill::{Fill, FillDef},
@@ -282,6 +283,8 @@ crate::catalogue![
     // in the picture.
     ScribbleDef => Scribble,
     StrokeDef => Stroke,
+    // Draws its own light along a line, a mask, a shape or text.
+    EnergyLineDef => EnergyLine,
     // Particulate, at the Generate family's end: it makes its own pixels
     // rather than changing the ones that arrived, which is what the Generate
     // family is for, and it is the first entry to declare a data output

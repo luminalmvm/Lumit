@@ -1582,10 +1582,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _makeGlyph(Color colour) {
     if (_glyphColour == colour) return;
     _glyphColour = colour;
+    final t = ThemeScope.of(context).theme;
+    final svg = IconStyle.resolve(LumitIcons.composition, t);
+    final own = IconStyle.keepsColours(svg);
     vg
         .loadPicture(
-            SvgStringLoader(
-                IconStyle.resolve(LumitIcons.composition, ThemeScope.of(context).theme),
+            SvgStringLoader(own ? IconStyle.themed(svg, t) : svg,
                 theme: SvgTheme(currentColor: colour)),
             null)
         .then((info) {
@@ -1597,7 +1599,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       // with the new one before the old is let go: a lane repainting with a
       // disposed picture throws.
       final old = _compGlyph;
-      setState(() => _compGlyph = (picture: info.picture, size: info.size));
+      // A person's own one-colour file not drawn in `currentColor` is
+      // tinted as it is painted.
+      setState(() => _compGlyph = (
+            picture: info.picture,
+            size: info.size,
+            tint: own || svg.contains('currentColor') ? null : colour,
+          ));
       WidgetsBinding.instance
           .addPostFrameCallback((_) => old?.picture.dispose());
     });

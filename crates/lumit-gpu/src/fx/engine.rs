@@ -758,6 +758,7 @@ impl FxEngine {
             lens_dirt: Default::default(),
             film: Default::default(),
             sprite_flare: Default::default(),
+            energy_line: super::energy_line::LazyEnergyLine::spawn(ctx),
             layout,
             adjust_layout,
             mb_layout,

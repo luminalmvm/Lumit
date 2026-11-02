@@ -380,6 +380,15 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("source_width", f(120.0)),
             ("source_height", f(120.0)),
         ],
+        // The light on its own would leave the plate behind, so the plate
+        // stays under it, and the line runs across the frame on a slant.
+        "energy_line" => vec![
+            ("composite_on_original", on(true)),
+            ("start_x", f(260.0)),
+            ("start_y", f(620.0)),
+            ("end_x", f(1660.0)),
+            ("end_y", f(200.0)),
+        ],
 
         _ => Vec::new(),
     }
