@@ -2259,6 +2259,19 @@ class _EffectSection extends StatelessWidget {
     return it >= 0 && me >= 0 && it < me;
   }
 
+  /// Set this effect, and any picked effect of the same kind, to its
+  /// [preset]-th built-in preset, keyframes from the playhead.
+  void _applyPreset(BuildContext context, int preset) {
+    final at = Provider.of<LumitUiState>(context, listen: false)
+        .playheadFrame
+        .value;
+    _withHandle(context, (e) {
+      if (e.getInfo().name != info.name) return;
+      layer.applyEffectPreset(effect: e, preset: preset, atFrame: at);
+    });
+    onStackChanged();
+  }
+
   /// Run [op] on each of them, in stack order.
   void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,
       {bool reversed = false}) {
@@ -2991,6 +3004,10 @@ class _EffectSection extends StatelessWidget {
 
   void _showStackMenu(BuildContext context, Offset at, int index, int count) {
     final id = info.id;
+    final presets = [
+      for (final instance in _instances())
+        if (instance.id() == info.id) ...instance.presetNames(),
+    ];
     void move(int to) {
       // **The order several picked effects land in**. Each one is
       // taken out of the stack and put back *at* `to`, so the last one moved
@@ -3084,6 +3101,32 @@ class _EffectSection extends StatelessWidget {
                   _copyEffect(context);
                 },
                 child: Text(l10n.copyEffect),
+              ),
+            // The presets this effect ships with. Each sets the whole effect,
+            // with any keyframes starting at the playhead.
+            if (presets.isNotEmpty)
+              SubmenuRow(
+                key: ValueKey<String>('fx-menu-presets-$id'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => FloatSurface(
+                  width: 190,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (i, name) in presets.indexed)
+                        MenuRow(
+                          key: ValueKey<String>('fx-menu-preset-$id-$i'),
+                          onPressed: () {
+                            dismiss();
+                            _applyPreset(context, i);
+                          },
+                          child: Text(engineLabel(name)),
+                        ),
+                    ],
+                  ),
+                ),
+                child: Text(l10n.effectPresets),
               ),
             // This one effect as a preset, settings and keyframes and all.
             // A group header's stack is not a layer's to save from.

@@ -7565,6 +7565,7 @@ fn every_effect_carries_a_matte_row() {
                 | "venetian_blinds"
                 | "iris_wipe"
                 | "card_wipe"
+                | "luma_fade"
                 // Scatter: the matte is *where the points go*, which is
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
@@ -7642,10 +7643,11 @@ fn every_effect_carries_a_matte_row() {
         // channel choices), Vector blur (its three), the Lens flare (source
         // detection) and Scatter, which reads **alpha and only alpha** — carry
         // none, and the seam leaves their matte raw. Set matte used to be one
-        // more, and carries no Matte row at all now.
+        // more, and carries no Matte row at all now. Luma fade reads the matte's
+        // luminance itself, as it reads its own picture's.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter" | "luma_fade"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

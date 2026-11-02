@@ -57,6 +57,7 @@ pub mod params;
 /// The points stream and its closed forms: one frame's
 /// particles, worked out from their birth indices and nothing else.
 pub mod points;
+pub mod presets;
 /// The catalogue as JSON, for the manual's per-effect parameter tables.
 pub mod reference;
 /// What an effect is, as a value rather than a variant (§2.4).

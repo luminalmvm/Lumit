@@ -438,6 +438,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// declaration to hold the stored rows against, none of them is unused.
   BridgeParamSync parameterSync();
 
+  /// The names of the presets this effect ships with, in menu order. Engine
+  /// labels, so the panel translates them. Empty for most effects.
+  List<String> presetNames();
+
   /// Stage the removal of an Expression box's last input and answer its
   /// name, so the caller can take its wire off in the same commit. `None`
   /// for a box with no inputs.

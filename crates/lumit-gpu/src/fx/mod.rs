@@ -280,6 +280,8 @@ pub struct FxEngine {
     /// The first kernel to put a camera in front of a pixel, and it *inverts*
     /// the projection rather than drawing it — Lumit's effects gather.
     card_wipe: wgpu::ComputePipeline,
+    /// Luma fade: the picture goes away in order of brightness.
+    luma_fade: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather

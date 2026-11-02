@@ -603,3 +603,64 @@ struct CropParams {
     mix_amt: f32,
     _pad: [f32; 2],
 }
+
+/// One resolved Luma fade. Mirrors `lumit_core::fx::effects::luma_fade::LumaFadeParams`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LumaFadeOp {
+    /// Completion ÷ 100.
+    pub completion: f32,
+    /// Softness as a share of the 0..1 brightness range, floored above zero.
+    pub band: f32,
+    /// The brightest parts go first instead of the darkest.
+    pub invert: bool,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LumaFadeParams {
+    completion: f32,
+    band: f32,
+    mix_amt: f32,
+    invert: f32,
+    /// 1 = read the brightness from the matte rather than the picture.
+    matte_on: f32,
+    _pad: [f32; 3],
+}
+
+impl FxEngine {
+    /// Apply one Luma fade to a linear working texture, returning a new
+    /// texture of the same size. One pass. With no matte bound the picture's
+    /// own brightness drives it.
+    pub fn luma_fade(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        matte: Option<&wgpu::Texture>,
+        op: &LumaFadeOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-luma-fade-out");
+        self.dispatch_matted(
+            ctx,
+            &self.luma_fade,
+            src,
+            src,
+            matte,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&LumaFadeParams {
+                completion: op.completion,
+                band: op.band,
+                mix_amt: op.mix,
+                invert: f32::from(op.invert),
+                matte_on: f32::from(matte.is_some()),
+                _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+}
