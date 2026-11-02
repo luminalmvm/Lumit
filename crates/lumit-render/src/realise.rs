@@ -3049,7 +3049,7 @@ fn draw_order(
         // itself, so whatever it crosses is cut along its plane instead.
         let flat: Vec<bool> = run.iter().map(|&i| !layers[i].mb.is_empty()).collect();
         order.extend(
-            lumit_gpu::composite::depth_order(&worlds, &flat, view_proj, eye)
+            lumit_gpu::composite::order::depth_order(&worlds, &flat, view_proj, eye)
                 .into_iter()
                 .filter_map(|(i, cut)| Some((*run.get(i)?, cut))),
         );
