@@ -432,6 +432,7 @@ impl FxEngine {
             "fx-venetian-blinds",
         );
         let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
+        let luma_fade_mod = module(include_str!("../fx_lumafade.wgsl"), "fx-luma-fade");
         // The per-card shuffle is the shared hash, so the noise core is
         // prepended exactly as Fractal noise's and Roughen edges' are.
         let card_wipe_mod = module(
@@ -577,6 +578,7 @@ impl FxEngine {
         );
         let iris_wipe = pipeline(&iris_wipe_mod, "fx-iris-wipe", "iris_wipe");
         let card_wipe = pipeline(&card_wipe_mod, "fx-card-wipe", "card_wipe");
+        let luma_fade = pipeline(&luma_fade_mod, "fx-luma-fade", "luma_fade");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
@@ -730,6 +732,7 @@ impl FxEngine {
             venetian_blinds: venetian_blinds.wait(),
             iris_wipe: iris_wipe.wait(),
             card_wipe: card_wipe.wait(),
+            luma_fade: luma_fade.wait(),
             transform: transform.wait(),
             shake_mb: shake_mb.wait(),
             glow_bright: glow_bright.wait(),

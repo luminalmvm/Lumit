@@ -4188,6 +4188,22 @@
   "@fxCrop": {
     "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
   },
+  "fxLumaFade": "Luma fade",
+  "@fxLumaFade": {
+    "description": "Effect name in the Add effect menu — fades the picture away in order of brightness, darkest first."
+  },
+  "fxLumaReveal": "Luma reveal",
+  "@fxLumaReveal": {
+    "description": "A built-in preset in Luma fade's menu: the layer appears in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxLumaHide": "Luma hide",
+  "@fxLumaHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxHardHide": "Hard hide",
+  "@fxHardHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a hard edge."
+  },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
     "description": "Effect controls — a depth-channel option on Depth of field."
