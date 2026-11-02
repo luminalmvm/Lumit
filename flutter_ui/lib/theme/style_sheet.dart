@@ -619,10 +619,18 @@ class StyleSheet {
     }
 
     for (final e in dir.listSync()) {
+      // Not `.staging`, where a style being taken in is put together.
+      if (e.uri.pathSegments.where((s) => s.isNotEmpty).last.startsWith('.')) {
+        continue;
+      }
       if (e is File) take(e);
       if (e is Directory) {
-        for (final inner in e.listSync()) {
-          if (inner is File) take(inner);
+        try {
+          for (final inner in e.listSync()) {
+            if (inner is File) take(inner);
+          }
+        } on FileSystemException {
+          // Moved or gone mid-read: the next change reads it again.
         }
       }
     }

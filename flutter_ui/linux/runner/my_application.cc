@@ -643,11 +643,11 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
-// Whether this start was asked to install an extension package.
+// Whether this start was asked to install an extension package or a style.
 static gboolean asks_for_package(gchar** arguments) {
   for (gchar** argument = arguments; *argument != nullptr; argument++) {
     g_autofree gchar* lower = g_ascii_strdown(*argument, -1);
-    if (g_str_has_suffix(lower, ".lfx")) {
+    if (g_str_has_suffix(lower, ".lfx") || g_str_has_suffix(lower, ".lumstyle")) {
       return TRUE;
     }
   }

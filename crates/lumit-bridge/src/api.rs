@@ -46,6 +46,7 @@ pub mod shell;
 pub mod solid;
 pub mod state;
 pub mod streams;
+pub mod styles;
 pub mod system;
 pub mod track;
 pub mod wire_tie;

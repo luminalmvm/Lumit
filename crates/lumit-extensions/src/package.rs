@@ -36,7 +36,7 @@ fn not_a_package() -> ExtensionError {
 /// slashes, or None for one that is absolute, climbs out with `..`, is too
 /// deep, or that Windows can't write: a device name such as `con.txt`, or
 /// one ending in a dot or a space.
-fn plain(name: &str) -> Option<String> {
+pub(crate) fn plain(name: &str) -> Option<String> {
     let name = name.strip_suffix('/').unwrap_or(name);
     let parts: Vec<&str> = name.split('/').collect();
     let device = |p: &str| {
@@ -186,7 +186,7 @@ pub fn install_package(path: &Path, into: Option<&Path>) -> Result<Installed, Ex
 
 /// The files under `folder` a package takes, by their names in it. Links
 /// and anything whose name starts with a dot (`.git`, `.DS_Store`) stay out.
-fn gather(
+pub(crate) fn gather(
     folder: &Path,
     under: &str,
     depth: usize,
@@ -223,7 +223,7 @@ fn gather(
     Ok(())
 }
 
-fn write_zip(folder: &Path, files: &[String], out: &Path) -> Result<(), ExtensionError> {
+pub(crate) fn write_zip(folder: &Path, files: &[String], out: &Path) -> Result<(), ExtensionError> {
     let failed = |e: zip::result::ZipError| ExtensionError::Io(io::Error::other(e));
     let mut zip = ZipWriter::new(io::BufWriter::new(File::create(out)?));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);

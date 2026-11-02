@@ -51,6 +51,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/styles.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -143,11 +144,16 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
     switch (_extensionOf(path)) {
       case 'lum':
         isProject = true;
+      // A zipped style folder is the window's to take in.
+      case 'zip' when styleReadPackage(path: path) is BridgeStyleOutcome_Ready:
+        break;
       case 'aep':
       case 'zip':
         isAe = true;
-      // An extension package, which the window offers to install.
+      // An extension package, which the window offers to install, and a
+      // style, which it takes in.
       case 'lfx':
+      case 'lumstyle':
         break;
       default:
         media.add(path);

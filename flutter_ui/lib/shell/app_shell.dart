@@ -20,6 +20,7 @@ import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
+import 'package:lumit_flutter/shell/style_import.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
@@ -395,6 +396,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           installExtensionPackage(context, app, ui.extensions, package);
           return;
         }
+        final style = app.launchStyle;
+        if (style != null) {
+          app.launchStyle = null;
+          importStyle(context, app, ui, style);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
@@ -413,11 +420,12 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project or an extension package double-clicked, or an invite link
-  /// clicked in a browser, while Lumit is running. On macOS all three come to
-  /// this Lumit. Elsewhere a package always does, and the others when it is
-  /// kept running in the background. They are opened as File ▸ Open, the
-  /// install window and the Shared project window would.
+  /// A project, an extension package or a style double-clicked, or an invite
+  /// link clicked in a browser, while Lumit is running. On macOS all of them
+  /// come to this Lumit. Elsewhere a package or a style always does, and the
+  /// others when it is kept running in the background. They are opened as
+  /// File ▸ Open, the install window, Import style and the Shared project
+  /// window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -427,6 +435,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (package != null) {
       installExtensionPackage(
           context, app, context.read<LumitUiState>().extensions, package);
+    }
+    final style = stylePathFromArgs(asked);
+    if (style != null) {
+      importStyle(context, app, context.read<LumitUiState>(), style);
     }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);

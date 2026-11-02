@@ -7,6 +7,7 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -180,12 +181,17 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package goes to any Lumit that is open. Anything else only
-  // to one kept running in the background.
+  // An extension package or a style goes to any Lumit that is open.
+  // Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
-        return argument.size() > 4 &&
-               _stricmp(argument.c_str() + argument.size() - 4, ".lfx") == 0;
+        auto ends = [&argument](const char* ending) {
+          const size_t size = std::strlen(ending);
+          return argument.size() > size &&
+                 _stricmp(argument.c_str() + argument.size() - size, ending) ==
+                     0;
+        };
+        return ends(".lfx") || ends(".lumstyle");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
