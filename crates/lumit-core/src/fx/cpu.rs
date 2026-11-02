@@ -344,6 +344,11 @@ pub fn glow_gaussian_plan(radius_px: f32, w: u32, h: u32) -> GlowGaussian {
 /// picture itself.
 pub fn glow_gaussian(seed: &[f32], w: u32, h: u32, g: &GlowGaussian) -> Vec<f32> {
     let (fw, fh) = (w as usize, h as usize);
+    // A grid as fine as the picture is the picture, as on the GPU.
+    if g.step <= 1.0 {
+        let lit = glow_gauss_pass(seed, fw, fh, g, false);
+        return glow_gauss_pass(&lit, fw, fh, g, true);
+    }
     let (cw, ch) = (glow_grid(w, g.step) as usize, glow_grid(h, g.step) as usize);
     let across = glow_tent(seed, (fw, fh), (cw, fh), g.step, true);
     let coarse = glow_tent(&across, (cw, fh), (cw, ch), g.step, false);

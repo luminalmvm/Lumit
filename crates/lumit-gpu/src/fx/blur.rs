@@ -880,16 +880,6 @@ impl FxEngine {
         g: &GlowGaussianOp,
     ) -> wgpu::Texture {
         let [cw, ch] = g.grid;
-        let grid = |axis: u32| GlowExpParams {
-            step: g.step,
-            lambda: 0.0,
-            weight: 1.0,
-            axis,
-            first: 1,
-            taps: 0,
-            reach: 0.0,
-            _pad: 0.0,
-        };
         let blur = |dir: [f32; 2]| BlurParams {
             dir,
             radius: g.reach,
@@ -899,6 +889,46 @@ impl FxEngine {
             matte_on: 0.0,
             _pad0: 0.0,
             field: [[0.0; 4]; 3],
+        };
+        // A grid as fine as the picture is the picture: the tent and the
+        // scale-up would copy it there and back, texel for texel.
+        if g.step <= 1.0 {
+            let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
+            let halo = work_texture(ctx, w, h, "fx-glow-halo");
+            let p = blur([1.0, 0.0]);
+            self.dispatch(
+                ctx,
+                &self.blur,
+                bright,
+                bright,
+                &tmp,
+                w,
+                h,
+                bytemuck::bytes_of(&p),
+            );
+            let p = blur([0.0, 1.0]);
+            self.dispatch(
+                ctx,
+                &self.blur,
+                &tmp,
+                &tmp,
+                &halo,
+                w,
+                h,
+                bytemuck::bytes_of(&p),
+            );
+            ctx.recycle(tmp);
+            return halo;
+        }
+        let grid = |axis: u32| GlowExpParams {
+            step: g.step,
+            lambda: 0.0,
+            weight: 1.0,
+            axis,
+            first: 1,
+            taps: 0,
+            reach: 0.0,
+            _pad: 0.0,
         };
         let (across, across_p) = (work_texture(ctx, cw, h, "fx-glow-across"), grid(0));
         let (coarse, coarse_p) = (work_texture(ctx, cw, ch, "fx-glow-coarse"), grid(1));
