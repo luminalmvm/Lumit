@@ -2098,7 +2098,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui!.copyClaim = _claimCopy;
     _ui!.pasteClaim = _claimPaste;
     _ui!.noteTimelineView = _rememberShownView;
-    _publishEasingClaim();
+    // After the frame: this runs while the tree is being built, and the Easing
+    // panel listening to the claim may already be built in it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _publishEasingClaim();
+    });
     // An effect can be picked in the Effect controls panel too, and one
     // selection means the row here lights up when it is.
     _ui!.selectedEffects.addListener(_onEffectSelectionChanged);
