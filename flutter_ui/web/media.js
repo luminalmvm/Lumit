@@ -3,15 +3,28 @@
 // source at github.com/Vanilagy/mediabunny), and its bytes stay here. The
 // engine is handed the file's numbers and sound when it is opened and each
 // frame as it is decoded (crates/lumit-bridge/src/web_media.rs), and asks for
-// frames through `want`.
+// frames through `want`. An export's file is written here too, with the
+// browser's own encoders (`exportOpen` and the rest, at the end).
 
 import {
   ALL_FORMATS,
   AudioBufferSink,
+  AudioSample,
+  AudioSampleSource,
   BlobSource,
+  BufferTarget,
   CanvasSink,
   EncodedPacketSink,
   Input,
+  Mp4OutputFormat,
+  Output,
+  QUALITY_HIGH,
+  StreamTarget,
+  VideoSample,
+  VideoSampleSource,
+  WebMOutputFormat,
+  canEncodeAudio,
+  canEncodeVideo,
 } from './mediabunny/mediabunny.min.mjs';
 
 // Rates a camera records at, which a rate read off the frames is snapped to.
@@ -211,4 +224,203 @@ async function decode(file, wanted) {
   }
 }
 
-globalThis.lumitMedia = { open, want };
+// What an export can be written as, by the export dialogue's keys: the
+// container, the picture's codec, and the sound's, best first.
+const EXPORTS = {
+  h264: { ext: 'mp4', mime: 'video/mp4', video: 'avc', sound: ['aac', 'opus'] },
+  hevc: { ext: 'mp4', mime: 'video/mp4', video: 'hevc', sound: ['aac', 'opus'] },
+  vp9: { ext: 'webm', mime: 'video/webm', video: 'vp9', sound: ['opus', 'vorbis'] },
+  av1: { ext: 'webm', mime: 'video/webm', video: 'av1', sound: ['opus', 'vorbis'] },
+};
+
+// The most frames handed to an encoder that it has not taken yet.
+const MOST_QUEUED = 2;
+
+// The keys this browser has an encoder for, once it has been asked.
+let encodable = '';
+(async () => {
+  const keys = [];
+  for (const [key, format] of Object.entries(EXPORTS)) {
+    try {
+      if (await canEncodeVideo(format.video, { width: 1920, height: 1080 })) keys.push(key);
+    } catch {
+      // No encoder for it.
+    }
+  }
+  encodable = keys.join(',');
+})();
+
+const exports = new Map();
+let nextExport = 1;
+
+function exportCodecs() {
+  return encodable;
+}
+
+// Where the file goes. Chromium asks, and the file is written there as it is
+// made. Anywhere else, or when the browser won't ask (an export the queue
+// starts later, with nobody's click behind it), it is made in memory and
+// downloaded at the end.
+async function target(job) {
+  if (globalThis.showSaveFilePicker) {
+    try {
+      job.handle = await showSaveFilePicker({
+        suggestedName: job.name,
+        types: [{ accept: { [job.format.mime]: [`.${job.format.ext}`] } }],
+      });
+      const file = await job.handle.createWritable();
+      // A cancelled export throws away what it wrote rather than keeping it.
+      return new StreamTarget(new WritableStream({
+        write: (chunk) => file.write(chunk),
+        close: () => (job.cancelled ? file.abort() : file.close()),
+      }), { chunked: true });
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('cancelled');
+    }
+  }
+  return new BufferTarget();
+}
+
+async function begin(job, width, height, bitRate, soundRate, soundChannels, soundBitRate) {
+  job.target = await target(job);
+  if (job.cancelled) return;
+  const output = new Output({
+    format: job.format.ext === 'mp4' ? new Mp4OutputFormat() : new WebMOutputFormat(),
+    target: job.target,
+  });
+  job.picture = new VideoSampleSource({
+    codec: job.format.video,
+    bitrate: bitRate > 0 ? bitRate : QUALITY_HIGH,
+  });
+  output.addVideoTrack(job.picture, { frameRate: job.fpsNum / job.fpsDen });
+  // The first sound codec that takes the rate asked for, or failing that its
+  // own idea of a good one: Chromium's AAC refuses 320 kb/s.
+  const rates = soundBitRate > 0 ? [soundBitRate, QUALITY_HIGH] : [QUALITY_HIGH];
+  sound: for (const codec of soundRate > 0 ? job.format.sound : []) {
+    for (const bitrate of rates) {
+      const options = { numberOfChannels: soundChannels, sampleRate: soundRate, bitrate };
+      if (await canEncodeAudio(codec, options)) {
+        job.sound = new AudioSampleSource({ codec, bitrate });
+        output.addAudioTrack(job.sound);
+        break sound;
+      }
+    }
+  }
+  await output.start();
+  Object.assign(job, { output, width, height, soundRate, soundChannels });
+}
+
+function fail(job, e) {
+  job.error ??= e?.message || String(e);
+}
+
+// Start writing a file called `name` as `codec`, one of exportCodecs(). An
+// id for the calls below.
+function exportOpen(name, codec, width, height, fpsNum, fpsDen, bitRate,
+  soundRate, soundChannels, soundBitRate) {
+  const id = nextExport++;
+  const job = {
+    name: name.split(/[\\/]/).pop(),
+    format: EXPORTS[codec],
+    fpsNum,
+    fpsDen,
+    queued: 0,
+    pictures: Promise.resolve(),
+    sounds: Promise.resolve(),
+  };
+  exports.set(id, job);
+  if (!job.format) {
+    fail(job, `no encoder for ${codec}`);
+  } else {
+    begin(job, width, height, bitRate, soundRate, soundChannels, soundBitRate)
+      .catch((e) => fail(job, e));
+  }
+  return id;
+}
+
+// 'room' for another frame, 'busy', 'done', or what went wrong.
+function exportState(id) {
+  const job = exports.get(id);
+  if (!job) return 'the export has gone';
+  if (job.error) return job.error;
+  if (job.done) {
+    exports.delete(id);
+    return 'done';
+  }
+  return job.output && !job.finishing && job.queued < MOST_QUEUED ? 'room' : 'busy';
+}
+
+// Frame `n`, as RGBA. The bytes are the engine's and are copied at once.
+function exportFrame(id, rgba, n) {
+  const job = exports.get(id);
+  if (!job?.output) return;
+  const sample = new VideoSample(new Uint8Array(rgba), {
+    format: 'RGBX',
+    codedWidth: job.width,
+    codedHeight: job.height,
+    timestamp: (n * job.fpsDen) / job.fpsNum,
+    duration: job.fpsDen / job.fpsNum,
+  });
+  job.queued++;
+  job.pictures = job.pictures
+    .then(() => job.picture.add(sample))
+    .catch((e) => fail(job, e))
+    .finally(() => {
+      sample.close();
+      job.queued--;
+    });
+}
+
+// Interleaved sound, `first` samples a channel into the file.
+function exportSound(id, samples, first) {
+  const job = exports.get(id);
+  if (!job?.sound) return;
+  const sample = new AudioSample({
+    data: new Float32Array(samples),
+    format: 'f32',
+    numberOfChannels: job.soundChannels,
+    sampleRate: job.soundRate,
+    timestamp: first / job.soundRate,
+  });
+  job.sounds = job.sounds
+    .then(() => job.sound.add(sample))
+    .catch((e) => fail(job, e))
+    .finally(() => sample.close());
+}
+
+function exportFinish(id) {
+  const job = exports.get(id);
+  if (!job?.output) return;
+  job.finishing = true;
+  (async () => {
+    await Promise.all([job.pictures, job.sounds]);
+    if (job.error) return;
+    await job.output.finalize();
+    if (job.target instanceof BufferTarget) {
+      const url = URL.createObjectURL(new Blob([job.target.buffer], { type: job.format.mime }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = job.name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+    job.done = true;
+  })().catch((e) => fail(job, e));
+}
+
+// Stop, and leave no file behind.
+function exportCancel(id) {
+  const job = exports.get(id);
+  if (!job) return;
+  exports.delete(id);
+  job.cancelled = true;
+  (async () => {
+    await job.output?.cancel();
+    await job.handle?.remove?.();
+  })().catch(() => {});
+}
+
+globalThis.lumitMedia = {
+  open, want, exportCodecs, exportOpen, exportState, exportFrame, exportSound, exportFinish,
+  exportCancel,
+};

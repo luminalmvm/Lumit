@@ -1,10 +1,11 @@
 //! The browser build's side of footage. The page reads each file with the
 //! browser's own decoders and hands in what it found: the file's numbers when
 //! it is opened (here), its sound (`sound`), and each frame once it is decoded
-//! (`frames`). The bytes stay with the page. Writing a file needs FFmpeg, so
-//! opening an encoder answers an error and the methods of one can never be
-//! reached.
+//! (`frames`). The bytes stay with the page. The page writes an export's
+//! file too (`export`). FFmpeg's encoders are not here, so opening one
+//! answers an error and the methods of one can never be reached.
 
+pub mod export;
 pub mod frames;
 pub mod sound;
 
@@ -17,6 +18,7 @@ use crate::encode::{
     AudioSettings, BitDepth, ColourTags, Encoder, GifEncoder, GifOptions, ImageFormat,
     ImageSequenceEncoder, Metadata, VideoSettings,
 };
+use crate::decode::DecodedFrame;
 use crate::index::{FrameIndex, IndexEntry};
 use crate::probe::MediaProbe;
 use crate::{no_ffmpeg, Fingerprint, MediaError};

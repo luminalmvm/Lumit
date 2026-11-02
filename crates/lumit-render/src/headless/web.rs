@@ -20,3 +20,17 @@ impl HeadlessRenderer {
         })
     }
 }
+
+impl HeadlessRenderer {
+    /// The bytes of a read-back [`Self::start_preview`] started, once they
+    /// are off the card, and `None` until then. Never waits: the page can't,
+    /// and the copy lands between its turns.
+    pub fn poll_preview(
+        &mut self,
+        pending: &mut lumit_gpu::PendingReadback,
+    ) -> Option<Result<Vec<u8>, String>> {
+        pending
+            .poll(&self.gpu)
+            .map(|bytes| bytes.map_err(|e| format!("headless preview: {e}")))
+    }
+}

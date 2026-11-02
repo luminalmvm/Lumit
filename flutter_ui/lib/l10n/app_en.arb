@@ -2256,6 +2256,14 @@
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
   },
+  "formatVp9": "VP9 video (.webm)",
+  "@formatVp9": {
+    "description": "Export format, offered in the browser version only. VP9 and .webm are technical names and stay as they are."
+  },
+  "formatAv1": "AV1 video (.webm)",
+  "@formatAv1": {
+    "description": "Export format, offered in the browser version only. AV1 and .webm are technical names and stay as they are."
+  },
   "formatMp4Picker": "MP4 video",
   "@formatMp4Picker": {
     "description": "The file type shown in the system Save dialogue. MP4 stays as it is."
