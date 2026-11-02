@@ -1935,6 +1935,10 @@ fn feed_layer(
                             stamper.stamp(item, clip.held_source_time(at), native)
                         }
                         ClipSource::Comp(_) => None,
+                        ClipSource::Solid(def) => {
+                            feed_solid(h, doc, def);
+                            return;
+                        }
                     };
                     match stamp {
                         Some((identity, frame)) => {
@@ -2474,6 +2478,7 @@ fn feed_source(
                             feed_f64(h, st);
                         }
                     }
+                    ClipSource::Solid(def) => feed_solid(h, doc, def),
                     ClipSource::Comp(comp) => {
                         if visited.contains(&comp) {
                             h.update(b"cycle");
@@ -2859,6 +2864,23 @@ fn feed_depth(
         });
         for v in values {
             feed_f64(h, v);
+        }
+    }
+}
+
+/// A solid clip's picture: its colour and size, the same at every time.
+fn feed_solid(h: &mut blake3::Hasher, doc: &lumit_core::model::Document, def: uuid::Uuid) {
+    h.update(b"seq-solid/");
+    match doc.solid(def) {
+        Some(sd) => {
+            for ch in sd.colour.0 {
+                h.update(&ch.to_le_bytes());
+            }
+            h.update(&sd.width.to_le_bytes());
+            h.update(&sd.height.to_le_bytes());
+        }
+        None => {
+            h.update(b"nosolid");
         }
     }
 }

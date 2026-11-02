@@ -946,9 +946,7 @@ impl CompositionReference {
                     .into_iter()
                     .filter(|c| c.place_duration > Rational::ZERO)
                     .map(|clip| {
-                        let source = match clip.source {
-                            ClipSource::Footage(id) | ClipSource::Comp(id) => id,
-                        };
+                        let source = clip.source.id();
                         let (start, end) = (clip.place_start, clip.place_end());
                         let mut l = crate::edits::base_layer(
                             doc.item(source)
@@ -1120,6 +1118,31 @@ impl CompositionReference {
 
         self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, id))
+    }
+
+    /// Place a solid from the Project panel as a Solid layer at `row`,
+    /// centred and as long as this composition, as a dropped composition is.
+    #[frb(sync)]
+    pub fn add_solid_item_layer(
+        &self,
+        solid: &crate::api::solid::SolidReference,
+        row: Option<u32>,
+    ) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let doc = self.document()?;
+        let sd = doc.solid(solid.id).ok_or(BridgeError::InvalidItem)?;
+        let layer = crate::edits::base_layer(
+            sd.name.clone(),
+            lumit_core::model::LayerKind::Solid { def: sd.id },
+            comp.duration.0,
+            crate::edits::centred_transform(
+                f64::from(sd.width),
+                f64::from(sd.height),
+                comp.width,
+                comp.height,
+            ),
+        );
+        self.add_at(layer, row)
     }
 
     /// Place another composition into this one as a Precomp layer.

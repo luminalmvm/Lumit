@@ -28,12 +28,24 @@ use uuid::Uuid;
 mod clip_opacity;
 pub mod takes;
 
-/// What a clip plays: one footage item or one nested composition
+/// What a clip plays: one footage item, one nested composition or one solid
 /// (docs/03-DATA-MODEL.md §5.3 ClipSource).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipSource {
     Footage(Uuid),
     Comp(Uuid),
+    /// A flat colour at the solid's own size, the same at every time.
+    Solid(Uuid),
+}
+
+impl ClipSource {
+    /// The project item it plays.
+    #[must_use]
+    pub fn id(self) -> Uuid {
+        match self {
+            Self::Footage(id) | Self::Comp(id) | Self::Solid(id) => id,
+        }
+    }
 }
 
 /// How far a Custom handle may reach past the box in y, in box heights, and

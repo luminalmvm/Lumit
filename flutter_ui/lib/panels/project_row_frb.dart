@@ -645,6 +645,14 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         child: row,
       );
     }
+    if (item case ItemReference_Solid(:final field0)) {
+      return Draggable<SolidDragData>(
+        data: SolidDragData(field0, widget.name),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _DragFeedbackFrb(name: widget.name, icon: LumitIcon.solid),
+        child: row,
+      );
+    }
     if (item case ItemReference_Composition(:final field0)) {
       return Draggable<CompDragData>(
         data: CompDragData(field0, widget.name),

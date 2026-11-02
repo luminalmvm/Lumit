@@ -4252,7 +4252,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // payload type and this drop honestly takes two.
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
-                details.data is FootageDragData || details.data is CompDragData,
+                details.data is FootageDragData ||
+                details.data is CompDragData ||
+                details.data is SolidDragData,
             onAcceptWithDetails: (details) {
               // Where the pointer let go, not the top of the stack: dropping
               // between two layers means "here", and a stack that ignores it
@@ -4275,6 +4277,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // the drop simply does nothing.
                   try {
                     comp.addPrecompLayer(comp: dropped, row: at);
+                  } catch (_) {}
+                case SolidDragData(:final solid):
+                  try {
+                    comp.addSolidItemLayer(solid: solid, row: at);
                   } catch (_) {}
               }
               ui.model.refresh();

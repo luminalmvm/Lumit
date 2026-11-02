@@ -4057,7 +4057,8 @@ fn comp_walk(
         let comp_clips = match &layer.kind {
             LayerKind::Sequence { clips } if !adjusts => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
-                let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
+                let plays =
+                    |c: &Clip| matches!(c.source, ClipSource::Comp(_) | ClipSource::Solid(_));
                 let shown = lumit_core::sequence::shown_at(clips, lt);
                 if let Shown::Two { opacity, .. } = shown {
                     clip_share = opacity as f32;
@@ -4119,6 +4120,28 @@ fn comp_walk(
                             ));
                         }
                         ClipSource::Comp(id) => id,
+                        // A tile stretched to the solid's size, as a plain
+                        // Solid layer draws, unless something on the layer
+                        // or the clip works on its pixels.
+                        ClipSource::Solid(def) => {
+                            let sd = doc.solid(def)?;
+                            let plain = layer.masks.is_empty()
+                                && layer.paint.is_empty()
+                                && !layer.effects.iter().any(|e| e.enabled)
+                                && !layer.styles.iter().any(|e| e.enabled)
+                                && !clip.effects.iter().any(|e| e.enabled);
+                            let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
+                            return Some((
+                                DrawSource::Pixels {
+                                    rgba: Arc::new(px_tile(&solid_rgba(sd.colour), tw, th)),
+                                    tex_w: tw,
+                                    tex_h: th,
+                                    format: lumit_media::decode::PixelFormat::Srgb8,
+                                    colour_space: None,
+                                },
+                                (sd.width as f32, sd.height as f32),
+                            ));
+                        }
                     };
                     let nested = doc
                         .comp(nested_id)
