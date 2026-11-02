@@ -1330,7 +1330,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggle(storageKey),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+            padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 10, 2),
             child: Row(
               children: [
                 TwirlTurn(

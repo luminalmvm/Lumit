@@ -4,8 +4,9 @@
 //
 // On Windows Lumit's window has no title bar, and on Linux it has none once
 // that is switched on in Settings. The menu bar is its top line, the three
-// buttons a title bar would hold stand at that line's right end, and the
-// empty part of the line moves the window the way a title bar does. The
+// buttons a title bar would hold stand at that line's end (its left end in a
+// right to left language, as Windows puts them), and the empty part of the
+// line moves the window the way a title bar does. The
 // runner does the moving and the closing (windows/runner/flutter_window.cpp,
 // linux/runner/my_application.cc); this file draws the buttons and says what
 // was pressed.
@@ -123,10 +124,10 @@ class WindowDragStrip extends StatelessWidget {
     if (!windowFrameDrawn) return child;
     return Stack(children: [
       child,
-      Positioned(
+      PositionedDirectional(
         top: 0,
-        left: 0,
-        right: windowButtonsWidth,
+        start: 0,
+        end: windowButtonsWidth,
         height: theme.density.menuBar,
         child: const WindowDragArea(),
       ),
@@ -134,7 +135,8 @@ class WindowDragStrip extends StatelessWidget {
   }
 }
 
-/// [child] as the window, with the window's buttons over its top right corner.
+/// [child] as the window, with the window's buttons over the end of its top
+/// line.
 class WindowFrame extends StatelessWidget {
   final LumitTheme theme;
   final Widget child;
@@ -146,9 +148,9 @@ class WindowFrame extends StatelessWidget {
     if (!windowFrameDrawn) return child;
     return Stack(children: [
       child,
-      Positioned(
+      PositionedDirectional(
         top: 0,
-        right: 0,
+        end: 0,
         height: theme.density.menuBar,
         child: _WindowButtons(theme: theme),
       ),

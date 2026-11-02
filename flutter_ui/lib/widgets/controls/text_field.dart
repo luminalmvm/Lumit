@@ -414,7 +414,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       // its text's): with an alignment the box expands to bounded
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       // A style's inner shadows, so a well can sit sunk into its panel.
       foregroundDecoration: widget.frameless
           ? null

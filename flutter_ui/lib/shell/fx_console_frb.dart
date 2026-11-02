@@ -623,7 +623,7 @@ class _FxConsoleState extends State<_FxConsole> {
     if (matches.isEmpty) {
       return Container(
         height: _rowHeight,
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Text(l10n.noEffectsMatch,
             style: t.small.copyWith(color: t.textMuted)),
@@ -645,7 +645,7 @@ class _FxConsoleState extends State<_FxConsole> {
           key: ValueKey<String>('fx-console-head-$heading'),
           height: _headingHeight,
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
         ));
       }

@@ -74,7 +74,7 @@ Widget settingsSection(
             padding: const EdgeInsets.fromLTRB(
                 settingsRowPadding, 12, settingsRowPadding, 4),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: Text(t.kickerCase(title), style: t.kicker),
             ),
           ),
@@ -118,7 +118,7 @@ Widget settingsRow(
                 ),
                 const SizedBox(width: settingsRowGap),
                 Expanded(
-                  child: Align(alignment: Alignment.centerLeft, child: control),
+                  child: Align(alignment: AlignmentDirectional.centerStart, child: control),
                 ),
                 for (final (i, action) in actions.indexed) ...[
                   SizedBox(width: i == 0 ? settingsRowGap : 8),

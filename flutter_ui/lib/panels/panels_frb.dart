@@ -54,10 +54,31 @@ const Set<Panel> _changing = {
   Panel.align,
 };
 
-Widget buildPanelBodyFrb(BuildContext context, PaneId pane) =>
-    _changing.contains(pane.panel)
-        ? LookHeld(child: _panelBody(pane))
-        : _panelBody(pane);
+/// The panels laid out along a time or space axis, or holding code. They read
+/// left to right in every language, as numbers and timecode do.
+const Set<Panel> _leftToRight = {
+  Panel.viewer,
+  Panel.timeline,
+  Panel.scopes,
+  Panel.easing,
+  Panel.graph,
+  Panel.mixer,
+  Panel.audio,
+  Panel.audioTimeline,
+  Panel.cutTimeline,
+  Panel.expressions,
+  Panel.align,
+  Panel.paragraph,
+};
+
+Widget buildPanelBodyFrb(BuildContext context, PaneId pane) {
+  final body = _changing.contains(pane.panel)
+      ? LookHeld(child: _panelBody(pane))
+      : _panelBody(pane);
+  return _leftToRight.contains(pane.panel)
+      ? Directionality(textDirection: TextDirection.ltr, child: body)
+      : body;
+}
 
 /// A panel of controls on a machine that can only look at the shared project
 /// it is in: dimmed, and taking no pointer and no keyboard focus. It is as it

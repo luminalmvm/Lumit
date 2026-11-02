@@ -10,6 +10,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../widgets/controls/base.dart' show ThemeScope;
 import 'icon_style.dart';
+import 'lumit_icons.dart';
 
 class LumitIcon extends StatelessWidget {
   /// One of the [LumitIcons] constants — never a looked-up string, so a call
@@ -48,7 +49,7 @@ class LumitIcon extends StatelessWidget {
     // follow the tint, and it greys out where a tinted icon would dim.
     final own = scope != null && IconStyle.keepsColours(svg);
     if (own) svg = IconStyle.themed(svg, scope.theme);
-    return SvgPicture.string(
+    final picture = SvgPicture.string(
       svg,
       width: size,
       height: size,
@@ -61,8 +62,15 @@ class LumitIcon extends StatelessWidget {
       semanticsLabel: semanticLabel,
       excludeFromSemantics: semanticLabel == null,
     );
+    // A glyph that points the way the line reads turns round right to left.
+    return _mirrored.contains(glyph) &&
+            Directionality.maybeOf(context) == TextDirection.rtl
+        ? Transform.flip(flipX: true, child: picture)
+        : picture;
   }
 }
+
+const _mirrored = {LumitIcons.expand, LumitIcons.undo, LumitIcons.redo};
 
 /// Grey, at less than half strength: a coloured icon on a control that
 /// can't be pressed.

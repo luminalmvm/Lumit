@@ -351,7 +351,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                 t,
                 l10n.transformPointOfInterest,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('light-aim'),
                     value: _s.twoNode,
@@ -365,7 +365,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                 t,
                 l10n.castsShadows,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('light-shadows'),
                     value: _s.castsShadows,
@@ -446,7 +446,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
     if (c == null) return _animated(t, 'colour');
     final exact = PickedColour(c[0], c[1], c[2]);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: ColourSwatchButton(
         key: const ValueKey('light-colour'),
         colour: exact.clipped,
@@ -511,7 +511,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
 
   /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: Text(
           l10n.animated,
           key: ValueKey<String>('light-$id-animated'),
@@ -548,7 +548,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),
