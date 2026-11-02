@@ -3,6 +3,8 @@
 // comp. Each change is written to the layer as it is made, so the Viewer shows
 // it, and the whole visit is one undo step that Cancel takes back.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -49,7 +51,10 @@ Future<void> showModelSettingsFrb({
     kept = await showLumitModal<bool>(
       context: context,
       id: 'model-settings',
+      // The Viewer behind shows each change as it is made.
+      dimBackground: false,
       builder: (close) => _ModelSettingsBody(
+        layer: layer,
         settings: settings,
         onChanged: (s) {
           layer.setModelSettings(settings: s);
@@ -69,11 +74,13 @@ Future<void> showModelSettingsFrb({
 }
 
 class _ModelSettingsBody extends StatefulWidget {
+  final LayerReference layer;
   final BridgeModelSettings settings;
   final ValueChanged<BridgeModelSettings> onChanged;
   final void Function(bool?) onDone;
 
   const _ModelSettingsBody({
+    required this.layer,
     required this.settings,
     required this.onChanged,
     required this.onDone,
@@ -86,10 +93,44 @@ class _ModelSettingsBody extends StatefulWidget {
 class _ModelSettingsBodyState extends State<_ModelSettingsBody> {
   late BridgeModelSettings _s = widget.settings;
 
+  /// What Fit to comp makes a metre, null until the model has been read.
+  late double? _fitted = _fittedFor(_s.upAxis);
+
+  /// Asks again until a model still being read has been.
+  Timer? _waiting;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_fitted != null) return;
+    _waiting = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+      final fitted = _fittedFor(_s.upAxis);
+      if (fitted == null) return;
+      timer.cancel();
+      setState(() => _fitted = fitted);
+    });
+  }
+
+  @override
+  void dispose() {
+    _waiting?.cancel();
+    super.dispose();
+  }
+
+  double? _fittedFor(BridgeUpAxis up) {
+    try {
+      return widget.layer.getModelFittedUnits(upAxis: up);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _set({BridgeUpAxis? upAxis, double? units, bool? fit}) {
+    if (upAxis != null && upAxis != _s.upAxis) _fitted = _fittedFor(upAxis);
     setState(() => _s = BridgeModelSettings(
           upAxis: upAxis ?? _s.upAxis,
-          units: units ?? _s.units,
+          // Fit let go keeps the size it gave, so the model stays put.
+          units: units ?? (fit == false && _s.fit ? _fitted : null) ?? _s.units,
           fit: fit ?? _s.fit,
         ));
     widget.onChanged(_s);
@@ -117,17 +158,20 @@ class _ModelSettingsBodyState extends State<_ModelSettingsBody> {
               _row(
                   t,
                   l10n.modelUpAxis,
-                  dialogDropdown<BridgeUpAxis>(
-                    t,
-                    id: 'model-up',
-                    value: _s.upAxis,
-                    options: BridgeUpAxis.values,
-                    label: (a) => switch (a) {
-                      BridgeUpAxis.y => l10n.viewportAxisY,
-                      BridgeUpAxis.z => l10n.viewportAxisZ,
-                    },
-                    onChanged: (a) => _set(upAxis: a),
-                    width: cameraWell,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: dialogDropdown<BridgeUpAxis>(
+                      t,
+                      id: 'model-up',
+                      value: _s.upAxis,
+                      options: BridgeUpAxis.values,
+                      label: (a) => switch (a) {
+                        BridgeUpAxis.y => l10n.viewportAxisY,
+                        BridgeUpAxis.z => l10n.viewportAxisZ,
+                      },
+                      onChanged: (a) => _set(upAxis: a),
+                      width: cameraWell,
+                    ),
                   )),
               _row(
                   t,
@@ -140,32 +184,39 @@ class _ModelSettingsBodyState extends State<_ModelSettingsBody> {
                       onChanged: (on) => _set(fit: on),
                     ),
                   )),
-              // A fitted model takes its size from the comp, so there are no
-              // units to set.
-              if (!_s.fit)
-                _row(
-                    t,
-                    l10n.modelUnits,
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: cameraWell,
-                          height: dialogControlHeight,
-                          child: DragValueField(
-                            key: const ValueKey('model-units'),
-                            value: _s.units,
-                            min: 0.001,
-                            max: 1000000,
-                            speed: 1,
-                            decimals: 1,
-                            fill: t.surface0,
-                            onChanged: (v) => _set(units: v.toDouble()),
+              // A fitted model takes its size from the comp, so its units
+              // show greyed, as the fit has them.
+              _row(
+                  t,
+                  l10n.modelUnits,
+                  IgnorePointer(
+                    ignoring: _s.fit,
+                    child: AnimatedOpacity(
+                      opacity: _s.fit ? 0.45 : 1,
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeOut,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: cameraWell,
+                            height: dialogControlHeight,
+                            child: DragValueField(
+                              key: const ValueKey('model-units'),
+                              value: _s.fit ? _fitted ?? _s.units : _s.units,
+                              min: 0.001,
+                              max: 1000000,
+                              speed: 1,
+                              decimals: 1,
+                              fill: t.surface0,
+                              onChanged: (v) => _set(units: v.toDouble()),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(l10n.modelPixelsPerMetre, style: dialogMono(t)),
-                      ],
-                    )),
+                          const SizedBox(width: 6),
+                          Text(l10n.modelPixelsPerMetre, style: dialogMono(t)),
+                        ],
+                      ),
+                    ),
+                  )),
             ],
           ),
         ),
