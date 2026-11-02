@@ -115,6 +115,8 @@ Future<void> _start(List<String> args) async {
   // And a double-clicked style asks to be used.
   state.launchStyle = stylePathFromArgs(args);
   final ui = LumitUiState(state);
+  // A double-clicked theme is in use before anything is drawn.
+  await openPresetOrTheme(state, ui, args);
   // Up once the settings are read, so it speaks the person's language.
   _splash = await BootSplash.open(
       version: versionFromBootLine(lumitVersion()) ?? '',

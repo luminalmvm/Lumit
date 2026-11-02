@@ -181,8 +181,8 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package or a style goes to any Lumit that is open.
-  // Anything else only to one kept running in the background.
+  // An extension package, a style, a preset or a theme goes to any Lumit
+  // that is open. Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
         auto ends = [&argument](const char* ending) {
@@ -191,7 +191,8 @@ bool ForwardToOpenLumit() {
                  _stricmp(argument.c_str() + argument.size() - size, ending) ==
                      0;
         };
-        return ends(".lfx") || ends(".lumstyle");
+        return ends(".lfx") || ends(".lumstyle") || ends(".lumfx") ||
+               ends(".lumtheme");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,

@@ -68,6 +68,15 @@ String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
 String? stylePathFromArgs(List<String> args) =>
     _fileFromArgs(args, '.lumstyle');
 
+/// The effect preset a double-click asked Lumit to apply, read as
+/// [projectPathFromArgs] reads a project.
+String? presetPathFromArgs(List<String> args) => _fileFromArgs(args, '.lumfx');
+
+/// The theme a double-click asked Lumit to take in, read as
+/// [projectPathFromArgs] reads a project.
+String? themePathFromArgs(List<String> args) =>
+    _fileFromArgs(args, '.lumtheme');
+
 String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
