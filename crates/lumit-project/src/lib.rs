@@ -419,11 +419,11 @@ pub fn save(doc: &Document, path: &Path) -> Result<(), ProjectError> {
     let tmp = dir.join(format!(
         ".{}.tmp-{}",
         stem.unwrap_or_else(|| "project.lum".into()),
-        std::process::id()
+        lumit_ingress::files::process_id()
     ));
 
     let result = (|| -> Result<(), ProjectError> {
-        let file = File::create(&tmp)?;
+        let file = lumit_ingress::files::create(&tmp)?;
         let mut zip = ZipWriter::new(file);
         let opts =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
@@ -434,12 +434,12 @@ pub fn save(doc: &Document, path: &Path) -> Result<(), ProjectError> {
         zip.write_all(serde_json::to_string_pretty(doc)?.as_bytes())?;
         let file = zip.finish()?;
         file.sync_all()?;
-        fs::rename(&tmp, path)?;
+        lumit_ingress::files::rename(&tmp, path)?;
         Ok(())
     })();
 
     if result.is_err() {
-        let _ = fs::remove_file(&tmp); // best effort; the target is untouched
+        let _ = lumit_ingress::files::remove_file(&tmp); // best effort; the target is untouched
     }
     result
 }
@@ -538,7 +538,7 @@ impl<R: std::io::Read + ?Sized> ZipEntry for zip::read::ZipFile<'_, R> {
 }
 
 pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
-    let mut zip = ZipArchive::new(File::open(path)?)?;
+    let mut zip = ZipArchive::new(lumit_ingress::files::open(path)?)?;
 
     let manifest: Manifest = {
         let entry = zip

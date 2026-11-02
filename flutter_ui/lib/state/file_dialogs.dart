@@ -6,12 +6,19 @@
 import 'dart:io' hide Platform;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lumit_flutter/l10n/strings.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
 import 'workspace.dart' show workspaceFileExtension;
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
+import 'files.dart' if (dart.library.js_interop) 'files_web.dart';
+
+// A picked file is reached through these: in the browser build it is put
+// where the engine can open it, and a saved project is handed to the person.
+export 'files.dart' if (dart.library.js_interop) 'files_web.dart'
+    show handOver, importsHere;
 
 /// The `.lum` project type group (docs/10 §1). The egui open filter also lists
 /// the pre-rename `kir` leftover; a fresh frontend only ever offers `.lum`.
@@ -57,13 +64,19 @@ XTypeGroup _anyGroup() => XTypeGroup(label: l10n.fileTypeAllFiles);
 /// Pick one project file to open, or null when the dialogue was cancelled.
 Future<String?> pickProjectToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_projectGroup()]);
-  return file?.path;
+  return file == null ? null : keepPicked(file);
 }
+
+/// [path] as it is, or picked again where the browser build has not kept it,
+/// which it never does past the page. Null when that was cancelled.
+Future<String?> pickIfGone(String path) async =>
+    File(path).existsSync() ? path : pickProjectToOpen();
 
 /// Choose where to save a project, defaulting the name to `untitled.lum` (as
 /// the egui Save dialogue does), or null when cancelled.
 Future<String?> pickProjectSaveLocation(
     {String suggestedName = 'untitled.lum', String? initialDirectory}) async {
+  if (kIsWeb) return pickSaveTarget(suggestedName);
   final location = await getSaveLocation(
     acceptedTypeGroups: [_projectGroup()],
     suggestedName: suggestedName,
@@ -83,7 +96,16 @@ Future<List<String>> pickFootage({bool projects = false}) async {
       _anyGroup(),
     ],
   );
-  return [for (final f in files) f.path];
+  return droppedPaths(files);
+}
+
+/// Where each of [files] is, picked or dropped, for the engine to open.
+Future<List<String>> droppedPaths(List<XFile> files) async {
+  final paths = <String>[];
+  for (final file in files) {
+    paths.add(await keepPicked(file));
+  }
+  return paths;
 }
 
 /// Choose where to save an exported video, defaulting the name to the

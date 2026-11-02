@@ -41,6 +41,7 @@ import 'api/state.dart';
 import 'api/streams.dart';
 import 'api/system.dart';
 import 'api/track.dart';
+import 'api/web_files.dart';
 import 'api/wire_tie.dart';
 import 'api/wireframes.dart';
 import 'dart:async';
@@ -110,7 +111,7 @@ class BridgeLib
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 613475202;
+  int get rustContentHash => -48709233;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -2694,6 +2695,19 @@ abstract class BridgeLibApi extends BaseApi {
   BridgeViewerTransport crateApiCacheViewerTransport();
 
   BridgeVramCacheStats crateApiCacheVramCacheStats();
+
+  List<String> crateApiWebFilesWebFileList({required String path});
+
+  bool crateApiWebFilesWebFileMakeFolder({required String path});
+
+  Uint8List? crateApiWebFilesWebFileRead({required String path});
+
+  void crateApiWebFilesWebFileRemove({required String path});
+
+  WebFileStat? crateApiWebFilesWebFileStat({required String path});
+
+  bool crateApiWebFilesWebFileWrite(
+      {required String path, required List<int> bytes});
 
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_BridgeEffectInstance;
@@ -22945,6 +22959,152 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         argNames: [],
       );
 
+  @override
+  List<String> crateApiWebFilesWebFileList({required String path}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 724)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_String,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileListConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileListConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_list",
+        argNames: ["path"],
+      );
+
+  @override
+  bool crateApiWebFilesWebFileMakeFolder({required String path}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 725)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileMakeFolderConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileMakeFolderConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_make_folder",
+        argNames: ["path"],
+      );
+
+  @override
+  Uint8List? crateApiWebFilesWebFileRead({required String path}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 726)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_list_prim_u_8_strict,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileReadConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileReadConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_read",
+        argNames: ["path"],
+      );
+
+  @override
+  void crateApiWebFilesWebFileRemove({required String path}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 727)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileRemoveConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileRemoveConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_remove",
+        argNames: ["path"],
+      );
+
+  @override
+  WebFileStat? crateApiWebFilesWebFileStat({required String path}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 728)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_box_autoadd_web_file_stat,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileStatConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileStatConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_stat",
+        argNames: ["path"],
+      );
+
+  @override
+  bool crateApiWebFilesWebFileWrite(
+      {required String path, required List<int> bytes}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        sse_encode_list_prim_u_8_loose(bytes, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 729)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiWebFilesWebFileWriteConstMeta,
+      argValues: [path, bytes],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiWebFilesWebFileWriteConstMeta =>
+      const TaskConstMeta(
+        debugName: "web_file_write",
+        argNames: ["path", "bytes"],
+      );
+
   RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_BridgeEffectInstance => wire
           .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance;
@@ -23792,6 +23952,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   int dco_decode_box_autoadd_u_8(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  WebFileStat dco_decode_box_autoadd_web_file_stat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_web_file_stat(raw);
   }
 
   @protected
@@ -30008,6 +30174,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  WebFileStat? dco_decode_opt_box_autoadd_web_file_stat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_web_file_stat(raw);
+  }
+
+  @protected
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_f_64_array_2(raw);
@@ -30048,6 +30220,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_prim_f_32_strict(raw);
+  }
+
+  @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_prim_u_8_strict(raw);
   }
 
   @protected
@@ -30135,6 +30313,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BigInt dco_decode_usize(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeU64(raw);
+  }
+
+  @protected
+  WebFileStat dco_decode_web_file_stat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return WebFileStat(
+      folder: dco_decode_bool(arr[0]),
+      size: dco_decode_u_32(arr[1]),
+      changedMs: dco_decode_f_64(arr[2]),
+    );
   }
 
   @protected
@@ -31075,6 +31266,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   int sse_decode_box_autoadd_u_8(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_8(deserializer));
+  }
+
+  @protected
+  WebFileStat sse_decode_box_autoadd_web_file_stat(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_web_file_stat(deserializer));
   }
 
   @protected
@@ -38652,6 +38850,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  WebFileStat? sse_decode_opt_box_autoadd_web_file_stat(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_web_file_stat(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   F64Array2? sse_decode_opt_f_64_array_2(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -38732,6 +38942,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_prim_u_8_strict(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_internalid = sse_decode_Uuid(deserializer);
@@ -38805,6 +39026,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BigInt sse_decode_usize(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getBigUint64();
+  }
+
+  @protected
+  WebFileStat sse_decode_web_file_stat(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_folder = sse_decode_bool(deserializer);
+    var var_size = sse_decode_u_32(deserializer);
+    var var_changedMs = sse_decode_f_64(deserializer);
+    return WebFileStat(
+        folder: var_folder, size: var_size, changedMs: var_changedMs);
   }
 
   @protected
@@ -39795,6 +40026,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_8(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_web_file_stat(
+      WebFileStat self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_web_file_stat(self, serializer);
   }
 
   @protected
@@ -45718,6 +45956,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_web_file_stat(
+      WebFileStat? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_web_file_stat(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_f_64_array_2(F64Array2? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -45793,6 +46042,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+      Uint8List? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_prim_u_8_strict(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_project_reference(
       ProjectReference self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -45858,6 +46118,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void sse_encode_usize(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
+  void sse_encode_web_file_stat(WebFileStat self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.folder, serializer);
+    sse_encode_u_32(self.size, serializer);
+    sse_encode_f_64(self.changedMs, serializer);
   }
 
   @protected

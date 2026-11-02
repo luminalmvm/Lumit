@@ -2224,6 +2224,7 @@ name = "lumit-ingress"
 version = "0.10.1"
 dependencies = [
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]
@@ -2245,12 +2246,14 @@ dependencies = [
  "libloading 0.8.9",
  "lumit-ingress",
  "miniz_oxide",
+ "png",
  "rsmpeg",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
  "wasm-bindgen",
  "web-time",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2338,6 +2341,7 @@ dependencies = [
  "criterion",
  "directories",
  "lumit-core",
+ "lumit-ingress",
  "serde",
  "serde_json",
  "tempfile",

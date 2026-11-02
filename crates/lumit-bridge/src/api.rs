@@ -48,6 +48,7 @@ pub mod state;
 pub mod streams;
 pub mod system;
 pub mod track;
+pub mod web_files;
 pub mod wire_tie;
 pub mod wireframes;
 

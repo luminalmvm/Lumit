@@ -2,16 +2,23 @@
 //
 // A page has no file system, and `dart:io` there only throws. So the browser
 // build gives `File` and `Directory` one of its own, through `IOOverrides`,
-// and every part of Lumit that reads or writes a file works unchanged. Files
-// live in memory. Those under the settings folder are also kept in the
-// browser's local storage, so the settings outlast the page.
+// and every part of Lumit that reads or writes a file works unchanged. The
+// files are the engine's, kept in memory (`lumit_ingress::files`), so a file
+// picked in the page is one the engine can open and a project it saved is one
+// the page can hand over. Those under the settings folder are also kept in
+// the browser's local storage, so the settings outlast the page.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' hide Platform;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import 'package:file_selector/file_selector.dart' show XFile;
+import 'package:lumit_flutter/src/rust/api/web_files.dart';
 import 'package:web/web.dart' as web;
+import 'package:lumit_flutter/state/web_media_web.dart';
 
 /// Where the settings are kept (`HOME` in platform_web.dart, then `.config`).
 const String _kept = '/home/.config/';
@@ -19,11 +26,8 @@ const String _kept = '/home/.config/';
 /// The prefix every kept file has in local storage.
 const String _key = 'lumit-file:';
 
-final Map<String, Uint8List> _files = {};
-final Map<String, DateTime> _changed = {};
-final Set<String> _dirs = {'/'};
-
 /// Put the browser's files in place of `dart:io`'s, before anything reads one.
+/// The engine's store is what they live in, so this comes after the bridge.
 Future<void> installFiles() async {
   final storage = web.window.localStorage;
   for (var i = 0; i < storage.length; i++) {
@@ -40,6 +44,88 @@ Future<void> installFiles() async {
   }
   IOOverrides.global = _WebOverrides();
 }
+
+/// How many files the page has been handed, which keeps their folders apart.
+int _picked = 0;
+
+/// A folder of its own for the next file the page is handed.
+String _newFolder() =>
+    '/web/${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${_picked++}';
+
+/// Put a file picked or dropped in the page where the engine can open it, and
+/// say where that is: `/web/<id>/<its name>`.
+///
+/// Video and sound stay where the browser has them and are read by its own
+/// decoders (web_media_web.dart), so they are never copied in here. An empty
+/// answer is a file this browser can't decode.
+Future<String> keepPicked(XFile file) async {
+  if (_media.contains(file.name.split('.').last.toLowerCase())) {
+    final response = await web.window.fetch(file.path.toJS).toDart;
+    final blob = await response.blob().toDart;
+    return await openWebMedia(web.File([blob].toJS, file.name)) ?? '';
+  }
+  final path = '${_newFolder()}/${file.name}';
+  _put(path, await file.readAsBytes());
+  return path;
+}
+
+/// The files the person chose to save into, by where they are kept here.
+final Map<String, web.FileSystemFileHandle> _chosen = {};
+
+@JS('showSaveFilePicker')
+external JSPromise<web.FileSystemFileHandle> _showSaveFilePicker(JSAny options);
+
+/// Where to save a project: a file the person chooses, where the browser can
+/// ask, and otherwise a name that is downloaded when it is saved. Null when
+/// they cancelled.
+Future<String?> pickSaveTarget(String suggestedName) async {
+  final at = _newFolder();
+  if (!globalContext.has('showSaveFilePicker')) return '$at/$suggestedName';
+  try {
+    final options = {'suggestedName': suggestedName}.jsify()!;
+    final handle = await _showSaveFilePicker(options).toDart;
+    _chosen['$at/${handle.name}'] = handle;
+    return '$at/${handle.name}';
+  } catch (e) {
+    // Cancelled, or not allowed here, which a download still is.
+    return '$e'.contains('AbortError') ? null : '$at/$suggestedName';
+  }
+}
+
+/// Hand a saved file to the person: into the file they chose for it, or as a
+/// download.
+Future<void> handOver(String path) async {
+  final bytes = _bytesOf(path);
+  final chosen = _chosen[_clean(path)];
+  if (chosen != null) {
+    final out = await chosen.createWritable().toDart;
+    await out.write(bytes.toJS).toDart;
+    await out.close().toDart;
+    return;
+  }
+  _download(bytes, _clean(path).split('/').last);
+}
+
+void _download(Uint8List bytes, String name) {
+  final url = web.URL.createObjectURL(web.Blob([bytes.toJS].toJS));
+  web.HTMLAnchorElement()
+    ..href = url
+    ..download = name
+    ..click();
+  // Let go once the browser has surely taken it. At once, it can cancel.
+  Timer(const Duration(minutes: 1), () => web.URL.revokeObjectURL(url));
+}
+
+/// What goes to the browser's own decoders rather than into the files here.
+const Set<String> _media = {
+  'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', //
+  'm2ts', 'wmv', 'flv', '3gp', 'ogv', 'mxf', 'wav', 'mp3', 'flac', 'aac',
+  'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
+};
+
+/// A picked file the browser could open. [keepPicked] answers an empty path
+/// for one it couldn't.
+bool importsHere(String path) => path.isNotEmpty;
 
 String _clean(String path) {
   var p = path.replaceAll('\\', '/');
@@ -62,20 +148,12 @@ String _parentOf(String path) {
   return at <= 0 ? '/' : p.substring(0, at);
 }
 
-void _makeDirs(String path) {
-  for (var p = _clean(path); !_dirs.contains(p); p = _parentOf(p)) {
-    _dirs.add(p);
-  }
-}
-
 void _put(String path, List<int> bytes, {bool keep = true}) {
   final p = _clean(path);
-  _makeDirs(_parentOf(p));
-  _files[p] = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
-  _changed[p] = DateTime.now();
+  webFileWrite(path: p, bytes: bytes);
   if (keep && p.startsWith(_kept)) {
     try {
-      web.window.localStorage.setItem('$_key$p', base64Encode(_files[p]!));
+      web.window.localStorage.setItem('$_key$p', base64Encode(bytes));
     } catch (_) {
       // Full. The file is still here for as long as the page is open.
     }
@@ -84,24 +162,47 @@ void _put(String path, List<int> bytes, {bool keep = true}) {
 
 void _drop(String path) {
   final p = _clean(path);
-  _files.remove(p);
-  _changed.remove(p);
+  webFileRemove(path: p);
   if (p.startsWith(_kept)) web.window.localStorage.removeItem('$_key$p');
 }
 
 FileSystemEntityType _typeOf(String path) {
-  final p = _clean(path);
-  if (_files.containsKey(p)) return FileSystemEntityType.file;
-  if (_dirs.contains(p)) return FileSystemEntityType.directory;
-  return FileSystemEntityType.notFound;
+  final stat = webFileStat(path: _clean(path));
+  if (stat == null) return FileSystemEntityType.notFound;
+  return stat.folder
+      ? FileSystemEntityType.directory
+      : FileSystemEntityType.file;
+}
+
+DateTime _changedOf(String path) {
+  final ms = webFileStat(path: _clean(path))?.changedMs;
+  return ms == null || ms == 0
+      ? DateTime.now()
+      : DateTime.fromMillisecondsSinceEpoch(ms.round());
 }
 
 Uint8List _bytesOf(String path) {
-  final bytes = _files[_clean(path)];
+  final bytes = webFileRead(path: _clean(path));
   if (bytes == null) {
     throw PathNotFoundException(path, const OSError('No such file', 2));
   }
   return bytes;
+}
+
+/// Every file and folder inside [dir], at any depth when [recursive].
+List<FileSystemEntity> _inside(String dir, bool recursive) {
+  final out = <FileSystemEntity>[];
+  for (final name in webFileList(path: dir)) {
+    final path = dir == '/' ? '/$name' : '$dir/$name';
+    if (!name.endsWith('/')) {
+      out.add(_WebFile(path));
+      continue;
+    }
+    final folder = path.substring(0, path.length - 1);
+    out.add(_WebDirectory(folder));
+    if (recursive) out.addAll(_inside(folder, true));
+  }
+  return out;
 }
 
 final class _WebOverrides extends IOOverrides {
@@ -185,7 +286,7 @@ class _WebFile extends _WebEntity implements File {
   Future<bool> exists() async => existsSync();
 
   @override
-  bool existsSync() => _files.containsKey(path);
+  bool existsSync() => _typeOf(path) == FileSystemEntityType.file;
 
   @override
   Future<File> create({bool recursive = false, bool exclusive = false}) async {
@@ -239,7 +340,7 @@ class _WebFile extends _WebEntity implements File {
   @override
   DateTime lastModifiedSync() {
     _bytesOf(path);
-    return _changed[path] ?? DateTime.now();
+    return _changedOf(path);
   }
 
   @override
@@ -322,7 +423,7 @@ class _WebDirectory extends _WebEntity implements Directory {
   Future<bool> exists() async => existsSync();
 
   @override
-  bool existsSync() => _dirs.contains(path);
+  bool existsSync() => _typeOf(path) == FileSystemEntityType.directory;
 
   @override
   Future<Directory> create({bool recursive = false}) async {
@@ -331,7 +432,7 @@ class _WebDirectory extends _WebEntity implements Directory {
   }
 
   @override
-  void createSync({bool recursive = false}) => _makeDirs(path);
+  void createSync({bool recursive = false}) => webFileMakeFolder(path: path);
 
   int _made = 0;
 
@@ -354,11 +455,10 @@ class _WebDirectory extends _WebEntity implements Directory {
 
   @override
   void deleteSync({bool recursive = false}) {
-    final inside = '$path/';
-    for (final file in _files.keys.where((f) => f.startsWith(inside)).toList()) {
-      _drop(file);
+    for (final file in _inside(path, true).whereType<File>()) {
+      _drop(file.path);
     }
-    _dirs.removeWhere((d) => d == path || d.startsWith(inside));
+    webFileRemove(path: path);
   }
 
   @override
@@ -367,14 +467,13 @@ class _WebDirectory extends _WebEntity implements Directory {
   @override
   Directory renameSync(String newPath) {
     final to = _clean(newPath);
-    final inside = '$path/';
-    for (final file in _files.keys.where((f) => f.startsWith(inside)).toList()) {
-      final bytes = _files[file]!;
-      _drop(file);
-      _put('$to/${file.substring(inside.length)}', bytes);
+    webFileMakeFolder(path: to);
+    for (final file in _inside(path, true).whereType<File>()) {
+      final bytes = _bytesOf(file.path);
+      _drop(file.path);
+      _put('$to${file.path.substring(path.length)}', bytes);
     }
-    _dirs.removeWhere((d) => d == path || d.startsWith(inside));
-    _makeDirs(to);
+    webFileRemove(path: path);
     return _WebDirectory(to);
   }
 
@@ -392,24 +491,15 @@ class _WebDirectory extends _WebEntity implements Directory {
 
   @override
   List<FileSystemEntity> listSync(
-      {bool recursive = false, bool followLinks = true}) {
-    final inside = path == '/' ? '/' : '$path/';
-    bool under(String p) =>
-        p != path &&
-        p.startsWith(inside) &&
-        (recursive || !p.substring(inside.length).contains('/'));
-    return [
-      for (final d in _dirs.where(under)) _WebDirectory(d),
-      for (final f in _files.keys.where(under)) _WebFile(f),
-    ];
-  }
+          {bool recursive = false, bool followLinks = true}) =>
+      _inside(path, recursive);
 }
 
 class _WebStat implements FileStat {
   _WebStat(String path)
       : type = _typeOf(path),
-        size = _files[_clean(path)]?.length ?? -1,
-        modified = _changed[_clean(path)] ?? DateTime.now();
+        size = webFileStat(path: _clean(path))?.size ?? -1,
+        modified = _changedOf(path);
 
   @override
   final FileSystemEntityType type;

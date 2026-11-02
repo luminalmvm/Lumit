@@ -36,9 +36,12 @@ rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "l
 # A self-deleting file for the frames a one-palette GIF holds until the end.
 tempfile = "3"
 
-# The browser build asks the page for each frame it decodes.
+# The browser build asks the page for each frame it decodes, and reads PNG and
+# JPEG stills itself, with the versions already in the build.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
+png = "0.18"
+zune-jpeg = "0.5"
 
 # The Linux FFmpeg build reaches libva through stubs that abort the process
 # when it isn't installed, so VAAPI checks it loads first.

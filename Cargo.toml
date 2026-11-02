@@ -44,3 +44,12 @@ opt-level = 3
 
 [profile.dev.package.lumit-render]
 opt-level = 3
+
+# The browser build (scripts/build-web.ps1). One codegen unit and full LTO make
+# the engine's wasm much smaller, and the page downloads every byte of it.
+[profile.web]
+inherits = "release"
+lto = true
+codegen-units = 1
+debug = false
+strip = true

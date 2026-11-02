@@ -672,6 +672,18 @@ jobs:
           version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
           wasm-bindgen --version 2>/dev/null | grep -q " $version$" \
             || cargo install wasm-bindgen-cli --version "$version" --locked
+      # build-web.ps1 runs wasm-opt on the engine's wasm when it is on PATH.
+      # Pinned to a release and its checksum, like FFmpeg in the jobs below.
+      - name: Install wasm-opt (binaryen)
+        env:
+          BINARYEN: version_133
+          BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+        run: |
+          url="https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN}/binaryen-${BINARYEN}-x86_64-linux.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/binaryen.tar.gz"
+          echo "$BINARYEN_SHA256  $RUNNER_TEMP/binaryen.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/binaryen.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-${BINARYEN}/bin" >> "$GITHUB_PATH"
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1

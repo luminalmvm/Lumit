@@ -221,3 +221,61 @@ impl Encoder {
         match self.0 {}
     }
 }
+
+/// Whether this is a still the page reads itself, with no FFmpeg: a PNG, a
+/// JPEG, or an EXR by its own reader.
+pub(crate) fn reads_still(path: &Path) -> bool {
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    ["png", "jpg", "jpeg", "exr"]
+        .iter()
+        .any(|known| extension.eq_ignore_ascii_case(known))
+}
+
+/// The longest still file the page reads.
+const STILL_MAX: u64 = 1 << 30;
+
+/// The picture of a still that [`reads_still`], at its own size.
+pub(crate) fn read_still(path: &Path) -> Result<DecodedFrame, MediaError> {
+    if crate::exr::is_exr(path) {
+        return crate::exr::read_pass(path, None);
+    }
+    let bytes = lumit_ingress::read_capped(path, STILL_MAX)?;
+    let unreadable = |e: String| MediaError::Ffmpeg(format!("could not read the picture: {e}"));
+    let (width, height, samples) = if bytes.starts_with(b"\x89PNG") {
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(&bytes));
+        decoder.set_transformations(png::Transformations::normalize_to_color8());
+        let mut reader = decoder.read_info().map_err(|e| unreadable(e.to_string()))?;
+        let size = reader.output_buffer_size().ok_or(MediaError::NoStreams)?;
+        let mut samples = vec![0; size];
+        let info = reader
+            .next_frame(&mut samples)
+            .map_err(|e| unreadable(e.to_string()))?;
+        samples.truncate(info.buffer_size());
+        (info.width, info.height, samples)
+    } else {
+        let mut decoder = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(&bytes));
+        let samples = decoder.decode().map_err(|e| unreadable(e.to_string()))?;
+        let info = decoder.info().ok_or(MediaError::NoStreams)?;
+        (u32::from(info.width), u32::from(info.height), samples)
+    };
+    let area = lumit_ingress::checked_area(u64::from(width), u64::from(height))?;
+    let channels = samples.len() / lumit_ingress::checked_usize(area.max(1))?;
+    let mut budget = lumit_ingress::Budget::new(lumit_ingress::Limits::IMAGE);
+    let mut rgba =
+        budget.vec_with_capacity(lumit_ingress::checked_usize(area)?.saturating_mul(4))?;
+    for px in samples.chunks_exact(channels.max(1)) {
+        rgba.extend_from_slice(&match *px {
+            [g] => [g, g, g, 255],
+            [g, a] => [g, g, g, a],
+            [r, g, b] => [r, g, b, 255],
+            [r, g, b, a] => [r, g, b, a],
+            _ => return Err(MediaError::NoStreams),
+        });
+    }
+    Ok(DecodedFrame {
+        width,
+        height,
+        rgba,
+        format: crate::decode::PixelFormat::Srgb8,
+    })
+}

@@ -172,11 +172,29 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
     scan(&src, fingerprint)
 }
 
+/// A still the page reads itself is one frame, as an Illustrator document is.
+/// Nothing else opens without FFmpeg.
 #[cfg(target_arch = "wasm32")]
-fn scan(src: &MediaSource, _fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
-    let mut index = crate::web::index(src.on_disk()).ok_or_else(crate::no_ffmpeg)?;
-    index.interpret = src.interpret;
-    Ok(index)
+fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    if let Some(mut index) = crate::web::index(src.on_disk()) {
+        index.interpret = src.interpret;
+        return Ok(index);
+    }
+    if !crate::web::reads_still(src.on_disk()) {
+        return Err(crate::no_ffmpeg());
+    }
+    Ok(FrameIndex {
+        timebase_num: 1,
+        timebase_den: 25,
+        entries: vec![IndexEntry {
+            pts: 0,
+            keyframe: true,
+        }],
+        vfr: false,
+        median_delta: 0,
+        fingerprint,
+        interpret: src.interpret,
+    })
 }
 
 /// The packet scan itself, for everything ffmpeg opens.

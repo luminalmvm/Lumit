@@ -41,6 +41,7 @@ import 'api/state.dart';
 import 'api/streams.dart';
 import 'api/system.dart';
 import 'api/track.dart';
+import 'api/web_files.dart';
 import 'api/wire_tie.dart';
 import 'api/wireframes.dart';
 import 'dart:async';
@@ -498,6 +499,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int dco_decode_box_autoadd_u_8(dynamic raw);
+
+  @protected
+  WebFileStat dco_decode_box_autoadd_web_file_stat(dynamic raw);
 
   @protected
   BridgeAddon dco_decode_bridge_addon(dynamic raw);
@@ -2137,6 +2141,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
 
   @protected
+  WebFileStat? dco_decode_opt_box_autoadd_web_file_stat(dynamic raw);
+
+  @protected
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw);
 
   @protected
@@ -2157,6 +2164,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
+
+  @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
   @protected
   ProjectReference dco_decode_project_reference(dynamic raw);
@@ -2187,6 +2197,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BigInt dco_decode_usize(dynamic raw);
+
+  @protected
+  WebFileStat dco_decode_web_file_stat(dynamic raw);
 
   @protected
   WorkerResponse dco_decode_worker_response(dynamic raw);
@@ -2692,6 +2705,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
+
+  @protected
+  WebFileStat sse_decode_box_autoadd_web_file_stat(
+      SseDeserializer deserializer);
 
   @protected
   BridgeAddon sse_decode_bridge_addon(SseDeserializer deserializer);
@@ -4614,6 +4631,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
+  WebFileStat? sse_decode_opt_box_autoadd_web_file_stat(
+      SseDeserializer deserializer);
+
+  @protected
   F64Array2? sse_decode_opt_f_64_array_2(SseDeserializer deserializer);
 
   @protected
@@ -4636,6 +4657,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   Float32List? sse_decode_opt_list_prim_f_32_strict(
       SseDeserializer deserializer);
+
+  @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer);
@@ -4667,6 +4691,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
+  WebFileStat sse_decode_web_file_stat(SseDeserializer deserializer);
 
   @protected
   WorkerResponse sse_decode_worker_response(SseDeserializer deserializer);
@@ -5175,6 +5202,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_web_file_stat(
+      WebFileStat self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_addon(BridgeAddon self, SseSerializer serializer);
@@ -7245,6 +7276,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_web_file_stat(
+      WebFileStat? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_f_64_array_2(F64Array2? self, SseSerializer serializer);
 
   @protected
@@ -7268,6 +7303,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_list_prim_f_32_strict(
       Float32List? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+      Uint8List? self, SseSerializer serializer);
 
   @protected
   void sse_encode_project_reference(
@@ -7301,6 +7340,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_web_file_stat(WebFileStat self, SseSerializer serializer);
 
   @protected
   void sse_encode_worker_response(

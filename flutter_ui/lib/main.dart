@@ -42,8 +42,6 @@ export 'package:lumit_flutter/state/ui_state.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // The browser build's files, before anything reads one.
-  await installFiles();
 
   // Before anything that could fault. A widget whose build throws is
   // replaced by Flutter with a blank grey rectangle in a release build, and the
@@ -89,6 +87,8 @@ Future<void> _start(List<String> args) async {
       probeProjectPath.isEmpty ? null : CountingBridgeHandler();
   await BridgeLib.init(
       handler: kDebugMode ? CustomHandler() : probeBridge);
+  // The browser build's files live in the engine, so they come after it.
+  await installFiles();
   // The browser hands its graphics card over as a promise, so it is asked for
   // here, before a project needs it.
   if (kIsWeb && !await prepareGraphics()) throw l10n.webNoGraphicsCard;

@@ -67,7 +67,10 @@ pub enum MediaError {
 /// can't open at all, or an EXR's render pass.
 #[must_use]
 pub fn reads_own(src: &MediaSource) -> bool {
-    src.source_layer.is_some() || ai::is_ai(src.on_disk()) || exr::reads_pass(src)
+    src.source_layer.is_some()
+        || ai::is_ai(src.on_disk())
+        || exr::reads_pass(src)
+        || reads_still(src.on_disk())
 }
 
 /// Whether `path` is a file footage can be read from. In the browser build a
@@ -78,7 +81,7 @@ pub fn is_file(path: &Path) -> bool {
     if web::holds(path) {
         return true;
     }
-    path.is_file()
+    lumit_ingress::files::is_file(path)
 }
 
 /// How many frames the page has handed in, in the browser build. A picture
@@ -141,9 +144,12 @@ pub fn read_own(
             .map(|frame| exr::downsample(frame, target_width))
     } else if ai::is_ai(path) {
         ai::read_layer(path, src.source_layer, target_width)
-    } else {
-        let layer = src.source_layer?;
+    } else if let Some(layer) = src.source_layer {
         psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width))
+    } else if reads_still(path) {
+        read_still(path).map(|frame| psd::downsample(frame, target_width))
+    } else {
+        return None;
     };
     // A still has no fields, cadence or loop to read, only its alpha and the
     // shape of its pixels.
@@ -154,6 +160,21 @@ pub fn read_own(
         }
         interpret::finish(frame, &it)
     }))
+}
+
+#[cfg(target_arch = "wasm32")]
+use web::{read_still, reads_still};
+
+/// A desktop leaves every plain still to FFmpeg. The browser build has none,
+/// and reads some itself.
+#[cfg(not(target_arch = "wasm32"))]
+fn reads_still(_path: &Path) -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_still(_path: &Path) -> Result<DecodedFrame, MediaError> {
+    Err(MediaError::NoStreams)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -203,15 +224,13 @@ impl Fingerprint {
         if let Some(print) = web::fingerprint(path) {
             return Ok(print);
         }
-        let meta = std::fs::metadata(path)?;
-        let size = meta.len();
-        let mtime_unix = meta
-            .modified()?
+        let size = lumit_ingress::files::len(path)?;
+        let mtime_unix = lumit_ingress::files::modified(path)?
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
             .unwrap_or(0);
 
-        let mut file = std::fs::File::open(path)?;
+        let mut file = lumit_ingress::files::open(path)?;
         let mut hasher = blake3::Hasher::new();
         let chunk = 64 * 1024;
         let mut buf = vec![0u8; chunk];

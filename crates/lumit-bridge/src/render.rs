@@ -165,6 +165,11 @@ pub(crate) fn thumbnail(
     frame: u64,
     scale: f32,
 ) -> Option<(Vec<u8>, u32, u32)> {
+    // A picture read back off the graphics card is waited for, and the page
+    // can't wait. The browser build goes without thumbnails for now.
+    if cfg!(target_arch = "wasm32") {
+        return None;
+    }
     with_ready(|renderer| {
         // The colour choice decides the display transform the picture is read
         // back through, so a thumbnail taken without it would be a different

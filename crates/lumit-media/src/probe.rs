@@ -366,9 +366,35 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     probe_container(src)
 }
 
+/// The page reads a still itself, as a picture of its own size. Nothing else
+/// opens without FFmpeg.
+///
+/// ponytail: the whole picture is read for its size. Read the header alone if
+/// big stills are slow to import.
 #[cfg(target_arch = "wasm32")]
 fn probe_container(src: &MediaSource) -> Result<MediaProbe, MediaError> {
-    crate::web::probe(src.on_disk()).ok_or_else(crate::no_ffmpeg)
+    if let Some(probe) = crate::web::probe(src.on_disk()) {
+        return Ok(probe);
+    }
+    if !crate::web::reads_still(src.on_disk()) {
+        return Err(crate::no_ffmpeg());
+    }
+    let still = crate::web::read_still(src.on_disk())?;
+    Ok(MediaProbe {
+        duration_seconds: 0.0,
+        container: "still".into(),
+        video: Some(VideoInfo {
+            width: still.width,
+            height: still.height,
+            // What ffmpeg says of any other still.
+            fps_num: 25,
+            fps_den: 1,
+            codec: "still".into(),
+        }),
+        audio: None,
+        more_audio: Vec::new(),
+        timecode: None,
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]

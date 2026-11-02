@@ -840,9 +840,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return DropTarget(
       onDragEntered: (_) => setState(() => _dropHover = true),
       onDragExited: (_) => setState(() => _dropHover = false),
-      onDragDone: (details) {
+      onDragDone: (details) async {
         setState(() => _dropHover = false);
-        _dropped([for (final f in details.files) f.path]);
+        _dropped(await droppedPaths(details.files));
       },
       // Painted over the panel rather than behind it, for the reason the row
       // target gives: the panel draws its own fill, and a drop with no
