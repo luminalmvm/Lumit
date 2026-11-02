@@ -4600,6 +4600,54 @@
   "@fxYEdges": {
     "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
   },
+  "fxRedAmount": "Red amount",
+  "@fxRedAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the red channel shakes, × the whole shake."
+  },
+  "fxRedPhase": "Red phase",
+  "@fxRedPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the red channel's shake runs behind the rest."
+  },
+  "fxGreenAmount": "Green amount",
+  "@fxGreenAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the green channel shakes, × the whole shake."
+  },
+  "fxGreenPhase": "Green phase",
+  "@fxGreenPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the green channel's shake runs behind the rest."
+  },
+  "fxBlueAmount": "Blue amount",
+  "@fxBlueAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the blue channel shakes, × the whole shake."
+  },
+  "fxBluePhase": "Blue phase",
+  "@fxBluePhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the blue channel's shake runs behind the rest."
+  },
+  "fxRandomRate": "Random rate",
+  "@fxRandomRate": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how fast each colour channel's own wobble moves, × Frequency."
+  },
+  "fxChannels": "Channels",
+  "@fxChannels": {
+    "description": "Effect controls — the twirl on Shake that shakes the red, green and blue channels apart."
+  },
+  "fxCropLeft": "Crop left",
+  "@fxCropLeft": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the left before shaking."
+  },
+  "fxCropRight": "Crop right",
+  "@fxCropRight": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the right before shaking."
+  },
+  "fxCropTop": "Crop top",
+  "@fxCropTop": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the top before shaking."
+  },
+  "fxCropBottom": "Crop bottom",
+  "@fxCropBottom": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the bottom before shaking."
+  },
   "fxSame": "Same",
   "@fxSame": {
     "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
