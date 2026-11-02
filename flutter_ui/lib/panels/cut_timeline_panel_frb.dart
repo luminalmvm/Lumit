@@ -87,7 +87,7 @@ import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart' show RazorOverlay;
 import 'timeline_snap.dart';
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
-import 'volume_band_frb.dart' show BandKind, VolumeBand, volumeBandFloorDb;
+import 'volume_band_frb.dart' show BandKind, VolumeBand, VolumeBandState, volumeBandFloorDb;
 import 'waveform_frb.dart';
 
 /// How wide the header column stands: a name and three switches.
@@ -2009,6 +2009,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// arena from one.
   void _down(PointerDownEvent event, LumitUiState ui) {
     if (_press != null) return;
+    // An envelope took this press.
+    if (VolumeBandState.claimed == event.pointer) return;
     _headPicked = false;
     final at = event.localPosition;
     final index = cutTrackAt(_tracks, at.dy, _tops);
