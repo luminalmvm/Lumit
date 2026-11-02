@@ -33,6 +33,8 @@ lumit-media = { path = "../lumit-media" }
 # answered where the frame is made (docs/impl/addons.md §6.3).
 lumit-ml = { path = "../lumit-ml" }
 lumit-project = { path = "../lumit-project" }
+# A 3D model as plain data, which a Model draw carries to the mesh pass.
+lumit-scene = { path = "../lumit-scene" }
 lumit-text = { path = "../lumit-text" }
 # The camera tracker. The analysis job lives here because it is the one
 # crate that can both decode a clip and hold the solve where the render path
@@ -42,7 +44,6 @@ lumit-track = { path = "../lumit-track" }
 # tracker's reason: this is the one crate that can decode a clip, measure its
 # flow and hold the answer where the render path reads it (impl/roto.md §5).
 lumit-roto = { path = "../lumit-roto" }
-lumit-scene = { path = "../lumit-scene" }
 # The compositor speaks wgpu directly. The version is pinned to the one
 # lumit-gpu links, or the handles would not unify.
 wgpu = "24"
