@@ -394,7 +394,7 @@ class LayerBoundsCache extends ChangeNotifier {
   /// [entry]'s model box at document [revision] (`LayerBox.cube`), or null
   /// on any other layer and until the model's file has been read.
   List<double>? modelBoxOf(BridgeLayerEntry entry,
-      {required BigInt? revision}) {
+      {required int? revision}) {
     if (entry.info.kind != BridgeLayerKind.model) return null;
     _atRevision(revision);
     final id = entry.layer.internallayerId;
