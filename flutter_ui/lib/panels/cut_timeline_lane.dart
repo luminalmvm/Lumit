@@ -61,7 +61,7 @@ typedef CutLaneColours = ({
 
 /// The composition glyph as a picture the painters can draw, made once by
 /// the panel in the name colour, for the clips that play a composition.
-typedef CutGlyph = ({ui.Picture picture, Size size});
+typedef CutGlyph = ({ui.Picture picture, Size size, Color? tint});
 
 /// The edges the pointer is over: the hovered clip's own and, while Linked is
 /// on, the same edge of the clips linked to it, so it is plain both will
@@ -770,7 +770,12 @@ class CutTrackPainter extends CustomPainter {
     canvas.clipRect(box.deflate(1));
     canvas.translate(box.left + from, box.top + (tall - side) / 2);
     canvas.scale(side / glyph.size.width, side / glyph.size.height);
+    if (glyph.tint case final tint?) {
+      canvas.saveLayer(Offset.zero & glyph.size,
+          Paint()..colorFilter = ColorFilter.mode(tint, BlendMode.srcIn));
+    }
     canvas.drawPicture(glyph.picture);
+    if (glyph.tint != null) canvas.restore();
     canvas.restore();
     return from + side + 3;
   }
