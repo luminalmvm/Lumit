@@ -11,6 +11,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -202,15 +203,18 @@ class FlowRowsFrb extends StatelessWidget {
                   style: t.small.copyWith(color: t.textMuted),
                 ),
               ),
-              const SizedBox(width: 6),
-              HouseButton(
-                key: const ValueKey('flow-engine-open-addons'),
-                small: true,
-                frameless: true,
-                onPressed: () => unawaited(showSettingsWindowFrb(context,
-                    initialPage: SettingsPage.addons)),
-                child: Text(l10n.openAddons, style: t.small),
-              ),
+              // A page has no addons to open.
+              if (!kIsWeb) ...[
+                const SizedBox(width: 6),
+                HouseButton(
+                  key: const ValueKey('flow-engine-open-addons'),
+                  small: true,
+                  frameless: true,
+                  onPressed: () => unawaited(showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.addons)),
+                  child: Text(l10n.openAddons, style: t.small),
+                ),
+              ],
             ],
           ),
         ),

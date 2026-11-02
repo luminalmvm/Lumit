@@ -19,6 +19,7 @@
 
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import '../theme/theme.dart';
 
 /// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
@@ -130,3 +131,41 @@ Widget settingsRow(
           ),
       ],
     );
+
+/// A size in bytes, in megabytes or, from one up, gigabytes.
+String byteSize(int bytes) {
+  final b = bytes.toDouble();
+  if (b >= 1 << 30) {
+    return '${(b / (1 << 30)).toStringAsFixed(1)} ${l10n.unitGb}';
+  }
+  return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
+}
+
+/// A size in bytes as a whole number of megabytes, without the unit.
+String mibText(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);
+
+/// The settings the browser build leaves out, by name. Each needs an account,
+/// a server, another program or the machine's own folders, and a page has
+/// none of them.
+Set<String> get settingsNotInPage => {
+      l10n.settingsShareUpLimit,
+      l10n.settingsShareDownLimit,
+      l10n.settingsKeepRunning,
+      l10n.settingsOpenAtSignIn,
+      l10n.settingsDiscordStatus,
+      l10n.settingsLiveEndpoint,
+      l10n.settingsScriptsFolder,
+      l10n.settingsScriptAfterExport,
+      l10n.settingsScriptAfterOpen,
+      l10n.settingsScriptAfterSave,
+      l10n.settingsAutomaticUpdates,
+      l10n.settingsNightlyBuilds,
+      l10n.settingsNightlyIcon,
+      l10n.settingsThisVersion,
+      l10n.settingsOwnTitleBar,
+      l10n.settingsPluginsOnCard,
+      l10n.settingsWhere,
+      l10n.settingsAppliesTo,
+      l10n.settingsStylesFolder,
+      l10n.settingsIconsFolder,
+    };

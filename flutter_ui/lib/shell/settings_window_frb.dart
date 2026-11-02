@@ -35,7 +35,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kDebugMode;
+    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -188,6 +188,12 @@ enum SettingsPage {
         SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
         SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
+
+  /// The pages in the sidebar. A page has no account, addons or extensions.
+  static List<SettingsPage> get shown => [
+        for (final page in values)
+          if (!kIsWeb || (page != account && page != addons)) page,
+      ];
 }
 
 /// Open Settings, on [initialPage] when somewhere else has a reason to send the
@@ -250,7 +256,9 @@ class _SettingsWindow extends StatefulWidget {
 enum CacheScope { everywhere, thisProject }
 
 class _SettingsWindowState extends State<_SettingsWindow> {
-  late SettingsPage _page = widget.initialPage;
+  late SettingsPage _page = SettingsPage.shown.contains(widget.initialPage)
+      ? widget.initialPage
+      : SettingsPage.general;
 
   /// How many times the page has been changed since the window opened. The
   /// page the window opens on arrives with the window, and every page after
@@ -437,6 +445,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// keep every row under "Theme" for the word *theme*, which is a page, not a
   /// result.
   bool _matches(String title) {
+    if (kIsWeb && settingsNotInPage.contains(title)) return false;
     // [settingsRowNames] is asking what the rows are called, not for the rows.
     if (_names case final names?) {
       names.add(title);
@@ -638,7 +647,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final page in SettingsPage.values)
+            for (final page in SettingsPage.shown)
               // The highlight a menu's rows take, under the page's own mark:
               // the page in force draws its fill over it.
               HoverFill(
@@ -741,7 +750,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// page, under a band with the page's name. Pressing the band goes to the
   /// page.
   List<Widget> _found(LumitTheme t, LumitUiState ui) => [
-        for (final page in SettingsPage.values)
+        for (final page in SettingsPage.shown)
           if (page != SettingsPage.shortcuts)
             if (_sectionsOf(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
@@ -2974,14 +2983,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
         description: l10n.settingsAddonsPackDetail(pack.licence,
-            _bytes(pack.sizeBytes), addonTask(pack.task)),
+            byteSize(pack.sizeBytes), addonTask(pack.task)),
       );
 
   /// One pack the catalogue offers. While it is coming down the row is the bar
   /// and a Cancel; every other button on the page is unpressable meanwhile.
   Widget? _offerRow(LumitTheme t, AddonService service, Addon offer) {
     final coming = service.working == offer.id;
-    final size = _bytes(offer.sizeBytes);
+    final size = byteSize(offer.sizeBytes);
     return _row(
       t,
       offer.name.isEmpty ? offer.id : offer.name,
@@ -3497,7 +3506,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               width: _ddWide,
               // What one picture that size holds at 16-bit.
               label: (side) => l10n.settingsLargestPictureSize(
-                  '$side', _bytes(side * side * 8)),
+                  '$side', byteSize(side * side * 8)),
               onChanged: (side) => setState(() {
                 setLargestPicture(side: side);
                 _largest = largestPicture();
@@ -3551,7 +3560,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               children: [
                 Text(
                   l10n.settingsUsedMbIn(
-                      _mib(stats.usedBytes.toInt()), '${stats.entries}'),
+                      mibText(stats.usedBytes.toInt()), '${stats.entries}'),
                   key: const ValueKey('settings-cache-used'),
                   style: t.small,
                 ),
@@ -3588,7 +3597,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               children: [
                 Text(
                   l10n.settingsUsedMbIn(
-                      _mib(vram.usedBytes.toInt()), '${vram.entries}'),
+                      mibText(vram.usedBytes.toInt()), '${vram.entries}'),
                   key: const ValueKey('settings-vram-used'),
                   style: t.small,
                 ),
@@ -3653,7 +3662,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   Text(
                     memory.processBytes == 0
                         ? l10n.settingsMemoryNotKnown
-                        : _bytes(memory.processBytes),
+                        : byteSize(memory.processBytes),
                     key: const ValueKey('settings-memory-process'),
                     style: t.small,
                   ),
@@ -3664,7 +3673,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   Text(
                     memory.processBytes == 0
                         ? '—'
-                        : _bytes(memory.unaccountedBytes),
+                        : byteSize(memory.unaccountedBytes),
                     key: const ValueKey('settings-memory-unaccounted'),
                     style: t.small,
                   ),
@@ -3688,8 +3697,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     l10n.settingsGraphicsMemoryReserved,
                     Text(
                       l10n.settingsMemoryReservedInUse(
-                          _bytes(memory.gpuReservedBytes),
-                          _bytes(memory.gpuAllocatedBytes)),
+                          byteSize(memory.gpuReservedBytes),
+                          byteSize(memory.gpuAllocatedBytes)),
                       key: const ValueKey('settings-memory-gpu-bytes'),
                       style: t.small,
                     ),
@@ -3799,7 +3808,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             children: [
               Text(
                 l10n.settingsUsedMbIn(
-                    _mib(disk.usedBytes.toInt()), '${disk.entries}'),
+                    mibText(disk.usedBytes.toInt()), '${disk.entries}'),
                 key: const ValueKey('settings-disk-used'),
                 style: t.small,
               ),
@@ -3984,7 +3993,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         children: [
           Text(
             l10n.settingsGovernorUsedOfBudget(
-                _bytes(tier.usedBytes), _bytes(tier.budgetBytes)),
+                byteSize(tier.usedBytes), byteSize(tier.budgetBytes)),
             key: ValueKey<String>('settings-governor-$key'),
             style: t.small,
           ),
@@ -4000,7 +4009,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               style: t.small.copyWith(color: t.textMuted),
             ),
           Text(
-            l10n.settingsGovernorPeak(_bytes(tier.peakBytes)),
+            l10n.settingsGovernorPeak(byteSize(tier.peakBytes)),
             key: ValueKey<String>('settings-governor-$key-peak'),
             style: t.small.copyWith(color: t.textMuted),
           ),
@@ -4018,16 +4027,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         2 => l10n.settingsGovernorSevere,
         _ => l10n.settingsGovernorFull,
       };
-
-  static String _bytes(int bytes) {
-    final b = bytes.toDouble();
-    if (b >= 1 << 30) {
-      return '${(b / (1 << 30)).toStringAsFixed(1)} ${l10n.unitGb}';
-    }
-    return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
-  }
-
-  static String _mib(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);
 
   static String _tierLabel(int tier) => switch (tier) {
         1 => l10n.menuFull,

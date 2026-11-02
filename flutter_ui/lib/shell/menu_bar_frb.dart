@@ -36,8 +36,6 @@ import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
-import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
-import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/lumit_icon.dart' as glyph;
@@ -102,8 +100,6 @@ import 'welcome_frb.dart' show projectDisplayName;
 import 'window_frame.dart';
 import 'wordmark.dart';
 import 'workspace_shortcut_frb.dart';
-import 'package:lumit_flutter/state/platform.dart'
-    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
 /// arrangement on screen under a name of the user's own, and renaming,
@@ -770,7 +766,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       ));
     }
     // Every Settings page and every row on one: Enter opens Settings there.
-    for (final page in SettingsPage.values) {
+    for (final page in SettingsPage.shown) {
       final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
       commands.add(PaletteCommand(
         label: path,
@@ -984,8 +980,9 @@ List<MenuSection> lumitMenus(
                       () => app.openProject(path),
                       tip: path),
             ]),
-            MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
+                  needsPro: needsPro()),
             MenuEntry.divider(),
             // Closing a project puts an empty one in its place, because the shell
             // always has a document: the engine's `close` is what `newProject`
@@ -1012,14 +1009,15 @@ List<MenuSection> lumitMenus(
                 action: 'file.save.as'),
             // Save, and name the version the save makes. Greyed for a
             // project whose saves are not sent, which has no version to name.
-            MenuEntry(
-                l10n.backupMenuSaveVersion,
-                project == null || (ui.account.pro && !ui.backup.sends)
-                    ? null
-                    : () => saveVersionFrb(context, app, ui,
-                        picker: savePicker),
-                action: 'file.save.version',
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(
+                  l10n.backupMenuSaveVersion,
+                  project == null || (ui.account.pro && !ui.backup.sends)
+                      ? null
+                      : () => saveVersionFrb(context, app, ui,
+                          picker: savePicker),
+                  action: 'file.save.version',
+                  needsPro: needsPro()),
             // The footage inside the `.lum`, so the one file can be handed to
             // somebody else. Read as the menu opens: a pack is a save, and
             // nothing else tells the bar that one has happened.
@@ -1083,16 +1081,16 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
-            MenuEntry.submenu(l10n.menuScripts, _scriptRows(context, app, ui)),
-            MenuEntry.divider(),
-            // Sharing this project, joining somebody else's, and who is here.
-            MenuEntry(
-                l10n.menuSharedProject, () => showShareFrb(context, app)),
-            // Exports sent out for comments, and the comments that came back.
-            // Sending one is Pro's, and the window says so to an account
-            // without it.
-            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context),
-                needsPro: needsPro()),
+            // Scripts, sharing this project and joining somebody else's, and
+            // exports sent out for comments. A page runs and sends nothing.
+            if (!kIsWeb) ...[
+              MenuEntry.submenu(l10n.menuScripts, scriptRows(context, app, ui)),
+              MenuEntry.divider(),
+              MenuEntry(
+                  l10n.menuSharedProject, () => showShareFrb(context, app)),
+              MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context),
+                  needsPro: needsPro()),
+            ],
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
@@ -1107,9 +1105,10 @@ List<MenuSection> lumitMenus(
             // is the one command whose absence costs a day's work.
             MenuEntry(l10n.menuRecover,
                 projectPath == null ? null : () => _recover(context, app)),
-            MenuEntry(l10n.backupMenuHistory,
-                project == null ? null : () => showProjectHistory(context),
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(l10n.backupMenuHistory,
+                  project == null ? null : () => showProjectHistory(context),
+                  needsPro: needsPro()),
           ]
     ),
     (
@@ -1248,11 +1247,12 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
-            MenuEntry(
-                l10n.menuSendForReview,
-                comp == null
-                    ? null
-                    : () => showReviewLinks(context, send: comp)),
+            if (!kIsWeb)
+              MenuEntry(
+                  l10n.menuSendForReview,
+                  comp == null
+                      ? null
+                      : () => showReviewLinks(context, send: comp)),
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -1829,19 +1829,20 @@ List<MenuSection> lumitMenus(
                   action: panelToggleAction(panel),
                   checked: () => panelVisible(ui.split, panel),
                 ),
-            MenuEntry.submenu(l10n.menuExtensions, [
-              for (final extension in ui.extensions.panels)
-                MenuEntry.toggle(
-                  extension.name,
-                  () => ui.toggleExtension(extension.id),
-                  checked: () => ui.extensionShown(extension.id),
-                ),
-              if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
-              MenuEntry(
-                  l10n.menuManageExtensions,
-                  () => showSettingsWindowFrb(context,
-                      initialPage: SettingsPage.addons)),
-            ]),
+            if (!kIsWeb)
+              MenuEntry.submenu(l10n.menuExtensions, [
+                for (final extension in ui.extensions.panels)
+                  MenuEntry.toggle(
+                    extension.name,
+                    () => ui.toggleExtension(extension.id),
+                    checked: () => ui.extensionShown(extension.id),
+                  ),
+                if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
+                MenuEntry(
+                    l10n.menuManageExtensions,
+                    () => showSettingsWindowFrb(context,
+                        initialPage: SettingsPage.addons)),
+              ]),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once
@@ -1861,11 +1862,14 @@ List<MenuSection> lumitMenus(
       title: l10n.menuHelp,
       items: () => [
             MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
-            MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
-            MenuEntry.live(
-              ui.updates,
-              () => updateMenuEntry(context, app, ui, savePicker: savePicker),
-            ),
+            // A page has no account to buy Pro for and is always the newest.
+            if (!kIsWeb) ...[
+              MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
+              MenuEntry.live(
+                ui.updates,
+                () => updateMenuEntry(context, app, ui, savePicker: savePicker),
+              ),
+            ],
             MenuEntry.divider(),
             // The documentation, in whatever the user reads the web with. Both are
             // pages on docs.lumitlab.com rather than one of them being the
@@ -2165,54 +2169,6 @@ String? panelToggleAction(Panel panel) => switch (panel) {
 void togglePanel(LumitUiState ui, Panel panel) {
   setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
   ui.workspace.touch();
-}
-
-/// File ▸ Scripts: each script in the Scripts folder, a submenu for each
-/// folder inside it, then Run script… and the folder itself. Read from disk
-/// as the menu opens.
-List<MenuEntry> _scriptRows(
-    BuildContext context, LumitState app, LumitUiState ui) {
-  final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
-  var scripts = const <String>[];
-  try {
-    if (folder != null) scripts = listScripts(folder: folder);
-  } catch (_) {}
-  VoidCallback? run(String path) => app.project == null
-      ? null
-      : () => runScriptFrb(context, app, ui,
-          path: '$folder${Platform.pathSeparator}'
-              '${path.replaceAll('/', Platform.pathSeparator)}');
-
-  // A folder's scripts come together in the list, so each run of paths
-  // under one name is that folder's submenu.
-  List<MenuEntry> rows(List<String> paths, String under) {
-    final out = <MenuEntry>[];
-    for (var i = 0; i < paths.length;) {
-      final slash = paths[i].indexOf('/');
-      if (slash < 0) {
-        out.add(MenuEntry(paths[i], run('$under${paths[i]}')));
-        i++;
-        continue;
-      }
-      final name = paths[i].substring(0, slash + 1);
-      final inside = <String>[];
-      for (; i < paths.length && paths[i].startsWith(name); i++) {
-        inside.add(paths[i].substring(name.length));
-      }
-      out.add(MenuEntry.submenu(
-          name.substring(0, slash), rows(inside, '$under$name')));
-    }
-    return out;
-  }
-
-  return [
-    ...rows(scripts, ''),
-    if (scripts.isNotEmpty) MenuEntry.divider(),
-    MenuEntry(l10n.menuRunScript,
-        app.project == null ? null : () => runScriptFrb(context, app, ui)),
-    MenuEntry(l10n.menuOpenScriptsFolder,
-        folder == null ? null : () => revealInFolder(path: folder)),
-  ];
 }
 
 Future<void> openProjectFrb(LumitState app,

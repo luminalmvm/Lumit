@@ -11,6 +11,9 @@ import 'package:ffi/ffi.dart';
 /// This machine's operating system and processor, as `windows_x64`.
 String abiName() => Abi.current().toString();
 
+/// A tab is the browser build's; see win32_web.dart.
+bool openInTab(String url) => false;
+
 // --- Alt, from the keyboard itself ----------------------------------------
 
 const int _vkMenu = 0x12;

@@ -1923,11 +1923,11 @@ class LumitUiState extends ChangeNotifier {
   /// there is one there and the tray has nothing of its own.
   ///
   /// This is how a copy made in another Lumit window arrives, and how a paste
-  /// still works after something else on the machine has been copied in
-  /// between. Ordinary text is left alone — [lumitDocumentKind] only answers
-  /// for the two shapes the engine's paste calls accept.
+  /// still works after something else was copied in between. Ordinary text is
+  /// left alone ([lumitDocumentKind]), and so is a clipboard a browser refuses.
   Future<bool> adoptSystemClipboard() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
     if (text == null) return false;
     if (text == clipboard.text) return !clipboard.isEmpty;
     switch (lumitDocumentKind(text)) {

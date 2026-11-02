@@ -35,10 +35,13 @@ import 'package:lumit_flutter/state/platform.dart'
 const MethodChannel _channel = MethodChannel('lumit/window');
 
 /// Whether Lumit draws the window's buttons itself here. Asked of the target
-/// platform, so a widget test draws none unless it says it is a desktop.
+/// platform, so a widget test draws none unless it says it is a desktop. In a
+/// browser the window is the browser's.
 bool get windowFrameDrawn =>
-    defaultTargetPlatform == TargetPlatform.windows ||
-    (defaultTargetPlatform == TargetPlatform.linux && _startedWithOwnTitleBar);
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+        (defaultTargetPlatform == TargetPlatform.linux &&
+            _startedWithOwnTitleBar));
 
 /// On Linux, the file whose being there turns Lumit's own title bar on. A file
 /// rather than a setting in the store, because the runner reads it before the

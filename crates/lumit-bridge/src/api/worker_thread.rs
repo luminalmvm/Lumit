@@ -2958,9 +2958,9 @@ fn build_viewer_renderer(
     // devices inside a few seconds. Poisoning is nothing to fail over: the
     // lock guards the turn-taking and a set nobody is using.
     let mut pool = ENGINES.lock().unwrap_or_else(|e| e.into_inner());
-    // The worker of a project that has closed is on its way out with a set.
-    // It stops at the end of its turn, which is at once unless it is part
-    // way through a frame, so it is waited for as long as a build would take.
+    // The worker of a project that has closed is on its way out with a set,
+    // and stops at the end of its turn, so it is waited for as long as a build
+    // would take. The page can't wait for a later turn, so it builds its own.
     let give_up = web_time::Instant::now() + pool.built_in;
     loop {
         if !worth_building_for(project) {
@@ -2974,8 +2974,6 @@ fn build_viewer_renderer(
                 .iter()
                 .any(|id| !worth_building_for(&ProjectReference::new(*id)));
         let left = give_up.saturating_duration_since(web_time::Instant::now());
-        // The browser build's one thread can't wait for the other worker to
-        // finish, so it builds its own at once.
         if !coming || left.is_zero() || cfg!(target_arch = "wasm32") {
             break;
         }
