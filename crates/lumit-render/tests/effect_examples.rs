@@ -331,6 +331,9 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // which is the Linear wipe picture mirrored. A third of the way round
         // leaves a wedge, so the two pages do not show the same figure twice.
         "radial_wipe" => vec![("completion", f(35.0))],
+        // Soft, so the edge reads as a fade rather than a threshold, and short
+        // of half way, as the plate is a dark frame.
+        "luma_fade" => vec![("completion", f(45.0)), ("softness", f(30.0))],
         "iris_wipe" => vec![
             ("centre_y", f(f64::from(H) / 2.0)),
             ("outer_radius", f(540.0)),
