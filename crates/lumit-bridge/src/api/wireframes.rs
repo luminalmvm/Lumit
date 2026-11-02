@@ -713,6 +713,27 @@ impl CompositionReference {
                     drops.push(at);
                     outlines.push(Outline::Light(layer.id, kind, at, segs));
                 }
+                K::Model { item, settings } => {
+                    let size = (w as f32, h as f32);
+                    let Some(c) = lumit_render::model::layer_box(&doc, *item, settings, size)
+                    else {
+                        continue;
+                    };
+                    let anchor = (tr.anchor_x.value_at(lt), tr.anchor_y.value_at(lt));
+                    let m = place(anchor, (tr.scale_x.value_at(lt), tr.scale_y.value_at(lt)));
+                    let c = c.map(|p| apply(&m, p.map(f64::from).into()));
+                    reach_to.extend(c);
+                    if only.is_some() {
+                        continue;
+                    }
+                    // Each edge joins two corners one bit of x, y or z apart.
+                    let segs = (0..8)
+                        .flat_map(|i| [1, 2, 4].map(|b| (i, i | b)))
+                        .filter(|(i, j)| i != j)
+                        .map(|(i, j)| (c[i], c[j]))
+                        .collect();
+                    outlines.push(Outline::Layer(layer.id, segs));
+                }
                 _ => {
                     if !layer.switches.three_d || layer.audio_only {
                         continue;

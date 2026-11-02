@@ -199,6 +199,17 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     }
 
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
+        // A 3D model is never probed, so it is named by its file as it is on
+        // disk now, or a model saved over would keep its old frames.
+        if let Some(lumit_core::model::ProjectItem::Footage(f)) = self.doc.item(item) {
+            let path = f.media.on_disk();
+            if lumit_scene::is_model(path) {
+                let stamp = lumit_media::sequence::MediaSource::file(path)
+                    .stamped()
+                    .stamp;
+                return Some((format!("model#{path}#{stamp:?}"), 0));
+            }
+        }
         // The same proxy resolution point the decode planner goes through
         // (`crate::source::effective_media`), and for the reason the key
         // exists at all: the name of a frame has to say which file its pixels

@@ -3615,6 +3615,14 @@ class LayerReference {
         that: this,
       );
 
+  /// The corners of a Model layer's box in its own pixels, three numbers
+  /// each, once its file has been read. Empty before that and on any other
+  /// kind of layer.
+  Float64List getModelBox() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelBox(
+        that: this,
+      );
+
   /// A Model layer's settings, or `None` on any other kind of layer.
   BridgeModelSettings? getModelSettings() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelSettings(

@@ -55,6 +55,30 @@ impl LayerReference {
         })
     }
 
+    /// The corners of a Model layer's box in its own pixels, three numbers
+    /// each, once its file has been read. Empty before that and on any other
+    /// kind of layer.
+    #[frb(sync)]
+    pub fn get_model_box(&self) -> Result<Vec<f64>, BridgeError> {
+        let LayerKind::Model { item, settings } = self.item()?.kind else {
+            return Ok(Vec::new());
+        };
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let size = (comp.width as f32, comp.height as f32);
+        let corners = lumit_render::model::layer_box(&doc, item, &settings, size);
+        Ok(corners
+            .iter()
+            .flatten()
+            .flatten()
+            .map(|v| f64::from(*v))
+            .collect())
+    }
+
     /// Replace a Model layer's settings, as one undo step. Refused on any
     /// other kind of layer.
     #[frb(sync)]

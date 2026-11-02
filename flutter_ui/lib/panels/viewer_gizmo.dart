@@ -223,6 +223,10 @@ class LayerBox {
   /// A two-node camera's point of interest, which gets handles of its own.
   final Vec3? aim;
 
+  /// A Model layer's box: eight corners of three numbers in layer pixels,
+  /// numbered by the bits of x, y and z. Null on every other layer.
+  final List<double>? cube;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -240,6 +244,7 @@ class LayerBox {
     this.marker = false,
     this.transform,
     this.aim,
+    this.cube,
   });
 
   /// A point of the layer's **art** on screen.
@@ -273,6 +278,7 @@ class LayerBox {
         marker: marker,
         transform: transform,
         aim: aim,
+        cube: cube,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -298,6 +304,7 @@ class LayerBox {
   /// camera it is the four corners in perspective, and a marker's are a small
   /// diamond round its place.
   List<Offset> get corners {
+    if (cube != null) return _hull;
     if (marker) {
       final at = anchorScreen;
       return [
@@ -317,17 +324,19 @@ class LayerBox {
 
   /// Whether every corner is in front of the eye, which a 2D layer always is.
   /// A box reaching behind it has no sensible place for its handles.
-  bool get wholeInFront => marker
-      ? map.inFront(map.ax, map.ay)
-      : map.inFront(0, 0) &&
-          map.inFront(bounds.width, 0) &&
-          map.inFront(bounds.width, bounds.height) &&
-          map.inFront(0, bounds.height);
+  bool get wholeInFront => cube != null
+      ? _hull.isNotEmpty
+      : marker
+          ? map.inFront(map.ax, map.ay)
+          : map.inFront(0, 0) &&
+              map.inFront(bounds.width, 0) &&
+              map.inFront(bounds.width, bounds.height) &&
+              map.inFront(0, bounds.height);
 
   /// The outline drawn round the layer: [corners], less any part behind the
   /// eye, which a camera cannot see and has no screen point for.
   List<Offset> get outline {
-    if (marker) return wholeInFront ? corners : const [];
+    if (cube != null || marker) return wholeInFront ? corners : const [];
     if (!map.projected) return corners;
     final quad = [
       (0.0, 0.0),
@@ -351,6 +360,49 @@ class LayerBox {
     return [for (final p in kept) map.toScreen(p.$1, p.$2)];
   }
 
+  /// The model box's outline on screen, the hull round its eight corners, or
+  /// empty when any of them is behind the eye.
+  List<Offset> get _hull {
+    final c = cube!;
+    final points = <Offset>[];
+    for (var i = 0; i + 2 < c.length; i += 3) {
+      final p = map.inParent(c[i], c[i + 1], c[i + 2]);
+      if (!map.parentInFront(p.$1, p.$2, p.$3)) return const [];
+      points.add(map.parentToScreen(p.$1, p.$2, p.$3));
+    }
+    return convexHull(points);
+  }
+
+  /// A model box's twelve edges on screen, each joining two corners one bit
+  /// of x, y or z apart, less any with a corner behind the eye, and whether
+  /// it meets the corner farthest from the eye. Null on every other layer.
+  List<(Offset, Offset, bool)>? get edges {
+    final c = cube;
+    if (c == null) return null;
+    final placed = [
+      for (var i = 0; i + 2 < c.length; i += 3)
+        map.inParent(c[i], c[i + 1], c[i + 2]),
+    ];
+    final depths = [for (final p in placed) map.parentDepthOf(p.$1, p.$2, p.$3)];
+    var far = 0;
+    for (var i = 1; i < depths.length; i++) {
+      if (depths[i] > depths[far]) far = i;
+    }
+    final at = <Offset?>[
+      for (var i = 0; i < placed.length; i++)
+        depths[i] > viewerNear
+            ? map.parentToScreen(placed[i].$1, placed[i].$2, placed[i].$3)
+            : null,
+    ];
+    return [
+      for (var i = 0; i < at.length; i++)
+        for (final b in const [1, 2, 4])
+          if (i & b == 0 && i | b < at.length)
+            if ((at[i], at[i | b]) case (final p?, final q?))
+              (p, q, i == far || (i | b) == far),
+    ];
+  }
+
   /// Where the layer's anchor — the point it scales and rotates about — is on
   /// screen.
   Offset get anchorScreen => map.toScreen(map.ax, map.ay);
@@ -362,6 +414,11 @@ class LayerBox {
   /// already undoes all three. Seen through a camera the layer has to be in
   /// front of the eye there too. A marker is hit near its place.
   bool contains(Offset point) {
+    // ponytail: a model is picked anywhere inside its box's outline, even
+    // where nothing of it shows. Pick by its depth if that gets in the way.
+    if (cube != null) {
+      return wholeInFront && (Path()..addPolygon(_hull, true)).contains(point);
+    }
     if (marker) {
       return wholeInFront &&
           (anchorScreen - point).distance <= gizmoAnchorSlop / 2;
@@ -444,6 +501,29 @@ class LayerBox {
     }
     return best;
   }
+}
+
+/// The smallest convex outline round [points].
+List<Offset> convexHull(List<Offset> points) {
+  final sorted = [...points]..sort((a, b) =>
+      a.dx != b.dx ? a.dx.compareTo(b.dx) : a.dy.compareTo(b.dy));
+  if (sorted.length < 3) return sorted;
+  double turn(Offset o, Offset a, Offset b) =>
+      (a.dx - o.dx) * (b.dy - o.dy) - (a.dy - o.dy) * (b.dx - o.dx);
+  final hull = <Offset>[];
+  // One side left to right, then the other back again.
+  for (final side in [sorted, sorted.reversed]) {
+    final start = hull.length;
+    for (final p in side) {
+      while (hull.length >= start + 2 &&
+          turn(hull[hull.length - 2], hull.last, p) <= 0) {
+        hull.removeLast();
+      }
+      hull.add(p);
+    }
+    hull.removeLast();
+  }
+  return hull;
 }
 
 /// The box a drawing tool works on: the first of [boxes] — which are top first
@@ -3806,12 +3886,11 @@ class _GizmoPainter extends CustomPainter {
     // selection, so a selected box is never dimmed by a hover on top of it.
     final hovered = hover;
     if (hovered != null) {
-      _outline(canvas, hovered.outline, accent.withValues(alpha: 0.35));
+      _boxOutline(canvas, hovered, accent.withValues(alpha: 0.35));
     }
 
     for (final box in selected) {
-      final shift = _shift(box);
-      _outline(canvas, [for (final c in box.outline) c + shift], accent);
+      _boxOutline(canvas, box, accent, _shift(box));
     }
 
     final handles = handlesFor;
@@ -3954,6 +4033,34 @@ class _GizmoPainter extends CustomPainter {
   /// a camera is drawn where the move puts it instead, since perspective
   /// makes a move more than a slide across the screen.
   Offset _shift(LayerBox box) => box.map.projected ? Offset.zero : moved;
+
+  /// [box]'s outline moved by [shift]: a model's box edges, every other
+  /// layer's corners.
+  void _boxOutline(Canvas canvas, LayerBox box, Color colour,
+      [Offset shift = Offset.zero]) {
+    final edges = box.edges;
+    if (edges == null) {
+      return _outline(canvas, [for (final c in box.outline) c + shift], colour);
+    }
+    // The three edges round the far corner are drawn fainter, so the box
+    // reads as a box and not as either of the two a wire cube can be.
+    for (final back in const [true, false]) {
+      final path = Path();
+      for (final (a, b, far) in edges) {
+        if (far != back) continue;
+        path
+          ..moveTo(a.dx + shift.dx, a.dy + shift.dy)
+          ..lineTo(b.dx + shift.dx, b.dy + shift.dy);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = back ? colour.withValues(alpha: colour.a * 0.4) : colour
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke,
+      );
+    }
+  }
 
   void _outline(Canvas canvas, List<Offset> corners, Color colour) {
     if (corners.length < 2) return;

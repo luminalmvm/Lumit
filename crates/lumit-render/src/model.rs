@@ -104,18 +104,9 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
 /// The scene of model item `item`, read the first time it's asked for and
 /// kept after. `None` when the file is missing or won't open.
 pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
-    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-        return None;
-    };
-    let path = PathBuf::from(f.media.on_disk());
-    let meta = std::fs::metadata(&path).ok()?;
-    let key = (path, meta.len(), meta.modified().ok());
-    {
-        let mut slot = KEPT.lock().ok()?;
-        let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
-        if let Some(Kept(scene)) = kept.get(&key) {
-            return scene.clone();
-        }
+    let key = key_of(doc, item)?;
+    if let Some(scene) = kept(&key) {
+        return scene;
     }
     if ASIDE.with(Cell::get) {
         LEFT_OUT.fetch_add(1, Ordering::Relaxed);
@@ -123,6 +114,46 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
         return None;
     }
     read_and_keep(key)
+}
+
+/// The key model item `item`'s file is kept under, as it is on disk now.
+fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
+    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+        return None;
+    };
+    let path = PathBuf::from(f.media.on_disk());
+    let (len, at) = lumit_media::sequence::MediaSource::file(&path)
+        .stamped()
+        .stamp?;
+    Some((path, len, Some(at)))
+}
+
+/// What reading `key` came to, `None` when it hasn't been read.
+fn kept(key: &Key) -> Option<Option<Arc<ModelScene>>> {
+    let mut slot = KEPT.lock().ok()?;
+    let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
+    kept.get(key).map(|Kept(scene)| scene.clone())
+}
+
+/// The eight corners of the box model item `item` fills in its layer's
+/// pixels, as `settings` place it in a comp `comp` pixels in size, numbered
+/// by the bits of x, y and z. `None` until its file has been read, which this
+/// never does, so the Viewer can ask while it draws.
+pub fn layer_box(
+    doc: &Document,
+    item: Uuid,
+    settings: &ModelSettings,
+    comp: (f32, f32),
+) -> Option<[[f32; 3]; 8]> {
+    let bounds = kept(&key_of(doc, item)?)??.bounds;
+    let m = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &bounds, comp));
+    Some(std::array::from_fn(|i| {
+        let corner = std::array::from_fn(|k| match i >> k & 1 {
+            0 => bounds.min[k],
+            _ => bounds.max[k],
+        });
+        m.transform_point3(glam::Vec3::from(corner)).to_array()
+    }))
 }
 
 /// Read the file `key` names and keep what comes of it.

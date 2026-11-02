@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod model;
 mod moments;
 pub mod pool;
 pub mod schedule;
@@ -2484,20 +2485,7 @@ fn feed_source(
                 h.update(&json);
             }
         }
-        LayerKind::Model { item, settings } => {
-            // The file and how it sits in the layer. The scene is read from
-            // the file, so naming the file names the scene.
-            h.update(b"model/");
-            h.update(item.as_bytes());
-            if let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(*item) {
-                if let Ok(json) = serde_json::to_vec(&f.media) {
-                    h.update(&json);
-                }
-            }
-            if let Ok(json) = serde_json::to_vec(settings) {
-                h.update(&json);
-            }
-        }
+        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
