@@ -28,9 +28,11 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import 'package:lumit_flutter/src/rust/api/routes.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
+import 'audio_routes_frb.dart' show writeSend;
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam;
@@ -148,6 +150,17 @@ final class FoldVolumeRow extends LayerFoldRow {
   /// for a caller that supplied none, which the panel never is.
   final BridgeScalar? scalar;
   const FoldVolumeRow({this.scalar, required int depth}) : super(depth);
+}
+
+/// One send of the layer's sound to a bus: its level, keyed like Volume, and
+/// whether it is taken before the layer's Volume and Pan.
+final class FoldSendRow extends LayerFoldRow {
+  final BridgeSend send;
+
+  /// The bus's name, read off the comp's layers when the rows are built.
+  final String bus;
+  const FoldSendRow(this.send, {required this.bus, required int depth})
+      : super(depth);
 }
 
 /// The layer's Retime: source time in seconds, keyframable like any
@@ -837,6 +850,10 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
+      FoldSendRow(:final send) => switch (send.level) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       FoldFlowRow(:final rate) => switch (rate) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
@@ -1054,6 +1071,7 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
         read(transform, group.axes.first.prop),
       FoldRetimeRow(:final scalar) => scalar,
       FoldVolumeRow(:final scalar) => scalar,
+      FoldSendRow(:final send) => send.level,
       FoldFlowRow(:final rate) => rate,
       FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
         field0,
@@ -1098,6 +1116,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           BridgeScalar_Static(:final field0) => field0 != 0,
           _ => true,
         },
+      FoldSendRow() => true,
       FoldEffectParamRow(:final param, :final value) =>
         value != null && value != defaultEffectValue(param.kind),
       // A heading is a container, save for an effect's or a style's own: one
@@ -2006,6 +2025,13 @@ bool moveLaneKeys({
       entry.layer.setVolumeDb(value: BridgeScalar.keyframed(next));
       return true;
 
+    case FoldSendRow(:final send):
+      if (send.level is! BridgeScalar_Keyframed) return false;
+      final next = moved((send.level as BridgeScalar_Keyframed).field0);
+      if (next == null) return false;
+      writeSend(entry.layer, send.bus, level: BridgeScalar.keyframed(next));
+      return true;
+
     case FoldMaskValueRow(:final mask, :final value, :final vertex):
       if (value == MaskValue.path) {
         // A path key is a whole shape, so a *single* move goes to the engine
@@ -2147,6 +2173,7 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
       FoldVolumeRow() => '${audioPath(layerId)}/volume',
+      FoldSendRow(:final send) => '${sendsPath(layerId)}/${send.bus}',
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
@@ -2384,6 +2411,9 @@ String puppetPath(String layerId) => '$layerId/puppet';
 
 /// The path of a layer's Audio group.
 String audioPath(String layerId) => '$layerId/audio';
+
+/// The path of the Sends heading on an Audio timeline track.
+String sendsPath(String layerId) => '$layerId/sends';
 
 /// The path of the Waveform twirl inside the Audio group.
 String waveformPath(String layerId) => '$layerId/audio/waveform';

@@ -55,6 +55,7 @@ import '../widgets/marquee.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_routes_frb.dart';
 import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart';
 import 'audio_timeline_fades_frb.dart';
@@ -779,7 +780,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       if (_hasAudio.containsKey(id)) continue;
       // An Audio layer is sound by what it is, even before anything is on
       // it, so an empty one made to put clips on is listed too.
-      if (entry.info.kind == BridgeLayerKind.audio) {
+      if (entry.info.kind == BridgeLayerKind.audio ||
+          entry.info.kind == BridgeLayerKind.bus) {
         _hasAudio[id] = true;
         _hasPicture[id] = false;
         continue;
@@ -1172,6 +1174,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       rowHeight: t.density.laneRow,
       trackRows: _trackRows,
       volumeDb: _volumeDb,
+      busNames: {
+        for (final l in ui.model.layers)
+          if (l.info.kind == BridgeLayerKind.bus)
+            l.layer.internallayerId.toString(): l.info.name,
+      },
     );
     _lastTracks = tracks;
     _refreshPeaks(tracks);
@@ -1563,7 +1570,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final onTrack = theirs[track.id] ?? const <int>[];
     final head = ValueListenableBuilder<List<LayerReference>>(
             valueListenable: ui.selectedLayers,
-            builder: (context, picked, _) => AudioTrackOutlineRow(
+            builder: (context, picked, _) => GestureDetector(
+              // Where the track's sound goes. A bus goes to the master, and a
+              // faded picture row is worked on once its sound is detached.
+              onSecondaryTapUp: track.dimmed ||
+                      track.entry.info.kind == BridgeLayerKind.bus
+                  ? null
+                  : (e) => _routeMenu(track, e.globalPosition),
+              child: AudioTrackOutlineRow(
               key: ValueKey<String>('atl-row-${track.id}'),
               comp: comp,
               track: track,
@@ -1586,6 +1600,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onResizeStart: () => _rowCarry = 0,
               onResizeReset: () =>
                   setState(() => _trackRows.remove(track.id)),
+            ),
             ),
           );
     return Column(
@@ -1648,6 +1663,25 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           ),
         ],
       );
+  }
+
+  /// The track head's right-click: its Output and its sends.
+  void _routeMenu(AudioTrackRow track, Offset at) {
+    final buses = [
+      for (final l in _ui?.model.layers ?? const <BridgeLayerEntry>[])
+        if (l.info.kind == BridgeLayerKind.bus) l,
+    ];
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 170,
+      rows: (close) => audioRouteRows(
+        entry: track.entry,
+        buses: buses,
+        closeParent: () => close(null),
+        onChanged: _afterWrite,
+      ),
+    );
   }
 
   void _pickProperty(String path) {

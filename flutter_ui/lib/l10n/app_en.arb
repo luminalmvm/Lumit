@@ -11547,6 +11547,34 @@
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
   },
+  "insertBus": "Insert bus",
+  "@insertBus": {
+    "description": "Audio timeline, right-click on the empty ground below the rows: adds a bus, a track whose effects and volume work on the sound routed to it."
+  },
+  "audioRouteOutput": "Output",
+  "@audioRouteOutput": {
+    "description": "Audio timeline, right-click on a track's name: opens the list of where the track's sound goes, the master or a bus."
+  },
+  "audioRouteMaster": "Master",
+  "@audioRouteMaster": {
+    "description": "Audio timeline, Output submenu: the track's sound goes straight to the composition's master volume, not through a bus."
+  },
+  "audioRouteSendTo": "Send to",
+  "@audioRouteSendTo": {
+    "description": "Audio timeline, right-click on a track's name: a list of buses, each ticked if a copy of the track's sound is sent to it. Picking one adds or removes the send."
+  },
+  "audioSends": "Sends",
+  "@audioSends": {
+    "description": "Audio timeline: the heading under a track listing how much of its sound is sent to each bus."
+  },
+  "audioSendPre": "Pre",
+  "@audioSendPre": {
+    "description": "Audio timeline, a send row: short for pre-fader. The send is taken before the track's volume and pan. Click to switch to Post. Keep it very short."
+  },
+  "audioSendPost": "Post",
+  "@audioSendPost": {
+    "description": "Audio timeline, a send row: short for post-fader. The send is taken after the track's volume and pan. Click to switch to Pre. Keep it very short."
+  },
   "insertAudioLayer": "Insert audio layer",
   "@insertAudioLayer": {
     "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."

@@ -115,6 +115,7 @@ List<LayerFoldRow> audioTimelineFoldRows({
   required BridgeLayerEntry entry,
   required Set<String> open,
   BridgeScalar? volumeDb,
+  Map<String, String> busNames = const {},
 }) {
   final id = entry.layer.internallayerId.toString();
   final audio = {
@@ -170,7 +171,23 @@ List<LayerFoldRow> audioTimelineFoldRows({
         break;
     }
   }
-  return [...volume, ...effects];
+  // The Sends heading, while the track sends anywhere: one row a bus.
+  final sends = entry.info.sends;
+  final sendsOpen = open.contains(sendsPath(id));
+  return [
+    ...volume,
+    ...effects,
+    if (sends.isNotEmpty)
+      FoldGroupRow(
+        path: sendsPath(id),
+        label: l10n.audioSends,
+        open: sendsOpen,
+        depth: 1,
+      ),
+    if (sendsOpen)
+      for (final send in sends)
+        FoldSendRow(send, bus: busNames[send.bus.toString()] ?? '', depth: 2),
+  ];
 }
 
 /// The rows the clips on a track show, in track order.
@@ -199,6 +216,7 @@ List<AudioTrackRow> audioTimelineTracks({
   required double rowHeight,
   Map<String, int> trackRows = const {},
   Map<String, BridgeScalar> volumeDb = const {},
+  Map<String, String> busNames = const {},
 }) {
   final out = <AudioTrackRow>[];
   for (final entry in layers) {
@@ -209,7 +227,7 @@ List<AudioTrackRow> audioTimelineTracks({
       open: open.contains(id),
       dimmed: dimmed.contains(id),
       foldRows: audioTimelineFoldRows(
-          entry: entry, open: open, volumeDb: volumeDb[id]),
+          entry: entry, open: open, volumeDb: volumeDb[id], busNames: busNames),
       clipRows: audioTimelineClipRows(entry: entry, open: open),
       rowHeight: rowHeight,
       rows: trackRows[id] ?? audioTrackMinRows,
@@ -379,7 +397,13 @@ class AudioTrackOutlineRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: outlineGap),
-              track.dimmed ? _detach(t) : _laneChip(t),
+              // A bus has no sound of its own to draw, so no lane chip.
+              if (track.dimmed)
+                _detach(t)
+              else if (track.entry.info.kind == BridgeLayerKind.bus)
+                const SizedBox(width: audioTrackChipWidth)
+              else
+                _laneChip(t),
             ],
           ),
         )),
