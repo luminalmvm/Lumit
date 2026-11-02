@@ -280,8 +280,8 @@ pub enum Reason {
     /// field where After Effects' was undocumented. docs/11 §5's "look for
     /// look", said in the report rather than only in the spec.
     EffectDiffers { effect: String, detail: String },
-    /// An After Effects control that read the clock — Radio Waves' own time,
-    /// Ripple's Wave Speed — became keyframes on an ordinary Lumit control,
+    /// An After Effects control that read the clock, Radio Waves' own time,
+    /// became keyframes on an ordinary Lumit control,
     /// which is the same motion and is deterministic (docs/08 §2.4).
     EffectSpeedAsKeyframes { effect: String, param: String },
     /// A placeholder the table deliberately does not map, with the Lumit

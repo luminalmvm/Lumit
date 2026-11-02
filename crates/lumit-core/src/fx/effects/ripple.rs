@@ -5,15 +5,12 @@
 //! to nothing at the rim, and turning Evolution sends the rings travelling
 //! outward. Symmetric slides each pixel in and out along the radius, which reads
 //! as a lens breathing; Asymmetric walks it round a small circle instead, which
-//! is what water actually does and is why it is the default.
-//!
-//! **There is no speed control, and that is deliberate.** AE's Wave Speed reads
-//! the clock, and an effect that reads the clock renders one picture in the
-//! preview and another in the export (docs/08 §2.4). Evolution is the same
-//! motion with the timeline holding the stopwatch.
+//! is what water actually does and is why it is the default. Wave speed turns
+//! Evolution on with layer time, so fresh rings travel without a key.
 
 use crate::fx::{
-    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    cpu, effects::wave_warp, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
@@ -22,13 +19,17 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "ripple",
     label = "Ripple",
-    version = 1,
+    // 2: Wave speed. Older rings hold still, as they did.
+    version = 2,
     category = Distortion,
     // One sine and cosine and one bilinear tap a pixel.
     cost = Cheap,
     // The rings can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
+    // Wave speed moves it with layer time under constant controls, so the
+    // frame key takes the time.
+    seeded = true,
     // The matte scales the displacement, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
     matte = (
@@ -90,10 +91,14 @@ pub struct Ripple {
     )]
     pub wave_width: f32,
 
-    /// Degrees: one full turn sends one whole wave outward. AE's Wave Speed
-    /// converts to a linear keyframe on this (§3.53 decision 2).
+    /// Degrees: one full turn sends one whole wave outward.
     #[dial(default = 0.0, step = 45.0)]
     pub evolution: f32,
+
+    /// Waves a second sent outward, AE's Wave Speed. Read by
+    /// [`RippleDef::resolve_derived`], as Wave warp's is.
+    #[slider(label = "Wave speed", min = -5.0, max = 5.0, default = 1.0, unit = Raw)]
+    pub wave_speed: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
@@ -115,12 +120,15 @@ impl Ripple {
     /// paths multiply by the identical constant.
     pub const ENVELOPE_PEAK_RECIP: f32 = 6.75;
 
+    /// Turns the rings have travelled by this frame, Wave speed × layer time.
+    pub const DERIVED_TRAVEL: ParamId = ParamId::new("derived.travel");
+
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     /// Every division and every fold happens here: the radius and the wave
     /// width become reciprocals, Evolution becomes turns, and the Type choice
-    /// becomes a flag.
+    /// becomes a flag. `travel` is [`Self::DERIVED_TRAVEL`] out of the bag.
     #[must_use]
-    pub fn packed(self) -> cpu::RippleParams {
+    pub fn packed(self, travel: f32) -> cpu::RippleParams {
         let radius = self.radius.max(0.0);
         cpu::RippleParams {
             centre: [self.centre_x, self.centre_y],
@@ -130,7 +138,7 @@ impl Ripple {
             inv_radius: 1.0 / radius.max(1e-3),
             amount: self.wave_height * Self::ENVELOPE_PEAK_RECIP,
             inv_width: 1.0 / self.wave_width.max(1e-3),
-            turns: self.evolution / 360.0,
+            turns: self.evolution / 360.0 + travel,
             asymmetric: self.wave_type == 1,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
@@ -145,7 +153,12 @@ impl EffectDef for RippleDef {
         &<Ripple as EffectMetadata>::SCHEMA
     }
 
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
+        push(Ripple::DERIVED_TRAVEL, wave_warp::travel(cx));
+    }
+
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::ripple(rgba, w, h, &Ripple::read(p).packed());
+        let travel = p.float(Ripple::DERIVED_TRAVEL, 0.0);
+        cpu::ripple(rgba, w, h, &Ripple::read(p).packed(travel));
     }
 }
