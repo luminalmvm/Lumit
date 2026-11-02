@@ -8262,6 +8262,10 @@
   "@savePresetEllipsis": {
     "description": "Button that writes the current effect stack to a file."
   },
+  "effectPresets": "Presets",
+  "@effectPresets": {
+    "description": "Effect controls: the menu row on an effect that opens the list of built-in presets it ships with. Picking one sets the effect."
+  },
   "saved": "Saved",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."

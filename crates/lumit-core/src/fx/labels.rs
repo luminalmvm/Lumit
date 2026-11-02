@@ -76,6 +76,12 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for port in crate::graph::DERIVED_PORTS {
         out.insert(port.label.to_owned());
     }
+    // The built-in presets an effect's menu offers.
+    for def in super::catalogue::BUILTIN_DEFS.iter() {
+        for preset in def.presets() {
+            out.insert(preset.name.to_owned());
+        }
+    }
     for def in super::catalogue::BUILTIN_DEFS.iter() {
         let signature = def.signature();
         for port in signature.inputs().iter().chain(signature.outputs()) {

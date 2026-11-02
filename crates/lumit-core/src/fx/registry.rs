@@ -470,6 +470,12 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
+    /// The built-in presets its menu offers ([`crate::fx::presets`]). None by
+    /// default.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        &[]
+    }
+
     /// Whether this effect reads a Text layer's look (its Text
     /// layer row) without being a points effect, so the builder hands it the
     /// carriage the points effects get, with the layer's document in it

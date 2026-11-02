@@ -18,6 +18,7 @@ pub mod comp_graph;
 pub mod composition;
 pub mod cut;
 pub mod effect;
+pub mod effect_presets;
 pub mod export;
 pub mod expressions;
 pub mod extensions;
