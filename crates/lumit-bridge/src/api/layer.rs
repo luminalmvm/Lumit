@@ -1274,6 +1274,9 @@ pub enum BridgeLayerKind {
     /// `audio_only` set — but the frontend draws it as its own kind (its own
     /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
     Audio,
+    /// A Bus layer: a Null layer with `audio_only` set, whose rack and Volume
+    /// work on what is routed to it.
+    Bus,
 }
 
 /// How the frontend should draw this layer: the model's kind, except
@@ -1284,6 +1287,9 @@ pub enum BridgeLayerKind {
 #[frb(ignore)]
 pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
     use lumit_core::model::LayerKind as K;
+    if layer.is_bus() {
+        return BridgeLayerKind::Bus;
+    }
     if layer.audio_only {
         return BridgeLayerKind::Audio;
     }
@@ -1751,6 +1757,9 @@ pub struct BridgeLayerInfo {
     pub retime: Option<BridgeScalar>,
     /// Sound played faster or slower changes pitch with the speed.
     pub pitch_follows_speed: bool,
+    /// The Bus layer this layer's sound goes to, or `None` for the master.
+    pub output: Option<Uuid>,
+    pub sends: Vec<crate::api::routes::BridgeSend>,
     /// The layer's masks, bottom of the stack first. Carried in the
     /// read model for the same reason the effects are: the Timeline's
     /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -2005,6 +2014,8 @@ pub(crate) fn read_layer_info(
             .as_ref()
             .map(|r| BridgeScalar::read_at(r, layer.start_offset.0)),
         pitch_follows_speed: layer.pitch_follows_speed,
+        output: layer.audio_routes.output,
+        sends: crate::api::routes::bridge_sends(layer),
         masks: layer
             .masks
             .iter()

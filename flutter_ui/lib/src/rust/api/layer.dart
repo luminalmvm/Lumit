@@ -18,6 +18,7 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
 import 'roto.dart';
+import 'routes.dart';
 import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
@@ -859,6 +860,10 @@ class BridgeLayerInfo {
   /// Sound played faster or slower changes pitch with the speed.
   final bool pitchFollowsSpeed;
 
+  /// The Bus layer this layer's sound goes to, or `None` for the master.
+  final UuidValue? output;
+  final List<BridgeSend> sends;
+
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -991,6 +996,8 @@ class BridgeLayerInfo {
     this.matte,
     this.retime,
     required this.pitchFollowsSpeed,
+    this.output,
+    required this.sends,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -1034,6 +1041,8 @@ class BridgeLayerInfo {
       matte.hashCode ^
       retime.hashCode ^
       pitchFollowsSpeed.hashCode ^
+      output.hashCode ^
+      sends.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -1079,6 +1088,8 @@ class BridgeLayerInfo {
           matte == other.matte &&
           retime == other.retime &&
           pitchFollowsSpeed == other.pitchFollowsSpeed &&
+          output == other.output &&
+          sends == other.sends &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -1129,6 +1140,10 @@ enum BridgeLayerKind {
   /// `audio_only` set — but the frontend draws it as its own kind (its own
   /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
   audio,
+
+  /// A Bus layer: a Null layer with `audio_only` set, whose rack and Volume
+  /// work on what is routed to it.
+  bus,
   ;
 }
 
@@ -4128,6 +4143,12 @@ class LayerReference {
   /// keeps its pose. Refused while an expression drives one of them.
   void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
+
+  /// Route this layer's sound to `output` (a Bus layer, or `None` for the
+  /// master) and set its sends, as one undoable step.
+  void setAudioRoutes({UuidValue? output, required List<BridgeSend> sends}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetAudioRoutes(
+          that: this, output: output, sends: sends);
 
   /// Choose which audio streams this layer sounds, mixed. One undo step.
   ///

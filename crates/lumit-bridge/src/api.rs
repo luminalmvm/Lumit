@@ -40,6 +40,7 @@ pub mod project;
 pub mod project_item;
 pub mod retime;
 pub mod roto;
+pub mod routes;
 pub mod script;
 pub mod shape;
 pub mod share;

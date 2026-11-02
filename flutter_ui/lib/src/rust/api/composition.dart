@@ -21,6 +21,7 @@ import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
 import 'roto.dart';
+import 'routes.dart';
 import 'shape.dart';
 import 'share.dart';
 import 'solid.dart';
@@ -569,6 +570,11 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddAudioLayer(
               that: this, footage: footage, arrival: arrival);
+
+  /// Add a Bus layer, named after how many the comp already has. One undo
+  /// step.
+  LayerReference addBusLayer({int? row}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceAddBusLayer(that: this, row: row);
 
   /// Add a Camera layer looking at the comp centre from the After Effects
   /// 50 mm distance, `comp width × 50/36`, so a fresh camera changes no
@@ -1928,7 +1934,7 @@ class CompositionReference {
   /// One undo group around the two commits, because one Ctrl-Z has to put
   /// the layers *and* the Sound mix row back: the pack and the clearing are
   /// halves of the same act, and either alone leaves a comp that reads wrong.
-  /// The set is every layer that reads as `BridgeLayerKind::Audio`, which is
+  /// The set is every layer that reads as `BridgeLayerKind::Audio` or `Bus`, which is
   /// exactly what the Timeline's fold takes, so what is packed is what the
   /// user sees folded under the row. The new comps start unmixed, and there
   /// is no road back from a precomp to a mix.

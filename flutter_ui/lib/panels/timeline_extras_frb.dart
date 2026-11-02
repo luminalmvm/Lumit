@@ -1463,6 +1463,9 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // An Audio layer wears the speaker the audible switch wears, so
       // a row that only makes sound says so in the same glyph twice.
       BridgeLayerKind.audio => LumitIcon.audio,
+      // A bus is where the sound of several rows meets, as wires meet at a
+      // node.
+      BridgeLayerKind.bus => LumitIcon.nodes,
       BridgeLayerKind.solid => LumitIcon.solid,
       // An adjustment layer is a comp-sized effect container, and the set has
       // its own mark for one — a half-filled circle. It used to borrow the

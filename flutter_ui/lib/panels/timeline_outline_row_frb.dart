@@ -722,7 +722,7 @@ class _OutlineRowState extends State<OutlineRow> {
   /// leaving fx, 3D and motion blur.
   /// Whether the adjustment cell is drawn on a row of this kind: every
   /// kind that puts something in the Viewer, which is everything except the
-  /// four with no picture of their own.
+  /// kinds with no picture of their own.
   ///
   /// The frontend's half of `Layer::can_adjust`, listed as the kinds that are
   /// *out* rather than the ones that are in, so a new drawing kind gets the
@@ -731,7 +731,8 @@ class _OutlineRowState extends State<OutlineRow> {
       kind != BridgeLayerKind.camera &&
       kind != BridgeLayerKind.light &&
       kind != BridgeLayerKind.nullLayer &&
-      kind != BridgeLayerKind.audio;
+      kind != BridgeLayerKind.audio &&
+      kind != BridgeLayerKind.bus;
 
   Widget _renderCells(
       BuildContext context, BridgeLayerInfo info, double width) {
@@ -767,8 +768,8 @@ class _OutlineRowState extends State<OutlineRow> {
           //
           // **On every row that shows something in the Viewer** — footage,
           // solid, precomp, text, shape, sequence and a layer born an
-          // adjustment. Only the four with no picture to set aside leave it
-          // empty (camera, light, null, audio), and they keep the width so the
+          // adjustment. Only the kinds with no picture to set aside leave it
+          // empty (camera, light, null, audio, bus), and they keep the width so the
           // pickers after it stay in one column. Drawn regardless of the row's
           // own visibility switch: what a layer *is* and whether it is being
           // shown are two answers, and hiding one must not hide the other.

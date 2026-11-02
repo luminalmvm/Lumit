@@ -35,6 +35,7 @@ import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
+import 'api/routes.dart';
 import 'api/script.dart';
 import 'api/shape.dart';
 import 'api/share.dart';
@@ -1234,6 +1235,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSelectorShape dco_decode_bridge_selector_shape(dynamic raw);
 
   @protected
+  BridgeSend dco_decode_bridge_send(dynamic raw);
+
+  @protected
   BridgeSequenceRate dco_decode_bridge_sequence_rate(dynamic raw);
 
   @protected
@@ -1756,6 +1760,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
+
+  @protected
+  List<BridgeSend> dco_decode_list_bridge_send(dynamic raw);
 
   @protected
   List<BridgeShaderGraphNode> dco_decode_list_bridge_shader_graph_node(
@@ -3553,6 +3560,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSend sse_decode_bridge_send(SseDeserializer deserializer);
+
+  @protected
   BridgeSequenceRate sse_decode_bridge_sequence_rate(
       SseDeserializer deserializer);
 
@@ -4183,6 +4193,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<BridgeScalar> sse_decode_list_bridge_scalar(
       SseDeserializer deserializer);
+
+  @protected
+  List<BridgeSend> sse_decode_list_bridge_send(SseDeserializer deserializer);
 
   @protected
   List<BridgeShaderGraphNode> sse_decode_list_bridge_shader_graph_node(
@@ -6163,6 +6176,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSelectorShape self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_send(BridgeSend self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_sequence_rate(
       BridgeSequenceRate self, SseSerializer serializer);
 
@@ -6830,6 +6846,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_scalar(
       List<BridgeScalar> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_send(
+      List<BridgeSend> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_shader_graph_node(
