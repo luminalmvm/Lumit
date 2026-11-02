@@ -346,6 +346,14 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // where it opens by default: doubling the speed and opening the shutter
         // as well turned the picture into porridge.
         "motion_blur" => vec![("samples", f(24.0))],
+        // Faster than real time, held in whole frames and smeared along the
+        // measured motion, so the still shows what the effect adds.
+        "timewarp" => vec![
+            ("speed", f(150.0)),
+            ("method", choice(0)),
+            ("motion_blur", on(true)),
+            ("samples", f(32.0)),
+        ],
         // Thirty-two samples, because the whole claim of this effect is that
         // each one is a real render: too few and the picture is a stack of
         // copies rather than a blur.
