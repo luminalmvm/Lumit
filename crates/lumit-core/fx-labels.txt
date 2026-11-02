@@ -537,6 +537,7 @@ Half
 Halo
 Hard
 Hard colour
+Hard hide
 Hard light
 Hard mix
 Hardness
@@ -695,6 +696,9 @@ Lower left y
 Lower right x
 Lower right y
 Luma
+Luma fade
+Luma hide
+Luma reveal
 Luminance
 Luminance only
 Luminosity

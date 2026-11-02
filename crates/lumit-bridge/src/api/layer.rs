@@ -7697,7 +7697,10 @@ impl LayerReference {
     /// a header row's stopwatch, drag and expression the *same* code as an
     /// effect row's (the shared route, grown its fourth arm).
     #[frb(ignore)]
-    fn instance_home(&self, instance: &EffectInstance) -> Result<InstanceHome, BridgeError> {
+    pub(crate) fn instance_home(
+        &self,
+        instance: &EffectInstance,
+    ) -> Result<InstanceHome, BridgeError> {
         let id = instance.id;
         let layer = self.item()?;
         if layer.effects.iter().any(|e| e.id == id) {

@@ -2818,6 +2818,15 @@ class LayerReference {
   void addStyle({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddStyle(that: this, name: name);
 
+  /// Set `effect` to the `preset`-th of its built-in presets, as one undo
+  /// step. Any keyframes start at comp frame `at_frame`, the playhead.
+  void applyEffectPreset(
+          {required BridgeEffectInstance effect,
+          required int preset,
+          required PlatformInt64 atFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceApplyEffectPreset(
+          that: this, effect: effect, preset: preset, atFrame: atFrame);
+
   /// Ask the render for this layer's mesh before it has a puppet — what
   /// arming a puppet tool does, and what makes the first pin placeable
   /// (docs/impl/puppet.md §5).

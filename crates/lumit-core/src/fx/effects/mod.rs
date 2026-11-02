@@ -78,6 +78,7 @@ pub mod levels;
 pub mod light_wrap;
 pub mod lightning;
 pub mod linear_wipe;
+pub mod luma_fade;
 pub mod lut;
 pub mod matte_key;
 pub mod median;

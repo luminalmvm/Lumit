@@ -38,6 +38,7 @@ mod fx_colour;
 mod fx_distort;
 mod fx_energy;
 mod fx_grid;
+mod fx_luma_fade;
 mod layers;
 mod masks;
 mod props;

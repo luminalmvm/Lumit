@@ -127,6 +127,7 @@ use super::effects::{
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
+    luma_fade::{LumaFade, LumaFadeDef},
     lut::{Lut, LutDef},
     matte_key::{MatteKey, MatteKeyDef},
     median::{Median, MedianDef},
@@ -399,6 +400,7 @@ crate::catalogue![
     VenetianBlindsDef => VenetianBlinds,
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
+    LumaFadeDef => LumaFade,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.

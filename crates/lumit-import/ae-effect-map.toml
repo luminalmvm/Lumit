@@ -439,6 +439,12 @@ lumit = "linear_wipe"
 conversion = "linear_wipe"
 
 [[effect]]
+ae = "ADBE Gradient Wipe"
+name = "Gradient Wipe"
+lumit = "luma_fade"
+conversion = "gradient_wipe"
+
+[[effect]]
 ae = "ADBE Radial Wipe"
 name = "Radial Wipe"
 lumit = "radial_wipe"
