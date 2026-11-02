@@ -600,6 +600,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           Text(
             aspectRatioLabel(_width, _height),
             key: const ValueKey('comp-aspect'),
+            textDirection: TextDirection.ltr,
             style: dialogMono(t),
           ),
         ],

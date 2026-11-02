@@ -835,9 +835,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // pages the way it always did, and above the thumb, whose drag it
       // reproduces exactly (the ratio below is the one the thumb is drawn
       // with).
-      Positioned(
+      PositionedDirectional(
         key: const ValueKey('settings-gutter'),
-        right: _gutterInset,
+        end: _gutterInset,
         top: _gutterEnds,
         bottom: _gutterEnds,
         // As wide as the bar at its widest, under the pointer.

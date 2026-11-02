@@ -1186,7 +1186,9 @@ class _TierMeter extends StatelessWidget {
               // Used only: the budget is in the tooltip and in Settings, and
               // the status line is one line shared with the notices and
               // export.
-              Text('${_mibText(used)} MB', style: t.small.copyWith(color: ink)),
+              Text('${_mibText(used)} MB',
+                  textDirection: TextDirection.ltr,
+                  style: t.small.copyWith(color: ink)),
             ],
           );
         }),

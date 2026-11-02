@@ -143,7 +143,12 @@ class _ColumnSeam extends StatelessWidget {
       cursor: SystemMouseCursors.resizeColumn,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (d) => resize(d.delta.dx),
+        // The seam is on the column's trailing side, its left in a right to
+        // left language.
+        onHorizontalDragUpdate: (d) => resize(
+            Directionality.of(context) == TextDirection.rtl
+                ? -d.delta.dx
+                : d.delta.dx),
         child: SizedBox(
           width: projectRowGap,
           child: Center(

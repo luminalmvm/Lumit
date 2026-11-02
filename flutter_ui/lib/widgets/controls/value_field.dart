@@ -661,6 +661,8 @@ class _DragValueFieldState extends State<DragValueField>
                     // reading loses its sign or its unit on the way into the
                     // field.
                     textAlign: TextAlign.right,
+                    // A number reads left to right in every language.
+                    textDirection: TextDirection.ltr,
                     cursorColor: t.accent,
                     backgroundCursorColor: t.surface2,
                     selectionColor: t.accent.withValues(alpha: 0.5),
@@ -835,6 +837,7 @@ class _DragValueFieldState extends State<DragValueField>
               child: Text(
                 _format(widget.value),
                 textAlign: TextAlign.right,
+                textDirection: TextDirection.ltr,
                 maxLines: 1,
                 softWrap: false,
                 style: _valueStyle(t).copyWith(

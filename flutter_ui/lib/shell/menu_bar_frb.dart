@@ -469,7 +469,9 @@ class _CommandBox extends StatelessWidget {
                 ),
               ),
               if (chord case final chord?)
-                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
+                Text(chord,
+                    textDirection: TextDirection.ltr,
+                    style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
           ),
@@ -2095,7 +2097,9 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
               Padding(
                 padding: const EdgeInsetsDirectional.only(start: 16),
                 child:
-                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+                    Text(chord,
+                        textDirection: TextDirection.ltr,
+                        style: t.small.copyWith(color: t.textMuted)),
               ),
           ]),
         ),
@@ -3215,7 +3219,9 @@ class _MenuListState extends State<_MenuList> {
         else if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
-            child: Text(shortcut, style: t.small.copyWith(color: t.textMuted)),
+            child: Text(shortcut,
+                textDirection: TextDirection.ltr,
+                style: t.small.copyWith(color: t.textMuted)),
           ),
       ],
     );

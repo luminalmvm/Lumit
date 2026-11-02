@@ -521,8 +521,8 @@ Widget dialogGutter(
           child: child,
         ),
       ),
-      Positioned(
-        right: inset,
+      PositionedDirectional(
+        end: inset,
         top: top + ends,
         bottom: ends,
         width: thickness,

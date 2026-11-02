@@ -124,9 +124,7 @@ class LumitAppNew extends StatelessWidget {
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               wireStyle: uiState.workspace.interface.wireStyle,
-              child: Directionality(
-                textDirection: TextDirection.ltr,
-                child: LookFade(
+              child: LookFade(
                   workspace: uiState.workspace,
                   child: _RoomPicture(
                   child: ColoredBox(
@@ -156,7 +154,6 @@ class LumitAppNew extends StatelessWidget {
                 ),
                 ),
                 ),
-              ),
             ),
           ),
         ),
@@ -586,7 +583,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!rail) const LumitToolBarFrb(),
         Expanded(
           child: rail
-              ? Row(children: [
+              ? Row(textDirection: TextDirection.ltr, children: [
                   const LumitToolRailFrb(),
                   Expanded(child: dock),
                 ])
