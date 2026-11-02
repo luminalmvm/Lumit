@@ -13,7 +13,6 @@ import {
   AudioSampleSource,
   BlobSource,
   BufferTarget,
-  CanvasSink,
   EncodedPacketSink,
   Input,
   Mp4OutputFormat,
@@ -21,6 +20,7 @@ import {
   QUALITY_HIGH,
   StreamTarget,
   VideoSample,
+  VideoSampleSink,
   VideoSampleSource,
   WebMOutputFormat,
   canEncodeAudio,
@@ -147,7 +147,16 @@ async function open(file) {
   if (audio) {
     wasm_bindgen.lumit_web_sound(path, probe.audio.sample_rate, await stereo(audio));
   }
-  files.set(path, { video, runs: new Map() });
+  // Where each keyframe starts, in seconds, so a run starts exactly on one.
+  const keyTimes = stamps.filter((_, i) => keys[i]).map((stamp) => stamp / ticks);
+  // Decoded on the processor where it can be: each frame is read back as
+  // bytes, which costs the page a third of what a frame on the graphics card
+  // does.
+  const soft = video && (await VideoDecoder.isConfigSupported({
+    ...(await video.getDecoderConfig()), hardwareAcceleration: 'prefer-software',
+  })).supported;
+  const accel = soft ? 'prefer-software' : 'no-preference';
+  files.set(path, { video, keyTimes, accel, runs: new Map() });
   return path;
 }
 
@@ -184,10 +193,28 @@ async function decodeWaiting() {
   }
 }
 
-function land(wanted, canvas) {
-  const pixels = canvas.getContext('2d').getImageData(0, 0, wanted.width, wanted.height).data;
-  wasm_bindgen.lumit_web_frame(wanted.path, wanted.frame, wanted.width, wanted.height,
-    new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength));
+// The frame as RGBA at the size wanted. The browser converts it on the way
+// out when it is already that size, and a canvas scales it otherwise.
+async function rgbaOf(sample, run, width, height) {
+  if (sample.displayWidth === width && sample.displayHeight === height && !sample.rotation) {
+    const rgba = new Uint8Array(width * height * 4);
+    try {
+      await sample.copyTo(rgba, { format: 'RGBA' });
+      return rgba;
+    } catch {
+      // This browser can't convert it: draw it instead.
+    }
+  }
+  run.canvas ??= new OffscreenCanvas(width, height);
+  const context = run.canvas.getContext('2d');
+  sample.drawWithFit(context, { fit: 'fill' });
+  const { data } = context.getImageData(0, 0, width, height);
+  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+}
+
+async function land(wanted, sample, run) {
+  const rgba = await rgbaOf(sample, run, wanted.width, wanted.height);
+  wasm_bindgen.lumit_web_frame(wanted.path, wanted.frame, wanted.width, wanted.height, rgba);
 }
 
 // Decode on from where this file was last decoded at this size when the
@@ -197,30 +224,41 @@ async function decode(file, wanted) {
   const size = `${wanted.width}x${wanted.height}`;
   let run = file.runs.get(size);
   if (!run || wanted.at < run.at || wanted.at > run.at + REACH_SECONDS) {
-    await run?.frames.return();
-    const sink = run?.sink ?? new CanvasSink(file.video, {
-      width: wanted.width, height: wanted.height, fit: 'fill',
-    });
-    run = { sink, frames: sink.canvases(wanted.at), at: -Infinity, last: null };
+    await run?.samples.return();
+    run?.last?.close();
+    const key = file.keyTimes.findLast((t) => t <= wanted.at) ?? 0;
+    run = {
+      sink: run?.sink ?? new VideoSampleSink(file.video, { hardwareAcceleration: file.accel }),
+      canvas: run?.canvas,
+      at: -Infinity,
+      last: null,
+    };
+    run.samples = run.sink.samples(key);
     file.runs.set(size, run);
   }
+  if (run.last && wanted.at < run.last.timestamp + run.last.duration) {
+    await land(wanted, run.last, run);
+    return;
+  }
   for (;;) {
-    const { value, done } = await run.frames.next();
+    const { value, done } = await run.samples.next();
     if (done) {
       file.runs.delete(size);
-      if (run.last) land(wanted, run.last);
+      if (run.last) await land(wanted, run.last, run);
+      run.last?.close();
       return;
     }
+    run.last?.close();
     run.at = value.timestamp;
-    run.last = value.canvas;
+    run.last = value;
     const end = value.timestamp + value.duration;
     if (wanted.at < end) {
-      land(wanted, value.canvas);
+      await land(wanted, value, run);
       return;
     }
     const passed = waiting.findIndex((w) => w.path === wanted.path && w.width === wanted.width
       && w.height === wanted.height && w.at >= value.timestamp && w.at < end);
-    if (passed >= 0) land(waiting.splice(passed, 1)[0], value.canvas);
+    if (passed >= 0) await land(waiting.splice(passed, 1)[0], value, run);
   }
 }
 

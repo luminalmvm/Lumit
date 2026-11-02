@@ -56,3 +56,6 @@ assets/brand/stable-icon.*
 
 # The bridge built for the browser (scripts/build-web.ps1).
 /web/pkg/
+
+# Wrangler's own files from a deploy.
+/.wrangler/

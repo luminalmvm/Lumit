@@ -409,7 +409,7 @@ fn shared_pool_evictions(entries: &[(u32, u32, u32)]) -> Vec<usize> {
 
 /// One frame's decoded per-layer pixels, kept alongside the decode plan that
 /// asked for them, so the next render can tell at a glance whether it needs new
-/// ones ([`crate::plan::same_decode`]).
+/// ones ([`crate::plan::same_decode`]). No plan is kept for a stand-in's pixels.
 struct Retained {
     comp: Uuid,
     frame: u64,
@@ -1433,6 +1433,7 @@ impl HeadlessRenderer {
         );
         if !reusable {
             let total = jobs.len() as u32;
+            let stood_in = lumit_media::stand_ins();
             let pixels = self
                 .pool
                 .decode_comp(comp_id, frame as usize, &jobs, 0, &|done| {
@@ -1444,7 +1445,11 @@ impl HeadlessRenderer {
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,
-                jobs,
+                jobs: if lumit_media::stand_ins() == stood_in {
+                    jobs
+                } else {
+                    Vec::new()
+                },
                 pixels,
             });
         }
@@ -2006,14 +2011,6 @@ impl HeadlessRenderer {
             done.target_width,
             done.decoded,
         );
-    }
-
-    /// Forget the retained per-layer pixels. The next [`Self::render_preview`]
-    /// decodes afresh. Called when something outside the document changes what
-    /// the sources *are* — a probe landing, a relink — since the decode plan
-    /// alone cannot see that.
-    pub fn forget_retained(&mut self) {
-        self.retained = None;
     }
 
     /// The decoded-frame cache's bytes and how many decoders are open — see

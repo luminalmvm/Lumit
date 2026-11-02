@@ -23,6 +23,20 @@ pub(crate) fn pause(wait: Duration) {
     });
 }
 
+/// Let a `wait` too short to sleep go by: spun on the desktop, where a sleep
+/// is only as fine as the system timer, and a pause in the browser build.
+pub(crate) fn spin(wait: Duration) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let due = web_time::Instant::now() + wait;
+        while web_time::Instant::now() < due {
+            std::hint::spin_loop();
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    pause(wait);
+}
+
 /// A moment `ago` before now, or now itself when the clock has not run that
 /// long. A page's clock starts when the page loads.
 pub(crate) fn long_ago(ago: Duration) -> web_time::Instant {
@@ -150,21 +164,49 @@ mod web {
     thread_local! {
         /// Every running worker, one per open project.
         pub(super) static TURNS: RefCell<Vec<Turn>> = const { RefCell::new(Vec::new()) };
-        /// The shortest wait asked for during this round of turns.
+        /// The shortest wait the worker taking its turn has asked for.
         pub(super) static NEXT: Cell<Option<Duration>> = const { Cell::new(None) };
-        /// When the timer set is due, on the page's clock, if one is set.
-        static DUE: Cell<Option<f64>> = const { Cell::new(None) };
+        /// When the next round is due, on the page's clock, and the handle
+        /// of its timer when it has one. Only ever one, or each wake would
+        /// start another.
+        static DUE: Cell<Option<(f64, Option<i32>)>> = const { Cell::new(None) };
         static TICK: Closure<dyn FnMut()> = Closure::new(round);
+        /// Where a round wanted now is posted. Browsers hold a timer back at
+        /// least 4 ms once they nest, which is a quarter of a frame at 60.
+        static NOW: Option<web_sys::MessageChannel> = {
+            let channel = web_sys::MessageChannel::new().ok();
+            if let Some(channel) = &channel {
+                let tick = TICK.with(|tick| tick.as_ref().clone());
+                channel.port1().set_onmessage(Some(tick.unchecked_ref()));
+            }
+            channel
+        };
     }
 
-    // ponytail: setTimeout, which browsers hold to 4 ms once nested. A
-    // MessageChannel would make wake() sooner if that ever shows.
     pub(super) fn schedule(after_ms: f64) {
         let Some(window) = web_sys::window() else {
             return;
         };
         let now = window.performance().map_or(0.0, |p| p.now());
-        if DUE.with(|due| due.get().is_some_and(|due| due <= now + after_ms)) {
+        if let Some((due, timer)) = DUE.with(Cell::get) {
+            if due <= now + after_ms {
+                return;
+            }
+            if let Some(timer) = timer {
+                window.clear_timeout_with_handle(timer);
+            }
+        }
+        let posted = after_ms < 1.0
+            && NOW.with(|channel| {
+                channel.as_ref().is_some_and(|channel| {
+                    channel
+                        .port2()
+                        .post_message(&wasm_bindgen::JsValue::NULL)
+                        .is_ok()
+                })
+            });
+        if posted {
+            DUE.with(|due| due.set(Some((now, None))));
             return;
         }
         let set = TICK.with(|tick| {
@@ -173,19 +215,29 @@ mod web {
                 after_ms.max(0.0) as i32,
             )
         });
-        if set.is_ok() {
-            DUE.with(|due| due.set(Some(now + after_ms)));
+        if let Ok(timer) = set {
+            DUE.with(|due| due.set(Some((now + after_ms, Some(timer)))));
         }
     }
 
     /// One turn of every worker, then the timer set for the soonest wait.
     fn round() {
         DUE.with(|due| due.set(None));
-        NEXT.with(|next| next.set(None));
         // Taken out while they run, so a turn that starts another worker or
         // wakes this one finds the list free.
         let mut turns = TURNS.with(|turns| std::mem::take(&mut *turns.borrow_mut()));
-        turns.retain_mut(|turn| turn());
+        let mut soonest = None::<Duration>;
+        turns.retain_mut(|turn| {
+            NEXT.with(|next| next.set(None));
+            let going = turn();
+            // A worker that asked for no wait wants its next turn now, however
+            // long another is content to wait.
+            let wait = NEXT.with(|next| next.get()).unwrap_or_default();
+            if going {
+                soonest = Some(soonest.map_or(wait, |had| had.min(wait)));
+            }
+            going
+        });
         TURNS.with(|now| {
             let mut now = now.borrow_mut();
             turns.append(&mut now);
@@ -194,7 +246,6 @@ mod web {
         if TURNS.with(|turns| turns.borrow().is_empty()) {
             return;
         }
-        let wait = NEXT.with(|next| next.get()).unwrap_or_default();
-        schedule(wait.as_secs_f64() * 1000.0);
+        schedule(soonest.unwrap_or_default().as_secs_f64() * 1000.0);
     }
 }

@@ -1899,7 +1899,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         }
         // Any request stops the fill's frame, which is made again next turn.
         let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
-        let stood_in = lumit_gpu::device::read_stand_ins();
+        let stood_in = lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins();
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
@@ -1908,9 +1908,9 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
         }
-        // In the browser build a frame drawn from an earlier frame's read-back
-        // is never kept, so filling would make it again and again.
-        if lumit_gpu::device::read_stand_ins() != stood_in {
+        // In the browser build a frame drawn from an earlier frame's read-back, or
+        // in place of footage still on its way, is never kept: wait for a landing.
+        if lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins() != stood_in {
             state.fill_exhausted = true;
         }
         return;
@@ -3874,6 +3874,10 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // bakes inside the frame. One drawn with the lens before it is
                 // not kept, and making it again on the next lap stops the sound.
                 let exact = matches!(playback.mode, BridgePlaybackMode::EveryFrame);
+                #[cfg(target_arch = "wasm32")]
+                if web::footage_waits(state, &document, comp_id, frame, quality) {
+                    return;
+                }
                 if exact {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
@@ -3956,15 +3960,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         if wait > SPIN {
             crate::turns::pause((wait - SPIN).min(std::time::Duration::from_millis(4)));
         } else {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let due = web_time::Instant::now() + wait;
-                while web_time::Instant::now() < due {
-                    std::hint::spin_loop();
-                }
-            }
-            #[cfg(target_arch = "wasm32")]
-            crate::turns::pause(wait);
+            crate::turns::spin(wait);
         }
     }
 }

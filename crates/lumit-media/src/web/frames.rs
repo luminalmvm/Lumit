@@ -27,7 +27,8 @@ type Key = (PathBuf, usize, u32);
 #[derive(Default)]
 struct Store {
     frames: BTreeMap<Key, DecodedFrame>,
-    /// Oldest first, which is the order they go in when the budget is spent.
+    /// Longest since it landed or playback asked for it first, which is the
+    /// order they go in when the budget is spent.
     order: VecDeque<Key>,
     bytes: usize,
 }
@@ -146,6 +147,21 @@ fn held(path: &Path, want: &Want) -> Option<DecodedFrame> {
     })
 }
 
+/// Whether the frame is here, moved to the back of the queue to go if it is:
+/// playback is about to show it.
+fn keep(path: &Path, want: &Want) -> bool {
+    STORE.with(|store| {
+        let mut store = store.borrow_mut();
+        let key = (path.to_path_buf(), want.raw, want.width);
+        let here = store.frames.contains_key(&key);
+        if here {
+            store.order.retain(|held| held != &key);
+            store.order.push_back(key);
+        }
+        here
+    })
+}
+
 fn ask(path: &Path, want: &Want, ahead: bool) {
     let path = path.to_string_lossy();
     let _ = page_want(&path, want.raw, want.at, want.width, want.height, ahead);
@@ -209,8 +225,8 @@ impl Video {
 }
 
 /// Ask the page for a frame playback is about to show, behind any a render
-/// is waiting on.
-pub fn ahead(src: &MediaSource, n: usize, target_width: Option<u32>) {
+/// is waiting on. True when it is here already.
+pub fn ahead(src: &MediaSource, n: usize, target_width: Option<u32>) -> bool {
     let want = super::with(src.on_disk(), |held| {
         let video = held.probe.video.as_ref()?;
         want_of(
@@ -222,9 +238,14 @@ pub fn ahead(src: &MediaSource, n: usize, target_width: Option<u32>) {
         )
     })
     .flatten();
-    if let Some(want) = want.filter(|want| held(src.on_disk(), want).is_none()) {
+    let Some(want) = want else {
+        return true;
+    };
+    let here = keep(src.on_disk(), &want);
+    if !here {
         ask(src.on_disk(), &want, true);
     }
+    here
 }
 
 impl VideoDecoder {

@@ -1,4 +1,4 @@
-//! The Scopes and the dropper in the browser build.
+//! The Scopes, the dropper and playback's footage in the browser build.
 //!
 //! A copy off the card lands only once the page's event loop has run, which is
 //! after the turn that asked for it. So here a trace or a dropper read starts
@@ -320,4 +320,40 @@ pub(super) fn sample_pixels(
         Err(err) => note!("Dropper render failed: {err}"),
     }
     Ok(())
+}
+
+/// Whether playback holds `frame` back for footage the page is still
+/// decoding: it is asked for, and drawn once it lands or the clock reaches
+/// it, whichever is first. A stand-in drawn early would be shown in its place.
+/// A frame a tier holds needs no footage.
+pub(super) fn footage_waits(
+    state: &mut WorkerState,
+    document: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    quality: lumit_render::plan::Quality,
+) -> bool {
+    let bgra = super::zero_copy_wants_bgra();
+    let name = state.renderer.frame_key(document, comp, frame, quality);
+    if name.is_some_and(|key| super::held_in_a_tier(&state.renderer, &state.disk, key, bgra)) {
+        return false;
+    }
+    let wants = state
+        .renderer
+        .prefetch_wants(document, comp, frame, quality);
+    // Every want is asked for, not just the first missing one.
+    let landed = wants.iter().fold(true, |all, want| {
+        lumit_media::web::frames::ahead(&want.source, want.frame, want.target_width) && all
+    });
+    let Some(playback) = state.playback.as_mut() else {
+        return false;
+    };
+    if landed || playback.clock_reached(frame) {
+        return false;
+    }
+    // Back to be rendered again next turn. A landing wakes the worker.
+    playback.next = frame;
+    playback.ended = false;
+    crate::turns::pause(std::time::Duration::from_millis(4));
+    true
 }

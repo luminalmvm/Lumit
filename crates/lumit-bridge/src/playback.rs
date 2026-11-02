@@ -25,8 +25,9 @@ const COST_WINDOW: usize = 32;
 /// How many frames past the one being rendered have their source decodes
 /// posted to the decode-ahead thread. Enough to keep that thread busy through
 /// one composite; more would just fill the decoded-frame cache further ahead
-/// than the ring ever presents.
-pub(crate) const PREFETCH_AHEAD: u64 = 4;
+/// than the ring ever presents. The browser build's page decodes between the
+/// worker's turns and in bursts, so it is asked further ahead.
+pub(crate) const PREFETCH_AHEAD: u64 = if cfg!(target_arch = "wasm32") { 12 } else { 4 };
 
 /// The frames whose edit points playback should ask about now, as "after this
 /// one, up to and including that one": the clips starting in there have their
