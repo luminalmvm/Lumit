@@ -25,6 +25,8 @@ const BLEND_CORE: &str = include_str!("../src/fx_blend_core.wgsl");
 const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
 /// The light maths planes and models share, exactly as both prepend it.
 const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
+/// What the casters let through, prepended to everything that reads it.
+const SHADOW_CORE: &str = include_str!("../src/shadow_core.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -58,6 +60,7 @@ fn every_wgsl_kernel_parses_and_validates() {
             || name == "ocio_sample.wgsl"
             || name == "fx_blend_core.wgsl"
             || name == "light_core.wgsl"
+            || name == "shadow_core.wgsl"
         {
             continue;
         }
@@ -84,6 +87,11 @@ fn every_wgsl_kernel_parses_and_validates() {
         // The blend modes' maths, prepended to the two kernels that call it.
         let source = if source.contains("blend_pixel(") {
             format!("{BLEND_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("transmitted(") {
+            format!("{SHADOW_CORE}{source}")
         } else {
             source
         };

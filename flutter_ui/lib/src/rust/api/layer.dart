@@ -1648,19 +1648,22 @@ class BridgeMaterialChannels {
           lightTransmission == other.lightTransmission;
 }
 
-/// Whether a layer casts and accepts shadows, one op
+/// Whether a layer casts and accepts shadows and is a holdout, one op
 /// ([`lumit_core::model::MaterialSettings`]).
 class BridgeMaterialSettings {
   final BridgeShadowMode castsShadows;
   final BridgeShadowMode acceptsShadows;
+  final bool holdout;
 
   const BridgeMaterialSettings({
     required this.castsShadows,
     required this.acceptsShadows,
+    required this.holdout,
   });
 
   @override
-  int get hashCode => castsShadows.hashCode ^ acceptsShadows.hashCode;
+  int get hashCode =>
+      castsShadows.hashCode ^ acceptsShadows.hashCode ^ holdout.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1668,7 +1671,8 @@ class BridgeMaterialSettings {
       other is BridgeMaterialSettings &&
           runtimeType == other.runtimeType &&
           castsShadows == other.castsShadows &&
-          acceptsShadows == other.acceptsShadows;
+          acceptsShadows == other.acceptsShadows &&
+          holdout == other.holdout;
 }
 
 /// A layer used as another layer's matte (docs/03 §5.1).

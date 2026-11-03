@@ -19,13 +19,14 @@ enum LayerSetting {
   lightCastsShadows,
   castsShadows,
   acceptsShadows,
+  holdout,
   acceptsLights;
 
   /// The heading the row sits under.
   TransformSection get section => switch (this) {
         lightType || lightFalloff || lightCastsShadows =>
           TransformSection.light,
-        castsShadows || acceptsShadows || acceptsLights =>
+        castsShadows || acceptsShadows || holdout || acceptsLights =>
           TransformSection.material,
       };
 
@@ -34,6 +35,7 @@ enum LayerSetting {
         lightFalloff => l10n.lightFalloff,
         lightCastsShadows || castsShadows => l10n.castsShadows,
         acceptsShadows => l10n.acceptsShadows,
+        holdout => l10n.holdout,
         acceptsLights => l10n.switchAcceptsLights,
       };
 }
@@ -53,6 +55,7 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
 const BridgeMaterialSettings plainMaterial = BridgeMaterialSettings(
   castsShadows: BridgeShadowMode.off,
   acceptsShadows: BridgeShadowMode.on_,
+  holdout: false,
 );
 
 /// The choice rows a layer shows, in order.
@@ -69,12 +72,9 @@ List<LayerSetting> layerSettings({
       if (threeD &&
           kind != BridgeLayerKind.camera &&
           kind != BridgeLayerKind.nullLayer) ...[
-        // ponytail: a model neither casts nor takes shadows until the
-        // shadows item makes it, so it doesn't show the switches.
-        if (kind != BridgeLayerKind.model) ...[
-          LayerSetting.castsShadows,
-          LayerSetting.acceptsShadows,
-        ],
+        LayerSetting.castsShadows,
+        LayerSetting.acceptsShadows,
+        if (kind == BridgeLayerKind.model) LayerSetting.holdout,
         LayerSetting.acceptsLights,
       ],
     ];
@@ -169,11 +169,13 @@ class LayerSettingRowFrb extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final s = light ?? plainLight;
     final m = material ?? plainMaterial;
-    void shadows({BridgeShadowMode? casts, BridgeShadowMode? accepts}) {
+    void shadows(
+        {BridgeShadowMode? casts, BridgeShadowMode? accepts, bool? holdout}) {
       layer.setMaterialSettings(
         settings: BridgeMaterialSettings(
           castsShadows: casts ?? m.castsShadows,
           acceptsShadows: accepts ?? m.acceptsShadows,
+          holdout: holdout ?? m.holdout,
         ),
       );
       onChanged();
@@ -225,6 +227,14 @@ class LayerSettingRowFrb extends StatelessWidget {
           options: BridgeShadowMode.values,
           label: shadowModeLabel,
           onChanged: (v) => shadows(accepts: v),
+        ),
+      LayerSetting.holdout => Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: HouseCheckbox(
+            key: key,
+            value: m.holdout,
+            onChanged: (on) => shadows(holdout: on),
+          ),
         ),
       // The same switch as the layer's right-click item, one op a click.
       LayerSetting.acceptsLights => Align(

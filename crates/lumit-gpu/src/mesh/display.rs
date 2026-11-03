@@ -39,6 +39,13 @@ impl ModelDisplay {
         self.shading as u8 * 2 + u8::from(self.faces)
     }
 
+    /// Whether it takes shadows at all: only as it exports, as the other
+    /// looks are for seeing the model itself.
+    #[must_use]
+    pub fn takes_shadows(self) -> bool {
+        self.shading == Shading::Final
+    }
+
     pub(super) fn draws_faces(self) -> bool {
         self.shading != Shading::Wireframe
     }

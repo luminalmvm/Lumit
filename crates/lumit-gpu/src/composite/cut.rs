@@ -99,9 +99,13 @@ impl Compositor {
                     near,
                     metres_per_w,
                 ];
-                let flags = [f32::from(u8::from(clear)), 0.0, 0.0, 0.0];
+                let holdout = f32::from(u8::from(model.holdout));
+                let flags = [f32::from(u8::from(clear)), holdout, 0.0, 0.0];
                 let matrix = self.full_frame_matrix(width, height, None);
-                return (true, self.join_group(ctx, model, matrix, params, flags));
+                return (
+                    true,
+                    self.join_group(ctx, model, matrix, params, flags, None),
+                );
             }
             let uniform = LayerUniform {
                 matrix: layer
@@ -385,21 +389,25 @@ impl Compositor {
         };
         // Snapshot of the accumulation for shader-computed blends: one
         // per-frame scratch, copied into just before each such layer draws.
+        // A holdout's plate is another, copied as its run starts.
         let needs_snapshot = layers.iter().any(|l| l.blend.uses_snapshot());
-        let snapshot = needs_snapshot.then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("comp-dst-snapshot"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
+        let holdouts = models.iter().any(|m| m.holdout);
+        let [snapshot, plate] = [needs_snapshot, holdouts].map(|needed| {
+            needed.then(|| {
+                ctx.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("comp-dst-snapshot"),
+                    size: wgpu::Extent3d {
+                        width: tw,
+                        height: th,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: ctx.working(),
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                })
             })
         });
 
@@ -707,7 +715,9 @@ impl Compositor {
                     };
                     let params = [(l.opacity / 100.0).clamp(0.0, 1.0), z, 0.0, 0.0];
                     let matrix = self.full_frame_matrix(width, height, region);
-                    Some(self.join_group(ctx, model, matrix, params, [0.0; 4]))
+                    let flags = [0.0, f32::from(u8::from(model.holdout)), 0.0, 0.0];
+                    let under = plate.as_ref().filter(|_| model.holdout);
+                    Some(self.join_group(ctx, model, matrix, params, flags, under))
                 })
                 .collect(),
             None => Vec::new(),
@@ -725,13 +735,26 @@ impl Compositor {
                     picture_of[before] == picture_of[idx] && before != idx
                 })
         };
+        // The first draw of a run with a holdout, where what is under the run
+        // is kept for it.
+        let plate_at = |k: usize| {
+            let run = draws[k].2;
+            run.is_some()
+                && (k == 0 || draws[k - 1].2 != run)
+                && draws.iter().any(|&(j, _, r)| {
+                    r == run
+                        && models
+                            .iter()
+                            .any(|m| m.holdout && &m.colour == layers[j].texture)
+                })
+        };
         let mut cleared: Option<usize> = None;
         let mut first_pass = seed.is_none();
         let mut k = 0usize;
         while k < draws.len() {
             let run = draws[k].2;
-            if snaps(k) {
-                if let Some(snap) = &snapshot {
+            for (wanted, into) in [(snaps(k), &snapshot), (plate_at(k), &plate)] {
+                if let (true, Some(snap)) = (wanted, into) {
                     if first_pass {
                         // Materialise the background before snapshotting. With
                         // MSAA this pass resolves too, so the snapshot copy
@@ -798,11 +821,14 @@ impl Compositor {
                 first_pass = false;
                 for &(idx, go, _) in &draws[k..end] {
                     if let (Some(Some(group)), Some(j)) = (joined.get(idx), &joins) {
+                        let holdout = model_of(&layers[idx]).is_some_and(|m| m.holdout);
                         rpass.set_pipeline(
-                            &j[match go {
-                                Go::Depth => 0,
-                                Go::Front => 1,
-                                _ => 2,
+                            &j[match (go, holdout) {
+                                (Go::Depth, _) => 0,
+                                (Go::Front, false) => 1,
+                                (Go::Front, true) => 5,
+                                (_, false) => 2,
+                                (_, true) => 6,
                             }],
                         );
                         rpass.set_bind_group(0, group, &[]);

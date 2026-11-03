@@ -18,9 +18,11 @@ use crate::draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw,
 };
 use order::{draw_order, runs_of};
+use shadows::{casts_shadows, shadow_only};
 
 mod order;
 mod picture;
+mod shadows;
 
 pub(crate) mod dof;
 pub(crate) mod scene;
@@ -2150,6 +2152,10 @@ impl Realiser<'_> {
         // A shadow needs every caster's picture before anything is lit, so
         // where this segment has one, the lighting waits for the whole list.
         let shadowed = casts_shadows(layers);
+        let maps = self.shadow_maps(layers, haze);
+        // There, a model is drawn after the 3D layers, whose casters it takes.
+        let order = shadows::models_last(layers, shadowed);
+        let mut early = None;
         let mut waiting = Vec::new();
         // Each model's depth, by its place in the list.
         let mut model_depths = Vec::new();
@@ -2158,7 +2164,8 @@ impl Realiser<'_> {
         let (seen, mut made) = self.scene_frame(camera, (width, height), layers);
         let mut scene_depths = Vec::with_capacity(layers.len());
         let mut emitters = Vec::new();
-        for (i, l) in layers.iter().enumerate() {
+        for &i in &order {
+            let l = &layers[i];
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
             // that follows is one pass over the whole segment rather than a
@@ -2171,15 +2178,27 @@ impl Realiser<'_> {
                 .map(|frame| scene::Seen::enter(frame, l));
             let (mut tex, mut grow, model_depth) = match made.get_mut(i).and_then(Option::take) {
                 Some(made) => made,
-                None => self.layer_picture(l, camera, (width, height), &mut fx_ms),
+                None => {
+                    let model = matches!(l.source, DrawSource::Model(_));
+                    let casters = (shadowed && model).then(|| {
+                        let (sets, each) = early.get_or_insert_with(|| {
+                            let so_far = (&order[..], &linear_textures[..], &grown[..]);
+                            self.casters_so_far(layers, so_far, (width, height), eye)
+                        });
+                        each[i].0.and_then(|k| sets.get(k))
+                    });
+                    let shadows = (casters.flatten(), maps.as_ref());
+                    self.layer_picture(l, camera, (width, height), shadows, &mut fx_ms)
+                }
             };
             drop(entered);
             if let Some(depth) = model_depth {
-                model_depths.push((linear_textures.len(), depth));
+                let holdout = matches!(&l.source, DrawSource::Model(m) if m.holds_out());
+                model_depths.push((linear_textures.len(), depth, holdout));
             }
             let claimed = scene::claim(l).map(|(depth, emitter)| {
                 emitters.push((linear_textures.len(), emitter));
-                model_depths.push((linear_textures.len(), depth.clone()));
+                model_depths.push((linear_textures.len(), depth.clone(), false));
                 depth
             });
             if shadowed {
@@ -2198,8 +2217,7 @@ impl Realiser<'_> {
                     tex,
                     eye,
                     camera,
-                    None,
-                    None,
+                    (None, None, None),
                     grow,
                     (width, height),
                     claimed.as_ref(),
@@ -2214,9 +2232,19 @@ impl Realiser<'_> {
             linear_textures.push(tex);
             scene_depths.push(claimed);
         }
+        linear_textures = shadows::unpermute(linear_textures, &order);
+        grown = shadows::unpermute(grown, &order);
+        let waiting = shadows::unpermute(waiting, &order);
+        let scene_depths = shadows::unpermute(scene_depths, &order);
+        let model_depths = model_depths
+            .into_iter()
+            .map(|(k, d, h)| (order[k], d, h))
+            .collect();
+        let emitters: Vec<_> = emitters.into_iter().map(|(k, e)| (order[k], e)).collect();
         if shadowed {
-            let (sets, each) =
-                self.shadow_casters(layers, &linear_textures, &grown, width, height, eye);
+            let (sets, each) = early.unwrap_or_else(|| {
+                self.shadow_casters(layers, &linear_textures, &grown, width, height, eye)
+            });
             let lit: Vec<_> = linear_textures
                 .into_iter()
                 .zip(layers)
@@ -2234,8 +2262,7 @@ impl Realiser<'_> {
                             tex,
                             eye,
                             camera,
-                            casters,
-                            own,
+                            (casters, own, maps.as_ref()),
                             *grow,
                             size,
                             depth.as_ref(),
@@ -2570,7 +2597,7 @@ impl Realiser<'_> {
             haze,
             (layers, &linear_textures, &grown),
             &comp_layers[..split],
-            &models,
+            (&models, maps.as_ref()),
             camera,
             (width, height),
         );
@@ -2608,11 +2635,12 @@ impl Realiser<'_> {
     /// A finished layer lit by the comp's lights (docs/06) and then blurred by
     /// the camera's depth of field (docs/impl/camera.md §5), each only where
     /// it applies, so a comp with neither renders byte-for-byte as before.
-    /// `casters` are the segment's shadows and `own` this layer's square
-    /// among them; `grow` is how much its effects grew it and `size` the
-    /// comp's, which the depth of field reads. Hands back the picture, how much
-    /// it has grown now, and the lit picture before the blur with its own grow
-    /// when it was blurred. Particles in the scene come with their `depth`.
+    /// `casters` are the segment's shadows, `own` this layer's square
+    /// among them and `maps` the models' shadows; `grow` is how much its
+    /// effects grew it and `size` the comp's, which the depth of field reads.
+    /// Hands back the picture, how much it has grown now, and the lit picture
+    /// before the blur with its own grow when it was blurred. Particles in
+    /// the scene come with their `depth`.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn lit(
         &self,
@@ -2620,8 +2648,11 @@ impl Realiser<'_> {
         mut tex: wgpu::Texture,
         eye: [f32; 3],
         camera: Option<lumit_core::model::CameraPose>,
-        casters: Option<&lumit_gpu::fx::lighting::ShadowCasters>,
-        own: Option<usize>,
+        (casters, own, maps): (
+            Option<&lumit_gpu::fx::lighting::ShadowCasters>,
+            Option<usize>,
+            Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+        ),
         grow: (f32, f32),
         size: (u32, u32),
         depth: Option<&wgpu::Texture>,
@@ -2649,12 +2680,19 @@ impl Realiser<'_> {
         // and so has to be cleared.
         let unshaded = l.material.unlit
             && casters.is_none()
+            && maps.is_none()
             && l.material.accepts_shadows != lumit_gpu::fx::lighting::LightingShadows::Only;
         if let Some(mut op) = lighting_op(l, tex.width(), tex.height(), eye).filter(|_| !unshaded) {
             op.own_caster = own;
-            tex = self
-                .fx
-                .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op, casters);
+            tex = self.fx.lighting(
+                &self.ctx,
+                &tex,
+                tex.width(),
+                tex.height(),
+                &op,
+                casters,
+                maps,
+            );
         }
         // Depth of field (docs/impl/camera.md §5): each part of a 3D layer
         // off the camera's focus plane is blurred by its own circle of
@@ -2676,79 +2714,6 @@ impl Realiser<'_> {
             grow.1 * h as f32 / tex.height() as f32,
         );
         (blurred, wider, Some((tex, grow)))
-    }
-
-    /// Each layer's shadows: which run of 3D layers' casters it takes, and its
-    /// own place among them. A 2D layer ends a run, as in After Effects, so
-    /// the layers either side of one don't shade each other. The runs share
-    /// the frame's budget for their squares.
-    #[allow(clippy::type_complexity)]
-    fn shadow_casters(
-        &self,
-        layers: &[CompLayerDraw],
-        textures: &[wgpu::Texture],
-        grown: &[(f32, f32)],
-        width: u32,
-        height: u32,
-        eye: [f32; 3],
-    ) -> (
-        Vec<lumit_gpu::fx::lighting::ShadowCasters>,
-        Vec<(Option<usize>, Option<usize>)>,
-    ) {
-        let mut plans = Vec::new();
-        let mut start = 0;
-        while start < layers.len() {
-            let end = (start..layers.len())
-                .find(|&i| !layers[i].three_d || layers[i].ends_run)
-                .unwrap_or(layers.len());
-            let run = start..end;
-            if let Some(plan) = run_plan(
-                &layers[run.clone()],
-                &textures[run.clone()],
-                &grown[run],
-                eye,
-            ) {
-                plans.push((start, plan));
-            }
-            start = end + 1;
-        }
-        let share = SHADOW_BUDGET / plans.len().max(1) as u64;
-        let frame = width.max(height).max(64).next_power_of_two();
-        let mut sets = Vec::new();
-        let mut each = vec![(None, None); layers.len()];
-        // ponytail: made again every frame. Keep a run's squares while its
-        // casters' pictures and places hold still if they show in a profile.
-        for (start, plan) in plans {
-            let casters: Vec<(&wgpu::Texture, lumit_gpu::fx::lighting::CasterPlane)> = plan
-                .kept
-                .iter()
-                .map(|&(i, p)| (&textures[start + i], p))
-                .collect();
-            let longest = casters
-                .iter()
-                .map(|(t, _)| t.width().max(t.height()))
-                .max()
-                .unwrap_or(0);
-            // The picture fills three quarters of its square at most.
-            let mut size = (longest.saturating_mul(4) / 3)
-                .max(64)
-                .next_power_of_two()
-                .min(frame);
-            while size > 64 && u64::from(size).pow(2) * 4 * 4 / 3 * casters.len() as u64 > share {
-                size /= 2;
-            }
-            let Some(set) =
-                self.fx
-                    .shadow_casters(&self.ctx, &casters, size, plan.encoded, plan.spread)
-            else {
-                continue;
-            };
-            for (k, own) in plan.own.into_iter().enumerate() {
-                each[start + k] = (Some(sets.len()), own);
-            }
-            sets.push(set);
-        }
-        (sets, each)
     }
 
     /// How far the 3D in `layers` is from the camera `cam` at each pixel, as
@@ -3013,125 +2978,6 @@ fn straight_to_composite(l: &CompLayerDraw, camera: Option<lumit_core::model::Ca
         && l.mb.is_empty()
         && !(l.three_d && camera.is_some_and(|c| c.dof.is_some()))
         && l.material.casts_shadows == lumit_gpu::fx::lighting::LightingShadows::Off
-}
-
-/// How much video memory one frame's shadow casters may take between them,
-/// shared out between the runs of 3D layers that cast.
-const SHADOW_BUDGET: u64 = 96 << 20;
-
-/// Which of a run's layers cast, chosen before any square is made.
-struct RunPlan {
-    /// Each kept caster's place in the run and its plane, in stack order.
-    kept: Vec<(usize, lumit_gpu::fx::lighting::CasterPlane)>,
-    /// Each layer's place among the kept casters.
-    own: Vec<Option<usize>>,
-    /// Whether the comp lights the display-encoded picture.
-    encoded: bool,
-    /// The widest soft edge any light here gives a caster, comp pixels.
-    spread: f32,
-}
-
-/// One run's casters and each layer's place among them. Only the casters
-/// that can shade a layer in the run are kept, the 16 nearest the layers
-/// they shade when there are more. `None` when nothing in the run casts on
-/// anything.
-fn run_plan(
-    layers: &[CompLayerDraw],
-    textures: &[wgpu::Texture],
-    grown: &[(f32, f32)],
-    eye: [f32; 3],
-) -> Option<RunPlan> {
-    use lumit_gpu::fx::lighting::{
-        CasterPlane, LightingShadows, DIFFUSION_SPREAD, MAX_SHADOW_CASTERS, MAX_STRETCH,
-    };
-    let centre =
-        |c: &[[f32; 3]; 4]| [0, 1, 2].map(|k| (c[0][k] + c[1][k] + c[2][k] + c[3][k]) * 0.25);
-    let receivers: Vec<(usize, &CompLayerDraw, [[f32; 3]; 4])> = layers
-        .iter()
-        .zip(textures)
-        .enumerate()
-        // A model isn't a plane, so it neither casts nor takes these.
-        .filter(|(_, (l, _))| l.material.accepts_shadows != LightingShadows::Off)
-        .filter(|(_, (l, _))| !matches!(l.source, DrawSource::Model(_)))
-        .filter_map(|(i, (l, tex))| {
-            let op = lighting_op(l, tex.width(), tex.height(), eye)?;
-            Some((i, l, op.corners(tex.width(), tex.height())))
-        })
-        .collect();
-    let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
-    for (i, ((l, tex), g)) in layers.iter().zip(textures).zip(grown).enumerate() {
-        let model = matches!(l.source, DrawSource::Model(_)) || scene::draws_in_scene(l);
-        if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 || model {
-            continue;
-        }
-        let plane = crate::build::shading::caster_plane(tex, l, *g);
-        let (o, u, v) = (plane.origin, plane.u, plane.v);
-        let at = |a: f32, b: f32| [0, 1, 2].map(|k| o[k] + u[k] * a + v[k] * b);
-        let corners = [o, at(1.0, 0.0), at(0.0, 1.0), at(1.0, 1.0)];
-        let mid = centre(&corners);
-        // How near it is to the nearest layer it can shade, if any.
-        let near = receivers
-            .iter()
-            .filter(|(r, l, corners)| {
-                *r != i
-                    && (scene::draws_in_scene(l)
-                        || l.lights
-                            .iter()
-                            .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane)))
-            })
-            .map(|(_, _, corners)| {
-                let c = centre(corners);
-                (0..3).map(|k| (c[k] - mid[k]).powi(2)).sum::<f32>()
-            })
-            .min_by(f32::total_cmp);
-        if let Some(near) = near {
-            kept.push((near, i, plane));
-        }
-    }
-    if kept.is_empty() {
-        return None;
-    }
-    // ponytail: the farthest past 16 drop without a word. Say so once the
-    // render has a list of notes to show, beside lights past eight.
-    kept.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-    kept.truncate(MAX_SHADOW_CASTERS);
-    kept.sort_by_key(|k| k.1);
-    let mut own = vec![None; layers.len()];
-    for (k, (_, i, _)) in kept.iter().enumerate() {
-        own[*i] = Some(k);
-    }
-    let lights = receivers.iter().flat_map(|(_, l, _)| &l.lights);
-    Some(RunPlan {
-        kept: kept.into_iter().map(|(_, i, p)| (i, p)).collect(),
-        own,
-        // The squares keep their colour the way the comp lights it.
-        encoded: receivers.iter().any(|(_, l, _)| l.material.encoded),
-        spread: lights
-            .filter(|g| g.shadow_darkness > 0.0)
-            .map(|g| g.shadow_diffusion * DIFFUSION_SPREAD * MAX_STRETCH)
-            .fold(0.0, f32::max),
-    })
-}
-
-/// Whether any layer in `layers` casts a shadow that a light carries onto
-/// another layer taking them.
-fn casts_shadows(layers: &[CompLayerDraw]) -> bool {
-    use lumit_gpu::fx::lighting::LightingShadows as S;
-    layers
-        .iter()
-        .any(|l| l.three_d && l.material.casts_shadows != S::Off)
-        && layers.iter().any(|l| {
-            l.material.accepts_shadows != S::Off && l.lights.iter().any(|g| g.shadow_darkness > 0.0)
-        })
-}
-
-/// A layer that is there only for its shadows, After Effects' Only: one that
-/// casts them without being seen, or one showing only those that fall on it
-/// when no light reaches it at all.
-fn shadow_only(l: &CompLayerDraw) -> bool {
-    use lumit_gpu::fx::lighting::LightingShadows as S;
-    l.material.casts_shadows == S::Only
-        || (l.material.accepts_shadows == S::Only && l.lights.is_empty())
 }
 
 /// Whether a region of interest can be applied to this draw list, or

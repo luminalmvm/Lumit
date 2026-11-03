@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod material;
 mod model;
 mod moments;
 pub mod pool;
@@ -88,7 +89,8 @@ pub mod schedule;
 ///   inner layers of a collapsed Precomp blur.
 /// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
 ///   they are handed.
-pub const ALGO_VERSION: u32 = 24;
+/// * 25: Model layers cast and take shadows.
+pub const ALGO_VERSION: u32 = 25;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -1713,31 +1715,7 @@ fn feed_layer(
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
     }
-    // The material shades only a 3D layer and only where there is a light,
-    // and is hashed only once it has moved off what layers had before it
-    // existed, so those keys stay valid.
-    let m = &layer.transform.material;
-    if layer.switches.three_d
-        && comp.layers.iter().any(|l| l.is_light())
-        && **m != lumit_core::model::Material::legacy()
-    {
-        h.update(b"material");
-        for p in [
-            &m.ambient,
-            &m.diffuse,
-            &m.specular,
-            &m.shininess,
-            &m.metal,
-            &m.light_transmission,
-        ] {
-            feed_f64(h, p.value_at(lt));
-        }
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
-    } else if [m.casts_shadows, m.accepts_shadows].contains(&lumit_core::model::ShadowMode::Only) {
-        // Set to Only, a layer can go undrawn with no light in the comp too.
-        h.update(b"shadow only");
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
-    }
+    material::feed(h, comp, layer, lt);
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
     if layer.switches.collapse && matches!(layer.kind, LayerKind::Precomp { .. }) {
@@ -4876,12 +4854,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 24, which renamed every frame.
+        // Pinned under ALGO_VERSION 25, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                270_542_465_235_573_792_129_354_421_493_715_365_663,
-                245_443_632_604_847_733_809_670_259_225_426_457_713
+                7_699_045_846_567_640_697_737_022_643_143_253_696,
+                117_983_961_780_902_144_977_624_882_292_873_552_404
             )
         );
 

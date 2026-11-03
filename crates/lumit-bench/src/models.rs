@@ -1,11 +1,14 @@
-//! **B30 — a Model layer of a million triangles** (docs/13 §2).
+//! **B30 — a Model layer of a million triangles**, and **B33 — the same with
+//! shadows** (docs/13 §2).
 //!
 //! # In plain terms
 //!
 //! One model drawn through a camera with two lights at 1080p, the comp's
 //! default anti-aliasing, the way the mesh pass draws a Model layer each
 //! frame. The model is uploaded once before the stopwatch starts, as the
-//! engine keeps it between frames, so the number is the draw alone.
+//! engine keeps it between frames, so the number is the draw alone. B33 has
+//! both lights cast, a point and a parallel one, so each frame makes their
+//! shadow maps and the model is drawn taking them.
 
 use std::sync::Arc;
 
@@ -20,7 +23,7 @@ const WARMUP: u32 = 4;
 /// The fastest of these is kept, as for Particulate's three.
 const REPEATS: u32 = 3;
 
-/// Measure B30. `Err` when there is no graphics adapter.
+/// Measure B30 and B33. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let ctx = lumit_gpu::GpuContext::headless().map_err(|e| format!("no GPU adapter: {e}"))?;
     let fx = lumit_gpu::fx::FxEngine::new(&ctx);
@@ -80,31 +83,77 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             ..LightingMaterial::default()
         },
         instances: &[],
+        casters: None,
+        maps: None,
         display: Default::default(),
     };
-    let run = || fx.model(&ctx, &scene, &view).map_err(|e| e.to_string());
-    for _ in 0..WARMUP {
-        run()?;
-    }
-    ctx.flush();
-    ctx.settle();
-    let mut best = f64::INFINITY;
-    for _ in 0..REPEATS {
-        let started = Instant::now();
-        for _ in 0..RUNS {
+    let time = |run: &dyn Fn() -> Result<(), String>| -> Result<f64, String> {
+        for _ in 0..WARMUP {
             run()?;
         }
         ctx.flush();
         ctx.settle();
-        best = best.min(elapsed_ms(started) / f64::from(RUNS));
-    }
-    let m = Measurement {
-        budget: "B30",
-        value_ms: best,
-        frames: u64::from(RUNS),
+        let mut best = f64::INFINITY;
+        for _ in 0..REPEATS {
+            let started = Instant::now();
+            for _ in 0..RUNS {
+                run()?;
+            }
+            ctx.flush();
+            ctx.settle();
+            best = best.min(elapsed_ms(started) / f64::from(RUNS));
+        }
+        Ok(best)
     };
-    progress(m);
-    Ok(vec![m])
+    let b30 = time(&|| {
+        fx.model(&ctx, &scene, &view)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    })?;
+    let casting = [
+        LightingLight {
+            shadow_darkness: 1.0,
+            shadow_diffusion: 20.0,
+            ..lights[0]
+        },
+        LightingLight {
+            kind: LightingKind::Parallel,
+            axis: [0.3, 0.5, 0.8],
+            shadow_darkness: 1.0,
+            shadow_diffusion: 20.0,
+            ..lights[0]
+        },
+    ];
+    let caster = lumit_gpu::mesh::shadow::MapCaster {
+        scene: &scene,
+        model_to_comp: view.model_to_comp,
+    };
+    let b33 = time(&|| {
+        let maps = fx.shadow_maps(&ctx, std::slice::from_ref(&caster), &casting, 2048);
+        let view = lumit_gpu::mesh::ModelView {
+            lights: &casting,
+            maps: maps.as_ref(),
+            material: LightingMaterial {
+                accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
+                ..view.material
+            },
+            ..view
+        };
+        fx.model(&ctx, &scene, &view)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    })?;
+    let mut out = Vec::new();
+    for (budget, value_ms) in [("B30", b30), ("B33", b33)] {
+        let m = Measurement {
+            budget,
+            value_ms,
+            frames: u64::from(RUNS),
+        };
+        progress(m);
+        out.push(m);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

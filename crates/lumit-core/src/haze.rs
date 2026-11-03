@@ -319,8 +319,8 @@ pub fn march(
             let phase = (1.0 - g * g) / (1.0 + g * g - 2.0 * g * cos).max(1e-6).powf(1.5);
             let mut through = [1.0f32; 3];
             if l.shadow_darkness > 0.0 {
-                // Where models will cut it too: one between here and the
-                // light will dim `through` the same way a caster does.
+                // On the card, models' shadow maps dim `through` here too
+                // (`mapped`), which this has no models for.
                 through = crate::lighting::transmitted(p, l, casters, None)
                     .map(|v| 1.0 - l.shadow_darkness * (1.0 - v));
             }

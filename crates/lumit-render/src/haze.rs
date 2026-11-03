@@ -16,7 +16,7 @@ use crate::draw::{CompLayerDraw, DrawSource};
 use crate::realise::Realiser;
 
 /// The lights a haze draw shows, each with its haze.
-type HazeLights = [(LightingLight, Haze)];
+pub(crate) type HazeLights = [(LightingLight, Haze)];
 
 /// Put the comp's haze draw just above its top 3D layer, or under every layer
 /// when it has none, if any of its lights show in the air at `t`.
@@ -126,7 +126,8 @@ impl Realiser<'_> {
     /// `frame` with the haze of `lights` laid over it, if there is any, seen
     /// through `camera`. `drawn` is the segment's draws with each one's
     /// finished picture and grow, `placed` the same as the compositor draws
-    /// them, and `models` the models among them, which the haze stops at.
+    /// them, `models` the models among them, which the haze stops at, and
+    /// `maps` their shadows, which cut it.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn haze_over(
         &self,
@@ -134,7 +135,10 @@ impl Realiser<'_> {
         lights: Option<&HazeLights>,
         (layers, textures, grown): (&[CompLayerDraw], &[wgpu::Texture], &[(f32, f32)]),
         placed: &[lumit_gpu::composite::CompositeLayer<'_>],
-        models: &[lumit_gpu::mesh::ModelPicture],
+        (models, maps): (
+            &[lumit_gpu::mesh::ModelPicture],
+            Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+        ),
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
     ) -> wgpu::Texture {
@@ -154,8 +158,8 @@ impl Realiser<'_> {
             .zip(textures)
             .zip(grown)
             .filter(|((l, t), _)| {
-                // ponytail: a model or particles in the scene cast no shafts
-                // until models take shadows.
+                // A model's shafts come from its shadow maps, and particles in
+                // the scene cast none.
                 shadowed
                     && l.three_d
                     && !models.iter().any(|m| &m.colour == *t)
@@ -227,6 +231,6 @@ impl Realiser<'_> {
             lights: lights.to_vec(),
         };
         self.fx
-            .haze(&self.ctx, &frame, &depth, &op, casters.as_ref())
+            .haze(&self.ctx, &frame, &depth, &op, casters.as_ref(), maps)
     }
 }

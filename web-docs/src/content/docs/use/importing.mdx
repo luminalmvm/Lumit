@@ -113,9 +113,14 @@ picture, which keeps its depth. Motion blur smears it along its own movement. In
 Viewer it is outlined by its box and picked where the model itself is. A model with
 pictures missing wears **Missing** in the Project panel, with their names on it.
 
+A new Model layer casts shadows, on itself, on other models and on 3D layers, and takes
+theirs. Its **Casts shadows** and **Accepts shadows** rows work as on any 3D layer, and
+**Holdout** draws what is under it in its place (see [Layers](/use/layers/)).
+
 :::note[Not built yet]
-A Model layer has no rows for its materials, animation or parts. It takes no shadows and no
-blur from the camera's depth of field.
+A Model layer has no rows for its materials, animation or parts. It takes no blur from the
+camera's depth of field. A faded model's shadow doesn't fade, and a holdout's outline doesn't
+blur with motion.
 :::
 
 ## Interpretation
