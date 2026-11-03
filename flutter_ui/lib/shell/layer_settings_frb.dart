@@ -250,7 +250,7 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                 t,
                 label: l10n.sourceSolidColour,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   // A solid's colour is chosen as a **display** colour, so the
                   // picker's channels read 0—255 — the same reading the
                   // source card's own swatch opens with.

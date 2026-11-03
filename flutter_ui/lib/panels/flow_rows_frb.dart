@@ -192,8 +192,8 @@ class FlowRowsFrb extends StatelessWidget {
       children: [
         row,
         Padding(
-          padding: const EdgeInsets.only(
-              left: fxNameColumnWidth, bottom: 2, right: 4),
+          padding: const EdgeInsetsDirectional.only(
+              start: fxNameColumnWidth, bottom: 2, end: 4),
           child: Row(
             children: [
               Flexible(

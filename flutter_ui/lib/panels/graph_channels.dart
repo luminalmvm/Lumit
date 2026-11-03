@@ -341,15 +341,27 @@ List<GraphChannel> graphChannels({
     // An effect's parameters, and a **layer style's** on the same road:
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
+    // A placed graph's Inputs too, whose one instance has no id in the path.
     final styles = path.startsWith('${stylesPath(layerId)}/');
-    if (styles || path.startsWith('${effectsPath(layerId)}/')) {
-      final head = styles ? stylesPath(layerId) : effectsPath(layerId);
+    final inputs = path.startsWith('${inputsPath(layerId)}/');
+    if (inputs || styles || path.startsWith('${effectsPath(layerId)}/')) {
+      final head = inputs
+          ? inputsPath(layerId)
+          : styles
+              ? stylesPath(layerId)
+              : effectsPath(layerId);
       final rest = path.substring(head.length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final effectId = rest.substring(0, slash);
+      final slash = inputs ? -1 : rest.indexOf('/');
+      if (!inputs && slash <= 0) continue;
+      final graphInputs = entry.info.graphInputs;
+      final effectId =
+          inputs ? '${graphInputs?.id}' : rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in styles ? entry.info.styles : entry.info.effects) {
+      for (final fx in inputs
+          ? [if (graphInputs != null) graphInputs]
+          : styles
+              ? entry.info.styles
+              : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.
@@ -367,7 +379,11 @@ List<GraphChannel> graphChannels({
             if (row.id == pair.y) linkedParam = row;
           }
         }
-        final channelId = leadId == paramId ? path : '$head/$effectId/$leadId';
+        final channelId = leadId == paramId
+            ? path
+            : inputs
+                ? '$head/$leadId'
+                : '$head/$effectId/$leadId';
         if (out.any((c) => c.id == channelId)) continue;
         for (final param in rows) {
           if (param.id != leadId) continue;
@@ -385,8 +401,9 @@ List<GraphChannel> graphChannels({
           out.add(GraphChannel(
             path: path,
             id: channelId,
-            label:
-                '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
+            label: '${entry.info.name} · '
+                '${inputs ? l10n.foldInputs : effectLabelOf(fx.name)} · '
+                '${param.label}',
             colourIndex: out.length,
             scalar: scalar,
             entry: entry,

@@ -573,6 +573,30 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect,
           if (rect.contains(p.at)) p.key,
     };
 
+/// The mask whose **Path** row is picked, or the shape item with any of its
+/// rows picked, if one is — the shape the author is editing, so it is the
+/// one whose points are offered even when the layer itself was never clicked.
+(UuidValue, UuidValue)? pathBeingEdited(Iterable<String> selectedProperties) {
+  for (final path in selectedProperties) {
+    final parts = path.split('/');
+    // <layer>/masks/<mask>/path or <layer>/contents/<item>[/<row>]
+    if ((parts.length == 4 &&
+            parts[1] == 'masks' &&
+            parts[3] == MaskValue.path.name) ||
+        (parts.length >= 3 && parts[1] == 'contents')) {
+      try {
+        return (
+          UuidValue.fromString(parts[0]),
+          UuidValue.fromString(parts[2])
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 /// Whether [box]'s path [path] is drawn and offered: always, unless [only]
 /// names another path of the same layer.
 bool showsPath(LayerBox box, UuidValue path, (UuidValue, UuidValue)? only) =>
@@ -1097,12 +1121,13 @@ BridgeMask maskWith(
   BridgeMask mask, {
   List<BridgeVertex>? vertices,
   List<BridgeScalar>? vertexFeather,
+  bool? closed,
 }) =>
     BridgeMask(
       id: mask.id,
       name: mask.name,
       vertices: vertices ?? mask.vertices,
-      closed: mask.closed,
+      closed: closed ?? mask.closed,
       inverted: mask.inverted,
       opacity: mask.opacity,
       mode: mask.mode,
@@ -1869,29 +1894,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return out;
   }
 
-  /// The mask whose **Path** row is picked, or the shape item with any of its
-  /// rows picked, if one is — the shape the author is editing, so it is the
-  /// one whose points are offered even when the layer itself was never clicked.
-  (UuidValue, UuidValue)? get _pathBeingEdited {
-    for (final path in widget.uiState.selectedProperties.value) {
-      final parts = path.split('/');
-      // <layer>/masks/<mask>/path or <layer>/contents/<item>[/<row>]
-      if ((parts.length == 4 &&
-              parts[1] == 'masks' &&
-              parts[3] == MaskValue.path.name) ||
-          (parts.length >= 3 && parts[1] == 'contents')) {
-        try {
-          return (
-            UuidValue.fromString(parts[0]),
-            UuidValue.fromString(parts[2])
-          );
-        } catch (_) {
-          return null;
-        }
-      }
-    }
-    return null;
-  }
+  (UuidValue, UuidValue)? get _pathBeingEdited =>
+      pathBeingEdited(widget.uiState.selectedProperties.value);
 
   @override
   Widget build(BuildContext context) {

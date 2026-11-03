@@ -116,7 +116,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
         _versions(t),
         const SizedBox(height: 12),
         Align(
-          alignment: Alignment.centerRight,
+          alignment: AlignmentDirectional.centerEnd,
           child: HouseButton(
             key: const ValueKey('review-delete'),
             small: true,
@@ -138,7 +138,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
           t,
           label,
           Align(
-            alignment: Alignment.centerLeft,
+            alignment: AlignmentDirectional.centerStart,
             child: IgnorePointer(
               ignoring: !live,
               child: Opacity(
@@ -279,7 +279,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
         t,
         l10n.reviewExpires,
         Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           // Nought is never, and minus one is the day already set, which
           // stays on the list as what is in force.
           child: dialogDropdown<int>(
@@ -320,7 +320,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
           ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 24),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               // Nothing is said until the server has, so the line does not
               // flash "nobody" at somebody with twenty viewers.
               child: Text(_views == null ? '' : l10n.reviewSeenByNobody,
@@ -342,7 +342,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
                         child: view.name.isEmpty
                             ? null
                             : Align(
-                                alignment: Alignment.centerLeft,
+                                alignment: AlignmentDirectional.centerStart,
                                 child: reviewDot(t, view.name)),
                       ),
                       Flexible(
@@ -370,7 +370,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
         // The rest of them, shown in place when asked for.
         if (views.length > _viewsShown && !_allViews)
           Align(
-            alignment: Alignment.centerLeft,
+            alignment: AlignmentDirectional.centerStart,
             child: HouseButton(
               key: const ValueKey('review-seen-by-more'),
               small: true,
@@ -434,7 +434,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
                   SizedBox(
                     width: 40,
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: reviewTag(t, l10n.reviewVersion(v.n)),
                     ),
                   ),
@@ -498,7 +498,7 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
             ),
             if (v.note.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(left: 40, bottom: 6),
+                padding: const EdgeInsetsDirectional.only(start: 40, bottom: 6),
                 child: Text(v.note,
                     key: ValueKey<String>('review-note-${v.n}'),
                     style: t.small.copyWith(

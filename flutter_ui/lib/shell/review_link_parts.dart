@@ -449,7 +449,7 @@ class ReviewLinkRow extends StatelessWidget {
           duration: scope.motion.mark.duration,
           curve: scope.motion.mark.curve,
           height: reviewLinkRowHeight,
-          padding: EdgeInsets.only(left: chosen ? 10 : 12, right: 12),
+          padding: EdgeInsetsDirectional.only(start: chosen ? 10 : 12, end: 12),
           decoration: BoxDecoration(
             color: chosen ? t.surface2 : null,
             border: chosen
@@ -481,7 +481,7 @@ class ReviewLinkRow extends StatelessWidget {
                             key: ValueKey<String>('review-unseen-${link.id}'),
                             width: 6,
                             height: 6,
-                            margin: const EdgeInsets.only(left: 8),
+                            margin: const EdgeInsetsDirectional.only(start: 8),
                             decoration: BoxDecoration(
                                 shape: BoxShape.circle, color: t.textPrimary),
                           ),
@@ -670,7 +670,7 @@ class _ReviewAddressState extends State<ReviewAddress> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     Widget action(String id, VoidCallback onPressed, Widget child) => Padding(
-          padding: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsetsDirectional.only(start: 8),
           child: SizedBox(
             height: 26,
             child: HouseButton(
@@ -893,7 +893,7 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
               ),
               if (c.text.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 2),
                   child: Text.rich(_words(t),
                       style: t.body.copyWith(
                           color: c.resolved ? t.textMuted : t.textSecondary,
@@ -901,13 +901,13 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
                 ),
               if (c.picture != null)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 6, bottom: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 6, bottom: 2),
                   child: ReviewPicture(widget.review, c,
                       onPressed: widget.onPicture),
                 ),
               if (widget.drawing case final drawing?)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 8, bottom: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 8, bottom: 2),
                   child: drawing,
                 ),
             ],
@@ -1152,7 +1152,7 @@ class _ReviewApprovedRowState extends State<ReviewApprovedRow> {
               SizedBox(
                 width: 14,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: glyph.LumitIcon(LumitIcons.tick,
                       size: 11, colour: t.success),
                 ),

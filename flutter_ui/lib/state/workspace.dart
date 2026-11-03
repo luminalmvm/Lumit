@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
+import '../theme/theme_file.dart' show readThemeFile;
 import 'window_backdrop.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
@@ -1514,6 +1515,26 @@ class Workspace extends ChangeNotifier {
     final name = availableThemeName(imported.name);
     saveCustomTheme(imported.renamed(name));
     return name;
+  }
+
+  /// Take in the theme file at [path] and select it. Why it was refused, or
+  /// null when it went in.
+  Future<String?> importThemeFile(String path) async {
+    final String text;
+    try {
+      text = await File(path).readAsString();
+    } catch (_) {
+      return l10n.keymapFileUnreadable;
+    }
+    final file = path.split(RegExp(r'[\\/]')).last;
+    final read = readThemeFile(text,
+        name: file.contains('.')
+            ? file.substring(0, file.lastIndexOf('.'))
+            : file);
+    final theme = read.theme;
+    if (theme == null) return read.refusal;
+    importCustomTheme(theme);
+    return null;
   }
 
   /// Rename one of the user's themes, keeping its place in the list and the

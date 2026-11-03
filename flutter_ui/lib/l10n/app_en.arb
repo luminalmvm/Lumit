@@ -520,6 +520,10 @@
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."
   },
+  "foldInputs": "Inputs",
+  "@foldInputs": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the Inputs of the node graph the layer places."
+  },
   "foldStyles": "Styles",
   "@foldStyles": {
     "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
@@ -12092,6 +12096,18 @@
   "fxMoodLighting": "Mood lighting",
   "@fxMoodLighting": {
     "description": "Effect name in the Add effect menu — pools of coloured light laid over the picture, and a firmer contrast under them."
+  },
+  "fxAmorphous": "Amorphous",
+  "@fxAmorphous": {
+    "description": "Effect controls — a Style option on Mood lighting: soft round pools of light."
+  },
+  "fxDigital": "Digital",
+  "@fxDigital": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light broken into square blocks."
+  },
+  "fxStreaks": "Streaks",
+  "@fxStreaks": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light stretched sideways into long bands."
   },
   "fxMoreOptions": "More options",
   "@fxMoreOptions": {

@@ -574,12 +574,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     [for (final c in widget.holders) t.personColour(c)],
                     tint: 0.14,
                   ),
-            padding: EdgeInsets.only(
+            padding: EdgeInsetsDirectional.only(
               // Five levels at most, so a deep folder still leaves its rows
               // a name and room for the columns.
-              left: projectRowPadding +
+              start: projectRowPadding +
                   math.min(widget.depth, 5) * projectIndentPerDepth,
-              right: projectRowPadding,
+              end: projectRowPadding,
             ),
             child: Row(
               children: [

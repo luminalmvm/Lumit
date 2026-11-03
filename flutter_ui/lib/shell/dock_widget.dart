@@ -342,7 +342,11 @@ class _DockWidgetState extends State<DockWidget> {
         ));
       }
     }
-    return horizontal ? Row(children: children) : Column(children: children);
+    // The arrangement is the one the user built, in every language: the seam
+    // drags and the drop sides below are in screen terms.
+    return horizontal
+        ? Row(textDirection: TextDirection.ltr, children: children)
+        : Column(children: children);
   }
 
   /// Move the boundary between child i and i+1 by `deltaPx` of `totalExtent`.
@@ -768,7 +772,7 @@ class _TitleLine extends StatelessWidget {
           Expanded(
             child: t.tokens.titleCentred
                 ? Center(child: child)
-                : Align(alignment: Alignment.centerLeft, child: child),
+                : Align(alignment: AlignmentDirectional.centerStart, child: child),
           ),
           // The dot's own width again, so the words centre on the line rather
           // than on what is left of it.

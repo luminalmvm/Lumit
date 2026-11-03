@@ -180,14 +180,14 @@ Widget dialogTitleBar(
           key: ValueKey<String>('$keyPrefix-title-dot'),
           width: 6,
           height: 6,
-          margin: const EdgeInsets.only(right: 6),
+          margin: const EdgeInsetsDirectional.only(end: 6),
           decoration: BoxDecoration(color: t.accent, shape: BoxShape.circle),
         ),
       Text(t.kickerCase(title), style: t.kickerOn),
     ],
   );
   final about = Padding(
-    padding: const EdgeInsets.only(left: 10),
+    padding: const EdgeInsetsDirectional.only(start: 10),
     child: MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
   );
   final close = LumitTooltip(
@@ -208,7 +208,7 @@ Widget dialogTitleBar(
           width: dialogCloseGlyph + 8,
           height: dialogTitleStrip,
           child: Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerEnd,
             child: glyph.LumitIcon(
               LumitIcons.close,
               size: dialogCloseGlyph,
@@ -241,14 +241,14 @@ Widget dialogTitleBar(
                   if (subject.isNotEmpty) Flexible(child: about),
                 ],
               ),
-              Align(alignment: Alignment.centerRight, child: close),
+              Align(alignment: AlignmentDirectional.centerEnd, child: close),
             ],
           )
         : Row(
             children: [
               name,
               Expanded(
-                  child: Align(alignment: Alignment.centerLeft, child: about)),
+                  child: Align(alignment: AlignmentDirectional.centerStart, child: about)),
               close,
             ],
           ),
@@ -280,7 +280,7 @@ Widget dialogTabs<T>(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onPick(page),
                 child: Container(
-                  margin: const EdgeInsets.only(right: dialogTabGap),
+                  margin: const EdgeInsetsDirectional.only(end: dialogTabGap),
                   padding: const EdgeInsets.fromLTRB(6, 6, 6, 5),
                   decoration: BoxDecoration(
                     border: Border(
@@ -470,7 +470,7 @@ Widget dialogFooter(
                 Expanded(
                   child: leading != null
                       ? Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: AlignmentDirectional.centerStart,
                           child: SizedBox(
                               height: dialogFooterButton, child: leading),
                         )
@@ -514,15 +514,15 @@ Widget dialogGutter(
         thumbColor: t.surface4,
         trackColor: t.surface2,
         trackRadius: const Radius.circular(3),
-        padding: EdgeInsets.fromLTRB(0, top + ends, inset, ends),
+        padding: EdgeInsetsDirectional.fromSTEB(0, top + ends, inset, ends),
         child: ScrollConfiguration(
           behavior:
               ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: child,
         ),
       ),
-      Positioned(
-        right: inset,
+      PositionedDirectional(
+        end: inset,
         top: top + ends,
         bottom: ends,
         width: thickness,

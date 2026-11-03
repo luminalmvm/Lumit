@@ -181,8 +181,8 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package or a style goes to any Lumit that is open.
-  // Anything else only to one kept running in the background.
+  // An extension package, a style, a preset or a theme goes to any Lumit
+  // that is open. Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
         auto ends = [&argument](const char* ending) {
@@ -191,7 +191,8 @@ bool ForwardToOpenLumit() {
                  _stricmp(argument.c_str() + argument.size() - size, ending) ==
                      0;
         };
-        return ends(".lfx") || ends(".lumstyle");
+        return ends(".lfx") || ends(".lumstyle") || ends(".lumfx") ||
+               ends(".lumtheme");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
@@ -410,6 +411,16 @@ bool FlutterWindow::OnCreate() {
           ::ShowWindow(hwnd, SW_MINIMIZE);
         } else if (method == "maximise") {
           ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        } else if (method == "maximiseButton") {
+          // Where the button is, sent each time it moves.
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            maximise_button_ = {
+                static_cast<LONG>(IntArgument(*args, "left")),
+                static_cast<LONG>(IntArgument(*args, "top")),
+                static_cast<LONG>(IntArgument(*args, "right")),
+                static_cast<LONG>(IntArgument(*args, "bottom"))};
+          }
         } else if (method == "close") {
           ::PostMessage(hwnd, WM_CLOSE, 0, 0);
         } else if (method == "background") {
@@ -576,6 +587,45 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // Over the maximise button the frame answers the hit test
+    // (win32_window.cpp), so the mouse comes here and not to Flutter. Flutter
+    // still draws the button and is told when to light it. The press is kept
+    // from Windows, which would draw a button of its own.
+    case WM_NCMOUSEMOVE:
+      if ((wparam == HTMAXBUTTON) != maximise_hover_) {
+        maximise_hover_ = !maximise_hover_;
+        maximise_pressed_ = false;
+        if (maximise_hover_) {
+          TRACKMOUSEEVENT track = {sizeof(track), TME_LEAVE | TME_NONCLIENT,
+                                   hwnd};
+          ::TrackMouseEvent(&track);
+        }
+        Tell("lumit/window",
+             maximise_hover_ ? "maximiseHover" : "maximiseLeave");
+      }
+      break;
+    case WM_NCMOUSELEAVE:
+      if (maximise_hover_) {
+        maximise_hover_ = maximise_pressed_ = false;
+        Tell("lumit/window", "maximiseLeave");
+      }
+      break;
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+      if (wparam == HTMAXBUTTON) {
+        maximise_pressed_ = true;
+        return 0;
+      }
+      break;
+    case WM_NCLBUTTONUP:
+      if (wparam == HTMAXBUTTON) {
+        if (maximise_pressed_) {
+          maximise_pressed_ = false;
+          ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        }
+        return 0;
+      }
       break;
     // The window's own surface shows wherever Flutter's room is clear, so
     // under a see-through window it is painted clear: black, over a stretched

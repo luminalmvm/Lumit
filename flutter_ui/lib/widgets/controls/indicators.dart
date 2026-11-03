@@ -46,7 +46,7 @@ class HouseProgressBar extends StatelessWidget {
         duration: eased ? scope.motion.mark.duration : Duration.zero,
         curve: Curves.easeOut,
         builder: (context, shown, child) => FractionallySizedBox(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           widthFactor: shown.clamp(0.0, 1.0),
           child: child,
         ),

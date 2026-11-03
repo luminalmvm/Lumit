@@ -439,7 +439,7 @@ impl AnalysisKey {
         AnalysisKey(*h.finalize().as_bytes())
     }
 
-    fn file_name(&self) -> String {
+    pub(crate) fn file_name(&self) -> String {
         let mut name = String::with_capacity(68);
         for byte in self.0 {
             name.push_str(&format!("{byte:02x}"));
@@ -798,7 +798,7 @@ fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) -> Op
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
 /// from the future, a body that will not parse, or a key that is not the one
 /// asked for. Every refusal costs a re-analysis and nothing else.
-fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, Answer)> {
+pub(crate) fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, Answer)> {
     let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
     let record: Record = bincode::deserialize(body).ok()?;
     let clip_frames = usize::try_from(record.clip_frames).unwrap_or(usize::MAX);
@@ -820,7 +820,7 @@ fn write_sidecar(dir: &Path, key: AnalysisKey, fps: f64, clip_frames: usize, ans
 
 /// Where the sidecar lives. Overridable in tests, which must never write into
 /// the user's own cache folder — the shape [`crate::media_index`] uses.
-fn cache_dir() -> Option<PathBuf> {
+pub(crate) fn cache_dir() -> Option<PathBuf> {
     test_cache_dir().or_else(lumit_project::track_cache_dir)
 }
 
@@ -1408,7 +1408,7 @@ fn finish(media: Uuid, outcome: Option<Progress>) {
 
 /// The whole of one job, on the analysis thread: read the sidecar, and only if
 /// there is nothing there, track and solve.
-fn run(job: Job, cancel: &AtomicBool) {
+pub(crate) fn run(job: Job, cancel: &AtomicBool) {
     let media = job.media;
     let key = job.key;
     let kind = job.kind;

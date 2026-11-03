@@ -164,6 +164,7 @@ class _HouseSliderState extends State<HouseSlider>
           const SizedBox(width: 8),
           Text(
             '${_shown.toStringAsFixed(widget.decimals)}${widget.suffix ?? ''}',
+            textDirection: TextDirection.ltr,
             style: t.bodyPrimary,
           ),
         ],
