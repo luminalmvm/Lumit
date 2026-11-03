@@ -8554,7 +8554,7 @@
   "@projectItemNoBlender": {
     "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
   },
-  "tipProjectNoBlender": "Choose Blender in Settings",
+  "tipProjectNoBlender": "Choose Blender",
   "@tipProjectNoBlender": {
     "description": "Tooltip on the no Blender badge of a Project panel 3D model. Clicking the badge opens Settings at the Blender row."
   },
