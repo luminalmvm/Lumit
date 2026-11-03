@@ -185,6 +185,7 @@ pub(super) fn close_view(state: &mut WorkerState, view: u32) {
         state.last_shown = None;
     }
     state.looks.remove(&view);
+    state.beside_shown.retain(|shown| shown.0 != view);
     state.camera_views.remove(&view);
     state.grounds.remove(&view);
     state.names.forget_view(view);

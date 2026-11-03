@@ -89,6 +89,9 @@ pub struct WorkerState {
     /// Where the user is looking — the view, comp, frame and scale last shown
     /// — the idle cache-fill's anchor (docs/06 §5.5).
     last_shown: Option<(u32, CompositionReference, u64, f32)>,
+    /// The same for every other view, so a picture made before a model was
+    /// read or a lens baked is made again in each of them.
+    beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
     /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
@@ -1677,10 +1680,27 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// closed under us.
 #[frb(ignore)]
 fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
-    let Some((view, comp_ref, frame, scale)) = state.last_shown.clone() else {
-        return;
-    };
+    // The views beside first, so the one being worked in ends up holding the
+    // renderer's look. Not while playing, which has the worker to itself.
+    if state.playback.is_none() {
+        for shown in state.beside_shown.clone() {
+            republish(state, stream, shown);
+        }
+    }
+    if let Some(shown) = state.last_shown.clone() {
+        republish(state, stream, shown);
+    }
+}
+
+/// Make one view's last picture again, looking its way.
+#[frb(ignore)]
+fn republish(
+    state: &mut WorkerState,
+    stream: &mut WorkerResponseStream,
+    (view, comp_ref, frame, scale): (u32, CompositionReference, u64, f32),
+) {
     state.set_view_id(view);
+    look_at(state, view);
     let Ok(project) = state.project.state() else {
         return;
     };
@@ -1699,7 +1719,8 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
         &document,
         stream,
         BridgePlaybackMode::EveryFrame,
-        true,
+        // A 3D viewport's draft is never banked.
+        !state.camera_view().is_some_and(|v| v.draft),
     );
 }
 
@@ -3210,6 +3231,7 @@ fn worker_loop(
         prioritised: false,
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
+        beside_shown: Vec::new(),
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
         // which is what it already held.
@@ -4661,6 +4683,9 @@ fn render_comp(
         set_prefix(state, req.prefix);
         state.prefix
     } else {
+        state.beside_shown.retain(|shown| shown.0 != req.view);
+        let shown = (req.view, req.comp.clone(), req.frame, req.scale);
+        state.beside_shown.push(shown);
         None
     };
     let view = state.camera_view();
@@ -6347,6 +6372,7 @@ mod tests {
             prioritised: false,
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
+            beside_shown: Vec::new(),
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),
