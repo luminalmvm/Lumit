@@ -190,11 +190,11 @@ pub struct PlaneKey {
 /// Bump when a record's meaning changes. Old files then hash to a different
 /// name and are simply never asked for. Two, because a record now keeps the box
 /// its bytes cover rather than always the whole plane.
-const FORMAT_VERSION: u16 = 2;
+pub(crate) const FORMAT_VERSION: u16 = 2;
 
 /// `LUMPLN\0` - read before anything is deserialised, so a file that is not one
 /// of ours is refused rather than fed to a decoder.
-const MAGIC: &[u8; 7] = b"LUMPLN\0";
+pub(crate) const MAGIC: &[u8; 7] = b"LUMPLN\0";
 
 impl PlaneKey {
     /// The key for `fingerprint` analysed under `settings`.
@@ -245,7 +245,7 @@ impl PlaneKey {
         self.media.iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    fn file_name(&self) -> String {
+    pub(crate) fn file_name(&self) -> String {
         let run: String = self.run.iter().map(|b| format!("{b:02x}")).collect();
         format!("{}-{run}.lpln", self.prefix())
     }
@@ -714,7 +714,7 @@ fn record_of(frame: i64, out: &PlaneOut) -> FrameRecord {
 
 /// What one `.lpln` file holds.
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Record {
+pub(crate) struct Record {
     /// Repeated inside the file as well as in its name, so a collision or a
     /// renamed file is caught rather than believed.
     key: [u8; 32],
@@ -753,7 +753,7 @@ fn decode(bytes: &[u8], key: PlaneKey) -> Option<Record> {
     (record.key == key_bytes(key)).then_some(record)
 }
 
-fn record_to_run(record: Record) -> Option<PlaneRun> {
+pub(crate) fn record_to_run(record: Record) -> Option<PlaneRun> {
     let first = record.frames.first()?.frame;
     let last = record.frames.last()?.frame;
     Some(PlaneRun {
@@ -773,7 +773,7 @@ fn read_sidecar(dir: &Path, key: PlaneKey) -> Option<PlaneRun> {
     record_to_run(decode(&bytes, key)?)
 }
 
-fn write_sidecar(dir: &Path, key: PlaneKey, run: &PlaneRun) {
+pub(crate) fn write_sidecar(dir: &Path, key: PlaneKey, run: &PlaneRun) {
     if let Some(bytes) = encode(key, run) {
         sidecar::write(dir, &key.file_name(), &bytes);
     }
@@ -877,7 +877,7 @@ fn read_png(dir: &Path, task: PlaneTask, frame: i64) -> Option<PlaneOut> {
 /// the user's own cache folder - the shape [`crate::track`] and [`crate::roto`]
 /// both use, and process-wide rather than per thread because the analysis runs
 /// on a thread this module spawns.
-fn cache_dir() -> Option<PathBuf> {
+pub(crate) fn cache_dir() -> Option<PathBuf> {
     test_cache_dir().or_else(lumit_project::planes_cache_dir)
 }
 
@@ -1193,7 +1193,7 @@ fn finish(instance: Uuid, outcome: Option<Progress>, owns_slot: bool) {
 
 /// The whole of one job, on the analysis thread: read the sidecar, and only if
 /// there is nothing there, open a model and read the clip.
-fn run(job: PlaneJob, cancel: &AtomicBool) {
+pub(crate) fn run(job: PlaneJob, cancel: &AtomicBool) {
     let instance = job.instance;
     let owns_slot = job.owns_slot;
     let key = job.key;
