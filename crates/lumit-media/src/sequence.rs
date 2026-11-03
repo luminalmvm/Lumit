@@ -162,11 +162,11 @@ fn split(name: &str) -> Option<Parts<'_>> {
 /// still-image formats where a numbered run *means* a sequence. A folder of
 /// `clip0001.mp4`…`clip0100.mp4` is a hundred clips, not one sequence, and the
 /// import must not quietly glue them together. Every entry here is decoded by
-/// the FFmpeg Lumit links (PNG, TIFF, JPEG, OpenEXR, Targa, DPX, BMP, WebP and
-/// the Netpbm family all ship in a default build).
+/// the FFmpeg Lumit links (PNG, TIFF, JPEG, OpenEXR, Radiance HDR, Targa, DPX,
+/// BMP, WebP and the Netpbm family all ship in a default build).
 pub const STILL_EXTENSIONS: &[&str] = &[
-    "png", "tif", "tiff", "jpg", "jpeg", "exr", "tga", "targa", "dpx", "bmp", "webp", "ppm", "pgm",
-    "pnm", "pbm",
+    "png", "tif", "tiff", "jpg", "jpeg", "exr", "hdr", "tga", "targa", "dpx", "bmp", "webp", "ppm",
+    "pgm", "pnm", "pbm",
 ];
 
 /// Whether `path`'s extension is a still-image format a numbered run of which

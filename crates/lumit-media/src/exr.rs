@@ -336,7 +336,8 @@ fn pick<'a>(passes: &'a [Pass], wanted: Option<&str>) -> Option<&'a Pass> {
 
 /// Whether this source's picture is read here rather than by ffmpeg: an EXR
 /// whose picture isn't just a plain RGBA, so one with several passes, a
-/// lone channel or layer names ffmpeg can't place.
+/// lone channel or layer names ffmpeg can't place, or one packed with PIZ,
+/// which ffmpeg can't always unpack.
 #[must_use]
 pub fn reads_pass(src: &crate::sequence::MediaSource) -> bool {
     let path = src.on_disk();
@@ -347,8 +348,11 @@ pub fn reads_pass(src: &crate::sequence::MediaSource) -> bool {
         return false;
     };
     let passes = passes_in(&meta);
+    let piz = |h: &exr::meta::header::Header| h.compression == exr::compression::Compression::PIZ;
     !passes.is_empty()
-        && (src.render_pass.is_some() || !(passes.len() == 1 && passes[0].name == PLAIN))
+        && (src.render_pass.is_some()
+            || !(passes.len() == 1 && passes[0].name == PLAIN)
+            || meta.headers.iter().any(piz))
 }
 
 /// Every render pass in an EXR, in the file's order, and the one Auto reads.

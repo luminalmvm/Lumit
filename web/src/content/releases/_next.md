@@ -11,3 +11,4 @@ section below, and when the release note is written the lines move into it.
 - Measure reads footage at its own size, and a Sequence layer at the size of the clip showing, where it used to read the comp's size. An expression's sourceRectAtTime changes the same way, so anything wired to either can change size.
 - Measure in Comp space sees a 3D layer through the camera, where it used to measure it lying flat.
 - Corner pin and Bezier warp in a node graph now draw past the picture they're handed, so a graph that pins its picture and then scales it may show what used to be cut off.
+- An OpenEXR packed with PIZ is read by Lumit's own reader, as FFmpeg drew some with broken blocks, so those pictures can look different.
