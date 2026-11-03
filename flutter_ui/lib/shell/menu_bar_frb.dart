@@ -1476,6 +1476,7 @@ List<MenuSection> lumitMenus(
             cameraSettingsRow(context, app, ui),
             lightSettingsRow(context, app, ui),
             modelSettingsRow(context, ui),
+            editInBlenderRow(ui),
             MenuEntry.todo(l10n.menuAutoOutline),
             // Pre-compose… is live only with a comp open and something selected in
             // it — the menu says so by greying out rather than by failing.

@@ -8514,6 +8514,22 @@
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
   },
+  "projectItemConverting": "converting",
+  "@projectItemConverting": {
+    "description": "Project panel row badge, beside the item name: this 3D model is being turned into a form Lumit reads by the user's Blender, which takes a while the first time. Lower case, one word, like the other row badges."
+  },
+  "projectItemNoBlender": "no Blender",
+  "@projectItemNoBlender": {
+    "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
+  },
+  "tipProjectNoBlender": "Choose Blender in Settings",
+  "@tipProjectNoBlender": {
+    "description": "Tooltip on the no Blender badge of a Project panel 3D model. Clicking the badge opens Settings at the Blender row."
+  },
+  "menuEditInBlender": "Edit in Blender",
+  "@menuEditInBlender": {
+    "description": "Layer menu and Project panel context menu item: opens the selected Model layer's or item's .blend file in Blender, the separate 3D program. Blender is a product name; keep it as it is."
+  },
   "projectItemUndecodable": "unreadable",
   "@projectItemUndecodable": {
     "description": "Warning beside a footage item whose file is on disk but cannot be decoded. Lower case, one word, like the other row badges."
