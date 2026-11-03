@@ -35,6 +35,7 @@ import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show audioSetMuted, audioSetOffsetMs, setAudioDevice;
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -2622,6 +2623,12 @@ class LumitUiState extends ChangeNotifier {
     // engine's to keep to.
     this.workspace.onShareFootage = _applyShareFootage;
     _applyShareFootage();
+    // The Blender picked in Settings, which the engine converts with.
+    try {
+      chooseBlender(path: this.workspace.blenderPath);
+    } catch (_) {
+      // No engine to tell, as in a widget test.
+    }
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;

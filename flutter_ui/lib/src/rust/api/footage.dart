@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import 'blender.dart';
 import 'effect.dart';
 import 'interpret.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -271,6 +272,13 @@ class FootageReference {
         that: this,
       );
 
+  /// Where this 3D model's trip through Blender stands, `None` when it
+  /// needs none or is done. Cheap: it reads nothing.
+  BridgeBlenderState? blenderState() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceBlenderState(
+        that: this,
+      );
+
   /// Detach this item's proxy. The file on disk is left alone — a proxy took
   /// minutes to make, and forgetting it in the project is not a reason to
   /// delete it.
@@ -288,6 +296,13 @@ class FootageReference {
   /// moved would be a silent edit of their project.
   String? colourSpace() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceColourSpace(
+        that: this,
+      );
+
+  /// Open this file in Blender's own window. False when no Blender was
+  /// found or it wouldn't start.
+  Future<bool> editInBlender() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceEditInBlender(
         that: this,
       );
 

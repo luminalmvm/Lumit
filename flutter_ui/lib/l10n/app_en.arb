@@ -22576,6 +22576,30 @@
   "@settingsGroupScripts": {
     "description": "Settings window: heading over a group of rows, the Scripts folder and the script run after each event."
   },
+  "settingsGroup3dModels": "3D models",
+  "@settingsGroup3dModels": {
+    "description": "Settings window: heading over the rows about opening 3D model files, such as which Blender converts the files Lumit has no reader for."
+  },
+  "settingsBlender": "Blender",
+  "@settingsBlender": {
+    "description": "Settings window: row naming the Blender program that 3D model files Lumit cannot read itself (.blend, USD, Alembic) are converted with. A product name; keep it as it is. Its buttons choose another program or go back to the one found."
+  },
+  "settingsBlenderNotFound": "Not found",
+  "@settingsBlenderNotFound": {
+    "description": "Settings window: under the Blender row when no Blender was found on this computer."
+  },
+  "settingsBlenderFound": "{version} · {path}",
+  "@settingsBlenderFound": {
+    "description": "Settings window: under the Blender row, the version and program file of the Blender found, as in 5.2.3 followed by the path to blender.exe.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "settingsScriptAfterExport": "Export finished",
   "@settingsScriptAfterExport": {
     "description": "Settings window: the name of one setting, the script from the Scripts folder run each time an export finishes. Its choices are the scripts and None."

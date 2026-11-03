@@ -941,6 +941,9 @@ class Workspace extends ChangeNotifier {
   /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
 
+  /// The Blender picked in Settings, or empty to use the one found.
+  String blenderPath = '';
+
   /// The script run after each event, by its path in the Scripts folder.
   /// None is set at first.
   final Map<ScriptEvent, String> eventScripts = {};
@@ -1603,6 +1606,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Pick the Blender 3D models open with, or empty to use the one found.
+  void setBlenderPath(String path) {
+    blenderPath = path;
+    settingsChanged();
+  }
+
   /// Run [script] after [event], or nothing when it is null.
   void setEventScript(ScriptEvent event, String? script) {
     if (script == null) {
@@ -2158,6 +2167,7 @@ class Workspace extends ChangeNotifier {
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'scripts_folder': scriptsFolder,
+        'blender_path': blenderPath,
         'event_scripts': {
           for (final MapEntry(:key, :value) in eventScripts.entries)
             key.name: value,
@@ -2284,6 +2294,7 @@ class Workspace extends ChangeNotifier {
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
     scriptsFolder = j['scripts_folder'] as String? ?? '';
+    blenderPath = j['blender_path'] as String? ?? '';
     eventScripts.clear();
     if (j['event_scripts'] case final Map<String, dynamic> scripts) {
       for (final MapEntry(:key, :value) in scripts.entries) {

@@ -253,6 +253,9 @@ Future<String?> pickScript() async {
   return file?.path;
 }
 
+/// Pick a program, or null when cancelled.
+Future<String?> pickProgram() async => (await openFile())?.path;
+
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);
