@@ -110,7 +110,8 @@ fn run() -> Result<(), String> {
         },
     )?);
 
-    // A Model layer of a million triangles (docs/13 §2 B30).
+    // A Model layer of a million triangles (docs/13 §2 B30), and with
+    // shadows (B33).
     results.extend(lumit_bench::models::budgets(&mut |m: Measurement| {
         println!(
             "{}",
