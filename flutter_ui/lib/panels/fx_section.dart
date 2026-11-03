@@ -830,9 +830,14 @@ Widget fxTwoColumnRow({
                 const SizedBox(width: 4),
                 SizedBox(
                     width: fxLabelWidthFor(constraints.maxWidth), child: name),
+                // A long name ends short of its value rather than against it.
                 Expanded(
-                  child:
-                      Align(alignment: AlignmentDirectional.centerStart, child: control),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 6),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: control),
+                  ),
                 ),
               ],
             ),
