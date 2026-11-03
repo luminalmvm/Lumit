@@ -24,6 +24,8 @@ mod gltf_file;
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod fixtures;
 
+pub mod blender;
+
 /// One model: its tree of nodes and everything they point at.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelScene {
@@ -360,23 +362,51 @@ pub enum SceneError {
     Read { path: PathBuf, reason: String },
     #[error("{path} isn't a model Lumit can open")]
     Unsupported { path: PathBuf },
+    #[error("{path} opens through Blender, and none was found")]
+    NoBlender { path: PathBuf },
     #[error("{path} is larger than the memory a model may use")]
     TooLarge { path: PathBuf },
     #[error("cancelled")]
     Cancelled,
 }
 
-/// The extensions [`read`] opens, lower case.
+/// The extensions [`read`] opens itself, lower case. The rest of
+/// [`is_model`]'s go through Blender.
 pub const EXTENSIONS: [&str; 4] = ["gltf", "glb", "fbx", "obj"];
 
 /// Whether the file at `path` is a 3D model [`read`] opens, by its name.
 pub fn is_model(path: impl AsRef<FilePath>) -> bool {
-    EXTENSIONS.contains(&extension(path.as_ref()).as_str())
+    let ext = extension(path.as_ref());
+    EXTENSIONS.contains(&ext.as_str()) || blender::EXTENSIONS.contains(&ext.as_str())
 }
 
 /// Read the model at `path`, held to `limits` and stopped when `cancel` is
-/// set. Never panics, whatever the file holds.
+/// set. A file only Blender reads is turned into a GLB in `cache` first, and
+/// so is an FBX the native reader refuses. Never panics, whatever the file
+/// holds.
 pub fn read(
+    path: &FilePath,
+    limits: Limits,
+    cache: &FilePath,
+    cancel: &AtomicBool,
+) -> Result<ModelScene, SceneError> {
+    let ext = extension(path);
+    if blender::EXTENSIONS.contains(&ext.as_str()) {
+        return read_native(&blender::to_glb(path, cache, cancel)?, limits, cancel);
+    }
+    match read_native(path, limits, cancel) {
+        Err(refused @ SceneError::Read { .. }) if ext == "fbx" => {
+            match blender::to_glb(path, cache, cancel) {
+                Ok(glb) => read_native(&glb, limits, cancel),
+                Err(SceneError::Cancelled) => Err(SceneError::Cancelled),
+                Err(_) => Err(refused),
+            }
+        }
+        read => read,
+    }
+}
+
+fn read_native(
     path: &FilePath,
     limits: Limits,
     cancel: &AtomicBool,
@@ -389,8 +419,6 @@ pub fn read(
             "gltf" | "glb" => gltf_file::read(&mut r),
             #[cfg(not(target_arch = "wasm32"))]
             "fbx" | "obj" => fbx_file::read(&mut r),
-            // .blend, USD, Alembic, PLY, STL and DAE go here: turned into a
-            // GLB by the user's Blender, then read by gltf_file::read.
             _ => Err(SceneError::Unsupported {
                 path: path.to_path_buf(),
             }),

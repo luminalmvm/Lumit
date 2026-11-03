@@ -50,6 +50,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/styles.dart';
@@ -390,6 +391,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _priorPaste;
     }
     _changes?.cancel();
+    _blenderPoll?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     _rowPicks.dispose();
@@ -838,6 +840,44 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// The pictures each 3D model names that are missing or won't read.
   final Map<String, List<String>> _pictures = {};
 
+  /// Where each 3D model's trip through Blender stands, while it isn't done.
+  final Map<String, BridgeBlenderState> _blender = {};
+
+  /// The 3D models asked after on a timer: read and still being read, or
+  /// waiting on Blender.
+  final Map<String, FootageReference> _watched = {};
+  final Set<String> _reading = {};
+  Timer? _blenderPoll;
+
+  /// Look at each watched model's Blender state, and stop watching the ones
+  /// with nothing left to happen.
+  void _pollBlender() {
+    for (final MapEntry(key: id, value: footage) in _watched.entries.toList()) {
+      BridgeBlenderState? state;
+      try {
+        state = footage.blenderState();
+      } catch (_) {
+        state = null;
+      }
+      if (state != _blender[id]) {
+        if (state == null) {
+          _blender.remove(id);
+        } else {
+          _blender[id] = state;
+        }
+        // A timer tick, so nothing else is drawing a frame to wait for.
+        if (mounted) setState(() {});
+      }
+      // No Blender stays watched, so picking one in Settings shows here.
+      final settled = state == null || state is BridgeBlenderState_Failed;
+      if (settled && !_reading.contains(id)) _watched.remove(id);
+    }
+    if (_watched.isEmpty) {
+      _blenderPoll?.cancel();
+      _blenderPoll = null;
+    }
+  }
+
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
   /// of v0's `documentEpoch`.
@@ -1150,6 +1190,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         missing: missing,
         undecodable: _undecodable.contains(id),
         missingPictures: _pictures[id] ?? const [],
+        blender: _blender[id],
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
@@ -1774,7 +1815,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           if (_models[id] ??= _isModel(item)) {
             // The old names stay until the new answer lands, so the badge
             // doesn't blink on every edit.
-            item.field0.getModelMissing().then((names) {
+            // Reading a model Blender converts takes a while, so it is
+            // watched until that is done.
+            _watched[id] = item.field0;
+            _reading.add(id);
+            _blenderPoll ??= Timer.periodic(
+                const Duration(milliseconds: 500), (_) => _pollBlender());
+            item.field0.getModelMissing().whenComplete(() {
+              _reading.remove(id);
+              if (mounted) _pollBlender();
+            }).then((names) {
               if (!mounted) return;
               final had = _pictures[id];
               if (names.isEmpty ? had == null : listEquals(had, names)) return;

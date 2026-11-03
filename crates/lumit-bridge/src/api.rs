@@ -11,6 +11,7 @@ pub mod audio;
 // call site rather than at anything a person wrote. Detection itself
 // needs the audio pipeline and says so calmly when the build has none.
 pub mod beats;
+pub mod blender;
 pub mod cache;
 pub mod clip_group;
 pub mod colour;

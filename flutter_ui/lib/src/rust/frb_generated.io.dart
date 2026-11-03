@@ -8,6 +8,7 @@ import 'api/addons.dart';
 import 'api/assets.dart';
 import 'api/audio.dart';
 import 'api/beats.dart';
+import 'api/blender.dart';
 import 'api/cache.dart';
 import 'api/colour.dart';
 import 'api/comp_graph.dart';
@@ -203,6 +204,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw);
+
+  @protected
+  BridgeBlender dco_decode_box_autoadd_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState dco_decode_box_autoadd_bridge_blender_state(dynamic raw);
 
   @protected
   BridgeCameraAim dco_decode_box_autoadd_bridge_camera_aim(dynamic raw);
@@ -577,6 +584,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide dco_decode_bridge_bezier_side(dynamic raw);
+
+  @protected
+  BridgeBlender dco_decode_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState dco_decode_bridge_blender_state(dynamic raw);
 
   @protected
   BridgeBoxSource dco_decode_bridge_box_source(dynamic raw);
@@ -1976,6 +1989,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeBeatGrid? dco_decode_opt_box_autoadd_bridge_beat_grid(dynamic raw);
 
   @protected
+  BridgeBlender? dco_decode_opt_box_autoadd_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState? dco_decode_opt_box_autoadd_bridge_blender_state(
+      dynamic raw);
+
+  @protected
   BridgeCameraAim? dco_decode_opt_box_autoadd_bridge_camera_aim(dynamic raw);
 
   @protected
@@ -2376,6 +2396,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlender sse_decode_box_autoadd_bridge_blender(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState sse_decode_box_autoadd_bridge_blender_state(
       SseDeserializer deserializer);
 
   @protected
@@ -2832,6 +2860,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_bridge_bezier_side(SseDeserializer deserializer);
+
+  @protected
+  BridgeBlender sse_decode_bridge_blender(SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState sse_decode_bridge_blender_state(
+      SseDeserializer deserializer);
 
   @protected
   BridgeBoxSource sse_decode_bridge_box_source(SseDeserializer deserializer);
@@ -4481,6 +4516,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeBlender? sse_decode_opt_box_autoadd_bridge_blender(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState? sse_decode_opt_box_autoadd_bridge_blender_state(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeCameraAim? sse_decode_opt_box_autoadd_bridge_camera_aim(
       SseDeserializer deserializer);
 
@@ -4913,6 +4956,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_blender(
+      BridgeBlender self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_blender_state(
+      BridgeBlenderState self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_camera_aim(
@@ -5384,6 +5435,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_blender(BridgeBlender self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_blender_state(
+      BridgeBlenderState self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_box_source(
@@ -7171,6 +7229,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_beat_grid(
       BridgeBeatGrid? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_blender(
+      BridgeBlender? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_blender_state(
+      BridgeBlenderState? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_camera_aim(

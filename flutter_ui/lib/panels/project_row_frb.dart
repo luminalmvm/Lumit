@@ -14,6 +14,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,7 @@ import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/name_direction.dart';
+import '../shell/settings_window_frb.dart' show showSettingsWindowFrb;
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -190,6 +192,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// tooltip.
   final List<String> missingPictures;
 
+  /// Where a 3D model's trip through the user's Blender stands, null when it
+  /// needs none or is done.
+  final BridgeBlenderState? blender;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -324,6 +330,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.missing,
     this.undecodable = false,
     this.missingPictures = const [],
+    this.blender,
     required this.audio,
     required this.label,
     required this.inherited,
@@ -828,6 +835,20 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   Widget _nameAndBadges(LumitTheme t) {
     final id = projectItemId(item);
     final badges = [
+      // First, so a narrow column keeps it: the one thing the row is waiting
+      // on, or that wants fixing before the model can draw.
+      ...switch (widget.blender) {
+        BridgeBlenderState_Converting() => [
+            ('converting-$id', l10n.projectItemConverting, t.textMuted)
+          ],
+        BridgeBlenderState_NoBlender() => [
+            ('no-blender-$id', l10n.projectItemNoBlender, t.warning)
+          ],
+        BridgeBlenderState_Failed() => [
+            ('blender-failed-$id', l10n.projectItemUndecodable, t.warning)
+          ],
+        null => const <(String, String, Color)>[],
+      },
       // Placed somewhere (§12A.3a). Before the missing badge, so a broken
       // file that is nonetheless *in* a comp reads left to right as "used,
       // and lost", which is the order those two facts matter in.
@@ -935,6 +956,27 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                       ),
                     ),
                   ),
+                )
+              else if (key.startsWith('no-blender-'))
+                // Straight to the row that fixes it.
+                LumitTooltip(
+                  message: l10n.tipProjectNoBlender,
+                  child: GestureDetector(
+                    key: ValueKey<String>(key),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showSettingsWindowFrb(context,
+                        row: l10n.settingsBlender),
+                    child: ProjectBadge(label: label, colour: colour),
+                  ),
+                )
+              else if (key.startsWith('blender-failed-'))
+                LumitTooltip(
+                  message: switch (widget.blender) {
+                    BridgeBlenderState_Failed(:final reason) => reason,
+                    _ => l10n.tipProjectUndecodable,
+                  },
+                  child: ProjectBadge(
+                      key: ValueKey<String>(key), label: label, colour: colour),
                 )
               else if (key.startsWith('undecodable-') ||
                   key.startsWith('pictures-'))
