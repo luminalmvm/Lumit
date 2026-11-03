@@ -82,11 +82,13 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
         if l.matte.as_ref().is_some_and(|m| below(m.layer)) {
             return None;
         }
-        let refs_below = l.effects.iter().filter(|e| e.enabled).any(|e| {
-            e.params
-                .iter()
-                .any(|p| matches!(p.value, EffectValue::Layer(Some(id)) if below(id)))
-        });
+        let refs_below = crate::model_material::and_effects(l)
+            .filter(|e| e.enabled)
+            .any(|e| {
+                e.params
+                    .iter()
+                    .any(|p| matches!(p.value, EffectValue::Layer(Some(id)) if below(id)))
+            });
         if refs_below {
             return None;
         }

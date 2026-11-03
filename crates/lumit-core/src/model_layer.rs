@@ -20,6 +20,10 @@ pub struct ModelSettings {
     pub units: f64,
     /// Size the model to fill the comp and centre it, in place of `units`.
     pub fit: bool,
+    /// The rows of each material the user has changed, by its place in the
+    /// file ([`crate::model_material`]). Nothing for one left as it is.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub materials: Vec<Option<crate::model::EffectInstance>>,
 }
 
 impl Default for ModelSettings {
@@ -28,6 +32,7 @@ impl Default for ModelSettings {
             up_axis: UpAxis::Y,
             units: 100.0,
             fit: true,
+            materials: Vec::new(),
         }
     }
 }
@@ -110,6 +115,8 @@ mod tests {
             up_axis: UpAxis::Z,
             units: 250.0,
             fit: false,
+            // A changed material is kept, an unchanged one is nothing.
+            materials: vec![None, crate::fx::builtins::instantiate("model_material")],
         };
         let set = Op::SetLayerKind {
             comp,

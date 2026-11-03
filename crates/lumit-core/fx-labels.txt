@@ -109,6 +109,8 @@ Band 5 frequency
 Band 5 gain
 Band 5 on
 Band 5 type
+Base colour
+Base colour layer
 Basic
 Beam
 Beat markers
@@ -168,6 +170,7 @@ Broadband, green
 Broadcast safe
 Brush hardness
 Brush size
+Brushed metal
 Bulge
 Burst
 Burst count
@@ -202,6 +205,7 @@ Choke
 Choose by
 Chorus
 Chromatic aberration
+Chrome
 Circle
 Clamp
 Clearance
@@ -218,6 +222,8 @@ Clone layer 3
 Clone layer 4
 Clone to points
 Closed
+Coat
+Coat roughness
 Coating
 Cohesion
 Collide
@@ -411,6 +417,10 @@ Element 9
 Ellipse
 Ellipse outline
 Emboss
+Emission colour
+Emission layer
+Emission strength
+Emissive
 Emit from image
 Emit rate
 Emitter
@@ -511,6 +521,7 @@ From
 From group
 From x
 From y
+Frosted glass
 Fujicolor C200
 Fujicolor Pro 400H
 Full body
@@ -527,6 +538,7 @@ Generate
 Ghost
 Ghost intensity
 Ghost softness
+Glass
 Glass curvature
 Glass dirt
 Glitch hit
@@ -538,6 +550,7 @@ Glow intensity
 Glow opacity
 Glow radius
 Glow size
+Gold
 Gold 200
 Gradient
 Gradient 1
@@ -609,6 +622,7 @@ Hue range
 Hue shift
 Hue start
 Hysteresis
+IOR
 Ice
 Image
 Image layer
@@ -766,6 +780,7 @@ Mask path
 Mask points
 Mask/Path
 Master
+Material
 Math
 Matte
 Matte inverted
@@ -789,6 +804,7 @@ Measure
 Median
 Merge
 Merge points
+Metallic
 Method
 Micro Four Thirds
 Middle
@@ -833,6 +849,8 @@ Noise speed
 Noise type
 None
 Normal
+Normal layer
+Normal strength
 Normalised
 Not picked
 Note
@@ -867,6 +885,7 @@ One point
 Opacity
 Opacity %
 Opacity by
+Opacity layer
 Opacity over life
 Open graph
 Operate on alpha
@@ -941,6 +960,7 @@ Placement
 Planar track
 Planes
 Plasma
+Plastic
 Point
 Point 1 x
 Point 1 y
@@ -1081,10 +1101,12 @@ Rotation wave phase
 Roto brush
 Roughen
 Roughen edges
+Roughness
 Roundness
 Row gap
 Rows
 Rows/columns jitter
+Rubber
 Same
 Same as Per
 Samples
@@ -1333,6 +1355,7 @@ Transform
 Transform points
 Transition
 Transition width
+Transmission
 Transparent
 Tremolo
 Triangle

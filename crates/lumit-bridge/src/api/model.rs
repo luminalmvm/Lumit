@@ -221,7 +221,11 @@ impl LayerReference {
     /// other kind of layer.
     #[frb(sync)]
     pub fn set_model_settings(&self, settings: BridgeModelSettings) -> Result<(), BridgeError> {
-        let LayerKind::Model { item, .. } = self.item()?.kind else {
+        let LayerKind::Model {
+            item,
+            settings: kept,
+        } = self.item()?.kind
+        else {
             return Err(BridgeError::InvalidLayer);
         };
         let settings = ModelSettings {
@@ -232,6 +236,7 @@ impl LayerReference {
             // Nought would shrink the model to nothing and no further.
             units: settings.units.max(f64::EPSILON),
             fit: settings.fit,
+            materials: kept.materials,
         };
         self.commit(lumit_core::ops::Op::SetLayerKind {
             comp: self.comp_id,

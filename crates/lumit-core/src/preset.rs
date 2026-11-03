@@ -100,13 +100,13 @@ pub fn from_json(text: &str) -> Result<EffectPreset, String> {
     serde_json::from_str::<EffectPreset>(text).map_err(|e| e.to_string())
 }
 
-/// The preset's effects with fresh instance ids — what actually lands on a
-/// layer, so applying one preset to several layers never shares an instance
-/// id (ids are instance identity only; they never feed a cache key).
+/// The preset's effects with fresh instance ids, so applying one to several
+/// layers never shares an id (ids never feed a cache key).
 pub fn instantiated(preset: &EffectPreset) -> Vec<EffectInstance> {
     preset
         .effects
         .iter()
+        .filter(|e| e.effect.match_name != crate::model_material::MATCH_NAME)
         .cloned()
         .map(|mut e| {
             e.id = uuid::Uuid::now_v7();
