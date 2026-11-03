@@ -5076,6 +5076,22 @@
   "@fxCutWords": {
     "description": "Effect controls — a checkbox on Type fill: keep each word at its column's width and let the region's edge cut it, instead of stretching it."
   },
+  "fxColumnWidths": "Column widths",
+  "@fxColumnWidths": {
+    "description": "Effect controls — a text row on Type fill: how wide each word's column is, as numbers between bars, shares of the width."
+  },
+  "fxFitPiece": "Fit piece",
+  "@fxFitPiece": {
+    "description": "Effect controls — a checkbox on Type fill: give every piece of the region its own whole word, fitted to the piece across and down."
+  },
+  "fxPieceScale": "Piece scale",
+  "@fxPieceScale": {
+    "description": "Effect controls — a slider on Type fill: how much of its piece a word fills with Fit piece, per cent."
+  },
+  "fxGridHeight": "Grid height",
+  "@fxGridHeight": {
+    "description": "Effect controls — a slider on Type fill: how tall the rows stand together, centred in the frame; 0 is the frame height."
+  },
   "fxRowGap": "Row gap",
   "@fxRowGap": {
     "description": "Effect controls — a control on Type fill: the room between one row and the next, in pixels."

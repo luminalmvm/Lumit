@@ -16914,6 +16914,13 @@
           "default": "Flood|the|Grid"
         },
         {
+          "id": "column_widths",
+          "label": "Column widths",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
           "id": "region_layer",
           "label": "Region layer",
           "kind": "layer",
@@ -16960,6 +16967,24 @@
           "default": false
         },
         {
+          "id": "fit_piece",
+          "label": "Fit piece",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "piece_scale",
+          "label": "Piece scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 95.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "threshold",
           "label": "Threshold",
           "kind": "float",
@@ -16980,6 +17005,16 @@
           "slider_max": 200.0,
           "hard_min": 1.0,
           "hard_max": 400.0
+        },
+        {
+          "id": "grid_height",
+          "label": "Grid height",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 4000.0,
+          "hard_min": 0.0
         },
         {
           "id": "row_gap",

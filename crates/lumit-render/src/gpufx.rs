@@ -6269,8 +6269,43 @@ impl GpuEffect for TypeFill {
             .filter(|t| t.width() == w && t.height() == h)
             .and_then(|t| lumit_gpu::fx::common::readback_linear_f32(ctx, t, w, h).ok());
         let luminance = inst.region_from == 1;
+        let read = |px: &[f32], at: usize| -> f32 {
+            let t = px.get(at..at + 4).unwrap_or(&[0.0; 4]);
+            if luminance {
+                (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
+            } else {
+                t[3].clamp(0.0, 1.0)
+            }
+        };
+        // Fit piece: how far down each row's band the region reaches, a pixel
+        // column at a time, over the whole band rather than its middle.
+        let reach: Vec<Vec<Option<[f32; 2]>>> = if inst.fit_piece {
+            bands
+                .iter()
+                .map(|band| {
+                    let rows =
+                        (band[0].max(0.0) as usize)..(band[1].ceil() as usize).min(h as usize);
+                    (0..w as usize)
+                        .map(|x| {
+                            let Some(px) = &region else {
+                                return Some(*band);
+                            };
+                            let inside = |y: &usize| {
+                                inst.coverage(read(px, (y * w as usize + x) * 4)) >= 0.5
+                            };
+                            let top = rows.clone().find(inside)?;
+                            let bottom = rows.clone().rev().find(inside)?;
+                            Some([top as f32, bottom as f32 + 1.0])
+                        })
+                        .collect()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let free: Vec<Vec<[f32; 2]>> = bands
             .iter()
+            .filter(|_| !inst.fit_piece)
             .map(|band| {
                 let y = (((band[0] + band[1]) * 0.5) as u32).min(h - 1) as usize;
                 let samples: Vec<f32> = match &region {
@@ -6315,7 +6350,11 @@ impl GpuEffect for TypeFill {
             .iter()
             .map(|d| d.width as f32 / d.height.max(1) as f32)
             .collect();
-        let pieces = inst.pieces(&bands, &free, &natural, w as f32, px_scale);
+        let pieces = if inst.fit_piece {
+            inst.fit_pieces(&reach, &natural, w as f32, px_scale)
+        } else {
+            inst.pieces(&bands, &free, &natural, w as f32, px_scale)
+        };
         // Each word is set again as wide as its boxes want it, in quarter
         // octaves, so a wide column gets wide letters instead of a smear.
         let step = |piece: &lumit_core::fx::effects::type_fill::Piece| -> i32 {
@@ -6345,8 +6384,9 @@ impl GpuEffect for TypeFill {
         }
         let mut px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
         // The region cuts the words pixel by pixel: the rows read it only
-        // along their middle, and a curved edge crosses a tall row.
-        if let Some(region) = &region {
+        // along their middle, and a curved edge crosses a tall row. Fit piece
+        // keeps every word whole.
+        if let Some(region) = region.as_ref().filter(|_| !inst.fit_piece) {
             for (out, t) in px.chunks_exact_mut(4).zip(region.chunks_exact(4)) {
                 let v = if luminance {
                     (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)

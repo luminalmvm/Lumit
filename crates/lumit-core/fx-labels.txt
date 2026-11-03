@@ -238,6 +238,7 @@ Colour overlay
 Colour ramp
 Colour variation
 Colours
+Column widths
 Columns
 Combine
 Combine channels
@@ -446,6 +447,7 @@ Find edges
 Fish
 Fisheye
 Fit cell
+Fit piece
 Fit to size
 Five
 Flag
@@ -520,6 +522,7 @@ Green blur
 Green from
 Greens
 Grid
+Grid height
 Grid size
 Grid size x
 Grid size y
@@ -870,6 +873,7 @@ Pick
 Pick points
 Picked
 Picked and the rest
+Piece scale
 Pillow emboss
 Pin layer
 Pin light

@@ -6784,6 +6784,7 @@ fn every_parameter_declares_a_unit() {
             // Label points: how far from its point a label sits.
             ("label_points", "offset_x"),
             ("label_points", "offset_y"),
+            ("type_fill", "grid_height"),
             ("type_fill", "row_gap"),
             ("type_fill", "word_gap"),
             ("type_fill", "min_width"),

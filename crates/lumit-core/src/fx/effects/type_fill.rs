@@ -19,8 +19,10 @@
 use crate::fx::builtins::MAP_PLACEMENT_OPTIONS;
 use crate::fx::{
     params::ParamId, params::ShortText, params::Value, registry::EffectDef,
-    registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
+    registry::EffectMetadata, registry::ResolveCx, registry::RowState, registry::Signature,
+    schema::EffectSchema,
 };
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
 /// What Order offers.
@@ -52,6 +54,13 @@ pub struct TypeFill {
     #[text(label = "Words", default = "Flood|the|Grid")]
     pub words: ShortText,
 
+    /// How wide each word's column is, as numbers between bars in the order
+    /// of Words (`46|8|40`): shares of the width, not pixels. Empty, or not
+    /// one number for each word, makes each column as wide as its word
+    /// naturally is.
+    #[text(label = "Column widths", default = "")]
+    pub column_widths: ShortText,
+
     /// The layer that says where the words may go. Unset, the whole frame is
     /// theirs.
     #[layer(label = "Region layer")]
@@ -79,6 +88,25 @@ pub struct TypeFill {
     #[toggle(label = "Cut words", default = false)]
     pub cut_words: bool,
 
+    /// Give every piece the region leaves in a cell its own whole word,
+    /// fitted to the piece's box across and down, as Cavalry's Contours to
+    /// Sub-Meshes and Mesh distribution do: a piece the shape's edge makes
+    /// short gets a short word, and nothing is cut.
+    #[toggle(label = "Fit piece", default = false)]
+    pub fit_piece: bool,
+
+    /// How much of its piece's box a word fills with Fit piece, per cent.
+    #[slider(
+        label = "Piece scale",
+        min = 0.0,
+        max = 100.0,
+        default = 95.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub piece_scale: f32,
+
     /// How much of the region a place needs to be in it, per cent.
     #[slider(
         label = "Threshold",
@@ -102,6 +130,18 @@ pub struct TypeFill {
         unit = Raw
     )]
     pub rows: i32,
+
+    /// How tall the rows stand together, centred in the frame, px@comp; 0
+    /// is the frame's height. Keyed with Rows, one row grows into a grid.
+    #[slider(
+        label = "Grid height",
+        min = 0.0,
+        max = 4000.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub grid_height: f32,
 
     /// The room between one row and the next, px@comp.
     #[slider(
@@ -196,10 +236,16 @@ impl TypeFill {
     pub fn row_bands(&self, height: f32, px_scale: f32) -> Vec<[f32; 2]> {
         let n = self.rows.clamp(1, 400) as usize;
         let gap = (self.row_gap * px_scale).max(0.0);
-        let row = ((height - gap * (n - 1) as f32) / n as f32).max(0.0);
+        let grid = if self.grid_height > 0.0 {
+            (self.grid_height * px_scale).min(height)
+        } else {
+            height
+        };
+        let first = (height - grid) * 0.5;
+        let row = ((grid - gap * (n - 1) as f32) / n as f32).max(0.0);
         (0..n)
             .map(|r| {
-                let top = r as f32 * (row + gap);
+                let top = first + r as f32 * (row + gap);
                 [top, top + row]
             })
             .collect()
@@ -292,18 +338,11 @@ impl TypeFill {
         let least = (self.min_width * px_scale).max(1.0);
         let mut out = Vec::new();
         for (r, band) in bands.iter().enumerate() {
-            let order = self.row_order(r, n);
             let height = band[1] - band[0];
             if height <= 0.0 {
                 continue;
             }
-            #[allow(clippy::cast_precision_loss)]
-            let room = (width - gap * (n.saturating_sub(1)) as f32).max(0.0);
-            let total: f32 = order.iter().map(|&k| natural[k].max(1e-3)).sum();
-            let mut left = 0.0f32;
-            for &k in &order {
-                let column = [left, left + room * natural[k].max(1e-3) / total];
-                left = column[1] + gap;
+            for (k, column) in self.columns(r, natural, width, gap) {
                 if self.cut_words {
                     // Every word whole; the region cuts it pixel by pixel
                     // (`TypeFill::coverage`).
@@ -354,6 +393,127 @@ impl TypeFill {
         }
         out
     }
+
+    /// The share of the width each word's column takes: Column widths when
+    /// it gives one positive number for each word, else `natural`.
+    #[must_use]
+    pub fn shares(&self, natural: &[f32]) -> Vec<f32> {
+        let given: Vec<f32> = self
+            .column_widths
+            .as_str()
+            .split('|')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse::<f32>().ok())
+            .collect();
+        if given.len() == natural.len() && given.iter().all(|v| *v > 0.0) {
+            given
+        } else {
+            natural.iter().map(|v| v.max(1e-3)).collect()
+        }
+    }
+
+    /// Row `r`'s columns across `width`, left to right: which word, and its
+    /// left and right, as wide as [`TypeFill::shares`] says, Word gap (`gap`,
+    /// raster px) between them.
+    fn columns(&self, r: usize, natural: &[f32], width: f32, gap: f32) -> Vec<(usize, [f32; 2])> {
+        let n = natural.len();
+        let order = self.row_order(r, n);
+        let shares = self.shares(natural);
+        #[allow(clippy::cast_precision_loss)]
+        let room = (width - gap * (n.saturating_sub(1)) as f32).max(0.0);
+        let total: f32 = order.iter().map(|&k| shares[k]).sum();
+        let mut left = 0.0f32;
+        order
+            .into_iter()
+            .map(|k| {
+                let column = [left, left + room * shares[k] / total];
+                left = column[1] + gap;
+                (k, column)
+            })
+            .collect()
+    }
+
+    /// Every word's box with Fit piece. `reach[r][x]` is how far down row
+    /// r's band the region reaches at pixel column x, top and bottom, or
+    /// `None` where it does not; the other arguments are as
+    /// [`TypeFill::pieces`] takes them.
+    ///
+    /// A row's region is cut by its columns into pieces, one for each run of
+    /// pixel columns the region reaches (Word gap is only the room between
+    /// columns, not an inset at the region's edges);
+    /// each piece narrower than Min width stays empty, and each other
+    /// gets its column's word whole, fitted to the piece's box (as wide as
+    /// the run, as tall as the region reaches over it) at Piece scale.
+    #[must_use]
+    pub fn fit_pieces(
+        &self,
+        reach: &[Vec<Option<[f32; 2]>>],
+        natural: &[f32],
+        width: f32,
+        px_scale: f32,
+    ) -> Vec<Piece> {
+        if natural.is_empty() {
+            return Vec::new();
+        }
+        let gap = (self.word_gap * px_scale).max(0.0);
+        let least = (self.min_width * px_scale).max(1.0);
+        let scale = (self.piece_scale / 100.0).clamp(0.0, 1.0);
+        let mut out = Vec::new();
+        for (r, row) in reach.iter().enumerate() {
+            let spans = runs(row);
+            for (k, column) in self.columns(r, natural, width, gap) {
+                for span in &spans {
+                    // The region's own edges are the pieces' edges: Word
+                    // gap is only the room between columns.
+                    #[allow(clippy::cast_precision_loss)]
+                    let (s0, s1) = (span[0] as f32, span[1] as f32);
+                    let (x0, x1) = (column[0].max(s0), column[1].min(s1));
+                    if x1 - x0 < least {
+                        continue;
+                    }
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    let cols = (x0.floor().max(0.0) as usize)..(x1.ceil() as usize).min(row.len());
+                    let (mut top, mut bottom) = (f32::MAX, f32::MIN);
+                    for [t, b] in row[cols].iter().flatten() {
+                        top = top.min(*t);
+                        bottom = bottom.max(*b);
+                    }
+                    if bottom <= top {
+                        continue;
+                    }
+                    let (cx, cy) = ((x0 + x1) * 0.5, (top + bottom) * 0.5);
+                    let (hw, hh) = ((x1 - x0) * 0.5 * scale, (bottom - top) * 0.5 * scale);
+                    out.push(Piece {
+                        word: k,
+                        rect: [cx - hw, cy - hh, cx + hw, cy + hh],
+                        clip: [cx - hw, cx + hw],
+                    });
+                }
+            }
+        }
+        out
+    }
+}
+
+/// The runs of pixel columns a row's region reaches, start and end.
+fn runs(row: &[Option<[f32; 2]>]) -> Vec<[usize; 2]> {
+    let mut out = Vec::new();
+    let mut start = None;
+    for (x, v) in row.iter().enumerate() {
+        match (v.is_some(), start) {
+            (true, None) => start = Some(x),
+            (false, Some(s)) => {
+                out.push([s, x]);
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        out.push([s, row.len()]);
+    }
+    out
 }
 
 /// Type fill's behaviour. No CPU reference through the trait: the Text layer
@@ -374,6 +534,16 @@ impl EffectDef for TypeFillDef {
 
     fn reads_text_layer(&self) -> bool {
         true
+    }
+
+    /// Fit piece keeps every word whole, so Cut words does nothing beside
+    /// it; Piece scale is only read by Fit piece.
+    fn row_state(&self, inst: &EffectInstance) -> RowState {
+        let fit = matches!(inst.param("fit_piece"), Some(EffectValue::Bool(true)));
+        RowState {
+            disabled: vec![if fit { "cut_words" } else { "piece_scale" }],
+            ..RowState::default()
+        }
     }
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
@@ -501,5 +671,64 @@ mod tests {
         sorted.sort_unstable();
         assert_eq!(sorted, vec![0, 1, 2], "a shuffle of the words");
         assert_eq!(a, random.row_order(4, 3), "the same every frame");
+    }
+
+    /// Grid height stands the rows together in a band of that height in the
+    /// middle of the frame, so one row keyed into forty grows into a grid.
+    #[test]
+    fn grid_height_centres_the_rows() {
+        let mut t = TypeFill::read(Params::EMPTY);
+        t.rows = 2;
+        t.row_gap = 0.0;
+        t.grid_height = 40.0;
+        assert_eq!(t.row_bands(100.0, 1.0), vec![[30.0, 50.0], [50.0, 70.0]]);
+        t.grid_height = 0.0;
+        assert_eq!(t.row_bands(100.0, 1.0), vec![[0.0, 50.0], [50.0, 100.0]]);
+    }
+
+    /// Fit piece: a shape that cuts a column in two leaves two pieces, each
+    /// with the whole word, fitted to its own box across and down at Piece
+    /// scale; a piece the region reaches only part of the way down gets a
+    /// short word. Guards a word cut by the shape, or stretched over it.
+    #[test]
+    fn fit_piece_gives_each_piece_its_own_whole_word() {
+        let mut t = TypeFill::read(Params::EMPTY);
+        t.words = crate::fx::params::ShortText::new("a");
+        t.word_gap = 0.0;
+        t.min_width = 1.0;
+        t.piece_scale = 50.0;
+        // One row 0..20 across 10 px: free at 0..4 all the way down, held
+        // at 4..6, free at 6..10 only from 10 to 20.
+        let mut row = vec![Some([0.0, 20.0]); 4];
+        row.extend([None, None]);
+        row.extend(vec![Some([10.0, 20.0]); 4]);
+        let pieces = t.fit_pieces(&[row], &[1.0], 10.0, 1.0);
+        assert_eq!(
+            pieces,
+            vec![
+                Piece {
+                    word: 0,
+                    rect: [1.0, 5.0, 3.0, 15.0],
+                    clip: [1.0, 3.0]
+                },
+                Piece {
+                    word: 0,
+                    rect: [7.0, 12.5, 9.0, 17.5],
+                    clip: [7.0, 9.0]
+                },
+            ]
+        );
+    }
+
+    /// Column widths sets each column's share of the width; a list that is
+    /// not one positive number for each word is left out.
+    #[test]
+    fn column_widths_set_the_columns() {
+        let mut t = TypeFill::read(Params::EMPTY);
+        assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
+        t.column_widths = crate::fx::params::ShortText::new("46|8|40");
+        assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![46.0, 8.0, 40.0]);
+        t.column_widths = crate::fx::params::ShortText::new("46|8");
+        assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
     }
 }
