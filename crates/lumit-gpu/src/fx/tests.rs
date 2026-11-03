@@ -10609,6 +10609,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
             pts: p.pts,
             steps: p.steps,
             mix: p.mix,
+            frame: p.frame,
         }
     };
     for (name, b) in [
@@ -14684,6 +14685,7 @@ fn the_matte_scales_the_bezier_warp_bend() {
         pts: p.pts,
         steps: p.steps,
         mix: p.mix,
+        frame: p.frame,
     };
     check_matte_claim(
         &ctx,

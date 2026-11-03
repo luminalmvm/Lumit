@@ -1765,7 +1765,7 @@ impl GpuEffect for CornerPin {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let c = effects::corner_pin::CornerPin::read(p).packed();
+        let c = effects::corner_pin::CornerPin::packed_in(p, w, h);
         fx.corner_pin(
             ctx,
             tex,
@@ -1995,7 +1995,7 @@ impl GpuEffect for BezierWarp {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let b = effects::bezier_warp::BezierWarp::read(p).packed();
+        let b = effects::bezier_warp::BezierWarp::packed_in(p);
         fx.bezier_warp(
             ctx,
             tex,
@@ -2006,6 +2006,7 @@ impl GpuEffect for BezierWarp {
                 pts: b.pts,
                 steps: b.steps,
                 mix: b.mix,
+                frame: b.frame,
             },
         )
     }

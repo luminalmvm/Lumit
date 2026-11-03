@@ -3589,6 +3589,9 @@ pub struct BezierWarpParams {
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
 }
 
 /// The narrowest Jacobian determinant the patch inversion will divide by. Below
@@ -3680,14 +3683,18 @@ pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
 /// empty matte is the unmatted path to the byte.
 pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
-    let (fw, fh) = (w as f32, h as f32);
+    let [ox, oy, fw, fh] = if p.frame[2] > 0.0 {
+        p.frame
+    } else {
+        [0.0, 0.0, w as f32, h as f32]
+    };
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let mut u = px / fw;
-            let mut v = py / fh;
+            let mut u = (px - ox) / fw;
+            let mut v = (py - oy) / fh;
             for _ in 0..p.steps {
                 let (s, du, dv) = coons(&p.pts, u, v);
                 let fx = s[0] - px;
@@ -3709,8 +3716,8 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
             {
                 [0.0f32; 4]
             } else {
-                let mut sx = u * fw;
-                let mut sy = v * fh;
+                let mut sx = ox + u * fw;
+                let mut sy = oy + v * fh;
                 if (sx - px).abs() < BEZ_SNAP_PX && (sy - py).abs() < BEZ_SNAP_PX {
                     sx = px;
                     sy = py;
