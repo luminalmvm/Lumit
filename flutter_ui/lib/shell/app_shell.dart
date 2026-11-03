@@ -619,9 +619,11 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   /// A camera tool in hand over the Viewer gets After Effects' F and
   /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere, and so
-  /// does a 3D viewport in front, which also frames everything on Shift+F.
+  /// does a 3D view or viewport in front, which also frames everything on
+  /// Shift+F.
   String? _cameraLook(LumitUiState ui, KeyEvent event) {
-    final viewport = ui.isViewport(ui.activeViewId);
+    final viewport = ui.isViewport(ui.activeViewId) ||
+        ui.viewPoseOf(ui.activeViewId) != null;
     if ((ui.tools.tool.group != ToolGroup.camera && !viewport) ||
         ui.activePanel != Panel.viewer) {
       return null;

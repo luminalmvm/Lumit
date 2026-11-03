@@ -72,7 +72,7 @@ import 'package:lumit_flutter/widgets/drag_escape.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'transform_rows_frb.dart' show read;
-import 'viewer_gizmo.dart' show LayerBox, layerAtPoint;
+import 'viewer_gizmo.dart' show LayerBox, layerAndDepthAt, layerAtPoint;
 import 'viewer_gizmo_3d.dart'
     show Vec3, compToParent, eulerYxz, rotationMatching;
 import 'viewer_layer_map.dart' show viewerNear;
@@ -1072,6 +1072,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   (double, double, double)? _dollyToward;
   Offset _dollyAt = Offset.zero;
   double _framed = 0;
+
+  /// The last point a navigation turned round that was under the pointer.
+  (double, double, double)? _lastPivot;
 
   /// The orbit's pivot while no drag runs, held against what moves it so a
   /// hover walks no boxes.
@@ -2306,14 +2309,16 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   Offset _toPicture(Offset at) => (at - widget.fitted.topLeft) / _scale;
 
   /// The nearest 3D layer under [at] seen through [pose]: where the pointer
-  /// meets it, and its depth over the zoom. A light is its own point.
+  /// meets it, and its depth over the zoom. A light is its own point, and a
+  /// model is met where the engine finds its triangles, not its box.
   ({(double, double, double) point, double depth})? _hitAt(
       Offset at, CameraPose pose) {
-    final hit = layerAtPoint(widget.boxes(), at);
+    final found = layerAndDepthAt(widget.boxes(), at, exact: true);
+    final hit = found?.box;
     if (hit == null || !hit.map.projected) return null;
     final m = hit.map;
     final on = hit.marker ? m.toScreen(m.ax, m.ay) : at;
-    final w = hit.marker ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
+    final w = found!.depth.isFinite ? found.depth : null;
     if (w == null || w <= viewerNear) return null;
     return (
       point: pointUnder(pose, _toPicture(on), widget.compSize, w),
@@ -2339,11 +2344,13 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     return picked ?? _middleOf(boxes, pose);
   }
 
-  /// What a navigation turns round: what is under [at], else the middle of
-  /// the selection, else the middle of the scene.
+  /// What a navigation turns round: what is under [at], else what it turned
+  /// round last, else the middle of the selection, else of the scene. Empty
+  /// space never swings the view somewhere nobody pointed.
   (double, double, double)? _navPivot(Offset? at, CameraPose pose) {
     final hit = at == null ? null : _hitAt(at, pose)?.point;
-    if (hit != null) return hit;
+    if (hit != null) return _lastPivot = hit;
+    if (_lastPivot case final last?) return last;
     final boxes = widget.boxes();
     final selected = widget.uiState.selectedLayerIds;
     return _middleOf(boxes.where((b) => selected.contains(b.id)), pose) ??
@@ -2386,6 +2393,17 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         take(box, box.map.ax, box.map.ay);
         continue;
       }
+      // A model by the eight corners of its box.
+      final c = box.cube;
+      for (var i = 0; c != null && i + 2 < c.length; i += 3) {
+        final p = box.map.inParent(c[i], c[i + 1], c[i + 2]);
+        final w = box.map.parentDepthOf(p.$1, p.$2, p.$3);
+        if (w.abs() < 1e-9) continue;
+        out.add(pointUnder(pose,
+            _toPicture(box.map.parentToScreen(p.$1, p.$2, p.$3)),
+            widget.compSize, w));
+      }
+      if (c != null) continue;
       final s = box.bounds;
       take(box, 0, 0);
       take(box, s.width, 0);
@@ -2428,9 +2446,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     switch (command) {
       case ViewerCameraCommand.lookAtSelected ||
             ViewerCameraCommand.lookAtAll:
+        // With nothing selected, everything is the selection.
         final selected = widget.uiState.selectedLayerIds;
         final boxes = widget.boxes().where((b) =>
             command == ViewerCameraCommand.lookAtAll ||
+            selected.isEmpty ||
             selected.contains(b.id));
         final points = _cornersOf(boxes, target.pose);
         // A view, not a camera, takes in the cameras as well when it frames
