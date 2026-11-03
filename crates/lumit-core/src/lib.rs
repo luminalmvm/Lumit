@@ -12,6 +12,8 @@ pub mod camera;
 pub mod comp_graph;
 /// The layer and asset defaults every front end builds from.
 pub mod edits;
+/// The Environment light: a picture of everything round the scene.
+pub mod environment;
 pub mod expression;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.

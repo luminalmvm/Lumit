@@ -18,10 +18,10 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../panels/light_rows_frb.dart';
-import '../state/app_state.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'camera_settings_dialog.dart'
     show
         cameraDialogWidth,
@@ -156,6 +156,8 @@ Future<void> newLightFrb({
           castsShadows: false,
           inAir: false,
           noisy: false,
+          source: null,
+          background: false,
         ),
         intensity: 100,
         colour: [1, 1, 1],
@@ -168,11 +170,19 @@ Future<void> newLightFrb({
         shadowDarkness: 100,
         shadowDiffusion: 0,
       );
+  // An environment starts from the selected layer, when it has a picture.
+  final selected =
+      Provider.of<LumitUiState>(context, listen: false).selectedLayer.value;
+  if (start.settings.source == null && selected != null && selected.hasPicture()) {
+    start.settings =
+        lightSettingsWith(start.settings, source: (selected.internallayerId,));
+  }
+  final layers = comp.getModel().layers;
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
     id: 'light-settings',
-    builder: (close) =>
-        _LightSettingsBody(values: start, name: null, onDone: close),
+    builder: (close) => _LightSettingsBody(
+        values: start, name: null, layers: layers, onDone: close),
   );
   if (picked == null) return;
   final (values, name) = picked;
@@ -202,12 +212,15 @@ Future<bool> showLightSettingsFrb({
   required double compHeight,
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
+  final layers =
+      Provider.of<LumitUiState>(context, listen: false).model.layers;
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
     id: 'light-settings',
     builder: (close) => _LightSettingsBody(
       values: _LightValues.of(settings, channels),
       name: name,
+      layers: layers,
       onDone: close,
     ),
   );
@@ -244,11 +257,15 @@ class _LightSettingsBody extends StatefulWidget {
   /// The light's name, or null for a light still to be made, whose name
   /// follows its type until it is typed over.
   final String? name;
+
+  /// The comp's layers, which an environment's picture is picked from.
+  final List<BridgeLayerEntry> layers;
   final void Function((_LightValues, String)?) onDone;
 
   const _LightSettingsBody({
     required this.values,
     required this.name,
+    required this.layers,
     required this.onDone,
   });
 
@@ -307,6 +324,33 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
           ),
         ),
         _section(t, l10n.lightOptions, [
+          if (kind == BridgeLightKind.environment) ...[
+            _row(
+                t,
+                l10n.lightSource,
+                LayerPicker(
+                  key: const ValueKey('light-source'),
+                  layers: widget.layers,
+                  value: _s.source,
+                  empty: l10n.none,
+                  missing: l10n.missingLayer,
+                  offered: (l) => l.layer.hasPicture(),
+                  onChanged: (id) => setState(() =>
+                      _v.settings = lightSettingsWith(_s, source: (id,))),
+                )),
+            _row(
+                t,
+                l10n.lightShowInBackground,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: HouseCheckbox(
+                    key: const ValueKey('light-background'),
+                    value: _s.background,
+                    onChanged: (on) => setState(() =>
+                        _v.settings = lightSettingsWith(_s, background: on)),
+                  ),
+                )),
+          ],
           _row(t, l10n.lightColour, _colourRow(t)),
           _row(
               t,
@@ -359,8 +403,9 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                         _v.settings = lightSettingsWith(_s, twoNode: on)),
                   ),
                 )),
-          // An ambient light comes from nowhere, so it casts nothing.
-          if (kind != BridgeLightKind.ambient) ...[
+          // An ambient or environment light comes from nowhere, so it casts
+          // nothing.
+          if (lightCasts(kind)) ...[
             _row(
                 t,
                 l10n.castsShadows,
@@ -424,7 +469,10 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         onChanged: (k) => setState(() {
           // A new light's name follows its type until it is typed over.
           final was = _kindName;
-          _v.settings = lightSettingsWith(_s, kind: k);
+          // A new environment shows its picture, which is what it's made for.
+          final shown = widget.name == null && k == BridgeLightKind.environment;
+          _v.settings =
+              lightSettingsWith(_s, kind: k, background: shown || _s.background);
           if (widget.name == null && _name.text == was) _name.text = _kindName;
         }),
         width: cameraWell + 60,

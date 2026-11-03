@@ -27,6 +27,8 @@ const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
 const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
 /// What the casters let through, prepended to everything that reads it.
 const SHADOW_CORE: &str = include_str!("../src/shadow_core.wgsl");
+/// An Environment light as the passes it lights read it.
+const ENVIRONMENT_CORE: &str = include_str!("../src/environment_core.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -61,6 +63,7 @@ fn every_wgsl_kernel_parses_and_validates() {
             || name == "fx_blend_core.wgsl"
             || name == "light_core.wgsl"
             || name == "shadow_core.wgsl"
+            || name == "environment_core.wgsl"
         {
             continue;
         }
@@ -92,6 +95,11 @@ fn every_wgsl_kernel_parses_and_validates() {
         };
         let source = if source.contains("transmitted(") {
             format!("{SHADOW_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("env_turn(") || source.contains("env_radiance(") {
+            format!("{ENVIRONMENT_CORE}{source}")
         } else {
             source
         };

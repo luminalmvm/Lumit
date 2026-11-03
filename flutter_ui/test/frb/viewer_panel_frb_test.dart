@@ -1954,7 +1954,9 @@ void main() {
               twoNode: true,
               castsShadows: false,
               inAir: false,
-              noisy: false));
+              noisy: false,
+              source: null,
+              background: false));
       set(beam, {
         BridgeTransformProp.positionZ: -300,
         BridgeTransformProp.rotation: -15,

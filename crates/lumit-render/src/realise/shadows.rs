@@ -1,7 +1,8 @@
 //! Shadows between 3D layers: which layers cast on which, and the squares
 //! their pictures are shrunk into for the lighting pass.
 
-use super::{lighting_op, scene, Realiser};
+use super::lighting::lighting_op;
+use super::{scene, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {
@@ -143,7 +144,7 @@ fn run_plan(
         .filter(|(_, (l, _))| l.material.accepts_shadows != LightingShadows::Off)
         .filter(|(_, (l, _))| !matches!(l.source, DrawSource::Model(_)))
         .filter_map(|(i, (l, tex))| {
-            let op = lighting_op(l, tex.width(), tex.height(), eye)?;
+            let op = lighting_op(l, tex.width(), tex.height(), eye, false)?;
             Some((i, l, op.corners(tex.width(), tex.height())))
         })
         .collect();

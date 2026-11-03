@@ -484,6 +484,9 @@ pub enum DrawSource {
     ),
     /// A Model layer's 3D model, for the mesh pass.
     Model(Box<crate::model::ModelDraw>),
+    /// The comp's Environment light (`crate::environment`), at the head of
+    /// its list.
+    Environment(Box<crate::environment::EnvironmentDraw>),
 }
 
 /// The below-stack re-rendered at a held/sample time for a temporal adjustment
@@ -788,4 +791,53 @@ pub struct CompLayerDraw {
     /// What a Particulate in the scene takes from the comp beyond its rows.
     /// `None` on every other layer.
     pub in_scene: Option<crate::realise::scene::Carried>,
+}
+
+impl CompLayerDraw {
+    /// A draw that covers the whole comp and stands for none of its layers:
+    /// the haze's and the environment's.
+    pub(crate) fn over_comp(comp: &lumit_core::model::Composition, source: DrawSource) -> Self {
+        let (w, h) = (comp.width as f32, comp.height as f32);
+        Self {
+            layer: comp.id,
+            source,
+            natural_size: (w, h),
+            position: (w * 0.5, h * 0.5),
+            anchor: (w * 0.5, h * 0.5),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            opacity: 100.0,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: 0.0,
+            three_d: false,
+            ends_run: false,
+            matte: None,
+            blend: lumit_gpu::composite::Blend::Normal,
+            mask_cov: None,
+            pre: None,
+            fx: Default::default(),
+            fx_ids: Vec::new(),
+            neighbours: Vec::new(),
+            flow_fields: Vec::new(),
+            colour_tables: Vec::new(),
+            dof_inputs: Vec::new(),
+            mattes: Vec::new(),
+            mask_paths: Vec::new(),
+            roto_mattes: Vec::new(),
+            planes: Vec::new(),
+            points_schedules: Vec::new(),
+            flare_lens_files: Vec::new(),
+            graph_fx: Vec::new(),
+            fx_ref_width: None,
+            fx_input_key: None,
+            mb: Vec::new(),
+            lights: Vec::new(),
+            material: Default::default(),
+            temporal_below: None,
+            accumulation_below: None,
+            flow_below: Vec::new(),
+            in_scene: None,
+        }
+    }
 }

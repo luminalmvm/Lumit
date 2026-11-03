@@ -95,6 +95,7 @@ mod footage;
 mod framecache;
 #[cfg(feature = "media")]
 mod layered;
+mod light_settings;
 mod live;
 mod media;
 mod motion_path;

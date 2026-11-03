@@ -1200,10 +1200,12 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       BridgeTransformProp.hazeColourB =>
         1,
       BridgeTransformProp.hazeFalloff ||
-      BridgeTransformProp.hazeNoiseSpeed =>
+      BridgeTransformProp.hazeNoiseSpeed ||
+      BridgeTransformProp.backgroundBlur =>
         0,
       BridgeTransformProp.shadowDiffusion ||
-      BridgeTransformProp.lightTransmission =>
+      BridgeTransformProp.lightTransmission ||
+      BridgeTransformProp.reflection =>
         0,
       // After Effects' Material options defaults.
       BridgeTransformProp.ambient || BridgeTransformProp.metal => 100,

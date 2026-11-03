@@ -19,6 +19,7 @@ pub mod distort;
 pub mod dof;
 pub mod energy_line;
 mod engine;
+pub mod environment;
 /// Film's passes, built on first use.
 pub mod film;
 pub mod generate;
@@ -70,6 +71,8 @@ pub struct FxEngine {
     energy_line: energy_line::LazyEnergyLine,
     /// The mesh pass, built the first time a model is drawn.
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
+    /// The Environment light's passes, built the first time a comp has one.
+    pub(crate) environment: std::sync::OnceLock<environment::EnvironmentFx>,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,

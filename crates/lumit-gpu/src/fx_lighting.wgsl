@@ -17,7 +17,8 @@
 const MAX_LIT_LIGHTS: u32 = 8u;
 
 struct Params {
-    // xyz = comp-space position of texel (0,0).
+    // xyz = comp-space position of texel (0,0), w = how much of an
+    // environment it reflects.
     origin: vec4<f32>,
     // xyz = comp-space step per texel in x / in y.
     du: vec4<f32>,
@@ -72,6 +73,11 @@ fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
 @group(0) @binding(8) var maps: texture_depth_2d_array;
 @group(0) @binding(9) var map_sampler: sampler_comparison;
 @group(0) @binding(10) var<uniform> shadow_maps: ShadowMaps;
+// The comp's environment (environment_core.wgsl, prepended).
+@group(0) @binding(11) var env_irradiance_cube: texture_cube<f32>;
+@group(0) @binding(12) var env_specular_cube: texture_cube<f32>;
+@group(0) @binding(13) var env_sampler: sampler;
+@group(0) @binding(14) var<uniform> environment: Environment;
 
 // Blinn-Phong, as lumit_core::lighting::highlight.
 fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
@@ -104,7 +110,8 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     let live = u32(p.normal.w);
-    if (live == 0u) {
+    let surround = environment.colour.w > 0.5;
+    if (live == 0u && !surround) {
         textureStore(dst, xy, o);
         return;
     }
@@ -152,7 +159,9 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         return;
     }
-    var gain = vec3<f32>(p.base.x);
+    // An environment surrounds everything, so with one a layer starts from
+    // black, as a model does.
+    var gain = vec3<f32>(select(p.base.x, 0.0, surround));
     var shine = vec3<f32>(0.0);
     let diffuse = p.material.y;
     for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
@@ -177,6 +186,20 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     let metal = p.eye.w;
+    if (surround) {
+        // The environment on a model's shading: Ambient takes its matte
+        // light, Reflection is how much of it the layer reflects, tinted by
+        // the layer as a metal is, and Shininess how sharply. Seen from
+        // either side.
+        let v = normalise(p.eye.xyz - pos);
+        let n = select(p.normal.xyz, -p.normal.xyz, dot(p.normal.xyz, v) < 0.0);
+        let k = clamp(p.origin.w, 0.0, 1.0);
+        let roughness = 1.0 - clamp(p.material.w / 100.0, 0.0, 1.0);
+        let matte = env_irradiance(env_irradiance_cube, env_sampler, environment, n);
+        let mirror = env_radiance(env_specular_cube, env_sampler, environment, reflect(-v, n), roughness);
+        let e = matte * p.material.x * (1.0 - k) + mirror * k;
+        gain = gain + select(e, encode(e), encoded);
+    }
     let lit = max(shine, vec3<f32>(0.0));
     let g = max(gain + metal * lit, vec3<f32>(0.0));
     if (encoded) {

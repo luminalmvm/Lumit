@@ -3605,6 +3605,8 @@ fn comp_walk(
     // Solo / isolate: while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
+    // An Environment light's picture is drawn for it, shown or not.
+    let surround = comp.environment_source(t_comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
         // A frame nobody wants any more stops here, and the renderer throws
@@ -3647,10 +3649,9 @@ fn comp_walk(
         }
         // A layer whose Layer out is unplugged draws nothing, which is
         // the same nothing a hidden layer draws and is skipped in the same place.
-        if !layer.switches.visible
-            || layer.graph.out_unwired
+        let shown = layer.switches.visible && !layer.graph.out_unwired;
+        if !(shown && !(any_solo && !layer.switches.solo) || Some(layer.id) == surround)
             || !in_span(layer)
-            || (any_solo && !layer.switches.solo)
         {
             continue;
         }
@@ -4525,6 +4526,7 @@ fn comp_walk(
                 | DrawSource::Adjust
                 | DrawSource::Graph(_)
                 | DrawSource::Haze(_)
+                | DrawSource::Environment(_)
                 | DrawSource::Model(_) => 1.0,
             };
             if layer.switches.fx {
@@ -4564,7 +4566,8 @@ fn comp_walk(
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
             | DrawSource::Graph(_)
-            | DrawSource::Haze(_) => None,
+            | DrawSource::Haze(_)
+            | DrawSource::Environment(_) => None,
         };
         // The name the per-effect cache files this stack's outputs under: a
         // picture made from bytes, or a nested comp's frame, whose texture is
@@ -4578,6 +4581,7 @@ fn comp_walk(
             DrawSource::Adjust
             | DrawSource::Graph(_)
             | DrawSource::Haze(_)
+            | DrawSource::Environment(_)
             | DrawSource::Model(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
@@ -4744,31 +4748,15 @@ fn comp_walk(
         let size = (comp.width, comp.height);
         for d in draws.iter_mut().filter(|d| d.three_d) {
             if !crate::realise::dof::dof_leaves_sharp(seen_through, d, size) {
-                at_own_size(d);
+                shading::at_own_size(d);
             }
         }
     }
     if !spliced {
         crate::haze::add(&mut draws, doc, comp, t_comp);
+        crate::environment::add(&mut draws, doc, comp, t_comp);
     }
     draws
-}
-
-/// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
-fn at_own_size(d: &mut CompLayerDraw) {
-    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
-    if let DrawSource::Pixels {
-        rgba, tex_w, tex_h, ..
-    } = &mut d.source
-    {
-        let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
-        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
-            let fit = lumit_core::largest_picture::fit;
-            let (w, h) = (fit(natural.0), fit(natural.1));
-            let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
-            (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
-        }
-    }
 }
 
 /// The content name of the picture a layer's effect stack runs on

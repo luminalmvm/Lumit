@@ -659,6 +659,8 @@ impl CompositionReference {
                         .unwrap_or(w * 0.2);
                     let mut segs = Vec::new();
                     let kind = match light.kind {
+                        // An environment is nowhere, so it has nothing to draw.
+                        L::Environment => continue,
                         L::Point | L::Ambient => BridgeWireLightKind::Point,
                         L::Parallel => {
                             // Every ray runs the same way, so one line shows it.

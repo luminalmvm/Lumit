@@ -180,6 +180,7 @@ impl CompositionReference {
             2 => LightKind::Area,
             3 => LightKind::Parallel,
             4 => LightKind::Ambient,
+            5 => LightKind::Environment,
             _ => LightKind::Point,
         };
         let (w, h) = (f64::from(comp.width), f64::from(comp.height));
@@ -200,6 +201,7 @@ impl CompositionReference {
             LightKind::Area => "Area light",
             LightKind::Parallel => "Parallel light",
             LightKind::Ambient => "Ambient light",
+            LightKind::Environment => "Environment light",
         };
         crate::edits::base_layer(
             name.into(),

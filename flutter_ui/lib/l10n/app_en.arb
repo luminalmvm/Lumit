@@ -183,6 +183,26 @@
   "@lightAmbient": {
     "description": "Light type: light from everywhere at once, with no place or direction."
   },
+  "lightEnvironment": "Environment",
+  "@lightEnvironment": {
+    "description": "Light type: light from a picture of everything round the scene, such as an HDRI."
+  },
+  "lightSource": "Source",
+  "@lightSource": {
+    "description": "Environment light row: the layer whose picture surrounds the scene and lights it."
+  },
+  "lightShowInBackground": "Show in background",
+  "@lightShowInBackground": {
+    "description": "Environment light row, a checkbox: draw the surrounding picture behind everything, as the camera sees it."
+  },
+  "materialReflection": "Reflection",
+  "@materialReflection": {
+    "description": "Material options row on a 3D layer: how much of an Environment light it reflects, as a percentage."
+  },
+  "lightBackgroundBlur": "Background blur",
+  "@lightBackgroundBlur": {
+    "description": "Environment light row: how soft the surrounding picture is where it shows behind everything, as a percentage."
+  },
   "lightIntensity": "Intensity",
   "@lightIntensity": {
     "description": "Light row: how bright the light is, as a percentage."

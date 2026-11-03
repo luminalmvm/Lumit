@@ -6,7 +6,7 @@ use crate::draw::{CompLayerDraw, DrawSource};
 impl Realiser<'_> {
     /// `l`'s picture before it is lit or placed, how much its effects grew
     /// it, and the depth the mesh pass drew beside it when it is a model,
-    /// which takes `shadows`. `fx_ms` gathers each effect's own time when the
+    /// which takes `shadows` and the comp's environment. `fx_ms` gathers each effect's own time when the
     /// frame is profiled.
     pub(super) fn layer_picture(
         &self,
@@ -16,6 +16,7 @@ impl Realiser<'_> {
         shadows: (
             Option<&lumit_gpu::fx::lighting::ShadowCasters>,
             Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+            Option<&lumit_gpu::fx::environment::EnvironmentLight>,
         ),
         fx_ms: &mut Option<Vec<f32>>,
     ) -> (wgpu::Texture, (f32, f32), Option<wgpu::Texture>) {
@@ -28,6 +29,7 @@ impl Realiser<'_> {
                 format,
                 colour_space,
             } if straight_to_composite(l, camera)
+                && (shadows.2.is_none() || !l.three_d)
                 && matches!(format, lumit_media::decode::PixelFormat::Srgb8)
                 && self.input_transform(colour_space).is_none() =>
             {
@@ -85,7 +87,7 @@ impl Realiser<'_> {
                     None => self.transparent(1, 1),
                 }
             }
-            DrawSource::Adjust | DrawSource::Haze(_) => {
+            DrawSource::Adjust | DrawSource::Haze(_) | DrawSource::Environment(_) => {
                 // realise splits segments at every Adjust draw, so none
                 // reaches here; a transparent texel keeps the no-panic
                 // rule (and draws nothing) if that ever regresses.

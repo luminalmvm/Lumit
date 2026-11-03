@@ -33,6 +33,7 @@ impl Material {
             TransformProp::Shininess => &self.shininess,
             TransformProp::Metal => &self.metal,
             TransformProp::LightTransmission => &self.light_transmission,
+            TransformProp::Reflection => &self.reflection,
             _ => return None,
         })
     }
@@ -62,6 +63,7 @@ impl Material {
             TransformProp::Shininess => &mut self.shininess,
             TransformProp::Metal => &mut self.metal,
             TransformProp::LightTransmission => &mut self.light_transmission,
+            TransformProp::Reflection => &mut self.reflection,
             _ => return None,
         })
     }
@@ -79,6 +81,7 @@ impl Default for Material {
             casts_shadows: ShadowMode::Off,
             accepts_shadows: ShadowMode::On,
             light_transmission: Property::zero(),
+            reflection: Property::zero(),
             holdout: false,
         }
     }

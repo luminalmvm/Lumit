@@ -15,18 +15,22 @@ use lumit_gpu::mesh::{ModelPicture, ModelView};
 impl Realiser<'_> {
     /// Model draw `m` seen through the comp's camera, or the default one when
     /// it has none, and lit by `l`'s lights as `l`'s Material options take
-    /// them, with the 3D layers' and models' shadows, at this render's scale
-    /// and anti-aliasing. `None` when the card can't hold the model, which
-    /// leaves it out of the frame rather than failing it, or when it is only
-    /// there to cast. A holdout draws only the shadows it takes, if any, to
-    /// lay over what is under its run.
+    /// them and by the comp's environment, with the 3D layers' and models'
+    /// shadows, at this render's scale and anti-aliasing. `None` when the
+    /// card can't hold the model, which leaves it out of the frame rather
+    /// than failing it, or when it is only there to cast. A holdout draws
+    /// only the shadows it takes, if any, to lay over what is under its run.
     pub fn model_picture(
         &self,
         l: &CompLayerDraw,
         m: &ModelDraw,
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
-        (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
+        (casters, maps, environment): (
+            Option<&ShadowCasters>,
+            Option<&ShadowMaps>,
+            Option<&lumit_gpu::fx::environment::EnvironmentLight>,
+        ),
     ) -> Option<ModelPicture> {
         // Only there to cast, unless it is a holdout, which is never seen, or
         // a view is showing the models themselves.
@@ -68,6 +72,7 @@ impl Realiser<'_> {
             // model's shadow on a stand-in is missed.
             maps: maps.filter(|_| takes && !m.holdout),
             display,
+            environment,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {

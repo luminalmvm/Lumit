@@ -16,7 +16,7 @@
 //! Thread role: pure function over the snapshot; any thread.
 
 use crate::anim::Animation;
-use crate::model::{BlendMode, Composition, Document, EffectValue, Layer, LayerKind};
+use crate::model::{BlendMode, Composition, Document, EffectValue, Layer, LayerKind, LightKind};
 use crate::time::layer_time;
 
 /// The index (0 = top of the stack) of the topmost layer in `comp` that, at
@@ -46,6 +46,12 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     // here: while any header is live, nothing culls — and the decode planner,
     // which asks this same function, keeps decoding what the unit will draw.
     if comp.groups.iter().any(crate::group::header_live) {
+        return None;
+    }
+    // An Environment light's picture is a layer that is never drawn, so a
+    // full-frame one hides nothing.
+    let environment = |l: &Layer| matches!(&l.kind, LayerKind::Light { light } if light.kind == LightKind::Environment);
+    if comp.layers.iter().any(environment) {
         return None;
     }
     let any_solo = crate::model::any_picture_solo(comp);

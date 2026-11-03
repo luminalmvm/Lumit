@@ -444,6 +444,7 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
         shininess: read("ADBE Shininess Coefficient", 5.0),
         metal: read("ADBE Metal Coefficient", 100.0),
         light_transmission: read("ADBE Light Transmission", 0.0),
+        reflection: read("ADBE Reflection Coefficient", 0.0),
         casts_shadows: shadow_mode(
             shadow_switch(conv, path, options, "ADBE Casts Shadows", "Casts Shadows"),
             ShadowMode::Off,

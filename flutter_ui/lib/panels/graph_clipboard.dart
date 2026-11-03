@@ -311,6 +311,11 @@ LumitClipGroup _transformClipGroup(
         l10n.lightNoiseSpeed,
         l10n.unitPerSecond(l10n.unitPixels)
       ),
+    BridgeTransformProp.backgroundBlur => (
+        l10n.lightBackgroundBlur,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.reflection => (l10n.materialReflection, l10n.unitPercent),
     BridgeTransformProp.lightTransmission => (
         l10n.materialLightTransmission,
         l10n.unitPercent

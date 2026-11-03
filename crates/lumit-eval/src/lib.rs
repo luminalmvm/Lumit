@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod lights;
 mod material;
 mod model;
 mod moments;
@@ -90,7 +91,8 @@ pub mod schedule;
 /// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
 ///   they are handed.
 /// * 25: Model layers cast and take shadows.
-pub const ALGO_VERSION: u32 = 25;
+/// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
+pub const ALGO_VERSION: u32 = 26;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -430,55 +432,7 @@ fn feed_comp(
         h.update(&comp.motion_blur.samples.to_le_bytes());
         h.update(&comp.motion_blur.limit.to_le_bytes());
     }
-    // The comp's lights (docs/06). Hashed once here rather than per
-    // layer, because a light shades every layer that accepts it — and hashed
-    // only when the comp actually has one, so every key made before lighting
-    // existed stays valid. A Light layer draws no pixels of its own, so
-    // nothing else in this walk would notice it moving.
-    let context = lumit_core::model::comp_context(doc, comp, t);
-    let read = lumit_core::model::context_reader(&context, t);
-    let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));
-    if !lights.is_empty() {
-        h.update(b"lights/");
-        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
-            h.update(b"after-effects/");
-            h.update(&[u8::from(linear)]);
-        }
-        for l in &lights {
-            h.update(&[match l.kind {
-                lumit_core::model::LightKind::Point => 0u8,
-                lumit_core::model::LightKind::Spot => 1,
-                lumit_core::model::LightKind::Area => 2,
-                lumit_core::model::LightKind::Parallel => 3,
-                lumit_core::model::LightKind::Ambient => 4,
-            }]);
-            h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
-            for v in [
-                l.position.0,
-                l.position.1,
-                l.z,
-                l.half_size.0,
-                l.half_size.1,
-                l.cone_deg,
-                l.rotation_deg,
-                l.rotation_x_deg,
-                l.rotation_y_deg,
-                l.falloff_px,
-                l.cone_feather,
-                l.radius_px,
-                f64::from(l.gain),
-            ] {
-                feed_f64(h, v);
-            }
-            l.colour.iter().for_each(|c| feed_f64(h, f64::from(*c)));
-            if l.shadow_darkness > 0.0 {
-                h.update(b"shadows/");
-                feed_f64(h, f64::from(l.shadow_darkness));
-                feed_f64(h, f64::from(l.shadow_diffusion));
-            }
-            l.haze.cache_key(|v| feed_f64(h, f64::from(v)));
-        }
-    }
+    lights::feed_lights(h, doc, comp, t, quality, stamper, visited)?;
     // **A node graph composition** (docs/impl/node-graph-comp.md §2.5). The
     // walk forks here, so every byte a layer comp feeds is unchanged and no
     // key ever made moves: a comp with no graph never reaches this line, and a
@@ -4854,12 +4808,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 25, which renamed every frame.
+        // Pinned under ALGO_VERSION 26, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                7_699_045_846_567_640_697_737_022_643_143_253_696,
-                117_983_961_780_902_144_977_624_882_292_873_552_404
+                227_890_055_451_045_895_250_876_588_966_720_741_802,
+                292_465_701_935_215_467_852_406_669_579_654_097_275
             )
         );
 

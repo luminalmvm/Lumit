@@ -772,6 +772,7 @@ impl FxEngine {
             sprite_flare: Default::default(),
             energy_line: super::energy_line::LazyEnergyLine::spawn(ctx),
             mesh: Default::default(),
+            environment: Default::default(),
             layout,
             adjust_layout,
             mb_layout,

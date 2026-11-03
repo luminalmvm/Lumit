@@ -180,6 +180,7 @@ pub fn shading_material(
         casts_shadows: shadows(m.casts_shadows),
         transmission: pct(&m.light_transmission).min(1.0),
         unlit: !layer.switches.accepts_lights,
+        reflection: pct(&m.reflection).min(1.0),
     }
 }
 
@@ -218,5 +219,22 @@ pub(crate) fn caster_plane(
         v: world.col(1).truncate().to_array(),
         transmission: l.material.transmission,
         opacity: (l.opacity / 100.0).clamp(0.0, 1.0),
+    }
+}
+
+/// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
+pub(crate) fn at_own_size(d: &mut crate::draw::CompLayerDraw) {
+    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
+    if let crate::draw::DrawSource::Pixels {
+        rgba, tex_w, tex_h, ..
+    } = &mut d.source
+    {
+        let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
+        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
+            let fit = lumit_core::largest_picture::fit;
+            let (w, h) = (fit(natural.0), fit(natural.1));
+            let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
+            (*rgba, *tex_w, *tex_h) = (Arc::new(super::px_tile(&px, w, h)), w, h);
+        }
     }
 }

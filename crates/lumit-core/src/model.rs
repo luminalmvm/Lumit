@@ -12,6 +12,7 @@ use crate::time::{CompTime, Duration, FrameRate, Rational};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod light;
 mod light_file;
 mod material;
 
@@ -752,6 +753,9 @@ pub struct Material {
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
     pub light_transmission: Property,
+    /// How much of an Environment light it reflects.
+    #[serde(skip_serializing_if = "crate::paint::is_static_zero")]
+    pub reflection: Property,
     /// A Model layer drawn as what is under its run, so it hides what is
     /// behind it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -957,6 +961,8 @@ pub enum TransformProp {
     HazeNoise,
     HazeNoiseSize,
     HazeNoiseSpeed,
+    /// An Environment light's, in [`crate::environment::LightEnvironment`].
+    BackgroundBlur,
     /// A layer's Material options, in [`Material`].
     Ambient,
     Diffuse,
@@ -964,6 +970,7 @@ pub enum TransformProp {
     Shininess,
     Metal,
     LightTransmission,
+    Reflection,
 }
 
 fn zero3() -> [Property; 3] {
@@ -2516,15 +2523,15 @@ pub enum LightKind {
     Point,
     /// A cone, aimed by the layer's own rotation.
     Spot,
-    /// A rectangle of a real size: a softbox, a window, a strip light. The
-    /// kind a compositor actually reaches for, and the reason [`LightDef`]
-    /// carries a width and a height at all.
+    /// A rectangle of a real size: a softbox, a window, a strip light.
     Area,
     /// Light from so far away that every ray runs the same way, like the sun.
     /// It shines along the layer's own forward axis.
     Parallel,
     /// Light from everywhere at once: no place and no direction.
     Ambient,
+    /// Light from a picture of everything round the scene.
+    Environment,
 }
 
 /// How a composition's lights fall on its layers.
@@ -2619,121 +2626,11 @@ pub struct LightDef {
     pub legacy_shape: bool,
     #[serde(default, skip_serializing_if = "crate::haze::LightHaze::is_default")]
     pub haze: crate::haze::LightHaze,
-}
-
-impl LightDef {
-    fn white() -> [Property; 3] {
-        [
-            Property::fixed(1.0),
-            Property::fixed(1.0),
-            Property::fixed(1.0),
-        ]
-    }
-    fn zero_pair() -> [Property; 2] {
-        [Property::zero(), Property::zero()]
-    }
-    fn zero3() -> [Property; 3] {
-        [Property::zero(), Property::zero(), Property::zero()]
-    }
-    fn ten() -> Property {
-        Property::fixed(10.0)
-    }
-    fn ninety() -> Property {
-        Property::fixed(90.0)
-    }
-    fn hundred() -> Property {
-        Property::fixed(100.0)
-    }
-
-    /// The light's own channel that `prop` names, or `None` for one it does
-    /// not have.
-    #[must_use]
-    pub fn channel(&self, prop: TransformProp) -> Option<&Property> {
-        Some(match prop {
-            TransformProp::LightIntensity => &self.intensity,
-            TransformProp::LightColourR => &self.colour[0],
-            TransformProp::LightColourG => &self.colour[1],
-            TransformProp::LightColourB => &self.colour[2],
-            TransformProp::ConeAngle => &self.cone_angle,
-            TransformProp::ConeFeather => &self.cone_feather,
-            TransformProp::LightRadius => &self.radius_px,
-            TransformProp::FalloffDistance => &self.falloff_px,
-            TransformProp::LightWidth => &self.size[0],
-            TransformProp::LightHeight => &self.size[1],
-            TransformProp::PoiX => &self.point_of_interest[0],
-            TransformProp::PoiY => &self.point_of_interest[1],
-            TransformProp::PoiZ => &self.point_of_interest[2],
-            TransformProp::ShadowDarkness => &self.shadow_darkness,
-            TransformProp::ShadowDiffusion => &self.shadow_diffusion,
-            _ => return self.haze.channel(prop),
-        })
-    }
-
-    pub fn channel_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
-        Some(match prop {
-            TransformProp::LightIntensity => &mut self.intensity,
-            TransformProp::LightColourR => &mut self.colour[0],
-            TransformProp::LightColourG => &mut self.colour[1],
-            TransformProp::LightColourB => &mut self.colour[2],
-            TransformProp::ConeAngle => &mut self.cone_angle,
-            TransformProp::ConeFeather => &mut self.cone_feather,
-            TransformProp::LightRadius => &mut self.radius_px,
-            TransformProp::FalloffDistance => &mut self.falloff_px,
-            TransformProp::LightWidth => &mut self.size[0],
-            TransformProp::LightHeight => &mut self.size[1],
-            TransformProp::PoiX => &mut self.point_of_interest[0],
-            TransformProp::PoiY => &mut self.point_of_interest[1],
-            TransformProp::PoiZ => &mut self.point_of_interest[2],
-            TransformProp::ShadowDarkness => &mut self.shadow_darkness,
-            TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
-            _ => return self.haze.channel_mut(prop),
-        })
-    }
-
-    /// The part the settings dialog edits as one op.
-    #[must_use]
-    pub fn settings(&self) -> LightSettings {
-        LightSettings {
-            kind: self.kind,
-            falloff: self.falloff,
-            two_node: self.two_node,
-            legacy_shape: self.legacy_shape,
-            casts_shadows: self.casts_shadows,
-        }
-    }
-
-    pub fn set_settings(&mut self, s: LightSettings) {
-        self.kind = s.kind;
-        self.falloff = s.falloff;
-        self.two_node = s.two_node;
-        self.legacy_shape = s.legacy_shape;
-        self.casts_shadows = s.casts_shadows;
-    }
-}
-
-/// A fresh light, on After Effects' defaults. Not aimed, since a point of
-/// interest needs a composition to sit in: whoever places one sets both.
-impl Default for LightDef {
-    fn default() -> Self {
-        Self {
-            kind: LightKind::default(),
-            colour: Self::white(),
-            intensity: Self::hundred(),
-            size: Self::zero_pair(),
-            cone_angle: Self::ninety(),
-            cone_feather: Property::fixed(50.0),
-            falloff: LightFalloff::None,
-            radius_px: Property::fixed(500.0),
-            falloff_px: Property::fixed(500.0),
-            two_node: false,
-            point_of_interest: Self::zero3(),
-            casts_shadows: false,
-            shadow_darkness: Self::hundred(),
-            shadow_diffusion: Property::zero(),
-            legacy_shape: false,
-            haze: crate::haze::LightHaze::default(),
-        }
-    }
+    #[serde(
+        default,
+        skip_serializing_if = "crate::environment::LightEnvironment::is_default"
+    )]
+    pub environment: crate::environment::LightEnvironment,
 }
 
 /// The non-animatable part of a light, what `Op::SetLightSettings` carries.
@@ -2748,6 +2645,8 @@ pub struct LightSettings {
     pub legacy_shape: bool,
     #[serde(default)]
     pub casts_shadows: bool,
+    #[serde(default)]
+    pub environment: crate::environment::EnvironmentSettings,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2985,15 +2884,10 @@ impl Composition {
         }
     }
 
-    /// Every visible Light layer whose span contains `t`, evaluated at its own
-    /// layer time and in the comp's own pixels.
-    ///
-    /// Top of the stack first, which is the order the effects that read lights
-    /// take them in — so a frame that has more lights than an effect can carry
-    /// spends its slots on the ones nearest the top, the same rule the layer
-    /// stack uses everywhere else. A light switched off is not a light, exactly
-    /// as a layer switched off is not on the picture.
-    ///
+    /// Every visible Light layer whose span contains `t` but an Environment
+    /// light ([`Self::environment_at`]), at its own layer time and in the
+    /// comp's own pixels. Top of the stack first, so a frame with more lights
+    /// than an effect carries spends its slots on the ones nearest the top.
     /// `read` reads their properties and their parents', and with `solves` a
     /// light on a solved camera follows the solve.
     pub fn lights_at(&self, t: f64, read: &Read<'_>, solves: Solves<'_>) -> Vec<ResolvedLight> {
@@ -3003,7 +2897,11 @@ impl Composition {
                 let LayerKind::Light { light } = &l.kind else {
                     return None;
                 };
-                if !l.switches.visible || t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
+                if !l.switches.visible
+                    || light.kind == LightKind::Environment
+                    || t < l.in_point.0.to_f64()
+                    || t >= l.out_point.0.to_f64()
+                {
                     return None;
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);

@@ -170,6 +170,7 @@ impl HazeFx {
                     include_str!("../fx_noise_core.wgsl"),
                     include_str!("../light_core.wgsl"),
                     include_str!("../shadow_core.wgsl"),
+                    include_str!("../environment_core.wgsl"),
                     include_str!("../fx_lighting.wgsl"),
                     include_str!("../fx_volumetric.wgsl")
                 )
