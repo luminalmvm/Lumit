@@ -60,9 +60,10 @@ pub(crate) enum Behind {
 /// The most bytes kept scenes hold between them, in memory.
 const KEPT_BYTES: usize = 2 << 30;
 
-/// A file by its path and the stamp it had when it was read, so a model saved
-/// over is read again.
-type Key = (PathBuf, u64, Option<SystemTime>);
+/// A file by its path, the stamp it had when it was read and the Blender
+/// choices made by then, so a model saved over is read again, and so is one
+/// that wanted a Blender once one is picked.
+type Key = (PathBuf, u64, Option<SystemTime>, u64);
 
 /// A read that failed is kept too, so a broken file isn't read every frame.
 struct Kept(Option<Arc<ModelScene>>);
@@ -78,6 +79,10 @@ static KEPT: Mutex<Option<lumit_cache::ByteLru<Key, Kept>>> = Mutex::new(None);
 /// Each file's missing pictures, kept after its scene goes so its badge
 /// never reads it again.
 static MISSING: Mutex<Option<HashMap<Key, Vec<String>>>> = Mutex::new(None);
+
+/// The last scene read from each file, while it lives, drawn in its place
+/// while the file saved over is read again.
+static LAST: Mutex<Option<HashMap<PathBuf, std::sync::Weak<ModelScene>>>> = Mutex::new(None);
 
 /// The files being read beside the frame.
 static READING: Mutex<Option<HashSet<Key>>> = Mutex::new(None);
@@ -174,8 +179,12 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     }
     if ASIDE.with(Cell::get) {
         LEFT_OUT.fetch_add(1, Ordering::Relaxed);
+        let last = LAST
+            .lock()
+            .ok()
+            .and_then(|last| last.as_ref()?.get(&key.0)?.upgrade());
         read_beside(key);
-        return None;
+        return last;
     }
     read_and_keep(key)
 }
@@ -252,7 +261,7 @@ fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
     let (len, at) = lumit_media::sequence::MediaSource::file(&path)
         .stamped()
         .stamp?;
-    Some((path, len, Some(at)))
+    Some((path, len, Some(at), lumit_scene::blender::choices()))
 }
 
 /// What reading `key` came to, `None` when it hasn't been read.
@@ -387,7 +396,10 @@ pub fn hit(
 /// Read the file `key` names and keep what comes of it.
 fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
     let stop = STOP.with(|s| s.borrow().clone()).unwrap_or_default();
-    let read = lumit_scene::read(&key.0, lumit_ingress::Limits::MODEL, &stop);
+    let cache = lumit_project::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("models");
+    let read = lumit_scene::read(&key.0, lumit_ingress::Limits::MODEL, &cache, &stop);
     // A read stopped part way says nothing about the file, so it isn't kept.
     if matches!(read, Err(lumit_scene::SceneError::Cancelled)) {
         return None;
@@ -404,6 +416,10 @@ fn read_and_keep(key: Key) -> Option<Arc<ModelScene>> {
         .is_some_and(lumit_budget::Pressure::should_trim)
     {
         kept.evict_cold_half();
+    }
+    if let (Some(s), Ok(mut last)) = (&scene, LAST.lock()) {
+        last.get_or_insert_with(HashMap::new)
+            .insert(key.0.clone(), Arc::downgrade(s));
     }
     kept.insert(key, Kept(scene.clone()));
     scene

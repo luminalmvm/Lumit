@@ -42,6 +42,7 @@ import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage, BridgeFfxImport, importFfxPresets;
@@ -283,6 +284,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _pluginsOnCard = pluginsOnGraphicsCard();
     _largest = largestPicture();
     _largestChoices = largestPictureChoices();
+    unawaited(_findBlender());
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -298,6 +300,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// On the row the window was opened to show, so it can be scrolled to.
   final GlobalKey _wantedRow = GlobalKey();
+
+  /// The Blender 3D models open with, once looked for. Asking each one its
+  /// version takes a moment, so the row fills in when the answer comes.
+  BridgeBlender? _blender;
+  bool _blenderLooked = false;
+
+  Future<void> _findBlender() async {
+    final found = await findBlender();
+    if (mounted) {
+      setState(() {
+        _blender = found;
+        _blenderLooked = true;
+      });
+    }
+  }
+
+  void _chooseBlender(LumitUiState ui, String path) {
+    ui.workspace.setBlenderPath(path);
+    chooseBlender(path: path);
+    // A model that wanted a Blender is tried again.
+    ui.requestFrame();
+    // The old answer stays until the new one lands, so the line doesn't blink.
+    setState(() {});
+    unawaited(_findBlender());
+  }
 
   /// Whether this build has put [_wantedRow] on a row yet. A name can be on a
   /// page more than once and a key can be in the tree only once.
@@ -1221,6 +1248,47 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                       () => ui.workspace.setEventScript(event, script)),
                 ),
               ),
+          ],
+        ),
+        (
+          l10n.settingsGroup3dModels,
+          [
+            // Picked here, or the one found on the machine. Clear goes back
+            // to looking.
+            _row(
+              t,
+              l10n.settingsBlender,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-blender'),
+                    small: true,
+                    onPressed: () async {
+                      final path = await pickProgram();
+                      if (path == null || !mounted) return;
+                      _chooseBlender(ui, path);
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.blenderPath.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-blender-clear'),
+                      small: true,
+                      onPressed: () => _chooseBlender(ui, ''),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: switch ((_blenderLooked, _blender)) {
+                (false, _) => '',
+                (true, null) => l10n.settingsBlenderNotFound,
+                (true, final found?) =>
+                  l10n.settingsBlenderFound(found.version, found.path),
+              },
+            ),
           ],
         ),
         // The same updater the Help menu drives, seen from the other side: one

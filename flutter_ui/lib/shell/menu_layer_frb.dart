@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
@@ -691,6 +692,33 @@ MenuEntry modelSettingsRow(BuildContext context, LumitUiState ui) => MenuEntry(
               .where((entry) => entry.info.kind == BridgeLayerKind.model)
               .firstOrNull),
     );
+
+/// Layer ▸ Edit in Blender: the picked Model layer's .blend in Blender's own
+/// window, greyed for any other layer. Read as the menu opens.
+MenuEntry editInBlenderRow(LumitUiState ui) {
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.kind == BridgeLayerKind.model)
+      .firstOrNull;
+  ItemReference? source;
+  var path = '';
+  try {
+    source = picked?.layer.getSourceItem();
+    if (source case ItemReference_Footage(:final field0)) {
+      path = field0.filePath();
+    }
+  } catch (_) {
+    // The project closed as the menu opened.
+  }
+  return MenuEntry(
+    l10n.menuEditInBlender,
+    switch (source) {
+      ItemReference_Footage(:final field0)
+          when path.toLowerCase().endsWith('.blend') =>
+        () => field0.editInBlender(),
+      _ => null,
+    },
+  );
+}
 
 /// Opens [picked]'s Model settings, or null where there is none to open.
 VoidCallback? _modelWindow(BuildContext context, BridgeLayerEntry? picked) {

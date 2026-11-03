@@ -57,8 +57,9 @@ const List<String> footageExtensions = [
   'psd', 'ai',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
-  // 3D models
-  'gltf', 'glb', 'fbx', 'obj',
+  // 3D models, and the ones the user's Blender converts
+  'gltf', 'glb', 'fbx', 'obj', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
+  'ply', 'stl', 'dae',
 ];
 /// The footage type group.
 XTypeGroup _footageGroup() =>
@@ -254,6 +255,9 @@ Future<String?> pickScript() async {
   ]);
   return file?.path;
 }
+
+/// Pick a program, or null when cancelled.
+Future<String?> pickProgram() async => (await openFile())?.path;
 
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
