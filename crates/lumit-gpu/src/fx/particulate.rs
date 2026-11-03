@@ -868,7 +868,7 @@ pub(super) struct ParticulatePass {
     bind: wgpu::BindGroup,
     pub(super) draw_bind: wgpu::BindGroup,
     pub(super) empty: wgpu::BindGroup,
-    stream: wgpu::Buffer,
+    pub(super) stream: wgpu::Buffer,
     pub(super) args: wgpu::Buffer,
     candidates: u32,
     blocks: u32,

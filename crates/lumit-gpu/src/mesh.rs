@@ -58,6 +58,17 @@ pub struct ModelView<'a> {
     /// draws the model unlit.
     pub lights: &'a [LightingLight],
     pub material: LightingMaterial,
+    /// Each copy of the model. Empty draws it once where it is.
+    pub instances: &'a [ModelCopy],
+}
+
+/// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
+/// and the colour its own is multiplied by.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ModelCopy {
+    pub place: [[f32; 4]; 4],
+    pub tint: [f32; 4],
 }
 
 /// A model's picture at render size, and its depth as one over clip w at
@@ -223,7 +234,20 @@ impl MeshFx {
         };
         let frame_layout = layout(
             "mesh-frame",
-            &[uniform_entry(0, false), uniform_entry(1, true)],
+            &[
+                uniform_entry(0, false),
+                uniform_entry(1, true),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         );
         let mut entries = vec![uniform_entry(0, false)];
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
@@ -668,6 +692,21 @@ impl MeshFx {
                 contents: &bytes,
                 usage: wgpu::BufferUsages::UNIFORM,
             });
+        let one = ModelCopy {
+            place: Mat4::IDENTITY.to_cols_array_2d(),
+            tint: [1.0; 4],
+        };
+        let places = match view.instances {
+            [] => std::slice::from_ref(&one),
+            many => many,
+        };
+        let instances = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("mesh-instances"),
+                contents: bytemuck::cast_slice(places),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
         let frame_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mesh-frame"),
             layout: &self.frame_layout,
@@ -683,6 +722,10 @@ impl MeshFx {
                         offset: 0,
                         size: wgpu::BufferSize::new(size as u64),
                     }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: instances.as_entire_binding(),
                 },
             ],
         });
@@ -742,7 +785,11 @@ impl MeshFx {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
-                pass.draw_indexed(p.first..p.first + p.count, p.base_vertex, 0..1);
+                pass.draw_indexed(
+                    p.first..p.first + p.count,
+                    p.base_vertex,
+                    0..places.len() as u32,
+                );
             }
         };
         let mut encoder = ctx.encoder("mesh");

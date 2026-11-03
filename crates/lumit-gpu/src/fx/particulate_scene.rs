@@ -473,4 +473,50 @@ impl FxEngine {
         drop(enc);
         (out, inv_w)
     }
+
+    /// The first `n` particles' place, size, turn, colour and id, read back for
+    /// drawing a model at each, with the live count. Laid out as the stream
+    /// is, each range cut to `n`, so the cost follows `n` and not the cap.
+    pub fn particulate_copies(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        (w, h): (u32, u32),
+        op: &ParticulateOp<'_>,
+        n: u32,
+    ) -> Option<(u32, Vec<u32>)> {
+        let pass = self.particulate_prepare(ctx, src, w, h, None, op)?;
+        let (n, cap) = (u64::from(n.min(op.cap)), u64::from(op.cap));
+        // (first word in the stream, words) for position, size, turn, colour
+        // and id.
+        let ranges = [
+            (0, 3 * n),
+            (8 * cap, n),
+            (9 * cap, n),
+            (10 * cap, 2 * n),
+            (12 * cap, 2 * n),
+        ];
+        let words: u64 = ranges.iter().map(|r| r.1).sum();
+        let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fx-particulate-copies"),
+            size: 16 + words * 4,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        {
+            let mut enc = ctx.encoder("fx-particulate-copies");
+            pass.evaluate(self, &mut enc);
+            enc.copy_buffer_to_buffer(&pass.args, 0, &staging, 0, 16);
+            let mut at = 16;
+            for (from, len) in ranges {
+                enc.copy_buffer_to_buffer(&pass.stream, from * 4, &staging, at, len * 4);
+                at += len * 4;
+            }
+        }
+        ctx.flush();
+        // The browser build answers with what an earlier frame left.
+        let read: Vec<u32> =
+            crate::device::read_buffer(ctx, ("particulate-copies", n, w, h), &staging)?;
+        Some((*read.get(1)?, read.get(4..)?.to_vec()))
+    }
 }

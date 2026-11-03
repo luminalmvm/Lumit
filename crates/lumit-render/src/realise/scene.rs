@@ -26,6 +26,11 @@ pub(super) struct Frame {
     near: f32,
     /// What the layer drawing now carries.
     carried: Carried,
+    /// Its anti-aliasing, lights and Material options, which a model drawn as
+    /// its particles takes.
+    samples: u32,
+    lights: Vec<lumit_gpu::fx::lighting::LightingLight>,
+    material: lumit_gpu::fx::lighting::LightingMaterial,
 }
 
 /// What a Particulate in the scene drew beside its picture.
@@ -59,6 +64,9 @@ pub struct Carried {
     /// layer's own pixels: three corners each, the first carrying in w the
     /// area of every triangle up to and including it.
     pub surface: Option<Arc<[[f32; 4]]>>,
+    /// The model its Sprite layer names, drawn at each particle, and that
+    /// model's space to a box a pixel across about nought.
+    pub shape: Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)>,
 }
 
 /// Whether `layer` is a 3D layer with a Particulate in the scene.
@@ -79,6 +87,7 @@ pub(crate) fn carried(doc: &Document, comp: &Composition, layer: &Layer) -> Opti
         shutter: if blurs { open as f32 } else { 0.0 },
         opens: (comp.motion_blur.shutter_phase / 360.0 * frame) as f32,
         surface: surface(doc, comp, layer),
+        shape: shape(doc, comp, layer),
     })
 }
 
@@ -123,6 +132,35 @@ fn surface(doc: &Document, comp: &Composition, layer: &Layer) -> Option<Arc<[[f3
         }
     }
     (total > 0.0).then(|| out.into())
+}
+
+/// The model `layer`'s Particulate in the scene draws as each particle, when
+/// it is in Sprite mode and its Sprite layer is a Model layer, and that model's
+/// space to a box a pixel across about nought, its up axis as its layer has it.
+fn shape(
+    doc: &Document,
+    comp: &Composition,
+    layer: &Layer,
+) -> Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)> {
+    let e = layer.effects.iter().find(|e| is_scene(e))?;
+    let src = matches!(e.param("mode"), Some(EffectValue::Choice(1)))
+        .then(|| e.layer_ref("sprite_layer"))
+        .flatten()
+        .and_then(|id| comp.layers.iter().find(|l| l.id == id))?;
+    let lumit_core::model::LayerKind::Model { item, settings } = &src.kind else {
+        return None;
+    };
+    let scene = crate::model::scene(doc, *item)?;
+    let comp_size = (comp.width as f32, comp.height as f32);
+    let m = crate::model::model_to_comp(settings, &scene.bounds, comp_size);
+    let m = glam::Mat4::from_cols_array_2d(&m);
+    let lo = m.transform_point3(scene.bounds.min.into());
+    let hi = m.transform_point3(scene.bounds.max.into());
+    let across = (hi - lo).abs().max_element();
+    let unit = glam::Mat4::from_scale(glam::Vec3::splat(1.0 / across))
+        * glam::Mat4::from_translation(-(lo + hi) / 2.0)
+        * m;
+    (across > 0.0).then_some((scene, unit))
 }
 
 /// The layer a Layer emitter names, if `e` is one.
@@ -264,6 +302,18 @@ pub(crate) fn draw(
     };
     let middle = place.transform_point3(glam::Vec3::from(at) / s);
     let joined = |depth| PENDING.with(|p| *p.borrow_mut() = Some(Joined { depth, middle }));
+    if let Some(picture) = shapes(
+        fx,
+        ctx,
+        src,
+        raster,
+        &op,
+        &frame,
+        place * glam::Mat4::from_scale(glam::Vec3::splat(1.0 / s)),
+    ) {
+        joined(picture.depth);
+        return Some(picture.colour);
+    }
     let (colour, depth) = fx.particulate_scene(
         ctx,
         src,
@@ -286,6 +336,78 @@ pub(crate) fn draw(
     Some(colour)
 }
 
+/// The most models a Particulate draws as its particles.
+// ponytail: the particles are read back to place the copies, which waits on
+// the card once a frame. Placing them on the card is the way up.
+const MAX_SHAPES: usize = 20_000;
+
+/// The particles of `op` each drawn as the model the frame carries, through
+/// the mesh pass, lit by the layer's lights. `place` takes a particle in the
+/// raster to comp pixels. `None` when there is no model, or no particle.
+fn shapes(
+    fx: &lumit_gpu::fx::FxEngine,
+    ctx: &lumit_gpu::GpuContext,
+    src: &wgpu::Texture,
+    (w, h): (u32, u32),
+    op: &lumit_gpu::fx::particulate::ParticulateOp<'_>,
+    frame: &Frame,
+    place: glam::Mat4,
+) -> Option<ModelPicture> {
+    use glam::{Mat4, Vec3};
+    let (model, unit) = frame.carried.shape.as_ref()?;
+    let (count, words) = fx.particulate_copies(ctx, src, (w, h), op, MAX_SHAPES as u32)?;
+    // Positions first, then each one's size, turn, colour and id.
+    let n = (op.cap as usize).min(MAX_SHAPES);
+    let word = |i: usize| words.get(i).copied().unwrap_or(0);
+    let float = |i: usize| f32::from_bits(word(i));
+    let halves = |i: usize| {
+        let v = word(i);
+        [v & 0xffff, v >> 16].map(|b| lumit_gpu::fx::common::f16_to_f32(b as u16))
+    };
+    let copies: Vec<lumit_gpu::mesh::ModelCopy> = (0..(count as usize).min(n))
+        .map(|i| {
+            let at = Vec3::new(float(i * 3), float(i * 3 + 1), float(i * 3 + 2));
+            let [r, g] = halves(5 * n + 2 * i);
+            let [b, a] = halves(5 * n + 2 * i + 1);
+            // Each one turns about its own axis, picked by its id.
+            let id = word(7 * n + 2 * i).wrapping_mul(0x9e37_79b9);
+            let spin = (id & 0xffff) as f32 / 65_536.0 * std::f32::consts::TAU;
+            let up = (id >> 16) as f32 / 65_536.0 * 2.0 - 1.0;
+            let round = (1.0 - up * up).max(0.0).sqrt();
+            let axis = Vec3::new(round * spin.cos(), round * spin.sin(), up);
+            // Shrunk as it fades, so it goes rather than pops.
+            let size = float(3 * n + i) * a.clamp(0.0, 1.0);
+            lumit_gpu::mesh::ModelCopy {
+                place: (place
+                    * Mat4::from_translation(at)
+                    * Mat4::from_axis_angle(axis, float(4 * n + i))
+                    * Mat4::from_scale(Vec3::splat(size)))
+                .to_cols_array_2d(),
+                tint: [r, g, b, a],
+            }
+        })
+        .collect();
+    if copies.is_empty() {
+        return None;
+    }
+    let eye = frame.camera.position;
+    let view = lumit_gpu::mesh::ModelView {
+        comp: frame.comp,
+        render_scale: frame.render_scale,
+        samples: frame.samples,
+        camera: crate::export::camera_mat(frame.comp.0, frame.comp.1, frame.camera),
+        model_to_comp: *unit,
+        shutter: &[],
+        lights: &frame.lights,
+        material: lumit_gpu::fx::lighting::LightingMaterial {
+            eye: [eye.0 as f32, eye.1 as f32, eye.2 as f32],
+            ..frame.material
+        },
+        instances: &copies,
+    };
+    fx.model(ctx, model, &view).ok()
+}
+
 /// What `l`'s Particulate in the scene drew beside its picture: its depth,
 /// and its emitter in comp pixels. Anything left over from a stack that is
 /// not `l`'s goes.
@@ -301,6 +423,8 @@ impl Seen {
     pub(super) fn enter(frame: &Frame, l: &CompLayerDraw) -> Self {
         let frame = Frame {
             carried: l.in_scene.clone().unwrap_or_default(),
+            lights: l.lights.clone(),
+            material: l.material,
             ..frame.clone()
         };
         FRAMES.with(|f| f.borrow_mut().push(frame));
@@ -387,6 +511,9 @@ impl Realiser<'_> {
             occluder,
             near,
             carried: Carried::default(),
+            samples: self.samples,
+            lights: Vec::new(),
+            material: Default::default(),
         };
         (Some(frame), made)
     }
@@ -407,7 +534,9 @@ impl Realiser<'_> {
         (cw, ch): (u32, u32),
         casters: Option<&lumit_gpu::fx::lighting::ShadowCasters>,
     ) -> wgpu::Texture {
-        if l.lights.is_empty() {
+        // A model drawn as the particles was lit as it was drawn.
+        let shaped = l.in_scene.as_ref().is_some_and(|c| c.shape.is_some());
+        if l.lights.is_empty() || shaped {
             return tex;
         }
         let pose = camera
