@@ -16401,6 +16401,10 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
     broad.scale = 40.0;
     let mut tight = base;
     tight.scale = 4.0;
+    let mut digital = base;
+    digital.style = 1;
+    let mut streaks = base;
+    streaks.style = 2;
 
     for (name, mood, mix) in [
         ("default", base, 1.0f32),
@@ -16414,6 +16418,8 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
         ("drifted", drifted, 1.0),
         ("broad", broad, 1.0),
         ("tight", tight, 1.0),
+        ("digital", digital, 1.0),
+        ("streaks", streaks, 1.0),
         ("mixed", strong, 0.6),
         ("mix-zero", strong, 0.0),
     ] {
@@ -16429,6 +16435,7 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
             turbulent: p.field.turbulent,
             cycle: p.field.cycle,
             inv_scale: p.inv_scale,
+            block: p.block,
             z: p.z,
             intensity: p.intensity,
             light: p.light,
@@ -16513,6 +16520,7 @@ fn the_matte_scales_the_mood_lighting() {
         turbulent: p.field.turbulent,
         cycle: p.field.cycle,
         inv_scale: p.inv_scale,
+        block: p.block,
         z: p.z,
         intensity: p.intensity,
         light: p.light,

@@ -995,8 +995,10 @@ pub struct MoodLightingOp {
     pub turbulent: bool,
     /// Depth loop length in cells; 0 for a field that never repeats.
     pub cycle: i32,
-    /// `1 ÷ pool size`, raster pixels.
-    pub inv_scale: f32,
+    /// `1 ÷ pool size` across and down, raster pixels.
+    pub inv_scale: [f32; 2],
+    /// Raster pixels a side of the square the field is read once for.
+    pub block: u32,
     /// The field's depth coordinate (Drift ÷ 360).
     pub z: f32,
     /// Intensity ÷ 100.
@@ -1026,6 +1028,10 @@ struct MoodLightingParams {
     octaves: u32,
     cycle: i32,
     flags: u32,
+    inv_scale_y: f32,
+    block: u32,
+    _pad0: f32,
+    _pad1: f32,
 }
 
 /// One resolved Texturize (docs/08 §3.68). Mirrors
@@ -1219,7 +1225,7 @@ impl FxEngine {
             bytemuck::bytes_of(&MoodLightingParams {
                 light: [op.light[0], op.light[1], op.light[2], 0.0],
                 shade: [op.shade[0], op.shade[1], op.shade[2], 0.0],
-                inv_scale_z_int_con: [op.inv_scale, op.z, op.intensity, op.contrast],
+                inv_scale_z_int_con: [op.inv_scale[0], op.z, op.intensity, op.contrast],
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
                 gain: op.gain,
@@ -1228,6 +1234,10 @@ impl FxEngine {
                 octaves: op.octaves,
                 cycle: op.cycle,
                 flags,
+                inv_scale_y: op.inv_scale[1],
+                block: op.block.max(1),
+                _pad0: 0.0,
+                _pad1: 0.0,
             }),
         );
         out
