@@ -1276,6 +1276,18 @@
   "@fxSrgb": {
     "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
   },
+  "fxSrgbCurve": "sRGB curve",
+  "@fxSrgbCurve": {
+    "description": "Effect name in the Add effect menu — puts the picture onto the sRGB curve, or takes it back off, so a grade made on the encoded picture sees the numbers it was made on."
+  },
+  "fxLinearToSrgb": "Linear to sRGB",
+  "@fxLinearToSrgb": {
+    "description": "Effect controls — a Direction option on sRGB curve: from linear light onto the sRGB curve."
+  },
+  "fxSrgbToLinear": "sRGB to linear",
+  "@fxSrgbToLinear": {
+    "description": "Effect controls — a Direction option on sRGB curve: from the sRGB curve back to linear light."
+  },
   "fxStar": "Star",
   "@fxStar": {
     "description": "Effect controls — a switch on Radio waves: make a star of the polygon."

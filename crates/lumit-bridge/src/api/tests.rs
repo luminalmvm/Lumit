@@ -10426,7 +10426,7 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
             vec!["colour_balance"],
             vec!["vibrancy", "saturation"],
             vec!["black_and_white"],
-            vec!["curves"],
+            vec!["srgb_curve", "curves", "srgb_curve"],
             vec!["photo_filter"],
             vec![],
             vec![]
@@ -10445,11 +10445,11 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         }
     };
     assert_eq!(
-        row(3, 0, "green"),
+        row(3, 1, "green"),
         [0.0, 1.0, 1.0, 0.0],
         "input, then output"
     );
-    assert_eq!(row(3, 0, "master"), [0.0, 0.0, 1.0, 1.0]);
+    assert_eq!(row(3, 1, "master"), [0.0, 0.0, 1.0, 1.0]);
     assert_eq!(
         (row(2, 0, "reds"), row(2, 0, "tint")),
         (vec![-10.0], vec![1.0])
