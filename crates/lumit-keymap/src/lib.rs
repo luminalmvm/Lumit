@@ -300,6 +300,13 @@ impl ActionId {
             "viewer.3d.camera.new" => "Create a camera from the 3D view",
             "viewer.3d.camera.move" => "Move the active camera to the 3D view",
             "viewer.3d.place" => "Place the selected layers on a surface",
+            "viewer.look.final" => "Show models as they export",
+            "viewer.look.shaded" => "Show models shaded",
+            "viewer.look.wireframe" => "Show models as wireframes",
+            "viewer.look.shaded_wire" => "Show models shaded with wire",
+            "viewer.look.normals" => "Show models' normals",
+            "viewer.look.faces" => "Show or hide face orientation",
+            "viewer.look.lines" => "Switch wireframe on or off",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",

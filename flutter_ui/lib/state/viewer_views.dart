@@ -22,6 +22,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:uuid/uuid.dart';
 
 import 'dock.dart';
@@ -177,12 +178,21 @@ class ViewerSurface {
   bool snappedOrtho = false;
 
   /// A 3D viewport's picture: the size it fills round the comp's middle,
-  /// comp pixels, which its panel measures, the share of its tier it is drawn
-  /// at so a wide pane costs at most twice the comp's pixels, and whether it
-  /// is drawn as lines only, which skips the engine altogether.
+  /// comp pixels, which its panel measures, and the share of its tier it is
+  /// drawn at so a wide pane costs at most twice the comp's pixels.
   (int, int) canvas = (0, 0);
   double canvasShare = 1;
-  bool wireframeOnly = false;
+
+  /// How this view shows models in a fixed or custom view, and through the
+  /// comp's own camera. Null until picked, which is shaded in a light of the
+  /// view's own in the first and as they export in the second. And whether
+  /// their faces are tinted by which way they face.
+  BridgeModelDisplay? viewDisplay;
+  BridgeModelDisplay? cameraDisplay;
+  bool faces = false;
+
+  /// The look the cube's Lines only goes back to. Not written down.
+  BridgeModelDisplay? beforeLines;
 
   ViewerSurface({
     required this.id,
@@ -247,7 +257,9 @@ class ViewerSurface {
                 ],
           },
         if (orthoZooms.isNotEmpty) 'ortho': orthoZooms,
-        if (wireframeOnly) 'wireframe_only': true,
+        if (viewDisplay != null) 'display': viewDisplay!.name,
+        if (cameraDisplay != null) 'camera_display': cameraDisplay!.name,
+        if (faces) 'faces': true,
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -305,7 +317,11 @@ class ViewerSurface {
         );
       }
     }
-    surface.wireframeOnly = j['wireframe_only'] == true;
+    final displays = BridgeModelDisplay.values.asNameMap();
+    surface.viewDisplay = displays[j['display']] ??
+        (j['wireframe_only'] == true ? BridgeModelDisplay.wireframe : null);
+    surface.cameraDisplay = displays[j['camera_display']];
+    surface.faces = j['faces'] == true;
     final ortho = j['ortho'];
     if (ortho is Map) {
       for (final e in ortho.entries) {

@@ -404,6 +404,7 @@ fn shapes(
             ..frame.material
         },
         instances: &copies,
+        display: crate::model::display(),
     };
     fx.model(ctx, model, &view).ok()
 }

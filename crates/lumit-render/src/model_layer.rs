@@ -42,6 +42,7 @@ impl Realiser<'_> {
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial { eye, ..l.material },
             instances: &[],
+            display: crate::model::display(),
         };
         self.fx.model(&self.ctx, &m.scene, &view).ok()
     }

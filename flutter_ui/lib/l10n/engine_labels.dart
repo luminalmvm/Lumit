@@ -1874,6 +1874,13 @@ Map<String, String> get _built => {
           l10n.keyMoveTheActiveCameraToThe3dView,
       "Place the selected layers on a surface":
           l10n.keyPlaceTheSelectedLayersOnASurface,
+      "Show models as they export": l10n.keyShowModelsAsTheyExport,
+      "Show models shaded": l10n.keyShowModelsShaded,
+      "Show models as wireframes": l10n.keyShowModelsAsWireframes,
+      "Show models shaded with wire": l10n.keyShowModelsShadedWithWire,
+      "Show models' normals": l10n.keyShowModelsNormals,
+      "Show or hide face orientation": l10n.keyShowOrHideFaceOrientation,
+      "Switch wireframe on or off": l10n.keySwitchWireframeOnOrOff,
       "Reset the 3D view": l10n.keyResetThe3dView,
       "Create a camera from the 3D view": l10n.keyCreateACameraFromThe3dView,
       "Focus the next panel": l10n.keyFocusTheNextPanel,

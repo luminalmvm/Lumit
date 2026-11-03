@@ -85,6 +85,20 @@ fn slots(m: &lumit_scene::Material) -> [(Option<TextureRef>, bool); 5] {
     ]
 }
 
+/// A primitive's corners three to a triangle, every primitive in the order
+/// it is uploaded, or `None` for one pointing past its own corners, which is
+/// left out.
+pub(super) fn triangles(p: &lumit_scene::Primitive) -> Option<Vec<u32>> {
+    let n = p.positions.len();
+    let mut own: Vec<u32> = if p.indices.is_empty() {
+        (0..u32::try_from(n).ok()?).collect()
+    } else {
+        p.indices.clone()
+    };
+    own.truncate(own.len() / 3 * 3);
+    (!own.is_empty() && own.iter().all(|&i| (i as usize) < n)).then_some(own)
+}
+
 impl GpuModel {
     pub(super) fn upload(
         ctx: &GpuContext,
@@ -100,21 +114,14 @@ impl GpuModel {
         for mesh in &scene.meshes {
             let mut each = Vec::new();
             for p in &mesh.primitives {
-                let n = p.positions.len();
-                let own: Vec<u32> = if p.indices.is_empty() {
-                    (0..u32::try_from(n).map_err(too_large)?).collect()
-                } else {
-                    p.indices.clone()
-                };
-                let count = own.len() / 3 * 3;
-                // A primitive pointing past its own corners is left out.
-                if count == 0 || own.iter().any(|&i| i as usize >= n) {
+                u32::try_from(p.positions.len()).map_err(too_large)?;
+                let Some(own) = triangles(p) else {
                     each.push(None);
                     continue;
-                }
+                };
                 let first = u32::try_from(indices.len()).map_err(too_large)?;
                 let base = i32::try_from(vertices.len()).map_err(too_large)?;
-                indices.extend_from_slice(&own[..count]);
+                indices.extend_from_slice(&own);
                 let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
                 vertices.extend(p.positions.iter().enumerate().map(|(i, &position)| {
                     lo = lo.min(position.into());
@@ -128,7 +135,7 @@ impl GpuModel {
                         colour: p.colours.get(i).copied().unwrap_or([1.0; 4]),
                     }
                 }));
-                let count = u32::try_from(count).map_err(too_large)?;
+                let count = u32::try_from(own.len()).map_err(too_large)?;
                 each.push(Some((first, count, base, (lo + hi) * 0.5, p.material)));
             }
             ranges.push(each);
@@ -334,6 +341,7 @@ impl GpuModel {
             indices,
             parts,
             materials,
+            edges: std::sync::OnceLock::new(),
             _held: held,
         })
     }

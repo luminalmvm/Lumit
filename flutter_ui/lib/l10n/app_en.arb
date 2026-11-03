@@ -6881,6 +6881,34 @@
   "@keyPlaceTheSelectedLayersOnASurface": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyShowModelsAsTheyExport": "Show models as they export",
+  "@keyShowModelsAsTheyExport": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShaded": "Show models shaded",
+  "@keyShowModelsShaded": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsAsWireframes": "Show models as wireframes",
+  "@keyShowModelsAsWireframes": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShadedWithWire": "Show models shaded with wire",
+  "@keyShowModelsShadedWithWire": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsNormals": "Show models' normals",
+  "@keyShowModelsNormals": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowOrHideFaceOrientation": "Show or hide face orientation",
+  "@keyShowOrHideFaceOrientation": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keySwitchWireframeOnOrOff": "Switch wireframe on or off",
+  "@keySwitchWireframeOnOrOff": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
   "keyResetThe3dView": "Reset the 3D view",
   "@keyResetThe3dView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -8196,7 +8224,7 @@
   },
   "tipViewportWireframe": "Lines only",
   "@tipViewportWireframe": {
-    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as outlines on the ground, with no picture."
+    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as lines: models as the edges of their triangles, every other layer as its outline."
   },
   "viewportPersp": "Persp",
   "@viewportPersp": {
@@ -11424,6 +11452,30 @@
   "viewerViewFree": "Free view",
   "@viewerViewFree": {
     "description": "Entry in the Viewer bar's 3D view menu, offered only in a 3D viewport: the viewport's own viewpoint, moved with the mouse and kept with the session."
+  },
+  "viewerDisplayFinal": "Final",
+  "@viewerDisplayFinal": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn lit by the composition's own lights, as they export. The default through the composition's camera."
+  },
+  "viewerDisplayShaded": "Shaded",
+  "@viewerDisplayShaded": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn in a fixed studio light of the view's own, whatever lights the composition has. The default in fixed and custom views."
+  },
+  "viewerDisplayWireframe": "Wireframe",
+  "@viewerDisplayWireframe": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn as the edges of their triangles, and every other layer as its outline."
+  },
+  "viewerDisplayShadedWire": "Shaded with wire",
+  "@viewerDisplayShadedWire": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn shaded, with the edges of their triangles over them."
+  },
+  "viewerDisplayNormals": "Normals",
+  "@viewerDisplayNormals": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn with the direction each point faces as colour. Normals is the 3D term for those directions."
+  },
+  "viewerDisplayFaces": "Face orientation",
+  "@viewerDisplayFaces": {
+    "description": "Switch in the Viewer bar's 3D view menu: tints the front of each model face blue and its back red, to find faces turned the wrong way."
   },
   "menuOpenIn3dViewport": "Open in new 3D viewport",
   "@menuOpenIn3dViewport": {
