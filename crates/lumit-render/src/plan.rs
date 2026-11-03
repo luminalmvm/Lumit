@@ -391,7 +391,7 @@ pub fn collect_comp_jobs(
     // dozens of simultaneous 4K decodes feeding a composite that draws one
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
-    let mut wanted: Vec<Uuid> = Vec::new();
+    let mut wanted: Vec<Uuid> = comp.environment_source(t).into_iter().collect();
     // Whether a layer is drawn, which is the walk below's own gate.
     let drawn = |idx: usize, l: &lumit_core::model::Layer| {
         !occluder.is_some_and(|o| idx > o)

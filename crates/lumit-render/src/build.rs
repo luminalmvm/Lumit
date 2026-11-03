@@ -3605,6 +3605,8 @@ fn comp_walk(
     // Solo / isolate: while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
+    // An Environment light's picture is drawn for it, shown or not.
+    let surround = comp.environment_source(t_comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
         // A frame nobody wants any more stops here, and the renderer throws
@@ -3647,10 +3649,9 @@ fn comp_walk(
         }
         // A layer whose Layer out is unplugged draws nothing, which is
         // the same nothing a hidden layer draws and is skipped in the same place.
-        if !layer.switches.visible
-            || layer.graph.out_unwired
+        let shown = layer.switches.visible && !layer.graph.out_unwired;
+        if !(shown && !(any_solo && !layer.switches.solo) || Some(layer.id) == surround)
             || !in_span(layer)
-            || (any_solo && !layer.switches.solo)
         {
             continue;
         }
@@ -4525,6 +4526,7 @@ fn comp_walk(
                 | DrawSource::Adjust
                 | DrawSource::Graph(_)
                 | DrawSource::Haze(_)
+                | DrawSource::Environment(_)
                 | DrawSource::Model(_) => 1.0,
             };
             if layer.switches.fx {
@@ -4564,7 +4566,8 @@ fn comp_walk(
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
             | DrawSource::Graph(_)
-            | DrawSource::Haze(_) => None,
+            | DrawSource::Haze(_)
+            | DrawSource::Environment(_) => None,
         };
         // The name the per-effect cache files this stack's outputs under: a
         // picture made from bytes, or a nested comp's frame, whose texture is
@@ -4578,6 +4581,7 @@ fn comp_walk(
             DrawSource::Adjust
             | DrawSource::Graph(_)
             | DrawSource::Haze(_)
+            | DrawSource::Environment(_)
             | DrawSource::Model(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
@@ -4750,6 +4754,7 @@ fn comp_walk(
     }
     if !spliced {
         crate::haze::add(&mut draws, doc, comp, t_comp);
+        crate::environment::add(&mut draws, doc, comp, t_comp);
     }
     draws
 }

@@ -88,6 +88,12 @@ struct Casters {
 @group(2) @binding(4) var map_sampler: sampler_comparison;
 @group(2) @binding(5) var<uniform> shadow_maps: ShadowMaps;
 
+// The comp's environment (environment_core.wgsl, prepended).
+@group(3) @binding(0) var env_irradiance_cube: texture_cube<f32>;
+@group(3) @binding(1) var env_specular_cube: texture_cube<f32>;
+@group(3) @binding(2) var env_sampler: sampler;
+@group(3) @binding(3) var<uniform> environment: Environment;
+
 struct VertexIn {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -181,7 +187,8 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let look = u32(frame.flags.y + 0.5);
     let count = min(u32(frame.eye.w), 8u);
     let accepts = u32(frame.flags.w + 0.5);
-    if (look == 0u && (mat.mode.z > 0.5 || count == 0u)) {
+    let surround = environment.colour.w > 0.5;
+    if (look == 0u && (mat.mode.z > 0.5 || (count == 0u && !surround))) {
         // Showing only its shadows, with none to show.
         if (accepts == 2u) {
             return vec4<f32>(0.0);
@@ -289,10 +296,29 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     }
     // A uniform ambient reflects too, by Karis' fit of the split-sum
     // lookup, or metal would stay black under it.
-    let r = roughness * vec4<f32>(-1.0, -0.0275, -0.572, 0.022) + vec4<f32>(1.0, 0.0425, 1.04, -0.04);
-    let a = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
-    let env = f0 * (a * -1.04 + r.z) + (a * 1.04 + r.w);
-    let rgb = (diffuse_colour + env) * ambient * ao + diffuse_colour * diffuse + specular + emissive;
+    let r4 = roughness * vec4<f32>(-1.0, -0.0275, -0.572, 0.022) + vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let a = min(r4.x * r4.x, exp2(-9.28 * nv)) * r4.x + r4.y;
+    let env = f0 * (a * -1.04 + r4.z) + (a * 1.04 + r4.w);
+    var rgb = (diffuse_colour + env) * ambient * ao + diffuse_colour * diffuse + specular + emissive;
+    if (surround) {
+        // The environment's split sum: what a matte surface takes from every
+        // way, and the reflection at this roughness, both darkened by the
+        // model's own occlusion.
+        let irradiance = env_irradiance(env_irradiance_cube, env_sampler, environment, n);
+        let r = reflect(-eye, n);
+        let radiance = env_radiance(env_specular_cube, env_sampler, environment, r, roughness);
+        // Karis' fit as its scale and bias, then the light many bounces
+        // between the microfacets keep (Fdez-Aguera, as Bevy has it).
+        let ab = vec2<f32>(a * -1.04 + r4.z, a * 1.04 + r4.w);
+        let fr = max(vec3<f32>(1.0 - roughness), f0) - f0;
+        let ks = f0 + fr * pow(1.0 - nv, 5.0);
+        let fss_ess = ks * ab.x + ab.y;
+        let ems = 1.0 - (ab.x + ab.y);
+        let favg = f0 + (1.0 - f0) / 21.0;
+        let fms_ems = fss_ess * favg / (1.0 - ems * favg) * ems;
+        let kd = diffuse_colour * (1.0 - (fss_ess + fms_ems));
+        rgb = rgb + ((fms_ems + kd) * irradiance + fss_ess * radiance) * ao;
+    }
     return vec4<f32>(rgb * alpha, alpha);
 }
 

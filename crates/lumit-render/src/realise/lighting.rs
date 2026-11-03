@@ -9,7 +9,8 @@ impl Realiser<'_> {
     /// the camera's depth of field (docs/impl/camera.md §5), each only where
     /// it applies, so a comp with neither renders byte-for-byte as before.
     /// `casters` are the segment's shadows, `own` this layer's square
-    /// among them and `maps` the models' shadows; `grow` is how much its
+    /// among them, `maps` the models' shadows and `environment` the comp's,
+    /// which lights a 3D layer that takes light; `grow` is how much its
     /// effects grew it and `size` the comp's, which the depth of field reads.
     /// Hands back the picture, how much it has grown now, and the lit picture
     /// before the blur with its own grow when it was blurred. Particles in
@@ -21,10 +22,11 @@ impl Realiser<'_> {
         mut tex: wgpu::Texture,
         eye: [f32; 3],
         camera: Option<lumit_core::model::CameraPose>,
-        (casters, own, maps): (
+        (casters, own, maps, environment): (
             Option<&lumit_gpu::fx::lighting::ShadowCasters>,
             Option<usize>,
             Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+            Option<&lumit_gpu::fx::environment::EnvironmentLight>,
         ),
         grow: (f32, f32),
         size: (u32, u32),
@@ -55,7 +57,10 @@ impl Realiser<'_> {
             && casters.is_none()
             && maps.is_none()
             && l.material.accepts_shadows != lumit_gpu::fx::lighting::LightingShadows::Only;
-        if let Some(mut op) = lighting_op(l, tex.width(), tex.height(), eye).filter(|_| !unshaded) {
+        let environment = environment.filter(|_| l.three_d && !l.material.unlit);
+        let (w, h) = (tex.width(), tex.height());
+        let op = lighting_op(l, w, h, eye, environment.is_some()).filter(|_| !unshaded);
+        if let Some(mut op) = op {
             op.own_caster = own;
             tex = self.fx.lighting(
                 &self.ctx,
@@ -65,6 +70,7 @@ impl Realiser<'_> {
                 &op,
                 casters,
                 maps,
+                environment,
             );
         }
         // Depth of field (docs/impl/camera.md §5): each part of a 3D layer
@@ -92,7 +98,8 @@ impl Realiser<'_> {
 
 /// The lighting pass's parameters for one draw (docs/06), or `None`
 /// when nothing lights it — which is the common case and the reason a comp
-/// without Light layers pays nothing.
+/// without Light layers pays nothing. `surround` is an environment lighting
+/// it, which needs the pass with no lights at all.
 ///
 /// The layer's plane is described to the kernel as an affine frame rather than
 /// a matrix: where texel (0, 0) sits in comp pixels, and how far one texel of
@@ -106,10 +113,11 @@ pub(super) fn lighting_op(
     w: u32,
     h: u32,
     eye: [f32; 3],
+    surround: bool,
 ) -> Option<lumit_gpu::fx::lighting::LightingOp> {
     use crate::build::shading::{place_dir, place_point, unit};
 
-    if l.lights.is_empty() || w == 0 || h == 0 {
+    if (l.lights.is_empty() && !surround) || w == 0 || h == 0 {
         return None;
     }
     // A 2D layer is drawn flat at z = 0 whatever its transform says, because

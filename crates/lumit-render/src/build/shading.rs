@@ -180,6 +180,7 @@ pub fn shading_material(
         casts_shadows: shadows(m.casts_shadows),
         transmission: pct(&m.light_transmission).min(1.0),
         unlit: !layer.switches.accepts_lights,
+        reflection: pct(&m.reflection).min(1.0),
     }
 }
 

@@ -994,6 +994,7 @@ impl Realiser<'_> {
                         DrawSource::Adjust
                         | DrawSource::Graph(_)
                         | DrawSource::Haze(_)
+                        | DrawSource::Environment(_)
                         | DrawSource::Model(_) => self.transparent(1, 1),
                     };
                     // The placement is in the graph's own pixels, so it is
@@ -1485,7 +1486,16 @@ impl Realiser<'_> {
         // The actual raster this comp's composites land on; all geometry
         // below stays in the logical `width`×`height` comp pixels.
         let (tw, th) = lumit_gpu::composite::scaled_size(width, height, self.render_scale);
-        let mut acc: Option<wgpu::Texture> = None;
+        let (surround, layers) = crate::environment::peel(layers);
+        // Only the look a comp exports with takes it, the others being for
+        // seeing the models themselves.
+        let surround = surround.filter(|_| crate::model::display().takes_shadows());
+        let lit_by = surround.map(|d| (d, self.environment_light(d)));
+        let mut acc = lit_by
+            .as_ref()
+            .filter(|(d, _)| d.background)
+            .and_then(|(d, e)| self.environment_background(e, d, camera, (width, height)));
+        let environment = lit_by.as_ref().map(|(_, e)| e);
         let mut start = 0usize;
         // The depth of the layers below, made only when an adjustment layer's
         // effect reads it, as metres per unit of the camera's view.
@@ -1514,6 +1524,7 @@ impl Realiser<'_> {
                 None,
                 metres_per_w.map(|m| (m, &mut depth)),
                 if haze { ground.take() } else { None },
+                environment,
             );
             if haze {
                 (acc, start) = (Some(below), i + 1);
@@ -1645,6 +1656,7 @@ impl Realiser<'_> {
             None,
             None,
             ground,
+            environment,
         )
     }
 
@@ -2130,6 +2142,7 @@ impl Realiser<'_> {
         capture: Option<&mut Option<lumit_gpu::fx::lens_blur::SceneLayers>>,
         below: Option<(f32, &mut Option<wgpu::Texture>)>,
         ground: Option<ViewGround>,
+        environment: Option<&lumit_gpu::fx::environment::EnvironmentLight>,
     ) -> wgpu::Texture {
         let (haze, layers) = crate::haze::peel(layers);
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
@@ -2188,7 +2201,7 @@ impl Realiser<'_> {
                         });
                         each[i].0.and_then(|k| sets.get(k))
                     });
-                    let shadows = (casters.flatten(), maps.as_ref());
+                    let shadows = (casters.flatten(), maps.as_ref(), environment);
                     self.layer_picture(l, camera, (width, height), shadows, &mut fx_ms)
                 }
             };
@@ -2218,7 +2231,7 @@ impl Realiser<'_> {
                     tex,
                     eye,
                     camera,
-                    (None, None, None),
+                    (None, None, None, environment),
                     grow,
                     (width, height),
                     claimed.as_ref(),
@@ -2263,7 +2276,7 @@ impl Realiser<'_> {
                             tex,
                             eye,
                             camera,
-                            (casters, own, maps.as_ref()),
+                            (casters, own, maps.as_ref(), environment),
                             *grow,
                             size,
                             depth.as_ref(),
@@ -2726,7 +2739,7 @@ impl Realiser<'_> {
         // their backdrop.
         let made = capture.is_some() || n.draws.iter().any(|d| d.three_d);
         let draws: &[CompLayerDraw] = if n.camera.is_some() && made {
-            &n.draws
+            crate::environment::peel(&n.draws).1
         } else {
             &[]
         };
@@ -2745,6 +2758,7 @@ impl Realiser<'_> {
             None,
             Some(metres_per_w),
             capture,
+            None,
             None,
             None,
         );
@@ -2840,9 +2854,12 @@ fn straight_to_composite(l: &CompLayerDraw, camera: Option<lumit_core::model::Ca
 /// caller crops. Nothing about the image changes — only how much of it was
 /// computed to get there.
 fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
-    !layers
-        .iter()
-        .any(|l| matches!(l.source, DrawSource::Adjust | DrawSource::Haze(_)) || !l.mb.is_empty())
+    !layers.iter().any(|l| {
+        matches!(
+            l.source,
+            DrawSource::Adjust | DrawSource::Haze(_) | DrawSource::Environment(_)
+        ) || !l.mb.is_empty()
+    })
 }
 
 /// One propagated matte on the card: a gray8 plane at the source's own

@@ -484,6 +484,9 @@ pub enum DrawSource {
     ),
     /// A Model layer's 3D model, for the mesh pass.
     Model(Box<crate::model::ModelDraw>),
+    /// The comp's Environment light (`crate::environment`), at the head of
+    /// its list.
+    Environment(Box<crate::environment::EnvironmentDraw>),
 }
 
 /// The below-stack re-rendered at a held/sample time for a temporal adjustment
@@ -792,7 +795,7 @@ pub struct CompLayerDraw {
 
 impl CompLayerDraw {
     /// A draw that covers the whole comp and stands for none of its layers:
-    /// the haze's.
+    /// the haze's and the environment's.
     pub(crate) fn over_comp(comp: &lumit_core::model::Composition, source: DrawSource) -> Self {
         let (w, h) = (comp.width as f32, comp.height as f32);
         Self {

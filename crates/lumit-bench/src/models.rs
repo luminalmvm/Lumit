@@ -86,6 +86,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         casters: None,
         maps: None,
         display: Default::default(),
+        environment: None,
     };
     let time = |run: &dyn Fn() -> Result<(), String>| -> Result<f64, String> {
         for _ in 0..WARMUP {
@@ -133,6 +134,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         let view = lumit_gpu::mesh::ModelView {
             lights: &casting,
             maps: maps.as_ref(),
+            environment: None,
             material: LightingMaterial {
                 accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
                 ..view.material

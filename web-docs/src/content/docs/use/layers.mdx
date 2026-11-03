@@ -207,7 +207,14 @@ linearised.
 **Light options**, inside the light's Transform group, holds its own rows:
 
 - **Light type**: **Point**, **Spot**, **Area**, **Parallel** (every ray runs the same way,
-  along the light's aim) or **Ambient** (light from everywhere, with no place or direction).
+  along the light's aim), **Ambient** (light from everywhere, with no place or direction) or
+  **Environment** (light from a picture of everything round the scene).
+- **Source**, on an environment light: the layer whose picture surrounds the scene, read as
+  a panorama twice as wide as it is tall: an HDR or OpenEXR picture, any footage or a
+  precomp. A layer an environment light names is never drawn itself. A new one from Light
+  settings starts on the selected layer, shown in the background.
+- **Show in background**, on an environment light: draws the picture behind everything, as
+  the camera sees it. **Background blur** softens it there.
 - **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away.
 - **Colour**: the colour of the light.
 - **Cone angle** and **Cone feather**, on a spot: the cone's full angle, and how much of its
@@ -217,12 +224,12 @@ linearised.
   light keeps its full strength, and **Falloff distance** how far past it a smooth falloff
   takes to fade out.
 - **Casts shadows**: whether the light casts the shadows of layers that cast them. An ambient
-  light casts none.
+  or environment light casts none.
 - **Shadow darkness** and **Shadow diffusion**, while it casts: how dark its shadows are, and
   how soft their edges get with the distance from the layer casting them.
 - **Volumetric**: how much the light shows in the air, as a beam or a glow, seen from every
   3D view. At nought it shows none. While it casts shadows, 3D layers that cast cut shafts
-  in it, tinted by any light they let through. An ambient light has none.
+  in it, tinted by any light they let through. An ambient or environment light has none.
 - **Haze density**, **Haze colour**, **Height falloff**, **Forward scatter** and **Noise**,
   while Volumetric is above nought or keyed: how thick the air is, the colour it tints the
   light, how fast it thins above the ground (the floor the 3D views draw, through the
@@ -233,6 +240,13 @@ linearised.
 Every row but the type and the falloff can be keyframed. **Point of interest**, in Light
 settings, aims a spot, parallel or area light at a point rather than by its rotation; the
 point's row then shows under Transform, and the rotation rows turn the light from there.
+
+An environment light lights 3D layers and models from every side, and its **Orientation**
+and **Rotation** turn the picture. It has no place, so it has no Position. Only the topmost
+environment light in a composition lights it, and a layer it lights starts from black. A
+model's occlusion map darkens the light it takes from one. The Ambient and Key light a first
+model brings stay on beside it. The fixed 3D views leave the background out. A view's looks
+other than **Final** ignore the light.
 
 **Material options**, beside Transform on a 3D layer, sets how it takes the lights:
 
@@ -251,6 +265,10 @@ point's row then shows under Transform, and the rotation rows turn the light fro
 - **Specular intensity**: how bright the highlight a light makes on it is.
 - **Specular shininess**: how small and hard that highlight is.
 - **Metal**: how much the highlight takes the layer's own colour rather than the light's.
+- **Reflection**: how much of an environment light it reflects, tinted by the layer, as sharp
+  as **Specular shininess**.
+
+Under an environment light, **Ambient** is how much of its light the layer takes.
 
 A layer in a project saved before materials existed has no highlight until its **Specular
 intensity** is raised.
@@ -261,7 +279,8 @@ shadow reaches every 3D layer and model, and cuts shafts in the haze.
 
 :::note[Not built yet]
 Motion blur on a moving layer's shadow. A track matte or a precomp's masks in the shadow it
-casts.
+casts. Shadows from an environment light. An environment light on particles in the 3D scene,
+or inside a collapsed precomp.
 :::
 
 ## Parenting

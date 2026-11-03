@@ -13,6 +13,7 @@
 //! through, so the same squares serve every light and every layer.
 
 use super::{work_texture, FxEngine};
+use crate::fx::environment::{self, EnvironmentLight};
 use crate::mesh::shadow::ShadowMaps;
 use crate::GpuContext;
 
@@ -129,6 +130,8 @@ pub struct LightingMaterial {
     /// Accepts lights off: the lights leave it as it is, but their shadows
     /// still darken it.
     pub unlit: bool,
+    /// How much of an environment it reflects, 0..1.
+    pub reflection: f32,
 }
 
 impl Default for LightingMaterial {
@@ -146,6 +149,7 @@ impl Default for LightingMaterial {
             casts_shadows: LightingShadows::Off,
             transmission: 0.0,
             unlit: false,
+            reflection: 0.0,
         }
     }
 }
@@ -347,6 +351,7 @@ struct GpuCaster {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct LightingParams {
+    /// w = how much of an environment it reflects.
     origin: [f32; 4],
     du: [f32; 4],
     dv: [f32; 4],
@@ -361,7 +366,8 @@ struct LightingParams {
     /// own caster or -1.
     base: [f32; 4],
     /// x = caster count, y = the side of their squares, z = 1 for a layer
-    /// that takes no light, only shadows.
+    /// that takes no light, only shadows, w = how much of an environment it
+    /// reflects.
     casters_head: [f32; 4],
     lights: [GpuLight; MAX_LIT_LIGHTS],
     casters: [GpuCaster; MAX_SHADOW_CASTERS],
@@ -487,6 +493,7 @@ pub(crate) struct LightingFx {
     /// frame has no maps: one empty map and a uniform saying so.
     map_sampler: wgpu::Sampler,
     no_maps: (wgpu::Texture, wgpu::Buffer),
+    no_environment: environment::Fallback,
 }
 
 /// The three entries the models' shadow maps take in a layout, from
@@ -621,6 +628,7 @@ impl LightingFx {
             tex(6, false, D::D2),
         ];
         entries.extend(map_layout(8, wgpu::ShaderStages::COMPUTE));
+        entries.extend(environment::layout(11, wgpu::ShaderStages::COMPUTE));
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lighting-layout"),
             entries: &entries,
@@ -655,6 +663,7 @@ impl LightingFx {
                 concat!(
                     include_str!("../light_core.wgsl"),
                     include_str!("../shadow_core.wgsl"),
+                    include_str!("../environment_core.wgsl"),
                     include_str!("../fx_lighting.wgsl")
                 ),
                 "fx-lighting",
@@ -691,6 +700,7 @@ impl LightingFx {
                 ..Default::default()
             }),
             no_maps: crate::mesh::shadow::no_maps(device),
+            no_environment: environment::Fallback::new(device),
             layout,
             square_layout,
         }
@@ -822,8 +832,9 @@ impl FxEngine {
     /// Shade one layer's linear working texture with the comp's lights,
     /// returning a new texture of the same size. Multiplies the picture by
     /// `1 + light`, so an unlit pixel is untouched; `op.lights` empty
-    /// short-circuits inside the kernel to a straight copy. `casters` are the
-    /// frame's shadows, for a layer that takes them, and `maps` the models'.
+    /// short-circuits inside the kernel to a straight copy unless there is an
+    /// `environment`. `casters` are the frame's shadows, for a layer that
+    /// takes them, and `maps` the models'.
     #[allow(clippy::too_many_arguments)]
     pub fn lighting(
         &self,
@@ -834,8 +845,9 @@ impl FxEngine {
         op: &LightingOp,
         casters: Option<&ShadowCasters>,
         maps: Option<&ShadowMaps>,
+        environment: Option<&EnvironmentLight>,
     ) -> wgpu::Texture {
-        self.lighting_at(ctx, src, (w, h), op, (casters, maps), None)
+        self.lighting_at(ctx, src, (w, h), op, (casters, maps, environment), None)
     }
 
     /// [`Self::lighting`] for particles in the scene, each pixel where `depth`
@@ -852,7 +864,7 @@ impl FxEngine {
     ) -> wgpu::Texture {
         let size = (src.width(), src.height());
         // ponytail: particles take no model's shadow yet.
-        self.lighting_at(ctx, src, size, op, (casters, None), Some(depth))
+        self.lighting_at(ctx, src, size, op, (casters, None, None), Some(depth))
     }
 
     fn lighting_at(
@@ -861,7 +873,11 @@ impl FxEngine {
         src: &wgpu::Texture,
         (w, h): (u32, u32),
         op: &LightingOp,
-        (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
+        (casters, maps, environment): (
+            Option<&ShadowCasters>,
+            Option<&ShadowMaps>,
+            Option<&EnvironmentLight>,
+        ),
         depth: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -890,7 +906,7 @@ impl FxEngine {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("fx-lighting-params"),
                 contents: bytemuck::bytes_of(&LightingParams {
-                    origin: v4(op.origin, 0.0),
+                    origin: v4(op.origin, m.reflection),
                     du: v4(op.du, 0.0),
                     dv: v4(op.dv, 0.0),
                     normal: v4(op.normal, live as f32),
@@ -951,6 +967,9 @@ impl FxEngine {
             },
         ];
         entries.extend(fx.map_entries(8, &v_maps, maps));
+        let own = environment.map(|e| environment::Views::of(ctx, e));
+        let surround = own.as_ref().unwrap_or(&fx.no_environment.views);
+        entries.extend(surround.entries(11, &fx.no_environment));
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-lighting"),
             layout: &fx.layout,

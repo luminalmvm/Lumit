@@ -6489,7 +6489,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
 
         let op = lighting_op(&surface, &m, &lights, None);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.lighting(&ctx, &tex, w, h, &op, None, None);
+        let out = fx.lighting(&ctx, &tex, w, h, &op, None, None, None);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = cpu
@@ -6506,7 +6506,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the light must actually do something");
         }
 
-        let out2 = fx.lighting(&ctx, &tex, w, h, &op, None, None);
+        let out2 = fx.lighting(&ctx, &tex, w, h, &op, None, None, None);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "{name}: the lighting pass must be bit-stable");
     }
@@ -6829,7 +6829,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
 
         let op = lighting_op(&surface, &m, &lights, own);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.lighting(&ctx, &tex, w, h, &op, Some(casters), None);
+        let out = fx.lighting(&ctx, &tex, w, h, &op, Some(casters), None, None);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         // Against the pixel's own size where it is bright: the squares are
         // read through the card's own filtering, which is a little coarser

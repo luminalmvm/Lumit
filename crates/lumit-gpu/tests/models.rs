@@ -79,6 +79,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     casters: None,
                     maps: None,
                     display: Default::default(),
+                    environment: None,
                 },
             )
             .expect("the model draws")
@@ -238,6 +239,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
                 shading,
                 faces: false,
             },
+            environment: None,
         };
         let picture = fx.model(&lease, &scene, &view).expect("the model draws");
         let px = lease
@@ -286,7 +288,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
             lights: vec![key],
             own_caster: None,
         };
-        let lit = fx.lighting(&lease, &white, 32, 32, &op, None, maps.as_ref());
+        let lit = fx.lighting(&lease, &white, 32, 32, &op, None, maps.as_ref(), None);
         let px = lumit_gpu::fx::common::readback_linear_f32(&lease, &lit, 32, 32).unwrap();
         let at = |x: usize, y: usize| px[(y * 32 + x) * 4];
         assert!(
@@ -301,5 +303,86 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
                 at(x, y)
             );
         }
+    }
+}
+
+/// Under a white environment and nothing else, a white matte model and a
+/// white card both read white where they face the camera.
+#[test]
+fn a_white_environment_lights_white_things_white() {
+    let Some(lease) = lumit_gpu::test_support::lease() else {
+        return lumit_gpu::no_adapter();
+    };
+    let fx = lease.fx();
+    let sky = lumit_gpu::fx::common::upload_linear_f32(&lease, &[1.0; 4].repeat(64 * 32), 64, 32);
+    let surround = lumit_gpu::fx::environment::EnvironmentLight {
+        maps: fx.environment(&lease, None, &sky),
+        colour: [1.0; 3],
+        turn: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    };
+    let matte = Material {
+        base_colour: [1.0; 4],
+        metallic: 0.0,
+        roughness: 1.0,
+        ..Material::default()
+    };
+    let scene = Arc::new(fixtures::scene(
+        vec![(fixtures::sphere(1.0, 64, 32, Some(0)), [0.0; 3])],
+        vec![matte],
+        Vec::new(),
+    ));
+    let pose = lumit_core::camera::default_pose(f64::from(W), f64::from(H));
+    let eye = [pose.position.0, pose.position.1, pose.position.2].map(|v| v as f32);
+    let camera = camera_matrix(
+        W as f32,
+        H as f32,
+        pose.zoom as f32,
+        (eye[0], eye[1], eye[2]),
+        (0.0, 0.0, 0.0),
+    );
+    let view = ModelView {
+        comp: (W, H),
+        render_scale: 1.0,
+        samples: 1,
+        camera,
+        model_to_comp: Mat4::from_translation(Vec3::new(160.0, 90.0, 0.0))
+            * Mat4::from_scale(Vec3::splat(60.0))
+            * Mat4::from_rotation_x(std::f32::consts::PI),
+        shutter: &[],
+        lights: &[],
+        material: LightingMaterial {
+            eye,
+            ..LightingMaterial::default()
+        },
+        instances: &[],
+        casters: None,
+        maps: None,
+        display: Default::default(),
+        environment: Some(&surround),
+    };
+    let model = fx.model(&lease, &scene, &view).expect("the model draws");
+    let px = lease
+        .colour()
+        .readback_linear_f32(&lease, &model.colour)
+        .unwrap();
+    let ball = &px[((90 * W + 160) * 4) as usize..][..3];
+    let white = lumit_gpu::fx::common::upload_linear_f32(&lease, &[1.0; 4].repeat(16), 4, 4);
+    let op = lumit_gpu::fx::lighting::LightingOp {
+        origin: [0.0, 0.0, 0.0],
+        du: [80.0, 0.0, 0.0],
+        dv: [0.0, 45.0, 0.0],
+        normal: [0.0, 0.0, -1.0],
+        material: LightingMaterial {
+            eye,
+            ..LightingMaterial::default()
+        },
+        lights: Vec::new(),
+        own_caster: None,
+    };
+    let lit = fx.lighting(&lease, &white, 4, 4, &op, None, None, Some(&surround));
+    let px = lumit_gpu::fx::common::readback_linear_f32(&lease, &lit, 4, 4).unwrap();
+    let card = &px[(2 * 4 + 2) * 4..][..3];
+    for v in ball.iter().chain(card) {
+        assert!((v - 1.0).abs() < 0.02, "ball {ball:?}, card {card:?}");
     }
 }

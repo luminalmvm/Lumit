@@ -56,6 +56,7 @@ pub mod colour;
 pub mod decode;
 pub mod diskio;
 pub mod draw;
+mod environment;
 pub mod export;
 pub mod export_defaults;
 pub mod export_presets;

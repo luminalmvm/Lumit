@@ -8,6 +8,7 @@
 //! it.
 
 use crate::composite::scaled_size;
+use crate::fx::environment::{self, EnvironmentLight};
 use crate::fx::lighting::{
     gpu_light, GpuLight, LightingFx, LightingLight, LightingMaterial, LightingShadows,
     ShadowCasters, MAX_LIT_LIGHTS,
@@ -75,6 +76,8 @@ pub struct ModelView<'a> {
     /// How the view shows it, which is the look it exports with everywhere
     /// but a Viewer that asks otherwise.
     pub display: display::ModelDisplay,
+    /// The comp's environment, which lights it unless Accepts lights is off.
+    pub environment: Option<&'a EnvironmentLight>,
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -165,6 +168,7 @@ pub(crate) struct MeshFx {
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
     shadows_layout: wgpu::BindGroupLayout,
+    environment: environment::Binding,
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
@@ -238,6 +242,7 @@ impl MeshFx {
                 concat!(
                     include_str!("light_core.wgsl"),
                     include_str!("shadow_core.wgsl"),
+                    include_str!("environment_core.wgsl"),
                     include_str!("mesh.wgsl")
                 )
                 .into(),
@@ -278,6 +283,7 @@ impl MeshFx {
         entries.extend((6..=10).map(sampler));
         let material_layout = layout("mesh-material", &entries);
         let shadows_layout = layout("mesh-shadows", &shadow::layout());
+        let environment = environment::Binding::new(device);
         let pipeline_layout = |label, layouts: &[&wgpu::BindGroupLayout]| {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
@@ -377,11 +383,20 @@ impl MeshFx {
             &[255; 4],
         );
         Self {
-            layout: pipeline_layout("mesh", &[&frame_layout, &material_layout, &shadows_layout]),
+            layout: pipeline_layout(
+                "mesh",
+                &[
+                    &frame_layout,
+                    &material_layout,
+                    &shadows_layout,
+                    &environment.layout,
+                ],
+            ),
             shader,
             frame_layout,
             material_layout,
             shadows_layout,
+            environment,
             shadow: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
@@ -782,6 +797,9 @@ impl MeshFx {
             ],
         });
         let shadows_group = self.shadows_group(ctx, lighting, casters, maps);
+        let environment_group = self
+            .environment
+            .group(ctx, view.environment.filter(|_| !m.unlit));
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
@@ -844,6 +862,7 @@ impl MeshFx {
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
                 pass.set_bind_group(2, &shadows_group, &[]);
+                pass.set_bind_group(3, &environment_group, &[]);
                 pass.draw_indexed(
                     p.first..p.first + p.count,
                     p.base_vertex,
@@ -863,6 +882,7 @@ impl MeshFx {
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
                 pass.set_bind_group(2, &shadows_group, &[]);
+                pass.set_bind_group(3, &environment_group, &[]);
                 pass.draw_indexed(
                     p.first * 2..(p.first + p.count) * 2,
                     p.base_vertex,

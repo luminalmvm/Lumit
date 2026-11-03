@@ -144,7 +144,7 @@ fn run_plan(
         .filter(|(_, (l, _))| l.material.accepts_shadows != LightingShadows::Off)
         .filter(|(_, (l, _))| !matches!(l.source, DrawSource::Model(_)))
         .filter_map(|(i, (l, tex))| {
-            let op = lighting_op(l, tex.width(), tex.height(), eye)?;
+            let op = lighting_op(l, tex.width(), tex.height(), eye, false)?;
             Some((i, l, op.corners(tex.width(), tex.height())))
         })
         .collect();
