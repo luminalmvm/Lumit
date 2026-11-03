@@ -787,7 +787,8 @@ List<double>? _inverse3(List<double> m) {
 /// Draw [gizmo]: its arrows, squares and centre ring, or with [turning] its
 /// rings, each axis in its colour and the centre ring in [neutral]. [hot] is
 /// the part under the pointer, drawn stronger, and [held] the one being
-/// dragged, which is then all that is drawn.
+/// dragged, which is then all that is drawn. [tint] draws every part in one
+/// colour, for handles an expression drives.
 void paintGizmo3d(
   Canvas canvas,
   Gizmo3d gizmo, {
@@ -796,7 +797,9 @@ void paintGizmo3d(
   required Color outline,
   GizmoPick? hot,
   GizmoPick? held,
+  Color? tint,
 }) {
+  Color colourOf(int i) => tint ?? gizmoAxisColours[i];
   bool shows(GizmoKind kind, int axis) =>
       held == null || (held.kind == kind && held.axis == axis);
   bool lit(GizmoKind kind, int axis) =>
@@ -816,7 +819,7 @@ void paintGizmo3d(
       for (final run in gizmo.rings[i]) {
         final path = Path()..addPolygon(run, false);
         canvas.drawPath(path, stroke(outline, width + 1.8));
-        canvas.drawPath(path, stroke(gizmoAxisColours[i], width));
+        canvas.drawPath(path, stroke(colourOf(i), width));
       }
     }
     return;
@@ -829,15 +832,16 @@ void paintGizmo3d(
     canvas.drawPath(
         path,
         Paint()
-          ..color = gizmoAxisColours[i]
+          ..color = colourOf(i)
               .withValues(alpha: lit(GizmoKind.plane, i) ? 0.7 : 0.35));
-    canvas.drawPath(path, stroke(gizmoAxisColours[i], 1));
+    canvas.drawPath(path, stroke(colourOf(i), 1));
   }
   if (shows(GizmoKind.screen, 2)) {
     final width = lit(GizmoKind.screen, 2) ? 2.6 : 1.4;
     canvas.drawCircle(
         gizmo.centre, gizmoScreenRing, stroke(outline, width + 1.8));
-    canvas.drawCircle(gizmo.centre, gizmoScreenRing, stroke(neutral, width));
+    canvas.drawCircle(
+        gizmo.centre, gizmoScreenRing, stroke(tint ?? neutral, width));
   }
   for (var i = 0; i < gizmo.knobs.length; i++) {
     final knob = gizmo.knobs[i];
@@ -873,8 +877,8 @@ void paintGizmo3d(
       ..close();
     canvas.drawLine(gizmo.centre, base, stroke(outline, width + 1.8));
     canvas.drawPath(head, stroke(outline, 1.8));
-    canvas.drawLine(gizmo.centre, base, stroke(gizmoAxisColours[i], width));
-    canvas.drawPath(head, Paint()..color = gizmoAxisColours[i]);
+    canvas.drawLine(gizmo.centre, base, stroke(colourOf(i), width));
+    canvas.drawPath(head, Paint()..color = colourOf(i));
   }
 }
 
