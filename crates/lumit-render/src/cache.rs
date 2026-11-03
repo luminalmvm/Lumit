@@ -207,7 +207,8 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
                 let stamp = lumit_media::sequence::MediaSource::file(path)
                     .stamped()
                     .stamp;
-                return Some((format!("model#{path}#{stamp:?}"), 0));
+                let chosen = lumit_scene::blender::choices();
+                return Some((format!("model#{path}#{stamp:?}#{chosen}"), 0));
             }
         }
         // The same proxy resolution point the decode planner goes through

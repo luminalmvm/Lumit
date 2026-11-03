@@ -32,7 +32,7 @@ fn a_gltf_triangle_opens() {
     let path = dir.join("triangle.gltf");
     std::fs::write(&path, json).unwrap();
 
-    let scene = lumit_scene::read(&path, Limits::MODEL, &AtomicBool::new(false)).unwrap();
+    let scene = lumit_scene::read(&path, Limits::MODEL, &dir, &AtomicBool::new(false)).unwrap();
     assert_eq!(scene.roots, vec![0]);
     assert_eq!(scene.meshes[0].primitives[0].indices, vec![0, 1, 2]);
     assert_eq!(scene.bounds.min, [0.0, 0.0, -2.0]);
@@ -61,7 +61,7 @@ fn an_obj_finds_its_mtl_by_name_and_says_what_is_missing() {
     .unwrap();
     let path = model.join("quad.obj");
 
-    let scene = lumit_scene::read(&path, Limits::MODEL, &AtomicBool::new(false)).unwrap();
+    let scene = lumit_scene::read(&path, Limits::MODEL, &dir, &AtomicBool::new(false)).unwrap();
     let triangles: usize = scene
         .meshes
         .iter()
