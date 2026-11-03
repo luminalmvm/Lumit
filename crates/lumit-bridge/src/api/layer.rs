@@ -2456,54 +2456,6 @@ pub struct BridgeLightSettings {
     pub noisy: bool,
 }
 
-impl BridgeLightSettings {
-    #[frb(ignore)]
-    pub(crate) fn of(s: lumit_core::model::LightSettings) -> Self {
-        use lumit_core::model::{LightFalloff as F, LightKind as K};
-        Self {
-            kind: match s.kind {
-                K::Point => BridgeLightKind::Point,
-                K::Spot => BridgeLightKind::Spot,
-                K::Area => BridgeLightKind::Area,
-                K::Parallel => BridgeLightKind::Parallel,
-                K::Ambient => BridgeLightKind::Ambient,
-            },
-            falloff: match s.falloff {
-                F::None => BridgeLightFalloff::None,
-                F::Smooth => BridgeLightFalloff::Smooth,
-                F::InverseSquareClamped => BridgeLightFalloff::InverseSquareClamped,
-            },
-            two_node: s.two_node,
-            casts_shadows: s.casts_shadows,
-            in_air: false,
-            noisy: false,
-        }
-    }
-
-    /// `legacy_shape` is the light's own, which the window never shows.
-    #[frb(ignore)]
-    pub(crate) fn core(self, legacy_shape: bool) -> lumit_core::model::LightSettings {
-        use lumit_core::model::{LightFalloff as F, LightKind as K};
-        lumit_core::model::LightSettings {
-            kind: match self.kind {
-                BridgeLightKind::Point => K::Point,
-                BridgeLightKind::Spot => K::Spot,
-                BridgeLightKind::Area => K::Area,
-                BridgeLightKind::Parallel => K::Parallel,
-                BridgeLightKind::Ambient => K::Ambient,
-            },
-            falloff: match self.falloff {
-                BridgeLightFalloff::None => F::None,
-                BridgeLightFalloff::Smooth => F::Smooth,
-                BridgeLightFalloff::InverseSquareClamped => F::InverseSquareClamped,
-            },
-            two_node: self.two_node,
-            legacy_shape,
-            casts_shadows: self.casts_shadows,
-        }
-    }
-}
-
 /// The seven animatable channels a Camera layer has beyond its transform.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]

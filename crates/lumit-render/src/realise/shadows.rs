@@ -1,7 +1,8 @@
 //! Shadows between 3D layers: which layers cast on which, and the squares
 //! their pictures are shrunk into for the lighting pass.
 
-use super::{lighting_op, scene, Realiser};
+use super::lighting::lighting_op;
+use super::{scene, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {

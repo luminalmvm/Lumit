@@ -4744,7 +4744,7 @@ fn comp_walk(
         let size = (comp.width, comp.height);
         for d in draws.iter_mut().filter(|d| d.three_d) {
             if !crate::realise::dof::dof_leaves_sharp(seen_through, d, size) {
-                at_own_size(d);
+                shading::at_own_size(d);
             }
         }
     }
@@ -4752,23 +4752,6 @@ fn comp_walk(
         crate::haze::add(&mut draws, doc, comp, t_comp);
     }
     draws
-}
-
-/// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
-fn at_own_size(d: &mut CompLayerDraw) {
-    let natural = (d.natural_size.0 as u32, d.natural_size.1 as u32);
-    if let DrawSource::Pixels {
-        rgba, tex_w, tex_h, ..
-    } = &mut d.source
-    {
-        let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
-        if (*tex_w, *tex_h) == (8, 8) && natural != (8, 8) && flat {
-            let fit = lumit_core::largest_picture::fit;
-            let (w, h) = (fit(natural.0), fit(natural.1));
-            let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
-            (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
-        }
-    }
 }
 
 /// The content name of the picture a layer's effect stack runs on
