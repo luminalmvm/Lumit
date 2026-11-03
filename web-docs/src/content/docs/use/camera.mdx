@@ -121,7 +121,8 @@ Moving it while it looks through the active camera or a fixed view switches it t
 view from there. The ground is drawn into its picture, under any 2D layer stacked above the
 3D ones and hidden wherever a layer stands in front of it. It follows the playhead at its
 own resolution, **Half** until given another, and plays along only while the Viewer has time
-to spare. It draws without motion blur or depth of field.
+to spare. It draws without motion blur or depth of field. A view whose pictures come slowly
+draws at half its resolution while it is moved.
 
 On Wayland the pointer is not held still during a drag. Some Linux window managers take
 `Alt` and a drag to move windows.

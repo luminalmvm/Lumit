@@ -1759,20 +1759,25 @@ class _Picture extends StatelessWidget {
       valueListenable: uiState.textureOf(viewId),
       builder: (context, textureId, _) => ValueListenableBuilder<int>(
         valueListenable: uiState.previewTier,
-        builder: (context, tier, _) {
-          final picture = textureId != null
-              ? viewerPicture(
-                  textureId,
-                  filterQuality: viewerPictureFilter(
-                    shownScale: shownScale,
-                    tier: tier,
-                    devicePixelRatio: dpr,
-                    smooth: uiState.workspace.smoothZoomedViewer,
-                  ),
-                )
-              : const SizedBox.expand();
-          return pictureChannelFilter(channel, picture);
-        },
+        builder: (context, tier, _) => ValueListenableBuilder<int?>(
+          valueListenable: uiState.draftView,
+          builder: (context, draft, _) {
+            final picture = textureId != null
+                ? viewerPicture(
+                    textureId,
+                    filterQuality: viewerPictureFilter(
+                      shownScale: shownScale,
+                      tier: tier,
+                      devicePixelRatio: dpr,
+                      // A draft reads as soft, never as blocks.
+                      smooth: uiState.workspace.smoothZoomedViewer ||
+                          draft == viewId,
+                    ),
+                  )
+                : const SizedBox.expand();
+            return pictureChannelFilter(channel, picture);
+          },
+        ),
       ),
     );
   }

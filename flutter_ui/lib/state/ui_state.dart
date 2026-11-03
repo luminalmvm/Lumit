@@ -1270,10 +1270,12 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     final frame = frameFor(view);
-    // A viewport draws at its own tier, every other view at the comp's.
-    final scale = viewport
-        ? view.resolution.scaleFor(_panelScale) * view.canvasShare
-        : _compResolution.scaleFor(_panelScale);
+    // A viewport draws at its own tier, every other view at the comp's, and
+    // half that while a slow one is being moved.
+    final scale = (viewport
+            ? view.resolution.scaleFor(_panelScale) * view.canvasShare
+            : _compResolution.scaleFor(_panelScale)) *
+        (_drafting(view) ? 0.5 : 1);
     final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
         '${view.look.stops}/${view.look.toneMap}/${view.region}/'
         '${view.colourView}/$viewerPrefixStamp';
@@ -1298,6 +1300,9 @@ class LumitUiState extends ChangeNotifier {
         active: view.id == views.activeId,
       );
       if (viewport) _viewportAsked[view.engineId] = DateTime.now();
+      if (cameraDragging || cameraFlying) {
+        _askedAt[view.engineId] = DateTime.now();
+      }
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
@@ -1785,6 +1790,8 @@ class LumitUiState extends ChangeNotifier {
       _pushedCamera.remove(engineId);
       _viewportAsked.remove(engineId);
       _viewportWaiting.remove(engineId);
+      _askedAt.remove(engineId);
+      _pictureTook.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -2792,6 +2799,10 @@ class LumitUiState extends ChangeNotifier {
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when field0.done) {
         _viewportLanded(field0.view);
+        final asked = _askedAt.remove(field0.view);
+        if (asked != null) {
+          _pictureTook[field0.view] = DateTime.now().difference(asked);
+        }
       }
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when !field0.done) {
@@ -4130,13 +4141,66 @@ class LumitUiState extends ChangeNotifier {
 
   /// Whether a camera tool's drag is running, which holds the 3D view still
   /// until it ends.
-  bool cameraDragging = false;
+  bool get cameraDragging => _cameraDragging;
+  set cameraDragging(bool on) {
+    _cameraDragging = on;
+    _moved();
+  }
+
+  bool _cameraDragging = false;
 
   /// Whether a 3D viewport is flying, which keeps the keys from everything
   /// else until it lands, and whether the right button is down in one, which
   /// keeps the fly keys for it.
-  bool cameraFlying = false;
+  bool get cameraFlying => _cameraFlying;
+  set cameraFlying(bool on) {
+    _cameraFlying = on;
+    _moved();
+  }
+
+  bool _cameraFlying = false;
   bool flyKeysArmed = false;
+
+  /// The view drawn at half its scale while it moves, because a picture
+  /// asked during this move came slower than [_slowPicture], and how long
+  /// each picture asked during the move took from the ask to the engine
+  /// finishing it. The Viewer draws a draft smooth at any zoom.
+  final ValueNotifier<int?> draftView = ValueNotifier(null);
+  final Map<int, DateTime> _askedAt = {};
+  final Map<int, Duration> _pictureTook = {};
+  static const _slowPicture = Duration(milliseconds: 50);
+
+  /// A drag or a flight started or ended. Each move is timed afresh, and
+  /// ending one puts a view drawn as a draft back to its full scale.
+  void _moved() {
+    final draft = draftView.value;
+    if (cameraDragging || cameraFlying) {
+      if (draft == null) _pictureTook.clear();
+      return;
+    }
+    _askedAt.clear();
+    if (draft == null) return;
+    draftView.value = null;
+    _askedFor.remove(draft);
+    requestFrame();
+  }
+
+  /// Whether [view] is drawn as a draft: it is being moved, and a picture
+  /// of this move was slow. Never lines, which halved go thick and soft.
+  bool _drafting(ViewerSurface view) {
+    if (!(cameraDragging || cameraFlying) || view.id != views.activeId) {
+      return false;
+    }
+    final lines = switch (displayOf(view.engineId)) {
+      BridgeModelDisplay.wireframe || BridgeModelDisplay.shadedWire => true,
+      _ => false,
+    };
+    final took = _pictureTook[view.engineId] ?? Duration.zero;
+    if (draftView.value == null && !lines && took > _slowPicture) {
+      draftView.value = view.engineId;
+    }
+    return draftView.value == view.engineId;
+  }
 
   /// The 3D views view [viewId] can be switched to: a 3D viewport's free
   /// view only in a viewport.
