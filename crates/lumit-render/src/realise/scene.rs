@@ -55,6 +55,10 @@ pub struct Carried {
     /// and when it opens, from now.
     pub shutter: f32,
     pub opens: f32,
+    /// The triangles a Layer emitter on a Model layer gives birth on, in that
+    /// layer's own pixels: three corners each, the first carrying in w the
+    /// area of every triangle up to and including it.
+    pub surface: Option<Arc<[[f32; 4]]>>,
 }
 
 /// Whether `layer` is a 3D layer with a Particulate in the scene.
@@ -64,7 +68,7 @@ pub fn in_scene(layer: &Layer) -> bool {
 }
 
 /// What `layer` carries into the scene, `None` when it has nothing there.
-pub(crate) fn carried(comp: &Composition, layer: &Layer) -> Option<Carried> {
+pub(crate) fn carried(doc: &Document, comp: &Composition, layer: &Layer) -> Option<Carried> {
     if !in_scene(layer) {
         return None;
     }
@@ -74,7 +78,51 @@ pub(crate) fn carried(comp: &Composition, layer: &Layer) -> Option<Carried> {
     Some(Carried {
         shutter: if blurs { open as f32 } else { 0.0 },
         opens: (comp.motion_blur.shutter_phase / 360.0 * frame) as f32,
+        surface: surface(doc, comp, layer),
     })
+}
+
+/// The most triangles a surface gives birth on.
+// ponytail: the triangles are gathered again each frame. Keep them with the
+// model's scene if a large model shows in a profile.
+const MAX_SURFACE: usize = 1 << 20;
+
+/// The surface `layer`'s Particulate in the scene gives birth on, when its
+/// Layer emitter is a Model layer, where that model is in its own layer.
+fn surface(doc: &Document, comp: &Composition, layer: &Layer) -> Option<Arc<[[f32; 4]]>> {
+    let e = layer.effects.iter().find(|e| is_scene(e))?;
+    let src = emitter_layer(comp, e)?;
+    let lumit_core::model::LayerKind::Model { item, settings } = &src.kind else {
+        return None;
+    };
+    let scene = crate::model::scene(doc, *item)?;
+    let comp_size = (comp.width as f32, comp.height as f32);
+    let to_layer = crate::model::model_to_comp(settings, &scene.bounds, comp_size);
+    let to_layer = glam::Mat4::from_cols_array_2d(&to_layer);
+    let mut out = Vec::new();
+    let mut total = 0.0;
+    for (k, node) in scene.nodes.iter().enumerate() {
+        let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {
+            continue;
+        };
+        let at = to_layer * scene.node_world(k);
+        for p in &mesh.primitives {
+            let corner = |i: &u32| {
+                let v = p.positions.get(*i as usize)?;
+                Some(at.transform_point3(glam::Vec3::from(*v)))
+            };
+            for tri in p.indices.chunks_exact(3).take(MAX_SURFACE - out.len() / 3) {
+                let (Some(a), Some(b), Some(c)) =
+                    (corner(&tri[0]), corner(&tri[1]), corner(&tri[2]))
+                else {
+                    continue;
+                };
+                total += (b - a).cross(c - a).length() * 0.5;
+                out.extend([a.extend(total), b.extend(0.0), c.extend(0.0)].map(|v| v.to_array()));
+            }
+        }
+    }
+    (total > 0.0).then(|| out.into())
 }
 
 /// The layer a Layer emitter names, if `e` is one.
@@ -122,11 +170,13 @@ pub(crate) fn placement(
         glam::Mat4::from_cols_array_2d(&crate::placement::world_placement(comp, l, t_comp, context))
     };
     let emitter = emitter_layer(comp, e);
+    // A model's surface is already in its own layer's pixels.
+    let model = emitter.filter(|l| matches!(l.kind, lumit_core::model::LayerKind::Model { .. }));
     let place = match emitter.zip(size(owner)).zip(emitter.and_then(size)) {
         Some(((src, (ow, oh)), (sw, sh))) if ow > 0.0 && oh > 0.0 => {
             world(src) * glam::Mat4::from_scale(glam::vec3(sw / ow, sh / oh, 1.0))
         }
-        _ => world(owner),
+        _ => world(model.unwrap_or(owner)),
     };
     let r = place.transpose().to_cols_array_2d();
     Some(lumit_core::fx::points::Projection {
@@ -183,6 +233,12 @@ pub(crate) fn draw(
     // A blurring layer draws each disc from where it was when the shutter
     // opened to where it was when it closed, as a streak is drawn.
     let blur = frame.carried.shutter > 0.0 && op.tail_seconds == 0.0 && op.mode != 1;
+    // A model's surface to give birth on, taken into the raster.
+    let surface = frame.carried.surface.as_ref().map(|tris| {
+        tris.iter()
+            .map(|c| [c[0] * s, c[1] * s, c[2] * s, c[3]])
+            .collect::<Vec<_>>()
+    });
     let target = lumit_gpu::composite::scaled_size(cw, ch, r);
     let zoom = frame.camera.zoom.max(1.0);
     // The camera's blur, as the layers take it (dof.rs).
@@ -192,6 +248,8 @@ pub(crate) fn draw(
     });
     let op = lumit_gpu::fx::particulate::ParticulateOp {
         projection: Some(projection),
+        shape: if surface.is_some() { 10 } else { op.shape },
+        path: surface.as_deref().unwrap_or(op.path),
         tail_seconds: if blur {
             frame.carried.shutter
         } else {

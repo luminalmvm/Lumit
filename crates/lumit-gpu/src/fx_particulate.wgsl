@@ -390,7 +390,39 @@ fn pt_path_at(s_in: f32) -> vec2<f32> {
 // `w_die` is the draw through the emitter's Depth, filled uniformly: a
 // Point becomes a segment, an Ellipse a cylinder, a Rectangle a box. Line and
 // Mask path ignore it and stay on the plane.
+// A point on a model's surface, the triangle picked by area: `path` holds
+// three corners to a triangle, the first with the area of every triangle up
+// to and including it in w.
+fn pt_surface(u: f32, v: f32, w_die: f32) -> vec4<f32> {
+    let n = p.path_len / 3u;
+    let s = u * path[(n - 1u) * 3u].w;
+    // The first triangle whose running area passes s.
+    var lo = 0u;
+    var hi = n - 1u;
+    loop {
+        if (lo >= hi) { break; }
+        let mid = (lo + hi) / 2u;
+        if (path[mid * 3u].w <= s) { lo = mid + 1u; } else { hi = mid; }
+    }
+    let a = path[lo * 3u].xyz;
+    var b = v;
+    var c = w_die;
+    // Folded back into the triangle, so every point of it is as likely.
+    if (b + c > 1.0) {
+        b = 1.0 - b;
+        c = 1.0 - c;
+    }
+    return vec4<f32>(a + (path[lo * 3u + 1u].xyz - a) * b + (path[lo * 3u + 2u].xyz - a) * c, 1.0);
+}
+
 fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
+    // A Layer emitter on a Model layer gives birth on its surface.
+    if (p.shape == 10u) {
+        if (p.path_len < 3u) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return pt_surface(u, v, w_die);
+    }
     if (p.shape == 4u) {
         if (p.path_len < 2u) {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);
