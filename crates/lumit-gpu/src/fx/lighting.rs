@@ -549,9 +549,9 @@ impl LightingFx {
         Self {
             pipeline: compute(
                 &layout,
-                &format!(
-                    "{}{}",
+                concat!(
                     include_str!("../light_core.wgsl"),
+                    include_str!("../shadow_core.wgsl"),
                     include_str!("../fx_lighting.wgsl")
                 ),
                 "fx-lighting",
