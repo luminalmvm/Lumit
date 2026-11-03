@@ -15,6 +15,10 @@ struct Scene {
     // x: 1 to draw in `order`'s order, y: 1 when there is a depth to meet, z:
     // what that depth is counted from.
     flags: vec4<f32>,
+    // The camera's depth of field: x the blur in raster pixels per unit of
+    // `|distance − focus| / clip w`, nought for none, y the zoom, z the focus
+    // distance, comp pixels.
+    lens: vec4<f32>,
     // x: how much the layer's scale sizes each particle.
     look: vec4<f32>,
 };
@@ -45,7 +49,18 @@ fn pt_vs_scene(@builtin(vertex_index) vi: u32, @builtin(instance_index) slot: u3
     let seen = pt_seen(ii);
     let size = bitcast<f32>(dstream[r_size(dp.cap) + ii]) * seen.head.z * sc.look.x;
     let iw = sc.k * seen.head.z;
-    let g = pt_geo(ii, seen.head.xy, seen.tail.xy, size);
+    // Out of focus a particle spreads over its circle of confusion, its light
+    // with it.
+    var blur = 0.0;
+    if (sc.lens.x > 0.0 && iw > 0.0) {
+        blur = sc.lens.x * abs(sc.lens.y / iw - sc.lens.z) * iw;
+    }
+    var g = pt_geo(ii, seen.head.xy, seen.tail.xy, size + 2.0 * blur);
+    if (blur > 0.0) {
+        g.geom.y = max(g.geom.y, blur);
+        let share = size / max(size + 2.0 * blur, 1e-6);
+        g.colour = g.colour * share * share;
+    }
     var corner = vec2<f32>(-1.0, -1.0);
     if (vi == 1u || vi == 4u) { corner = vec2<f32>(1.0, -1.0); }
     if (vi == 2u || vi == 3u) { corner = vec2<f32>(-1.0, 1.0); }

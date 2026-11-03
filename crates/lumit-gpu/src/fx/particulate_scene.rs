@@ -29,6 +29,10 @@ pub struct SceneView<'a> {
     /// One over clip w for whatever lands where no particle does, such as a
     /// glow added after this: the middle of the cloud.
     pub fallback: f32,
+    /// The camera's depth of field: the blur in raster pixels per unit of
+    /// `|distance − focus| / clip w`, nought for none, the zoom, and the focus
+    /// distance in comp pixels.
+    pub lens: [f32; 3],
     /// How much the layer's scale sizes each particle.
     pub scale: f32,
 }
@@ -40,6 +44,7 @@ struct SceneUniform {
     k: f32,
     soft: f32,
     flags: [f32; 4],
+    lens: [f32; 4],
     look: [f32; 4],
 }
 
@@ -400,6 +405,7 @@ impl FxEngine {
                         view.near,
                         0.0,
                     ],
+                    lens: [view.lens[0], view.lens[1], view.lens[2], 0.0],
                     look: [view.scale, 0.0, 0.0, 0.0],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,

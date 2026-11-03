@@ -149,6 +149,12 @@ pub(crate) fn draw(
         .length()
         .sqrt();
     let target = lumit_gpu::composite::scaled_size(cw, ch, r);
+    let zoom = frame.camera.zoom.max(1.0);
+    // The camera's blur, as the layers take it (dof.rs).
+    let lens = frame.camera.dof.map_or([0.0; 3], |dof| {
+        let k = lumit_core::camera::coc_per_zoom(&dof, zoom) / 2.0 * super::dof::DOF_SOFTNESS;
+        [k as f32 * r, zoom as f32, dof.focus_distance as f32]
+    });
     let op = lumit_gpu::fx::particulate::ParticulateOp {
         projection: Some(projection),
         ..*op
@@ -164,10 +170,11 @@ pub(crate) fn draw(
         &lumit_gpu::fx::particulate_scene::SceneView {
             target,
             k,
-            soft: 1.0 / (frame.camera.zoom.max(1.0) as f32 * r),
+            soft: 1.0 / (zoom as f32 * r),
             occluder: frame.occluder.as_ref(),
             near: frame.near,
             fallback: if w_middle > 0.0 { 1.0 / w_middle } else { 0.0 },
+            lens,
             scale,
         },
     );
