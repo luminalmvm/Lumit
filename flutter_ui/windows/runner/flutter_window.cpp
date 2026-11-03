@@ -90,6 +90,29 @@ std::wstring Utf16FromUtf8(const std::string& text) {
 constexpr UINT_PTR kShowAnywayTimer = 1;
 constexpr UINT kShowAnywayAfterMs = 10000;
 
+// A panel popped out into a window of its own is in one of the engine's
+// windows (lib/shell/pop_out.dart).
+constexpr wchar_t kPopOutClass[] = L"FLUTTER_HOST_WINDOW";
+constexpr UINT_PTR kCloseAgainTimer = 2;
+
+// Ask every popped-out panel's window to close, and say whether there was one.
+bool ClosePopOuts() {
+  bool any = false;
+  ::EnumThreadWindows(
+      ::GetCurrentThreadId(),
+      [](HWND window, LPARAM found) -> BOOL {
+        wchar_t name[32];
+        if (::GetClassName(window, name, 32) &&
+            wcscmp(name, kPopOutClass) == 0) {
+          ::PostMessage(window, WM_CLOSE, 0, 0);
+          *reinterpret_cast<bool*>(found) = true;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&any));
+  return any;
+}
+
 // The Start menu and a pinned taskbar button draw a shortcut's icon, not the
 // window's. So every shortcut that starts this executable is given |icon| as
 // its picture, or the executable's own when |icon| is empty.
@@ -561,6 +584,15 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  // Flutter asks Dart before quitting only when this is the last window, so a
+  // popped-out panel's window would let Lumit quit without asking about
+  // unsaved work. Those close first, which docks their panels, and the close
+  // is tried again once they have gone.
+  if (message == WM_CLOSE && ClosePopOuts()) {
+    ::SetTimer(hwnd, kCloseAgainTimer, 50, nullptr);
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -573,6 +605,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_TIMER:
+      if (wparam == kCloseAgainTimer) {
+        ::KillTimer(hwnd, kCloseAgainTimer);
+        ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+        return 0;
+      }
       if (wparam == kShowAnywayTimer) {
         ::KillTimer(hwnd, kShowAnywayTimer);
         // Already up is the ordinary case: the first frame arrived and showed

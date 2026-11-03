@@ -22,6 +22,7 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
 import 'package:lumit_flutter/probe/perf_probe.dart';
 import 'package:lumit_flutter/shell/app_shell.dart';
+import 'package:lumit_flutter/shell/pop_out.dart';
 import 'package:lumit_flutter/shell/startup_failure.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/background.dart';
@@ -41,6 +42,7 @@ export 'package:lumit_flutter/state/bridge_trace.dart';
 export 'package:lumit_flutter/state/ui_state.dart';
 
 Future<void> main(List<String> args) async {
+  enablePopOut();
   WidgetsFlutterBinding.ensureInitialized();
 
   // Before anything that could fault. A widget whose build throws is

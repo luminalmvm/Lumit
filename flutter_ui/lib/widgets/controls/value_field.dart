@@ -335,7 +335,7 @@ class _DragValueFieldState extends State<DragValueField>
   }
 
   void _showLadder() {
-    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final overlay = rootOverlayOf(context);
     final box = context.findRenderObject();
     final overlayBox = overlay?.context.findRenderObject();
     // No overlay above this field (a bare widget-test host) simply means no
