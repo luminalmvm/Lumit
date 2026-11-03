@@ -265,9 +265,14 @@ Future<String?> pickShaderToOpen() async {
 /// [suggestedName] and the folder to [initialDirectory] (the preset library,
 /// so a plain save lands where the browser lists), or null when cancelled.
 Future<String?> pickPresetSaveLocation(String suggestedName,
-    {String? initialDirectory}) async {
+    {String? initialDirectory, bool material = false}) async {
   final location = await getSaveLocation(
-    acceptedTypeGroups: [_presetGroup()],
+    acceptedTypeGroups: [
+      material
+          ? XTypeGroup(
+              label: l10n.fileTypeMaterialPreset, extensions: const ['lummat'])
+          : _presetGroup()
+    ],
     suggestedName: suggestedName,
     initialDirectory: initialDirectory,
   );

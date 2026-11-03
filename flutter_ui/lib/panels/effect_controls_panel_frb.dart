@@ -50,6 +50,8 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart'
+    show listMaterialPresets, materialPreset;
 import 'package:lumit_flutter/src/rust/api/track.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:provider/provider.dart';
@@ -85,6 +87,7 @@ import 'layer_fold_frb.dart'
         effectPath,
         groupFoldPrefix,
         inputsPath,
+        modelMaterialPath,
         stylePath,
         transformGroupPath,
         transformPath;
@@ -1247,6 +1250,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     if (info.graphInputs?.derivedParams.isNotEmpty ?? false)
                       _effectCard(context, ui, comp, layer, info, 0,
                           layersRead: layersRead, inputs: true),
+                    // A Model layer's materials, before the effects that run
+                    // on the picture they make.
+                    if (info.materials case final materials?
+                        when materials.isNotEmpty) ...[
+                      _groupHeading(
+                          context, 'materials-group', l10n.foldMaterials),
+                      if (_isOpen('materials-group'))
+                        for (var i = 0; i < materials.length; i++)
+                          _effectCard(context, ui, comp, layer, info, i,
+                              layersRead: layersRead,
+                              style: true,
+                              material: true),
+                    ],
                     if (info.effects.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1465,18 +1481,30 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     required List<Object?> layersRead,
     bool style = false,
     bool inputs = false,
+    bool material = false,
   }) {
     final playhead = ui.playheadFrame.value;
     final fx = inputs
         ? info.graphInputs!
-        : style
-            ? info.styles[index]
-            : info.effects[index];
+        : material
+            ? info.materials![index]
+            : style
+                ? info.styles[index]
+                : info.effects[index];
     // The Inputs card is headed Inputs: the graph's own name is the layer's.
-    final graphName = inputs ? l10n.foldInputs : _graphNameOf(context, fx);
+    // A material its file gives no name is numbered.
+    final graphName = inputs
+        ? l10n.foldInputs
+        : material
+            ? '${effectLabelOf(fx.name)} ${index + 1}'
+            : _graphNameOf(context, fx);
     // Neither a style nor the Inputs takes part in the effect selection.
     final fixed = style || inputs;
-    final open = _isOpen('fx-${fx.id}');
+    // A model with many materials starts with each closed, so its first
+    // look is a list of names rather than a wall of rows.
+    final open = material && info.materials!.length > 3
+        ? _shut.contains('fx-${fx.id}')
+        : _isOpen('fx-${fx.id}');
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
@@ -1485,7 +1513,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final interface =
         !fixed && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
     return _SameCard(
-      key: ValueKey<String>('fx-card-${style ? 'style-' : ''}${fx.id}'),
+      key: ValueKey<String>(
+          'fx-card-${material ? 'material-' : style ? 'style-' : ''}${fx.id}'),
       // Everything the card draws from. Read [_SameCard] before adding to the
       // card below: a fact that is not in here is one the card may not hold.
       reading: [
@@ -1511,6 +1540,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         renaming,
         style,
         inputs,
+        material,
         interface,
         playhead,
         _actionPressed,
@@ -1536,6 +1566,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         graphName: graphName,
         style: style,
         inputs: inputs,
+        material: material,
         open: open,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
         // The selection this heading follows, rather than an answer read here
@@ -1573,7 +1604,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         // Escape: close the editor, write nothing.
         onRenameCancelled: () => setState(() => _renamingEffect = null),
         onStartRename:
-            inputs ? null : () => setState(() => _renamingEffect = fx.id),
+            inputs || material
+                ? null
+                : () => setState(() => _renamingEffect = fx.id),
         onSelect: () {
           if (fixed) return;
           // The run a Shift-click reaches over is read at the click. A card is
@@ -2096,6 +2129,10 @@ class _EffectSection extends StatelessWidget {
   /// switch says, so the card is its rows, Reset and nothing else.
   final bool inputs;
 
+  /// This card is one of a Model layer's materials, which also sets [style]:
+  /// fixed in place and taking no part in the selection.
+  final bool material;
+
   /// This card sits on a **group header's** stack
   /// (docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
   /// third arm. Every command still goes through [layer] (the group's first
@@ -2193,6 +2230,7 @@ class _EffectSection extends StatelessWidget {
     required this.stagedValue,
     this.style = false,
     this.inputs = false,
+    this.material = false,
     this.group,
     this.clip,
     required this.layer,
@@ -2260,6 +2298,7 @@ class _EffectSection extends StatelessWidget {
     return switch (group) {
       final g? => comp.getGroupEffects(group: g),
       null when inputs => graphInputsOf(layer),
+      null when material => layer.getMaterials(),
       null => style ? layer.getStyles() : layer.getEffects(),
     };
   }
@@ -2296,6 +2335,35 @@ class _EffectSection extends StatelessWidget {
       if (e.getInfo().name != info.name) return;
       layer.applyEffectPreset(effect: e, preset: preset, atFrame: at);
     });
+    onStackChanged();
+  }
+
+  /// Put one of this material's rows back to its file's value.
+  void _resetMaterialRow(String param) {
+    for (final instance in _instances()) {
+      if (instance.id() != info.id) continue;
+      try {
+        layer.resetMaterialRow(material: instance, param: param);
+      } catch (_) {
+        // The material went away under the press; nothing to put back.
+      }
+    }
+    onStackChanged();
+  }
+
+  /// Set this material to the one saved in the preset at [path].
+  Future<void> _applySaved(String path, int at) async {
+    try {
+      final text = await readEffectPreset(path: path);
+      for (final instance in _instances()) {
+        if (instance.id() == info.id) {
+          layer.applyMaterialPreset(material: instance, text: text, atFrame: at);
+        }
+      }
+    } catch (_) {
+      // A file that has gone or isn't a material; nothing changes.
+      return;
+    }
     onStackChanged();
   }
 
@@ -2370,6 +2438,14 @@ class _EffectSection extends StatelessWidget {
   /// which stages exactly one parameter: a reset is every parameter at once, and
   /// staging them one at a time would be one undo entry each.
   void _reset() {
+    // A material goes back to its file, as its menu's Reset does.
+    if (material) {
+      for (final e in _instances().where((e) => e.id() == info.id)) {
+        layer.removeEffect(effect: e);
+      }
+      onStackChanged();
+      return;
+    }
     final stack = _instances();
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
@@ -2403,13 +2479,15 @@ class _EffectSection extends StatelessWidget {
         ? ''
         : inputs
             ? inputsPath(owner)
-            : style
-                ? stylePath(owner, '$id')
-                : group != null
-                    ? effectPath(groupFoldPrefix(group!), '$id')
-                    : clip != null
-                        ? effectPath(clipFoldPrefix(clip!), '$id')
-                        : effectPath(owner, '$id');
+            : material
+                ? modelMaterialPath(owner, '$id')
+                : style
+                    ? stylePath(owner, '$id')
+                    : group != null
+                        ? effectPath(groupFoldPrefix(group!), '$id')
+                        : clip != null
+                            ? effectPath(clipFoldPrefix(clip!), '$id')
+                            : effectPath(owner, '$id');
 
     // The effect's own display, read at `at` — the Levels histogram traces the
     // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
@@ -2525,7 +2603,7 @@ class _EffectSection extends StatelessWidget {
       // space instead. Nothing is lost: the menu moves an effect a step, and
       // to either end.
       onContextMenu: inputs ? null : (at) => _stackMenu(context, at),
-      trailing: inputs ? null : _markButton(
+      trailing: inputs || material ? null : _markButton(
         context,
         mark: '×',
         tip: l10n.tipRemove,
@@ -2747,6 +2825,7 @@ class _EffectSection extends StatelessWidget {
         ],
         onAction: onAction,
         driven: driven['$id/${param.id}'],
+        onReset: material ? () => _resetMaterialRow(param.id) : null,
       ));
     }
 
@@ -3008,14 +3087,18 @@ class _EffectSection extends StatelessWidget {
   /// Effects & presets panel lists it. Named after the effect to begin with.
   Future<void> _savePreset(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final suggested = '${info.customName ?? effectLabelOf(info.name)}.lumfx';
+    final kind = material ? 'lummat' : 'lumfx';
+    final suggested = '${info.customName ?? effectLabelOf(info.name)}.$kind';
     final path = await pickPresetSaveLocation(suggested,
-        initialDirectory: presetsDirPath());
+        initialDirectory: presetsDirPath(), material: material);
     if (path == null) return;
-    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
+    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.$kind', '');
     try {
-      File(path)
-          .writeAsStringSync(layer.savePreset(name: name, only: info.id));
+      File(path).writeAsStringSync(material
+          ? materialPreset(
+              material: _instances().firstWhere((e) => e.id() == info.id),
+              name: name)
+          : layer.savePreset(name: name, only: info.id));
     } catch (_) {
       // A folder that will not take the file, or an effect that went away
       // under the open dialogue. The document is untouched either way.
@@ -3042,6 +3125,8 @@ class _EffectSection extends StatelessWidget {
       for (final instance in _instances())
         if (instance.id() == info.id) ...instance.presetNames(),
     ];
+    // A material also takes any the user has saved.
+    final saved = material ? listMaterialPresets() : const <BridgePresetInfo>[];
     void move(int to) {
       // **The order several picked effects land in**. Each one is
       // taken out of the stack and put back *at* `to`, so the last one moved
@@ -3138,7 +3223,7 @@ class _EffectSection extends StatelessWidget {
               ),
             // The presets this effect ships with. Each sets the whole effect,
             // with any keyframes starting at the playhead.
-            if (presets.isNotEmpty)
+            if (presets.isNotEmpty || saved.isNotEmpty)
               SubmenuRow(
                 key: ValueKey<String>('fx-menu-presets-$id'),
                 closeParent: () => close(null),
@@ -3157,6 +3242,20 @@ class _EffectSection extends StatelessWidget {
                           },
                           child: Text(engineLabel(name)),
                         ),
+                      for (final (i, preset) in saved.indexed)
+                        MenuRow(
+                          key: ValueKey<String>('fx-menu-saved-$id-$i'),
+                          onPressed: () {
+                            dismiss();
+                            _applySaved(
+                                preset.path,
+                                Provider.of<LumitUiState>(context,
+                                        listen: false)
+                                    .playheadFrame
+                                    .value);
+                          },
+                          child: Text(preset.name),
+                        ),
                     ],
                   ),
                 ),
@@ -3164,7 +3263,7 @@ class _EffectSection extends StatelessWidget {
               ),
             // This one effect as a preset, settings and keyframes and all.
             // A group header's stack is not a layer's to save from.
-            if (!style && group == null)
+            if ((!style || material) && group == null)
               MenuRow(
                 key: ValueKey<String>('fx-menu-save-preset-$id'),
                 onPressed: () {
@@ -3180,7 +3279,8 @@ class _EffectSection extends StatelessWidget {
                 _withHandle(context, (e) => layer.removeEffect(effect: e));
                 onStackChanged();
               },
-              child: Text(l10n.removeEffect),
+              // A material goes back to its file's own values.
+              child: Text(material ? l10n.reset : l10n.removeEffect),
             ),
           ],
         ),

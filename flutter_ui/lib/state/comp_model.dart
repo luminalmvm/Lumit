@@ -10,9 +10,13 @@
 // The model is plain data. Edits still go through the reference handles —
 // this holds what to *show*, never what to *do*.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show modelReads;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:uuid/uuid.dart';
 
@@ -211,6 +215,7 @@ class CompModel extends ChangeNotifier {
       if (revision == _revision && _model != null) return;
       _model = comp.getModel();
       _revision = revision;
+      _whileReading();
     } catch (_) {
       // The comp has gone (deleted, or the project closed): an empty model,
       // not a crash — the panels show their placeholders. The revision goes
@@ -219,6 +224,30 @@ class CompModel extends ChangeNotifier {
       _model = null;
       _revision = null;
     }
+  }
+
+  /// Held while a Model layer's file is still being read, so its material
+  /// rows, which come with the file, are read again once a read lands.
+  Timer? _reading;
+
+  void _whileReading() {
+    final waiting = _model?.layers.any((e) =>
+            e.info.kind == BridgeLayerKind.model && e.info.materials == null) ??
+        false;
+    if (!waiting || _reading != null) return;
+    final reads = modelReads();
+    _reading = Timer.periodic(const Duration(milliseconds: 300), (tick) {
+      if (modelReads() == reads) return;
+      tick.cancel();
+      _reading = null;
+      refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _reading?.cancel();
+    super.dispose();
   }
 
   /// The entry for [id], or null when the layer is gone.

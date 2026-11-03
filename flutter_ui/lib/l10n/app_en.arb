@@ -1940,6 +1940,10 @@
     "description": "A file type in the system's file dialogues: an exported set of shortcuts."
   },
   "fileTypePreset": "Lumit effect preset",
+  "fileTypeMaterialPreset": "Lumit material preset",
+  "@fileTypeMaterialPreset": {
+    "description": "Save dialogue: the file type of a saved preset for a 3D model's material."
+  },
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
@@ -23775,5 +23779,93 @@
   "fxOn": "On",
   "@fxOn": {
     "description": "Effect controls: the switch at the top of one of Film's parts (Print, Halation, Bloom, Grain, Gate weave, Flicker) that turns that part on."
+  },
+  "fxMaterial": "Material",
+  "@fxMaterial": {
+    "description": "Effect controls and the Timeline: the name a 3D model's material goes by when its file gives it none."
+  },
+  "fxBaseColour": "Base colour",
+  "@fxBaseColour": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxBaseColourLayer": "Base colour layer",
+  "@fxBaseColourLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
+  },
+  "fxMetallic": "Metallic",
+  "@fxMetallic": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxEmissionColour": "Emission colour",
+  "@fxEmissionColour": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The colour of light the surface gives off."
+  },
+  "fxEmissionStrength": "Emission strength",
+  "@fxEmissionStrength": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxEmissionLayer": "Emission layer",
+  "@fxEmissionLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture glows on the surface."
+  },
+  "fxOpacityLayer": "Opacity layer",
+  "@fxOpacityLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's brightness says how much of the surface shows."
+  },
+  "fxNormalStrength": "Normal strength",
+  "@fxNormalStrength": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How strongly the normal map bumps the surface."
+  },
+  "fxTransmission": "Transmission",
+  "@fxTransmission": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How much light passes through, as through glass."
+  },
+  "fxIor": "IOR",
+  "@fxIor": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Index of refraction, how much glass bends what is behind it. Usually left as IOR."
+  },
+  "fxCoat": "Coat",
+  "@fxCoat": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. A clear varnish layer over the surface."
+  },
+  "fxCoatRoughness": "Coat roughness",
+  "@fxCoatRoughness": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How rough the clear varnish over the surface is."
+  },
+  "fxNormalLayer": "Normal layer",
+  "@fxNormalLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture is used as the surface's normal map."
+  },
+  "fxChrome": "Chrome",
+  "@fxChrome": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxGold": "Gold",
+  "@fxGold": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxBrushedMetal": "Brushed metal",
+  "@fxBrushedMetal": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxFrostedGlass": "Frosted glass",
+  "@fxFrostedGlass": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxPlastic": "Plastic",
+  "@fxPlastic": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxRubber": "Rubber",
+  "@fxRubber": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxEmissive": "Emissive",
+  "@fxEmissive": {
+    "description": "Effect controls: a material preset in a material's Presets menu. A material that glows."
+  },
+  "foldMaterials": "Materials",
+  "@foldMaterials": {
+    "description": "Heading in a Model layer's fold-out and in the Effect controls panel, over a group of rows for each material in its 3D model."
   }
 }

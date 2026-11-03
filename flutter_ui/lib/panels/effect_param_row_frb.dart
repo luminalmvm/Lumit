@@ -197,6 +197,10 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The parameter's graph line colour while it is selected.
   final Color? graphColour;
 
+  /// What the reset arrow does in place of writing the declared default: a
+  /// 3D model's material row goes back to its file's value.
+  final VoidCallback? onReset;
+
   /// The group this row came out of, drawn before its name on a **flat
   /// sheet**: the dope sheet lists `Glow · Intensity`, where the
   /// fold-out draws `Intensity` under the effect's own heading. Null wherever
@@ -269,6 +273,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.rowPadding = const EdgeInsets.symmetric(vertical: 2),
     this.onLabelTap,
     this.graphColour,
+    this.onReset,
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
@@ -572,7 +577,7 @@ class EffectParamRowFrb extends StatelessWidget {
             frameless: true,
             small: true,
             padding: const EdgeInsets.all(1),
-            onPressed: () => _set(fallback),
+            onPressed: onReset ?? () => _set(fallback),
             // A step under the row's other glyphs: the arrow rides beside a
             // 10px unit rider and is an undo, not a control.
             child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
@@ -2753,7 +2758,9 @@ class EffectStackEditor {
       final styleIds = {for (final s in styles) s.id()};
       stack = _staged.keys.every((key) => styleIds.contains(key.$1))
           ? styles
-          : ((groupStack ?? clipStack)?.call() ?? graphInputsOf(layer));
+          : ((groupStack ?? clipStack)?.call() ??
+              _materials(layer) ??
+              graphInputsOf(layer));
     }
     for (final instance in stack) {
       final id = instance.id();
@@ -2764,6 +2771,13 @@ class EffectStackEditor {
       }
     }
     return stack;
+  }
+
+  /// A Model layer's material rows when they hold what is staged.
+  List<BridgeEffectInstance>? _materials(LayerReference layer) {
+    final materials = layer.getMaterials();
+    final ids = {for (final m in materials) m.id()};
+    return _staged.keys.every((key) => ids.contains(key.$1)) ? materials : null;
   }
 
   /// A drag tick: stage the value and render it, throttled. Nothing is

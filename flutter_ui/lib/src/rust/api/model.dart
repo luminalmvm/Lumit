@@ -3,11 +3,27 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../api.dart';
 import '../frb_generated.dart';
+import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `engine`, `snapshot`
+// These functions are ignored because they are not marked as `pub`: `engine`, `materials_op`, `snapshot`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// The user's saved material presets, sorted by name.
+List<BridgePresetInfo> listMaterialPresets() =>
+    BridgeLib.instance.api.crateApiModelListMaterialPresets();
+
+/// A number that moves when a 3D model's file starts or finishes being read,
+/// which is when a Model layer's material rows come.
+int modelReads() => BridgeLib.instance.api.crateApiModelModelReads();
+
+/// `material`'s rows as the text of a preset named `name`.
+String materialPreset(
+        {required BridgeEffectInstance material, required String name}) =>
+    BridgeLib.instance.api
+        .crateApiModelMaterialPreset(material: material, name: name);
 
 /// How a Viewer view shows its models: lit as they export, in a studio
 /// light of the view's own, as lines, both, or as the way they face.

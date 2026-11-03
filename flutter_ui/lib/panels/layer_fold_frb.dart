@@ -139,13 +139,18 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (docs/impl/node-graph-comp.md §5.3), the styles bit again: its own path
   /// ([inputsPath]) and the layer's Inputs as the list a write reads.
   final bool inputs;
+
+  /// A Model layer's material row: the style bit's pattern again, read from
+  /// and written to the layer's material rows.
+  final bool material;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
       this.style = false,
       this.group,
       this.clip,
-      this.inputs = false})
+      this.inputs = false,
+      this.material = false})
       : super(depth);
 }
 
@@ -1989,7 +1994,8 @@ bool moveLaneKeys({
         :final style,
         :final group,
         clip: final clipId,
-        :final inputs
+        :final inputs,
+        :final material
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
       // do, and a group header's and a clip's the same way. The row
@@ -2003,6 +2009,8 @@ bool moveLaneKeys({
         stack = comp.getGroupEffects(group: group);
       } else if (inputs) {
         stack = graphInputsOf(entry.layer);
+      } else if (material) {
+        stack = entry.layer.getMaterials();
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
@@ -2183,6 +2191,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final param, inputs: true) =>
         '${inputsPath(layerId)}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, material: true) =>
+        '${modelMaterialPath(layerId, info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -2362,6 +2372,12 @@ List<LayerFoldRow> clipFoldRows({
 /// The path of a placed graph's **Inputs** group, and with a parameter's id
 /// after it, of each of its rows: there is only ever one instance.
 String inputsPath(String layerId) => '$layerId/inputs';
+
+/// The path of a Model layer's **Materials** group, and of one material in
+/// it.
+String materialsPath(String layerId) => '$layerId/materials';
+String modelMaterialPath(String layerId, String materialId) =>
+    '${materialsPath(layerId)}/$materialId';
 
 /// The path of a layer's **Styles** group.
 String stylesPath(String layerId) => '$layerId/styles';
@@ -2857,6 +2873,40 @@ List<LayerFoldRow> layerFoldRows({
         rows.add(FoldPuppetPinRow(pin, depth: 2));
         for (final value in puppetValuesFor(pin.kind)) {
           rows.add(FoldPuppetValueRow(pin, value, depth: 3));
+        }
+      }
+    }
+  }
+
+  // A Model layer's materials, a group of rows for each in its file, before
+  // the effects that run on the picture they make.
+  if (info.materials case final materials? when materials.isNotEmpty) {
+    final materialsOpen = open.contains(materialsPath(id));
+    rows.add(FoldGroupRow(
+      path: materialsPath(id),
+      label: l10n.foldMaterials,
+      open: materialsOpen,
+      depth: 1,
+    ));
+    if (materialsOpen) {
+      for (final (i, material) in materials.indexed) {
+        final path = modelMaterialPath(id, material.id.toString());
+        final materialOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          // A material its file gives no name is numbered.
+          label: material.customName ?? '${effectLabelOf(material.name)} ${i + 1}',
+          open: materialOpen,
+          depth: 2,
+        ));
+        if (materialOpen) {
+          final values = {for (final v in material.values) v.id: v.value};
+          for (final param in cachedListParameters(material.name)) {
+            rows.add(FoldEffectParamRow(material, param, values[param.id],
+                depth: 3,
+                material: true,
+                driven: driven['${material.id}/${param.id}']));
+          }
         }
       }
     }
