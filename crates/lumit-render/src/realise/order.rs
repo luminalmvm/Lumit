@@ -1,6 +1,7 @@
 //! The order a segment's 3D layers draw in, and the runs it cuts them into.
 
-use super::{placed_in_3d, shadow_only};
+use super::placed_in_3d;
+use super::shadows::shadow_only;
 use crate::draw::CompLayerDraw;
 use crate::model_layer::{middle, model_run_order};
 
