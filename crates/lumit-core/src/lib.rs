@@ -44,6 +44,7 @@ pub mod preset;
 pub mod puppet;
 pub mod retime;
 pub mod roto;
+pub mod routes;
 pub mod sequence;
 pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.

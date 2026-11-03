@@ -3454,6 +3454,9 @@ pub struct Layer {
     /// tape does. Off keeps the pitch where it was. The layer's clips follow it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pitch_follows_speed: bool,
+    /// Where the layer's sound goes: a bus instead of the master, and its sends.
+    #[serde(default, skip_serializing_if = "crate::routes::AudioRoutes::is_master")]
+    pub audio_routes: crate::routes::AudioRoutes,
     /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -5133,6 +5136,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
@@ -5514,6 +5518,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5832,6 +5837,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

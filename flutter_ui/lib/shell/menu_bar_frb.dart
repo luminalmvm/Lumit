@@ -2062,6 +2062,8 @@ void insertEmptyLayer(
       comp.addSequenceLayer(row: row);
     case 'layer.new.adjustment':
       comp.addAdjustmentLayer(row: row);
+    case 'layer.new.bus':
+      comp.addBusLayer(row: row ?? ui.model.layers.length);
   }
 }
 
@@ -2074,6 +2076,7 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
   final t = ThemeScope.of(context).theme;
   final rows = [
     ('layer.new.audio', l10n.insertAudioLayer),
+    if (!picture) ('layer.new.bus', l10n.insertBus),
     if (picture) ...[
       ('layer.new.sequence', l10n.insertVideoLayer),
       ('layer.new.adjustment', l10n.insertAdjustmentLayer),

@@ -41,6 +41,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
+mod routes;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
@@ -3331,9 +3332,21 @@ impl AudioJobsBuilder {
             .layers
             .iter()
             .any(|l| l.switches.solo && (l.audio_only || self.layer_has_audio(doc, l)));
+        let buses = routes::buses(doc, comp, base_s);
         for layer in &comp.layers {
+            let from = jobs.len();
+            let any_solo = any_solo && !routes::feeds_solo(&buses, layer);
             self.walk_layer(
                 doc, comp, layer, any_solo, base_s, window, carriers, strip, visited, jobs,
+            );
+            routes::route(
+                &buses,
+                layer,
+                base_s,
+                carriers.len(),
+                strip.is_none(),
+                from,
+                jobs,
             );
         }
     }
@@ -3786,7 +3799,7 @@ impl AudioJobsBuilder {
     /// Answered through the same per-item probe cache, so asking about every
     /// row of a comp probes each file once.
     pub fn layer_has_audio(&mut self, doc: &Document, layer: &lumit_core::model::Layer) -> bool {
-        self.kind_has_audio(doc, &layer.kind, &mut Vec::new())
+        layer.is_bus() || self.kind_has_audio(doc, &layer.kind, &mut Vec::new())
     }
 
     fn kind_has_audio(
@@ -4468,6 +4481,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4508,7 +4522,7 @@ mod tests {
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
     /// so a probe here costs a `stat` and never FFmpeg.
-    fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
+    pub(super) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
@@ -4532,12 +4546,12 @@ mod tests {
     /// Tell the has-audio memo that `item` carries sound, so a test can place a
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
-    fn seed_has_audio(item: Uuid) {
+    pub(super) fn seed_has_audio(item: Uuid) {
         AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
-    fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
+    pub(super) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
         let layer = lumit_core::model::Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -4557,6 +4571,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4576,7 +4591,7 @@ mod tests {
     }
 
     /// An empty composition added to `doc`, returning its id.
-    fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
+    pub(super) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
@@ -4645,6 +4660,7 @@ mod tests {
             let layer = lumit_core::model::Layer {
                 adjustment: false,
                 pitch_follows_speed: false,
+                audio_routes: Default::default(),
                 graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
@@ -6537,6 +6553,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

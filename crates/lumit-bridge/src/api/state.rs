@@ -804,6 +804,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerRoutes { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),

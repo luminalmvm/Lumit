@@ -1470,7 +1470,7 @@ final Map<UuidValue, bool> _pictured = {};
 /// and only once a layer: the engine answers from the probe it made at import,
 /// so the first ask is the one crossing and the rest are a lookup.
 bool _drawsPicture(BridgeLayerEntry entry) => switch (entry.info.kind) {
-      BridgeLayerKind.audio => false,
+      BridgeLayerKind.audio || BridgeLayerKind.bus => false,
       BridgeLayerKind.footage =>
         _pictured[entry.layer.internallayerId] ??= () {
           try {
@@ -1516,6 +1516,7 @@ BridgeLayerEntry? layerAtCompPoint(
     BridgeLayerKind.nullLayer,
     BridgeLayerKind.light,
     BridgeLayerKind.audio,
+    BridgeLayerKind.bus,
   };
   final byId = {
     for (final entry in model.layers) entry.layer.internallayerId: entry

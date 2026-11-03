@@ -962,12 +962,13 @@ bool shiftSelectedLayers(LumitState app, LumitUiState ui, int frames) {
 }
 
 /// The kinds with a picture to gate another layer with — everything except the
-/// four that draw no pixels at all.
+/// kinds that draw no pixels at all.
 bool _gates(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||
       BridgeLayerKind.nullLayer ||
-      BridgeLayerKind.audio =>
+      BridgeLayerKind.audio ||
+      BridgeLayerKind.bus =>
         false,
       _ => true,
     };

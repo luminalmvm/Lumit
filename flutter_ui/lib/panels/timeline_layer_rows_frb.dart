@@ -22,6 +22,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
+import 'audio_routes_frb.dart' show writeSend;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
 import 'effect_param_row_frb.dart';
@@ -588,6 +589,33 @@ class FoldRow extends StatelessWidget {
             onChanged();
           },
         ),
+      FoldSendRow(:final send, :final bus) => _VolumeRow(
+          comp: comp,
+          layer: layer,
+          scalar: send.level,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+          label: bus,
+          rowKey: 'tl-send-${send.bus}',
+          write: (v) => writeSend(layer, send.bus, level: v),
+          // Before or after the layer's Volume and Pan.
+          trailing: HouseButton(
+            key: ValueKey<String>('tl-send-pre-${send.bus}'),
+            small: true,
+            frameless: true,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            onPressed: () {
+              writeSend(layer, send.bus, pre: !send.pre);
+              onChanged();
+            },
+            child: Text(send.pre ? l10n.audioSendPre : l10n.audioSendPost),
+          ),
+        ),
       FoldRetimeRow(:final scalar) => RetimeRow(
           comp: comp,
           layer: layer,
@@ -1022,6 +1050,12 @@ class _VolumeRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// A send's row is this one with its own name, writer and Pre button.
+  final String? label;
+  final ValueChanged<BridgeScalar>? write;
+  final Widget? trailing;
+  final String rowKey;
+
   const _VolumeRow({
     required this.comp,
     required this.layer,
@@ -1030,6 +1064,10 @@ class _VolumeRow extends StatefulWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.label,
+    this.write,
+    this.trailing,
+    this.rowKey = 'tl-volume',
   });
 
   @override
@@ -1067,15 +1105,17 @@ class _VolumeRowState extends State<_VolumeRow> {
               scalars: [scalar],
               comp: widget.comp,
               onSeek: widget.onSeek,
-              rowKey: 'tl-volume',
+              rowKey: widget.rowKey,
               onWrite: (next) {
-                widget.layer.setVolumeDb(value: next.single);
+                _write(next.single);
                 widget.onChanged();
               },
             ),
             const SizedBox(width: 4),
             Expanded(
-                child: Text(t.propertyCase(l10n.volume), style: t.body)),
+                child: Text(widget.label ?? t.propertyCase(l10n.volume),
+                    style: t.body)),
+            if (widget.trailing != null) widget.trailing!,
             SizedBox(
               width: widget.valueColumn.width,
               // Animated: the change lands in the key under the playhead (or
@@ -1083,7 +1123,7 @@ class _VolumeRowState extends State<_VolumeRow> {
               // staged so the whole gesture is one undo step.
               child: animated
                   ? KeyedValueField(
-                      fieldKey: const ValueKey('tl-volume-db'),
+                      fieldKey: ValueKey('${widget.rowKey}-db'),
                       value: value,
                       min: -60,
                       max: 12,
@@ -1093,7 +1133,7 @@ class _VolumeRowState extends State<_VolumeRow> {
                       onCommit: (v) => _commitAt(scalar, v, frame),
                     )
                   : DragValueField(
-                      key: const ValueKey('tl-volume-db'),
+                      key: ValueKey('${widget.rowKey}-db'),
                       value: value,
                       // The engine's own range (docs/09 §6): silence to a
                       // +12 dB boost.
@@ -1116,10 +1156,12 @@ class _VolumeRowState extends State<_VolumeRow> {
     );
   }
 
+  void _write(BridgeScalar value) => widget.write != null
+      ? widget.write!(value)
+      : widget.layer.setVolumeDb(value: value);
+
   void _commitAt(BridgeScalar scalar, num value, int frame) {
-    widget.layer.setVolumeDb(
-      value: scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame),
-    );
+    _write(scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame));
     setState(() => _staged = null);
     widget.onChanged();
   }

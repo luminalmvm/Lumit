@@ -643,6 +643,13 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Replace where a layer's sound goes: its output bus and its sends, as
+    /// one value so undo puts the whole routing back.
+    SetLayerRoutes {
+        comp: Uuid,
+        layer: Uuid,
+        routes: crate::routes::AudioRoutes,
+    },
     /// Choose which of its file's audio streams a layer sounds
     /// ([`crate::model::AudioStreams`]). Carries the whole choice, so undoing
     /// it puts back the one before. Valid on any layer, as Volume and Pan
@@ -962,6 +969,7 @@ impl Op {
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
+            Op::SetLayerRoutes { .. } => "Edit routing",
             Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
             Op::SetSoundMix { .. } => "Sound mix",
@@ -1059,6 +1067,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerRoutes { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
@@ -1127,6 +1136,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
         | Op::SetLayerPan { comp, .. }
+        | Op::SetLayerRoutes { comp, .. }
         | Op::SetLayerAudioStreams { comp, .. }
         | Op::SetRetimeProperty { comp, .. }
         | Op::SetLayerInterpolation { comp, .. }
@@ -2412,6 +2422,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetLayerRoutes {
+            comp,
+            layer,
+            routes,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.audio_routes, routes.clone());
+            Ok(Op::SetLayerRoutes {
+                comp: *comp,
+                layer: *layer,
+                routes: previous,
             })
         }
         Op::SetLayerAudioStreams {

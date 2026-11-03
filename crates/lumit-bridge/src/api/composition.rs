@@ -782,7 +782,7 @@ impl CompositionReference {
     /// One undo group around the two commits, because one Ctrl-Z has to put
     /// the layers *and* the Sound mix row back: the pack and the clearing are
     /// halves of the same act, and either alone leaves a comp that reads wrong.
-    /// The set is every layer that reads as `BridgeLayerKind::Audio`, which is
+    /// The set is every layer that reads as `BridgeLayerKind::Audio` or `Bus`, which is
     /// exactly what the Timeline's fold takes, so what is packed is what the
     /// user sees folded under the row. The new comps start unmixed, and there
     /// is no road back from a precomp to a mix.
@@ -886,7 +886,12 @@ impl CompositionReference {
         let rows: Vec<Layer> = comp
             .layers
             .iter()
-            .filter(|l| bridge_kind(l) == BridgeLayerKind::Audio)
+            .filter(|l| {
+                matches!(
+                    bridge_kind(l),
+                    BridgeLayerKind::Audio | BridgeLayerKind::Bus
+                )
+            })
             .cloned()
             .collect();
         if rows.is_empty() {
