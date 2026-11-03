@@ -33,7 +33,8 @@ impl Default for ModelSettings {
 }
 
 /// A fresh Model layer for 3D model `item` in `comp`: always 3D, at the comp's
-/// centre, as long as the comp, and sized by the default settings.
+/// centre, as long as the comp, sized by the default settings, and casting
+/// shadows, so it stands on whatever is under it.
 pub fn model_layer(
     comp: &crate::model::Composition,
     item: &crate::model::FootageItem,
@@ -48,6 +49,7 @@ pub fn model_layer(
         crate::edits::centred_transform(0.0, 0.0, comp.width, comp.height),
     );
     layer.switches.three_d = true;
+    layer.transform.material.casts_shadows = crate::model::ShadowMode::On;
     layer
 }
 
