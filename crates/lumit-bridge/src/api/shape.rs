@@ -61,6 +61,8 @@ pub struct BridgeShapeModifier {
     pub kind: BridgeShapeModifierKind,
     /// Its eye is off: the art is drawn as if it were not there.
     pub hidden: bool,
+    /// Acts on the item right above it alone, not on everything above it.
+    pub own: bool,
 }
 
 /// The modifiers there are. An offset carries its amount in layer pixels
@@ -179,6 +181,7 @@ impl BridgeShapeModifier {
             id: m.id,
             name: m.name.clone(),
             hidden: m.hidden,
+            own: m.own,
             kind: match &m.kind {
                 ModifierKind::Repeat(r) => BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                     copies: at(&r.copies),
@@ -318,6 +321,7 @@ impl BridgeShapeModifier {
             name: self.name.clone(),
             kind,
             hidden: self.hidden,
+            own: self.own,
         })
     }
 }

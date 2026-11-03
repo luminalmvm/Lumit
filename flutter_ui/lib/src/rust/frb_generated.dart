@@ -27473,13 +27473,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeModifier dco_decode_bridge_shape_modifier(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeShapeModifier(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
       kind: dco_decode_bridge_shape_modifier_kind(arr[2]),
       hidden: dco_decode_bool(arr[3]),
+      own: dco_decode_bool(arr[4]),
     );
   }
 
@@ -34964,8 +34965,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_name = sse_decode_String(deserializer);
     var var_kind = sse_decode_bridge_shape_modifier_kind(deserializer);
     var var_hidden = sse_decode_bool(deserializer);
+    var var_own = sse_decode_bool(deserializer);
     return BridgeShapeModifier(
-        id: var_id, name: var_name, kind: var_kind, hidden: var_hidden);
+        id: var_id,
+        name: var_name,
+        kind: var_kind,
+        hidden: var_hidden,
+        own: var_own);
   }
 
   @protected
@@ -42753,6 +42759,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_String(self.name, serializer);
     sse_encode_bridge_shape_modifier_kind(self.kind, serializer);
     sse_encode_bool(self.hidden, serializer);
+    sse_encode_bool(self.own, serializer);
   }
 
   @protected

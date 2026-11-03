@@ -117,7 +117,8 @@ class ShapeItemRow extends StatelessWidget {
     ];
     return [
       shapeAddSubmenu(close, item.id, adds,
-          (add) => _writeEntries((e) => addedToShape(e, item.id, add, item))),
+          (add) => _writeEntries(
+              (e) => addedToShape(e, item.id, add, item: item, own: true))),
       if (removes.isNotEmpty)
         shapeAddSubmenu(
             close,
@@ -173,7 +174,8 @@ class ShapeItemRow extends StatelessWidget {
       deleteLabel: l10n.deleteShape,
       menuRows: (close) => _opRows(close, context),
       addRows: (close) => shapeAddRows(close, item.id, _adds,
-          (add) => _writeEntries((e) => addedToShape(e, item.id, add, item))),
+          (add) => _writeEntries(
+              (e) => addedToShape(e, item.id, add, item: item, own: true))),
     );
   }
 }
@@ -238,7 +240,7 @@ List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
           key: ValueKey<String>('tl-shape-move-${by < 0 ? 'up' : 'down'}-$id'),
           onPressed: () {
             close();
-            write((entries) => entries.moved(id, by));
+            write((entries) => entries.movedKeepingGlobals(id, by));
           },
           child: Text(label),
         ),
@@ -265,7 +267,7 @@ ShapeAdd shapeAddOf(BridgeShapeModifier modifier) => switch (modifier.kind) {
 /// Effects does too.
 List<BridgeShapeEntry> addedToShape(
     List<BridgeShapeEntry> entries, UuidValue at, ShapeAdd add,
-    [BridgeShapeItem? item]) {
+    {BridgeShapeItem? item, bool own = false}) {
   switch (add) {
     case ShapeAdd.fill:
       return entries.withItem(
@@ -311,6 +313,33 @@ List<BridgeShapeEntry> addedToShape(
       final box = item == null ? null : shapeContentsRect([
           BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(item))
         ]);
+      final modifier = newShapeModifier(entries, add, box, own: own);
+      final inside = entries.any((e) =>
+          e.kind is BridgeShapeEntryKind_Group && shapeEntryId(e) == at);
+      return inside
+          ? entries.appendedInto(at, modifier)
+          : entries.insertedAfter(at, modifier);
+  }
+}
+
+/// [entries] with [add] put at the end as a global modifier, one that acts
+/// on every shape in the layer. The whole art's box places it the way an
+/// item's own box places one added to the item.
+List<BridgeShapeEntry> addedGlobally(
+        List<BridgeShapeEntry> entries, ShapeAdd add) =>
+    [
+      ...entries,
+      BridgeShapeEntry(
+          depth: 0,
+          kind: newShapeModifier(entries, add, shapeContentsRect(entries))),
+    ];
+
+/// A new modifier entry of kind [add], set to show it has done something
+/// to the art in [box], named for its kind and numbered after any already
+/// in [entries].
+BridgeShapeEntryKind newShapeModifier(
+    List<BridgeShapeEntry> entries, ShapeAdd add, Rect? box,
+    {bool own = false}) {
       final centre = box?.center ?? Offset.zero;
       final kind = switch (add) {
         ShapeAdd.repeater =>
@@ -355,17 +384,12 @@ List<BridgeShapeEntry> addedToShape(
       final name = alike == 0
           ? shapeAddLabel(add)
           : '${shapeAddLabel(add)} ${alike + 1}';
-      final modifier = BridgeShapeEntryKind.modifier(BridgeShapeModifier(
+      return BridgeShapeEntryKind.modifier(BridgeShapeModifier(
           id: UuidValue.fromString(const Uuid().v4()),
           name: name,
           kind: kind,
-          hidden: false));
-      final inside = entries.any((e) =>
-          e.kind is BridgeShapeEntryKind_Group && shapeEntryId(e) == at);
-      return inside
-          ? entries.appendedInto(at, modifier)
-          : entries.insertedAfter(at, modifier);
-  }
+          hidden: false,
+          own: own));
 }
 
 /// A modifier entry in the Timeline: a repeater, a trim, an offset, a twist,
@@ -416,14 +440,19 @@ class ShapeModifierRow extends StatelessWidget {
       onRename: (name) => _write((e) => e.withModifier(
           modifier.id,
           (m) => BridgeShapeModifier(
-              id: m.id, name: name, kind: m.kind, hidden: m.hidden))),
+              id: m.id,
+              name: name,
+              kind: m.kind,
+              hidden: m.hidden,
+              own: m.own))),
       onDelete: () => _write((e) => e.without(modifier.id)),
       deleteLabel: l10n.deleteShapeModifier,
       removeButton: true,
       menuRows: (close) => [
         // Added under this one, so the two stack.
         shapeAddSubmenu(close, modifier.id, adds,
-            (add) => _write((e) => addedToShape(e, modifier.id, add))),
+            (add) => _write((e) =>
+                addedToShape(e, modifier.id, add, own: modifier.own))),
         if (modifier.kind is BridgeShapeModifierKind_Repeat)
           shapeExpandSubmenu(
               close, 'tl-shape-expand-${modifier.id}', l10n.shapeExpandCopies,
@@ -1665,3 +1694,21 @@ class ShapePaintRow extends StatelessWidget {
     );
   }
 }
+
+/// The Contents heading's Global add menu: every modifier, each put at the
+/// end of the layer's contents to act on all its shapes.
+List<Widget> globalAddRows(
+        VoidCallback dismiss, LayerReference layer, VoidCallback onChanged) =>
+    [
+      for (final add in ShapeAdd.values)
+        if (!isItemAdd(add) && add != ShapeAdd.group)
+          MenuRow(
+            key: ValueKey<String>('tl-shape-global-add-${add.name}'),
+            onPressed: () {
+              dismiss();
+              writeShapeEntries(
+                  layer, onChanged, (e) => addedGlobally(e, add));
+            },
+            child: Text(shapeAddLabel(add)),
+          ),
+    ];

@@ -3570,6 +3570,7 @@ mod tests {
                     name: kind.label().into(),
                     kind,
                     hidden: false,
+                    own: false,
                 })
             }));
             layer.kind = LayerKind::Shape { contents };

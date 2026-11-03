@@ -1831,7 +1831,8 @@ BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
       id: modifier.id,
       name: modifier.name,
       kind: kind,
-      hidden: hidden ?? modifier.hidden);
+      hidden: hidden ?? modifier.hidden,
+      own: modifier.own);
 }
 
 /// The whole list with the one number [row] names replaced by [to]: on its
@@ -2395,6 +2396,9 @@ String masksPath(String layerId) => '$layerId/masks';
 /// The path of a shape layer's Contents group.
 String contentsPath(String layerId) => '$layerId/contents';
 
+/// The path of the heading over a shape layer's global modifiers.
+String globalModifiersPath(String layerId) => '${contentsPath(layerId)}/global';
+
 /// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
 
@@ -2565,9 +2569,27 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (contentsOpen) {
       final entries = info.shapeContents;
+      // The modifiers at the end that act on every shape go under a heading
+      // of their own, below all the art.
+      final globalFrom = entries.globalStart;
+      // A modifier's row and, open, its numbers under it.
+      void modifierRows(BridgeShapeModifier modifier, int depth, bool open) {
+        rows.add(FoldShapeModifierRow(modifier, open: open, depth: depth));
+        if (!open) return;
+        for (final value in modifierValues(modifier)) {
+          // Displace or Scale heads the deform's numbers, which it
+          // decides the meaning of.
+          if (value == ShapeValue.deformAmount) {
+            rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
+                modifier: modifier, depth: depth + 1));
+          }
+          rows.add(FoldShapeValueRow(null, value,
+              modifier: modifier, depth: depth + 1));
+        }
+      }
       // The depth of a shut group whose entries are being passed over.
       int? shutUnder;
-      for (final (index, entry) in entries.indexed) {
+      for (final (index, entry) in entries.indexed.take(globalFrom)) {
         if (shutUnder != null && entry.depth > shutUnder) continue;
         shutUnder = null;
         // Each entry has its own twirl, shut until opened, like an animator:
@@ -2581,19 +2603,8 @@ List<LayerFoldRow> layerFoldRows({
             rows.add(FoldShapeGroupRow(field0, open: entryOpen, depth: depth));
             if (!entryOpen) shutUnder = entry.depth;
           case BridgeShapeEntryKind_Modifier(:final field0):
-            rows.add(
-                FoldShapeModifierRow(field0, open: entryOpen, depth: depth));
-            if (!entryOpen) continue;
-            for (final value in modifierValues(field0)) {
-              // Displace or Scale heads the deform's numbers, which it
-              // decides the meaning of.
-              if (value == ShapeValue.deformAmount) {
-                rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
-                    modifier: field0, depth: depth + 1));
-              }
-              rows.add(FoldShapeValueRow(null, value,
-                  modifier: field0, depth: depth + 1));
-            }
+            // One that is its shape's own sits a little in, under it.
+            modifierRows(field0, field0.own ? depth + 1 : depth, entryOpen);
           case BridgeShapeEntryKind_Item(field0: final item):
             rows.add(FoldShapeRow(item, open: entryOpen, depth: depth));
             if (!entryOpen) continue;
@@ -2683,6 +2694,24 @@ List<LayerFoldRow> layerFoldRows({
               }
               rows.add(FoldShapeValueRow(item, value, depth: depth + 1));
             }
+        }
+      }
+      if (globalFrom < entries.length) {
+        final path = globalModifiersPath(id);
+        final globalOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: l10n.shapeGlobalModifiers,
+          open: globalOpen,
+          depth: 2,
+        ));
+        if (globalOpen) {
+          for (final entry in entries.sublist(globalFrom)) {
+            if (entry.kind case BridgeShapeEntryKind_Modifier(:final field0)) {
+              modifierRows(field0, 3,
+                  open.contains('${contentsPath(id)}/${field0.id}'));
+            }
+          }
         }
       }
     }

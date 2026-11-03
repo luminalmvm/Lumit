@@ -778,7 +778,7 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             const SizedBox(width: 6),
           ],
           if (widget.addRows case final rows?) ...[
-            _RowButton(
+            RowButton(
               key: ValueKey<String>('${widget.keyPrefix}-add-button-${widget.id}'),
               label: l10n.shapeOpAdd,
               arrow: true,
@@ -792,7 +792,7 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             const SizedBox(width: 6),
           ],
           if (widget.removeButton) ...[
-            _RowButton(
+            RowButton(
               key: ValueKey<String>(
                   '${widget.keyPrefix}-remove-button-${widget.id}'),
               label: l10n.shapeOpRemove,
@@ -872,12 +872,12 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
 
 /// A small word-button on an item row, in the accent: Add, with the arrow
 /// After Effects draws after it, or Remove.
-class _RowButton extends StatelessWidget {
+class RowButton extends StatelessWidget {
   final String label;
   final bool arrow;
   final void Function(Offset at) onTap;
 
-  const _RowButton({
+  const RowButton({
     super.key,
     required this.label,
     required this.onTap,

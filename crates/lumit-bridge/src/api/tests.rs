@@ -3294,6 +3294,7 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
             id: Uuid::now_v7(),
             name: "Trim paths".into(),
             hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
                 start: BridgeScalar::Static(-40.0),
                 offset: BridgeScalar::Static(180.0),
@@ -3527,6 +3528,7 @@ fn expanding_a_repeater_makes_its_copies_real() {
             id: repeater,
             name: "Repeater".into(),
             hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                 copies: BridgeScalar::Static(3.0),
                 offset: BridgeScalar::Static(0.0),

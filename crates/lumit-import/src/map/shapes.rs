@@ -77,6 +77,7 @@ fn entries(items: Vec<Art>) -> Vec<ShapeEntry> {
                 name: kind.label().into(),
                 kind,
                 hidden: false,
+                own: false,
             })
         }));
         if out.is_empty() {

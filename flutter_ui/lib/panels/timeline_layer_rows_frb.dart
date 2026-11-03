@@ -579,6 +579,31 @@ class FoldRow extends StatelessWidget {
                       child: TimingsCell(effectId: effectId),
                     ),
                   ),
+                ] else if (!locked &&
+                    path == contentsPath(layer.internallayerId.toString())) ...[
+                  // A shape layer's Contents heading: Global add, in the
+                  // place the Add on the rows under it has.
+                  Expanded(
+                    child: Text(t.propertyCase(label),
+                        style: t.body.copyWith(
+                            color:
+                                Color.lerp(t.body.color, t.textPrimary, lit)),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  RowButton(
+                    key: ValueKey<String>('tl-shape-global-add-button-$path'),
+                    label: l10n.shapeGlobalAdd,
+                    arrow: true,
+                    onTap: (at) => showMenuAt<void>(
+                      context: context,
+                      position: at,
+                      width: 150,
+                      rows: (close) =>
+                          globalAddRows(() => close(null), layer, onChanged),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(width: valueColumn.width),
                 ] else
                   Flexible(
                     child: Text(named ? label : t.propertyCase(label),

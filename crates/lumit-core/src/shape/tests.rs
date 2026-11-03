@@ -23,6 +23,7 @@ pub(super) fn modifier(kind: ModifierKind) -> ShapeEntry {
         name: kind.label().into(),
         kind,
         hidden: false,
+        own: false,
     })
 }
 
@@ -897,4 +898,30 @@ fn an_eye_switched_off_leaves_its_part_out() {
     let mut group = modifier::ShapeGroup::new("Group", entries(vec![under]));
     group.hidden = true;
     assert!(draw(&[ShapeEntry::Group(group)]).iter().all(|&b| b == 0), "a hidden group draws nothing");
+}
+
+#[test]
+fn an_items_own_modifier_acts_on_it_alone_and_a_global_one_on_every_item() {
+    let own = |kind| match modifier(kind) {
+        ShapeEntry::Modifier(m) => ShapeEntry::Modifier(ShapeModifier { own: true, ..m }),
+        e => e,
+    };
+    let a = item(square(0.0, 0.0, 10.0));
+    let b = item(square(50.0, 0.0, 10.0));
+    let contents = vec![
+        ShapeEntry::Item(a),
+        own(ModifierKind::Repeat(repeater(3.0, 12.0))),
+        ShapeEntry::Item(b),
+        own(offset(2.0)),
+        modifier(trim(0.0, 50.0)),
+    ];
+    let kinds = |n: usize| {
+        modifier::lowered(&contents)[n]
+            .mods
+            .iter()
+            .map(|m| m.kind.label())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(kinds(0), ["Repeater", "Trim paths"], "its own, then the global one");
+    assert_eq!(kinds(1), ["Offset paths", "Trim paths"], "not the first item's repeater");
 }

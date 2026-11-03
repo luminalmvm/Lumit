@@ -30168,11 +30168,13 @@ impl SseDecode for crate::api::shape::BridgeShapeModifier {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_kind = <crate::api::shape::BridgeShapeModifierKind>::sse_decode(deserializer);
         let mut var_hidden = <bool>::sse_decode(deserializer);
+        let mut var_own = <bool>::sse_decode(deserializer);
         return crate::api::shape::BridgeShapeModifier {
             id: var_id,
             name: var_name,
             kind: var_kind,
             hidden: var_hidden,
+            own: var_own,
         };
     }
 }
@@ -42136,6 +42138,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::shape::BridgeShapeModifier {
             self.name.into_into_dart().into_dart(),
             self.kind.into_into_dart().into_dart(),
             self.hidden.into_into_dart().into_dart(),
+            self.own.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -48143,6 +48146,7 @@ impl SseEncode for crate::api::shape::BridgeShapeModifier {
         <String>::sse_encode(self.name, serializer);
         <crate::api::shape::BridgeShapeModifierKind>::sse_encode(self.kind, serializer);
         <bool>::sse_encode(self.hidden, serializer);
+        <bool>::sse_encode(self.own, serializer);
     }
 }
 

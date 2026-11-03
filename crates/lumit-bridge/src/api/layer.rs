@@ -4451,10 +4451,24 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Shape { .. } = self.item()?.kind else {
             return Err(BridgeError::NotShape);
         };
-        contents.push(crate::api::shape::BridgeShapeEntry {
-            depth: 0,
-            kind: crate::api::shape::BridgeShapeEntryKind::Item(item),
-        });
+        // Above the global modifiers at the end, so they act on it too.
+        let at = contents.len()
+            - contents
+                .iter()
+                .rev()
+                .take_while(|e| {
+                    e.depth == 0
+                        && matches!(&e.kind,
+                            crate::api::shape::BridgeShapeEntryKind::Modifier(m) if !m.own)
+                })
+                .count();
+        contents.insert(
+            at,
+            crate::api::shape::BridgeShapeEntry {
+                depth: 0,
+                kind: crate::api::shape::BridgeShapeEntryKind::Item(item),
+            },
+        );
         self.set_shape_contents(contents, None)
     }
 

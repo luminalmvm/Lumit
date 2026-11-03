@@ -10148,6 +10148,14 @@
   "@shapeOpAdd": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it can be given, such as Twist."
   },
+  "shapeGlobalAdd": "Global add",
+  "@shapeGlobalAdd": {
+    "description": "Button on a shape layer's Contents heading in the Timeline, opening the modifiers that can be added to act on every shape in the layer."
+  },
+  "shapeGlobalModifiers": "Global modifiers",
+  "@shapeGlobalModifiers": {
+    "description": "Timeline heading at the bottom of a shape layer's Contents, folding the modifiers that act on every shape in the layer."
+  },
   "shapeOpRemove": "Remove",
   "@shapeOpRemove": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."

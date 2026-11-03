@@ -209,19 +209,63 @@ extension ShapeEntries on List<BridgeShapeEntry> {
   }
 
   /// The modifiers acting on the item at [index]: the ones after it at its
-  /// depth, then the ones after its group outside, and so on up. The
-  /// engine's `lowered`, in the same order.
+  /// depth, then the ones after its group outside, and so on up, eyes off
+  /// left out. One added from an item's Add (`own`) reaches back to the art
+  /// right above it and no further. The engine's `lowered`, in the same
+  /// order.
   List<BridgeShapeModifier> modifiersOn(int index) {
     final out = <BridgeShapeModifier>[];
     var depth = this[index].depth;
+    var mine = true;
     for (var j = index + 1; j < length; j++) {
       final e = this[j];
       if (e.depth > depth) continue;
-      depth = e.depth;
-      if (e.kind case BridgeShapeEntryKind_Modifier(:final field0)) {
-        out.add(field0);
+      if (e.depth < depth) {
+        // Out of a group: the group is the art the next ones follow.
+        depth = e.depth;
+        mine = true;
+      }
+      switch (e.kind) {
+        case BridgeShapeEntryKind_Modifier(:final field0):
+          if (!field0.hidden && (mine || !field0.own)) out.add(field0);
+        case BridgeShapeEntryKind_Item(:final field0)
+            when field0.combine != 0 &&
+                this[j - 1].depth == e.depth &&
+                this[j - 1].kind is BridgeShapeEntryKind_Item:
+          // Combined into the item above: drawn as one with it.
+          break;
+        default:
+          mine = false;
       }
     }
     return out;
+  }
+
+  /// [moved], unless the move would take an entry into or out of the
+  /// global modifiers at the end: those stay below every shape.
+  List<BridgeShapeEntry> movedKeepingGlobals(UuidValue id, int by) {
+    final next = moved(id, by);
+    Iterable<UuidValue> globals(List<BridgeShapeEntry> e) =>
+        e.sublist(e.globalStart).map(shapeEntryId);
+    return globals(next).toSet().containsAll(globals(this)) &&
+            globals(this).toSet().containsAll(globals(next))
+        ? next
+        : this;
+  }
+
+  /// Where the layer's global modifiers start: the run at the end of the
+  /// top list of modifiers that are not an item's own, which act on every
+  /// shape above them. [length] when there are none.
+  int get globalStart {
+    var i = length;
+    while (i > 0 &&
+        this[i - 1].depth == 0 &&
+        switch (this[i - 1].kind) {
+          BridgeShapeEntryKind_Modifier(:final field0) => !field0.own,
+          _ => false,
+        }) {
+      i--;
+    }
+    return i;
   }
 }
