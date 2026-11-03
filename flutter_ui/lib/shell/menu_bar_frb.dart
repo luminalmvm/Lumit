@@ -469,7 +469,9 @@ class _CommandBox extends StatelessWidget {
                 ),
               ),
               if (chord case final chord?)
-                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
+                Text(chord,
+                    textDirection: TextDirection.ltr,
+                    style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
           ),
@@ -607,7 +609,7 @@ class LumitMenuBarFrb extends StatelessWidget {
             if (windowFrameDrawn)
               const WindowDragArea(
                 child: Padding(
-                  padding: EdgeInsets.only(left: 10, right: 4),
+                  padding: EdgeInsetsDirectional.only(start: 10, end: 4),
                   child: Center(widthFactor: 1, child: LumitMark(size: 16)),
                 ),
               ),
@@ -2094,9 +2096,11 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
             Expanded(child: Text(label)),
             if (ui.keymap.chordFor(action) case final chord?)
               Padding(
-                padding: const EdgeInsets.only(left: 16),
+                padding: const EdgeInsetsDirectional.only(start: 16),
                 child:
-                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+                    Text(chord,
+                        textDirection: TextDirection.ltr,
+                        style: t.small.copyWith(color: t.textMuted)),
               ),
           ]),
         ),
@@ -3210,13 +3214,15 @@ class _MenuListState extends State<_MenuList> {
         ),
         if (item.needsPro)
           const Padding(
-            padding: EdgeInsets.only(left: 16),
+            padding: EdgeInsetsDirectional.only(start: 16),
             child: Opacity(opacity: 0.6, child: ProBadge()),
           )
         else if (shortcut != null)
           Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Text(shortcut, style: t.small.copyWith(color: t.textMuted)),
+            padding: const EdgeInsetsDirectional.only(start: 16),
+            child: Text(shortcut,
+                textDirection: TextDirection.ltr,
+                style: t.small.copyWith(color: t.textMuted)),
           ),
       ],
     );

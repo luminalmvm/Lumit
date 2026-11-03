@@ -490,7 +490,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                 t,
                 l10n.compLightsLikeAfterEffects,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('comp-lights-ae'),
                     value: on,
@@ -611,6 +611,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           Text(
             aspectRatioLabel(_width, _height),
             key: const ValueKey('comp-aspect'),
+            textDirection: TextDirection.ltr,
             style: dialogMono(t),
           ),
         ],
@@ -794,7 +795,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),

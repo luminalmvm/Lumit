@@ -514,6 +514,9 @@ void _matchOnLayer(
     final info = source.entry.info;
     final from = source.entry.layer.internallayerId.toString();
     if (source.effect case final fx? when seen.add('${fx.id}')) {
+      // A placed graph's Inputs are found by their path alone. There is only
+      // one, so there is no id to swap and nothing to add.
+      if (isUnderPath(inputsPath(from), source.path)) continue;
       final style = isUnderPath(stylesPath(from), source.path);
       List<String> ofKind(List<BridgeEffectInstanceInfo> list) => [
             for (final e in list)

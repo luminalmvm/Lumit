@@ -106,7 +106,7 @@ class _ExpressionBodyState extends State<_ExpressionBody> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Align(
-              alignment: Alignment.centerRight,
+              alignment: AlignmentDirectional.centerEnd,
               child: SizedBox(
                 width: 120,
                 height: 22,

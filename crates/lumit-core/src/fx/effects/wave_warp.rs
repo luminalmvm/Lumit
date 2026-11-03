@@ -4,16 +4,16 @@
 //! **In plain terms.** A wave runs across the picture in the direction you set,
 //! and the picture slides sideways to it — the transverse wave, which is the one
 //! a flag makes. Wave width is the distance between crests, Wave height how far
-//! the picture slides, Phase where along the wave the frame is caught. Pinning
-//! nails chosen edges of the frame down so the wave dies away before it reaches
-//! them.
-//!
-//! As with Ripple (§3.53), AE's Wave Speed is not here: Phase is the same motion
-//! with the timeline holding the stopwatch, and nothing reads a clock (§2.4).
+//! the picture slides, Phase where along the wave the frame is caught. Wave
+//! speed moves Phase on with layer time, so a fresh wave travels without a key.
+//! Pinning nails chosen edges of the frame down so the wave dies away before it
+//! reaches them.
 
 use crate::fx::{
-    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EffectSchema,
 };
+use crate::model::{EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 
 /// Wave warp's controls.
@@ -21,7 +21,8 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "wave_warp",
     label = "Wave warp",
-    version = 1,
+    // 2: Wave speed. An older wave holds still, as it did.
+    version = 2,
     category = Distortion,
     // One wave shape and one bilinear tap a pixel.
     cost = Cheap,
@@ -29,6 +30,9 @@ use lumit_fx_macros::Effect;
     // slider's 500 px@comp doubled, and the pin ramp only shortens the slide.
     roi = PaddedPx(1000.0),
     premultiplied = true,
+    // Wave speed moves it with layer time under constant controls, so the
+    // frame key takes the time.
+    seeded = true,
     // The matte scales the displacement, inside the kernel (the owner's rule
     // for mattes); the generic strength dissolve does not also run.
     matte = (
@@ -87,10 +91,15 @@ pub struct WaveWarp {
     #[dial(default = 90.0, step = 15.0)]
     pub direction: f32,
 
-    /// Degrees: where along the wave this frame is caught. AE's Wave Speed
-    /// converts to a linear keyframe on this (§3.54's second note).
+    /// Degrees: where along the wave the frame is caught at layer time 0.
     #[dial(default = 0.0, step = 45.0)]
     pub phase: f32,
+
+    /// Waves a second that pass a point, AE's Wave Speed. Read by
+    /// [`WaveWarpDef::resolve_derived`], which turns it and layer time into
+    /// turns of Phase.
+    #[slider(label = "Wave speed", min = -5.0, max = 5.0, default = 1.0, unit = Raw)]
+    pub wave_speed: f32,
 
     /// Which of the frame's edges are held still. A pinned edge cannot move, so
     /// the slide ramps to zero across the last `|Wave height|` pixels before it.
@@ -124,12 +133,16 @@ pub struct WaveWarp {
 }
 
 impl WaveWarp {
+    /// Turns the wave has travelled by this frame, Wave speed × layer time.
+    pub const DERIVED_TRAVEL: ParamId = ParamId::new("derived.travel");
+
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4). The
     /// direction's sine and cosine are spent here, the wave width becomes a
     /// reciprocal, Phase becomes turns and the Pinning choice becomes four
     /// per-edge flags — so the kernel runs no trigonometry and no division.
+    /// `travel` is [`Self::DERIVED_TRAVEL`] out of the bag.
     #[must_use]
-    pub fn packed(self) -> cpu::WaveWarpParams {
+    pub fn packed(self, travel: f32) -> cpu::WaveWarpParams {
         let theta = self.direction.to_radians();
         let (sin, cos) = theta.sin_cos();
         // Left, right, top, bottom.
@@ -150,7 +163,7 @@ impl WaveWarp {
             perp: [cos, sin],
             height: self.wave_height,
             inv_width: 1.0 / self.wave_width.max(1e-3),
-            turns: self.phase / 360.0,
+            turns: self.phase / 360.0 + travel,
             shape: self.wave_type.min(8),
             pin,
             // The pin ramp is |Wave height| wide, so a pinned edge cannot be
@@ -170,7 +183,36 @@ impl EffectDef for WaveWarpDef {
         &<WaveWarp as EffectMetadata>::SCHEMA
     }
 
-    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::wave_warp(rgba, w, h, &WaveWarp::read(p).packed());
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
+        push(WaveWarp::DERIVED_TRAVEL, travel(cx));
     }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        let travel = p.float(WaveWarp::DERIVED_TRAVEL, 0.0);
+        cpu::wave_warp(rgba, w, h, &WaveWarp::read(p).packed(travel));
+    }
+}
+
+/// Turns travelled by layer time at Wave speed's waves a second, shared with
+/// Ripple. Not wrapped to one turn: the noise waves do not repeat.
+pub(crate) fn travel(cx: &ResolveCx<'_>) -> Value {
+    let speed = (cx.inst).float_at_with_context("wave_speed", cx.lt, cx.context.clone());
+    Value::Float((speed.unwrap_or(0.0) * cx.lt) as f32)
+}
+
+/// A Wave warp or Ripple saved before Wave speed holds still, as it did. Runs
+/// before the backfill would give it the moving default.
+pub(crate) fn migrate_v1(e: &mut EffectInstance) {
+    if !matches!(e.effect.match_name.as_str(), "wave_warp" | "ripple") || e.effect.version >= 2 {
+        return;
+    }
+    e.effect.version = 2;
+    if e.params.iter().any(|p| p.id == "wave_speed") {
+        return;
+    }
+    e.params.push(EffectParam {
+        id: "wave_speed".to_owned(),
+        value: EffectValue::Float(crate::anim::Property::fixed(0.0)),
+        extra: serde_json::Map::new(),
+    });
 }

@@ -218,7 +218,7 @@ Widget textCell(LumitTheme t, String label, Widget control) => SizedBox(
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(child: Align(alignment: Alignment.centerLeft, child: control)),
+          Expanded(child: Align(alignment: AlignmentDirectional.centerStart, child: control)),
           const SizedBox(width: 10),
         ],
       ),

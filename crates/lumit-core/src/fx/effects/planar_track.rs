@@ -193,6 +193,9 @@ pub struct PlanarTrack {
     /// inside it — the hand over the phone, the reflection crossing the sign.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
+    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
 }
 
 /// The Planar track's behaviour: none, by design.

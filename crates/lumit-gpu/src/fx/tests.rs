@@ -10343,7 +10343,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     off.mix = 0.0;
 
     let op_of = |r: Ripple| {
-        let p = r.packed();
+        let p = r.packed(0.0);
         RippleOp {
             centre: p.centre,
             radius: p.radius,
@@ -10366,7 +10366,7 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
         ("mixed", faded),
         ("mix-zero", off),
     ] {
-        let p = r.packed();
+        let p = r.packed(0.0);
         let mut cpu = img.clone();
         lumit_core::fx::cpu::ripple(&mut cpu, w, h, &p);
         let out = fx.ripple(&ctx, &tex, w, h, None, &op_of(r));
@@ -10438,7 +10438,7 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
         v
     };
     let op_of = |v: WaveWarp| {
-        let p = v.packed();
+        let p = v.packed(0.0);
         WaveWarpOp {
             dir: p.dir,
             perp: p.perp,
@@ -10493,7 +10493,7 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
     cases.push(("mix-zero".to_owned(), off));
 
     for (name, v) in &cases {
-        let p = v.packed();
+        let p = v.packed(0.0);
         let mut cpu = img.clone();
         lumit_core::fx::cpu::wave_warp(&mut cpu, w, h, &p);
         let out = fx.wave_warp(&ctx, &tex, w, h, None, &op_of(*v));
@@ -10609,6 +10609,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
             pts: p.pts,
             steps: p.steps,
             mix: p.mix,
+            frame: p.frame,
         }
     };
     for (name, b) in [
@@ -14684,6 +14685,7 @@ fn the_matte_scales_the_bezier_warp_bend() {
         pts: p.pts,
         steps: p.steps,
         mix: p.mix,
+        frame: p.frame,
     };
     check_matte_claim(
         &ctx,
@@ -14813,7 +14815,7 @@ fn the_matte_scales_the_ripple_height() {
     r.radius = 12.0;
     r.wave_height = 2.5;
     r.wave_width = 5.0;
-    let p = r.packed();
+    let p = r.packed(0.0);
     let op = RippleOp {
         centre: p.centre,
         radius: p.radius,
@@ -14854,7 +14856,7 @@ fn the_matte_scales_the_wave_warp_height() {
     let mut v = WaveWarp::read(Params::EMPTY);
     v.wave_height = 3.0;
     v.wave_width = 14.0;
-    let p = v.packed();
+    let p = v.packed(0.0);
     let op = WaveWarpOp {
         dir: p.dir,
         perp: p.perp,
@@ -16401,6 +16403,10 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
     broad.scale = 40.0;
     let mut tight = base;
     tight.scale = 4.0;
+    let mut digital = base;
+    digital.style = 1;
+    let mut streaks = base;
+    streaks.style = 2;
 
     for (name, mood, mix) in [
         ("default", base, 1.0f32),
@@ -16414,6 +16420,8 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
         ("drifted", drifted, 1.0),
         ("broad", broad, 1.0),
         ("tight", tight, 1.0),
+        ("digital", digital, 1.0),
+        ("streaks", streaks, 1.0),
         ("mixed", strong, 0.6),
         ("mix-zero", strong, 0.0),
     ] {
@@ -16429,6 +16437,7 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
             turbulent: p.field.turbulent,
             cycle: p.field.cycle,
             inv_scale: p.inv_scale,
+            block: p.block,
             z: p.z,
             intensity: p.intensity,
             light: p.light,
@@ -16513,6 +16522,7 @@ fn the_matte_scales_the_mood_lighting() {
         turbulent: p.field.turbulent,
         cycle: p.field.cycle,
         inv_scale: p.inv_scale,
+        block: p.block,
         z: p.z,
         intensity: p.intensity,
         light: p.light,

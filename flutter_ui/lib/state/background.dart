@@ -10,6 +10,7 @@
 
 import 'dart:ui' show AppExitType;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/strings.dart';
@@ -17,6 +18,10 @@ import 'window_backdrop.dart';
 import 'workspace.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
+
+/// The pointer is on the window's maximise button. On Windows the runner
+/// follows the pointer there, not Flutter (lib/shell/window_frame.dart).
+final ValueNotifier<bool> maximiseHovered = ValueNotifier<bool>(false);
 
 /// Tell the runner whether closing the window keeps Lumit running, and
 /// whether Lumit starts in the tray at sign-in. The runner writes or removes
@@ -57,6 +62,10 @@ void listenToRunner({required VoidCallback hidden}) {
         hidden();
       case 'backdrop':
         WindowBackdrop.refresh();
+      case 'maximiseHover':
+        maximiseHovered.value = true;
+      case 'maximiseLeave':
+        maximiseHovered.value = false;
     }
   });
 }

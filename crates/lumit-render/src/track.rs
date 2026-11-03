@@ -429,7 +429,17 @@ impl AnalysisKey {
         AnalysisKey(*h.finalize().as_bytes())
     }
 
-    fn file_name(&self) -> String {
+    /// This key for a run limited to the source seconds `a` to `b`.
+    fn within(self, a: f64, b: f64) -> Self {
+        let mut h = blake3::Hasher::new();
+        h.update(b"lumit-track/frames/");
+        h.update(&self.0);
+        h.update(&a.to_le_bytes());
+        h.update(&b.to_le_bytes());
+        AnalysisKey(*h.finalize().as_bytes())
+    }
+
+    pub(crate) fn file_name(&self) -> String {
         let mut name = String::with_capacity(68);
         for byte in self.0 {
             name.push_str(&format!("{byte:02x}"));
@@ -553,6 +563,23 @@ pub struct Job {
     /// `false` asks only for a cache hit: the warm pass a project open makes,
     /// which must never start tracking a clip nobody asked about.
     pub analyse: bool,
+    /// The source times to track, first and last, in seconds, or `None` for
+    /// the whole clip: the effect's Frames row. Set by [`Job::within`].
+    pub range: Option<(f64, f64)>,
+}
+
+impl Job {
+    /// This job limited to `range`, from [`lumit_core::planes::source_span`].
+    /// A limited run is another answer, so it is filed under another name, and
+    /// All frames keeps the name it always had.
+    #[must_use]
+    pub fn within(mut self, range: Option<(f64, f64)>) -> Self {
+        if let Some((a, b)) = range {
+            self.key = self.key.map(|k| k.within(a, b));
+        }
+        self.range = range;
+        self
+    }
 }
 
 /// How far an analysis has got. Read, never subscribed to — the interface
@@ -610,8 +637,9 @@ pub enum AnalysisError {
 pub struct Solved {
     /// The media's own rate, which the solved frame numbers count at.
     pub fps: f64,
-    /// How many frames the **clip** has, against which the solved span is a
-    /// whole answer or a partial one. See [`Solved::is_partial`].
+    /// How many frames the **clip** has, or the Frames row's span of it, against
+    /// which the solved span is a whole answer or a partial one. See
+    /// [`Solved::is_partial`].
     pub clip_frames: usize,
     pub first_frame: i64,
     pub last_frame: i64,
@@ -639,13 +667,13 @@ impl Solved {
     /// Whether the clip runs on past what was solved — a run that stopped at a
     /// tracking failure, or frames that stopped decoding.
     ///
-    /// The span is a prefix by construction: the job tracks the source from its
-    /// first frame and can only ever stop early, never start late. So the one
-    /// comparison below is the whole test, and there is no second range to keep
-    /// in step with this one.
+    /// The span starts where the job started, the clip's first frame or the
+    /// Frames row's, and can only ever stop early, never start late. So the one
+    /// count below is the whole test, and there is no second range to keep in
+    /// step with this one.
     #[must_use]
     pub fn is_partial(&self) -> bool {
-        self.last_frame + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX)
+        self.last_frame - self.first_frame + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX)
     }
 
     /// The converted pose at solved frame `frame`.
@@ -770,7 +798,7 @@ fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) -> Op
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
 /// from the future, a body that will not parse, or a key that is not the one
 /// asked for. Every refusal costs a re-analysis and nothing else.
-fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, Answer)> {
+pub(crate) fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, Answer)> {
     let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
     let record: Record = bincode::deserialize(body).ok()?;
     let clip_frames = usize::try_from(record.clip_frames).unwrap_or(usize::MAX);
@@ -792,7 +820,7 @@ fn write_sidecar(dir: &Path, key: AnalysisKey, fps: f64, clip_frames: usize, ans
 
 /// Where the sidecar lives. Overridable in tests, which must never write into
 /// the user's own cache folder — the shape [`crate::media_index`] uses.
-fn cache_dir() -> Option<PathBuf> {
+pub(crate) fn cache_dir() -> Option<PathBuf> {
     test_cache_dir().or_else(lumit_project::track_cache_dir)
 }
 
@@ -853,9 +881,9 @@ impl PlanarSolved {
     /// its arithmetic.
     #[must_use]
     pub fn is_partial(&self) -> bool {
-        self.track
-            .frame_range()
-            .is_some_and(|(_, last)| last + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX))
+        self.track.frame_range().is_some_and(|(first, last)| {
+            last - first + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX)
+        })
     }
 }
 
@@ -1254,6 +1282,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
                 masks: MaskTrack::default(),
                 open: Box::new(|| None),
                 analyse: false,
+                range: None,
             }));
             let LayerKind::Footage { item: media } = layer.kind else {
                 continue;
@@ -1286,17 +1315,23 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
             // are one analysis. One planar job per **effect instance**, because
             // two quads on one shot are two answers, so there is
             // nothing to deduplicate.
+            // Each limited by its own Frames row, so it asks for the name
+            // Analyse filed it under.
+            let span = |fx: Option<&EffectInstance>| {
+                fx.and_then(|fx| lumit_core::planes::source_span(fx, Some(layer), comp))
+            };
             if seen.insert(media) {
                 if let Some(job) = job_for(layer, path.clone(), fingerprint, false) {
-                    out.push(job);
+                    out.push(job.within(span(camera_track_effect(layer))));
                 }
             }
             // One per Track points instance, for the Planar track's reason.
             for fx in track_points_effects(layer) {
-                out.extend(points_job_for(layer, fx, path.clone(), fingerprint, false));
+                let job = points_job_for(layer, fx, path.clone(), fingerprint, false);
+                out.extend(job.map(|j| j.within(span(Some(fx)))));
             }
             if let Some(job) = planar_job_for(layer, path, fingerprint, false) {
-                out.push(job);
+                out.push(job.within(span(planar_track_effect(layer))));
             }
         }
     }
@@ -1373,7 +1408,7 @@ fn finish(media: Uuid, outcome: Option<Progress>) {
 
 /// The whole of one job, on the analysis thread: read the sidecar, and only if
 /// there is nothing there, track and solve.
-fn run(job: Job, cancel: &AtomicBool) {
+pub(crate) fn run(job: Job, cancel: &AtomicBool) {
     let media = job.media;
     let key = job.key;
     let kind = job.kind;
@@ -1451,7 +1486,8 @@ fn file(id: Uuid, kind: JobKind, fps: f64, clip_frames: usize, answer: Answer) -
 
 /// Put a solve in the store, converted.
 ///
-/// `clip_frames` is the **clip's** own length, which is what makes the solve
+/// `clip_frames` is the **clip's** own length, or the span the Frames row
+/// asked for, which is what makes the solve
 /// able to say whether it covers all of it ([`Solved::is_partial`]); it is not
 /// derivable from the poses, which describe only the span that was solved.
 ///
@@ -1770,12 +1806,18 @@ fn follow_points(
         max_blobs: MAX_BLOBS,
     });
 
+    // The answer stays the clip's length, which is what a layer's frame is
+    // looked up against, and the span is only how far the progress runs.
+    let (first, last) = frames_in(job.range, fps, total);
     let mut pushed = 0usize;
-    for n in 0..total {
+    for n in first..=last {
         if cancel.load(Ordering::Relaxed) {
             return Err(AnalysisError::Cancelled);
         }
-        report(Progress::Tracking { done: n, total });
+        report(Progress::Tracking {
+            done: n - first,
+            total: last - first + 1,
+        });
         let Some(luma) = frames.luma(n) else {
             break;
         };
@@ -1790,7 +1832,7 @@ fn follow_points(
     }
     report(Progress::Tracking {
         done: pushed,
-        total,
+        total: last - first + 1,
     });
 
     // The frames are numbered from nought, so a first frame always fits.
@@ -1916,6 +1958,14 @@ fn rescale(solve: &mut CameraSolve, scale: f64) {
 /// somebody has to defend.
 const MIN_CARRIED: usize = 8;
 
+/// The frames, first and last, of a `clip`-frame source at `fps` that a job's
+/// `range` of source seconds covers, picked as a layer picks the frame it
+/// shows. All of them without one.
+fn frames_in(range: Option<(f64, f64)>, fps: f64, clip: usize) -> (usize, usize) {
+    let pick = |t| lumit_core::pixels::frame_pick(t, fps, clip, false, None).0;
+    range.map_or((0, clip - 1), |(a, b)| (pick(a), pick(b)))
+}
+
 /// The decode-and-follow half: every frame of the clip through the tracker, one
 /// at a time, with the frame loop as the cancellation seam.
 ///
@@ -1924,7 +1974,7 @@ const MIN_CARRIED: usize = 8;
 /// tracks rather than about cameras.
 ///
 /// **It can stop before the end of the clip**, and the set it hands back then
-/// covers only the span that worked (`(fps, the clip's own frame count, the
+/// covers only the span that worked (`(fps, the span's frame count, the
 /// tracks, the scale they were measured at)`). Two things end a run early and they are reported the same way,
 /// because they mean the same thing to everything downstream: the frames stop
 /// arriving ([`LumaFrames::luma`] answering `None`), or the tracking itself
@@ -1938,11 +1988,15 @@ fn track_frames(
     report: &dyn Fn(Progress),
 ) -> Result<(f64, usize, lumit_track::TrackSet, f64), AnalysisError> {
     let mut frames = (job.open)().ok_or(AnalysisError::Unreadable)?;
-    let (total, width, height, fps) = frames.info();
-    if total == 0 || width == 0 || height == 0 || fps <= 0.0 || !fps.is_finite() {
+    let (clip, width, height, fps) = frames.info();
+    if clip == 0 || width == 0 || height == 0 || fps <= 0.0 || !fps.is_finite() {
         return Err(AnalysisError::NoFrames);
     }
     let (w, h) = (width as usize, height as usize);
+    // A limited run is a whole answer when it reaches the end of its span, so
+    // the span is the length the answer is measured against.
+    let (first, last) = frames_in(job.range, fps, clip);
+    let total = last - first + 1;
 
     let mut tracker = Tracker::new(job.settings.tracker());
     // A still mask is flattened once for the whole run; a keyed one is
@@ -1958,14 +2012,17 @@ fn track_frames(
     }
     let mut pushed = 0usize;
     let mut severed: Option<i64> = None;
-    for n in 0..total {
+    for n in first..=last {
         // The frame loop is the cancellation seam (docs/14 §1.4): one check per
         // frame, and the crate being driven owns no long uninterruptible run of
         // its own.
         if cancel.load(Ordering::Relaxed) {
             return Err(AnalysisError::Cancelled);
         }
-        report(Progress::Tracking { done: n, total });
+        report(Progress::Tracking {
+            done: n - first,
+            total,
+        });
         let Some(luma) = frames.luma(n) else {
             break;
         };
@@ -1980,7 +2037,7 @@ fn track_frames(
             .map_err(AnalysisError::Tracking)?;
         // Nothing carries into the first frame, so there is nothing to judge
         // until the second one.
-        if n > 0 && tracker.carried_count() < MIN_CARRIED {
+        if n > first && tracker.carried_count() < MIN_CARRIED {
             severed = Some(n as i64);
             break;
         }
@@ -2039,6 +2096,7 @@ pub fn job_for(
         masks,
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
         analyse,
+        range: None,
     })
 }
 
@@ -2178,6 +2236,7 @@ fn planar_job(layer: &Layer, open: OpenFrames, analyse: bool) -> Option<Job> {
         masks,
         open,
         analyse,
+        range: None,
     })
 }
 
@@ -2214,6 +2273,7 @@ pub fn points_job_for(
         masks: MaskTrack::default(),
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
         analyse,
+        range: None,
     })
 }
 
@@ -2239,6 +2299,7 @@ pub fn points_job_for_precomp(
         masks: MaskTrack::default(),
         open: comp_frames(doc, nested),
         analyse,
+        range: None,
     })
 }
 
@@ -2271,6 +2332,7 @@ pub fn job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Opt
             CompLuma::open(doc, nested).map(|s| Box::new(s) as Box<dyn LumaFrames>)
         }),
         analyse,
+        range: None,
     })
 }
 
@@ -2678,6 +2740,7 @@ mod tests {
             masks,
             open: Box::new(|| Some(Box::new(Shot::new()) as Box<dyn LumaFrames>)),
             analyse: true,
+            range: None,
         }
     }
 
@@ -3688,6 +3751,7 @@ mod tests {
             masks,
             open: Box::new(|| Some(Box::new(PlaneShot) as Box<dyn LumaFrames>)),
             analyse: true,
+            range: None,
         }
     }
 
@@ -3901,6 +3965,7 @@ mod tests {
             masks,
             open: Box::new(|| Some(Box::new(PatchShot) as Box<dyn LumaFrames>)),
             analyse: true,
+            range: None,
         }
     }
 

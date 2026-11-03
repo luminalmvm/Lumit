@@ -760,8 +760,10 @@ class _SubmenuRowState extends State<SubmenuRow> {
     if (_out) return;
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
-    // Beside the row, overlapping it slightly, the way a flyout sits.
-    final at = box.localToGlobal(Offset(box.size.width - 6, -4));
+    // Beside the row, overlapping it slightly, the way a flyout sits. Right
+    // to left it flies out of the row's left edge.
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final at = box.localToGlobal(Offset(rtl ? 6 : box.size.width - 6, -4));
     _out = true;
     showLumitPopup<void>(
       context: context,

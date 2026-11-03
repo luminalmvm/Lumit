@@ -3589,6 +3589,9 @@ pub struct BezierWarpParams {
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
 }
 
 /// The narrowest Jacobian determinant the patch inversion will divide by. Below
@@ -3680,14 +3683,18 @@ pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
 /// empty matte is the unmatted path to the byte.
 pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
-    let (fw, fh) = (w as f32, h as f32);
+    let [ox, oy, fw, fh] = if p.frame[2] > 0.0 {
+        p.frame
+    } else {
+        [0.0, 0.0, w as f32, h as f32]
+    };
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let mut u = px / fw;
-            let mut v = py / fh;
+            let mut u = (px - ox) / fw;
+            let mut v = (py - oy) / fh;
             for _ in 0..p.steps {
                 let (s, du, dv) = coons(&p.pts, u, v);
                 let fx = s[0] - px;
@@ -3709,8 +3716,8 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
             {
                 [0.0f32; 4]
             } else {
-                let mut sx = u * fw;
-                let mut sy = v * fh;
+                let mut sx = ox + u * fw;
+                let mut sy = oy + v * fh;
                 if (sx - px).abs() < BEZ_SNAP_PX && (sy - py).abs() < BEZ_SNAP_PX {
                     sx = px;
                     sy = py;
@@ -8543,8 +8550,11 @@ pub fn texturize_matted(
 pub struct MoodLightingParams {
     /// The light field's shape (§3.37's core), seed included.
     pub field: FractalField,
-    /// `1 ÷ pool size`, in raster pixels.
-    pub inv_scale: f32,
+    /// `1 ÷ pool size` across and down, in raster pixels.
+    pub inv_scale: [f32; 2],
+    /// Raster pixels a side of the square the field is read once for; 1 reads
+    /// it at every pixel.
+    pub block: u32,
     /// The field's depth coordinate: Drift ÷ 360.
     pub z: f32,
     /// Intensity ÷ 100.
@@ -8590,6 +8600,10 @@ pub fn mood_lighting_matted(
     p: &MoodLightingParams,
     matte: &[f32],
 ) {
+    // Each pixel reads the field at the centre of its block. A block of one is
+    // the pixel's own centre.
+    let b = p.block.max(1);
+    let half = b as f32 * 0.5;
     for y in 0..h {
         for x in 0..w {
             let i = (y as usize * w as usize + x as usize) * 4;
@@ -8598,8 +8612,8 @@ pub fn mood_lighting_matted(
             let contrast = matte_toward(p.contrast, 1.0, k);
             let n = fractal(
                 &p.field,
-                (x as f32 + 0.5) * p.inv_scale,
-                (y as f32 + 0.5) * p.inv_scale,
+                ((x / b * b) as f32 + half) * p.inv_scale[0],
+                ((y / b * b) as f32 + half) * p.inv_scale[1],
                 p.z,
             );
             // The field, spread to fill 0..1: a Perlin sum rarely reaches its

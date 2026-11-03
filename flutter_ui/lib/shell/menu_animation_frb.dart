@@ -510,19 +510,24 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
         ? null
         : () async {
             final path = await animationPresetOpenPicker();
-            if (path == null) return;
-            final String text;
-            try {
-              text = await readEffectPreset(path: path);
-            } catch (_) {
-              return;
-            }
-            asOneUndoStep(app.project, () {
-              try {
-                layer.loadPreset(text: text);
-              } catch (_) {}
-            });
-            app.notifyDocumentChanged();
+            if (path != null) await applyPresetFile(app, layer, path);
           },
   );
+}
+
+/// The preset at [path] onto [layer], as one undo step.
+Future<void> applyPresetFile(
+    LumitState app, LayerReference layer, String path) async {
+  final String text;
+  try {
+    text = await readEffectPreset(path: path);
+  } catch (_) {
+    return;
+  }
+  asOneUndoStep(app.project, () {
+    try {
+      layer.loadPreset(text: text);
+    } catch (_) {}
+  });
+  app.notifyDocumentChanged();
 }

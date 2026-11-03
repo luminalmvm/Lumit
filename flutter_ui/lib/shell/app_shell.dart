@@ -124,9 +124,7 @@ class LumitAppNew extends StatelessWidget {
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               wireStyle: uiState.workspace.interface.wireStyle,
-              child: Directionality(
-                textDirection: TextDirection.ltr,
-                child: LookFade(
+              child: LookFade(
                   workspace: uiState.workspace,
                   child: _RoomPicture(
                   child: ColoredBox(
@@ -156,7 +154,6 @@ class LumitAppNew extends StatelessWidget {
                 ),
                 ),
                 ),
-              ),
             ),
           ),
         ),
@@ -424,12 +421,12 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project, an extension package or a style double-clicked, or an invite
-  /// link clicked in a browser, while Lumit is running. On macOS all of them
-  /// come to this Lumit. Elsewhere a package or a style always does, and the
-  /// others when it is kept running in the background. They are opened as
-  /// File ▸ Open, the install window, Import style and the Shared project
-  /// window would.
+  /// A project, an extension package, a style, a preset or a theme
+  /// double-clicked, or an invite link clicked in a browser, while Lumit is
+  /// running. On macOS all of them come to this Lumit. Elsewhere all but a
+  /// project and a link always do, and those two when it is kept running in
+  /// the background. They are opened as File ▸ Open, the install window,
+  /// Import style, [openPresetOrTheme] and the Shared project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -444,6 +441,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (style != null) {
       importStyle(context, app, context.read<LumitUiState>(), style);
     }
+    openPresetOrTheme(app, context.read<LumitUiState>(), asked);
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }
@@ -570,6 +568,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       onLayoutChanged: uiState.saveLayout,
       activePanel: uiState.activePane,
       maximised: uiState.maximisedPane,
+      uiScale: uiState.workspace.interface.uiScale,
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
@@ -586,7 +585,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!rail) const LumitToolBarFrb(),
         Expanded(
           child: rail
-              ? Row(children: [
+              ? Row(textDirection: TextDirection.ltr, children: [
                   const LumitToolRailFrb(),
                   Expanded(child: dock),
                 ])
@@ -1416,3 +1415,24 @@ bool _pressedOnce(String action) =>
       'viewer.controls.toggle',
       'viewer.snap.grid.toggle',
     }.contains(action);
+
+/// A preset or a theme double-clicked, as Lumit starts or while it runs. The
+/// preset goes onto the selected layer as Apply animation preset puts it, and
+/// the theme is taken in and used as Settings' Import does.
+Future<void> openPresetOrTheme(
+    LumitState app, LumitUiState ui, List<String> asked) async {
+  final preset = presetPathFromArgs(asked);
+  if (preset != null) {
+    final layer = ui.selectedLayer.value;
+    if (layer == null) {
+      app.postNotice(l10n.selectALayer);
+    } else {
+      await applyPresetFile(app, layer, preset);
+    }
+  }
+  final theme = themePathFromArgs(asked);
+  if (theme != null) {
+    final refusal = await ui.workspace.importThemeFile(theme);
+    if (refusal != null) app.postNotice(refusal, error: true);
+  }
+}

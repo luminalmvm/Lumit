@@ -124,9 +124,7 @@ pub struct Conv<'a> {
     /// a layer with no source of its own (text, a shape, a null) draws at the
     /// composition's size, which is what it falls back to.
     pub(crate) size: (f64, f64),
-    /// The current layer's own span, in its own timebase. The two clock-reading
-    /// After Effects controls (Ripple's Wave Speed, Wave warp's) become
-    /// keyframes across it (docs/08 §3.53).
+    /// The current layer's own span, in its own timebase.
     pub(crate) span: (Rational, Rational),
     /// AE stacking index → Lumit layer id, so an effect parameter naming a
     /// layer (Set matte's, Displacement map's) resolves to the same id the

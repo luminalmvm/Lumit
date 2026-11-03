@@ -591,9 +591,9 @@ class _OptionsHeading extends StatelessWidget {
     return SizedBox(
       height: fxRowHeight(t),
       child: Padding(
-        padding: const EdgeInsets.only(left: fxKeyColumnWidth + 4),
+        padding: const EdgeInsetsDirectional.only(start: fxKeyColumnWidth + 4),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(t.kickerCase(label), style: t.kicker),
         ),
       ),
@@ -829,7 +829,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           if ((widget.graphColours?.length ?? 0) > 1)
             for (final colour in widget.graphColours!)
               Padding(
-                padding: const EdgeInsets.only(left: 3),
+                padding: const EdgeInsetsDirectional.only(start: 3),
                 child: Container(
                   width: 5,
                   height: 5,
@@ -1085,7 +1085,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ];
     final exact = PickedColour(rgb[0], rgb[1], rgb[2]);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: ColourSwatchButton(
         key: ValueKey<String>(
             '${widget.keyPrefix}-${group.axes.first.prop.name}'),

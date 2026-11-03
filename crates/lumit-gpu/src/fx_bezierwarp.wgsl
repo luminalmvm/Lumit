@@ -25,6 +25,7 @@ struct Params {
     steps: u32,          // Newton steps a pixel, 1..12
     matte_on: f32,       // 1 = the matte scales the bend from the straight frame
     _pad1: u32,
+    frame: vec4<f32>,    // where the frame sits on the raster: x, y, width, height
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -138,12 +139,14 @@ fn bezier_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let fw = f32(size.x);
-    let fh = f32(size.y);
+    let ox = p.frame.x;
+    let oy = p.frame.y;
+    let fw = p.frame.z;
+    let fh = p.frame.w;
     let px = f32(xy.x) + 0.5;
     let py = f32(xy.y) + 0.5;
-    var u = px / fw;
-    var v = py / fh;
+    var u = (px - ox) / fw;
+    var v = (py - oy) / fh;
     for (var i = 0u; i < p.steps; i = i + 1u) {
         let pt = coons(u, v);
         let fx = pt.s.x - px;
@@ -161,8 +164,8 @@ fn bezier_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
     let miss = max(abs(back.s.x - px), abs(back.s.y - py));
     var val = vec4<f32>(0.0, 0.0, 0.0, 0.0);
     if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0 && miss <= MAX_RESIDUAL_PX) {
-        var sx = u * fw;
-        var sy = v * fh;
+        var sx = ox + u * fw;
+        var sy = oy + v * fh;
         if (abs(sx - px) < SNAP_PX && abs(sy - py) < SNAP_PX) {
             sx = px;
             sy = py;

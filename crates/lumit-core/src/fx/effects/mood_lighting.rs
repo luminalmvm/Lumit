@@ -39,6 +39,12 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct MoodLighting {
+    /// The shape of the light. Amorphous is soft round pools, Digital the same
+    /// pools read once per square block, Streaks the pools stretched sideways
+    /// into long bands.
+    #[choice(options = ["Amorphous", "Digital", "Streaks"], default = 0)]
+    pub style: u32,
+
     /// Per cent: how far the light pulls the picture either side of neutral. 0
     /// is no light at all, which leaves Contrast working on its own. 100 is the
     /// lamp at full, and the effect is meant to be seen on the way in; turn it
@@ -100,8 +106,19 @@ impl MoodLighting {
     /// them forgotten. Scale arrives already scaled to the raster by its
     /// declared `Px` unit and leaves as a reciprocal, so the kernel divides by
     /// nothing.
+    ///
+    /// The styles are settled here too. Digital reads the field once per block
+    /// an eighth of a pool across. Streaks makes a pool four times as long and a
+    /// third as tall. Amorphous keeps a block of one pixel and the same scale
+    /// both ways, which is the arithmetic the effect had before it had styles.
     #[must_use]
     pub fn packed(self) -> cpu::MoodLightingParams {
+        let inv = 1.0 / self.scale.max(1.0);
+        let (inv_scale, block) = match self.style {
+            1 => ([inv, inv], (self.scale / 8.0).round().max(1.0) as u32),
+            2 => ([inv * 0.25, inv * 3.0], 1),
+            _ => ([inv, inv], 1),
+        };
         cpu::MoodLightingParams {
             field: noise::FractalField {
                 seed: self.seed,
@@ -112,7 +129,8 @@ impl MoodLighting {
                 turbulent: false,
                 cycle: 0,
             },
-            inv_scale: 1.0 / self.scale.max(1.0),
+            inv_scale,
+            block,
             z: self.drift / 360.0,
             intensity: (self.intensity / 100.0).max(0.0),
             light: [self.light[0], self.light[1], self.light[2]],

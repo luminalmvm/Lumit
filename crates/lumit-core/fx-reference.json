@@ -5227,7 +5227,7 @@
       "slug": "shake",
       "match_name": "shake",
       "label": "Shake",
-      "version": 2,
+      "version": 3,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -8254,7 +8254,7 @@
       "slug": "ripple",
       "match_name": "ripple",
       "label": "Ripple",
-      "version": 1,
+      "version": 2,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -8325,6 +8325,15 @@
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 45.0
+        },
+        {
+          "id": "wave_speed",
+          "label": "Wave speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
         },
         {
           "id": "mix",
@@ -8414,7 +8423,7 @@
       "slug": "wave-warp",
       "match_name": "wave_warp",
       "label": "Wave warp",
-      "version": 1,
+      "version": 2,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -8471,6 +8480,15 @@
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 45.0
+        },
+        {
+          "id": "wave_speed",
+          "label": "Wave speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
         },
         {
           "id": "pinning",
@@ -14791,6 +14809,19 @@
           "hard_min": 0.0
         },
         {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "analyse",
           "label": "Analyse",
           "kind": "action",
@@ -21059,6 +21090,19 @@
           "default": true
         },
         {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "show_points",
           "label": "Show points",
           "kind": "bool",
@@ -21257,6 +21301,19 @@
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         }
       ],
       "groups": [],
@@ -26678,6 +26735,19 @@
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
+        {
+          "id": "style",
+          "label": "Style",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Amorphous",
+            "Digital",
+            "Streaks"
+          ],
+          "dividers_after": []
+        },
         {
           "id": "intensity",
           "label": "Intensity",

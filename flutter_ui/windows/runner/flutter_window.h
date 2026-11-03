@@ -63,6 +63,10 @@ class FlutterWindow : public Win32Window {
   // Say |method| to Dart on |channel|, with no arguments.
   void Tell(const char* channel, const char* method);
 
+  // The pointer is on the maximise button, and was pressed there.
+  bool maximise_hover_ = false;
+  bool maximise_pressed_ = false;
+
   // Started at sign-in and not shown yet.
   bool start_hidden_ = false;
 

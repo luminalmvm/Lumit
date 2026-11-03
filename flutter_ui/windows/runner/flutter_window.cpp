@@ -90,6 +90,29 @@ std::wstring Utf16FromUtf8(const std::string& text) {
 constexpr UINT_PTR kShowAnywayTimer = 1;
 constexpr UINT kShowAnywayAfterMs = 10000;
 
+// A panel popped out into a window of its own is in one of the engine's
+// windows (lib/shell/pop_out.dart).
+constexpr wchar_t kPopOutClass[] = L"FLUTTER_HOST_WINDOW";
+constexpr UINT_PTR kCloseAgainTimer = 2;
+
+// Ask every popped-out panel's window to close, and say whether there was one.
+bool ClosePopOuts() {
+  bool any = false;
+  ::EnumThreadWindows(
+      ::GetCurrentThreadId(),
+      [](HWND window, LPARAM found) -> BOOL {
+        wchar_t name[32];
+        if (::GetClassName(window, name, 32) &&
+            wcscmp(name, kPopOutClass) == 0) {
+          ::PostMessage(window, WM_CLOSE, 0, 0);
+          *reinterpret_cast<bool*>(found) = true;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&any));
+  return any;
+}
+
 // The Start menu and a pinned taskbar button draw a shortcut's icon, not the
 // window's. So every shortcut that starts this executable is given |icon| as
 // its picture, or the executable's own when |icon| is empty.
@@ -181,8 +204,8 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package or a style goes to any Lumit that is open.
-  // Anything else only to one kept running in the background.
+  // An extension package, a style, a preset or a theme goes to any Lumit
+  // that is open. Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
         auto ends = [&argument](const char* ending) {
@@ -191,7 +214,8 @@ bool ForwardToOpenLumit() {
                  _stricmp(argument.c_str() + argument.size() - size, ending) ==
                      0;
         };
-        return ends(".lfx") || ends(".lumstyle");
+        return ends(".lfx") || ends(".lumstyle") || ends(".lumfx") ||
+               ends(".lumtheme");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
@@ -410,6 +434,16 @@ bool FlutterWindow::OnCreate() {
           ::ShowWindow(hwnd, SW_MINIMIZE);
         } else if (method == "maximise") {
           ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        } else if (method == "maximiseButton") {
+          // Where the button is, sent each time it moves.
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            maximise_button_ = {
+                static_cast<LONG>(IntArgument(*args, "left")),
+                static_cast<LONG>(IntArgument(*args, "top")),
+                static_cast<LONG>(IntArgument(*args, "right")),
+                static_cast<LONG>(IntArgument(*args, "bottom"))};
+          }
         } else if (method == "close") {
           ::PostMessage(hwnd, WM_CLOSE, 0, 0);
         } else if (method == "background") {
@@ -550,6 +584,15 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  // Flutter asks Dart before quitting only when this is the last window, so a
+  // popped-out panel's window would let Lumit quit without asking about
+  // unsaved work. Those close first, which docks their panels, and the close
+  // is tried again once they have gone.
+  if (message == WM_CLOSE && ClosePopOuts()) {
+    ::SetTimer(hwnd, kCloseAgainTimer, 50, nullptr);
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -562,6 +605,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_TIMER:
+      if (wparam == kCloseAgainTimer) {
+        ::KillTimer(hwnd, kCloseAgainTimer);
+        ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+        return 0;
+      }
       if (wparam == kShowAnywayTimer) {
         ::KillTimer(hwnd, kShowAnywayTimer);
         // Already up is the ordinary case: the first frame arrived and showed
@@ -576,6 +624,45 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // Over the maximise button the frame answers the hit test
+    // (win32_window.cpp), so the mouse comes here and not to Flutter. Flutter
+    // still draws the button and is told when to light it. The press is kept
+    // from Windows, which would draw a button of its own.
+    case WM_NCMOUSEMOVE:
+      if ((wparam == HTMAXBUTTON) != maximise_hover_) {
+        maximise_hover_ = !maximise_hover_;
+        maximise_pressed_ = false;
+        if (maximise_hover_) {
+          TRACKMOUSEEVENT track = {sizeof(track), TME_LEAVE | TME_NONCLIENT,
+                                   hwnd};
+          ::TrackMouseEvent(&track);
+        }
+        Tell("lumit/window",
+             maximise_hover_ ? "maximiseHover" : "maximiseLeave");
+      }
+      break;
+    case WM_NCMOUSELEAVE:
+      if (maximise_hover_) {
+        maximise_hover_ = maximise_pressed_ = false;
+        Tell("lumit/window", "maximiseLeave");
+      }
+      break;
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+      if (wparam == HTMAXBUTTON) {
+        maximise_pressed_ = true;
+        return 0;
+      }
+      break;
+    case WM_NCLBUTTONUP:
+      if (wparam == HTMAXBUTTON) {
+        if (maximise_pressed_) {
+          maximise_pressed_ = false;
+          ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        }
+        return 0;
+      }
       break;
     // The window's own surface shows wherever Flutter's room is clear, so
     // under a see-through window it is painted clear: black, over a stretched

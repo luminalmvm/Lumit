@@ -84,6 +84,7 @@ import 'layer_fold_frb.dart'
         clipFoldPrefix,
         effectPath,
         groupFoldPrefix,
+        inputsPath,
         stylePath,
         transformGroupPath,
         transformPath;
@@ -1241,6 +1242,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
+                    // A placed node graph's Inputs, above the stack because
+                    // they make the picture the effects then process.
+                    if (info.graphInputs?.derivedParams.isNotEmpty ?? false)
+                      _effectCard(context, ui, comp, layer, info, 0,
+                          layersRead: layersRead, inputs: true),
                     if (info.effects.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1324,7 +1330,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggle(storageKey),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+            padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 10, 2),
             child: Row(
               children: [
                 TwirlTurn(
@@ -1446,6 +1452,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selection — Copy, Paste, Delete and the reorder all act on the stack, and
   /// nine fixed slots can do none of the four — so it is drawn unpicked and its
   /// heading only twirls.
+  ///
+  /// With `inputs` set it draws a placed graph's **Inputs** the same way, and
+  /// `index` is not read: there is only one.
   Widget _effectCard(
     BuildContext context,
     LumitUiState ui,
@@ -1455,10 +1464,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     int index, {
     required List<Object?> layersRead,
     bool style = false,
+    bool inputs = false,
   }) {
     final playhead = ui.playheadFrame.value;
-    final fx = style ? info.styles[index] : info.effects[index];
-    final graphName = _graphNameOf(context, fx);
+    final fx = inputs
+        ? info.graphInputs!
+        : style
+            ? info.styles[index]
+            : info.effects[index];
+    // The Inputs card is headed Inputs: the graph's own name is the layer's.
+    final graphName = inputs ? l10n.foldInputs : _graphNameOf(context, fx);
+    // Neither a style nor the Inputs takes part in the effect selection.
+    final fixed = style || inputs;
     final open = _isOpen('fx-${fx.id}');
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
@@ -1466,7 +1483,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
     // An LFX effect with a page of its own, which the heading opens.
     final interface =
-        !style && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
+        !fixed && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
     return _SameCard(
       key: ValueKey<String>('fx-card-${style ? 'style-' : ''}${fx.id}'),
       // Everything the card draws from. Read [_SameCard] before adding to the
@@ -1493,6 +1510,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         open,
         renaming,
         style,
+        inputs,
         interface,
         playhead,
         _actionPressed,
@@ -1517,13 +1535,14 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         info: fx,
         graphName: graphName,
         style: style,
+        inputs: inputs,
         open: open,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
         // The selection this heading follows, rather than an answer read here
         // and handed down: a pick recolours the heading and rebuilds nothing
         // above it. A style takes no part in the effect selection, so its
         // heading only twirls.
-        pick: style
+        pick: fixed
             ? null
             : FxPick(
                 selection: ui.pickedEffects,
@@ -1553,9 +1572,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         },
         // Escape: close the editor, write nothing.
         onRenameCancelled: () => setState(() => _renamingEffect = null),
-        onStartRename: () => setState(() => _renamingEffect = fx.id),
+        onStartRename:
+            inputs ? null : () => setState(() => _renamingEffect = fx.id),
         onSelect: () {
-          if (style) return;
+          if (fixed) return;
           // The run a Shift-click reaches over is read at the click. A card is
           // not rebuilt when a neighbour is removed, so an order held from the
           // last build could name an effect that has gone.
@@ -1590,15 +1610,15 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         onWrite: (id, param, value) {
           _effects.write(layer, id, param, value);
           ui.model.refresh();
-          if (!style) pickForPoint(ui, layer, fx, param);
+          if (!fixed) pickForPoint(ui, layer, fx, param);
         },
         onWritePair: (id, values) {
           _effects.writeAll(layer, id, values);
           ui.model.refresh();
-          if (!style) pickForPoint(ui, layer, fx, values.keys.first);
+          if (!fixed) pickForPoint(ui, layer, fx, values.keys.first);
         },
         onLive: (id, param, value) {
-          if (!style) pickForPoint(ui, layer, fx, param);
+          if (!fixed) pickForPoint(ui, layer, fx, param);
           setState(() {
             _effects.live(comp, layer, id, param, value,
                 frame: ui.playheadFrame.value, scale: ui.viewerScale);
@@ -2071,6 +2091,11 @@ class _EffectSection extends StatelessWidget {
   /// paste, none of which nine fixed slots in a pinned order can perform.
   final bool style;
 
+  /// This card is a placed graph's **Inputs** (docs/impl/node-graph-comp.md
+  /// §5.3). The layer carries exactly one and the graph reads it whatever its
+  /// switch says, so the card is its rows, Reset and nothing else.
+  final bool inputs;
+
   /// This card sits on a **group header's** stack
   /// (docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
   /// third arm. Every command still goes through [layer] (the group's first
@@ -2167,6 +2192,7 @@ class _EffectSection extends StatelessWidget {
     this.points = const {},
     required this.stagedValue,
     this.style = false,
+    this.inputs = false,
     this.group,
     this.clip,
     required this.layer,
@@ -2208,7 +2234,7 @@ class _EffectSection extends StatelessWidget {
     // stack's, and a style has no place in it. So this card's own instance is
     // the whole answer — and a group header's card takes the same
     // road for the same reason.
-    if (style || group != null || clip != null) {
+    if (style || inputs || group != null || clip != null) {
       return [
         for (final candidate in _instances())
           if (candidate.id() == info.id) candidate,
@@ -2223,8 +2249,8 @@ class _EffectSection extends StatelessWidget {
     ];
   }
 
-  /// The list this card's instance is on — a group header's stack,
-  /// the layer's style list, or its effect stack. Written back
+  /// The list this card's instance is on — a group header's stack, a placed
+  /// graph's Inputs, the layer's style list, or its effect stack. Written back
   /// through `setEffects` either way: the engine routes a staged list to the
   /// list its ids name.
   List<BridgeEffectInstance> _instances() {
@@ -2233,6 +2259,7 @@ class _EffectSection extends StatelessWidget {
     }
     return switch (group) {
       final g? => comp.getGroupEffects(group: g),
+      null when inputs => graphInputsOf(layer),
       null => style ? layer.getStyles() : layer.getEffects(),
     };
   }
@@ -2326,8 +2353,13 @@ class _EffectSection extends StatelessWidget {
   /// under the match name because it never changes; the derived half rides the
   /// read model beside the values, because it is a fact about the instance and
   /// a fetch per card per rebuild is the traffic the budget test forbids.
+  /// The Inputs are only the graph's own rows: the declared Open graph, Mix
+  /// and Matte do nothing on a layer that places it.
   List<BridgeParamInfo> get _rows => relistedRows(
-        [...cachedListParameters(info.name), ...info.derivedParams],
+        [
+          if (!inputs) ...cachedListParameters(info.name),
+          ...info.derivedParams,
+        ],
         info.rowOptions,
       );
 
@@ -2369,13 +2401,15 @@ class _EffectSection extends StatelessWidget {
     final owner = layer.internallayerId.toString();
     final base = named == null
         ? ''
-        : style
-            ? stylePath(owner, '$id')
-            : group != null
-                ? effectPath(groupFoldPrefix(group!), '$id')
-                : clip != null
-                    ? effectPath(clipFoldPrefix(clip!), '$id')
-                    : effectPath(owner, '$id');
+        : inputs
+            ? inputsPath(owner)
+            : style
+                ? stylePath(owner, '$id')
+                : group != null
+                    ? effectPath(groupFoldPrefix(group!), '$id')
+                    : clip != null
+                        ? effectPath(clipFoldPrefix(clip!), '$id')
+                        : effectPath(owner, '$id');
 
     // The effect's own display, read at `at` — the Levels histogram traces the
     // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
@@ -2421,7 +2455,7 @@ class _EffectSection extends StatelessWidget {
               field0: BridgeScalar_Keyframed(:final field0)))
             ...field0,
       ],
-      leading: LumitTooltip(
+      leading: inputs ? null : LumitTooltip(
         message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
         // **A target you can hit** (owner, desk test). The checkbox's own 14px
         // box is what a settings page wants; here it is the control reached
@@ -2471,7 +2505,7 @@ class _EffectSection extends StatelessWidget {
       // owner asked for.
       // A style is not draggable: its place in the list is Photoshop's, not
       // the user's (docs/impl/layer-styles.md §2).
-      dragKey: style ? null : '$id',
+      dragKey: style || inputs ? null : '$id',
       landsBelow: _landsBelow,
       onDropped: (from) {
         final stack = _instances();
@@ -2490,8 +2524,8 @@ class _EffectSection extends StatelessWidget {
       // time — read constantly while a comp is being made faster — earns that
       // space instead. Nothing is lost: the menu moves an effect a step, and
       // to either end.
-      onContextMenu: (at) => _stackMenu(context, at),
-      trailing: _markButton(
+      onContextMenu: inputs ? null : (at) => _stackMenu(context, at),
+      trailing: inputs ? null : _markButton(
         context,
         mark: '×',
         tip: l10n.tipRemove,

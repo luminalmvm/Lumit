@@ -447,7 +447,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         );
 
   Widget _depthRow(LumitTheme t) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: HouseCheckbox(
           key: const ValueKey('camera-dof'),
           value: _depthOfField,
@@ -456,7 +456,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
       );
 
   Widget _lockRow(LumitTheme t) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: HouseCheckbox(
           key: const ValueKey('camera-lock'),
           value: _lockToZoom,
@@ -516,7 +516,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
 
   /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: Text(
           l10n.animated,
           key: ValueKey<String>('camera-$id-animated'),
@@ -554,7 +554,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),

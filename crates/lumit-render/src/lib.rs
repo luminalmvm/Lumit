@@ -86,6 +86,7 @@ pub mod proxy;
 pub mod puppet;
 pub mod realise;
 pub mod roto;
+pub mod sent;
 mod sidecar;
 pub mod source;
 pub mod standin;

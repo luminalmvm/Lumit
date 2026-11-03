@@ -381,7 +381,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
               ? null
               : (d) => _groupMenu(d.globalPosition, library),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
+            padding: EdgeInsetsDirectional.fromSTEB(
                 4 + depth * _indent, depth == 0 ? 6 : 2, 10, 2),
             child: Row(
               children: [
@@ -482,8 +482,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                               movePreset(path: preset.path, group: group));
                         },
                         child: Padding(
-                          padding: EdgeInsets.only(
-                              left: '/'.allMatches(group).length * _indent),
+                          padding: EdgeInsetsDirectional.only(
+                              start: '/'.allMatches(group).length * _indent),
                           child: Text(
                               group.isEmpty
                                   ? l10n.savedPresets
@@ -770,9 +770,9 @@ Widget _libraryRow(
                 behavior: HitTestBehavior.opaque,
                 onDoubleTap: onApply,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsetsDirectional.only(end: 6),
                     child: Text(label,
                         style: t.body, overflow: TextOverflow.ellipsis),
                   ),
@@ -847,7 +847,7 @@ class _PresetRow extends StatelessWidget {
         onSecondaryTapDown:
             onMenu == null ? null : (d) => onMenu!(d.globalPosition),
         child: Padding(
-          padding: EdgeInsets.only(left: indent),
+          padding: EdgeInsetsDirectional.only(start: indent),
           child: _libraryRow(
             context,
             label: preset.name,

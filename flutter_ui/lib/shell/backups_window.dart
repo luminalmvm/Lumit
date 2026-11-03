@@ -447,7 +447,7 @@ class _CardState extends State<_Card> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 10, 0, 0),
+                  padding: const EdgeInsetsDirectional.fromSTEB(4, 10, 0, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

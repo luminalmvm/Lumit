@@ -83,6 +83,9 @@ pub struct CameraTrack {
     /// tracked layer is almost always drawn round the thing that moves.
     #[toggle(default = true, label = "Use masks")]
     pub use_masks: bool,
+    /// Which frames Analyse tracks - see [`crate::planes::FRAMES_OPTIONS`].
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
     /// Whether the solved point cloud draws over the picture on this layer.
     /// On after a solve.
     #[toggle(default = true, label = "Show points")]
