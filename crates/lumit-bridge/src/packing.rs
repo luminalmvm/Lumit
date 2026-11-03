@@ -136,10 +136,15 @@ pub(crate) fn sources(doc: &Document, project_dir: &Path, all: bool) -> Vec<Pack
         let ProjectItem::Footage(f) = item else {
             return None;
         };
-        Some(PackSource {
-            item: f.id,
-            files: run_files(file(f.id, &f.media)?, f.sequence.is_some()),
-        })
+        let first = file(f.id, &f.media)?;
+        // A 3D model travels with its .bin, pictures and .mtl.
+        let files = if lumit_scene::is_model(&first) {
+            let rest = lumit_scene::dependants(&first);
+            std::iter::once(first).chain(rest).collect()
+        } else {
+            run_files(first, f.sequence.is_some())
+        };
+        Some(PackSource { item: f.id, files })
     });
     let proxies = doc.proxies.iter().filter_map(|(item, proxy)| {
         let id = packed_id(*item);

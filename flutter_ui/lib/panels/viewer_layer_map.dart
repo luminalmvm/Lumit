@@ -245,16 +245,16 @@ class ViewerLayerMap {
           _turns.$3.abs() > 1e-9 ||
           depth?.outside != null);
 
-  /// Where the layer point ([x], [y]) is in its parent's space, depth and
-  /// all: the compositor's T · O · Ry · Rx · Rz · S · T(-anchor), worked
+  /// Where the layer point ([x], [y], [z]) is in its parent's space, depth
+  /// and all: the compositor's T · O · Ry · Rx · Rz · S · T(-anchor), worked
   /// through by hand, with O the turn outside the rotations, and Rx · Ry · Rz
   /// on a layer turning in After Effects' order. A 2D layer's is at depth 0.
-  (double, double, double) inParent(double x, double y) {
+  (double, double, double) inParent(double x, double y, [double z = 0]) {
     final (sinX, cosX, sinY, cosY) = _turns;
     final dx = (x - ax) * sx;
     final dy = (y - ay) * sy;
     // Anchor Z pushes the flat picture back along its own z.
-    final dz = -(depth?.anchorZ ?? 0) * (depth?.scaleZ ?? 100) / 100;
+    final dz = (z - (depth?.anchorZ ?? 0)) * (depth?.scaleZ ?? 100) / 100;
     final zx = dx * cos - dy * sin;
     final zy = dx * sin + dy * cos;
     (double, double, double) v;

@@ -1232,7 +1232,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
       for (final reply in all)
         if (reply.parent == top.id)
           Padding(
-            padding: const EdgeInsets.only(left: 14),
+            padding: const EdgeInsetsDirectional.only(start: 14),
             child: ReviewCommentRow(
               key: ValueKey<String>('review-comment-${reply.id}'),
               review: review,
@@ -1245,7 +1245,7 @@ class _ReviewWindowState extends State<_ReviewWindow> {
           ),
       if (_replyTo == top.id)
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 0, 8),
+          padding: const EdgeInsetsDirectional.fromSTEB(14, 0, 0, 8),
           child: SizedBox(
             height: dialogControlHeight,
             child: HouseTextField(

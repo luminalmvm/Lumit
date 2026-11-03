@@ -11,6 +11,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
 | **Interpretation** | How a footage item's file is read: its alpha, frame rate, fields, pixel aspect ratio, loop and colour. Kept on the item. The verb is **interpret** |
+| **3D model** | A footage item pointing at a glTF, GLB, FBX or OBJ file: meshes, materials and pictures. Never just *model*, which a **Model pack** holds |
 | **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A file arrives with all of them mixed on one layer or clip unless Settings says otherwise. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
@@ -39,6 +40,7 @@ composites over it.
 | **Audio layer** | An audio item, or footage's audio |
 | **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
+| **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100% |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the

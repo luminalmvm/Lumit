@@ -332,6 +332,7 @@ class ViewerStage extends StatelessWidget {
       final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
+      final cube = uiState.layerBounds.modelBoxOf(entry, revision: revision);
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
@@ -385,13 +386,16 @@ class ViewerStage extends StatelessWidget {
             (map.projected &&
                 tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
-        // A light is a place, with nothing to scale or turn on the picture.
+        // A light is a place, with nothing to scale or turn on the picture,
+        // and a model's box has no flat side for the handles.
         scalable: !light &&
+            cube == null &&
             isStill(tf.scaleX) &&
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
         marker: light,
+        cube: cube,
         transform: tf,
         // The path a keyed position follows, for the layers whose outline is
         // drawn: asked once per layer per document revision and held. A 3D

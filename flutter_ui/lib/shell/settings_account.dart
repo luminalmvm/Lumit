@@ -824,7 +824,7 @@ class _FriendsState extends State<_Friends> {
         child: SizedBox(
           height: settingsRowHeight,
           child: Align(
-            alignment: Alignment.centerLeft,
+            alignment: AlignmentDirectional.centerStart,
             child: HouseButton(
               key: const ValueKey('settings-friends-fold'),
               frameless: true,

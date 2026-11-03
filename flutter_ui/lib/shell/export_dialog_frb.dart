@@ -1096,7 +1096,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         // already says it is global. The extra 12 is the groups' own inner
         // inset, so Preset's label and controls share the exact left edges
         // of every row below it.
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
             dialogPadding + 12, exportPresetStripGap, dialogPadding, 0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1746,7 +1746,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             const SizedBox(width: 8),
             Flexible(
               child: Align(
-                alignment: Alignment.centerRight,
+                alignment: AlignmentDirectional.centerEnd,
                 child: Text(
                   l10n.exportFinalSize('$width', '$height'),
                   key: const ValueKey('export-final-size'),
@@ -2274,7 +2274,7 @@ class _ExportDialogState extends State<_ExportDialog> {
           ValueChanged<int> set, int limit) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
         Padding(
-          padding: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsetsDirectional.only(end: 4),
           child: Text(mark,
               style: dialogMono(t)
                   .copyWith(color: _picture ? null : t.textDisabled)),
@@ -2307,7 +2307,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       Container(
         key: key,
         height: dialogControlHeight,
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: t.surface0,
@@ -2457,15 +2457,15 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A factual line under a group's rows, in the label column's own indent.
   Widget _reading(LumitTheme t, String text, {Key? key}) => Padding(
-        padding: const EdgeInsets.only(
-            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        padding: const EdgeInsetsDirectional.only(
+            start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: dialogMono(t)),
       );
 
   /// A line the user has to act on, where a reading would go.
   Widget _warning(LumitTheme t, String text, {Key? key}) => Padding(
-        padding: const EdgeInsets.only(
-            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        padding: const EdgeInsetsDirectional.only(
+            start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: t.small),
       );
 
@@ -2480,7 +2480,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _setFormat(_formats.firstWhere((f) => f.type == type)),
         child: Container(
-          margin: const EdgeInsets.only(right: dialogTabGap),
+          margin: const EdgeInsetsDirectional.only(end: dialogTabGap),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),

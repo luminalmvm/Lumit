@@ -325,7 +325,7 @@ class _BackupMarkState extends State<BackupMark> {
           }
           return widget.wrap(
             Padding(
-              padding: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsetsDirectional.only(start: 2),
               child: LumitTooltip(
                 message: words,
                 child: HouseButton(
@@ -1750,8 +1750,8 @@ class _HistoryState extends State<_History> {
       children: [
         Container(
           height: _listHeadHeight,
-          padding: const EdgeInsets.only(left: _railAt * 2, right: 14),
-          alignment: Alignment.centerLeft,
+          padding: const EdgeInsetsDirectional.only(start: _railAt * 2, end: 14),
+          alignment: AlignmentDirectional.centerStart,
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: t.hairline)),
           ),
@@ -1832,7 +1832,7 @@ class _HistoryState extends State<_History> {
                       if (rows.isEmpty)
                         Padding(
                           padding:
-                              const EdgeInsets.fromLTRB(_railAt * 2, 14, 14, 6),
+                              const EdgeInsetsDirectional.fromSTEB(_railAt * 2, 14, 14, 6),
                           child: Text(l10n.backupNoNamed,
                               style: t.body.copyWith(color: t.textSecondary)),
                         ),
@@ -1849,7 +1849,7 @@ class _HistoryState extends State<_History> {
         // it is showing and however far it has been scrolled. The rule is
         // there for whoever stops on it.
         Container(
-          padding: const EdgeInsets.fromLTRB(_railAt * 2, 8, 14, 9),
+          padding: const EdgeInsetsDirectional.fromSTEB(_railAt * 2, 8, 14, 9),
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: t.hairline)),
           ),
@@ -1892,8 +1892,8 @@ class _HistoryState extends State<_History> {
             right: 0,
             height: _dayHeight + 1,
             child: Container(
-              padding: const EdgeInsets.only(left: _railAt * 2, top: 1),
-              alignment: Alignment.centerLeft,
+              padding: const EdgeInsetsDirectional.only(start: _railAt * 2, top: 1),
+              alignment: AlignmentDirectional.centerStart,
               decoration: BoxDecoration(
                 color: t.surface1,
                 // Ruled off once rows are passing under it.

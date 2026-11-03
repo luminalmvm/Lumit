@@ -447,6 +447,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_crop::Crop,
     &crate::gpufx_film::Film,
     &crate::gpufx_luma_fade::LumaFadeFx,
+    &crate::gpufx_srgb_curve::SrgbCurveFx,
     &crate::gpufx_timewarp::TimewarpFx,
     &RadialWipe,
     &VenetianBlinds,
@@ -1765,7 +1766,7 @@ impl GpuEffect for CornerPin {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let c = effects::corner_pin::CornerPin::read(p).packed();
+        let c = effects::corner_pin::CornerPin::packed_in(p, w, h);
         fx.corner_pin(
             ctx,
             tex,
@@ -1920,7 +1921,8 @@ impl GpuEffect for Ripple {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let r = effects::ripple::Ripple::read(p).packed();
+        let travel = p.float(effects::ripple::Ripple::DERIVED_TRAVEL, 0.0);
+        let r = effects::ripple::Ripple::read(p).packed(travel);
         fx.ripple(
             ctx,
             tex,
@@ -1956,7 +1958,8 @@ impl GpuEffect for WaveWarp {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let v = effects::wave_warp::WaveWarp::read(p).packed();
+        let travel = p.float(effects::wave_warp::WaveWarp::DERIVED_TRAVEL, 0.0);
+        let v = effects::wave_warp::WaveWarp::read(p).packed(travel);
         fx.wave_warp(
             ctx,
             tex,
@@ -1993,7 +1996,7 @@ impl GpuEffect for BezierWarp {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let b = effects::bezier_warp::BezierWarp::read(p).packed();
+        let b = effects::bezier_warp::BezierWarp::packed_in(p);
         fx.bezier_warp(
             ctx,
             tex,
@@ -2004,6 +2007,7 @@ impl GpuEffect for BezierWarp {
                 pts: b.pts,
                 steps: b.steps,
                 mix: b.mix,
+                frame: b.frame,
             },
         )
     }
@@ -4278,6 +4282,7 @@ impl GpuEffect for MoodLighting {
                 turbulent: m.field.turbulent,
                 cycle: m.field.cycle,
                 inv_scale: m.inv_scale,
+                block: m.block,
                 z: m.z,
                 intensity: m.intensity,
                 light: m.light,

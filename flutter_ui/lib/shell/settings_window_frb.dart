@@ -666,10 +666,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     duration: ThemeScope.of(context).motion.mark.duration,
                     curve: ThemeScope.of(context).motion.mark.curve,
                     height: settingsNavRow,
-                    alignment: Alignment.centerLeft,
-                    padding: EdgeInsets.only(
-                        left: _marked(page) ? 14 - settingsNavTick : 14,
-                        right: 14),
+                    alignment: AlignmentDirectional.centerStart,
+                    padding: EdgeInsetsDirectional.only(
+                        start: _marked(page) ? 14 - settingsNavTick : 14,
+                        end: 14),
                     decoration: BoxDecoration(
                       color: _marked(page) ? t.surface2 : null,
                       // The tick, not a fill: the page in force is marked by
@@ -769,7 +769,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                       height: settingsNavRow,
                       padding: const EdgeInsets.symmetric(
                           horizontal: settingsRowPadding),
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(page.label, style: t.bodyPrimary),
                     ),
                   ),
@@ -788,7 +788,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         thumbVisibility: true,
         trackVisibility: true,
         thickness: _gutterThickness,
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
         // than a lazy list's guess, and without the app's own second scrollbar.
@@ -835,9 +835,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // pages the way it always did, and above the thumb, whose drag it
       // reproduces exactly (the ratio below is the one the thumb is drawn
       // with).
-      Positioned(
+      PositionedDirectional(
         key: const ValueKey('settings-gutter'),
-        right: _gutterInset,
+        end: _gutterInset,
         top: _gutterEnds,
         bottom: _gutterEnds,
         // As wide as the bar at its widest, under the pointer.
@@ -2033,26 +2033,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Future<void> _importTheme(LumitUiState ui) async {
     final path = await pickThemeToOpen();
     if (path == null) return;
-    String text;
-    try {
-      text = await File(path).readAsString();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _themeMessage = l10n.keymapFileUnreadable);
-      }
-      return;
-    }
-    final file = path.split(RegExp(r'[\\/]')).last;
-    final read = readThemeFile(text,
-        name: file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file);
-    if (!mounted) return;
-    final theme = read.theme;
-    if (theme == null) {
-      setState(() => _themeMessage = read.refusal);
-      return;
-    }
-    ui.workspace.importCustomTheme(theme);
-    setState(() => _themeMessage = null);
+    final refusal = await ui.workspace.importThemeFile(path);
+    if (mounted) setState(() => _themeMessage = refusal);
   }
 
   /// Write the theme in use out as a file. Offered from a built-in scheme too:
@@ -2968,7 +2950,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: HouseButton(
         key: ValueKey<String>('settings-addon-licence-${addon.id}'),
         small: true,
@@ -4187,7 +4169,7 @@ class _ChordCellState extends State<_ChordCell> {
       children: [
         if (_refusal != null)
           Padding(
-            padding: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsetsDirectional.only(end: 6),
             child: Text(_refusal!, style: t.small.copyWith(color: t.error)),
           ),
         GestureDetector(

@@ -223,6 +223,30 @@
   "@lightSettings": {
     "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
   },
+  "modelSettings": "Model settings",
+  "@modelSettings": {
+    "description": "Layer menu item, and the title of the window it opens: how a 3D model sits in its Model layer. The window also opens when a 3D model is dropped into a comp."
+  },
+  "modelUpAxis": "Up axis",
+  "@modelUpAxis": {
+    "description": "Model settings row: which of the 3D model file's axes points up, Y or Z."
+  },
+  "modelFitToComp": "Fit to comp",
+  "@modelFitToComp": {
+    "description": "Model settings row, a checkbox: size the 3D model to fill the composition and centre it."
+  },
+  "modelUnits": "Units",
+  "@modelUnits": {
+    "description": "Model settings row: how big the 3D model is, as comp pixels for each metre of the model."
+  },
+  "modelPixelsPerMetre": "px per metre",
+  "@modelPixelsPerMetre": {
+    "description": "Unit after the Units number in Model settings: comp pixels for each metre of the 3D model."
+  },
+  "keyLightName": "Key light",
+  "@keyLightName": {
+    "description": "The name of the light a first 3D model dropped into a composition with no lights brings with it, the main light that shows the model's shape. Beside it comes an Ambient light."
+  },
   "lightLayerName": "{kind} light",
   "@lightLayerName": {
     "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",
@@ -519,6 +543,10 @@
   "foldPuppet": "Puppet",
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."
+  },
+  "foldInputs": "Inputs",
+  "@foldInputs": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the Inputs of the node graph the layer places."
   },
   "foldStyles": "Styles",
   "@foldStyles": {
@@ -1271,6 +1299,18 @@
   "fxSrgb": "sRGB",
   "@fxSrgb": {
     "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
+  },
+  "fxSrgbCurve": "sRGB curve",
+  "@fxSrgbCurve": {
+    "description": "Effect name in the Add effect menu — puts the picture onto the sRGB curve, or takes it back off, so a grade made on the encoded picture sees the numbers it was made on."
+  },
+  "fxLinearToSrgb": "Linear to sRGB",
+  "@fxLinearToSrgb": {
+    "description": "Effect controls — a Direction option on sRGB curve: from linear light onto the sRGB curve."
+  },
+  "fxSrgbToLinear": "sRGB to linear",
+  "@fxSrgbToLinear": {
+    "description": "Effect controls — a Direction option on sRGB curve: from the sRGB curve back to linear light."
   },
   "fxStar": "Star",
   "@fxStar": {
@@ -12025,6 +12065,10 @@
   "@fxWaveHeight": {
     "description": "Effect controls — a control on Ripple and on Wave warp."
   },
+  "fxWaveSpeed": "Wave speed",
+  "@fxWaveSpeed": {
+    "description": "Effect controls: a control on Ripple and on Wave warp, how many waves pass a second."
+  },
   "fxWaveType": "Wave type",
   "@fxWaveType": {
     "description": "Effect controls — a control on Wave warp."
@@ -12116,6 +12160,18 @@
   "fxMoodLighting": "Mood lighting",
   "@fxMoodLighting": {
     "description": "Effect name in the Add effect menu — pools of coloured light laid over the picture, and a firmer contrast under them."
+  },
+  "fxAmorphous": "Amorphous",
+  "@fxAmorphous": {
+    "description": "Effect controls — a Style option on Mood lighting: soft round pools of light."
+  },
+  "fxDigital": "Digital",
+  "@fxDigital": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light broken into square blocks."
+  },
+  "fxStreaks": "Streaks",
+  "@fxStreaks": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light stretched sideways into long bands."
   },
   "fxMoreOptions": "More options",
   "@fxMoreOptions": {
@@ -15469,11 +15525,7 @@
   },
   "popOutPanel": "Pop out",
   "@popOutPanel": {
-    "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "Not available",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
+    "description": "The right-click menu on a panel's tab: the row that moves the Viewer into a separate window of its own, which can be dragged to another monitor. Closing that window puts the Viewer back where it was."
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {

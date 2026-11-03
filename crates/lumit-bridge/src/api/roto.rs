@@ -583,22 +583,19 @@ pub fn roto_source_frame(layer: LayerReference, frame: i64) -> Result<i64, Bridg
     source_frame_at(source, item.source_time_at(lt))
 }
 
-/// The source frames, first and last, the Frames row on `fx` limits an
-/// analysis on `layer` to, or `None` for all of them. The two ends of the comp
-/// span go through [`roto_source_frame`], so a retimed layer is limited to
-/// the frames it shows.
-///
-/// ponytail: only the two ends are mapped, so a Retime that runs backwards
-/// and forwards again inside the span is limited to what its ends show.
+/// The frames of `source`, first and last, the Frames row's `span` of source
+/// seconds limits an analysis to, or `None` for all of them. The span comes
+/// from [`lumit_core::planes::source_span`], for a layer or a node graph box,
+/// and each end is picked as [`roto_source_frame`] picks one.
 pub(crate) fn analysis_range(
-    layer: &LayerReference,
-    fx: &lumit_core::model::EffectInstance,
+    source: &Result<Source, BridgeError>,
+    span: Option<(f64, f64)>,
 ) -> Option<(i64, i64)> {
-    let (first, last) =
-        lumit_core::planes::frames_span(fx, &layer.item().ok()?, &layer.composition().ok()?)?;
-    let a = roto_source_frame(*layer, first).ok()?;
-    let b = roto_source_frame(*layer, last).ok()?;
-    Some((a.min(b), a.max(b)))
+    let ((a, b), source) = (span?, *source.as_ref().ok()?);
+    Some((
+        source_frame_at(source, a).ok()?,
+        source_frame_at(source, b).ok()?,
+    ))
 }
 
 /// The frame of the file at `source` that is showing at `source_time`: the

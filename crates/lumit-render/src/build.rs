@@ -24,6 +24,7 @@ use crate::draw::{
     LayerInputDraw, MatteDraw, TemporalBelow,
 };
 use crate::export::mask_rgba;
+use crate::placement::{own_placement, parent_world_placement, world_placement};
 use crate::realise::Realiser;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::pixels::{px_tile, solid_rgba};
@@ -276,36 +277,6 @@ pub fn patch_layer_effect_param(
     patched
 }
 
-/// The world placement matrix of `layer`'s parent chain within `comp` at comp
-/// time `t_comp` (layer parenting): `P_top × … × P_grandparent ×
-/// P_parent`, each ancestor's `place_matrix` sampled at its own local time
-/// (`t_comp − start_offset`). `None` when the layer has no parent. Used as a
-/// draw's `pre`, which the GPU applies as `pre × own_placement` — so the child
-/// ends up placed inside its parent's coordinate space (After Effects
-/// parenting). Cycle- and missing-parent-safe via `model::layer_parent_chain`.
-/// Shared by the preview (here) and the export path so the two stay identical.
-/// v1 composes the full `place_matrix` (2D plus the 2.5D axes it already
-/// carries); no behaviour changes for an unparented layer (`None`).
-pub fn parent_world_placement(
-    comp: &lumit_core::model::Composition,
-    layer: &lumit_core::model::Layer,
-    t_comp: f64,
-    context: Arc<ExpressionContext>,
-) -> Option<[[f32; 4]; 4]> {
-    let mut world: Option<[[f32; 4]; 4]> = None;
-    // Outermost first, so concat_place(outer, inner) = outer × inner.
-    let read = lumit_core::model::context_reader(&context, t_comp);
-    let solves = crate::track::solves_for(&context.document);
-    for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &read, solves) {
-        let p = place_of(&p);
-        world = Some(match world {
-            Some(w) => lumit_gpu::composite::concat_place(w, p),
-            None => p,
-        });
-    }
-    world
-}
-
 /// Whether `layer` carries a live effect drawn over the composite below
 /// ([`EffectDef::backdrop`](lumit_core::fx::registry::EffectDef::backdrop)),
 /// which makes it an adjustment for this frame without being one in the
@@ -320,39 +291,6 @@ fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
         && lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&e.effect.match_name)
             .is_some_and(|d| d.backdrop())
-}
-
-/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
-/// own pixels to comp pixels, as the compositor places it.
-fn world_placement(
-    comp: &lumit_core::model::Composition,
-    layer: &lumit_core::model::Layer,
-    t_comp: f64,
-    context: Arc<ExpressionContext>,
-) -> [[f32; 4]; 4] {
-    let own = own_placement(layer, t_comp, &context);
-    match parent_world_placement(comp, layer, t_comp, context) {
-        Some(pre) => lumit_gpu::composite::concat_place(pre, own),
-        None => own,
-    }
-}
-
-/// `layer`'s own placement at comp time `t_comp`, before any parent's.
-fn own_placement(
-    layer: &lumit_core::model::Layer,
-    t_comp: f64,
-    context: &Arc<ExpressionContext>,
-) -> [[f32; 4]; 4] {
-    place_of(&lumit_core::model::placement(
-        layer,
-        t_comp,
-        &lumit_core::model::context_reader(context, t_comp),
-    ))
-}
-
-fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
-    let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
-    lumit_gpu::composite::place_matrix_3d(f(p.position), f(p.anchor), f(p.scale), f(p.rotation_deg))
 }
 
 /// What the compositor draws `layer`'s own picture with at layer time `lt`,
@@ -2033,6 +1971,8 @@ fn comp_walk(
             // of its own; the effects that read lights take them from
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
+            // Drawn by the mesh pass, from its own draw source.
+            LayerKind::Model { .. } => None,
         };
         // Footage is the only kind that can arrive as anything but bytes.
         let format = match &layer.kind {
@@ -4539,6 +4479,14 @@ fn comp_walk(
                 }));
                 continue;
             }
+            LayerKind::Model { item, settings } => {
+                let Some(draw) =
+                    crate::model::draw(doc, comp, layer, *item, settings, t_comp, &context)
+                else {
+                    continue;
+                };
+                (DrawSource::Model(Box::new(draw)), (1.0, 1.0))
+            }
             _ => {
                 let Some((rgba, w, h, natural, format)) = pixels_for(layer) else {
                     continue;
@@ -4570,7 +4518,8 @@ fn comp_walk(
                 DrawSource::Nested { .. }
                 | DrawSource::Adjust
                 | DrawSource::Graph(_)
-                | DrawSource::Haze(_) => 1.0,
+                | DrawSource::Haze(_)
+                | DrawSource::Model(_) => 1.0,
             };
             if layer.switches.fx {
                 // scale doubles as the §2.3 preview-resolution factor:
@@ -4604,6 +4553,8 @@ fn comp_walk(
         // kind: a Pixels stack already resolved at its decode scale above.
         let fx_ref_width = match &source {
             DrawSource::Nested { width, .. } => Some(*width as f32),
+            // A model is drawn at the comp's size too.
+            DrawSource::Model(_) => Some(comp.width as f32),
             DrawSource::Pixels { .. }
             | DrawSource::Adjust
             | DrawSource::Graph(_)
@@ -4618,7 +4569,10 @@ fn comp_walk(
                 fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
             DrawSource::Nested { key, .. } => *key,
-            DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => None,
+            DrawSource::Adjust
+            | DrawSource::Graph(_)
+            | DrawSource::Haze(_)
+            | DrawSource::Model(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack, and where a
@@ -6824,7 +6778,8 @@ fn rebuilt_as_itself(
             | LayerKind::Adjustment
             | LayerKind::Null
             | LayerKind::Camera { .. }
-            | LayerKind::Light { .. } => true,
+            | LayerKind::Light { .. }
+            | LayerKind::Model { .. } => true,
             LayerKind::Sequence { .. } => false,
         }
     })

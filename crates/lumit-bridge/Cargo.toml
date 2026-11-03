@@ -100,6 +100,7 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+lumit-scene = { path = "../lumit-scene" }
 # The device the renderer opened, and what it says about the card.
 lumit-gpu = { path = "../lumit-gpu" }
 # Where a project's parked frames may sit.

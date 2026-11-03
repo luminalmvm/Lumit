@@ -186,6 +186,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// On disk, but the engine cannot decode it.
   final bool undecodable;
 
+  /// The pictures a 3D model names that are missing, shown in its badge's
+  /// tooltip.
+  final List<String> missingPictures;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -206,6 +210,9 @@ class ProjectRowFrb extends StatefulWidget {
   /// and nothing else: a node graph opens, drags and nests as any comp does.
   /// Handed in from the panel's cache, for the reason the name is.
   final bool nodeGraph;
+
+  /// A 3D model rather than footage that plays, which wears the cube.
+  final bool model;
 
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
@@ -316,10 +323,12 @@ class ProjectRowFrb extends StatefulWidget {
     required this.depth,
     required this.missing,
     this.undecodable = false,
+    this.missingPictures = const [],
     required this.audio,
     required this.label,
     required this.inherited,
     this.nodeGraph = false,
+    this.model = false,
     required this.inUse,
     required this.proxy,
     this.standIn = false,
@@ -574,12 +583,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     [for (final c in widget.holders) t.personColour(c)],
                     tint: 0.14,
                   ),
-            padding: EdgeInsets.only(
+            padding: EdgeInsetsDirectional.only(
               // Five levels at most, so a deep folder still leaves its rows
               // a name and room for the columns.
-              left: projectRowPadding +
+              start: projectRowPadding +
                   math.min(widget.depth, 5) * projectIndentPerDepth,
-              right: projectRowPadding,
+              end: projectRowPadding,
             ),
             child: Row(
               children: [
@@ -839,6 +848,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
       if (widget.undecodable)
         ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
+      if (widget.missingPictures.isNotEmpty)
+        ('pictures-$id', l10n.projectItemMissing, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
@@ -925,9 +936,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 )
-              else if (key.startsWith('undecodable-'))
+              else if (key.startsWith('undecodable-') ||
+                  key.startsWith('pictures-'))
                 LumitTooltip(
-                  message: l10n.tipProjectUndecodable,
+                  message: key.startsWith('pictures-')
+                      ? widget.missingPictures.join('\n')
+                      : l10n.tipProjectUndecodable,
                   child: ProjectBadge(
                       key: ValueKey<String>(key), label: label, colour: colour),
                 )
@@ -994,7 +1008,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     final fallback = projectDefaultLabel(item, audio: widget.audio);
     return switch (item) {
       ItemReference_Footage() => (
-          widget.audio ? LumitIcon.audioFile : LumitIcon.footage,
+          widget.model
+              ? LumitIcon.cube3d
+              : widget.audio
+                  ? LumitIcon.audioFile
+                  : LumitIcon.footage,
           t.labelColour(fallback),
         ),
       ItemReference_Folder() => (LumitIcon.folder, t.textMuted),

@@ -351,6 +351,9 @@ class LayerBoundsCache extends ChangeNotifier {
   /// Sizes by layer id, good for as long as [_revision] is.
   final Map<UuidValue, Size> _byLayer = {};
 
+  /// Model boxes by layer id, the same. Only kept once the model is read.
+  final Map<UuidValue, List<double>> _boxes = {};
+
   /// Probed media sizes by footage item id. Kept for the session: a file's
   /// dimensions do not change under us, and a relink refreshes through the
   /// document revision below anyway.
@@ -385,6 +388,25 @@ class LayerBoundsCache extends ChangeNotifier {
     if (revision == _revision) return;
     _revision = revision;
     _byLayer.clear();
+    _boxes.clear();
+  }
+
+  /// [entry]'s model box at document [revision] (`LayerBox.cube`), or null
+  /// on any other layer and until the model's file has been read.
+  List<double>? modelBoxOf(BridgeLayerEntry entry,
+      {required int? revision}) {
+    if (entry.info.kind != BridgeLayerKind.model) return null;
+    _atRevision(revision);
+    final id = entry.layer.internallayerId;
+    final held = _boxes[id];
+    if (held != null) return held;
+    try {
+      final box = entry.layer.getModelBox();
+      if (box.length == 24) return _boxes[id] = box;
+    } catch (_) {
+      // The layer went away between the model being read and this call.
+    }
+    return null;
   }
 
   /// The size of [entry]'s content in layer pixels, at document [revision].
@@ -421,8 +443,12 @@ class LayerBoundsCache extends ChangeNotifier {
 
   Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t) {
     // A Null never draws, so its box is the convention above rather than
-    // anything read from the document.
-    if (entry.info.kind == BridgeLayerKind.nullLayer) return nullLayerBounds;
+    // anything read from the document. A Model layer borrows it until its box
+    // comes from the model's own bounds.
+    if (entry.info.kind == BridgeLayerKind.nullLayer ||
+        entry.info.kind == BridgeLayerKind.model) {
+      return nullLayerBounds;
+    }
 
     // A shape layer is exactly as big as its art, and **that changes as the art
     // is edited** — the first kind whose size is not fixed by a source.

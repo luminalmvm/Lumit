@@ -134,12 +134,18 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (`LayerReference.getClipEffects`), and that its keys are in clip time, so
   /// the lane draws them a clip's start along.
   final UuidValue? clip;
+
+  /// This row is one of a placed graph's **Inputs**
+  /// (docs/impl/node-graph-comp.md §5.3), the styles bit again: its own path
+  /// ([inputsPath]) and the layer's Inputs as the list a write reads.
+  final bool inputs;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
       this.style = false,
       this.group,
-      this.clip})
+      this.clip,
+      this.inputs = false})
       : super(depth);
 }
 
@@ -1581,6 +1587,7 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeItem item, {
   String? name,
   List<BridgeVertex>? vertices,
+  bool? closed,
   ShapeValue? value,
   BridgeScalar? to,
   BridgeColour? fill,
@@ -1610,7 +1617,7 @@ BridgeShapeItem shapeItemWith(
     id: item.id,
     name: name ?? item.name,
     vertices: vertices ?? item.vertices,
-    closed: item.closed,
+    closed: closed ?? item.closed,
     fill: removeFill
         ? null
         : fill ??
@@ -1979,7 +1986,8 @@ bool moveLaneKeys({
         :final param,
         :final style,
         :final group,
-        clip: final clipId
+        clip: final clipId,
+        :final inputs
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
       // do, and a group header's and a clip's the same way. The row
@@ -1991,6 +1999,8 @@ bool moveLaneKeys({
       } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);
+      } else if (inputs) {
+        stack = graphInputsOf(entry.layer);
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
@@ -2169,6 +2179,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${effectPath(clipFoldPrefix(c), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final param, inputs: true) =>
+        '${inputsPath(layerId)}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -2344,6 +2356,10 @@ List<LayerFoldRow> clipFoldRows({
   }
   return rows;
 }
+
+/// The path of a placed graph's **Inputs** group, and with a parameter's id
+/// after it, of each of its rows: there is only ever one instance.
+String inputsPath(String layerId) => '$layerId/inputs';
 
 /// The path of a layer's **Styles** group.
 String stylesPath(String layerId) => '$layerId/styles';
@@ -2536,12 +2552,15 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  // Material options, beside Transform rather than inside it.
+  // Material options, beside Transform rather than inside it. A Model layer
+  // has the switches and none of the numbers.
   final material = [
     for (final g in groups)
       if (g.section == TransformSection.material) g
   ];
-  if (material.isNotEmpty && !soloed) {
+  final materialSwitches =
+      settings.any((s) => s.section == TransformSection.material);
+  if ((material.isNotEmpty || materialSwitches) && !soloed) {
     final materialOpen = open.contains(materialPath(id));
     rows.add(FoldGroupRow(
       path: materialPath(id),
@@ -2559,6 +2578,31 @@ List<LayerFoldRow> layerFoldRows({
     for (final group in material) {
       if (materialOpen || open.contains(transformGroupPath(id, group))) {
         rows.add(FoldTransformRow(group, info.transform, depth: 2));
+      }
+    }
+  }
+
+  // A placed node graph's Inputs, where Contents would be: they make the
+  // layer's picture, which the masks then gate and the effects process. The
+  // rows are the ordinary effect rows, so they key, drag and ease as any do.
+  if (info.graphInputs case final inputs?
+      when inputs.derivedParams.isNotEmpty) {
+    final inputsOpen = open.contains(inputsPath(id));
+    rows.add(FoldGroupRow(
+      path: inputsPath(id),
+      label: l10n.foldInputs,
+      open: inputsOpen,
+      depth: 1,
+    ));
+    if (inputsOpen) {
+      // The graph's own rows only: the declared Mix and Matte do nothing on a
+      // layer that places it.
+      final values = {for (final v in inputs.values) v.id: v.value};
+      for (final param in inputs.derivedParams) {
+        rows.add(FoldEffectParamRow(inputs, param, values[param.id],
+            depth: 2,
+            inputs: true,
+            driven: driven['${inputs.id}/${param.id}']));
       }
     }
   }

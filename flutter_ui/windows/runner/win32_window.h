@@ -73,6 +73,11 @@ class Win32Window {
   // Called when Destroy is called.
   virtual void OnDestroy();
 
+  // Where Flutter drew the maximise button, in the client area's physical
+  // pixels (lib/shell/window_frame.dart). The hit test names it, which is how
+  // Windows 11 knows to open its snap layouts there.
+  RECT maximise_button_ = {};
+
  private:
   friend class WindowClassRegistrar;
 

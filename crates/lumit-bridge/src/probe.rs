@@ -268,6 +268,10 @@ fn whole_file(mut src: MediaSource) -> MediaSource {
 #[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
     let src = whole_file(src.into());
+    // A 3D model is read by its own reader, never by FFmpeg.
+    if lumit_scene::is_model(&src.path) {
+        return;
+    }
     let Some(stamp) = stamp(src.on_disk()) else {
         return;
     };

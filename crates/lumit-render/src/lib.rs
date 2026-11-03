@@ -68,11 +68,15 @@ mod gpufx_crop;
 mod gpufx_film;
 mod gpufx_jolt;
 mod gpufx_luma_fade;
+mod gpufx_srgb_curve;
 mod gpufx_timewarp;
 mod grid_lines;
 mod haze;
 pub mod headless;
 pub mod media_index;
+pub mod model;
+pub mod model_layer;
+pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame
 /// (docs/impl/addons.md §6.1).
@@ -83,6 +87,7 @@ pub mod proxy;
 pub mod puppet;
 pub mod realise;
 pub mod roto;
+pub mod sent;
 mod sidecar;
 pub mod source;
 pub mod standin;

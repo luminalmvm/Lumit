@@ -380,7 +380,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     child: Padding(
                       padding: welcomeRecentRowPadding,
                       child: Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(l10n.welcomeNoRecent, style: t.body),
                       ),
                     ),
@@ -673,7 +673,7 @@ class _WelcomeCardState extends State<_WelcomeCard> {
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(
             widget.title,
             style: t.bodyPrimary.copyWith(fontSize: 13),

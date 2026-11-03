@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod model;
 mod moments;
 pub mod pool;
 pub mod schedule;
@@ -85,7 +86,9 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-pub const ALGO_VERSION: u32 = 23;
+/// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
+///   they are handed.
+pub const ALGO_VERSION: u32 = 24;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -2484,6 +2487,7 @@ fn feed_source(
                 h.update(&json);
             }
         }
+        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
@@ -4872,12 +4876,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 23, which renamed every frame.
+        // Pinned under ALGO_VERSION 24, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                182_280_591_360_908_586_824_180_793_851_848_185_389,
-                216_552_543_631_262_711_762_116_911_137_856_281_097
+                270_542_465_235_573_792_129_354_421_493_715_365_663,
+                245_443_632_604_847_733_809_670_259_225_426_457_713
             )
         );
 

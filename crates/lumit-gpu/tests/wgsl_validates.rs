@@ -23,6 +23,8 @@ const OCIO_SAMPLE: &str = include_str!("../src/ocio_sample.wgsl");
 const BLEND_CORE: &str = include_str!("../src/fx_blend_core.wgsl");
 /// The lighting kernel, which volumetric light is compiled after.
 const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
+/// The light maths planes and models share, exactly as both prepend it.
+const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -55,6 +57,7 @@ fn every_wgsl_kernel_parses_and_validates() {
         if name == "fx_noise_core.wgsl"
             || name == "ocio_sample.wgsl"
             || name == "fx_blend_core.wgsl"
+            || name == "light_core.wgsl"
         {
             continue;
         }
@@ -75,6 +78,11 @@ fn every_wgsl_kernel_parses_and_validates() {
         // The blend modes' maths, prepended to the two kernels that call it.
         let source = if source.contains("blend_pixel(") {
             format!("{BLEND_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("irradiance(") {
+            format!("{LIGHT_CORE}{source}")
         } else {
             source
         };

@@ -41,6 +41,7 @@ Alpha blur
 Alpha from
 Altitude
 Ambient
+Amorphous
 Amount
 Amplitude
 Analyse
@@ -333,6 +334,7 @@ Detected beats
 Detector
 Diagonal
 Difference
+Digital
 Direction
 Direction x
 Direction y
@@ -723,6 +725,7 @@ Line width
 Linear
 Linear burn
 Linear light
+Linear to sRGB
 Linear wipe
 Lines
 Load from file…
@@ -1238,6 +1241,7 @@ Stops
 Store
 Streak
 Streak length
+Streaks
 Strength
 Stretch
 Stretch to fit
@@ -1415,6 +1419,7 @@ Warp
 Wave
 Wave angle
 Wave height
+Wave speed
 Wave type
 Wave warp
 Wave width
@@ -1468,3 +1473,5 @@ Z wave phase
 Zebra
 Zoom
 sRGB
+sRGB curve
+sRGB to linear

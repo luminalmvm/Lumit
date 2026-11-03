@@ -127,7 +127,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 10, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -366,7 +366,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
   Widget _well(LumitTheme t, String text) => Container(
         key: const ValueKey('project-colour-config-path'),
         height: settingsControlHeight,
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: t.surface0,

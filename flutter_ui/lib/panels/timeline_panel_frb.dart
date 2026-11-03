@@ -52,6 +52,8 @@ import '../icons/lumit_icon.dart' as glyph_set;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
@@ -85,6 +87,7 @@ import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'graph_box_lanes.dart';
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
@@ -4058,30 +4061,42 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           LayoutBuilder(builder: (context, box) {
             // No zoom here, so the frames span the panel's width.
             final axis = TimelineAxis(frames: frames, width: box.maxWidth);
-            return SizedBox(
-              height: t.density.ruler,
-              child: Stack(
-                children: [
-                  TimelineRuler(
-                    comp: comp,
-                    axis: axis,
-                    fps: ui.model.fps,
-                    height: t.density.ruler,
-                    work: work,
-                    onSeek: (f) =>
-                        ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
-                    onWorkArea: (span) {
-                      comp.setWorkArea(span: span);
-                      setState(() {});
-                    },
-                    onWorkPreview: (span) => _workPreview.value = span,
-                    onMarkersChanged: () => setState(() {}),
-                    cache: TimelineCacheBar(
-                        comp: comp, axis: axis, revision: _cacheRevision!),
-                  ),
-                  PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
-                ],
-              ),
+            // The picked box's keyed rows hang under the ruler on its axis,
+            // and the playhead runs down through both.
+            return Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: t.density.ruler,
+                      child: TimelineRuler(
+                        comp: comp,
+                        axis: axis,
+                        fps: ui.model.fps,
+                        height: t.density.ruler,
+                        work: work,
+                        onSeek: (f) => ui
+                            .scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
+                        onWorkArea: (span) {
+                          comp.setWorkArea(span: span);
+                          setState(() {});
+                        },
+                        onWorkPreview: (span) => _workPreview.value = span,
+                        onMarkersChanged: () => setState(() {}),
+                        cache: TimelineCacheBar(
+                            comp: comp,
+                            axis: axis,
+                            revision: _cacheRevision!),
+                      ),
+                    ),
+                    GraphBoxLanes(
+                        comp: comp, frames: frames, width: box.maxWidth),
+                  ],
+                ),
+                PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
+              ],
             );
           }),
           Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
@@ -4270,12 +4285,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // The files land on the row they were dropped on, in the
                   // order the panel lists them, as one undo step. Several lie
                   // end to end, and Shift stacks them all at the start.
-                  comp.addFootageLayers(
+                  final placed = comp.addFootageLayers(
                       footage: footage,
                       asSequence: _videoAsSequence(context),
                       row: at,
                       arrival: ui.streamsArrival,
-                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed,
+                      lightNames: modelLightNames());
+                  // A 3D model asks how it sits as it lands.
+                  showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.

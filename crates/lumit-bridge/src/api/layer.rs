@@ -1277,6 +1277,8 @@ pub enum BridgeLayerKind {
     /// A Bus layer: a Null layer with `audio_only` set, whose rack and Volume
     /// work on what is routed to it.
     Bus,
+    /// A Model layer: a 3D model file drawn in the comp's 3D space.
+    Model,
 }
 
 /// How the frontend should draw this layer: the model's kind, except
@@ -1304,6 +1306,7 @@ pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
         K::Shape { .. } => BridgeLayerKind::Shape,
         K::Null => BridgeLayerKind::NullLayer,
         K::Light { .. } => BridgeLayerKind::Light,
+        K::Model { .. } => BridgeLayerKind::Model,
     }
 }
 
@@ -5721,7 +5724,7 @@ impl LayerReference {
         use lumit_core::model::LayerKind;
         let layer = self.item()?;
         let id = match layer.kind {
-            LayerKind::Footage { item, .. } => item,
+            LayerKind::Footage { item, .. } | LayerKind::Model { item, .. } => item,
             LayerKind::Precomp { comp } => comp,
             LayerKind::Solid { def } => def,
             LayerKind::Text { .. }

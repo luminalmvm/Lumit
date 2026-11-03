@@ -69,8 +69,12 @@ List<LayerSetting> layerSettings({
       if (threeD &&
           kind != BridgeLayerKind.camera &&
           kind != BridgeLayerKind.nullLayer) ...[
-        LayerSetting.castsShadows,
-        LayerSetting.acceptsShadows,
+        // ponytail: a model neither casts nor takes shadows until the
+        // shadows item makes it, so it doesn't show the switches.
+        if (kind != BridgeLayerKind.model) ...[
+          LayerSetting.castsShadows,
+          LayerSetting.acceptsShadows,
+        ],
         LayerSetting.acceptsLights,
       ],
     ];
@@ -199,7 +203,7 @@ class LayerSettingRowFrb extends StatelessWidget {
           onChanged: (f) => write(lightSettingsWith(s, falloff: f)),
         ),
       LayerSetting.lightCastsShadows => Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: HouseCheckbox(
             key: key,
             value: s.castsShadows,
@@ -224,7 +228,7 @@ class LayerSettingRowFrb extends StatelessWidget {
         ),
       // The same switch as the layer's right-click item, one op a click.
       LayerSetting.acceptsLights => Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: HouseCheckbox(
             key: key,
             value: acceptsLights,
@@ -250,7 +254,7 @@ class LayerSettingRowFrb extends StatelessWidget {
         Expanded(child: name),
         SizedBox(
           width: col.width,
-          child: Align(alignment: Alignment.centerLeft, child: control),
+          child: Align(alignment: AlignmentDirectional.centerStart, child: control),
         ),
         SizedBox(width: col.rightInset),
       ],

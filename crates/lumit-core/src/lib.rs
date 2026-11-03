@@ -29,6 +29,7 @@ pub mod lut;
 pub mod markers;
 pub mod mask;
 pub mod model;
+pub mod model_layer;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;

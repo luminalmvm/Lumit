@@ -116,11 +116,13 @@ class TransformGroup {
 
 /// Whether a layer of this kind has a 3D switch to flip.
 ///
-/// A Camera and a Light are three-dimensional by being what they are
-/// (docs/impl/camera.md §1), so the switch would be one you cannot turn off:
-/// the Timeline leaves their cell blank and the Layer menu skips them.
+/// A Camera, a Light and a Model layer are three-dimensional by being what
+/// they are (docs/impl/camera.md §1), so the switch would be one you cannot
+/// turn off: the Timeline leaves their cell blank and the Layer menu skips them.
 bool hasThreeDSwitch(BridgeLayerKind kind) =>
-    kind != BridgeLayerKind.camera && kind != BridgeLayerKind.light;
+    kind != BridgeLayerKind.camera &&
+    kind != BridgeLayerKind.light &&
+    kind != BridgeLayerKind.model;
 
 /// Whether a layer of this kind carries the visibility eye.
 ///
@@ -418,8 +420,10 @@ List<TransformGroup> transformGroups({
           suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
     ]),
     // How a 3D layer takes the comp's lights, as After Effects has it. A null
-    // has no picture to light.
-    if (threeD && kind != BridgeLayerKind.nullLayer)
+    // has no picture to light, and a model's materials come from its file.
+    if (threeD &&
+        kind != BridgeLayerKind.nullLayer &&
+        kind != BridgeLayerKind.model)
       for (final (label, prop) in [
         // Light passes through a layer only where it casts a shadow.
         if (material?.castsShadows != BridgeShadowMode.off)
@@ -510,6 +514,32 @@ class TransformRowsFrb extends StatelessWidget {
     final settings = layerSettings(kind: kind, light: light, threeD: threeD);
     final out = <Widget>[];
     TransformSection? last;
+    final seen = <TransformSection>{};
+    // The Effect controls card names each options group as the Timeline's
+    // headings do.
+    void options(TransformSection section) {
+      seen.add(section);
+      final heading = switch (section) {
+        TransformSection.transform => null,
+        TransformSection.camera => l10n.cameraOptions,
+        TransformSection.light => l10n.lightOptions,
+        TransformSection.material => l10n.materialOptions,
+      };
+      if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
+      for (final setting in settings) {
+        if (setting.section != section) continue;
+        out.add(LayerSettingRowFrb(
+          layer: layer,
+          setting: setting,
+          light: light,
+          material: material,
+          acceptsLights: acceptsLights,
+          onChanged: onChanged,
+          keyPrefix: keyPrefix,
+        ));
+      }
+    }
+
     for (final group in transformGroups(
         threeD: threeD,
         modes: axisModes,
@@ -519,27 +549,7 @@ class TransformRowsFrb extends StatelessWidget {
         material: material)) {
       if (group.section != last) {
         last = group.section;
-        // The Effect controls card names each options group as the
-        // Timeline's headings do.
-        final heading = switch (group.section) {
-          TransformSection.transform => null,
-          TransformSection.camera => l10n.cameraOptions,
-          TransformSection.light => l10n.lightOptions,
-          TransformSection.material => l10n.materialOptions,
-        };
-        if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
-        for (final setting in settings) {
-          if (setting.section != last) continue;
-          out.add(LayerSettingRowFrb(
-            layer: layer,
-            setting: setting,
-            light: light,
-            material: material,
-            acceptsLights: acceptsLights,
-            onChanged: onChanged,
-            keyPrefix: keyPrefix,
-          ));
-        }
+        options(group.section);
       }
       out.add(TransformRowFrb(
         comp: comp,
@@ -554,6 +564,10 @@ class TransformRowsFrb extends StatelessWidget {
         rowPadding: rowPadding,
         twoColumn: twoColumn,
       ));
+    }
+    // A section of switches with no numbers, as a Model layer's materials.
+    for (final section in {for (final s in settings) s.section}) {
+      if (!seen.contains(section)) options(section);
     }
     return out;
   }
@@ -577,9 +591,9 @@ class _OptionsHeading extends StatelessWidget {
     return SizedBox(
       height: fxRowHeight(t),
       child: Padding(
-        padding: const EdgeInsets.only(left: fxKeyColumnWidth + 4),
+        padding: const EdgeInsetsDirectional.only(start: fxKeyColumnWidth + 4),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(t.kickerCase(label), style: t.kicker),
         ),
       ),
@@ -815,7 +829,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           if ((widget.graphColours?.length ?? 0) > 1)
             for (final colour in widget.graphColours!)
               Padding(
-                padding: const EdgeInsets.only(left: 3),
+                padding: const EdgeInsetsDirectional.only(start: 3),
                 child: Container(
                   width: 5,
                   height: 5,
@@ -1071,7 +1085,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ];
     final exact = PickedColour(rgb[0], rgb[1], rgb[2]);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: ColourSwatchButton(
         key: ValueKey<String>(
             '${widget.keyPrefix}-${group.axes.first.prop.name}'),

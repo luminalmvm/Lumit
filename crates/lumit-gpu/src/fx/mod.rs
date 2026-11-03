@@ -67,6 +67,8 @@ pub struct FxEngine {
     sprite_flare: sprite_flare::LazySpriteFlare,
     /// Energy line, compiled in the background as the engine starts.
     energy_line: energy_line::LazyEnergyLine,
+    /// The mesh pass, built the first time a model is drawn.
+    pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
@@ -288,6 +290,8 @@ pub struct FxEngine {
     card_wipe: wgpu::ComputePipeline,
     /// Luma fade: the picture goes away in order of brightness.
     luma_fade: wgpu::ComputePipeline,
+    /// sRGB curve: onto the sRGB curve, or back off it.
+    srgb_curve: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
