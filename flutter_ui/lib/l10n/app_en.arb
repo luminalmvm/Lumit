@@ -6881,6 +6881,34 @@
   "@keyPlaceTheSelectedLayersOnASurface": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyShowModelsAsTheyExport": "Show models as they export",
+  "@keyShowModelsAsTheyExport": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShaded": "Show models shaded",
+  "@keyShowModelsShaded": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsAsWireframes": "Show models as wireframes",
+  "@keyShowModelsAsWireframes": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShadedWithWire": "Show models shaded with wire",
+  "@keyShowModelsShadedWithWire": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsNormals": "Show models' normals",
+  "@keyShowModelsNormals": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowOrHideFaceOrientation": "Show or hide face orientation",
+  "@keyShowOrHideFaceOrientation": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keySwitchWireframeOnOrOff": "Switch wireframe on or off",
+  "@keySwitchWireframeOnOrOff": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
   "keyResetThe3dView": "Reset the 3D view",
   "@keyResetThe3dView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."

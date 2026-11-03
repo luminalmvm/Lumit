@@ -50,6 +50,7 @@ import 'package:lumit_flutter/shell/window_frame.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
@@ -993,6 +994,25 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = cameraToView(state, ui);
       case 'viewer.3d.place':
         ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
+      // How the view in front shows models.
+      case 'viewer.look.lines':
+        ui.toggleLines(ui.activeViewId);
+      case 'viewer.look.faces':
+        ui.setModelDisplay(ui.activeViewId,
+            faces: !ui.facesShown(ui.activeViewId));
+      case 'viewer.look.final':
+        ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
+      case 'viewer.look.shaded':
+        ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.shaded);
+      case 'viewer.look.wireframe':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.wireframe);
+      case 'viewer.look.shaded_wire':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.shadedWire);
+      case 'viewer.look.normals':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.normals);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.
