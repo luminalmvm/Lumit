@@ -406,6 +406,7 @@ fn shapes(
         instances: &copies,
         casters: None,
         maps: None,
+        display: crate::model::display(),
     };
     fx.model(ctx, model, &view).ok()
 }

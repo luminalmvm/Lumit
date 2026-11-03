@@ -2477,15 +2477,15 @@ impl CompositionReference {
     }
 
     /// Look at this comp in Viewer view `view` through `pose` rather than its
-    /// active camera, or through the active camera again with `None`. Panel
+    /// active camera, or through the active camera again with `None`, and
+    /// show its models the `look` way. Panel
     /// state, kept per view like the look, so the frontend sends it whenever a
-    /// view's 3D view changes and that view's next render looks through it.
-    /// Export never sees a view.
+    /// view's 3D view changes. Export never sees a view.
     ///
     /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
     /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
-    /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
-    /// middle, the shape of its pane. Zero is the comp's own size.
+    /// picture `canvas` comp pixels wide and high round the comp's middle, the
+    /// shape of its pane. Zero is the comp's own size.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
@@ -2493,26 +2493,20 @@ impl CompositionReference {
         view: u32,
         draft: bool,
         ground: Option<u32>,
-        canvas_width: u32,
-        canvas_height: u32,
+        canvas: (u32, u32),
+        look: crate::api::model::BridgeModelLook,
     ) -> Result<(), BridgeError> {
-        let channel =
-            |argb: u32, shift: u32| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
-        let ground = ground.map(|argb| {
-            [
-                channel(argb, 16),
-                channel(argb, 8),
-                channel(argb, 0),
-                f32::from((argb >> 24) as u8) / 255.0,
-            ]
-        });
+        let channel = |argb: u32, shift| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
+        let alpha = |argb: u32| f32::from((argb >> 24) as u8) / 255.0;
+        let ground = ground.map(|c| [channel(c, 16), channel(c, 8), channel(c, 0), alpha(c)]);
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
             pose,
             view,
             draft,
             ground,
-            canvas: (canvas_width, canvas_height),
+            canvas,
+            display: look.engine(),
         })
     }
 

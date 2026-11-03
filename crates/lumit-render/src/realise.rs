@@ -2193,7 +2193,7 @@ impl Realiser<'_> {
             };
             drop(entered);
             if let Some(depth) = model_depth {
-                let holdout = matches!(&l.source, DrawSource::Model(m) if m.holdout);
+                let holdout = matches!(&l.source, DrawSource::Model(m) if m.holds_out());
                 model_depths.push((linear_textures.len(), depth, holdout));
             }
             let claimed = scene::claim(l).map(|(depth, emitter)| {

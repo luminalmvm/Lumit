@@ -17,9 +17,13 @@ struct Frame {
     clip: mat4x4<f32>,
     // xyz = the eye in comp pixels, w = how many lights.
     eye: vec4<f32>,
-    // x = 1 when the layer takes no light, y = whether it takes shadows: 0
-    // no, 1 yes, 2 only the shadows.
+    // x = 1 when the layer takes no light, y = how a view shades it (0 as it
+    // exports, 1 in a studio light, 2 as its normals), z = 1 to tint its
+    // faces by which way they face, w = whether it takes shadows: 0 no, 1 yes,
+    // 2 only the shadows.
     flags: vec4<f32>,
+    // The lines' colour, where a view draws them.
+    wire: vec4<f32>,
     lights: array<Light, 8>,
 };
 
@@ -129,7 +133,7 @@ fn slot_uv(s: Slot, in: VsOut) -> vec2<f32> {
 // What is left of light `l` at `pos` past the shadows in its way, as a 3D
 // layer works it out.
 fn left_of(pos: vec3<f32>, n: vec3<f32>, l: Light) -> vec3<f32> {
-    if (frame.flags.y < 0.5 || l.shadow.x <= 0.0) {
+    if (frame.flags.w < 0.5 || l.shadow.x <= 0.0) {
         return vec3<f32>(1.0);
     }
     return 1.0 - l.shadow.x * (1.0 - transmitted(pos, l) * mapped(pos, n, l));
@@ -137,6 +141,18 @@ fn left_of(pos: vec3<f32>, n: vec3<f32>, l: Light) -> vec3<f32> {
 
 @fragment
 fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
+    let c = shade(in, front);
+    if (frame.flags.z < 0.5) {
+        return c;
+    }
+    // Fronts blue and backs red, the way the face is wound, shaded by how
+    // bright the face is so the tint reads the same on any material.
+    let tint = select(vec3<f32>(0.6, 0.02, 0.02), vec3<f32>(0.02, 0.1, 0.7), front != (draw.normal0.w > 0.5));
+    let light = dot(c.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return vec4<f32>(tint * (0.35 * c.a + 0.65 * light), c.a);
+}
+
+fn shade(in: VsOut, front: bool) -> vec4<f32> {
     // Every picture and slope read first, while every pixel of the quad is
     // still running.
     let base_uv = slot_uv(mat.slots[0], in);
@@ -162,9 +178,10 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         alpha = 1.0;
     }
     let emissive = mat.emissive.rgb * glow;
+    let look = u32(frame.flags.y + 0.5);
     let count = min(u32(frame.eye.w), 8u);
-    let accepts = u32(frame.flags.y + 0.5);
-    if (mat.mode.z > 0.5 || count == 0u) {
+    let accepts = u32(frame.flags.w + 0.5);
+    if (look == 0u && (mat.mode.z > 0.5 || count == 0u)) {
         // Showing only its shadows, with none to show.
         if (accepts == 2u) {
             return vec4<f32>(0.0);
@@ -197,7 +214,7 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
             n = normalise(t * mapped.x * s + b * mapped.y * s + n * mapped.z);
         }
     }
-    if (frame.flags.x > 0.5 || accepts == 2u) {
+    if (look == 0u && (frame.flags.x > 0.5 || accepts == 2u)) {
         // Unlit, or showing only its shadows, so only the shadows touch it.
         var dim = vec3<f32>(1.0);
         for (var i: u32 = 0u; i < count; i = i + 1u) {
@@ -214,10 +231,26 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
         return vec4<f32>((base.rgb + emissive) * dim * alpha, alpha);
     }
 
+    if (look == 2u) {
+        // x right, y up and z towards the comp's own camera, as colour.
+        let c = vec3<f32>(n.x, -n.y, -n.z) * 0.5 + 0.5;
+        return vec4<f32>(pow(c, vec3<f32>(2.2)) * alpha, alpha);
+    }
+
     let metallic = clamp(mat.params.x * mr.b, 0.0, 1.0);
     let roughness = clamp(mat.params.y * mr.g, 0.045, 1.0);
     let ao = 1.0 + mat.params.w * (occlusion - 1.0);
     let albedo = base.rgb;
+    if (look == 1u) {
+        // The studio light: a key from over the eye's shoulder and a sky
+        // that's brighter overhead, whatever lights the comp has.
+        let key = normalise(eye + vec3<f32>(-0.4, -0.7, 0.0));
+        let sky = mix(0.15, 0.45, 0.5 - 0.5 * n.y);
+        let h = normalise(key + eye);
+        let shine = pow(max(dot(n, h), 0.0), mix(80.0, 6.0, roughness)) * mix(0.3, 0.03, roughness);
+        let rgb = albedo * (sky + 0.75 * max(dot(n, key), 0.0)) * ao + shine + emissive;
+        return vec4<f32>(rgb * alpha, alpha);
+    }
     let diffuse_colour = albedo * (1.0 - metallic);
     let f0 = mix(vec3<f32>(0.04), albedo, metallic);
     let a2 = roughness * roughness * roughness * roughness;
@@ -261,6 +294,20 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     let env = f0 * (a * -1.04 + r.z) + (a * 1.04 + r.w);
     let rgb = (diffuse_colour + env) * ambient * ao + diffuse_colour * diffuse + specular + emissive;
     return vec4<f32>(rgb * alpha, alpha);
+}
+
+// A view's lines along the model's edges, a hair nearer than the faces so
+// the faces under them never hide them.
+@vertex
+fn vs_wire(v: VertexIn, @builtin(instance_index) slot: u32) -> @builtin(position) vec4<f32> {
+    var pos = frame.clip * instances[slot].place * draw.model * vec4<f32>(v.position, 1.0);
+    pos.z = CUT_NEAR * 1.002;
+    return pos;
+}
+
+@fragment
+fn fs_wire() -> @location(0) vec4<f32> {
+    return frame.wire;
 }
 
 // The model's depth, as one over clip w at each pixel, its nearest sample's

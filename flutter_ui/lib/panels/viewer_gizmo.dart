@@ -1478,13 +1478,20 @@ UuidValue? pickedShapeItem(List<String> selected, UuidValue layerId) {
 /// the model itself is under the pointer, so the space round it inside its
 /// box picks what is behind.
 LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point,
+        {bool exact = false}) =>
+    layerAndDepthAt(boxes, point, exact: exact)?.box;
+
+/// [layerAtPoint], with how far in front of the eye it was met, as the
+/// depth over the camera's zoom. Infinite for a 2D layer.
+({LayerBox box, double depth})? layerAndDepthAt(
+    List<LayerBox> boxes, Offset point,
     {bool exact = false}) {
   LayerBox? nearest;
   var nearestDepth = double.infinity;
   for (final box in boxes) {
     if (!box.map.projected) {
-      if (nearest != null) return nearest;
-      if (box.contains(point)) return box;
+      if (nearest != null) return (box: nearest, depth: nearestDepth);
+      if (box.contains(point)) return (box: box, depth: double.infinity);
       continue;
     }
     if (!box.contains(point)) continue;
@@ -1499,7 +1506,7 @@ LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point,
       nearestDepth = depth;
     }
   }
-  return nearest;
+  return nearest == null ? null : (box: nearest, depth: nearestDepth);
 }
 
 /// Which layer a *drag* at [point] picks up.

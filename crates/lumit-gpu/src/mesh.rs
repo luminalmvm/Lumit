@@ -17,10 +17,11 @@ use crate::GpuContext;
 use glam::{Mat3, Mat4, Vec3};
 use lumit_scene::ModelScene;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use wgpu::util::DeviceExt;
 
 mod blur;
+pub mod display;
 pub mod shadow;
 mod upload;
 
@@ -30,6 +31,8 @@ const COLOUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// The depth the compositor reads: one over clip w, nought where empty.
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+/// The pipeline set that draws edges as lines.
+const WIRE: usize = 6;
 
 /// Why a model can't be drawn.
 #[derive(Debug, thiserror::Error)]
@@ -65,9 +68,13 @@ pub struct ModelView<'a> {
     /// Each copy of the model. Empty draws it once where it is.
     pub instances: &'a [ModelCopy],
     /// The shadows it takes, as `material.accepts_shadows` says: the 3D
-    /// layers' casters and the models' maps.
+    /// layers' casters and the models' maps. Only the look it exports with
+    /// reads them.
     pub casters: Option<&'a ShadowCasters>,
     pub maps: Option<&'a shadow::ShadowMaps>,
+    /// How the view shows it, which is the look it exports with everywhere
+    /// but a Viewer that asks otherwise.
+    pub display: display::ModelDisplay,
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -106,6 +113,7 @@ struct FrameUniform {
     clip: [[f32; 4]; 4],
     eye: [f32; 4],
     flags: [f32; 4],
+    wire: [f32; 4],
     lights: [GpuLight; MAX_LIT_LIGHTS],
 }
 
@@ -145,6 +153,8 @@ pub(crate) struct GpuModel {
     /// Each material's bind group, whether it blends and whether it is
     /// double-sided. The last is glTF's default, for parts with none.
     materials: Vec<(wgpu::BindGroup, bool, bool)>,
+    /// Its edges as lines, made the first time a view draws them.
+    edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     _held: lumit_budget::Reservation,
 }
 
@@ -167,8 +177,9 @@ pub(crate) struct MeshFx {
         wgpu::Sampler,
     ),
     /// By sample count and kind: opaque and blended, each culled and
-    /// double-sided, then depth alone, culled and double-sided. Each is made
-    /// the first time a draw needs it, as making one takes a while.
+    /// double-sided, then depth alone, culled and double-sided, then lines
+    /// ([`WIRE`]). Each is made the first time a draw needs it, as making one
+    /// takes a while.
     sets: Mutex<HashMap<(u32, usize), Arc<wgpu::RenderPipeline>>>,
     /// Adds a shutter sample's picture to the rest ([`blur`]).
     add: wgpu::RenderPipeline,
@@ -443,6 +454,14 @@ impl MeshFx {
         set: usize,
     ) -> Arc<wgpu::RenderPipeline> {
         let build = || {
+            if set == WIRE {
+                return Arc::new(display::wire_pipeline(
+                    device,
+                    &self.shader,
+                    &self.layout,
+                    samples,
+                ));
+            }
             let attributes = wgpu::vertex_attr_array![
                 0 => Float32x3, 1 => Float32x3, 2 => Float32x4,
                 3 => Float32x2, 4 => Float32x2, 5 => Float32x4,
@@ -623,13 +642,14 @@ impl MeshFx {
             ))
             * view.camera;
         let m = &view.material;
-        let takes = m.accepts_shadows != LightingShadows::Off;
+        let takes = m.accepts_shadows != LightingShadows::Off && view.display.takes_shadows();
         let (casters, maps) = (view.casters.filter(|_| takes), view.maps.filter(|_| takes));
         let mut lights = [GpuLight::default(); MAX_LIT_LIGHTS];
         for (slot, l) in lights.iter_mut().zip(view.lights) {
             *slot = gpu_light(l, 0xffff, maps);
         }
         let live = view.lights.len().min(MAX_LIT_LIGHTS);
+        let (shade, faces) = view.display.flags();
         let frame = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -639,10 +659,11 @@ impl MeshFx {
                     eye: [m.eye[0], m.eye[1], m.eye[2], live as f32],
                     flags: [
                         f32::from(u8::from(m.unlit)),
-                        f32::from(m.accepts_shadows as u8),
-                        0.0,
-                        0.0,
+                        shade,
+                        faces,
+                        f32::from(if takes { m.accepts_shadows as u8 } else { 0 }),
                     ],
+                    wire: view.display.wire(),
                     lights,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
@@ -709,7 +730,9 @@ impl MeshFx {
                 let (blend, double) = look(p);
                 // ponytail: a mirrored part is drawn from both sides rather than
                 // with its winding turned round.
-                let set = usize::from(blend) * 2 + usize::from(double || mirrored);
+                // Tinted faces show their backs too.
+                let both = double || mirrored || view.display.faces;
+                let set = usize::from(blend) * 2 + usize::from(both);
                 these.push((p, offset as u32, set));
             }
             draws.push(these);
@@ -767,7 +790,12 @@ impl MeshFx {
         let blurred = draws.len() > 1;
         // Depth alone never blends, and is culled as the part is.
         let depth_set = |set: usize| 4 + set % 2;
-        let mut pipelines: [Option<Arc<wgpu::RenderPipeline>>; 6] = Default::default();
+        let mut pipelines: [Option<Arc<wgpu::RenderPipeline>>; 7] = Default::default();
+        let edges = model.edges.get();
+        let edges = edges.filter(|_| view.display.draws_wires());
+        if edges.is_some() {
+            pipelines[WIRE] = Some(self.pipeline(&ctx.device, samples, WIRE));
+        }
         for &(_, _, set) in draws.iter().flatten() {
             let wanted = std::iter::once(set).chain(blurred.then(|| depth_set(set)));
             for set in wanted {
@@ -805,7 +833,7 @@ impl MeshFx {
                           depth: bool| {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for &(p, offset, set) in these {
+            for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
                 let Some((group, _, _)) = model.materials.get(p.material) else {
                     continue;
                 };
@@ -818,6 +846,25 @@ impl MeshFx {
                 pass.set_bind_group(2, &shadows_group, &[]);
                 pass.draw_indexed(
                     p.first..p.first + p.count,
+                    p.base_vertex,
+                    0..places.len() as u32,
+                );
+            }
+            // Each triangle's edges, two indices for each of its corners.
+            let (Some((lines, _)), Some(wire), false) = (edges, &pipelines[WIRE], depth) else {
+                return;
+            };
+            pass.set_index_buffer(lines.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_pipeline(wire);
+            for &(p, offset, _) in these {
+                let Some((group, _, _)) = model.materials.get(p.material) else {
+                    continue;
+                };
+                pass.set_bind_group(0, &frame_group, &[offset]);
+                pass.set_bind_group(1, group, &[]);
+                pass.set_bind_group(2, &shadows_group, &[]);
+                pass.draw_indexed(
+                    p.first * 2..(p.first + p.count) * 2,
                     p.base_vertex,
                     0..places.len() as u32,
                 );
@@ -913,6 +960,11 @@ impl FxEngine {
     ) -> Result<ModelPicture, MeshError> {
         let fx = self.mesh.get_or_init(|| MeshFx::new(ctx));
         let model = fx.model_for(ctx, scene)?;
+        if view.display.draws_wires() && model.edges.get().is_none() {
+            if let Some(edges) = display::edges(ctx, scene) {
+                let _ = model.edges.set(edges);
+            }
+        }
         Ok(fx.draw(ctx, &self.lighting, &model, view))
     }
 }

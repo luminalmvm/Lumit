@@ -150,6 +150,7 @@ fn run_plan(
     let models: Vec<(&CompLayerDraw, [f32; 3])> = layers
         .iter()
         .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
+        .filter(|_| crate::model::display().takes_shadows())
         .filter_map(|l| Some((l, crate::model_layer::middle(l)?.to_array())))
         .collect();
     let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
@@ -212,10 +213,15 @@ fn run_plan(
 /// another layer taking them.
 pub(super) fn casts_shadows(layers: &[CompLayerDraw]) -> bool {
     use lumit_gpu::fx::lighting::LightingShadows as S;
-    layers
+    // A view showing the models themselves leaves them out of the shadows.
+    let plain = !crate::model::display().takes_shadows();
+    let mut layers = layers
         .iter()
+        .filter(|l| !(plain && matches!(l.source, DrawSource::Model(_))));
+    layers
+        .clone()
         .any(|l| l.three_d && l.material.casts_shadows != S::Off)
-        && layers.iter().any(|l| {
+        && layers.any(|l| {
             l.material.accepts_shadows != S::Off && l.lights.iter().any(|g| g.shadow_darkness > 0.0)
         })
 }
@@ -225,8 +231,11 @@ pub(super) fn casts_shadows(layers: &[CompLayerDraw]) -> bool {
 /// when no light reaches it at all.
 pub(super) fn shadow_only(l: &CompLayerDraw) -> bool {
     use lumit_gpu::fx::lighting::LightingShadows as S;
-    let holdout = matches!(&l.source, DrawSource::Model(m) if m.holdout);
-    !holdout
+    // A holdout is only hidden behind its shadows, and a view showing the
+    // models themselves shows them all.
+    let plain = !crate::model::display().takes_shadows();
+    let seen = matches!(&l.source, DrawSource::Model(m) if m.holdout || plain);
+    !seen
         && (l.material.casts_shadows == S::Only
             || (l.material.accepts_shadows == S::Only && l.lights.is_empty()))
 }

@@ -85,6 +85,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         instances: &[],
         casters: None,
         maps: None,
+        display: Default::default(),
     };
     let time = |run: &dyn Fn() -> Result<(), String>| -> Result<f64, String> {
         for _ in 0..WARMUP {

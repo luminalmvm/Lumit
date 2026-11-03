@@ -5,7 +5,8 @@
 
 use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{camera_matrix, order::cut_by_depth, Blend, CompositeLayer};
-use lumit_gpu::fx::lighting::{LightingKind, LightingLight, LightingMaterial};
+use lumit_gpu::fx::lighting::{LightingKind, LightingLight, LightingMaterial, LightingShadows};
+use lumit_gpu::mesh::display::{ModelDisplay, Shading};
 use lumit_gpu::mesh::ModelView;
 use lumit_scene::{fixtures, Material};
 use std::sync::Arc;
@@ -77,6 +78,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     instances: &[],
                     casters: None,
                     maps: None,
+                    display: Default::default(),
                 },
             )
             .expect("the model draws")
@@ -214,10 +216,10 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
     let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
     assert!(maps.is_some(), "a model and a light that casts make maps");
     // The face looking at the light is as lit with its own shadow as without.
-    let front = |maps| {
+    let front = |maps, accepts_shadows, shading| {
         let material = LightingMaterial {
             eye,
-            accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
+            accepts_shadows,
             ..LightingMaterial::default()
         };
         let view = ModelView {
@@ -232,6 +234,10 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
             instances: &[],
             casters: None,
             maps,
+            display: ModelDisplay {
+                shading,
+                faces: false,
+            },
         };
         let picture = fx.model(&lease, &scene, &view).expect("the model draws");
         let px = lease
@@ -241,11 +247,18 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
         let i = ((90 * W + 160) * 4) as usize;
         px[i]
     };
-    let (alone, shaded) = (front(None), front(maps.as_ref()));
+    let on = LightingShadows::On;
+    let (alone, shaded) = (
+        front(None, on, Shading::Final),
+        front(maps.as_ref(), on, Shading::Final),
+    );
     assert!(
         alone > 0.1 && (alone - shaded).abs() < 1e-3,
         "{alone} {shaded}"
     );
+    // Showing only its shadows it is empty here, unless a view shows it whole.
+    let only = |shading| front(maps.as_ref(), LightingShadows::Only, shading);
+    assert!(only(Shading::Final) < 1e-3 && only(Shading::Shaded) > 0.1);
     // A white card behind it and past the map's far depth, facing the light:
     // dark behind the cube only, lit in the square past the diamond, hard and
     // soft, out to a texel or two past its edge.
@@ -267,7 +280,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
             dv: [0.0, H as f32 / 32.0, 0.0],
             normal: [0.0, 0.0, -1.0],
             material: LightingMaterial {
-                accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
+                accepts_shadows: LightingShadows::On,
                 ..LightingMaterial::default()
             },
             lights: vec![key],

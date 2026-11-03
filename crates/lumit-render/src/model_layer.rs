@@ -28,8 +28,11 @@ impl Realiser<'_> {
         (width, height): (u32, u32),
         (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
     ) -> Option<ModelPicture> {
-        // Only there to cast, unless it is a holdout, which is never seen.
-        if l.material.casts_shadows == LightingShadows::Only && !m.holdout {
+        // Only there to cast, unless it is a holdout, which is never seen, or
+        // a view is showing the models themselves.
+        let display = crate::model::display();
+        let only = l.material.casts_shadows == LightingShadows::Only;
+        if only && !m.holdout && display.takes_shadows() {
             return None;
         }
         let pose = camera.unwrap_or_else(|| {
@@ -64,17 +67,18 @@ impl Realiser<'_> {
             // own and the footage has those already. A map without it if a
             // model's shadow on a stand-in is missed.
             maps: maps.filter(|_| takes && !m.holdout),
+            display,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {
-            holdout: m.holdout,
+            holdout: m.holds_out(),
             ..picture
         })
     }
 
     /// The shadow maps of the models in `layers` that cast, for the lights
     /// that cast on what takes shadows or show in `haze`. `None`, and nothing
-    /// made, when no model casts.
+    /// made, when no model casts or a view shows models without shadows.
     ///
     /// ponytail: made again every frame. Keep them while the models and
     /// lights hold still if they show in a profile.
@@ -83,6 +87,9 @@ impl Realiser<'_> {
         layers: &[CompLayerDraw],
         haze: Option<&crate::haze::HazeLights>,
     ) -> Option<ShadowMaps> {
+        if !crate::model::display().takes_shadows() {
+            return None;
+        }
         // ponytail: a faded model casts its whole shadow, as a depth can't
         // carry how see-through it is. Fade it into the maps if it's missed.
         let casters: Vec<MapCaster> = layers
