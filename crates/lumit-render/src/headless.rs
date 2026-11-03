@@ -1156,7 +1156,7 @@ impl HeadlessRenderer {
             && self.colour_view.is_none()
             && self.colour_output.is_none()
         {
-            return base;
+            return crate::model::named_as_shown(base);
         }
         let mut h = blake3::Hasher::new();
         h.update(b"view/");
@@ -1202,7 +1202,7 @@ impl HeadlessRenderer {
         let bytes = h.finalize();
         let mut k = [0u8; 16];
         k.copy_from_slice(&bytes.as_bytes()[..16]);
-        u128::from_le_bytes(k)
+        crate::model::named_as_shown(u128::from_le_bytes(k))
     }
 
     /// What the Viewer is currently looking through.

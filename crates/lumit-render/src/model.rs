@@ -11,6 +11,7 @@ use std::time::SystemTime;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::model::{Composition, Document, Layer, ProjectItem, ShadowMode};
 use lumit_core::model_layer::{ModelSettings, UpAxis};
+use lumit_gpu::mesh::display::ModelDisplay;
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
 
@@ -71,6 +72,40 @@ thread_local! {
     static ASIDE: Cell<bool> = const { Cell::new(false) };
     /// What stops a read on this thread part way: an export's cancel.
     static STOP: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
+    /// How the Viewer's view being drawn on this thread shows models. Export
+    /// never sets it, so it draws them as they are.
+    static DISPLAY: Cell<ModelDisplay> = const {
+        Cell::new(ModelDisplay {
+            shading: lumit_gpu::mesh::display::Shading::Final,
+            faces: false,
+        })
+    };
+}
+
+/// Show models on this thread `display`'s way from now on.
+pub fn show_models(display: ModelDisplay) {
+    DISPLAY.with(|d| d.set(display));
+}
+
+/// How models are shown on this thread.
+pub(crate) fn display() -> ModelDisplay {
+    DISPLAY.with(Cell::get)
+}
+
+/// Frame name `base` as this thread shows models: the same name for the look
+/// they export with, another for any other.
+pub(crate) fn named_as_shown(base: u128) -> u128 {
+    let code = display().code();
+    if code == 0 {
+        return base;
+    }
+    let mut h = blake3::Hasher::new();
+    h.update(b"models/");
+    h.update(&base.to_le_bytes());
+    h.update(&[code]);
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
+    u128::from_le_bytes(k)
 }
 
 /// Stop any model this thread reads from now on when `flag` is raised.
