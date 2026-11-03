@@ -925,3 +925,27 @@ fn an_items_own_modifier_acts_on_it_alone_and_a_global_one_on_every_item() {
     assert_eq!(kinds(0), ["Repeater", "Trim paths"], "its own, then the global one");
     assert_eq!(kinds(1), ["Offset paths", "Trim paths"], "not the first item's repeater");
 }
+
+/// A Shape layer whose path is keyed to move sets its picture down where the
+/// art has gone: the anchor is read less by how far the art's box has moved
+/// from where it is at the head of the layer.
+#[test]
+fn a_keyed_path_moves_the_layers_picture_with_it() {
+    let (from, to) = (square(20.0, 20.0, 100.0), square(250.0, 250.0, 50.0));
+    let mut it = item(from.clone());
+    it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
+    let layer = crate::edits::base_layer(
+        "Box".to_owned(),
+        crate::model::LayerKind::Shape { contents: entries(vec![it]) },
+        crate::time::Rational::new(2, 1).expect("two seconds"),
+        crate::model::TransformGroup::default(),
+    );
+    assert_eq!(crate::model::art_shift(&layer, 0.0), (0.0, 0.0));
+    assert_eq!(crate::model::art_shift(&layer, 2.0), (230.0, 230.0));
+    let read = |l: &crate::model::Layer, p: &crate::anim::Property| {
+        let _ = l;
+        p.value_at(2.0)
+    };
+    let placed = crate::model::placement(&layer, 2.0, &read);
+    assert_eq!((placed.anchor.0, placed.anchor.1), (-230.0, -230.0));
+}

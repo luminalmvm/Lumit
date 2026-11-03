@@ -3833,7 +3833,32 @@ pub fn placement(layer: &Layer, t: f64, read: &Read<'_>) -> Placement {
         out.rotation_deg = crate::camera::look_at(out.position, (x, y, z), out.rotation_deg)
             .unwrap_or(out.rotation_deg);
     }
+    let (dx, dy) = art_shift(layer, lt);
+    out.anchor.0 -= dx;
+    out.anchor.1 -= dy;
     out
+}
+
+/// How far a Shape layer's art has moved at layer time `lt` from where it is
+/// at the head of the layer, px: (0, 0) for every other kind.
+///
+/// A Shape layer's picture is its art's own box, and its Position is that
+/// box's corner at the head of the layer (an edit of the art moves the
+/// Position with it). A path or a parametric shape keyed to move takes the
+/// box with it, so the picture is set down that much further on: the anchor
+/// is read that much less, in the layer's own pixels.
+#[must_use]
+pub fn art_shift(layer: &Layer, lt: f64) -> (f64, f64) {
+    let LayerKind::Shape { contents } = &layer.kind else {
+        return (0.0, 0.0);
+    };
+    match (
+        crate::shape::contents_bounds(contents, lt),
+        crate::shape::contents_bounds(contents, 0.0),
+    ) {
+        (Some((x, y, _, _)), Some((x0, y0, _, _))) => (x - x0, y - y0),
+        _ => (0.0, 0.0),
+    }
 }
 
 /// What a layer's expressions in `comp` read at comp time `t`, the whole

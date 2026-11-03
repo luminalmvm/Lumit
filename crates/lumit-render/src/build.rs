@@ -384,9 +384,11 @@ fn drawn(
         .transform
         .placement_at(lt, !layer.switches.three_d, &read);
     let at = p.flat_position();
+    // A Shape layer's art moving under keys moves its picture too.
+    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
     lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
-        anchor: (p.anchor.0 as f32, p.anchor.1 as f32),
+        anchor: ((p.anchor.0 - dx) as f32, (p.anchor.1 - dy) as f32),
         scale: (p.scale.0 as f32, p.scale.1 as f32),
         rotation_deg: p.rotation_deg.2 as f32,
         z: at.2 as f32,
