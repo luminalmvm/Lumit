@@ -113,14 +113,33 @@ picture, which keeps its depth. Motion blur smears it along its own movement. In
 Viewer it is outlined by its box and picked where the model itself is. A model with
 pictures missing wears **Missing** in the Project panel, with their names on it.
 
+Under **Materials** a Model layer has a group of rows for each material in its file, named
+as the file names it, in the Timeline and in **Effect controls**: **Base colour**,
+**Metallic**, **Roughness**, **Emission colour**, **Emission strength**, **Opacity**,
+**Normal strength**, **Textures**, **Transmission**, **IOR**, **Coat** and **Coat
+roughness**. They start at the file's own values, keyframe like any other row, and are kept
+on the layer, never in the file. **Textures** off leaves out the file's base colour and
+metal-rough pictures. **Base colour layer**, **Emission layer**, **Opacity layer** and
+**Normal layer** each take a layer of the comp as the picture on the model's own uvs. A
+Normal layer is read as a normal map saved to a PNG would be.
+Transmission bends the comp's picture behind the model, softened by Roughness and tinted by
+Base colour. Under an environment light, metal, glass and Coat reflect it. In a view's
+**Shaded** look glass shows what is behind it without bending it, and **Normals** draws it
+solid. A material's menu has **Presets** (Chrome, Gold, Brushed metal, Glass, Frosted
+glass, Plastic, Rubber, Emissive, and any saved), **Save preset…** and **Reset**, which puts
+the file's values back. A preset starts from the file's values and turns Textures off.
+
 A new Model layer casts shadows, on itself, on other models and on 3D layers, and takes
 theirs. Its **Casts shadows** and **Accepts shadows** rows work as on any 3D layer, and
 **Holdout** draws what is under it in its place (see [Layers](/use/layers/)).
 
 :::note[Not built yet]
-A Model layer has no rows for its materials, animation or parts. It takes no blur from the
-camera's depth of field. A faded model's shadow doesn't fade, and a holdout's outline doesn't
-blur with motion.
+A Model layer has no rows for its animation or parts. It takes no blur from the camera's
+depth of field. A faded model's shadow doesn't fade, and a holdout's outline doesn't blur
+with motion. Materials don't change the shadow a model casts, so glass casts a whole shadow,
+and they don't reach a model used as a particle's shape. Glass does not bend the model
+itself, and shadows and haze from 3D layers below a 2D layer don't reach a run with glass
+in it.
 :::
 
 ## Interpretation
