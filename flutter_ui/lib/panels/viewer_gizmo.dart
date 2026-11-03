@@ -1670,7 +1670,11 @@ class Handles3d {
   /// x, y and z: Position, or a two-node camera's point of interest.
   final List<BridgeTransformProp> props;
 
-  const Handles3d(this.box, this.gizmo, this.props);
+  /// An expression writes one of [props], so the set is drawn but not held,
+  /// all but its scale knobs.
+  final bool driven;
+
+  const Handles3d(this.box, this.gizmo, this.props, {this.driven = false});
 
   /// Where the handles are, as the values the arrows write.
   Vec3 get at => gizmo.at;
@@ -1752,7 +1756,8 @@ LayerBox? primary3d(List<LayerBox> boxes, UuidValue? first) {
 
 /// The move handles of a 3D layer, a light or a camera: one set at its
 /// anchor, and a second at a two-node camera's point of interest. None where
-/// the place is behind the eye or a value it writes is an expression's.
+/// the place is behind the eye, and [Handles3d.driven] where a value it writes
+/// is an expression's.
 List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
   final tf = box.transform;
   final map = box.map;
@@ -1778,17 +1783,16 @@ List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
         ]
       ),
   ]) {
-    if (props.any((p) => switch (scalarOf(tf, p)) {
-          null || BridgeScalar_Expression() => true,
-          _ => false,
-        })) {
-      continue;
-    }
+    final values = [for (final p in props) scalarOf(tf, p)];
+    if (values.contains(null)) continue;
     final scales = props.first == BridgeTransformProp.positionX &&
         _hasScale(box);
     final gizmo =
         Gizmo3d.of(map, at: at, local: local, mode: mode, scales: scales);
-    if (gizmo != null) out.add(Handles3d(box, gizmo, props));
+    if (gizmo != null) {
+      out.add(Handles3d(box, gizmo, props,
+          driven: values.any((s) => s is BridgeScalar_Expression)));
+    }
   }
   return out;
 }
@@ -2014,6 +2018,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   /// The 3D handle under the pointer, which set and which part.
   (BridgeTransformProp, GizmoPick)? _hot3d;
+
+  /// The pointer is on 3D handles an expression drives.
+  bool _driven3d = false;
 
   /// Whether a body drag moves a 3D layer across the screen (Alt) rather
   /// than across its parent's flat.
@@ -2300,6 +2307,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         hot3d: _drag == _GizmoDrag.none ? _hot3d : null,
         held3d: held != null && part != null ? (held.props.first, part) : null,
         neutral: t.textPrimary,
+        driven: t.port.number,
         readout: switch (_drag) {
           _GizmoDrag.axis3d => _readout3d(),
           _GizmoDrag.move when _onScreen => _readoutAcross(),
@@ -2319,6 +2327,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
     return Positioned.fill(
       child: MouseRegion(
+        cursor: _driven3d ? SystemMouseCursors.forbidden : MouseCursor.defer,
         onHover: _onHover,
         onExit: (_) => _setHover(null),
         child: Listener(
@@ -2494,10 +2503,20 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void _onHover(PointerHoverEvent event) {
     if (_drag != _GizmoDrag.none) return;
     final hot = _pick3d(event.localPosition);
-    final named = hot == null ? null : (hot.$1.props.first, hot.$2);
-    if (named != _hot3d) setState(() => _hot3d = named);
+    // The scale knobs write Scale, so they still move a set whose place an
+    // expression drives.
+    final driven = hot != null &&
+        hot.$1.driven &&
+        hot.$2.kind != GizmoKind.scale;
+    final named = hot == null || driven ? null : (hot.$1.props.first, hot.$2);
+    if (named != _hot3d || driven != _driven3d) {
+      setState(() {
+        _hot3d = named;
+        _driven3d = driven;
+      });
+    }
     _rest?.cancel();
-    if (named != null) return _setHover(null);
+    if (hot != null) return _setHover(null);
     final at = event.localPosition;
     final ids = widget.uiState.selectedLayerIds;
     void show(LayerBox? hit) =>
@@ -2954,7 +2973,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         !(selected.length == 1 &&
             selected.single.scalable &&
             selected.single.handleHit(at) == GizmoHandle.anchor)) {
-      if (_pick3d(at) case (final set, final part)) {
+      if (_pick3d(at) case (final set, final part)
+          when !set.driven || part.kind == GizmoKind.scale) {
         setState(() {
           _set = set;
           _part = part;
@@ -4161,6 +4181,9 @@ class _GizmoPainter extends CustomPainter {
   final (BridgeTransformProp, GizmoPick)? held3d;
   final Color neutral;
 
+  /// Every part of a set an expression drives.
+  final Color driven;
+
   /// What a 3D drag has changed, drawn by [pointer].
   final List<String> readout;
   final Offset pointer;
@@ -4194,6 +4217,7 @@ class _GizmoPainter extends CustomPainter {
     required this.hot3d,
     required this.held3d,
     required this.neutral,
+    required this.driven,
     required this.readout,
     required this.pointer,
     required this.readoutStyle,
@@ -4306,6 +4330,7 @@ class _GizmoPainter extends CustomPainter {
         outline: surface,
         hot: hot3d?.$1 == named ? hot3d?.$2 : null,
         held: held?.$2,
+        tint: set.driven ? driven : null,
       );
     }
     paintGizmoReadout(canvas, pointer, readout,
