@@ -29,8 +29,9 @@ use std::sync::{Arc, Mutex};
 use rayon::prelude::*;
 
 use super::{
-    attr, birth_point, burst_base, draw, integrate, jitter, launch, look_of, outline_polyline,
-    turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream, BURST_ID, BURST_MAX,
+    attr, burst_base, draw, emitter::birth_point, emitter::outline_polyline, integrate, jitter,
+    launch, look_of, turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream,
+    BURST_ID, BURST_MAX,
 };
 use crate::camera::Place;
 use crate::expression::ExpressionContext;
@@ -615,7 +616,7 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 /// wired row counts as above nought, as it may be at some time.
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
-    inst.effect.match_name == "particulate"
+    crate::fx::effects::particulate::rows::on_its_layer(inst)
         && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
 }
 
@@ -623,7 +624,7 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
 /// above nought, at some time. It does not make the particles walk.
 #[must_use]
 pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
-    inst.effect.match_name == "particulate" && above(comp, inst, "persistence")
+    crate::fx::effects::particulate::rows::on_its_layer(inst) && above(comp, inst, "persistence")
 }
 
 /// Whether row `id` is above nought, or keyed, an expression or wired, as it
@@ -1009,9 +1010,8 @@ fn born(p: &PointsParams, walk: &MaskPolyline, b: u64, age: f32) -> Option<(Part
     let p0 = birth_point(
         &p.emitter,
         walk,
-        draw(p.seed, b, attr::EMIT_U),
-        draw(p.seed, b, attr::EMIT_V),
-        draw(p.seed, b, attr::EMIT_W),
+        p.frame,
+        [attr::EMIT_U, attr::EMIT_V, attr::EMIT_W].map(|a| draw(p.seed, b, a)),
     )?;
     let v0 = launch(p, b);
     let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;

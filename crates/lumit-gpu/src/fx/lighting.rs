@@ -519,6 +519,7 @@ impl LightingFx {
                     5,
                     wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 ),
+                tex(6, false, D::D2),
             ],
         });
         let square_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -721,6 +722,34 @@ impl FxEngine {
         op: &LightingOp,
         casters: Option<&ShadowCasters>,
     ) -> wgpu::Texture {
+        self.lighting_at(ctx, src, (w, h), op, casters, None)
+    }
+
+    /// [`Self::lighting`] for particles in the scene, each pixel where `depth`
+    /// says, as one over clip w: at `op.origin + (op.du·x + op.dv·y +
+    /// op.normal) / depth`. Each is lit as a ball, and every caster may shade
+    /// it.
+    pub fn lighting_scene(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        depth: &wgpu::Texture,
+        op: &LightingOp,
+        casters: Option<&ShadowCasters>,
+    ) -> wgpu::Texture {
+        let size = (src.width(), src.height());
+        self.lighting_at(ctx, src, size, op, casters, Some(depth))
+    }
+
+    fn lighting_at(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        (w, h): (u32, u32),
+        op: &LightingOp,
+        casters: Option<&ShadowCasters>,
+        depth: Option<&wgpu::Texture>,
+    ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
         let fx = &self.lighting;
         let out = work_texture(ctx, w, h, "fx-lighting-out");
@@ -733,7 +762,9 @@ impl FxEngine {
                 c.planes
                     .iter()
                     .enumerate()
-                    .filter(|&(i, p)| op.own_caster != Some(i) && may_shade(&receiver, l, p))
+                    .filter(|&(i, p)| {
+                        op.own_caster != Some(i) && (depth.is_some() || may_shade(&receiver, l, p))
+                    })
                     .fold(0, |m, (i, _)| m | (1 << i))
             });
             *slot = gpu_light(l, mask);
@@ -757,7 +788,12 @@ impl FxEngine {
                         f32::from(m.accepts_shadows as u8),
                         op.own_caster.map_or(-1.0, |i| i as f32),
                     ],
-                    casters_head: [count as f32, size as f32, f32::from(u8::from(m.unlit)), 0.0],
+                    casters_head: [
+                        count as f32,
+                        size as f32,
+                        f32::from(u8::from(m.unlit)),
+                        f32::from(u8::from(depth.is_some())),
+                    ],
                     lights,
                     casters: planes,
                 }),
@@ -795,6 +831,12 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 5,
                     resource: wgpu::BindingResource::Sampler(&fx.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(
+                        &depth.unwrap_or(&fx.empty).create_view(&Default::default()),
+                    ),
                 },
             ],
         });

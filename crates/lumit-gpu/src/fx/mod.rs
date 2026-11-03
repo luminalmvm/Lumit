@@ -31,6 +31,7 @@ pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
 pub mod particulate;
+pub mod particulate_scene;
 pub mod points_draw;
 pub mod points_field;
 pub mod split;
@@ -390,6 +391,8 @@ pub struct FxEngine {
     particulate_draw: wgpu::RenderPipeline,
     /// Particle blend's passes, beside the draw they stand in for.
     particulate_blend: particulate::ParticulateBlendPipelines,
+    /// Particles in the 3D scene, built the first time some are.
+    particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,

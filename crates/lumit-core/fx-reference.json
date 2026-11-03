@@ -12051,6 +12051,13 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "in_scene",
+          "label": "In the scene",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "shape",
           "label": "Shape",
           "kind": "choice",
@@ -12063,7 +12070,10 @@
             "Rectangle",
             "Mask path",
             "Ellipse outline",
-            "Rectangle outline"
+            "Rectangle outline",
+            "Box",
+            "Sphere",
+            "Layer"
           ],
           "dividers_after": []
         },
@@ -12150,6 +12160,13 @@
           "kind": "mask_path",
           "unit": "raw",
           "self_default": true
+        },
+        {
+          "id": "emitter_layer",
+          "label": "Emitter layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "density_layer",
@@ -12911,6 +12928,7 @@
         {
           "label": "Emitter",
           "params": [
+            "in_scene",
             "shape",
             "position_x",
             "position_y",
@@ -12921,6 +12939,7 @@
             "emitter_angle",
             "path_from",
             "mask_path",
+            "emitter_layer",
             "density_layer",
             "density_layer_placement",
             "emit_rate",
@@ -13064,6 +13083,54 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 2
+        },
+        {
+          "param": "emitter_layer",
+          "on": "shape",
+          "cond": "choice_is",
+          "value": 9
+        },
+        {
+          "param": "density_layer",
+          "on": "shape",
+          "cond": "choice_is_not",
+          "value": 9
+        },
+        {
+          "param": "collide_with",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "separation",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "alignment",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "cohesion",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "sparks",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "persistence",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
         },
         {
           "param": "burst_count",

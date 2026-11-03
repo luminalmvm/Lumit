@@ -4744,8 +4744,7 @@ fn particulate_op<'a>(
         turbulence: f.turbulence,
         turbulence_scale: f.turbulence_scale,
         turbulence_speed: f.turbulence_speed,
-        // The **fixed** central difference the CPU reference takes, so one
-        // frame key names one picture whatever raster is previewing.
+        // The CPU reference's fixed central difference, whatever the raster.
         eps: ((dt * 0.5) as f32).max(1e-6),
         dt: dt as f32,
         frames,
@@ -4754,6 +4753,7 @@ fn particulate_op<'a>(
         path,
         path_total,
         tail_seconds: style.streak_seconds,
+        tail_lead: 0.0,
         feather: style.feather,
         mix: style.mix,
         mode,
@@ -4846,19 +4846,16 @@ impl Particulate {
         let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
         curves.extend_from_slice(&packed.particle.size_curve);
         curves.extend_from_slice(&packed.particle.opacity_curve);
-        // The camera, in the raster this frame is drawn at: the
-        // projection was built in px@comp, like the mask path beside it, and
-        // takes the same factor for the same reason.
+        // The camera, in the raster this frame is drawn at: the projection
+        // was built in px@comp, like the mask path beside it.
         let projection = sched
             .projection
             .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
         // The polyline the emitter walks. A Mask path's arrives in px@comp and
-        // takes the raster factor like every other distance; an
-        // outline's is built **from the packed emitter**, whose extents the
-        // resolve step already rescaled, so scaling it again would draw the
-        // ring at twice the size on a half-resolution preview.
+        // takes the raster factor. An outline's is built from the packed
+        // emitter, which the resolve step already rescaled.
         let poly = if packed.emitter.shape.is_outline() {
-            lumit_core::fx::points::outline_polyline(&packed.emitter)
+            lumit_core::fx::points::emitter::outline_polyline(&packed.emitter)
         } else {
             lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p))
         };
@@ -4868,7 +4865,7 @@ impl Particulate {
             .zip(poly.arc.iter())
             .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
             .collect();
-        let density = picture("density_layer");
+        let density = picture(inst.density_row());
         let op = particulate_op(
             &packed,
             style,
@@ -4953,7 +4950,8 @@ impl GpuEffect for Particulate {
             return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
         }
         Particulate::with_op(p, aux, |op, sprite| {
-            fx.particulate(ctx, tex, w, h, sprite, op)
+            crate::realise::scene::draw(fx, ctx, tex, (w, h), sprite, op, p)
+                .unwrap_or_else(|| fx.particulate(ctx, tex, w, h, sprite, op))
         })
     }
 
@@ -6400,6 +6398,7 @@ mod tests {
             emitter_angle: 20.0,
             path_from: 0,
             mask_path: false,
+            emitter_layer: false,
             emit_rate: 220.0,
             burst: 0,
             burst_count: 100.0,
@@ -6450,6 +6449,7 @@ mod tests {
             turbulence_amount: 18.0,
             turbulence_scale: 70.0,
             turbulence_speed: 0.4,
+            in_scene: false,
             mode,
             feather: 60.0,
             sprite_layer: false,
@@ -6540,7 +6540,7 @@ mod tests {
         // Size run by speed, so the speed's length is held to the CPU's too.
         inst.size_by = 1;
         inst.shape = shape;
-        if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
+        if lumit_core::fx::points::emitter::EmitterShape::from_code(shape).is_outline() {
             // **Turbulence off for the outline twin, on purpose.** What this
             // run measures is that the two paths walk the polyline to the same
             // point, and turbulence is a magnifier sitting on top of it: the
@@ -6556,7 +6556,7 @@ mod tests {
         let packed = packed.framed(w as f32, h as f32);
         // The outline the emitter walks, flattened by the one function both
         // paths call — the shipping pass does exactly this.
-        let outline = lumit_core::fx::points::outline_polyline(&packed.emitter);
+        let outline = lumit_core::fx::points::emitter::outline_polyline(&packed.emitter);
         let path: Vec<[f32; 4]> = outline
             .points
             .iter()

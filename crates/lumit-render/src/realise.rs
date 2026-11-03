@@ -20,6 +20,10 @@ use crate::draw::{
 use order::{draw_order, runs_of};
 
 mod order;
+mod picture;
+
+pub(crate) mod dof;
+pub(crate) mod scene;
 
 /// One `node_graph` op's own walk, as [`crate::fxops::run_ops`] calls it: the
 /// picture in, its raster, and the picture out. Borrowed for as long as the
@@ -2149,232 +2153,35 @@ impl Realiser<'_> {
         let mut waiting = Vec::new();
         // Each model's depth, by its place in the list.
         let mut model_depths = Vec::new();
-        for l in layers {
+        // Particles in the scene: each one's depth by layer, and where its
+        // emitter is, by its place in the list.
+        let (seen, mut made) = self.scene_frame(camera, (width, height), layers);
+        let mut scene_depths = Vec::with_capacity(layers.len());
+        let mut emitters = Vec::new();
+        for (i, l) in layers.iter().enumerate() {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
             // that follows is one pass over the whole segment rather than a
             // per-layer act, so it lands in the frame total instead
             // (crate::profile).
             let (started, mut fx_ms) = self.layer_clock();
-            let tex = match &l.source {
-                DrawSource::Pixels {
-                    rgba,
-                    tex_w,
-                    tex_h,
-                    format,
-                    colour_space,
-                } if straight_to_composite(l, camera)
-                    && matches!(format, lumit_media::decode::PixelFormat::Srgb8)
-                    && self.input_transform(colour_space).is_none() =>
-                {
-                    // Nothing between here and the composite draw, so the
-                    // eight-bit upload goes there as it arrived. The sampler
-                    // decodes sRGB in hardware, which is the decode the
-                    // linearise pass was asking it for anyway, so the picture
-                    // is the same one and the working-format copy is never
-                    // made.
-                    self.engine.upload_srgb8(&self.ctx, rgba, *tex_w, *tex_h)
-                }
-                DrawSource::Pixels {
-                    rgba,
-                    tex_w,
-                    tex_h,
-                    format,
-                    colour_space,
-                } => self.upload_source(rgba, *tex_w, *tex_h, *format, colour_space),
-                DrawSource::Nested {
-                    width,
-                    height,
-                    background,
-                    draws,
-                    camera,
-                    key,
-                    paint,
-                    paint_time,
-                } => {
-                    let nested =
-                        self.realise_nested(*key, *camera, *width, *height, *background, draws);
-                    self.paint_over(
-                        nested,
-                        f64::from(*width),
-                        f64::from(*height),
-                        paint,
-                        *paint_time,
-                    )
-                }
-                // **A node graph composition** (docs/impl/node-graph-comp.md
-                // §2.3). Its frame is allocated at the render scale like every
-                // comp's, and the walk places its Read boxes in the graph's
-                // own pixels, so the scale applies once and a graph renders at
-                // half preview what a layer comp of the same picture does.
-                DrawSource::Graph(plan) => {
-                    let (gw, gh) = lumit_gpu::composite::scaled_size(
-                        plan.width,
-                        plan.height,
-                        self.render_scale,
-                    );
-                    self.realise_graph(plan, None, gw, gh, self.render_scale)
-                }
-                DrawSource::Model(m) => match self.model_picture(l, m, camera, (width, height)) {
-                    Some(p) => {
-                        model_depths.push((linear_textures.len(), p.depth));
-                        p.colour
-                    }
-                    None => self.transparent(1, 1),
-                },
-                DrawSource::Adjust | DrawSource::Haze(_) => {
-                    // realise splits segments at every Adjust draw, so none
-                    // reaches here; a transparent texel keeps the no-panic
-                    // rule (and draws nothing) if that ever regresses.
-                    let src = self.engine.upload_srgb8(&self.ctx, &[0, 0, 0, 0], 1, 1);
-                    self.engine.linearise(&self.ctx, &src)
-                }
+            let entered = seen
+                .as_ref()
+                .filter(|_| scene::draws_in_scene(l))
+                .map(|frame| scene::Seen::enter(frame, l));
+            let (mut tex, mut grow, model_depth) = match made.get_mut(i).and_then(Option::take) {
+                Some(made) => made,
+                None => self.layer_picture(l, camera, (width, height), &mut fx_ms),
             };
-            // The raster the stack starts from, kept because one effect can
-            // grow it and the composite must then place a picture wider
-            // than the layer it came from.
-            let (source_w, source_h) = (tex.width(), tex.height());
-            // The effect stack runs on the linear source, after masks and
-            // before the transform (docs/08 §1.5; docs/06 render order).
-            let mut tex = if l.fx.is_empty() {
-                tex
-            } else {
-                let (w, h) = (tex.width(), tex.height());
-                // Neighbour source frames a temporal effect (echo) reads;
-                // empty for a plain stack, so this uploads nothing then.
-                // **A Precomp measures its own motion** (docs/08 §3.2).
-                // A comp has no decoded frames either, so a Motion blur or
-                // Datamosh on a Precomp layer bound nothing and passed through;
-                // the nested picture was built again at each neighbour time, and
-                // the pair is compared here. Every other kind takes the decoded
-                // route below, unchanged.
-                let (neighbours, flow) = match &l.source {
-                    DrawSource::Nested {
-                        width,
-                        height,
-                        background,
-                        ..
-                    } if !l.flow_below.is_empty() => {
-                        self.measure_below_flow(l, &tex, *width, *height, *background)
-                    }
-                    _ => {
-                        let neighbours: Vec<(i32, wgpu::Texture)> = l
-                            .neighbours
-                            .iter()
-                            .map(|(offset, rgba, nw, nh)| {
-                                let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
-                                (*offset, self.engine.linearise(&self.ctx, &src))
-                            })
-                            .collect();
-                        // The dense motion fields, one per offset a
-                        // flow-consuming effect asked for, each uploaded
-                        // as its own texture (only when it matches the layer's
-                        // raster). The confidence rides in the .z channel
-                        // (FX-19).
-                        let flow: Vec<(i32, wgpu::Texture)> = l
-                            .flow_fields
-                            .iter()
-                            .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
-                            .map(|(offset, u, v, conf, _, _)| {
-                                (
-                                    *offset,
-                                    lumit_gpu::fx::common::upload_flow_field(
-                                        &self.ctx, u, v, conf, w, h,
-                                    ),
-                                )
-                            })
-                            .collect();
-                        (neighbours, flow)
-                    }
-                };
-                // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
-                // `lut` ops (§3.11); the same load export uses.
-                let tables = self.load_tables(&l.colour_tables);
-                // The layer inputs — a depth pass, a Light wrap background —
-                // resampled to this layer's working raster (w, h), 1:1 with the
-                // stack's consuming ops (§3.22, §3.28); the same render export
-                // runs.
-                let layer_inputs =
-                    self.render_layer_inputs(&l.dof_inputs, w, h, l.natural_size, None);
-                let mattes = self.render_layer_inputs(&l.mattes, w, h, l.natural_size, None);
-                let flare_lens = self.load_flare_lens(&l.flare_lens_files);
-                // A stack resolved against a raster wider than the one it is
-                // about to run on (a Precomp layer's, under reduced-resolution
-                // preview) has its px@comp parameters rescaled to this raster,
-                // the same correction the adjustment path applies. `None` —
-                // every other kind — resolved at its own decode scale already,
-                // so nothing moves.
-                let fx_ops = match l.fx_ref_width {
-                    Some(ref_w) if ref_w > 0.0 => {
-                        let mut ops = l.fx.clone();
-                        ops.rescale_spatial(w as f32 / ref_w);
-                        ops
-                    }
-                    _ => l.fx.clone(),
-                };
-                // The baked pictures a background analysis filed. A roto matte
-                // is uploaded at its own raster and `fit_centred` inside the
-                // walk takes it to the working one; a plane is resampled to
-                // the working raster here instead, by `plane_texture`, because
-                // it is at the model's own few-hundred-pixel raster and a
-                // crop-and-pad would leave a small square of depth in a sea of
-                // nothing. Empty on every layer with no such effect, which
-                // costs nothing at all.
-                let roto_mattes: Vec<Option<wgpu::Texture>> = l
-                    .roto_mattes
-                    .iter()
-                    .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
-                    .collect();
-                // The graphs this layer's Node graph effects apply
-                // (docs/impl/node-graph-comp.md §2.4): `run_ops` cannot reach
-                // the realiser, so it is handed one closure per enabled
-                // instance and calls the k-th where the k-th such op would
-                // have dispatched a kernel.
-                let plans = self.graph_closures(l, w);
-                let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
-                    plans.iter().map(|f| &**f).collect();
-                let planes: Vec<Option<wgpu::Texture>> = l
-                    .planes
-                    .iter()
-                    .map(|slot| slot.as_ref().map(|p| self.plane_texture(p, w, h)))
-                    .collect();
-                let late = |slot: usize, points: usize| {
-                    self.late_clones(l.dof_inputs.get(slot), points, w, h, l.natural_size)
-                };
-                let side = crate::fxops::Side {
-                    roto: &roto_mattes,
-                    planes: &planes,
-                    late: Some(&late),
-                };
-                crate::fxops::run_ops(
-                    self.fx,
-                    &self.ctx,
-                    tex,
-                    w,
-                    h,
-                    &fx_ops,
-                    &neighbours,
-                    &flow,
-                    &tables,
-                    &layer_inputs,
-                    &flare_lens,
-                    &mattes,
-                    &l.mask_paths,
-                    &l.points_schedules,
-                    &side,
-                    &graphs,
-                    fx_ms.as_mut(),
-                    // The per-effect cache, for a source the builder
-                    // could name; a nested comp, text or shape runs as before.
-                    l.fx_input_key.map(|key| (self.fx_cache, key)),
-                )
-            };
-            // How much its effects grew the picture, which the depth of field
-            // reads to place each pixel.
-            let mut grow = (
-                tex.width() as f32 / source_w as f32,
-                tex.height() as f32 / source_h as f32,
-            );
+            drop(entered);
+            if let Some(depth) = model_depth {
+                model_depths.push((linear_textures.len(), depth));
+            }
+            let claimed = scene::claim(l).map(|(depth, emitter)| {
+                emitters.push((linear_textures.len(), emitter));
+                model_depths.push((linear_textures.len(), depth.clone()));
+                depth
+            });
             if shadowed {
                 // Timed now and finished once it is lit, below, so its row
                 // still shows the whole of its cost.
@@ -2386,8 +2193,17 @@ impl Realiser<'_> {
                 waiting.push((so_far, fx_ms));
             } else {
                 let blurred;
-                (tex, grow, blurred) =
-                    self.lit(l, tex, eye, camera, None, None, grow, (width, height));
+                (tex, grow, blurred) = self.lit(
+                    l,
+                    tex,
+                    eye,
+                    camera,
+                    None,
+                    None,
+                    grow,
+                    (width, height),
+                    claimed.as_ref(),
+                );
                 if scene_depth.is_some() || below.is_some() {
                     sharp.resize(linear_textures.len() + 1, None);
                     sharp[linear_textures.len()] = blurred;
@@ -2396,6 +2212,7 @@ impl Realiser<'_> {
             }
             grown.push(grow);
             linear_textures.push(tex);
+            scene_depths.push(claimed);
         }
         if shadowed {
             let (sets, each) =
@@ -2406,14 +2223,27 @@ impl Realiser<'_> {
                 .zip(each)
                 .zip(waiting)
                 .zip(&grown)
-                .map(|((((tex, l), (set, own)), (so_far, fx_ms)), grow)| {
-                    let started = so_far.and_then(|d| web_time::Instant::now().checked_sub(d));
-                    let casters = set.and_then(|k| sets.get(k));
-                    let size = (width, height);
-                    let lit = self.lit(l, tex, eye, camera, casters, own, *grow, size);
-                    self.layer_done(l, started, fx_ms);
-                    lit
-                })
+                .zip(&scene_depths)
+                .map(
+                    |(((((tex, l), (set, own)), (so_far, fx_ms)), grow), depth)| {
+                        let started = so_far.and_then(|d| web_time::Instant::now().checked_sub(d));
+                        let casters = set.and_then(|k| sets.get(k));
+                        let size = (width, height);
+                        let lit = self.lit(
+                            l,
+                            tex,
+                            eye,
+                            camera,
+                            casters,
+                            own,
+                            *grow,
+                            size,
+                            depth.as_ref(),
+                        );
+                        self.layer_done(l, started, fx_ms);
+                        lit
+                    },
+                )
                 .collect();
             let keep_sharp = scene_depth.is_some() || below.is_some();
             linear_textures = Vec::with_capacity(lit.len());
@@ -2582,10 +2412,15 @@ impl Realiser<'_> {
                 pose.position.2 as f32,
             ]
         });
-        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::composite::Cut>>) =
-            draw_order(layers, &linear_textures, &grown, cam_mat.zip(eye))
-                .into_iter()
-                .unzip();
+        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::composite::Cut>>) = draw_order(
+            layers,
+            &linear_textures,
+            &grown,
+            cam_mat.zip(eye),
+            &emitters,
+        )
+        .into_iter()
+        .unzip();
         let comp_layers: Vec<lumit_gpu::composite::CompositeLayer> =
             order.iter().map(|&i| comp_layers[i].clone()).collect();
         // The depth pass reads each layer's coverage before the camera blurred
@@ -2663,7 +2498,7 @@ impl Realiser<'_> {
                 let mut planes = Vec::new();
                 let mut textures = Vec::new();
                 for ((texture, l), g) in linear_textures.iter().zip(layers).zip(&grown) {
-                    if !l.three_d || shadow_only(l) || matches!(l.source, DrawSource::Model(_)) {
+                    if !l.three_d || shadow_only(l) || models.iter().any(|m| &m.colour == texture) {
                         continue;
                     }
                     let m = frame * placed_in_3d(texture, l, *g).world();
@@ -2777,7 +2612,7 @@ impl Realiser<'_> {
     /// among them; `grow` is how much its effects grew it and `size` the
     /// comp's, which the depth of field reads. Hands back the picture, how much
     /// it has grown now, and the lit picture before the blur with its own grow
-    /// when it was blurred.
+    /// when it was blurred. Particles in the scene come with their `depth`.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn lit(
         &self,
@@ -2789,6 +2624,7 @@ impl Realiser<'_> {
         own: Option<usize>,
         grow: (f32, f32),
         size: (u32, u32),
+        depth: Option<&wgpu::Texture>,
     ) -> (
         wgpu::Texture,
         (f32, f32),
@@ -2798,6 +2634,13 @@ impl Realiser<'_> {
         // the comp's depth.
         if matches!(l.source, DrawSource::Model(_)) {
             return (tex, grow, None);
+        }
+        if let Some(depth) = depth {
+            return (
+                self.scene_lit(l, tex, depth, camera, size, casters),
+                grow,
+                None,
+            );
         }
         // After its effects and before it is placed. `l.lights` is empty
         // unless the comp holds lights and this layer accepts them, and empty
@@ -2817,7 +2660,7 @@ impl Realiser<'_> {
         // off the camera's focus plane is blurred by its own circle of
         // confusion. None unless the camera carries one.
         let Some((reach, field, step, room)) =
-            dof_blur(camera, l, &tex, grow, size, self.render_scale)
+            dof::dof_blur(camera, l, &tex, grow, size, self.render_scale)
         else {
             return (tex, grow, None);
         };
@@ -3086,191 +2929,6 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
     )
 }
 
-/// How far one pass of the camera's blur reaches at most, in texels. A layer
-/// seen nearly edge on would otherwise reach across all of it.
-const DOF_REACH: f32 = 512.0;
-
-/// The layer seen from the eye, laid out as `fx_blur.wgsl` says.
-type DofField = [[f32; 4]; 3];
-
-/// How much wider the gaussian's reach is than half the circle of confusion.
-/// After Effects blurs with a box that wide either side, and this gaussian is
-/// the one that comes closest to its pictures.
-const DOF_SOFTNESS: f64 = 1.37;
-
-/// Comp pixels as the camera's eye sees them: the eye at nought, looking
-/// down +z.
-fn from_eye(cam: lumit_core::model::CameraPose, comp: (u32, u32), zoom: f32) -> glam::Mat4 {
-    let (cw, ch) = (comp.0 as f32, comp.1 as f32);
-    let frame = lumit_gpu::composite::camera_frame(
-        cw,
-        ch,
-        zoom,
-        (
-            cam.position.0 as f32,
-            cam.position.1 as f32,
-            cam.position.2 as f32,
-        ),
-        (
-            cam.rotation_deg.0 as f32,
-            cam.rotation_deg.1 as f32,
-            cam.rotation_deg.2 as f32,
-        ),
-    );
-    // In the camera's frame the eye is at the comp centre, zoom back.
-    glam::Mat4::from_translation(glam::Vec3::new(-cw * 0.5, -ch * 0.5, zoom)) * frame
-}
-
-/// Whether the camera's depth of field leaves `l` sharp at its own size,
-/// read without its picture: wholly in front of the eye, and blurred under a
-/// quarter of a pixel at every corner. [`dof_blur`] leaves such a layer
-/// alone too.
-pub(crate) fn dof_leaves_sharp(
-    cam: lumit_core::model::CameraPose,
-    l: &crate::draw::CompLayerDraw,
-    comp: (u32, u32),
-) -> bool {
-    let Some(dof) = cam.dof else {
-        return true;
-    };
-    if !l.three_d {
-        return true;
-    }
-    let zoom = (cam.zoom as f32).max(1.0);
-    let k = (lumit_core::camera::coc_per_zoom(&dof, f64::from(zoom)) / 2.0 * DOF_SOFTNESS) as f32;
-    let focus = dof.focus_distance as f32;
-    let mut place = glam::Mat4::from_cols_array_2d(&lumit_gpu::composite::place_matrix(
-        l.position,
-        l.anchor,
-        l.scale,
-        l.rotation_deg,
-        l.z,
-        l.rotation_x_deg,
-        l.rotation_y_deg,
-    ));
-    if let Some(pre) = &l.pre {
-        place = glam::Mat4::from_cols_array_2d(pre) * place;
-    }
-    let size = glam::vec3(l.natural_size.0, l.natural_size.1, 1.0);
-    let m = from_eye(cam, comp, zoom) * place * glam::Mat4::from_scale(size);
-    [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
-        .map(|(x, y)| m.transform_point3(glam::vec3(x, y, 0.0)))
-        .iter()
-        .all(|c| c.z > 0.0 && k * zoom * (c.z - focus).abs() / c.z < 0.25)
-}
-
-/// Depth of field on a 3D layer (docs/impl/camera.md §5), for
-/// `FxEngine::blur_field`: the layer seen from the eye, how far a pass may
-/// reach, and how many texels of room the layer needs on each side for its
-/// edges to blur into, with the field already moved out by that room. Each
-/// pixel is blurred by its own distance from the focus plane, so a floor going
-/// into the distance softens towards its far end. A parent's scale comes in
-/// through the placement.
-///
-/// `None` for a sharp layer: no camera, no depth of field, a 2D layer, one
-/// wholly behind the eye or off the frame, or one blurred under half a pixel.
-fn dof_blur(
-    camera: Option<lumit_core::model::CameraPose>,
-    l: &crate::draw::CompLayerDraw,
-    texture: &wgpu::Texture,
-    grow: (f32, f32),
-    comp: (u32, u32),
-    render_scale: f32,
-) -> Option<(f32, DofField, f32, (u32, u32))> {
-    let cam = camera?;
-    let dof = cam.dof?;
-    if !l.three_d {
-        return None;
-    }
-    let zoom = (cam.zoom as f32).max(1.0);
-    // The blur's reach on screen is this times zoom times how far off focus a
-    // point is over its distance.
-    let k = (lumit_core::camera::coc_per_zoom(&dof, f64::from(zoom)) / 2.0 * DOF_SOFTNESS) as f32;
-    let focus = dof.focus_distance as f32;
-    if k <= 0.0 {
-        return None;
-    }
-    let (cw, ch) = (comp.0 as f32, comp.1 as f32);
-    let m = from_eye(cam, comp, zoom) * placed_in_3d(texture, l, grow).world();
-    let corner = m.col(3).truncate();
-    let (across, down) = (m.col(0).truncate(), m.col(1).truncate());
-    let corners = [
-        corner,
-        corner + across,
-        corner + down,
-        corner + across + down,
-    ];
-    if corners.iter().all(|c| c.z <= 0.0) {
-        return None;
-    }
-    if corners.iter().all(|c| c.z > 0.0) {
-        let seen = corners.map(|c| (c.x * zoom / c.z, c.y * zoom / c.z));
-        let off = |f: &dyn Fn((f32, f32)) -> bool| seen.iter().all(|&p| f(p));
-        if off(&|p| p.0 < -cw * 0.5)
-            || off(&|p| p.0 > cw * 0.5)
-            || off(&|p| p.1 < -ch * 0.5)
-            || off(&|p| p.1 > ch * 0.5)
-        {
-            return None;
-        }
-        // The widest blur on screen is at the nearest or farthest corner. A
-        // layer reaching past the eye is left to the shader, as its nearest
-        // part is no corner.
-        let widest = corners
-            .iter()
-            .map(|c| k * zoom * (c.z - focus).abs() / c.z)
-            .fold(0.0, f32::max);
-        if widest * render_scale < 0.5 {
-            return None;
-        }
-    }
-    let (tw, th) = (texture.width() as f32, texture.height() as f32);
-    let (x, y) = (across / tw, down / th);
-    // A layer blurred past the reach all over, far away or shrunk, is blurred
-    // on a grid a few pixels apart instead, where it reaches far enough.
-    let along = |q: glam::Vec3, s: glam::Vec3| (s.x * q.z - q.x * s.z).hypot(s.y * q.z - q.y * s.z);
-    let in_front = corners.iter().all(|c| c.z > 0.0);
-    let texels =
-        |c: glam::Vec3, s: glam::Vec3| k * (c.z - focus).abs() * c.z / along(c, s).max(1e-9);
-    let least = if in_front {
-        corners
-            .iter()
-            .flat_map(|&c| [x, y].map(|s| texels(c, s)))
-            .fold(f32::MAX, f32::min)
-    } else {
-        0.0
-    };
-    let step = if least > DOF_REACH {
-        (least / 32.0).min(tw.max(th))
-    } else {
-        1.0
-    };
-    let reach = DOF_REACH.min(tw.max(th) / step);
-    // The widest blur along each side is at one of its corners in front of
-    // the eye, as what is behind it never shows. Never past the widest picture
-    // the card takes.
-    let room = |s: glam::Vec3, n: f32| {
-        let widest = corners
-            .iter()
-            .filter(|c| c.z > 0.0)
-            .map(|&c| texels(c, s))
-            .fold(0.0, f32::max);
-        lumit_core::largest_picture::room(widest.min(reach * step).ceil() as u32, n as u32)
-    };
-    let room = (room(x, tw), room(y, th));
-    let corner = corner - x * room.0 as f32 - y * room.1 as f32;
-    Some((
-        reach,
-        [
-            [x.x, x.y, x.z, k],
-            [y.x, y.y, y.z, focus],
-            [corner.x, corner.y, corner.z, 0.0],
-        ],
-        step,
-        room,
-    ))
-}
-
 /// The lighting pass's parameters for one draw (docs/06), or `None`
 /// when nothing lights it — which is the common case and the reason a comp
 /// without Light layers pays nothing.
@@ -3402,7 +3060,7 @@ fn run_plan(
         .collect();
     let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
     for (i, ((l, tex), g)) in layers.iter().zip(textures).zip(grown).enumerate() {
-        let model = matches!(l.source, DrawSource::Model(_));
+        let model = matches!(l.source, DrawSource::Model(_)) || scene::draws_in_scene(l);
         if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 || model {
             continue;
         }
@@ -3416,9 +3074,10 @@ fn run_plan(
             .iter()
             .filter(|(r, l, corners)| {
                 *r != i
-                    && l.lights
-                        .iter()
-                        .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane))
+                    && (scene::draws_in_scene(l)
+                        || l.lights
+                            .iter()
+                            .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane)))
             })
             .map(|(_, _, corners)| {
                 let c = centre(corners);

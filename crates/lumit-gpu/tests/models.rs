@@ -74,6 +74,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                         eye,
                         ..LightingMaterial::default()
                     },
+                    instances: &[],
                 },
             )
             .expect("the model draws")

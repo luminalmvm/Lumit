@@ -785,4 +785,7 @@ pub struct CompLayerDraw {
         Option<lumit_core::model::CameraPose>,
         Option<i32>,
     )>,
+    /// What a Particulate in the scene takes from the comp beyond its rows.
+    /// `None` on every other layer.
+    pub in_scene: Option<crate::realise::scene::Carried>,
 }

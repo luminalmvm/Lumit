@@ -8571,7 +8571,7 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
 // ---------------------------------------------------------------------------
 
 use crate::fx::effects::particulate::Particulate;
-use crate::fx::points::{self, EmitterShape, PointsStream, Schedule};
+use crate::fx::points::{self, emitter::EmitterShape, PointsStream, Schedule};
 use crate::mask::MaskPolyline;
 
 /// A Particulate instance with its declared defaults, and `edits` applied —
@@ -10008,10 +10008,13 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         (4, EmitterShape::MaskPath),
         (5, EmitterShape::EllipseOutline),
         (6, EmitterShape::RectangleOutline),
+        (7, EmitterShape::Box),
+        (8, EmitterShape::Sphere),
+        (9, EmitterShape::Layer),
     ] {
         assert_eq!(EmitterShape::from_code(code), shape, "code {code}");
     }
-    assert_eq!(EmitterShape::OPTIONS.len(), 7);
+    assert_eq!(EmitterShape::OPTIONS.len(), 10);
     // A filled ellipse still fills: the interior draw is the one that was
     // there, and the outline is a different code entirely.
     let inside = outline_stream(2);
@@ -10028,6 +10031,8 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         "a filled ellipse put {on_ring} of {} particles exactly on its rim",
         inside.len()
     );
+    // With no frame to fill, a Layer emitter gives birth to nothing.
+    assert!(outline_stream(9).position.is_empty());
 }
 
 // ------------------------------------------------ the third axis

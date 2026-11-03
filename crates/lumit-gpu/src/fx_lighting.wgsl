@@ -46,7 +46,7 @@ struct Params {
     // w = this layer's own caster, or -1.
     base: vec4<f32>,
     // x = how many casters, y = the side of their squares, z = 1 for a layer
-    // that takes no light, only shadows.
+    // that takes no light, only shadows, w = 1 for particles in the scene.
     casters_head: vec4<f32>,
     lights: array<Light, 8>,
     casters: array<Caster, 16>,
@@ -57,6 +57,30 @@ struct Params {
 @group(0) @binding(3) var<uniform> p: Params;
 @group(0) @binding(4) var squares: texture_2d_array<f32>;
 @group(0) @binding(5) var square_sampler: sampler;
+// Particles in the scene: one over clip w at each texel, nought where none is.
+// Their place is `origin + (du·x + dv·y + normal) / that`.
+@group(0) @binding(6) var points_depth: texture_2d<f32>;
+
+// How much of a light reaches a particle in the scene, lit as a small ball
+// seen whole: the share of it lit as the camera sees it, so one lit from
+// behind fades to a rim rather than going out.
+fn ball(pos: vec3<f32>, l: Light) -> f32 {
+    var to_light = light_centre(l) - pos;
+    if (u32(l.flags.x + 0.5) == 2u) {
+        to_light = -l.axis.xyz;
+    }
+    let ld = normalise(to_light);
+    let seen = 0.5 + 0.5 * dot(normalise(p.eye.xyz - pos), ld);
+    return irradiance(pos, ld, l) * seen;
+}
+
+// The light reaching `pos`, a plane's or a particle's.
+fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
+    if (p.casters_head.w > 0.5) {
+        return ball(pos, l);
+    }
+    return irradiance(pos, p.normal.xyz, l);
+}
 
 // Blinn-Phong, as lumit_core::lighting::highlight.
 fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
@@ -185,7 +209,15 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let f = vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5);
-    let pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
+    var pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
+    if (p.casters_head.w > 0.5) {
+        let iw = textureLoad(points_depth, xy, 0).r;
+        if (iw <= 0.0) {
+            textureStore(dst, xy, o);
+            return;
+        }
+        pos = p.origin.xyz + (p.du.xyz * f.x + p.dv.xyz * f.y + p.normal.xyz) / iw;
+    }
     let encoded = p.base.y > 0.5;
     let accepts = u32(p.base.z + 0.5);
     let takes = accepts != 0u && p.casters_head.x > 0.5;
@@ -198,7 +230,7 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
                 break;
             }
             let l = p.lights[i];
-            if (!takes || l.shadow.x <= 0.0 || irradiance(pos, p.normal.xyz, l) <= 0.0) {
+            if (!takes || l.shadow.x <= 0.0 || lit_by(pos, l) <= 0.0) {
                 continue;
             }
             dim = dim * (1.0 - l.shadow.x * (1.0 - transmitted(pos, l)));
@@ -232,7 +264,7 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             gain = gain + p.material.x * colour;
             continue;
         }
-        let lit = irradiance(pos, p.normal.xyz, l);
+        let lit = lit_by(pos, l);
         let e = diffuse * lit;
         var left = vec3<f32>(1.0);
         if (takes && l.shadow.x > 0.0 && lit > 0.0) {

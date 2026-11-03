@@ -79,6 +79,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             specular: 0.5,
             ..LightingMaterial::default()
         },
+        instances: &[],
     };
     let run = || fx.model(&ctx, &scene, &view).map_err(|e| e.to_string());
     for _ in 0..WARMUP {

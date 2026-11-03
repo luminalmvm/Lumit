@@ -3440,7 +3440,7 @@ impl LayerReference {
                 .min();
             land(&mut added.effects, first)?;
             land(&mut added.nodes, first)?;
-            let mut graph = layer.graph;
+            let mut graph = layer.graph.clone();
             graph.nodes.extend(added.nodes);
             graph.edges.extend(added.edges);
             graph.layout.extend(added.layout);
@@ -3448,16 +3448,16 @@ impl LayerReference {
                 &mut added.effects,
                 &lumit_core::fx::builtins::wired_in(&graph),
             )?;
-            let mut effects = layer.effects;
+            let mut effects = layer.effects.clone();
             effects.extend(added.effects);
             graph.prune_rows(&effects);
             let op = lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     lumit_core::ops::Op::SetLayerGraph {
                         comp: self.comp_id,
                         layer: self.layer_id,
@@ -7560,9 +7560,9 @@ impl LayerReference {
             InstanceHome::Effects | InstanceHome::Styles => {
                 let layer = self.item()?;
                 let mut list = if home == InstanceHome::Styles {
-                    layer.styles
+                    layer.styles.clone()
                 } else {
-                    layer.effects
+                    layer.effects.clone()
                 };
                 edit(&mut list)?;
                 if home == InstanceHome::Styles {
@@ -7572,11 +7572,7 @@ impl LayerReference {
                         styles: list,
                     }
                 } else {
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
-                        effects: list,
-                    }
+                    lumit_core::fx::effects::particulate::set_effects(self.comp_id, &layer, list)
                 }
             }
             InstanceHome::Group(group) => {
@@ -7745,8 +7741,8 @@ impl LayerReference {
         // undo step, so the stack works without a trip to the node graph. Its
         // box starts open there too, showing every control.
         let layer = self.item()?;
-        let mut effects = layer.effects;
-        let mut graph = layer.graph;
+        let mut effects = layer.effects.clone();
+        let mut graph = layer.graph.clone();
         let before = effects.clone();
         effects.push(instance.clone());
         crate::api::track::settle(&before, &mut effects);
@@ -7759,11 +7755,11 @@ impl LayerReference {
         proj.store
             .commit(lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     lumit_core::ops::Op::SetLayerGraph {
                         comp: self.comp_id,
                         layer: self.layer_id,
@@ -8399,7 +8395,7 @@ impl LayerReference {
         let mut added = lumit_core::preset::group_instantiated(&preset, [x, y]);
 
         let layer = self.item()?;
-        let mut graph = layer.graph;
+        let mut graph = layer.graph.clone();
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
@@ -8411,7 +8407,7 @@ impl LayerReference {
             &lumit_core::fx::builtins::wired_in(&graph),
         )?;
         let none_added = added.effects.is_empty();
-        let mut effects = layer.effects;
+        let mut effects = layer.effects.clone();
         effects.extend(added.effects);
         graph.prune_rows(&effects);
         let graph = lumit_core::ops::Op::SetLayerGraph {
@@ -8426,11 +8422,11 @@ impl LayerReference {
         } else {
             lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     graph,
                 ],
             }

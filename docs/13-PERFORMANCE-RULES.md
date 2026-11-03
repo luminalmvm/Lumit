@@ -61,6 +61,7 @@ sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
 | B28 | Long cut: decoded sound in memory, a minute played | ≤ 512 MB | ≤ 512 MB |
 | B29 | Long cut: first peaks of a file never summarised | ≤ 500 ms | ≤ 1500 ms |
 | B30 | Model layer, 1,000,000 triangles at 1080p, one frame | ≤ 8 ms | |
+| B31 | Particulate in the 3D scene over the same flat, 1,000,000 cap, sorted, behind a lit 3D card, 1080p, one frame | ≤ 16 ms | |
 | B32 | Volumetric light pass, 1080p, two lights showing, GPU | ≤ 4 ms | ≤ 12 ms |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
@@ -132,7 +133,7 @@ pressure it slows down, it never changes output.
 ## 7. CI
 
 - A frame submits one command buffer however many layers it has. A test holds that.
-- `lumit-bench` runs B3 to B7, B11 and B12 to B30 and compares each with
+- `lumit-bench` runs B3 to B7, B11 and B12 to B31 and compares each with
   `crates/lumit-bench/baselines/<os>.json`. It fails at 1.6x worse. Under 1 ms isn't
   ratio-gated. Regenerate a baseline by running the harness and committing the file.
 - The absolute budgets are only asserted under `LUMIT_REFERENCE_HW=1`.

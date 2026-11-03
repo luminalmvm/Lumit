@@ -23,7 +23,8 @@ A particle system.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline | Point | - |
+| **In the scene** | Checkbox | On or off | Off | - |
+| **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline · Box · Sphere · Layer | Point | - |
 | **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Position z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -33,6 +34,7 @@ A particle system.
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
+| **Emitter layer** | Layer | Any layer in the composition | None | - |
 | **Density layer** | Layer | Any layer in the composition | None | - |
 | **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
@@ -103,7 +105,7 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **In the scene**, **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emitter layer**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
@@ -117,6 +119,14 @@ In the Effect Controls panel:
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Emitter layer** is editable while **Shape** is set to Layer.
+- **Density layer** is editable while **Shape** is anything but Layer.
+- **Collide with** is editable while **In the scene** is off.
+- **Separation** is editable while **In the scene** is off.
+- **Alignment** is editable while **In the scene** is off.
+- **Cohesion** is editable while **In the scene** is off.
+- **Sparks** is editable while **In the scene** is off.
+- **Persistence** is editable while **In the scene** is off.
 - **Burst count** is editable while **Burst** is anything but Off.
 - **Burst interval** is editable while **Burst** is set to Every N frames.
 - **Trigger** is editable while **Burst** is set to On trigger.
@@ -154,7 +164,13 @@ In the Effect Controls panel:
 
 The **Emitter** group, where particles come from and travel:
 
-- **Shape**: which emitter.
+- **In the scene**: the particles live in the composition's 3D space, lit, focused and
+  scaled like a 3D layer, with 3D layers and models passing in front of and behind them.
+  Turning it on puts the layer in 3D. Masks, track matte and blend mode do not apply.
+- **Shape**: which emitter. **Box** fills a box of Width, Height and Depth. **Sphere** fills a
+  ball as wide as Width. **Layer** gives birth over the whole frame where the Emitter
+  layer's picture is bright, and with no Emitter layer nothing is born. In the scene, a
+  Model layer as the Emitter layer gives birth all over its model's surface.
 - **Position x**, **Position y** and **Position z**: where the emitter sits.
 - **Width** and **Height**: how big the emitter is.
 - **Depth**: how far the emitter reaches through the plane.
@@ -164,6 +180,7 @@ The **Emitter** group, where particles come from and travel:
   and dashes as drawn, one line after another, repeater copies included. On any other layer
   Shape emits nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
+- **Emitter layer**: the layer a Layer emitter gives birth from.
 - **Density layer**: a layer whose brightness weights where particles are born inside the
   emitter. A birth with nowhere bright enough to go is skipped. While it is set, the
   points effects below Particulate on the same layer can read its particles, and
@@ -285,13 +302,16 @@ picture at the current frame is stamped on every earlier frame.
 
 The **Render** group, how they are drawn:
 
-- **Mode**: Disc, Sprite or Streak.
+- **Mode**: Disc, Sprite or Streak. In the scene, motion blur draws a disc across the open
+  shutter. Sprites, model copies and the layer's and camera's own moves do not blur.
 - **Feather**: how soft a disc's edge is. Disc mode only.
 - **Sprite layer**: the layer stamped at each particle. Sprite mode only, and discs are
-  drawn until you set it.
+  drawn until you set it. In the scene, a Model layer as the Sprite layer draws its model at
+  up to 20,000 particles, sized, turned and tinted by each.
 - **Streak length**: how long the tail is, in seconds.
 - **Particle blend**: how particles combine with each other where they overlap, by the layer
-  blend modes. They then go over the picture together, as Normal particles do.
+  blend modes. They then go over the picture together, as Normal particles do. In the
+  scene every mode but Add and Screen draws as Normal, nearest last.
 - **Max particles**: the most particles that may be alive at once.
 
 The remaining properties:

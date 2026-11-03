@@ -1872,6 +1872,7 @@ fn op_keys(
     ops.iter()
         .map(|resolved| {
             let schema = resolved.def.schema();
+            broken |= crate::realise::scene::is_scene_op(&resolved);
             resolved.feed_hash(&mut |b| {
                 h.update(b);
             });

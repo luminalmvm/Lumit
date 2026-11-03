@@ -321,3 +321,60 @@ fn the_generators_draw_on_a_solid_through_the_document() {
         assert_eq!(drawn, later, "{name} moved with the playhead");
     }
 }
+
+/// **Particles in the scene meet a 3D solid by depth**: a row of particles
+/// running from in front of a solid to behind it shows where it is in front
+/// and is hidden where it is behind.
+#[test]
+fn a_3d_solid_hides_the_particles_in_the_scene_behind_it() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut fx = default_particulate();
+    for (id, v) in [
+        ("position_x", f(1360.0)),
+        ("depth", f(1600.0)),
+        ("emit_rate", f(1000.0)),
+        ("initial_speed", f(0.0)),
+        ("turbulence_amount", f(0.0)),
+        ("life", f(10.0)),
+        ("size", f(12.0)),
+        ("in_scene", EffectValue::Bool(true)),
+    ] {
+        set(&mut fx, id, v);
+    }
+    let (doc, comp) = project(vec![fx]);
+    let mut doc = Arc::unwrap_or_clone(doc);
+    let Some(ProjectItem::Composition(c)) = doc.items.last_mut() else {
+        panic!("the comp is the last item");
+    };
+    // In the scene is only for a 3D layer.
+    c.layers[0].switches.three_d = true;
+    let mut solid = c.layers[0].clone();
+    solid.id = Uuid::now_v7();
+    solid.effects.clear();
+    solid.switches.three_d = true;
+    c.layers.push(solid);
+    let (px, w, _) = r
+        .render_rgba(&Arc::new(doc), comp, 60, 1.0)
+        .expect("the scene renders");
+    // The row runs towards the middle of the frame as it goes away, and
+    // crosses the solid's plane at x 1360. The solid is a dark grey, so a
+    // pixel well above it is a particle.
+    let bright = |x0: u32, x1: u32| {
+        (0..H)
+            .flat_map(|y| (x0..x1).map(move |x| ((y * w + x) * 4) as usize))
+            .filter(|&i| px[i] > 160)
+            .count()
+    };
+    let (front, behind) = (bright(1380, W), bright(W / 2, 1340));
+    assert!(
+        front > 500,
+        "the particles in front of the solid show ({front} px)"
+    );
+    assert!(
+        behind * 50 < front,
+        "the particles behind the solid are hidden ({behind} px against {front})"
+    );
+}

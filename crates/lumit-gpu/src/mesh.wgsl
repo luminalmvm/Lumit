@@ -53,6 +53,12 @@ struct Material {
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<uniform> draw: Draw;
+// Each copy of the model: where it goes, in comp pixels, and its tint.
+struct MeshCopy {
+    place: mat4x4<f32>,
+    tint: vec4<f32>,
+};
+@group(0) @binding(2) var<storage, read> instances: array<MeshCopy>;
 @group(1) @binding(0) var<uniform> mat: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(2) var mr_tex: texture_2d<f32>;
@@ -85,18 +91,20 @@ struct VsOut {
 };
 
 @vertex
-fn vs_mesh(v: VertexIn) -> VsOut {
+fn vs_mesh(v: VertexIn, @builtin(instance_index) slot: u32) -> VsOut {
     let n = mat3x3<f32>(draw.normal0.xyz, draw.normal1.xyz, draw.normal2.xyz);
-    let at = (draw.model * vec4<f32>(v.position, 1.0)).xyz;
+    let place = instances[slot].place;
+    let model = place * draw.model;
+    let at = (model * vec4<f32>(v.position, 1.0)).xyz;
     var out: VsOut;
     out.pos = frame.clip * vec4<f32>(at, 1.0);
     out.pos.z = CUT_NEAR;
     out.at = at;
-    out.normal = n * v.normal;
-    out.tangent = vec4<f32>((draw.model * vec4<f32>(v.tangent.xyz, 0.0)).xyz, v.tangent.w);
+    out.normal = (place * vec4<f32>(n * v.normal, 0.0)).xyz;
+    out.tangent = vec4<f32>((model * vec4<f32>(v.tangent.xyz, 0.0)).xyz, v.tangent.w);
     out.uv0 = v.uv0;
     out.uv1 = v.uv1;
-    out.colour = v.colour;
+    out.colour = v.colour * instances[slot].tint;
     return out;
 }
 

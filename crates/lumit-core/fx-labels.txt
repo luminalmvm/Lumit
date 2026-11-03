@@ -156,6 +156,7 @@ Bounce
 Bounciness
 Boundary
 Bounds
+Box
 Boxes x
 Boxes y
 Bright spots
@@ -414,6 +415,7 @@ Emit from image
 Emit rate
 Emitter
 Emitter angle
+Emitter layer
 End
 End colour
 End size
@@ -614,6 +616,7 @@ In front
 In high
 In low
 In order
+In the scene
 In turn
 Include spaces
 Index
@@ -1203,6 +1206,7 @@ Speed max
 Speed min
 Speed ramp
 Speed variance
+Sphere
 Spherize
 Spiky
 Spin

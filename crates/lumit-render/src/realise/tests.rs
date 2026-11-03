@@ -63,6 +63,7 @@ fn draw(rgba: &std::sync::Arc<Vec<u8>>) -> CompLayerDraw {
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
+        in_scene: None,
     }
 }
 
